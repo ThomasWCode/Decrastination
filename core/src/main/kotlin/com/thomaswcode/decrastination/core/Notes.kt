@@ -69,6 +69,19 @@ object Notes {
     }
 
     /**
+     * Which tasks [scope] is for, in words: "every Chemistry task", "every 12X/Ch1 task from Teams", "every
+     * task with “essay” in its title".
+     */
+    fun scopeLine(scope: NoteScope): String {
+        val of = listOfNotNull(scope.subject?.trim()?.takeIf { it.isNotEmpty() }, scope.className?.trim()?.takeIf { it.isNotEmpty() }).joinToString(" ")
+        return listOfNotNull(
+            "every ${if (of.isEmpty()) "" else "$of "}task",
+            scope.source?.let { "from ${it.label}" },
+            scope.titleContains?.trim()?.takeIf { it.isNotEmpty() }?.let { "with “$it” in its title" },
+        ).joinToString(" ")
+    }
+
+    /**
      * [notes] kept (the nightly prune): a deleted one only while a message in the chat's window, [messages],
      * holds its delete's act not undone, as that Undo brings it back; one on a task gone from the task list
      * ([tasks], their ids) only while its task's delete can be undone, as that Undo brings the task back

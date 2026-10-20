@@ -27,6 +27,7 @@ import com.thomaswcode.decrastination.core.MessageKind
 import com.thomaswcode.decrastination.core.OwnTask
 import com.thomaswcode.decrastination.core.OwnTaskRules
 import com.thomaswcode.decrastination.core.ProposalState
+import com.thomaswcode.decrastination.core.Reminders
 import com.thomaswcode.decrastination.core.SchoolCalendar
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.Source
@@ -34,6 +35,7 @@ import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.WallClock
 import com.thomaswcode.decrastination.data.ActivityLog
+import com.thomaswcode.decrastination.data.FelixStore
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.LearningState
 import com.thomaswcode.decrastination.data.RuntimeState
@@ -89,6 +91,8 @@ class Conversation(
     private val chat: JsonStore<ChatState>,
     private val school: JsonStore<SchoolCalendar>,
     private val memory: JsonStore<MemoryState>,
+    /** What he keeps at your asking (Stage 8a): notes on tasks, and reminders. */
+    private val felix: JsonStore<FelixStore>,
     private val clock: WallClock,
     private val scope: CoroutineScope,
     private val gateway: ModelGateway,
@@ -465,9 +469,14 @@ class Conversation(
         time: EventJudge.Time = calendarTime(),
         applied: List<Instruction> = instructions.value.applied,
     ): ChatPrompts.Context {
+        val plan = planning.plan(state, now = now, applied = applied, time = time)
+        // His notes and reminders (8a), each reminder with when it comes by this plan.
+        val kept = felix.value
+        val byId = state.tasks.associateBy { it.id }
+        val moments = kept.reminders.mapNotNull { r -> Reminders.moment(r, plan, byId, now)?.let { r.id to it } }.toMap()
         return ChatPrompts.Context(
-            known = ChatPrompts.context(state.tasks, time.events, applied, now, clock.zone(), settings.value.classMap, runtime.value.notSame, settings.value, learning.value.calibration),
-            plan = ChatPrompts.plan(planning.plan(state, now = now, applied = applied, time = time), clock.zone()),
+            known = ChatPrompts.context(state.tasks, time.events, applied, now, clock.zone(), settings.value.classMap, runtime.value.notSame, settings.value, learning.value.calibration, kept.notes, kept.reminders, moments),
+            plan = ChatPrompts.plan(plan, clock.zone()),
         )
     }
 

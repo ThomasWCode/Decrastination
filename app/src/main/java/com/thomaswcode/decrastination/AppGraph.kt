@@ -251,7 +251,7 @@ class AppGraph private constructor(context: Context) {
      * remembers, the replies from his notification, the week's check-in, and what the app says in his name.
      */
     val conversation: Conversation = Conversation(
-        tasks, settings, runtime, stores.learning, log, stores.instructions, chat, school, memory, clock, scope, gateway, notifier, focus, planning, felixPorts, outbox,
+        tasks, settings, runtime, stores.learning, log, stores.instructions, chat, school, memory, stores.felix, clock, scope, gateway, notifier, focus, planning, felixPorts, outbox,
         owners = object : Conversation.Owners {
             override suspend fun saveOwnTask(sourceId: String, task: OwnTask): Boolean = ownTasks.saveOwnTask(sourceId, task)
             override suspend fun finishOwnTask(taskId: String) { ownTasks.finishOwnTask(taskId) }

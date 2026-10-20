@@ -1,5 +1,9 @@
 package com.thomaswcode.decrastination.core
 
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 import kotlinx.serialization.Serializable
 
 /**
@@ -105,6 +109,31 @@ object Reminders {
      */
     fun drafted(r: Reminder, moment: Long, ahead: Long): Boolean =
         r.draft != null && r.draftedAt != null && r.draftedAt >= moment - ahead
+
+    private val WHEN = DateTimeFormatter.ofPattern("EEE d MMM HH:mm", Locale.UK)
+
+    /**
+     * When [r] comes, in words, [moment] its time ([Reminders.moment]) and [title] its task's: "Tue 20 Oct 19:00";
+     * "at the start of “Vectors”'s next slot, Tue 20 Oct 17:00" (or "none planned yet"); "1 h before “Essay”
+     * is due, Wed 21 Oct 08:00"; a snooze's, "snoozed to Tue 20 Oct 19:15".
+     */
+    fun whenLine(r: Reminder, moment: Long?, title: String?, zone: ZoneId): String {
+        fun at(time: Long?) = time?.let { Instant.ofEpochMilli(it).atZone(zone).format(WHEN) }
+        val task = "“${title ?: "its task"}”"
+        if (r.snoozedTo != null) return "snoozed to ${at(r.snoozedTo)}"
+        return when (r.due.kind) {
+            DueKind.At -> at(r.due.at ?: moment) ?: "no time"
+            DueKind.SlotStart -> "at the start of $task's next slot, ${at(moment) ?: "none planned yet"}"
+            DueKind.BeforeDue -> "${minutes(r.due.minutesBefore ?: 0)} before $task is due, ${at(moment) ?: "no deadline"}"
+        }
+    }
+
+    /** [n] minutes as a reminder's lead says them: "45 min", "1 h", "1 h 30 min", "2 days". */
+    private fun minutes(n: Int): String = when {
+        n >= 24 * 60 && n % (24 * 60) == 0 -> (n / (24 * 60)).let { "$it day${if (it == 1) "" else "s"}" }
+        n >= 60 -> "${n / 60} h" + if (n % 60 > 0) " ${n % 60} min" else ""
+        else -> "$n min"
+    }
 
     /**
      * [reminders] kept (the nightly prune): one sent or done more than [KEEP_MS] before [now] goes, as does

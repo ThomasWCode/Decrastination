@@ -1,6 +1,7 @@
 package com.thomaswcode.decrastination.felix
 
 import com.thomaswcode.decrastination.core.About
+import com.thomaswcode.decrastination.core.By
 import com.thomaswcode.decrastination.core.Calibration
 import com.thomaswcode.decrastination.core.ChatHistory
 import com.thomaswcode.decrastination.core.ChatMessage
@@ -12,9 +13,13 @@ import com.thomaswcode.decrastination.core.Instruction
 import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.MessageKind
+import com.thomaswcode.decrastination.core.Note
+import com.thomaswcode.decrastination.core.Notes
 import com.thomaswcode.decrastination.core.OwnTaskRules
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.ProposalState
+import com.thomaswcode.decrastination.core.Reminder
+import com.thomaswcode.decrastination.core.Reminders
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.SlotKind
 import com.thomaswcode.decrastination.core.Source
@@ -107,6 +112,15 @@ object ChatPrompts {
      */
     private const val READ = "7. Read a task in full (details): where you need more of a task's own text than the list shows (it says how much was left out), give its id, up to three, reply only that you're reading it, and change nothing: you'll be asked again with the whole text, to answer and act on. Not for the task a message is about, whose text comes whole; most messages need none, and details is then an empty list."
 
+    /**
+     * A reminder (Stage 8a, Q9: B): its words theirs, at a time, at their next slot on a task, or a while before a
+     * task's due; one listed moved or reworded in place by its id.
+     */
+    private const val REMIND = "8. Remind (reminders): when they ask to be reminded of something, that's a reminder, not a task: text in their words, as you'd say them then; when \"at\" for a date and time (date, time); \"slotStart\" for the start of their next slot on a task (taskId, and date only where it's not to be from today); \"beforeDue\" for a while before a task's due (taskId, minutesBefore). To move or reword one already set (\"push it to 8\"), give its id from the reminders' list, with when and its time as they're to be, and text empty to keep its words; a new one's id is empty. Say when it'll come. Not for work to plan, which is a task; most messages need none."
+
+    /** A note on a task (Stage 8a): kept with it, told to him whenever it comes up. */
+    private const val NOTE = "9. Note (notes): something to keep with a task for when it comes up (what the teacher said, which source to use, what they've decided): taskId and the words. Not a reminder, nor a fact about them; most messages need none."
+
     /** The chat's instructions, as Felix (AI-24; Q-44: the chat is him too), for a student in Year [year] (AI-06). */
     fun system(settings: Settings = Settings(), year: Int = 12): String = (
         """
@@ -119,9 +133,9 @@ object ChatPrompts {
         Minutes you set (a new task's, a Minutes change, each step's) are planned exactly as you set them, never stretched by the student's pace: that's only for the app's own estimates (the context gives their pace, and what each task's minutes come to in the plan by it). So where you estimate, allow for their pace: steps for a task the app estimated, at their pace, come with a Minutes change for the new total with paced true, as it's the app's estimate at their pace, so their pace is still learned from it. Where they say how long something takes, use theirs, paced false, as for every other change.
         3. Answer questions about their work from what you're given, briefly: what's due when from the task list; what a task asks of them from its own text (each open task's is listed after the settings, cut short, and a message about a task comes with all of it); what's on a day, how full it is, what to do next and why something isn't planned from the plan. The plan is what the app has them do and shows them, so say what it says rather than planning the work again yourself. The context gives the time now: a deadline later today is still ahead ("due at 16:00 today"), not past, and a slot marked past has gone by; say "overdue" only where the plan marks it so.
         4. Remember (memories): a fact about the student worth keeping for later (a preference, a pattern, something about their week: "football is on Tuesdays"), with a short topic, so a newer fact on the same topic replaces it; or, kind "rule", a standing instruction about how you should behave ("don't message before 8", "be blunter"). To forget one, give its topic (a rule's own words) and an empty text. Busy times, limits and days off are changes, not memories; most messages need none.
-        5. Act (actions): tickStep when the student says a step is done, untickStep when one ticked isn't (taskId, and stepIndex from the list's steps); done when they've finished a task of their own (from Yours), or one whose tick finishes it; reopen for one of theirs finished by mistake (from the finished list); delete for a task of their own they no longer want (another source's they can only say isn't a task: NotATask); open to show them a task; setting to change one of the settings listed with their values (taskId empty, setting its name, value as the list writes it: a number, a time as HH:MM, hours as HH:MM-HH:MM). stepIndex is -1 but for steps, setting and value empty but for settings. A task from Teams, Power Planner, Gmail or Anki is done when its source says so (handed in, completed in Power Planner, unstarred, studied), so it can't be marked done. Most messages need none.
-""" + (if (settings.felixSearches) RESEARCH else NO_RESEARCH).prependIndent("        ") + "\n" + READ.prependIndent("        ") + "\n" + """
-        Reply in one to three short sentences of plain UK English (asked what's on, a short list instead, a line a task). Everything you give is made as soon as you give it (a new task or event, a change, days off, a step ticked, a setting), so say what you've done ("Moved it to 19:30", "Added it, due Tuesday"), never what you'd do: the student has an Undo for each. To undo something yourself, give what puts it back. When a reply from them is likely, offer up to three short ones in their words (suggestedReplies). If what you need is missing or unclear (which task they mean, or when), ask one short question and change nothing. Don't add a task that's already listed: change it instead. When their message is about a given task, event or day, it's about that unless they clearly name another. When it starts with a message it replies to, quoted, it's answering that one. Do only what they asked for, and leave every field you don't use empty: an empty string, -1 for a number.
+        5. Act (actions): tickStep when the student says a step is done, untickStep when one ticked isn't (taskId, and stepIndex from the list's steps); done when they've finished a task of their own (from Yours), or one whose tick finishes it; reopen for one of theirs finished by mistake (from the finished list); delete for a task of their own they no longer want (another source's they can only say isn't a task: NotATask); open to show them a task; setting to change one of the settings listed with their values (taskId empty, setting its name, value as the list writes it: a number, a time as HH:MM, hours as HH:MM-HH:MM); cancelReminder to cancel a reminder set (taskId empty, value its id from the reminders' list); deleteNote to delete a note (taskId empty, value its id from the task's notes). stepIndex is -1 but for steps, setting empty but for settings, and value empty but for settings, cancelReminder and deleteNote. A task from Teams, Power Planner, Gmail or Anki is done when its source says so (handed in, completed in Power Planner, unstarred, studied), so it can't be marked done. Most messages need none.
+""" + (if (settings.felixSearches) RESEARCH else NO_RESEARCH).prependIndent("        ") + "\n" + READ.prependIndent("        ") + "\n" + REMIND.prependIndent("        ") + "\n" + NOTE.prependIndent("        ") + "\n" + """
+        Reply in one to three short sentences of plain UK English (asked what's on, a short list instead, a line a task). Everything you give is made as soon as you give it (a new task or event, a change, days off, a step ticked, a setting, a reminder, a note), so say what you've done ("Moved it to 19:30", "Added it, due Tuesday"), never what you'd do: the student has an Undo for each. To undo something yourself, give what puts it back. When a reply from them is likely, offer up to three short ones in their words (suggestedReplies). If what you need is missing or unclear (which task they mean, or when), ask one short question and change nothing. Don't add a task that's already listed: change it instead. When their message is about a given task, event or day, it's about that unless they clearly name another. When it starts with a message it replies to, quoted, it's answering that one. Do only what they asked for, and leave every field you don't use empty: an empty string, -1 for a number.
     """
         ).trimIndent()
 
@@ -158,14 +172,39 @@ object ChatPrompts {
         "kind" to mapOf("type" to "string", "enum" to listOf(Given.FACT, Given.RULE)),
     )
 
-    /** Something to do for the student (AI-14; 16 Oct, more of it), plain fields so no union is added: stepIndex -1, setting and value empty for none. */
+    /** Something to do for the student (AI-14; 16 Oct, more of it; 4.1.0, a reminder cancelled, a note deleted), plain fields so no union is added: stepIndex -1, setting and value empty for none. */
     private val ACTION = InstructionPrompts.obj(
-        "type" to mapOf("type" to "string", "enum" to listOf("tickStep", "untickStep", "done", "reopen", "delete", "open", "setting")),
+        "type" to mapOf("type" to "string", "enum" to listOf("tickStep", "untickStep", "done", "reopen", "delete", "open", "setting", "cancelReminder", "deleteNote")),
         "taskId" to STRING,
         "stepIndex" to INTEGER,
         "setting" to STRING,
         "value" to STRING,
     )
+
+    /**
+     * A reminder to set, or one listed (by its [id]) to move or reword (Stage 8a): plain fields, empty or -1 for
+     * none, as the lists' are kept (3.1.6), so the grammar the API compiles stays small.
+     */
+    private val REMINDER = InstructionPrompts.obj(
+        "id" to STRING,
+        "text" to STRING,
+        "date" to DATE,
+        "time" to TIME,
+        "taskId" to STRING,
+        "when" to mapOf("type" to "string", "enum" to listOf(WHEN_AT, WHEN_SLOT, WHEN_BEFORE)),
+        "minutesBefore" to INTEGER,
+    )
+
+    /** A note on a task (Stage 8a): plain strings. */
+    private val NOTE_ON = InstructionPrompts.obj(
+        "taskId" to STRING,
+        "text" to STRING,
+    )
+
+    /** A reminder's [REMINDER] `when`s: at a time, at its task's next slot, before its task's due. */
+    const val WHEN_AT = "at"
+    const val WHEN_SLOT = "slotStart"
+    const val WHEN_BEFORE = "beforeDue"
 
     /**
      * A change as the chat gives it: the instructions' reader's, and whether a Minutes total is the
@@ -185,6 +224,9 @@ object ChatPrompts {
         "research" to STRING,
         // The tasks whose whole text to read (D-93), none for nothing.
         "details" to mapOf("type" to "array", "items" to STRING),
+        // Reminders set or moved, and notes on tasks (Stage 8a), none for nothing.
+        "reminders" to mapOf("type" to "array", "items" to REMINDER),
+        "notes" to mapOf("type" to "array", "items" to NOTE_ON),
     )
 
     /**
@@ -346,9 +388,24 @@ object ChatPrompts {
      * since 16 Oct the student's own finished lately (to open again) and the [settings] he may change,
      * with their values; since 17 Oct their pace as [calibration] has learned it, and what each task's
      * minutes come to in the plan by it, so he allows for it in the minutes he sets (planned as he
-     * sets them). The plan's sent beside it ([plan], [turns]).
+     * sets them); since 4.1.0 each task's [notes] under its steps, its own and the standing ones it
+     * matches, and the [reminders] still to come, each by its id, when it comes ([moments], by id) and
+     * its words. The plan's sent beside it ([plan], [turns]).
      */
-    fun context(tasks: List<TaskItem>, events: List<CalendarEvent>, applied: List<Instruction>, now: Long, zone: ZoneId, classMap: Map<String, String> = emptyMap(), different: List<String> = emptyList(), settings: Settings? = null, calibration: Calibration? = null): String = buildString {
+    fun context(
+        tasks: List<TaskItem>,
+        events: List<CalendarEvent>,
+        applied: List<Instruction>,
+        now: Long,
+        zone: ZoneId,
+        classMap: Map<String, String> = emptyMap(),
+        different: List<String> = emptyList(),
+        settings: Settings? = null,
+        calibration: Calibration? = null,
+        notes: List<Note> = emptyList(),
+        reminders: List<Reminder> = emptyList(),
+        moments: Map<String, Long> = emptyMap(),
+    ): String = buildString {
         fun at(time: Long) = Instant.ofEpochMilli(time).atZone(zone).format(WHEN)
         // A task's minutes, and where a pace is learned for its kind and class, what the plan makes of them:
         // the app's estimate stretched by it, or minutes given (the student's, Felix's), as they are.
@@ -379,6 +436,11 @@ object ChatPrompts {
             appendLine("- ${t.id} | ${t.title.take(MAX_TITLE)} | ${t.source.label} | ${t.kind.label} | $due | ${minutes(t)} | ${t.workedMin + t.photoMin} | ${start?.let(::at) ?: "-"}")
             // Its steps by their place, for a tick (AI-14).
             t.subSteps.take(OwnTaskRules.MAX_STEPS).forEachIndexed { i, step -> appendLine("    step $i: ${step.title.take(MAX_TITLE)} (${step.minutes} min)${if (step.done) ", done" else ""}") }
+            // Its notes (8a), by id for a delete: its own, then the standing ones it matches (Q31: A); whose each is.
+            Notes.forTask(t, notes, classMap).forEach { n ->
+                val whose = if (n.by == By.Felix) "yours" else "theirs"
+                appendLine("    note ${n.id} ($whose${n.scope?.let { ", for ${Notes.scopeLine(it)}" }.orEmpty()}): ${n.text.take(Notes.MAX_TEXT)}")
+            }
         }
         // Their pace (17 Oct): what the app's own estimates are planned by, never minutes given.
         if (calibration != null) {
@@ -427,6 +489,15 @@ object ChatPrompts {
             appendLine()
             appendLine("Settings you can change (setting | what it is | its value now):")
             FelixSettings.describe(settings).forEach { appendLine("- $it") }
+        }
+        // The reminders still to come (8a), by id, to move or cancel; so one isn't set twice.
+        appendLine()
+        appendLine("Reminders set, still to come (id | when | their words | its task):")
+        val toCome = reminders.filter(Reminders::pending).sortedBy { moments[it.id] ?: Long.MAX_VALUE }
+        if (toCome.isEmpty()) appendLine("(none)")
+        toCome.forEach { r ->
+            val title = r.taskId?.let(byId::get)?.title?.take(MAX_TITLE)
+            appendLine("- ${r.id} | ${Reminders.whenLine(r, moments[r.id], title, zone)} | ${r.text.take(Reminders.MAX_TEXT)} | ${r.taskId ?: "-"}")
         }
         // Each open task's own text, cut short (D-93): what it asks of them, and what comes with it.
         // Last, so it's what a context too long for its room loses first ([turns]).
