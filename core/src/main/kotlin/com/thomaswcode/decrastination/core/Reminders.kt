@@ -93,14 +93,15 @@ object Reminders {
 
     /**
      * When the app is to wake for [reminders]: the earliest of each still to come's [moment] and, for one not
-     * written for its moment yet ([drafted]), the start of the window [ahead] of it while that's still to come,
-     * so it's written for with the phone asleep. Null with none to come.
+     * asked for its moment yet ([asked]), the start of the window [ahead] of it while that's still to come,
+     * so it's written for with the phone asleep; not before [notBefore] (a while on, after a failed sweep). Null
+     * with none to come.
      */
-    fun nextWake(reminders: List<Reminder>, plan: Plan, tasks: Map<String, TaskItem>, now: Long, ahead: Long): Long? =
+    fun nextWake(reminders: List<Reminder>, plan: Plan, tasks: Map<String, TaskItem>, now: Long, ahead: Long, notBefore: Long? = null): Long? =
         reminders.filter(::pending).flatMap { r ->
             val at = moment(r, plan, tasks, now) ?: return@flatMap emptyList()
-            listOfNotNull(at, (at - ahead).takeIf { it > now && !drafted(r, at) })
-        }.minOrNull()
+            listOfNotNull(at, (at - ahead).takeIf { it > now && !asked(r, at) })
+        }.minOrNull()?.let { at -> notBefore?.let { maxOf(at, it) } ?: at }
 
     /** Those of [reminders] still to come whose moment has come by [now], each with it, the earliest first. */
     fun due(reminders: List<Reminder>, plan: Plan, tasks: Map<String, TaskItem>, now: Long): List<Pair<Reminder, Long>> =
