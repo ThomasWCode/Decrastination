@@ -274,11 +274,30 @@ class GapsTest {
     private fun sync(source: String, taskId: String = "") = """{"type":"sync","taskId":"$taskId","stepIndex":-1,"setting":"$source","value":""}"""
 
     @Test
+    fun `asked to check Teams with the chat on screen, its widget's sync is asked too, and a refusal is said`() = runBlocking {
+        stores.tasks.update { it.copy(tasks = listOf(sheet)) }
+        conversation.chatInFront = true
+        val his = asked("I've handed it in, check Teams", answer("Reading Teams.", listOf(sync("Teams", sheet.id))))
+        assertEquals(1 to listOf(setOf(Source.Teams)), felix.teamsSyncs to felix.synced.toList())
+        assertEquals(FelixWords.TEAMS_SYNCING, his.acts.single().line)
+        // Refused (its service off, already syncing): what the widget has, and why.
+        felix.teamsRefusal = "The Teams widget is already syncing"
+        val again = asked("check Teams again", answer("Reading Teams.", listOf(sync("Teams", sheet.id))))
+        assertEquals("Asked Teams to read what the Teams widget has: its sync didn't start (the Teams widget is already syncing)", again.acts.single().line)
+        // Another source is only read, its own way.
+        val gmail = asked("check Gmail", answer("Reading Gmail.", listOf(sync("Gmail", ""))))
+        assertEquals("Asked Gmail to read", gmail.acts.single().line)
+        assertEquals(2, felix.teamsSyncs)
+    }
+
+    @Test
     fun `asked to check a source, it's read now, said with no Undo, and his note says how the task he was asked about changed`() = runBlocking {
         stores.tasks.update { it.copy(tasks = listOf(sheet)) }
         val his = asked("I've handed it in, check Teams", answer("Reading Teams.", listOf(sync("Teams", sheet.id))))
         assertEquals(listOf(setOf(Source.Teams)), felix.synced)
-        assertEquals("Asked Teams to read", his.acts.single().line)
+        // The chat not on screen: what the widget has, its sync not started (Q33: B), and said.
+        assertEquals("Asked Teams to read what the Teams widget has: the chat wasn't on screen to start its sync", his.acts.single().line)
+        assertEquals(0, felix.teamsSyncs)
         assertNull(his.acts.single().action)
         // A read that changes nothing says nothing, and he keeps watching.
         conversation.afterSync()

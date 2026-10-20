@@ -84,7 +84,12 @@ class FelixHarness(start: String = "2026-10-19T16:30") : AutoCloseable {
         answered = { message, words -> looks.answered(message, words) },
         draftReminders = { now -> looks.draftReminders(now) },
         requestSync = { synced += it },
+        requestTeamsSync = { teamsSyncs++; teamsRefusal },
     )
+
+    /** How often the Teams widget was asked to sync (Q33: B), and why it didn't start, as the test says. */
+    var teamsSyncs = 0
+    var teamsRefusal: String? = null
 
     /** The sources his `sync` asked to read (G2), in order. */
     val synced: MutableList<Set<Source>> = Collections.synchronizedList(mutableListOf())
