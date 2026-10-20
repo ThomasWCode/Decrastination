@@ -167,6 +167,19 @@ class NotesAndRemindersTest {
     }
 
     @Test
+    fun `a reminder's chips act only on one that came, not one moved while its message went`() = runBlocking {
+        stores.felix.update { it.copy(reminders = listOf(at("call gran", now + 60 * MIN))) }
+        // Its message stands from the moment it was moved away from; it never came.
+        val sent = ChatMessage("reminder-r-call gran-1", Speaker.Felix, FelixWords.reminder("call gran"), now, kind = MessageKind.Reminder, byApp = true, reminderId = "r-call gran", suggestedReplies = FelixWords.REMINDER_REPLIES)
+        stores.chat.update { it.copy(messages = it.messages + sent) }
+        assertTrue(conversation.ask(FelixWords.REMINDER_DONE, replyTo = sent.id))
+        felix.settle()
+        val r = stores.felix.value.reminders.single()
+        assertTrue(r.doneAt == null && Reminders.unsent(r), r.toString())
+        assertEquals(0, felix.server.requestCount)
+    }
+
+    @Test
     fun `a draft past his bounds, as a restored backup's could be, goes held to them`() = runBlocking {
         val moment = now + 5 * MIN
         val long = FelixAnswer("call gran now. " + "on and on ".repeat(100), replies = (1..9).map { "reply $it" })
@@ -216,6 +229,27 @@ class NotesAndRemindersTest {
         // Let go once.
         felix.looks.sweepReminders(now + MIN)
         assertEquals(1, stores.chat.value.messages.count { it.kind == MessageKind.Note })
+    }
+
+    @Test
+    fun `a slot's reminder goes by the plan just made, not the one kept for the minute, and one on an event is let go`() = runBlocking {
+        stores.tasks.update { it.copy(tasks = listOf(sheet)) }
+        stores.felix.update { it.copy(reminders = listOf(Reminder("r-form", "bring the form", now - 10 * MIN, By.Felix, sheet.id, Due(DueKind.SlotStart, now - 10 * MIN)))) }
+        val kept = felix.planning.plan(now = now)
+        val slots = kept.buckets.flatMap { it.slots }.filter { it.chunk?.taskId == sheet.id }
+        assertTrue(slots.isNotEmpty() && slots.all { it.start > now })
+        felix.looks.sweepReminders(now)
+        assertTrue(stores.chat.value.messages.none { it.kind == MessageKind.Reminder })
+        // A plan made of what the minute's isn't kept by (your pace, say), its slot for the sheet begun a minute ago.
+        val made = kept.copy(buckets = kept.buckets.map { b -> b.copy(slots = b.slots.map { s -> if (s.chunk?.taskId == sheet.id) s.copy(start = now - MIN) else s }) })
+        felix.looks.sweepReminders(now, made)
+        assertEquals("reminder-r-form-${now - MIN}", stores.chat.value.messages.single { it.kind == MessageKind.Reminder }.id)
+        // On an event, which never has a slot of work, it's let go, and said why.
+        stores.tasks.update { it.copy(tasks = listOf(sheet.copy(kind = Kind.Event))) }
+        stores.felix.update { it.copy(reminders = it.reminders + Reminder("r-pen", "bring a pen", now, By.Felix, sheet.id, Due(DueKind.SlotStart, now))) }
+        felix.looks.sweepReminders(now + MIN)
+        assertNotNull(stores.felix.value.reminders.single { it.id == "r-pen" }.cancelledAt)
+        assertEquals(FelixWords.letGo("bring a pen", "Forces worksheet", "is an event, with no slots of work"), stores.chat.value.messages.single { it.kind == MessageKind.Note }.text)
     }
 
     /** His answer for a reminder, as his calls give it. */
