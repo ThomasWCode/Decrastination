@@ -40,6 +40,18 @@ class ChatActsTest {
     }
 
     @Test
+    fun `a piece kept is taken back while it's among today's kept, one taken back kept again while it isn't, its task open`() {
+        val task = essay()
+        val keep = Act("Kept: Essay", ChatAction(ChatAction.Type.KeepPiece, task.id, value = "own:e#-1#1"))
+        assertTrue(ChatActs.canUndo(keep, listOf(task), settings, emptyList(), kept = setOf("own:e#-1#1")))
+        assertFalse(ChatActs.canUndo(keep, listOf(task), settings, emptyList(), kept = emptySet()))
+        assertFalse(ChatActs.canUndo(keep, listOf(finished()), settings, emptyList(), kept = setOf("own:e#-1#1")))
+        val unkeep = keep.copy(action = keep.action!!.copy(type = ChatAction.Type.UnkeepPiece))
+        assertTrue(ChatActs.canUndo(unkeep, listOf(task), settings, emptyList(), kept = emptySet()))
+        assertFalse(ChatActs.canUndo(unkeep, listOf(task), settings, emptyList(), kept = setOf("own:e#-1#1")))
+    }
+
+    @Test
     fun `a tick that finished one of yours can be undone, and a setting while it's as it was set`() {
         val tick = Act("Ticked: Write, of Essay", ChatAction(ChatAction.Type.TickStep, "own:e", 1))
         assertTrue(ChatActs.canUndo(tick, listOf(finished()), settings, emptyList()))

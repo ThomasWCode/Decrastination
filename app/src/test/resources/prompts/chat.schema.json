@@ -274,7 +274,9 @@
                             "open",
                             "setting",
                             "cancelReminder",
-                            "deleteNote"
+                            "deleteNote",
+                            "keepPiece",
+                            "unkeepPiece"
                         ]
                     },
                     "taskId": {

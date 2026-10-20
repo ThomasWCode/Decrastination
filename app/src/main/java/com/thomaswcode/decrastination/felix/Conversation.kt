@@ -42,6 +42,7 @@ import com.thomaswcode.decrastination.data.FelixStore
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.LearningState
 import com.thomaswcode.decrastination.data.RuntimeState
+import com.thomaswcode.decrastination.data.SlotRecord
 import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.enrich.Called
 import com.thomaswcode.decrastination.enrich.Found
@@ -505,10 +506,21 @@ class Conversation(
         // His notes and reminders (8a), each reminder with when it comes by this plan.
         val byId = state.tasks.associateBy { it.id }
         val moments = kept.reminders.mapNotNull { r -> Reminders.moment(r, plan, byId, now)?.let { r.id to it } }.toMap()
+        // The pieces he may keep (G1): today's slots', and each task with no steps' next; and those kept today, to take back.
+        val keepable = (plan.todaySlots.mapNotNull { it.chunk } + plan.ordered.filter { it.stepIndex == null }.distinctBy { it.taskId }).associate { it.key to it.taskId }
+        val keptToday = keptToday(now)
         return ChatPrompts.Context(
             known = ChatPrompts.context(state.tasks, time.events, applied, now, clock.zone(), settings.value.classMap, runtime.value.notSame, settings.value, learning.value.calibration, kept.notes, kept.reminders, moments),
-            plan = ChatPrompts.plan(plan, clock.zone()),
+            plan = ChatPrompts.plan(plan, clock.zone(), keptToday.map { it.key to it.label }),
+            keepable = keepable,
+            kept = keptToday.associate { it.key to it.taskId },
         )
+    }
+
+    /** Today's slots kept (G1), newest last: what unkeepPiece takes back, and what a keep's Undo needs to find. */
+    fun keptToday(now: Long = clock.now()): List<SlotRecord> {
+        val today = focus.today(now).toString()
+        return log.value.slots.filter { it.date == today && it.outcome.kept }.distinctBy { it.key }
     }
 
     /**
@@ -778,6 +790,16 @@ class Conversation(
                 }
                 // Made from the answer's reminders and notes ([keep]), not its actions.
                 ChatAction.Type.SetReminder, ChatAction.Type.MoveReminder, ChatAction.Type.AddNote -> null
+                // A piece done that has no step to tick (G1): kept as Day's Done keeps it, earning as that does; or taken back.
+                ChatAction.Type.KeepPiece -> {
+                    val label = planning.plan().let { p -> (p.todaySlots.mapNotNull { it.chunk } + p.ordered).firstOrNull { it.key == a.value } }?.label ?: task?.title
+                    said("Kept: $label", a).takeIf { focus.keepSlot(a.value.orEmpty()) }
+                }
+                ChatAction.Type.UnkeepPiece -> {
+                    val record = keptToday().lastOrNull { it.key == a.value }
+                    val since = focus.today(clock.now()).atStartOfDay(clock.zone()).toInstant().toEpochMilli()
+                    record?.let { said("Not kept after all: ${it.label}", a).takeIf { _ -> focus.unkeepSlot(it.key, since) } }
+                }
             }
         }
     }
@@ -871,6 +893,9 @@ class Conversation(
                 if (back) ports.scheduleReminders()
                 back
             }
+            // A piece kept (G1): taken back, its record since the answer; one taken back, kept again as the chat keeps one.
+            ChatAction.Type.KeepPiece -> keptToday().any { it.key == a.value } && chat.value.messages.firstOrNull { it.id == messageId }?.let { m -> focus.unkeepSlot(a.value.orEmpty(), m.at) } == true
+            ChatAction.Type.UnkeepPiece -> keptToday().none { it.key == a.value } && task?.isOpen == true && focus.keepSlot(a.value.orEmpty())
             // A reminder or a note (8a), while it's as the act left it: a reminder set goes, one moved has its time and
             // words back, one cancelled comes again; a note added goes, one deleted is back.
             ChatAction.Type.SetReminder, ChatAction.Type.MoveReminder, ChatAction.Type.CancelReminder, ChatAction.Type.AddNote, ChatAction.Type.DeleteNote -> {

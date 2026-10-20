@@ -93,6 +93,9 @@ class FelixHarness(start: String = "2026-10-19T16:30") : AutoCloseable {
         assess = { taskId, doneAt, answer -> assessed += Triple(taskId, doneAt, answer) },
     )
 
+    /** [key]'s piece kept as Day's Done keeps it ([Focus.keepSlot]). */
+    suspend fun focusKeep(key: String): Boolean = focus.keepSlot(key)
+
     /** How work went, as it was put on record ([Looks.answered]): the task, when it was done, the answer. */
     val assessed: MutableList<Triple<String, Long, String>> = Collections.synchronizedList(mutableListOf())
 

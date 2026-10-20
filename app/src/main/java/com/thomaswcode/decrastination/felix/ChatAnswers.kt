@@ -193,7 +193,7 @@ object ChatAnswers {
     /** The most memories one answer gives: a few at most is what's meant. */
     private const val MAX_MEMORIES = 5
 
-    fun parse(text: String, tasks: List<TaskItem>, events: List<CalendarEvent>, about: About, now: Long, zone: ZoneId, settings: Settings? = null, felix: FelixStore = FelixStore()): Reading? {
+    fun parse(text: String, tasks: List<TaskItem>, events: List<CalendarEvent>, about: About, now: Long, zone: ZoneId, settings: Settings? = null, felix: FelixStore = FelixStore(), context: ChatPrompts.Context? = null): Reading? {
         val answer = runCatching { json.decodeFromString(Answer.serializer(), text) }.getOrNull() ?: return null
         val reply = answer.reply.trim().takeIf { it.isNotEmpty() } ?: return null
         val leftOut = mutableListOf<String>()
@@ -226,7 +226,7 @@ object ChatAnswers {
         val replies = answer.suggestedReplies.map { it.trim().take(FelixAnswers.MAX_REPLY) }.filter { it.isNotEmpty() }.distinct().take(FelixAnswers.MAX_REPLIES)
         // A step ticked or unticked, a listed task shown (AI-14); a task of yours done, open again or
         // deleted, a setting set (16 Oct): each only as the task, or the setting, can be.
-        val actions = answer.actions.take(MAX_ACTIONS).mapNotNull { a -> action(a, byId, settings, felix, leftOut) }.distinct()
+        val actions = answer.actions.take(MAX_ACTIONS).mapNotNull { a -> action(a, byId, settings, felix, context, leftOut) }.distinct()
         // Tasks to read in full (D-93): listed and open, not the one the message is about (it came whole).
         val details = answer.details.map(String::trim).filter { id -> id != about.taskId && byId[id]?.let { it.isOpen && !it.hidden } == true }.distinct().take(ChatPrompts.MAX_READ)
         // Reminders and notes (Stage 8a): each as the app can keep it, the rest said.
@@ -340,10 +340,22 @@ object ChatAnswers {
     private const val YEAR_MS = 366 * DAY_MS
     private val CLOCK = DateTimeFormatter.ofPattern("HH:mm", Locale.UK)
 
-    /** [a] as an action the app can take, checked against the tasks there are ([byId]), the [settings] and [felix]'s reminders and notes; null, and why in [leftOut], if it can't be. */
-    private fun action(a: GivenAction, byId: Map<String, TaskItem>, settings: Settings?, felix: FelixStore, leftOut: MutableList<String>): ChatAction? {
+    /**
+     * [a] as an action the app can take, checked against the tasks there are ([byId]), the [settings], [felix]'s
+     * reminders and notes, and the pieces the [context] listed; null, and why in [leftOut], if it can't be.
+     */
+    private fun action(a: GivenAction, byId: Map<String, TaskItem>, settings: Settings?, felix: FelixStore, context: ChatPrompts.Context?, leftOut: MutableList<String>): ChatAction? {
         fun act(t: ChatAction.Type, id: String, step: Int? = null) = ChatAction(t, id, step)
         fun no(why: String) = null.also { leftOut += why }
+        // A piece kept as Day's Done keeps it, or taken back (G1): by its key, one the plan shown lists, or one kept today.
+        if (a.type == "keepPiece" || a.type == "unkeepPiece") {
+            val keep = a.type == "keepPiece"
+            val key = a.value.trim()
+            val of = (if (keep) context?.keepable else context?.kept)?.get(key)
+                ?: return no(if (keep) "a piece to keep that the plan shown doesn't list" else "a piece to take back that isn't one kept today")
+            if (byId[of]?.isOpen != true) return no("a piece of a task that's finished")
+            return ChatAction(if (keep) ChatAction.Type.KeepPiece else ChatAction.Type.UnkeepPiece, of, value = key)
+        }
         // A reminder cancelled, still to come; a note deleted, still kept (Stage 8a): by id, their task's taken from them.
         if (a.type == "cancelReminder") {
             val r = felix.reminders.firstOrNull { it.id == a.value.trim() }?.takeIf(Reminders::pending) ?: return no("a reminder to cancel that isn't one still to come")
