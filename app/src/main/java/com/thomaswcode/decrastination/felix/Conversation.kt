@@ -540,7 +540,7 @@ class Conversation(
         val s = settings.value
         val next = Lessons.next(timetable, now, clock.zone(), school.value, skip = setOf(s.studyPeriodName))
         val readAt = state.status(Source.PowerPlanner).lastSuccessAt
-        return Lessons.Timetabled(Lessons.groups(next, s.classMap), readAt, readAt != null && now - readAt > Lessons.STALE_MS)
+        return Lessons.Timetabled(Lessons.groups(next, s.classMap), readAt, Lessons.stale(readAt, now))
     }
 
     /** A task he asked a source to read about (G2), as it was then, watched till [until]. */
@@ -553,17 +553,19 @@ class Conversation(
      * After every sync (G2): each task he asked a source to read about that the read changed (finished,
      * open again, due another day, its words), said in a note of his in the app's words, then let go;
      * one unchanged waits for a later read till its watch is over, so a sync already under way when he
-     * asked doesn't end it.
+     * asked doesn't end it; one over, or its task gone, is let go first, whatever a later read finds.
      */
     suspend fun afterSync(now: Long = clock.now()) {
         if (watching.isEmpty()) return
         val byId = tasks.value.tasks.associateBy { it.id }
         for ((id, watch) in watching.entries.toList()) {
             val task = byId[id]
-            val what = task?.let { changed(watch.was, it, watch.source) }
-            if (what == null && now < watch.until && task != null) continue
+            if (now >= watch.until || task == null) {
+                watching.remove(id, watch)
+                continue
+            }
+            val what = changed(watch.was, task, watch.source) ?: continue
             watching.remove(id, watch)
-            if (what == null || task == null) continue
             outbox.send(ChatMessage(UUID.randomUUID().toString(), Speaker.Felix, FelixWords.read(watch.source.label, task.title, what), now, About(taskId = task.id, taskTitle = task.title), kind = MessageKind.Note, byApp = true))
         }
     }
@@ -819,6 +821,8 @@ class Conversation(
      */
     private suspend fun act(actions: List<ChatAction>, shownAt: Long, replyId: String): List<Act> {
         fun said(line: String, a: ChatAction) = Act(line, a)
+        // A task's card on his message (G3), where it isn't, or mayn't have been, opened where it lives.
+        suspend fun card(t: TaskItem) = chat.update { s -> s.copy(messages = s.messages.map { m -> if (m.id == replyId) m.copy(proposals = m.proposals + Proposal(UUID.randomUUID().toString(), open = t.id)) else m }) }
         return actions.mapNotNull { a ->
             val task = tasks.value.tasks.firstOrNull { it.id == a.taskId }
             when (a.type) {
@@ -828,11 +832,14 @@ class Conversation(
                     // background or with the chat left, Android may block the start, and one long after would surprise
                     // you; on a card then, its sheet's Open opening it there.
                     if (!chatInFront) {
-                        chat.update { s -> s.copy(messages = s.messages.map { m -> if (m.id == replyId) m.copy(proposals = m.proposals + Proposal(UUID.randomUUID().toString(), open = t.id)) else m }) }
+                        card(t)
                         return@let Act("On its card, not opened in ${t.source.label}: the chat wasn't on screen.")
                     }
                     val (opened, say) = ports.openSource(t)
-                    if (opened) Act("Opened in ${t.source.label}: ${t.title}" + say?.let { ". $it" }.orEmpty())
+                    // Left while it opened (the opener waits on the source's app first), it mayn't have come up: its card's there too.
+                    val left = opened && !chatInFront
+                    if (left) card(t)
+                    if (opened) Act("Opened in ${t.source.label}: ${t.title}" + say?.let { ". $it" }.orEmpty() + if (left) ". The chat was left as it opened: its card's here if it didn't come up" else "")
                     else Act("Couldn't open “${t.title}” in ${t.source.label}" + say?.let { ": $it" }.orEmpty(), problem = true)
                 }
                 ChatAction.Type.TickStep -> {
@@ -907,8 +914,10 @@ class Conversation(
                 }
                 ChatAction.Type.UnkeepPiece -> {
                     val record = keptToday().lastOrNull { it.key == a.value }
-                    val since = focus.today(clock.now()).atStartOfDay(clock.zone()).toInstant().toEpochMilli()
-                    record?.let { said("Not kept after all: ${it.label}", a).takeIf { _ -> focus.unkeepSlot(it.key, since) } }
+                    // The record he was shown, its key's newest then: kept again since (taken back and kept from Day while he
+                    // answered), the newest is yours, not his to take back.
+                    val at = keptAt()[a.value]?.takeIf { it <= shownAt } ?: return@mapNotNull null
+                    record?.let { said("Not kept after all: ${it.label}", a).takeIf { _ -> focus.unkeepSlot(it.key, at) } }
                 }
             }
         }

@@ -193,7 +193,11 @@ class FelixHarness(start: String = "2026-10-19T16:30") : AutoCloseable {
         /** The tasks opened where they live (G3), in order: each opened. */
         val opened: MutableList<String> = Collections.synchronizedList(mutableListOf())
 
+        /** Done as each opens, as if you'd done it meanwhile (the chat left). */
+        var whileOpening: () -> Unit = {}
+
         override suspend fun openSource(task: TaskItem): Pair<Boolean, String?> {
+            whileOpening()
             opened += task.id
             return true to null
         }

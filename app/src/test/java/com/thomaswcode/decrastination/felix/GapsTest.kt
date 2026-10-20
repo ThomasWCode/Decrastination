@@ -136,6 +136,24 @@ class GapsTest {
         assertTrue(conversation.keptToday().isEmpty())
     }
 
+    @Test
+    fun `his unkeep takes back the record he was shown, not one kept again from Day while he answered`() = runBlocking {
+        stores.tasks.update { it.copy(tasks = listOf(sheet)) }
+        val key = felix.planning.plan().todaySlots.mapNotNull { it.chunk }.single { it.taskId == sheet.id }.key
+        assertTrue(felix.focusKeep(key))
+        felix.answers(answer("Taken back.", listOf(action("unkeepPiece", sheet.id, key))), delayMs = 1_500)
+        assertTrue(conversation.ask("actually I haven't done it"))
+        delay(500)
+        // Taken back and kept again from Day meanwhile: yours now.
+        felix.clock.time = now + 60_000L
+        assertTrue(felix.focusUnkeep(key, now))
+        assertTrue(felix.focusKeep(key))
+        felix.settle()
+        val his = stores.chat.value.messages.last { it.from == Speaker.Felix }
+        assertTrue(his.acts.none { it.action?.type == ChatAction.Type.UnkeepPiece }, his.acts.toString())
+        assertEquals(listOf(key), conversation.keptToday().map { it.key })
+    }
+
     /** His sync action (G2): [source] read, about [taskId]. */
     private fun sync(source: String, taskId: String = "") = """{"type":"sync","taskId":"$taskId","stepIndex":-1,"setting":"$source","value":""}"""
 
@@ -175,6 +193,28 @@ class GapsTest {
     }
 
     @Test
+    fun `a change first seen by a read after the watch is over says nothing`() = runBlocking {
+        stores.tasks.update { it.copy(tasks = listOf(sheet)) }
+        asked("check Teams", answer("Reading Teams.", listOf(sync("Teams", sheet.id))))
+        // No read till past the quarter of an hour, which then finds it handed in.
+        felix.clock.time = now + 20 * 60_000L
+        stores.tasks.update { s -> s.copy(tasks = s.tasks.map { it.copy(status = Status.Done, doneAt = felix.clock.time) }) }
+        conversation.afterSync()
+        assertTrue(stores.chat.value.messages.none { it.kind == MessageKind.Note })
+    }
+
+    @Test
+    fun `a read of one source about another's task is made, but the task isn't watched`() = runBlocking {
+        stores.tasks.update { it.copy(tasks = listOf(sheet)) }
+        val his = asked("check Gmail for the worksheet", answer("Reading Gmail.", listOf(sync("Gmail", sheet.id))))
+        assertEquals(listOf(setOf(Source.Gmail)), felix.synced)
+        assertTrue(his.note!!.contains("it's from Teams"), his.note)
+        stores.tasks.update { s -> s.copy(tasks = s.tasks.map { it.copy(status = Status.Done, doneAt = now) }) }
+        conversation.afterSync()
+        assertTrue(stores.chat.value.messages.none { it.kind == MessageKind.Note })
+    }
+
+    @Test
     fun `a read past the watch says nothing, and a source the app doesn't read is refused`() = runBlocking {
         stores.tasks.update { it.copy(tasks = listOf(sheet)) }
         asked("check Teams", answer("Reading Teams.", listOf(sync("Teams", sheet.id))))
@@ -198,6 +238,17 @@ class GapsTest {
         assertEquals("Opened in Teams: Forces worksheet", his.acts.single().line)
         assertNull(his.acts.single().action)
         assertEquals(listOf(own.id), his.proposals.mapNotNull { it.open })
+    }
+
+    @Test
+    fun `the chat left while a task opened where it lives, its card is there too`() = runBlocking {
+        stores.tasks.update { it.copy(tasks = listOf(sheet)) }
+        conversation.chatInFront = true
+        felix.ports.whileOpening = { conversation.chatInFront = false }
+        val his = asked("open it in Teams", answer("Opening it in Teams.", listOf(action("open", sheet.id, "source"))))
+        assertEquals(listOf(sheet.id), felix.ports.opened)
+        assertEquals(listOf(sheet.id), his.proposals.mapNotNull { it.open })
+        assertTrue(his.acts.single().line.startsWith("Opened in Teams: Forces worksheet") && "its card's here" in his.acts.single().line, his.acts.toString())
     }
 
     @Test
