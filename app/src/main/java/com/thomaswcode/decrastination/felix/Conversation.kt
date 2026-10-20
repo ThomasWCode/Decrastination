@@ -943,6 +943,38 @@ class Conversation(
         return if (full) "It has ${Notes.PER_TASK} notes already: delete one first" else null
     }
 
+    /**
+     * His notes and reminders kept as long as they're wanted (8a, the morning's prune): a reminder sent or
+     * done a month ago goes, a cancelled one and a deleted note once their act's Undo is gone with its
+     * message from the chat's window, and a note on a task gone from the list once its delete can't be
+     * undone ([Notes.prune], [Reminders.prune]).
+     */
+    suspend fun pruneFelix(now: Long = clock.now()) {
+        val messages = chat.value.messages
+        val ids = tasks.value.tasks.mapTo(HashSet()) { it.id }
+        felix.update { s -> s.copy(notes = Notes.prune(s.notes, ids, messages), reminders = Reminders.prune(s.reminders, now, messages)) }
+    }
+
+    /** His notes and reminders as the debug page and the `felix` command show them (8a): a line each, a reminder's with when it comes now. */
+    fun notesAndReminders(now: Long = clock.now()): List<String> {
+        val kept = felix.value
+        val plan = planning.plan(now = now)
+        val byId = tasks.value.tasks.associateBy { it.id }
+        val reminders = kept.reminders.map { r ->
+            val state = when {
+                r.cancelledAt != null -> "cancelled"
+                r.doneAt != null -> "done"
+                !Reminders.pending(r) -> "sent"
+                r.sentAt != null -> "snoozed"
+                else -> "to come"
+            }
+            "reminder ${r.id} ($state, ${r.by}): ${Reminders.whenLine(r, Reminders.moment(r, plan, byId, now), r.taskId?.let(byId::get)?.title, clock.zone())}, “${r.text}”" +
+                (r.draft?.let { " · written ahead: “${it.message}”" }.orEmpty())
+        }
+        val notes = kept.notes.map { n -> "note ${n.id} (${n.by}${if (n.deletedAt != null) ", deleted" else ""}) on ${n.taskId ?: n.scope?.let(Notes::scopeLine)}: ${n.text}" }
+        return reminders + notes
+    }
+
     /** Note [id] deleted from a sheet (8a): marked, shown nowhere, and let go at the next prune, as no act holds it. */
     suspend fun deleteNote(id: String) {
         felix.update { s -> s.copy(notes = s.notes.map { if (it.id == id && it.deletedAt == null) it.copy(deletedAt = clock.now()) else it }) }

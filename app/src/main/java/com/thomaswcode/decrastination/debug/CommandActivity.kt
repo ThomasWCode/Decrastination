@@ -395,6 +395,8 @@ class CommandActivity : Activity() {
                 ChatHistory.his(chat.messages).takeLast(10).forEach { m ->
                     Log.i(TAG, "felix ${m.kind}${if (m.byApp) " (the app's words)" else ""} ${m.pieceKey}: ${m.text.ifBlank { "(silent)" }} ${m.suggestedReplies}${ChatHistory.replyOf(m, chat.messages)?.let { r -> " / reply: ${r.text}" }.orEmpty()}")
                 }
+                // His notes and reminders (8a), each with when it comes and what he's written ahead.
+                graph.conversation.notesAndReminders().forEach { Log.i(TAG, "felix $it") }
             }
             "felix-check" -> graph.looks.check().also { Log.i(TAG, "felix-check done") }
             "felix-say" -> {
