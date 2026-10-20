@@ -20,12 +20,15 @@ import com.thomaswcode.decrastination.core.Instruction
 import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.InstructionStatus
 import com.thomaswcode.decrastination.core.Kind
+import com.thomaswcode.decrastination.core.Lessons
 import com.thomaswcode.decrastination.core.MemoryState
 import com.thomaswcode.decrastination.core.MessageKind
 import com.thomaswcode.decrastination.core.NoSchool
 import com.thomaswcode.decrastination.core.Note
 import com.thomaswcode.decrastination.core.NoteScope
 import com.thomaswcode.decrastination.core.Plan
+import com.thomaswcode.decrastination.core.PpClass
+import com.thomaswcode.decrastination.core.PpSchedule
 import com.thomaswcode.decrastination.core.Planner
 import com.thomaswcode.decrastination.core.Proposal
 import com.thomaswcode.decrastination.core.ProposalState
@@ -38,6 +41,7 @@ import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.core.SubStep
+import com.thomaswcode.decrastination.core.Timetable
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.WebSource
 import com.thomaswcode.decrastination.core.WindowKind
@@ -66,7 +70,17 @@ import kotlin.test.fail
  * The words around them are the doc's own.
  */
 class FelixInputsDocTest {
-    private val settings = Settings(classMap = mapOf("12X/Ph1" to "Physics", "12X/Ma1" to "Maths", "12X/Ch1" to "Chemistry"), profileLines = listOf("I work best straight after school."))
+    // Power Planner's class names beside Teams' codes (G8): the same subject ties them.
+    private val settings = Settings(classMap = mapOf("12X/Ph1" to "Physics", "12X/Ma1" to "Maths", "12X/Ch1" to "Chemistry", "Chem" to "Chemistry", "Phys" to "Physics"), profileLines = listOf("I work best straight after school."))
+
+    /** Power Planner's two-week timetable (G8): chemistry on Wednesdays and Fridays, physics on Mondays and Thursdays. */
+    private val timetable = Timetable(
+        "2026-09-07T00:00:00",
+        listOf(
+            PpClass("c1", "Chem", listOf(PpSchedule("2026-09-05T10:00:00", "2026-09-05T11:00:00", 3), PpSchedule("2026-09-05T14:00:00", "2026-09-05T15:00:00", 5))),
+            PpClass("p1", "Phys", listOf(PpSchedule("2026-09-05T08:50:00", "2026-09-05T09:45:00", 1), PpSchedule("2026-09-05T12:20:00", "2026-09-05T13:15:00", 4))),
+        ),
+    )
     private val school = SchoolCalendar(noSchool = listOf(NoSchool("2026-10-22", "2026-10-23", "Training days")))
     private val memory = MemoryState(
         facts = listOf(Fact("football", "Training is on Tuesdays", Fixtures.at("2026-10-12T19:00"))),
@@ -154,8 +168,10 @@ class FelixInputsDocTest {
         val asked = ChatMessage("m3", Speaker.You, "Can I do these tomorrow instead?", now, about = About(taskId = vectors.id, taskTitle = vectors.title))
         val planned = plan("2026-10-13T17:20")
         val moments = reminders.mapNotNull { r -> Reminders.moment(r, planned, byId, now)?.let { r.id to it } }.toMap()
+        // Each class's next lessons (G8), the timetable read this morning: "the worksheet's due next lesson" has the worksheet's class and its lessons.
+        val lessons = Lessons.Timetabled(Lessons.groups(Lessons.next(timetable, now, LONDON, school), settings.classMap), Fixtures.at("2026-10-13T07:00"), stale = false)
         val context = ChatPrompts.Context(
-            known = ChatPrompts.context(tasks, events, applied, now, LONDON, settings.classMap, emptyList(), settings, calibration, notes, reminders, moments),
+            known = ChatPrompts.context(tasks, events, applied, now, LONDON, settings.classMap, emptyList(), settings, calibration, notes, reminders, moments, lessons),
             // With whether blocking applies, and the free time (G5), as Focus says it then.
             plan = ChatPrompts.plan(planned, LONDON, blocking = Focus.blockingLine(BlockPolicy.Verdict.Block(BlockPolicy.Reason.TodayUndone), planned.todayBucket?.chunks.orEmpty(), 0, 16 * 60 + 45, null)),
         )

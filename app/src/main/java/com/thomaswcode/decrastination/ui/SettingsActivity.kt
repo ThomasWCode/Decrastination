@@ -149,7 +149,7 @@ class SettingsActivity : ComponentActivity() {
                             minLines = 3,
                         )
                         // Each class code the sources give, and the subject it is: blank leaves it the code.
-                        for (code in screen.classCodes(graph.tasks.value.tasks)) {
+                        for (code in screen.classCodes(graph.tasks.value.tasks, graph.tasks.value.timetable)) {
                             OutlinedTextField(
                                 value = draft.classMap[code].orEmpty(),
                                 onValueChange = { subject -> screen.subject(code, subject) },
