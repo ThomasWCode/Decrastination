@@ -88,7 +88,7 @@ A note on a task whose record is gone from `tasks.json` goes at the next prune o
 ## Phone check
 
 - `chat-ask --es text "remind me in 3 minutes to stretch"` (a paid call, and a second for the draft, made at once as it's within the window): the act under his reply; `felix` shows the reminder and its draft; three minutes on, his message in the chat and on the notification with its chips, in his words; *Snooze 15 min* from the notification moves it (no call; the draft goes, a new one is written near the time); *Done* ends it.
-- The same with aeroplane mode on through the window (yours to switch): the reminder comes as your words, marked as the app's.
+- The same with aeroplane mode on through the window (yours to switch): the reminder comes as your words, marked as the app's. Set it at least 15 minutes ahead and switch on straight after his answer, before its last ten minutes: one set inside them (as the three-minute one above is) is written for at once, while the phone's still online, and comes in his words whatever's switched after, as designed.
 - `chat-ask --es text "note on <a task>: check the mark scheme first"`: on the sheet; in `chat-context`; in the next `felix-say --es reason SlotStart` about that task.
 - `chat-ask --es text "for all my chemistry homework: do it on sheets, not in my book"`: the standing note's act under his reply; on every chemistry task's sheet; under each in `chat-context`; in a `felix-say --es reason SlotStart` about one of them.
 - A `SlotStart` reminder on tomorrow's first slot: `plan` shows the slot; the alarm is set (`dumpsys alarm | grep decrastination`); the slot's start brings it.
