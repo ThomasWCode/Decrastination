@@ -39,9 +39,12 @@ class ChatReader(
     /**
      * Claude's answer to the last of [messages] (yours), with what the app knows now ([context]:
      * [ChatPrompts.context] and [ChatPrompts.plan]), what a web search it asked for [found], and the
-     * tasks whose whole text it asked to [read] (D-93); its reminders and notes checked against [felix]'s (Stage 8a).
+     * tasks whose whole text it asked to [read] (D-93), and what else it asked for [brought] (8c: the week's numbers,
+     * the calendar further out, each a block of its own), why a search it asked for wasn't made [notLooked], the [last]
+     * round said to be so; its reminders and notes
+     * checked against [felix]'s (Stage 8a).
      */
-    suspend fun answer(messages: List<ChatMessage>, tasks: List<TaskItem>, events: List<CalendarEvent>, context: ChatPrompts.Context, now: Long, found: Found? = null, read: List<TaskItem> = emptyList(), quoted: List<ChatMessage> = emptyList(), felix: FelixStore = FelixStore()): Result {
+    suspend fun answer(messages: List<ChatMessage>, tasks: List<TaskItem>, events: List<CalendarEvent>, context: ChatPrompts.Context, now: Long, found: Found? = null, read: List<TaskItem> = emptyList(), quoted: List<ChatMessage> = emptyList(), felix: FelixStore = FelixStore(), brought: List<String> = emptyList(), last: Boolean = false, notLooked: String? = null): Result {
         val schema = JsonOutputFormat.Schema.builder().apply { ChatPrompts.SCHEMA.forEach { (k, v) -> putAdditionalProperty(k, JsonValue.from(v)) } }.build()
         val builder = MessageCreateParams.builder()
             .model(model)
@@ -50,7 +53,7 @@ class ChatReader(
             .outputConfig(OutputConfig.builder().effort(ModelEffort.of(ModelEffort.Job.Chat)).format(JsonOutputFormat.builder().schema(schema).build()).build())
             .putAdditionalHeader("anthropic-beta", ClaudeEnricher.FALLBACK_BETA)
             .putAdditionalBodyProperty("fallbacks", JsonValue.from("default"))
-        ChatPrompts.turns(messages, context.known, tasks.associateBy { it.id }, zone, plan = context.plan, found = found, read = read, events = events, quoted = quoted).forEach { (from, text) ->
+        ChatPrompts.turns(messages, context.known, tasks.associateBy { it.id }, zone, plan = context.plan, found = found, read = read, events = events, quoted = quoted, brought = brought, lastRound = last, notLooked = notLooked).forEach { (from, text) ->
             if (from == Speaker.You) builder.addUserMessage(text) else builder.addAssistantMessage(text)
         }
         val message = withContext(Dispatchers.IO) { client.messages().create(builder.build()) }

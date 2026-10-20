@@ -175,17 +175,51 @@ class ChatTest {
     )
 
     @Test
-    fun `the context ends with each open task's own text, cut short, with what comes with it`() {
+    fun `the context ends with each open task's own text, cut short, what comes with it on its line`() {
         val counts = bridge.copy(id = "anki:quota", source = Source.Anki, sourceId = "quota", title = "Anki: 20 new", detail = "20 cards", derived = true)
         val text = ChatPrompts.context(listOf(bridge, sheet, letter, counts), emptyList(), emptyList(), now, LONDON)
         val section = text.substringAfter("The tasks' own text")
-        assertTrue("- teams:sheet | Teams; links: https://example.org/forces\n    Answer questions 1 to 6.\n    Show your working." in section, section)
-        assertTrue("- gmail:letter | Gmail, from Ms Example; attachments: form.pdf (107 KB)\n    Please return the form." in section, section)
+        assertTrue("- teams:sheet\n    Answer questions 1 to 6.\n    Show your working." in section, section)
+        assertTrue("- gmail:letter\n    Please return the form." in section, section)
         // Cut, its start and its end are kept: an email's newest reply is at its end.
         assertTrue("[… ${letter.detail.length - ChatPrompts.BRIEF_TEXT} characters left out …]" in section, section)
         assertTrue("x Update: it's now due Monday." in section, section)
         // Nothing of its own (the bridge), or Anki's counts: not listed.
         assertFalse("teams:bridge" in section || "anki:quota" in section, section)
+        // Who it's from, what's attached and linked, and how long its text is: on each task's line (8c).
+        val list = text.substringBefore("The tasks' own text")
+        assertTrue("| links: https://example.org/forces; text 43 characters\n" in list, list)
+        assertTrue("| from Ms Example; attachments: form.pdf (107 KB); text 1,053 characters\n" in list, list)
+        assertTrue("teams:bridge |" in list && "| no text\n" in list, list)
+        // The app's own count, with no text of its own to ask for.
+        assertTrue(list.lines().single { it.startsWith("- anki:quota |") }.endsWith(" | -"), list)
+    }
+
+    @Test
+    fun `what each task's text holds has a room of its own, so every task stays listed beside the text block's own room`() {
+        // Eighty tasks, each with a long name of a file and a long text: every one listed, each line's part within
+        // 160 characters, the length always said, and the lot within 6 000, the later ones their length alone.
+        val file = "a-very-long-name-for-an-attached-worksheet-".repeat(4) + ".pdf"
+        val tasks = (1..InstructionPrompts.MAX_TASKS).map { i ->
+            letter.copy(
+                id = "gmail:l$i", sourceId = "l$i", title = "Letter $i", dueAt = now + i * 3_600_000L, detail = "w".repeat(1_200),
+                extra = mapOf(GmailThreads.EXTRA_FROM_NAME to "Ms Example", GmailThreads.EXTRA_ATTACHMENTS to GmailThreads.attachmentsExtra(listOf(Mime.Attachment(file, "application/pdf", 50_000)))),
+            )
+        }
+        val text = ChatPrompts.context(tasks, emptyList(), emptyList(), now, LONDON)
+        val lines = text.substringBefore("The tasks' own text").lines().filter { it.startsWith("- gmail:l") }
+        assertEquals(InstructionPrompts.MAX_TASKS, lines.size)
+        val holds = lines.map { it.substringAfterLast(" | ") }
+        assertTrue(holds.all { it.length <= 160 && it.endsWith("text 1,200 characters") }, holds.first())
+        assertTrue(holds.sumOf { it.length } <= 6_000 + holds.size * "text 1,200 characters".length, "${holds.sumOf { it.length }}")
+        assertTrue(holds.first().startsWith("from Ms Example; attachments: a-very-long"), holds.first())
+        assertEquals("text 1,200 characters", holds.last())
+        // The text block: each text at most its 600 characters (its start and end, with the cut said), 12 000 in all.
+        val section = text.substringAfter("The tasks' own text")
+        val entries = section.split("\n- gmail:").drop(1)
+        assertTrue(entries.all { it.length <= ChatPrompts.BRIEF_TEXT + 200 }, entries.first())
+        assertTrue(section.length <= 12_000 + 600, "${section.length}")
+        assertTrue("left out for room" in section, section.takeLast(200))
     }
 
     @Test
@@ -238,6 +272,51 @@ class ChatTest {
             listOf(sheet) + others, emptyList(), About(taskId = sheet.id), now, LONDON,
         )!!
         assertEquals(listOf("teams:s1", "teams:s2", "teams:s3"), reading.details)
+    }
+
+    @Test
+    fun `beside three tasks' texts he asks for the week's numbers and the calendar, each once, any other word dropped`() {
+        val others = (1..4).map { i -> sheet.copy(id = "teams:s$i", sourceId = "s$i") }
+        fun asked(details: String) = ChatAnswers.parse(
+            """{"reply":"Looking.","newTasks":[],"changes":[],"memories":[],"suggestedReplies":[],"actions":[],"research":"","details":[$details]}""",
+            listOf(sheet) + others, emptyList(), About(), now, LONDON,
+        )!!
+        val reading = asked(""""stats","teams:s1","calendar:2026-12","teams:s2","STATS","calendar","teams:s3","teams:s4","calendar:December","weather"""")
+        assertEquals(listOf("teams:s1", "teams:s2", "teams:s3"), reading.details)
+        assertTrue(reading.stats)
+        // The calendar first asked for: December's.
+        assertEquals("2026-12", reading.calendar)
+        // Alone, the four weeks after the fortnight; a month that doesn't read asks for nothing, as does nothing.
+        assertEquals("", asked(""""calendar"""").calendar)
+        assertNull(asked(""""calendar:December"""").calendar)
+        assertEquals("2027-01", asked("""" calendar:2027-01 """").calendar)
+        // A month as four digits of a year and two of a month, or none: a signed year far off can't be made a time.
+        assertNull(asked(""""calendar:+999999999-12"""").calendar)
+        assertNull(asked(""""calendar:26-12"""").calendar)
+        assertFalse(asked("").stats)
+        assertNull(asked("").calendar)
+    }
+
+    @Test
+    fun `the week's numbers and each span of the calendar take a round the first time each is asked for, never again`() {
+        val reading = parse("""{"reply":"Looking.","newTasks":[],$none,"memories":[],"suggestedReplies":[],"actions":[],"research":"","details":[]}""")!!
+        assertEquals(ChatRounds.Next(null, emptyList(), stats = true), ChatRounds.next(reading.copy(stats = true), searched = false, searches = true, read = emptyList()))
+        assertEquals(ChatRounds.Next(null, emptyList(), calendar = listOf("2026-12")), ChatRounds.next(reading.copy(calendar = "2026-12"), searched = false, searches = true, read = emptyList()))
+        // Brought already: nothing new.
+        assertNull(ChatRounds.next(reading.copy(stats = true), searched = false, searches = true, read = emptyList(), stats = true))
+        assertNull(ChatRounds.next(reading.copy(calendar = "2026-12"), searched = false, searches = true, read = emptyList(), calendar = listOf("2026-12")))
+        // Another span after it: brought too, two at most.
+        assertEquals(listOf("", "2027-01"), ChatRounds.next(reading.copy(calendar = "2027-01"), searched = false, searches = true, read = emptyList(), calendar = listOf(""))!!.calendar)
+        assertNull(ChatRounds.next(reading.copy(calendar = "2027-02"), searched = false, searches = true, read = emptyList(), calendar = listOf("", "2027-01")))
+        // A third span, as a fourth text, is still asked for, though no round brings it: said under his answer.
+        assertTrue(ChatRounds.asking(reading.copy(calendar = "2027-02"), searched = false, searches = true, read = emptyList(), stats = false, calendar = listOf("", "2027-01")))
+        assertTrue(ChatRounds.asking(reading.copy(details = listOf("d")), searched = false, searches = true, read = listOf("a", "b", "c"), stats = false, calendar = emptyList()))
+        assertFalse(ChatRounds.asking(reading.copy(calendar = "2027-01", details = listOf("a")), searched = true, searches = true, read = listOf("a"), stats = false, calendar = listOf("2027-01")))
+        // With a text to read and what came before kept: one round for all of it.
+        assertEquals(
+            ChatRounds.Next(null, listOf("teams:s1"), stats = true, calendar = listOf("")),
+            ChatRounds.next(reading.copy(details = listOf("teams:s1"), calendar = ""), searched = false, searches = true, read = emptyList(), stats = true),
+        )
     }
 
     @Test

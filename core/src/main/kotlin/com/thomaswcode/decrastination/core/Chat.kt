@@ -211,6 +211,9 @@ data class Act(
         /** How a [problem]'s line starts where a card of the answer couldn't be made, and where a search he asked for wasn't looked up: each said apart in the message's label ([ChatSummary.line]). */
         const val NOT_MADE = "Not made: "
         const val NOT_LOOKED_UP = "Not looked up: "
+
+        /** How a [problem]'s line starts where he asked for more after the last round a message has (8c). */
+        const val NOT_BROUGHT = "Not brought: "
     }
 }
 
@@ -263,6 +266,7 @@ object ChatSummary {
             listOfNotNull(
                 "$notMade not made".takeIf { notMade > 0 },
                 "not looked up".takeIf { message.acts.any { it.problem && it.line.startsWith(Act.NOT_LOOKED_UP) } },
+                "not brought".takeIf { message.acts.any { it.problem && it.line.startsWith(Act.NOT_BROUGHT) } },
                 "left out".takeIf { message.note != null },
             ).joinToString(" · "),
         )

@@ -97,7 +97,8 @@ object EventJudge {
      * have; one that would be asked about but starts after [askUntil] (DX-14: questions keep to the
      * week ahead) counts as a few hours of its day meanwhile, so the plan beyond it leaves it room.
      */
-    data class Time(val busy: List<Busy>, val dayLoads: Map<LocalDate, Int>, val toAsk: List<CalendarEvent>, val events: List<CalendarEvent> = emptyList())
+    /** [events] as last read, judged; [read] from when to when that read ran (null where the calendar's never been read), as a failed read keeps the one before. */
+    data class Time(val busy: List<Busy>, val dayLoads: Map<LocalDate, Int>, val toAsk: List<CalendarEvent>, val events: List<CalendarEvent> = emptyList(), val read: Pair<Long, Long>? = null)
 
     fun time(events: List<CalendarEvent>, answers: Map<String, String>, zone: ZoneId, askUntil: Long): Time {
         val busy = mutableListOf<Busy>()
