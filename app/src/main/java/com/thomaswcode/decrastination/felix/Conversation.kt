@@ -60,6 +60,7 @@ import com.thomaswcode.decrastination.learn.Assessment
 import com.thomaswcode.decrastination.learn.CheckIn
 import com.thomaswcode.decrastination.learn.Daily
 import com.thomaswcode.decrastination.learn.EventJudge
+import com.thomaswcode.decrastination.learn.Stats
 import com.thomaswcode.decrastination.notify.Channels
 import com.thomaswcode.decrastination.notify.Notices
 import com.thomaswcode.decrastination.plan.Planning
@@ -399,7 +400,7 @@ class Conversation(
      * again with them, never searching or asking for them again, as each is paid for; a search held
      * back (Claude off or resting, the cap) isn't kept, so it can be made later.
      */
-    private data class Gathered(val id: String, val found: Found?, val notLooked: String?, val read: List<String>)
+    private data class Gathered(val id: String, val found: Found?, val notLooked: String?, val read: List<String>, val stats: Boolean = false, val calendar: String? = null)
 
     @Volatile
     private var gathered: Gathered? = null
@@ -642,9 +643,10 @@ class Conversation(
             fun upTo(messages: List<ChatMessage>) = messages.take(messages.indexOfFirst { it.id == waiting.id } + 1)
             // When the plan he was last shown was made: a piece he keeps is kept as of it (G1).
             var shownAt = clock.now()
-            // His answer, with what a web search he asked for found ([found], 16 Oct), and the tasks whose
-            // whole text he asked to [read] (D-93).
-            suspend fun ask(found: Found?, read: List<TaskItem> = emptyList()) = gateway.call(interactive = true, record = ModelCalls.OnRecord(ModelEffort.Job.Chat, waiting.text) { r: ChatReader.Result -> r.usage to ModelCalls.outcome(r.refused, r.reading == null) }, cost = { r: ChatReader.Result -> r.costUsd to r.refused }) { at ->
+            // His answer, with what a web search he asked for found ([found], 16 Oct), the tasks whose whole
+            // text he asked to [read] (D-93), and the week's numbers and the calendar further out where he asked
+            // for them ([stats], [calendar]: 8c), as of the moment it's asked.
+            suspend fun ask(found: Found?, read: List<TaskItem> = emptyList(), stats: Boolean = false, calendar: String? = null) = gateway.call(interactive = true, record = ModelCalls.OnRecord(ModelEffort.Job.Chat, waiting.text) { r: ChatReader.Result -> r.usage to ModelCalls.outcome(r.refused, r.reading == null) }, cost = { r: ChatReader.Result -> r.costUsd to r.refused }) { at ->
                 // Being asked now: whatever it said before (a failed call) is gone.
                 chat.update { s -> s.copy(messages = s.messages.map { if (it.id == waiting.id) it.copy(note = null, stuck = false) else it }) }
                 sentAt.value = at
@@ -653,7 +655,11 @@ class Conversation(
                     val sent = upTo(chat.value.messages)
                     // What a message of yours quotes from the archive, past the window: told to him all the same.
                     val quoted = sent.mapNotNull { m -> m.replyTo?.takeIf { r -> sent.none { it.id == r } }?.let { outbox.find(it) } }
-                    ChatReader(chatClient, clock.zone(), profile = profile(at), settings = settings.value).answer(sent, state.tasks, time.events, chatContext(at, state, time, instructions.value.applied, noted), at, found, read, quoted, noted)
+                    val brought = listOfNotNull(
+                        ChatPrompts.statsBlock(Stats.weekLines(log.value, settings.value.classMap, at, clock.zone())).takeIf { stats },
+                        calendar?.let { ChatPrompts.calendarBlock(time.events, it, at, clock.zone()) },
+                    )
+                    ChatReader(chatClient, clock.zone(), profile = profile(at), settings = settings.value).answer(sent, state.tasks, time.events, chatContext(at, state, time, instructions.value.applied, noted), at, found, read, quoted, noted, brought)
                 } finally {
                     sentAt.value = null
                 }
@@ -664,6 +670,8 @@ class Conversation(
             // with it, not looked up or asked for again.
             val before = gathered?.takeIf { it.id == waiting.id }
             var read = tasksOf(before?.read.orEmpty())
+            var stats = before?.stats == true
+            var calendar = before?.calendar
             // Let go while it ran (AC-08: the message says so already), or another of yours sent meanwhile, to be
             // answered with it (D-98): the answer goes unused, and nothing more is looked up or read for it.
             fun unwanted(): Boolean {
@@ -671,7 +679,7 @@ class Conversation(
                 if (letGo == waiting.id) letGo = null
                 return gone
             }
-            val called = ask(before?.found, read)
+            val called = ask(before?.found, read, stats, calendar)
             if (unwanted()) return@withLock
             val result = when (called) {
                 is Called.Held -> return@call gateway.because(called.hold)
@@ -696,7 +704,7 @@ class Conversation(
             // Why a search made found nothing, kept with the rest; one held back isn't, so it can be made later.
             var tried = before?.notLooked
             for (round in 1..ChatRounds.MAX_ROUNDS) {
-                val next = ChatRounds.next(reading, searched = found != null || notLooked != null, searches = settings.value.felixSearches, read = read.map { it.id }) ?: break
+                val next = ChatRounds.next(reading, searched = found != null || notLooked != null, searches = settings.value.felixSearches, read = read.map { it.id }, stats = stats, calendar = calendar) ?: break
                 var looks = false
                 next.search?.let { question ->
                     val search = gateway.call(interactive = true, record = ModelCalls.OnRecord(ModelEffort.Job.Research, question) { r: WebResearcher.Result -> r.usage to ModelCalls.outcome(r.refused, r.found == null) }, cost = { r: WebResearcher.Result -> r.costUsd to r.refused }) { at ->
@@ -729,10 +737,14 @@ class Conversation(
                 val more = tasksOf(next.read)
                 val reads = more.size > read.size
                 if (reads) read = more
+                // The week's numbers and the calendar further out (8c), each the first time he asks for it.
+                val brings = next.stats != stats || next.calendar != calendar
+                stats = next.stats
+                calendar = next.calendar
                 // Nothing new to answer with (a search that found nothing, no texts asked for): his answer stands.
-                if (!looks && !reads) break
-                gathered = Gathered(waiting.id, found, tried, read.map { it.id })
-                val again = ask(found, read)
+                if (!looks && !reads && !brings) break
+                gathered = Gathered(waiting.id, found, tried, read.map { it.id }, stats, calendar)
+                val again = ask(found, read, stats, calendar)
                 if (unwanted()) return@withLock
                 val second = when (again) {
                     is Called.Held -> return@call gateway.because(again.hold)
@@ -747,7 +759,7 @@ class Conversation(
                     return@call if (second.refused) "Claude declined to answer that: Try again, or put it another way" else "Claude's answer couldn't be read: Try again"
                 }
             }
-            reading = reading.copy(research = null, details = emptyList())
+            reading = reading.copy(research = null, details = emptyList(), stats = false, calendar = null)
             gathered = null
             val reply = ChatMessage(
                 id = UUID.randomUUID().toString(),
@@ -765,6 +777,9 @@ class Conversation(
                 acts = listOfNotNull(
                     notLooked?.let { Act(Act.NOT_LOOKED_UP + "$it.", problem = true) },
                     read.takeIf { it.isNotEmpty() }?.let { r -> Act("Read in full: " + r.joinToString("; ") { "“${it.title}”" } + ".") },
+                    // What else he read to answer (8c), said under it as the texts are.
+                    Act("Read: the week's numbers.").takeIf { stats },
+                    calendar?.let { Act("Read: the calendar for " + ChatPrompts.calendarWhat(it, shownAt, clock.zone()) + ".") },
                 ),
             )
             var kept = false
