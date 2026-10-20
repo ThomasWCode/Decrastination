@@ -107,6 +107,18 @@ class RemindersTest {
     }
 
     @Test
+    fun `one let go is back once what it waited on is, and one whose task went stays let go`() {
+        val reminders = listOf(slotStart("teams:sheet"), beforeDue("teams:essay", 30), beforeDue("teams:gone", 30).copy(id = "g")).map { it.copy(letGoAt = now - min) }
+        assertTrue(reminders.none(Reminders::pending))
+        // As they were let go: the sheet done, the essay with no deadline, the last's task gone, Teams read since.
+        val done = mapOf("teams:sheet" to task("teams:sheet", status = Status.Done), "teams:essay" to task("teams:essay"))
+        assertTrue(Reminders.back(reminders, done, now) { now }.isEmpty())
+        // The sheet open again (a tick undone), the essay given a due date; the gone one still not listed.
+        val again = mapOf("teams:sheet" to task("teams:sheet"), "teams:essay" to task("teams:essay", due = "2026-10-22T09:00"))
+        assertEquals(listOf("s", "b"), Reminders.back(reminders, again, now) { now }.map { it.id })
+    }
+
+    @Test
     fun `a slot's reminder on a task with no slots of work for good is let go, a deadline's on it not`() {
         val event = task("teams:test", due = "2026-10-22T09:00").copy(kind = Kind.Event)
         val hidden = task("teams:sheet").copy(mine = Mine(notATask = SetBy(true, By.You)))
@@ -133,17 +145,20 @@ class RemindersTest {
     }
 
     @Test
-    fun `those sent or done go after 30 days, a cancelled one with its act's Undo`() {
+    fun `those sent, done or let go go after 30 days, a cancelled one with its act's Undo`() {
         val old = now - Reminders.KEEP_MS - min
         val sent = at("2026-10-20T19:00").copy(id = "sent", sentAt = old)
         val done = at("2026-10-20T19:00").copy(id = "done", sentAt = old, doneAt = now - min)
         val pending = at("2026-10-20T19:00").copy(id = "pending", at = old)
         val cancelled = at("2026-10-20T19:00").copy(id = "cancelled", cancelledAt = now - min)
-        val all = listOf(sent, done, pending, cancelled)
+        // Let go a month ago, or a minute ago: the latter kept, to come back if its task's to do again.
+        val gone = slotStart("teams:sheet").copy(id = "gone", letGoAt = old)
+        val letGo = slotStart("teams:sheet").copy(id = "let go", letGoAt = now - min)
+        val all = listOf(sent, done, pending, cancelled, gone, letGo)
         val cancel = ChatMessage("m", Speaker.Felix, "Cancelled it.", now, acts = listOf(Act("Cancelled", ChatAction(ChatAction.Type.CancelReminder, "", value = "cancelled"))))
-        assertEquals(listOf("done", "pending", "cancelled"), Reminders.prune(all, now, listOf(cancel)).map { it.id })
+        assertEquals(listOf("done", "pending", "cancelled", "let go"), Reminders.prune(all, now, listOf(cancel)).map { it.id })
         // Its cancel undone (the reminder back), or its message gone from the window: nothing brings it back.
-        assertEquals(listOf("done", "pending"), Reminders.prune(all, now, listOf(cancel.copy(acts = cancel.acts.map { it.copy(undone = true) }))).map { it.id })
-        assertEquals(listOf("done", "pending"), Reminders.prune(all, now, emptyList()).map { it.id })
+        assertEquals(listOf("done", "pending", "let go"), Reminders.prune(all, now, listOf(cancel.copy(acts = cancel.acts.map { it.copy(undone = true) }))).map { it.id })
+        assertEquals(listOf("done", "pending", "let go"), Reminders.prune(all, now, emptyList()).map { it.id })
     }
 }

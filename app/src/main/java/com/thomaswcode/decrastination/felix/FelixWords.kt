@@ -43,6 +43,9 @@ object FelixWords {
     /** A reminder of yours, [words], let go before it came, as its task, [title], [why]. */
     fun letGo(words: String, title: String, why: String): String = "Your reminder “$words” is let go: “$title” $why."
 
+    /** A reminder of yours, [words], let go and back, as its task, [title], [why]. */
+    fun back(words: String, title: String, why: String): String = "Your reminder “$words” is back: “$title” $why."
+
     /** His line under an answer that asked [source] to read (G2): no Undo, as a read takes nothing back. */
     fun reading(source: String): String = "Asked $source to read"
 

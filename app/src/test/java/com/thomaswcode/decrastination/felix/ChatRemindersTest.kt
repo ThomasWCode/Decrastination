@@ -117,6 +117,27 @@ class ChatRemindersTest {
     }
 
     @Test
+    fun `a reminder on a task the same answer opens again is made, its actions being made first`() {
+        val poster = task("own:poster", "Poster", status = Status.Done).copy(source = Source.Own, sourceId = "poster", doneAt = now - 60 * min)
+        val json = answer(
+            listOf(reminder(text = "use the big pens", taskId = poster.id, whenIs = "slotStart")),
+            actions = """[{"type":"reopen","taskId":"${poster.id}","stepIndex":-1,"setting":"","value":""}]""",
+        )
+        val reading = ChatAnswers.parse(json, tasks + poster, emptyList(), About(), now, LONDON, felix = FelixStore())!!
+        assertEquals(listOf(ChatAction.Type.Reopen), reading.actions.map { it.type })
+        assertEquals(listOf("use the big pens"), reading.reminders.map { it.text }, reading.leftOut.toString())
+        // Not opened again by it, it's refused as on any finished task.
+        assertTrue(parse(answer(listOf(reminder(text = "use the big pens", taskId = done.id, whenIs = "slotStart")))).leftOut.single().contains("which is finished"))
+    }
+
+    @Test
+    fun `a standing note for tasks named past sixty characters is refused`() {
+        val reading = parse(answer(notes = listOf(standing("on paper", titleContains = "x".repeat(Notes.MAX_SCOPE + 1)))))
+        assertTrue(reading.notes.isEmpty())
+        assertTrue(reading.leftOut.single().contains("more than ${Notes.MAX_SCOPE} characters"), reading.leftOut.toString())
+    }
+
+    @Test
     fun `a listed reminder's id moves or rewords it in place, its draft let go, and an unknown or sent one's refused`() {
         val felix = FelixStore(reminders = listOf(listed, listed.copy(id = "r2", sentAt = now - min)))
         val moved = parse(answer(listOf(reminder(id = "r1", text = "", time = "20:00"))), felix).reminders.single()
@@ -244,8 +265,9 @@ class ChatRemindersTest {
         val closed = lines.indexOf("Notes on finished tasks (id | whose | its task | their words):")
         assertTrue(closed > lines.indexOf("Standing notes, for every task they match (id | whose | the tasks they're for | their words):"))
         assertEquals("- n4 | theirs | Practical write-up | marked, the write-up's back", lines[closed + 1])
+        // First, so a context too long for its room never loses them.
         val header = lines.indexOf("Reminders set, still to come (id | when | their words | its task):")
-        assertTrue(header > lines.indexOfFirst { it.startsWith("Calendar events") })
+        assertTrue(header in 0 until lines.indexOfFirst { it.startsWith("Open tasks") })
         assertEquals(
             listOf("- r1 | Tue 20 Oct 19:00 | call gran | -", "- r2 | at the start of “Forces worksheet”'s next slot, none planned yet | bring the form | teams:sheet"),
             lines.subList(header + 1, header + 3),

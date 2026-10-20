@@ -7,7 +7,6 @@ import java.time.LocalDate
 import com.thomaswcode.decrastination.core.yours
 import com.thomaswcode.decrastination.data.LearningState
 import com.thomaswcode.decrastination.data.ProtectionState
-import com.thomaswcode.decrastination.data.RuntimeSplit
 import com.thomaswcode.decrastination.data.SessionState
 import com.thomaswcode.decrastination.data.SlotOutcome
 import com.thomaswcode.decrastination.core.WindowKind
@@ -31,7 +30,6 @@ import com.thomaswcode.decrastination.data.Keeping
 import com.thomaswcode.decrastination.data.PhotoDone
 import com.thomaswcode.decrastination.data.SlotRecord
 import com.thomaswcode.decrastination.data.SourceStatus
-import com.thomaswcode.decrastination.data.RuntimeState
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.data.TasksMigration
@@ -57,7 +55,6 @@ class FocusTest {
     private val clock = FixedClock(Fixtures.at("2026-10-10T12:00"), LONDON)
     private val tasks = JsonStore(File(dir, "tasks.json"), TaskState.serializer(), ::TaskState, migrations = listOf(TasksMigration.TASKS))
     private val settings = JsonStore(File(dir, "settings.json"), Settings.serializer(), ::Settings)
-    private val runtime = JsonStore(File(dir, "runtime.json"), RuntimeState.serializer(), ::RuntimeState, migrations = listOf(ChatMigration.RUNTIME, RuntimeSplit.RUNTIME))
     private val protection = JsonStore(File(dir, "protection.json"), ProtectionState.serializer(), ::ProtectionState)
     private val session = JsonStore(File(dir, "session.json"), SessionState.serializer(), ::SessionState)
     private val learning = JsonStore(File(dir, "learning.json"), LearningState.serializer(), ::LearningState)
@@ -163,10 +160,10 @@ class FocusTest {
     @Test
     fun `what was just spent is off the credit at once, before it's saved`() = runTest {
         focus.onCompleted(listOf(task("hw", effort = 30).copy(status = Status.Done, doneAt = clock.time)))
-        // The store held mid-write, so the save waits.
+        // The store the credit is saved to held mid-write, so the save waits.
         val entered = CountDownLatch(1)
         val release = CountDownLatch(1)
-        val holder = thread { runBlocking { runtime.update { entered.countDown(); release.await(); it } } }
+        val holder = thread { runBlocking { session.update { entered.countDown(); release.await(); it } } }
         entered.await()
         val saving = focus.spendSoon(4 * 60_000L, CoroutineScope(Dispatchers.Default))
         // Not saved yet, and already counted.

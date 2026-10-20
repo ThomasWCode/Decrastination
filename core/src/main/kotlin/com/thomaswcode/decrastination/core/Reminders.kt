@@ -12,7 +12,8 @@ import kotlinx.serialization.Serializable
  * ([draft], Q9: B; Q24), or yours as you set them where he can't write. Set from the chat ([by]);
  * [sentAt] once delivered, [snoozedTo] by a snooze (it comes again then), [doneAt] by its *Done*.
  * Cancelled ([cancelledAt]), it's never delivered and kept whole for the cancel's Undo; one whose task
- * closes before it comes is let go the same way, said in the chat ([Reminders.letGo]).
+ * closes before it comes is let go ([letGoAt]), said in the chat ([Reminders.letGo]), and back, said too,
+ * once its task is to do again ([Reminders.back]).
  */
 @Serializable
 data class Reminder(
@@ -25,8 +26,10 @@ data class Reminder(
     val sentAt: Long? = null,
     val snoozedTo: Long? = null,
     val doneAt: Long? = null,
-    /** Cancelled from the chat, or let go: kept, never delivered, till its act can no longer be undone; Undo clears it. */
+    /** Cancelled from the chat: kept, never delivered, till its act can no longer be undone; Undo clears it. */
     val cancelledAt: Long? = null,
+    /** Let go by the app, as what it waited on went ([Reminders.letGo]): never delivered while so, and back once that's back. */
+    val letGoAt: Long? = null,
     /** His words for it, written ahead, when, and for the moment they were written for (or asked for, where none came): another moment's aren't sent. */
     val draft: FelixAnswer? = null,
     val draftedAt: Long? = null,
@@ -64,9 +67,9 @@ object Reminders {
     /** How long after its time one comes before it's marked late (the phone off, or asleep through it). */
     const val LATE_MS = 5 * 60_000L
 
-    /** Whether [r] is still to come: not done nor cancelled, and not sent but for a snooze since. */
+    /** Whether [r] is still to come: not done, cancelled nor let go, and not sent but for a snooze since. */
     fun pending(r: Reminder): Boolean =
-        r.doneAt == null && r.cancelledAt == null && (r.sentAt == null || (r.snoozedTo != null && r.snoozedTo > r.sentAt))
+        r.doneAt == null && r.cancelledAt == null && r.letGoAt == null && (r.sentAt == null || (r.snoozedTo != null && r.snoozedTo > r.sentAt))
 
     /** Whether [r] can still be moved or reworded: still to come, and never sent. */
     fun unsent(r: Reminder): Boolean = pending(r) && r.sentAt == null && r.snoozedTo == null
@@ -126,6 +129,14 @@ object Reminders {
     }
 
     /**
+     * Those of [reminders] let go ([letGo]) that what they waited on has come back to while they're kept: their task
+     * open and listed again, on the plan, with a deadline (a tick undone, a source's read that took it away a while), so
+     * a let-go doesn't lose what you set. Each comes as it was set.
+     */
+    fun back(reminders: List<Reminder>, tasks: Map<String, TaskItem>, now: Long, readAt: (Source) -> Long? = { null }): List<Reminder> =
+        reminders.filter { r -> r.letGoAt != null && r.copy(letGoAt = null).let { was -> unsent(was) && letGo(listOf(was), tasks, now, readAt).isEmpty() } }
+
+    /**
      * Whether [task] never has a work slot, so a SlotStart on it never comes: an event, or one you said isn't a
      * task or is the same as another ([TaskItem.hidden]), as the planner leaves them out of the work it lays.
      */
@@ -172,9 +183,9 @@ object Reminders {
     }
 
     /**
-     * [reminders] kept (the nightly prune): one sent or done more than [KEEP_MS] before [now] goes, as does
-     * one cancelled (or let go) once no message in the chat's window, [messages], holds its cancel's act
-     * not undone; the rest stay.
+     * [reminders] kept (the nightly prune): one sent, done or let go more than [KEEP_MS] before [now] goes, as
+     * does one cancelled once no message in the chat's window, [messages], holds its cancel's act not undone;
+     * the rest stay.
      */
     fun prune(reminders: List<Reminder>, now: Long, messages: List<ChatMessage>): List<Reminder> {
         val held = ChatActs.held(messages)
@@ -182,7 +193,7 @@ object Reminders {
             when {
                 r.cancelledAt != null -> r.id in held
                 pending(r) -> true
-                else -> (listOfNotNull(r.doneAt, r.sentAt).maxOrNull() ?: r.at) >= now - KEEP_MS
+                else -> (listOfNotNull(r.doneAt, r.sentAt, r.letGoAt).maxOrNull() ?: r.at) >= now - KEEP_MS
             }
         }
     }

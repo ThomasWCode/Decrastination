@@ -224,7 +224,7 @@ class NotesAndRemindersTest {
         // Said under an id of its own, before it's marked, so a failure between says it once, again.
         assertEquals("letgo-r-form", note.id)
         assertTrue(note.byApp && note.about.taskId == sheet.id)
-        assertNotNull(stores.felix.value.reminders.single().cancelledAt)
+        assertNotNull(stores.felix.value.reminders.single().letGoAt)
         assertTrue(stores.chat.value.messages.none { it.kind == MessageKind.Reminder })
         // Let go once.
         felix.looks.sweepReminders(now + MIN)
@@ -248,8 +248,27 @@ class NotesAndRemindersTest {
         stores.tasks.update { it.copy(tasks = listOf(sheet.copy(kind = Kind.Event))) }
         stores.felix.update { it.copy(reminders = it.reminders + Reminder("r-pen", "bring a pen", now, By.Felix, sheet.id, Due(DueKind.SlotStart, now))) }
         felix.looks.sweepReminders(now + MIN)
-        assertNotNull(stores.felix.value.reminders.single { it.id == "r-pen" }.cancelledAt)
+        assertNotNull(stores.felix.value.reminders.single { it.id == "r-pen" }.letGoAt)
         assertEquals(FelixWords.letGo("bring a pen", "Forces worksheet", "is an event, with no slots of work"), stores.chat.value.messages.single { it.kind == MessageKind.Note }.text)
+    }
+
+    @Test
+    fun `one let go is back once its task is open again, said in the let-go's note, and not lost to a tick undone`() = runBlocking {
+        stores.tasks.update { it.copy(tasks = listOf(sheet.copy(status = Status.Done, doneAt = now))) }
+        stores.felix.update { it.copy(reminders = listOf(Reminder("r-form", "bring the form", now - 10 * MIN, By.Felix, sheet.id, Due(DueKind.SlotStart, now - 10 * MIN)))) }
+        felix.looks.sweepReminders(now)
+        assertNotNull(stores.felix.value.reminders.single().letGoAt)
+        // The tick undone: open again, it's back, the same note saying so, moved to the end.
+        stores.tasks.update { it.copy(tasks = listOf(sheet)) }
+        felix.looks.sweepReminders(now + MIN)
+        val back = stores.felix.value.reminders.single()
+        assertTrue(back.letGoAt == null && Reminders.pending(back), back.toString())
+        val note = stores.chat.value.messages.single { it.kind == MessageKind.Note }
+        assertEquals("letgo-r-form", note.id)
+        assertEquals(FelixWords.back("bring the form", "Forces worksheet", "is on the plan again"), note.text)
+        // Back once: the next sweep says nothing more.
+        felix.looks.sweepReminders(now + 2 * MIN)
+        assertEquals(note, stores.chat.value.messages.single { it.kind == MessageKind.Note })
     }
 
     /** His answer for a reminder, as his calls give it. */
@@ -383,12 +402,16 @@ class NotesAndRemindersTest {
         stores.felix.update { s ->
             s.copy(
                 notes = s.notes + Note("gone", "deleted on its sheet", now, By.You, taskId = sheet.id, deletedAt = now),
-                reminders = listOf(at("old", now - 40 * 24 * 60 * MIN).copy(sentAt = now - 31 * 24 * 60 * MIN), at("let go", now + MIN).copy(cancelledAt = now), at("to come", now + 60 * MIN)),
+                reminders = listOf(
+                    at("old", now - 40 * 24 * 60 * MIN).copy(sentAt = now - 31 * 24 * 60 * MIN), at("cancelled", now + MIN).copy(cancelledAt = now),
+                    at("let go", now + MIN).copy(letGoAt = now), at("to come", now + 60 * MIN),
+                ),
             )
         }
         conversation.pruneFelix(now)
         assertEquals(listOf(own.id), stores.felix.value.notes.map { it.taskId })
-        assertEquals(listOf("to come"), stores.felix.value.reminders.map { it.text })
+        // A cancel no act holds goes; one let go is kept a while, to come back if its task's to do again.
+        assertEquals(listOf("let go", "to come"), stores.felix.value.reminders.map { it.text })
         // The delete's message out of the window: nothing brings the task back, so its note goes too.
         stores.chat.update { it.copy(messages = emptyList()) }
         conversation.pruneFelix(now)

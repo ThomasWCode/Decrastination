@@ -127,7 +127,7 @@ class Looks(
      * plan, [plan] the one just made, so a slot's reminder goes by where it laid the slot.
      */
     suspend fun sweepReminders(now: Long = clock.now(), plan: Plan? = null): Unit = sweeping.withLock {
-        if (felix.value.reminders.none(Reminders::pending)) return@withLock
+        if (felix.value.reminders.none { Reminders.pending(it) || it.letGoAt != null }) return@withLock
         val tasks = this.tasks.value.tasks.associateBy { it.id }
         for (r in Reminders.letGo(felix.value.reminders, tasks, now) { s -> this.tasks.value.status(s).lastSuccessAt }) {
             val task = r.taskId?.let(tasks::get)
@@ -141,7 +141,15 @@ class Looks(
             // message replacing itself, rather than gone with nothing said.
             outbox.send(ChatMessage("letgo-${r.id}", Speaker.Felix, FelixWords.letGo(r.text, task?.title ?: "its task", why), now, About(taskId = r.taskId, taskTitle = task?.title), kind = MessageKind.Note, byApp = true))
             // Only as it was let go: one moved meanwhile is another moment's, to come then.
-            felix.update { s -> s.copy(reminders = s.reminders.map { if (it.id == r.id && it.undrafted() == r.undrafted() && Reminders.unsent(it)) it.copy(cancelledAt = now).undrafted() else it }) }
+            felix.update { s -> s.copy(reminders = s.reminders.map { if (it.id == r.id && it.undrafted() == r.undrafted() && Reminders.unsent(it)) it.copy(letGoAt = now).undrafted() else it }) }
+        }
+        // One let go whose task is to do again (a tick undone, a source's read that took it away a while) is back, said
+        // under its let-go's id, so the chat holds one note for it as it now is; said first, then marked, as a let-go is.
+        for (r in Reminders.back(felix.value.reminders, tasks, now) { s -> this.tasks.value.status(s).lastSuccessAt }) {
+            val task = r.taskId?.let(tasks::get)
+            val why = if (r.due.kind == DueKind.BeforeDue) "is due again" else "is on the plan again"
+            outbox.send(ChatMessage("letgo-${r.id}", Speaker.Felix, FelixWords.back(r.text, task?.title ?: "its task", why), now, About(taskId = r.taskId, taskTitle = task?.title), kind = MessageKind.Note, byApp = true))
+            felix.update { s -> s.copy(reminders = s.reminders.map { if (it == r) it.copy(letGoAt = null) else it }) }
         }
         for ((r, moment) in Reminders.due(felix.value.reminders, plan ?: focus.plan(now), tasks, now)) deliver(r, moment, now, tasks)
     }
