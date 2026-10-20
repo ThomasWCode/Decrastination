@@ -759,7 +759,7 @@ class Conversation(
                 }
             }
             // Still asking after the last round a message has: said under his answer, not his "looking" passed off as one.
-            val unserved = ChatRounds.next(reading, searched = found != null || notLooked != null, searches = settings.value.felixSearches, read = read.map { it.id }, stats = stats, calendar = calendar) != null
+            val unserved = ChatRounds.asking(reading, searched = found != null || notLooked != null, searches = settings.value.felixSearches, read = read.map { it.id }, stats = stats, calendar = calendar)
             reading = reading.copy(research = null, details = emptyList(), stats = false, calendar = null)
             gathered = null
             val reply = ChatMessage(
