@@ -44,8 +44,8 @@ Stage by stage, what each PR needs from your phone and from you, for what and fo
 
 ## In sum
 
-- **The phone** is needed for 28 of the 29 PRs, for the install and its check: a plugged-in, unlocked phone on the desk for an evening does several PRs if their reviews are done by then. Two stages want it free of use for an hour (6b, on a weekend) or online for a minute's write (11).
-- **You** are needed for nine moments, about an hour and a half at the phone in all: 5a, 5b, 5c (ten, ten and five minutes; done, in one evening with the three PRs stacked), 4.0.10 (five minutes, 19 Oct), 8a (fifteen minutes spread over an evening), 8b (five minutes: your classes' subjects), 11 (twenty minutes with Gmail), and 10b twice by message (a read before, a read after): with Stage 5's and 4.0.10's done, 8a's, 8b's, 11's and 10b's are left. Four more are helpful but not needed (3, 6b, 7, 12): five minutes each, or slower guarded taps.
+- **The phone** is needed for 29 of the 30 PRs, for the install and its check: a plugged-in, unlocked phone on the desk for an evening does several PRs if their reviews are done by then. Two stages want it free of use for an hour (6b, on a weekend) or online for a minute's write (11).
+- **You** are needed for nine moments, about an hour and a half at the phone in all: 5a, 5b, 5c (ten, ten and five minutes; done, in one evening with the three PRs stacked), 4.0.10 (five minutes, 19 Oct), 8a (fifteen minutes spread over an evening), 8b (five minutes: your classes' subjects), 11 (twenty minutes with Gmail), and 10b twice by message (a read before, a read after): with Stage 5's, 4.0.10's, 8a's and 8b's done, 11's and 10b's are left. Four more are helpful but not needed (3, 6b, 7, 12): five minutes each, or slower guarded taps.
 - **No decision waits on you** during the work: every question is answered, and the three things that could go wrong mid-PR have their fallback chosen.
 
 ## Still to check
@@ -66,8 +66,8 @@ So it went on 19 Oct: the phone, disconnected that morning, came back in the eve
 
 1. **Stages 0–4** (six PRs, the ground; done): three phone evenings with no need of you; the five minutes of taps in Stage 3 whenever you're passing.
 2. **Stage 5** (the chat; done, in one evening with you): three short sessions with you, or one evening for all three.
-3. **Stages 6, 9 and 7** (eight PRs, the services, the names and the data release; 6a to 6e done): three or four phone evenings; a five-minute look after 7.
-4. **Stage 8** (reminders, the gaps and what he's sent): one evening with you for 8a's fifteen minutes, a glance the next day for the SlotStart reminder; 8b your classes' subjects first, five minutes; 8c needs only the phone.
+3. **Stages 6, 9 and 7** (eight PRs, the services, the names and the data release; done): three or four phone evenings; a five-minute look after 7.
+4. **Stage 8** (reminders, the gaps and what he's sent; 8a and 8b done, 20 Oct): one evening with you for 8a's fifteen minutes, a glance the next day for the SlotStart reminder; 8b your classes' subjects first, five minutes; 8c needs only the phone.
 5. **Stage 10**: the voice's text read by you before 10b starts (no phone), a session after it lands; 10a needs only the phone.
 6. **Stage 11**: one evening with Gmail open, twenty minutes.
 7. **Stage 12**: the phone, and the done-when list read together.

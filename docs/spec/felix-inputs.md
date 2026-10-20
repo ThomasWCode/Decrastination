@@ -12,7 +12,7 @@ The exact prompts and schemas are the golden copies in [`app/src/test/resources/
 |---|---|---|---|
 | [The chat](#the-chat) | you send a message, or reply to his notification | the chat's prompt, the profile, the conversation, and with your newest message what the app knows, each task's own text and what the message is about, in full | a reply, and what to make: tasks, changes, actions, memories |
 | [A web search](#a-web-search) | the chat's answer asks to look something up, with searches on | the search's prompt, what to look up, the web search tool | what it found, in words |
-| [His own messages](#his-own-messages) | around today's slots, in the morning, for a question, for the evening's completions | his prompt, the profile, one message saying why and what's on | a message, replies, when to look again, memories |
+| [His own messages](#his-own-messages) | around today's slots, in the morning, for a question, for the evening's completions, and just before a reminder of yours comes | his prompt, the profile, one message saying why and what's on | a message, replies, when to look again, memories |
 
 Messages in his name that no call writes, and what becomes of your replies, are [at the end](#in-his-name-but-not-his-words).
 
@@ -23,7 +23,7 @@ Messages in his name that no call writes, and what becomes of your replies, are 
 - **System**: two blocks, the call's own prompt (cached for an hour), then [the profile](#the-profile) (not cached). The web search has no profile.
 - **Input**: at most 40,000 characters (`Pricing.MAX_INPUT_CHARS`), as the cap's dearest call assumes.
 - **Answer**: JSON in a fixed schema for the chat and his own messages, which the API compiles into a grammar that holds the answer to it as it's written ([readings.md](readings.md#the-prompts-version-ac-06)); the search answers in words.
-- **Not asked at all** (`ModelHold`): with Claude off or no key; with this month's cap reached, where one is set; and while the model rests after a failure (an hour for most, AC-04). A rest holds what runs by itself (his morning message, one written ahead); the chat, a web search and a message of his due now are asked through it, as someone's waiting, unless the key is what failed.
+- **Not asked at all** (`ModelHold`): with Claude off or no key; with this month's cap reached, where one is set; and while the model rests after a failure (five minutes to an hour, by what failed and how many in a row, AC-04). A rest holds what runs by itself (his morning message, one written ahead); the chat, a web search and a message of his due now are asked through it, as someone's waiting, unless the key is what failed.
 
 ## The profile
 
@@ -95,6 +95,7 @@ Before those words comes what they're about, in full (D-93): the task's whole te
 
 What the app knows when you send (`ChatPrompts.context`):
 - **Today**: the date, the time and the time zone.
+- **The reminders still to come** (4.1.0), first, so a context too long for its room never loses them: each by its id, with when it comes as the plan has it now, your words and its task; "(none)" with none, so "what have I asked you to remind me of?" has its answer.
 - **Open tasks**, up to 80, by the deadline in force: each with its id, title, source, its class and the subject the class map gives it (4.1.1), kind, due date (marked "(a plan)" where the app or Claude set it), its minutes and what the plan makes of them at your pace, the minutes worked, and when it can start; under it, its steps, numbered for a tick, then its own notes (4.1.0), each by its id and whose it is, and the ids of the standing ones it matches, all of them in a room of 6,000 characters (the rest are on their sheets).
 - **Standing notes** (4.1.0, Q31: A), each once: its id, whose it is, the tasks it's for and its words.
 - **Notes on finished tasks** (4.1.0), the newest first, in what's left of the notes' room: each by its id, whose it is, its task and its words, so he can say or delete them.
@@ -105,7 +106,6 @@ What the app knows when you send (`ChatPrompts.context`):
 - **The changes in use**, in words.
 - **Your own tasks finished in the last week**, up to 15, to open again.
 - **The settings he may change**, with their values now (`FelixSettings`).
-- **The reminders still to come** (4.1.0), each by its id, with when it comes as the plan has it now, your words and its task; "(none)" with none, so "what have I asked you to remind me of?" has its answer.
 - **The tasks' own text** (D-93, `TaskText`): each open task's (but Anki's counts) that has any, by the deadline in force: its source, an email's sender, its attachments' names and its links, then its text (an assignment's instructions, an email's conversation, a planner item's details, your notes), at most 600 characters; 12,000 characters in all. A longer text is its reading's summary of all of it: the reading writes one for a text over about 600 characters, at no extra call ([readings.md](readings.md#the-three-jobs)). A text past the 16,000 characters a reading sees has its summary said to be of its start, with its end after it. With none (Claude off when it was read, or read before summaries), its start and its end, saying how much of the middle was left out: a conversation is kept oldest first, so its end holds the newest replies, where a changed date or a new ask turns up. The task in full and the tasks he reads are whole up to 8,000 characters; past that, the summary first, then the start and end. It comes last, so a context too long for its room loses it first.
 
 Not sent: a task's reading, but as its minutes and steps; a finished task's text.
@@ -423,6 +423,7 @@ He isn't asked in quiet hours, during a timed calendar event that takes its time
 Also:
 - **Morning**: at the briefing (07:00 on school days, 08:30 at weekends, both in Settings, D-74), when today has work slots. He has 20 seconds; without his answer the day's list is the morning's message, in his name in the app's words.
 - **Written ahead** (AC-10): the next slot's SlotStart, up to 10 minutes before it's due, written as of that moment; sent as it is if it still fits then.
+- **Reminder** (4.1.0): a reminder of yours due within ten minutes, written for as of its moment, once a moment (`Looks.draftReminders`); with none of his words by then, yours go ([below](#in-his-name-but-not-his-words)).
 - A call held or failed puts nothing on record: it's tried again after 5 minutes while it's still to say.
 - `felix-say` writes one now for any reason, from a PC ([storage-and-backups.md](storage-and-backups.md)).
 
@@ -431,7 +432,7 @@ Also:
 1. **System**: [his prompt](#his-prompt), with his name and line from Settings, then the profile.
 2. **One message** (`FelixPrompts.describe`), a line each:
    - `Reason:` and `Now:`;
-   - the piece: for a slot under way, its label, minutes, times and what earns its free time, and its first action where one's written (AI-15); for a slot on record, whether it was missed, kept, or ticked without its photo; for a question, the task;
+   - the piece: for a slot under way, its label, minutes, times and what earns its free time, and its first action where one's written (AI-15); for a slot on record, whether it was missed, kept, or ticked without its photo; for a question, the task; for a Reminder, the slot then under way or next (`Slot then:`) and its task (`Task:`);
    - `Its task's own text`: up to 1,500 characters of it (a longer one as its reading's summary, else its start and end), with its attachments, links and an email's sender (D-93);
    - `Notes on it:` the notes kept with its task (4.1.0), its own and the standing ones it matches;
    - `Their reminder…`: for a Reminder, your words; for a SlotStart, your reminder that came at the slot's start, so he doesn't say it twice;
@@ -641,4 +642,6 @@ It names Summary and Reply among its reasons, but no message of his is asked for
 - **The week's summary**: written in a call of its own, in your voice (D-66); "the summary is ready" is the app's own text, with *Send it*.
 - **Your answer to his Question**: read by the instructions reader, as an instruction on that task, and the task read again (AI-10); not by him.
 - **An answer to Completions** (*Harder*, *As expected*, *Easier*): kept on each of those completions (LR-05), with no call.
+- **A reminder he has no words for** (4.1.0): yours as you set it ("reminder: …"), marked late where it is; its *Done*, *Snooze 15 min* and *Snooze 1 h* kept on it, with no call.
+- **A reminder let go, or back** (4.1.0), and **what a read he asked for changed** (4.1.1: "Teams says “…” is handed in."): notes in the app's words.
 - **Any other reply**, from his notification, his chips or the chat: answered in the chat, as above; his answer is his next message, and in his notification while the chat isn't on screen.
