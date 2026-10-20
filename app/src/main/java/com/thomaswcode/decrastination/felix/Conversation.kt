@@ -645,8 +645,8 @@ class Conversation(
             var shownAt = clock.now()
             // His answer, with what a web search he asked for found ([found], 16 Oct), the tasks whose whole
             // text he asked to [read] (D-93), and the week's numbers and the calendar further out where he asked
-            // for them ([stats], [calendar]: 8c), as of the moment it's asked.
-            suspend fun ask(found: Found?, read: List<TaskItem> = emptyList(), stats: Boolean = false, calendar: String? = null) = gateway.call(interactive = true, record = ModelCalls.OnRecord(ModelEffort.Job.Chat, waiting.text) { r: ChatReader.Result -> r.usage to ModelCalls.outcome(r.refused, r.reading == null) }, cost = { r: ChatReader.Result -> r.costUsd to r.refused }) { at ->
+            // for them ([stats], [calendar]: 8c), as of the moment it's asked; at the [last] round a message has, told so.
+            suspend fun ask(found: Found?, read: List<TaskItem> = emptyList(), stats: Boolean = false, calendar: String? = null, last: Boolean = false) = gateway.call(interactive = true, record = ModelCalls.OnRecord(ModelEffort.Job.Chat, waiting.text) { r: ChatReader.Result -> r.usage to ModelCalls.outcome(r.refused, r.reading == null) }, cost = { r: ChatReader.Result -> r.costUsd to r.refused }) { at ->
                 // Being asked now: whatever it said before (a failed call) is gone.
                 chat.update { s -> s.copy(messages = s.messages.map { if (it.id == waiting.id) it.copy(note = null, stuck = false) else it }) }
                 sentAt.value = at
@@ -659,7 +659,7 @@ class Conversation(
                         ChatPrompts.statsBlock(Stats.weekLines(log.value, settings.value.classMap, at, clock.zone())).takeIf { stats },
                         calendar?.let { ChatPrompts.calendarBlock(time.events, it, at, clock.zone()) },
                     )
-                    ChatReader(chatClient, clock.zone(), profile = profile(at), settings = settings.value).answer(sent, state.tasks, time.events, chatContext(at, state, time, instructions.value.applied, noted), at, found, read, quoted, noted, brought)
+                    ChatReader(chatClient, clock.zone(), profile = profile(at), settings = settings.value).answer(sent, state.tasks, time.events, chatContext(at, state, time, instructions.value.applied, noted), at, found, read, quoted, noted, brought, last)
                 } finally {
                     sentAt.value = null
                 }
@@ -744,7 +744,7 @@ class Conversation(
                 // Nothing new to answer with (a search that found nothing, no texts asked for): his answer stands.
                 if (!looks && !reads && !brings) break
                 gathered = Gathered(waiting.id, found, tried, read.map { it.id }, stats, calendar)
-                val again = ask(found, read, stats, calendar)
+                val again = ask(found, read, stats, calendar, last = round == ChatRounds.MAX_ROUNDS)
                 if (unwanted()) return@withLock
                 val second = when (again) {
                     is Called.Held -> return@call gateway.because(again.hold)
@@ -759,6 +759,8 @@ class Conversation(
                     return@call if (second.refused) "Claude declined to answer that: Try again, or put it another way" else "Claude's answer couldn't be read: Try again"
                 }
             }
+            // Still asking after the last round a message has: said under his answer, not his "looking" passed off as one.
+            val unserved = ChatRounds.next(reading, searched = found != null || notLooked != null, searches = settings.value.felixSearches, read = read.map { it.id }, stats = stats, calendar = calendar) != null
             reading = reading.copy(research = null, details = emptyList(), stats = false, calendar = null)
             gathered = null
             val reply = ChatMessage(
@@ -780,6 +782,7 @@ class Conversation(
                     // What else he read to answer (8c), said under it as the texts are.
                     Act("Read: the week's numbers.").takeIf { stats },
                     calendar?.let { Act("Read: the calendar for " + ChatPrompts.calendarWhat(it, shownAt, clock.zone()) + ".") },
+                    Act(Act.NOT_BROUGHT + "he asked for more than a message's two rounds bring: ask again to go on.", problem = true).takeIf { unserved },
                 ),
             )
             var kept = false
