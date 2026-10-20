@@ -129,12 +129,14 @@ class Outbox(
 
         /**
          * The messages of [state] past its live window at [now]: older than the newest [WINDOW] and than
-         * [WINDOW_MS] both, and read; never an unread one, nor yours waiting for its answer.
+         * [WINDOW_MS] both, and read; never an unread one, nor yours waiting for its answer, nor yours replying to
+         * one of his still unread, which says that one's seen ([repliedTo]).
          */
         fun past(state: ChatState, now: Long): List<ChatMessage> {
             val newest = state.messages.takeLast(WINDOW).mapTo(HashSet()) { it.id }
             val waiting = state.unanswered?.id
-            return state.messages.filter { m -> m.id !in newest && m.at < now - WINDOW_MS && m.id != waiting && !unread(m, state.readAt) }
+            val unreadIds = state.messages.filter { unread(it, state.readAt) }.mapTo(HashSet()) { it.id }
+            return state.messages.filter { m -> m.id !in newest && m.at < now - WINDOW_MS && m.id != waiting && !unread(m, state.readAt) && m.replyTo !in unreadIds }
         }
 
         /**
