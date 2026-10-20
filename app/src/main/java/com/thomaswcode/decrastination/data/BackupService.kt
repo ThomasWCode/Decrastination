@@ -177,13 +177,16 @@ class BackupService(
         // Felix's notes and reminders it hasn't, by id (4.1.0): the chat's acts on them can be undone, and a reminder
         // still to come comes, late if its time has gone by.
         val felixBefore = stores.felix.value
-        val felixBack = stores.replace(stores.felix) { Backups.mergedFelix(it, backup.felixStore) }.let { it.notes.size + it.reminders.size - felixBefore.notes.size - felixBefore.reminders.size }
+        var felixLeft = 0
+        val felixBack = stores.replace(stores.felix) { Backups.mergedFelix(it, backup.felixStore).also { (_, left) -> felixLeft = left }.first }
+            .let { it.notes.size + it.reminders.size - felixBefore.notes.size - felixBefore.reminders.size }
         val own = ownAdded.size
         val told = buildList {
             if (own > 0) add("$own task${if (own == 1) "" else "s"} of your own")
             if (chatBack > 0) add("the chat ($chatBack message${if (chatBack == 1) "" else "s"})")
             if (hisBack > 0) add("$hisBack message${if (hisBack == 1) "" else "s"} of Felix's into the chat")
             if (felixBack > 0) add("$felixBack of Felix's notes and reminders")
+            if (felixLeft > 0) add("$felixLeft of the backup's notes and reminders left out, past what the app keeps")
             if (restored > 0) add("$restored instruction${if (restored == 1) "" else "s"} restored")
             if (unclear > 0) add("$unclear left unapplied under Your changes in Felix's chat, as ${if (unclear == 1) "it" else "they"} would have tasks wait for each other in a circle")
         }.takeIf { it.isNotEmpty() }?.joinToString(", ", prefix = " ", postfix = ".") ?: ""

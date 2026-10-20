@@ -281,9 +281,9 @@ object ChatActs {
      * a task done still done; one opened again still as that left it ([asReopened]); one deleted
      * still gone, and none of the cards that had added it made again since (Redo makes it anew); a
      * setting still as it was set; a reminder set or moved still unsent, not snoozed nor cancelled, and
-     * not moved again since; one cancelled still cancelled; a note added still there; one deleted still
-     * deleted, and kept; a piece kept still among today's [kept] (their keys), one kept no more still not,
-     * its task open.
+     * not moved again since; one cancelled still cancelled, with room for it among those still to come; a
+     * note added still there; one deleted still deleted, and kept, with room for it on its task; a piece
+     * kept still among today's [kept] (their keys), one kept no more still not, its task open.
      */
     fun canUndo(act: Act, tasks: List<TaskItem>, settings: Settings, messages: List<ChatMessage>, notes: List<Note> = emptyList(), reminders: List<Reminder> = emptyList(), kept: Set<String> = emptySet()): Boolean {
         if (act.undone) return false
@@ -302,9 +302,10 @@ object ChatActs {
             ChatAction.Type.Setting -> act.before != null && FelixSettings.field(a.setting.orEmpty())?.get(settings) == act.after
             ChatAction.Type.SetReminder -> reminder != null && Reminders.unsent(reminder) && !movedSince(act, messages)
             ChatAction.Type.MoveReminder -> reminder != null && act.reminder != null && Reminders.unsent(reminder) && !movedSince(act, messages)
-            ChatAction.Type.CancelReminder -> reminder?.cancelledAt != null
+            // Brought back only where there's room for it: not past the reminders still to come, nor a task's notes, kept.
+            ChatAction.Type.CancelReminder -> reminder?.cancelledAt != null && reminders.count(Reminders::pending) < Reminders.MAX_PENDING
             ChatAction.Type.AddNote -> note != null && note.deletedAt == null
-            ChatAction.Type.DeleteNote -> note?.deletedAt != null
+            ChatAction.Type.DeleteNote -> note?.deletedAt != null && Notes.hasRoom(note, notes)
             ChatAction.Type.KeepPiece -> a.value in kept && task?.isOpen == true
             ChatAction.Type.UnkeepPiece -> a.value !in kept && task?.isOpen == true
             ChatAction.Type.Sync -> false

@@ -32,6 +32,11 @@ class RepliesTest {
         // A nudge, not a question: it waits for your answer as nudges do, its day out (D-99).
         assertFalse(Replies.waiting(reminder, checkInUnderWay = false))
         assertEquals(setOf("m"), Replies.awaitingIds(listOf(reminder), checkInUnderWay = false, now = 2, zone = LONDON))
+        // Two about one task each wait for their own answer, the older still once the newer's answered.
+        val other = reminder.copy(id = "m2", reminderId = "r2", at = 2, about = About(taskId = "teams:t"))
+        val first = reminder.copy(about = About(taskId = "teams:t"))
+        assertEquals(setOf("m", "m2"), Replies.awaitingIds(listOf(first, other), checkInUnderWay = false, now = 3, zone = LONDON))
+        assertEquals(setOf("m"), Replies.awaitingIds(listOf(first, other.copy(answeredAt = 3)), checkInUnderWay = false, now = 4, zone = LONDON))
     }
 
     @Test
