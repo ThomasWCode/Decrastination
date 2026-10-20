@@ -11,6 +11,7 @@ import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.core.TaskItem
+import com.thomaswcode.decrastination.data.FelixStore
 import com.thomaswcode.decrastination.enrich.ClaudeEnricher
 import com.thomaswcode.decrastination.enrich.Found
 import com.thomaswcode.decrastination.enrich.ModelCalls
@@ -38,9 +39,9 @@ class ChatReader(
     /**
      * Claude's answer to the last of [messages] (yours), with what the app knows now ([context]:
      * [ChatPrompts.context] and [ChatPrompts.plan]), what a web search it asked for [found], and the
-     * tasks whose whole text it asked to [read] (D-93).
+     * tasks whose whole text it asked to [read] (D-93); its reminders and notes checked against [felix]'s (Stage 8a).
      */
-    suspend fun answer(messages: List<ChatMessage>, tasks: List<TaskItem>, events: List<CalendarEvent>, context: ChatPrompts.Context, now: Long, found: Found? = null, read: List<TaskItem> = emptyList(), quoted: List<ChatMessage> = emptyList()): Result {
+    suspend fun answer(messages: List<ChatMessage>, tasks: List<TaskItem>, events: List<CalendarEvent>, context: ChatPrompts.Context, now: Long, found: Found? = null, read: List<TaskItem> = emptyList(), quoted: List<ChatMessage> = emptyList(), felix: FelixStore = FelixStore()): Result {
         val schema = JsonOutputFormat.Schema.builder().apply { ChatPrompts.SCHEMA.forEach { (k, v) -> putAdditionalProperty(k, JsonValue.from(v)) } }.build()
         val builder = MessageCreateParams.builder()
             .model(model)
@@ -62,6 +63,6 @@ class ChatReader(
         }
         val text = message.content().mapNotNull { it.text().orElse(null)?.text() }.joinToString("")
         val about = messages.lastOrNull { it.from == Speaker.You }?.about ?: About()
-        return Result(ChatAnswers.parse(text, tasks, events, about, now, zone, settings), cost, usage = usage)
+        return Result(ChatAnswers.parse(text, tasks, events, about, now, zone, settings, felix), cost, usage = usage)
     }
 }
