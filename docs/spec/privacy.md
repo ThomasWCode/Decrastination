@@ -20,9 +20,9 @@ Each call's text is cut to 40 000 characters, the profile to 16 000. What else e
 | A photo with a task (AI-23) | The photo of the work, with its reading |
 | A photo of homework (NF-01) | The photo, and today's date |
 | A photo check | Up to three photos of the work; the piece, its task's title, subject, steps done and instructions (1 500 characters) |
-| A piece's first steps (AI-15) | The task's title and subject, the piece and its minutes, attachments by name, its instructions (1 500 characters) |
-| The chat | The conversation's last 12 messages and his last two nudges with your replies; the open tasks with their steps, the fortnight's calendar events (titles and times), your changes, your own tasks finished lately, Felix's settings, your pace, the plan's next 14 days; each open task's own text (instructions, an email's conversation, notes: 600 characters each), with its attachments' names, links and an email's sender; the whole text (8 000) of the task a message is about, and of up to three he asks to read; an event's place and description, for a message about it |
-| Felix's messages | The reason and the time, the piece and today's slots, the free time, work its source confirmed, his last six messages of his own and your replies, a reading's question; the piece's task's own text (1 500 characters), with its attachments' names and links |
+| A piece's first steps (AI-15) | The task's title and subject, the piece and its minutes, attachments by name, the notes kept with the task, its instructions (1 500 characters) |
+| The chat | The conversation's last 12 messages and his last two nudges with your replies; your reminders still to come, their words and when; the open tasks with their steps, their classes and subjects, and Felix's notes on them (standing ones, and those on finished tasks, too); the fortnight's calendar events (titles and times), each class's next lessons from Power Planner's timetable, your changes, your own tasks finished lately, Felix's settings, your pace, the plan's next 14 days with whether blocking applies, your free time and the pieces kept today; each open task's own text (instructions, an email's conversation, notes: 600 characters each), with its attachments' names, links and an email's sender; the whole text (8 000) of the task a message is about, and of up to three he asks to read; an event's place and description, for a message about it |
+| Felix's messages | The reason and the time, the piece and today's slots, the free time, work its source confirmed, his last six messages of his own and your replies, a reading's question; the piece's task's own text (1 500 characters), with its attachments' names and links, and the notes kept with it; a reminder's words (the one coming, the one that came at the slot's start, or in the morning today's) |
 | An instruction | Your words; what they're about (a task's title, sender, class, due date, minutes and details); the open tasks and the fortnight's events |
 | The weekly review | The week's record: finished work (titles, kinds, classes, estimates, minutes), slots by hour and day, blocks, days, Felix's counts, your check-in answers, the planning settings, what's learned |
 | The week's summary (NF-02) | The week's numbers, finished and missed work, the review's note, Felix's counts, the changes you asked for |
@@ -46,10 +46,11 @@ Nothing else: no analytics, no crash reports (crashes are written down on the ph
 
 | What | Where | How long |
 |---|---|---|
-| Tasks, their text and readings | `tasks.json` | A finished task while its source still lists it, then a fortnight; one its source stops listing is finished then; your own till you delete it. A fortnight after it's finished, its text, reading, answers and photo go, its record kept (C-Q3) |
+| Tasks, their text and readings | `tasks.json` | A finished task while its source still lists it, then a fortnight; one its source stops listing is finished then; your own till you delete it. A fortnight after it's finished, its text, reading, answers, photo and attachments' list go, its record kept (C-Q3) |
 | The activity log | `log.json` | 120 days; each week's totals two years |
 | The chat | `chat.json`, `chat-archive-<yyyy-MM>.json` | Every message, Felix's among them, till you clear it: the newest 200 or 14 days' in `chat.json`, the rest in the archive, a file a month |
 | What Felix remembers | `memory.json` | Facts within 6 000 characters, the oldest out first; up to 20 standing instructions; till you delete them |
+| Felix's notes and your reminders | `felix.json` | A note till it, or the task of yours it's on, is deleted (kept while that Undo stands); a reminder a month after it's sent, done or let go, a cancelled one while its Undo stands |
 | Your changes | `instructions.json` | Till you take them back |
 | Claude's calls | `model.json` | The last 100: job, what it's about, tokens, time, outcome, cost |
 | Photos of work | `files/photos/` | While a task holds one |
@@ -59,7 +60,7 @@ Nothing else: no analytics, no crash reports (crashes are written down on the ph
 | Copies of unreadable files | `files/` | The newest three of each |
 | The file a migration came from | `files/` (`<name>.v<n>`) | A week from the migration, then let go at the next start |
 
-A backup is plain JSON in the phone's shared `Documents` folder, holding the chat, what Felix remembers, your changes, your own tasks, the log and the settings (the summary's address among them).
+A backup is plain JSON in the phone's shared `Documents` folder, holding the chat, what Felix remembers, his notes and your reminders, your changes, your own tasks, the log and the settings (the summary's address among them).
 Apps with access to all files (a file manager, a sync app) can read it, and so can a PC over USB.
 
 ## Secrets
