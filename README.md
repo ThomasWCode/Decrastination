@@ -2,7 +2,7 @@
 
 An Android app that gathers everything outstanding (Teams assignments, Power Planner, starred Gmail conversations, AnkiDroid decks and tasks of your own), plans it into the days before each is due as timed slots, writes them to your calendar, shows the next thing to do on a home-screen widget, and, while work is due, replaces distracting apps with that next thing until it's done. Claude reads the work into steps and estimates, and Felix, a persona you chat with, makes changes and messages you about the day.
 
-A personal, sideloaded app for one phone, version 4.0.13.
+A personal, sideloaded app for one phone, version 4.1.2.
 
 ## Documents
 
@@ -25,13 +25,13 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 Install over the app with `-r`, never uninstalling it, and keep a backup first ([development.md](docs/development.md#the-phone)).
 
-Every prompt and schema Claude is sent has a golden copy in `app/src/test/resources/prompts/`; the tests fail on any difference, with its diff. When a change is meant, write them again and commit them with it; where a reading's prompt or the profile changed, raise `ReadingPrompts.VERSION` too (a test asks for it), so the readings made by the old ones are made again:
+Every prompt and schema Claude is sent has a golden copy in `app/src/test/resources/prompts/`, but the web search's prompt, which `FelixInputsDocTest` holds in [`docs/spec/felix-inputs.md`](docs/spec/felix-inputs.md); the tests fail on any difference, with its diff. When a change is meant, write them again and commit them with it; where a reading's prompt or the profile changed, raise `ReadingPrompts.VERSION` too (a test asks for it), so the readings made by the old ones are made again:
 
 ```bash
 ./gradlew testDebugUnitTest -PupdateGolden=true --tests '*GoldenPromptsTest*'
 ```
 
-The API compiles every schema into a grammar and refuses one too large, which no test can tell from the schema alone. After any change to a schema, have it compile them all before merging (one call for each schema, about a cent each; a refused one costs nothing; the key from the environment):
+The API compiles every schema into a grammar and refuses one too large, which no test can tell from the schema alone. After any change to a schema, have it compile them all before merging (the week's summary's, one plain string, isn't among them; one call for each schema, about a cent each; a refused one costs nothing; the key from the environment):
 
 ```bash
 ./gradlew testDebugUnitTest --tests '*SchemaCompileTest*' -PcheckSchemas=true
@@ -55,7 +55,7 @@ adb shell am start -n com.thomaswcode.decrastination/.debug.Command --es cmd sta
 adb shell am start -n com.thomaswcode.decrastination/.debug.Command --es cmd enrich   # Claude reads what's new now (real calls)
 ```
 
-[`docs/spec/storage-and-backups.md`](docs/spec/storage-and-backups.md) lists the rest. On a debug build the menu's *Debug* page shows the model's recent calls, a task's prompt as it would be sent, the chat's context, Felix's state, the stores, each source's last read and the watchdog's findings, each with Copy.
+[`docs/spec/storage-and-backups.md`](docs/spec/storage-and-backups.md) lists the rest. On a debug build the menu's *Debug* page shows the model's recent calls, a task's prompt as it would be sent, the chat's context, Felix's state, his notes and reminders, the stores, each source's last read and the watchdog's findings, each with Copy.
 
 ## Backups
 

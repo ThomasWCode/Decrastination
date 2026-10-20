@@ -302,7 +302,7 @@ class AppGraph private constructor(context: Context) {
         redraw = { WidgetUpdater.update(app) },
     )
 
-    /** Your own tasks ([OwnTasks]): kept, finished, opened again, deleted, and let go once long done. */
+    /** Your own tasks ([OwnTasks]): kept, finished, opened again, deleted, and trimmed to their record once long done. */
     val ownTasks: OwnTasks = OwnTasks(tasks, stores.instructions, chat, clock, scope) { settleCompletions() }
 
     /** The tasks' readings ([Readings]): by Claude while it can be asked, by the rules otherwise; one read again on asking. */
@@ -359,7 +359,7 @@ class AppGraph private constructor(context: Context) {
         syncer.addAfterEverySync { conversation.askKept() }
         // A task back after aging out of the list (or new) takes the overrides its instructions give.
         syncer.addAfterEverySync { instructions.layTaskOverrides() }
-        // Your own tasks long done go, as a source's do.
+        // Your own tasks long done trimmed to their record, as a source's are.
         syncer.addAfterEverySync { ownTasks.pruneOwn() }
         // A question of yours still waiting (Claude was off, resting, or the app stopped): tried again.
         syncer.addAfterEverySync { if (chat.value.unanswered != null) conversation.answerChat() }

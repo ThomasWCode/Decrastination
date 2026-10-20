@@ -79,7 +79,7 @@ A task finished more than 14 days ago (C-Q3; `Merge.KEEP_FINISHED_MS` is the sam
 
 ### `felix.json` (v1), Stage 8a
 
-Notes (on a task, or standing, for every task a scope matches) and reminders, versioned from the start; in the backup (format 8) and in Reset → "The chat and Felix's history". Not on `TaskItem`: a merge rewrites tasks and must not be able to drop them; keyed by task id, which is stable across syncs and reopenings, or by a scope the matcher reads at each use. The chat's shape gained their acts' types, a moved reminder's old time and words on its act (`Act.reminder`) and a reminder's message's reminder (`ChatMessage.reminderId`): `chat.json` version 4 and the archive's months version 3, read as they are (their fields have defaults), so an older build sets the newer file aside whole rather than reading part of it.
+Notes (on a task, or standing, for every task a scope matches) and reminders, versioned from the start; in the backup (format 8) and in Reset → "The chat and Felix's history". Not on `TaskItem`: a merge rewrites tasks and must not be able to drop them; keyed by task id, which is stable across syncs and reopenings, or by a scope the matcher reads at each use. The chat's shape gained their acts' types, a moved reminder's old time and words on its act (`Act.reminder`) and a reminder's message's reminder (`ChatMessage.reminderId`): `chat.json` version 4 and the archive's months version 3, read as they are (their fields have defaults), so an older build sets the newer file aside whole rather than reading part of it. 8b's acts on a piece kept or taken back raised them again, to 5 and 4, in the same way.
 
 ### Memory (v2), Stage 10a
 
@@ -100,7 +100,7 @@ data class ChatState(
     val readAt: Long = 0,
     /** His state between looks (from RuntimeState.felix, assessLater and checkInDraft). */
     val felix: FelixState = FelixState(),
-    val version: Int = 2,
+    val version: Int = 5,   // 2 from 5a, 3 from 7, 4 from 8a, 5 from 8b
 )
 
 @Serializable
@@ -124,6 +124,8 @@ data class ChatMessage(
     val asks: List<AssessLater> = emptyList(),
     /** A byApp message's own button, kept visible under the bubble: "review", "summary:<week>". */
     val opens: String? = null,
+    /** A Reminder message's reminder (8a): what its Done and snoozes act on. */
+    val reminderId: String? = null,
     /** As now. */
     val proposals: List<Proposal> = emptyList(), val answeredAt: Long? = null, val note: String? = null, val stuck: Boolean = false,
     val memoryEdits: List<MemoryEdit> = emptyList(), val acts: List<Act> = emptyList(), val suggestedReplies: List<String> = emptyList(),
@@ -132,18 +134,18 @@ data class ChatMessage(
 
 /** The messages before the live window: oldest first, never sent to the model, shown on scrolling back. */
 @Serializable
-data class ChatArchive(val messages: List<ChatMessage> = emptyList(), val version: Int = 1)
+data class ChatArchive(val messages: List<ChatMessage> = emptyList(), val version: Int = 4)   // 2 from 7, 3 from 8a, 4 from 8b
 
 // core/Mine.kt (7): every value of yours carries who set it.
 @Serializable
 data class Mine(
-    val notATask: Set<Boolean>? = null, val from: Set<Long>? = null, val after: Set<String>? = null, val dueAt: Set<Long>? = null,
-    val minutes: SetMinutes? = null, val onDay: Set<String>? = null, val atTime: Set<Long>? = null, val sameAs: Set<String>? = null,
-    val steps: SetSteps? = null, val title: Set<String>? = null,
+    val notATask: SetBy<Boolean>? = null, val from: SetBy<Long>? = null, val after: SetBy<String>? = null, val dueAt: SetBy<Long>? = null,
+    val minutes: SetMinutes? = null, val onDay: SetBy<String>? = null, val atTime: SetBy<Long>? = null, val sameAs: SetBy<String>? = null,
+    val steps: SetSteps? = null, val title: SetBy<String>? = null,
 )
-@Serializable data class Set<T>(val value: T, val by: By)
+@Serializable data class SetBy<T>(val value: T, val by: By)   // not Set, which is Kotlin's own
 @Serializable data class SetMinutes(val minutes: Int, val by: By, val paced: Paced? = null)
-@Serializable data class Paced(val from: Int, val contentHash: String)
+@Serializable data class Paced(val from: Int, val contentHash: String? = null)   // no hash where it was paced before 3.1.3 kept one
 @Serializable data class SetSteps(val steps: List<OwnStep>, val by: By)   // each OwnStep carries its id (below), so a re-lay keeps the ticks
 @Serializable enum class By { You, Felix }
 
@@ -165,6 +167,8 @@ data class Reminder(
     val sentAt: Long? = null, val snoozedTo: Long? = null, val doneAt: Long? = null,
     /** Cancelled from the chat: kept, never delivered, until its act's Undo window closes; Undo clears it. */
     val cancelledAt: Long? = null,
+    /** Let go by the app, as what it waited on went (4.1.0): never delivered while so, and back once that's back. */
+    val letGoAt: Long? = null,
     /** His words for it, written ahead, when, and for which moment (4.1.0: one whose slot or deadline moved is written for again). */
     val draft: FelixAnswer? = null, val draftedAt: Long? = null, val draftFor: Long? = null,
 )

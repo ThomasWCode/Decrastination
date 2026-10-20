@@ -7,7 +7,7 @@ import com.thomaswcode.decrastination.core.SchoolDays
 import com.thomaswcode.decrastination.ui.Format
 
 /**
- * The morning briefing (Q13), at 07:00 on school days and 08:30 at weekends: Felix's message on the
+ * The morning briefing (Q13), at 07:00 Monday to Friday and 08:30 at weekends: Felix's message on the
  * day's shape on a day with slots (LR-04), or the day's plan in his name in the app's words, in the
  * chat and his notification, made again with what waited overnight; a Teams sync offered at the next
  * unlock; and the day's plan recorded for the capacity check, with yesterday's marked done or not.

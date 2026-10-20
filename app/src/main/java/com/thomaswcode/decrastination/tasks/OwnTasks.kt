@@ -27,8 +27,8 @@ import kotlinx.coroutines.withContext
 /**
  * Your own tasks (2.0.0, Q28; docs/plan_v4, Stage 6c), moved out of `AppGraph`: kept ([saveOwnTask]),
  * finished as you say or once their steps are done ([finishOwnTask], [start]), opened again
- * ([reopenOwnTask]), deleted ([deleteOwnTask]), and let go a fortnight after they're done
- * ([pruneOwn]). Built like [com.thomaswcode.decrastination.block.Focus]: its stores, the clock and a
+ * ([reopenOwnTask]), deleted ([deleteOwnTask]), and trimmed to their record a fortnight after
+ * they're done ([pruneOwn]). Built like [com.thomaswcode.decrastination.block.Focus]: its stores, the clock and a
  * callback for what follows a finish. Their pure rules are [OwnTaskRules]'s,
  * named in full here, as this class has their name.
  */

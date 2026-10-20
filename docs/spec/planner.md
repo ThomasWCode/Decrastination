@@ -65,7 +65,7 @@ A task's pieces are its steps still to do, or, with no steps, boxes of its remai
 - **Boxes** are at most `Settings.boxMin`: your setting, 60 on your phone, so nothing is cut that isn't over an hour (30 by default). The weekly review never changes it.
 - Boxes are even: 100 minutes at 60 is 50 and 50, not 60 and 40. A task in one box is one piece; several are "part 2 of 3".
 - Where your instructions limit days, a box is no longer than the most any day the task can go on holds (`Planner.roomiest`). Steps aren't shortened: one longer than every such day goes unplanned.
-- **Where** (PL-15, `Chunk.where`): a step's own place from Claude's reading (home, or anywhere); else your own task's as you set it, Teams homework at home, the rest anywhere.
+- **Where** (PL-15, `Chunk.where`): a step's own place (home, or anywhere), as Claude read it or as the step was given; else your own task's as you set it, Teams homework at home, the rest anywhere.
 
 ## Sittings
 
@@ -98,10 +98,10 @@ A task's last usable day is its deadline's date less its kind's margin (`Calibra
 
 ## Placing the pieces
 
-The plan's days run from today to the latest deadline or day you put work on: at least 14 days, more where a task limited per day needs them, never more than 90 (`Planner.MAX_HORIZON_DAYS`).
+The plan's days run from today to the latest deadline or day you put work on: today and at least the 14 days after it, more where a task limited per day needs them, never past 90 days on (`Planner.MAX_HORIZON_DAYS`).
 Work is placed in this order, each taking its days' time before the next:
 
-1. Work you put on a day (PL-04).
+1. Work you put on a day, and a piece at a time you gave, on that time's day (PL-04).
 2. Work dated later today, then tomorrow: those deadlines can still be met. A task with some brings its overdue blocks along, ahead of it, ranked by the task's soonest deadline to come rather than their own.
 3. Overdue work, the oldest deadline first, into today.
 4. Dated work due after tomorrow, spread over its window (PL-01), the earliest last usable day first.
@@ -120,7 +120,7 @@ Work due by today goes on the first day it can (`placeNow`): today, unless a per
 6. A day without room passes its piece to the nearest that has some, earlier first.
 7. A task its window can't hold in order is placed backwards from its last usable day instead (`placeBack`).
 
-Spreading gives today a fair share of each task's days, not a far task's whole work in its last ones. Blocking reads today's work alone (`Plan.pressure`), so it lifts once today's share is done ([blocking-and-protection.md](blocking-and-protection.md)).
+Spreading gives today a fair share of each task's days, not a far task's whole work in its last ones. Blocking reads today's work (`Plan.pressure`), so it lifts once today's share is done, unless a slot missed today went to tomorrow, which keeps it on till the day's hours end (BL-11, [blocking-and-protection.md](blocking-and-protection.md)).
 
 ## Backwards, and behind
 
@@ -136,8 +136,8 @@ A day's first undated piece may be longer than that, never longer than the day's
 ## Anki decks
 
 AnkiDroid's work comes as tasks the app derives from its counts (`core/AnkiRules.kt`), done when the counts say so:
-- **The daily quota** (`AnkiRules.quota`): every due review, and today's new cards from the current textbook's first section deck with cards never seen, due at `Settings.ankiDeadlineMin` (21:30) each Anki day (it turns at 04:00).
-- The quota takes no new cards while homework's vocabulary is due by tomorrow.
+- **The daily quota** (`AnkiRules.quota`): every due review, and today's new cards from the first section deck with cards never seen, the current textbook's before the others' (not one homework names), due at `Settings.ankiDeadlineMin` (21:30) each Anki day (it turns at 04:00).
+- On an Anki day when homework's vocabulary is due by tomorrow, or overdue, the quota takes no new cards for the rest of that day.
 - **A deck homework names** (`AnkiRules.homeworkDecks`): "Learn Anki deck 1.2", due with the earliest of its assignments' deadlines in force. Each step is a day's new cards (the first what AnkiDroid will still show today), one step a day (`TaskItem.stepsPerDay`).
 - A deck whose new cards for today are used up can't start before the next 04:00 (`TaskItem.notBefore`).
 - Minutes: 8 seconds a review and 25 a new card, or the deck's own seconds a card as learned (DX-11, [learning.md](learning.md)).
@@ -184,13 +184,13 @@ Day shows "6 h left, 4 h free before Sat 09:00", with *What gives?* to ask Felix
 - `OpensLater`: it, or a run of its blocks, opens after the plan's last day;
 - `NoRoom`: there's no room for it by the plan's last day within each day's limits (a deck past its 90 days, undated work past its allowance).
 
-A task's runs left out for the same reason are one line. Hidden tasks, events and Anki's derived tasks aren't listed. The list only explains: it changes neither the days nor blocking.
+A task's runs left out for the same reason are one line. Hidden tasks and events aren't listed, nor Anki's derived tasks as not open or waiting (one with no room, or opening after the plan's last day, is). The list only explains: it changes neither the days nor blocking.
 
 ## Within a day
 
 A day's pieces are in `Planner.ORDER`: dated work before undated; then work due later today or tomorrow (its task's overdue part first), overdue, behind, the rest.
 Ties go by the deadline each ranks by; homework, revision, admin; the shorter task; the title, so the order never flickers; a task's parts stay in order.
-The slotter then gives every piece a time (PL-12), today's where the last plan had them (PL-13): see [slots-and-calendar.md](slots-and-calendar.md).
+The slotter then gives each piece a time where free time holds it whole (PL-12), today's where the last plan had them (PL-13): see [slots-and-calendar.md](slots-and-calendar.md).
 
 ## The same work from two sources (DX-15)
 

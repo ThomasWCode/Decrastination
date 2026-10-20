@@ -19,7 +19,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 /**
- * The app's own times of day (Phase 5): the morning briefing (Q13: 07:00 on school days, 08:30 at
+ * The app's own times of day (Phase 5): the morning briefing (Q13: 07:00 Monday to Friday, 08:30 at
  * weekends), the Sunday check-in's reminder, and the weekly review after it.
  */
 object Daily {

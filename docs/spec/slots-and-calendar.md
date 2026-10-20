@@ -5,8 +5,8 @@ Also how your calendar's events become busy time for the planner (`sync/Sync.kt`
 
 ## When the plan is made
 
-`PlanWatcher` makes the plan again whenever the tasks, the settings, your instructions, the calendar's busy time, the school calendar, today's slot starts or the calibration change, once they've been quiet 2 seconds (PL-13).
-After each plan: today's slots are saved (`Planning.keepSlots`), the slot alarms are set (`SlotAlarms.arm`), the widget is drawn again, and the calendar is written once plans have been quiet 5 seconds. A slot's start or end alarm whose work fails is logged, not a crash, and his look is queued all the same (`SlotReceiver`, 4.1.2).
+`PlanWatcher` makes the plan again whenever the tasks, the settings, your instructions, the calendar's busy time, the school calendar, today's slot starts or the calibration change, once they've been quiet 2 seconds (PL-13), and when Felix's notes change, so a piece's first steps are written with them.
+After each plan: today's slots are saved (`Planning.keepSlots`), the slot alarms are set (`SlotAlarms.arm`), your reminders it brings due or lets go are sent and their alarm set (`Looks.sweepReminders`, `SlotAlarms.armReminder`), the widget is drawn again, the pieces' first steps and Felix's next message are written ahead (`plan/Ahead.kt`), and the calendar is written once plans have been quiet 5 seconds. A slot's start or end alarm whose work fails is logged, not a crash, and his look is queued all the same (`SlotReceiver`, 4.1.2).
 
 ## The slotter (PL-12)
 
@@ -28,7 +28,7 @@ What's laid, in turn:
 
 ## Outside breaks
 
-On a weekend or a day off, `outsideBreaks` (3) breaks of `outsideBreakMin` (20) are laid first, one at or after each of `outsideTimes` (09:30, 13:00, 16:00), each over by the next one's time and none starting after 18:00 (`Slotter.OUTSIDE_LATEST_MIN`, D-41): one with no room by then isn't laid. On a day under way, one whose time has gone isn't laid later.
+On a weekend or a day off, `outsideBreaks` (3) breaks of `outsideBreakMin` (20) are laid first, one at or after each of `outsideTimes` (09:30, 13:00, 16:00), each over by the next one's time and none starting after 18:00 (`Slotter.OUTSIDE_LATEST_MIN`, D-41): one with no room by then isn't laid. On a day under way, one whose time has gone is laid from now while it can be over by the next one's time, and not at all once it can't.
 When the day's work needs their time (with its breaks, as they'd be laid), the midday one is given up first, then the afternoon's, then the morning's; and fewer still while more of the work would go unslotted around them than with none.
 
 ## Pins (PL-04)
@@ -39,7 +39,7 @@ Otherwise it goes at the next free start at or after its time, so a pin moved ne
 ## Kept starts (PL-13)
 
 After each plan, today's work slots' starts are saved by key (`SlotState.previous`, in `SessionState.slots`). The next plan lays each piece there again where that's still free, one under way or in its grace included, so a replan doesn't shuffle the day. A piece kept today also stays today's when the plan chooses its day, dated or undated, and one under way even with less than its length left, so work with days to spare isn't moved to a day with more room once its slot has begun; it says so (`Why.Kept`) where keeping it changed its day.
-A piece's key is its task and its step's place (`Chunk.key`: sittings counted from the end, a box by its part), so ticking one piece doesn't renumber the next and move it. A new day starts empty (`SlotState.on`).
+A piece's key is its task and its step's place (`Chunk.key`: sittings counted from the end), so ticking a step or a sitting doesn't renumber the next and move it. A box goes by its part, counted over what's left: keeping one hands its key to the next box, laid afresh. A new day starts empty (`SlotState.on`).
 
 ## Grace, and missed slots (PL-13)
 
@@ -48,7 +48,7 @@ A slot just over stays where it is for `Slotter.GRACE_MS` (10 minutes), its piec
 - At the end, a piece still planned is missed: recorded once (`Focus.missSlot`, `SlotOutcome.Missed`), and its start no longer kept (`SlotState.missed`), so the plan moves it to the next free time and says so (`Why.Refitted`).
 - Whether that took it to another day is noted (`MissedSlot.spilled`, by `SlotState.reconciled`). A slot missed today that went to tomorrow keeps today blocked till the day's hours end (BL-11, [blocking-and-protection.md](blocking-and-protection.md)).
 - A slot whose alarm couldn't ring (the phone off) is found at the next plan (`Slots.sweep`).
-- A time, a day or a start you then give the task is a move on purpose: today's slots of it are recorded moved (`Focus.moveSlot`, `SlotOutcome.Moved`), and its missed slots forgotten (`SlotState.moved`).
+- A time, a day or a start you then give the task is a move on purpose: the slots of today's it moves are recorded moved (`InstructionRules.movedSlots`: a time, its next piece's; another day, all of today's; a start, those before it; `Focus.moveSlot`, `SlotOutcome.Moved`), and its missed slots forgotten (`SlotState.moved`).
 
 ## The next thing to do
 
@@ -61,7 +61,7 @@ A slot just over stays where it is for `Slotter.GRACE_MS` (10 minutes), its piec
 - A step's last sitting ticks the step, its worked minutes including the step's other sittings still in the plan (kept out of order).
 - The slot's `SlotRecord` says how it went: `Kept`, or `KeptLate` once its grace is over or after a miss. A slot missed today and kept later is recorded as that slot, at its own time, and the miss gives way.
 - A piece ticked ahead of its slot, or with none, is kept all the same; one of a later day's earns nothing today.
-- A second tap keeps nothing: a tick on a piece kept since its screen's plan was made (`seenAt`: the Day screen's, the block screen's and a sheet's, the plan's minute, not a time read as the screen's drawn again), or kept in the last 30 seconds whenever that was (`Focus.AGAIN_MS`), is that Done again; a photo taken within those 30 seconds of a Done earns that Done's slot. Two ticks at once keep one, under a lock.
+- A second tap keeps nothing: a tick on a piece kept since its screen's plan was made (`seenAt`: the Day screen's, the block screen's, a sheet's, the widget's and the plan Felix was shown, the plan's minute, not a time read as the screen's drawn again), or kept in the last 30 seconds whenever that was (`Focus.AGAIN_MS`), is that Done again; a photo taken within those 30 seconds of a Done earns that Done's slot. Two ticks at once keep one, under a lock.
 - A Done that leaves all of a task's work done but its source's word (the task as the plan takes it, what's left rounding to none) says its last minutes stay planned until the source says it's done (`stillPlanned`), so the piece shown again isn't taken for a Done that didn't take.
 - One of your own, or feedback done by its tick (NF-06), whose minutes a keep finishes is finished, as *Done* does.
 
@@ -74,7 +74,7 @@ A stop part-way is finished at the next start (`Focus.finishKeeps`), before an e
 
 ## Undo
 
-`Focus.unkeepSlot` takes back a piece's last keep (Day's *Undo*, or Felix's untick through `Focus.untickBlock`), unless its task is finished:
+`Focus.unkeepSlot` takes back a piece's last keep (Day's *Undo*; Felix's untick through `Focus.untickBlock`, his `unkeepPiece` and his keep's Undo), unless its task is finished, but for one of your own, or one done by its tick (NF-06), that the keep itself finished, which Felix's opens again:
 - its record goes; one kept late becomes a miss again, on record and in today's misses;
 - a step's key unticks its step, and its minutes come off the task; a sitting before its step's last, or a box, gives back its minutes only;
 - kept in its slot today, its start is kept again, so the next plan lays it at that start again;
@@ -83,7 +83,7 @@ A stop part-way is finished at the next start (`Focus.finishKeeps`), before an e
 ## Moving a slot by hand
 
 On Day, a slot swiped right to left is done. Left to right, it's later today (`Instructions.laterToday`, its task's next piece only): at the first free time after it with its minutes, around today's other slots, as an `AtTime` change.
-Held, it goes to a day of the next fortnight, at a time or any time that day (`ui/MoveSheet.kt`): not a day after a real deadline still to come, while overdue work can go to any (D-30). Each move is a change of yours, taken back in *Your changes*; one the plan wouldn't keep is refused first (`Planner.pinProblem`).
+Held, it goes to a day of the next fortnight, at a time or any time that day (`ui/MoveSheet.kt`): not a day before its task can start, nor one after a real deadline still to come, while overdue work can go to any (D-30). Each move is a change of yours, taken back in *Your changes*; one the plan wouldn't keep is refused first (`Planner.pinProblem`).
 
 ## Writing the calendar (NF-07)
 
@@ -93,7 +93,7 @@ Pick one you made at calendar.google.com: a calendar an app makes stays on the p
 - **What**: the next seven days' slots (today and the six after, `SlotCalendarDiff.DAYS`), pieces of work and outside breaks.
 - **Each event**: the piece's label as its title ("Outside" for a break); its source and why as its description ("Teams. Due tomorrow."), with its first action where one's written (AI-15), or "A break outside.".
 - **Marked**: free, with no reminders, and with the app's package and its URI (`CUSTOM_APP_PACKAGE`, `CUSTOM_APP_URI`: `decrastination://slot/<date>/<key>`).
-- **Cheap**: one query and one batch a write (`CalendarWriter.writeSlots`), nothing written when nothing changed; slots as last written aren't even read back unless the calendar has changed after its last read (AR-08).
+- **Cheap**: two queries (its events, and those worded like them) and at most one batch a write (`CalendarWriter.writeSlots`), nothing written when nothing changed; slots as last written aren't even read back unless the calendar has changed after its last read (AR-08).
 - **Once quiet**: written after plans have been quiet 5 seconds (`CalendarWriter.CALENDAR_WRITE_QUIET_MS`), so a burst of changes is one write, not an event changed again while the calendar's sync still has it.
 
 `SlotCalendarDiff.diff` compares the slots with the app's events, those starting in the week and any with a slot's URI wherever it is now:
@@ -135,11 +135,11 @@ It's tried again at each write till it works (the permission back, the provider 
 `Sync.refreshCalendar` reads the phone's calendar (`READ_CALENDAR`) from a day back to the end of the plan's last day, 90 days on (`CalendarTime.readUntil`, DX-14).
 - Only the calendars ticked in Settings → Calendar (`Settings.calendarsExcluded`, DX-13), never the one written to; events you've declined are left out.
 - Each event's location and description (its first 500 characters) are read too (DX-12).
-- It's read again when the calendar changes (once quiet 5 seconds), after each sync, and at the morning briefing; a failed read judges the last events read again.
+- It's read at the app's start, when the calendar changes (once quiet 5 seconds) or the calendars picked do, after a sync that adds, finishes, reopens or misses a task, when an answer about an event or a change of yours is laid again, and at the morning briefing, among others (a time-zone change, the calendar permission granted in Setup, Settings' Calendar section); a failed read judges the last events read again.
 
 `EventJudge.judge` judges each event:
 - your answer for events of that name comes first (an instruction's over one given to Felix's question);
-- marked free, in a holidays, birthdays or observances calendar, or travel (a train, bus, coach, flight or ferry): free;
+- marked free, in a holidays, birthdays, observances or week numbers calendar, or travel (a train, bus, coach, flight, plane, ferry, tube or metro): free;
 - a timed event whose description says it's optional or tentative: asked about;
 - all day, or four hours or more: asked about;
 - anything else: busy, taking its time.

@@ -141,7 +141,7 @@ On a debug build the menu's *Debug* page (AR-03) has a button for each command t
 
 **The chat, Felix and instructions**
 - `chat-ask --es text "<words>"` (a paid call; with `--es replyTo <message id>`, a reply to that message, routed as any reply is: a question of his answered with no call); `chat-context` (writes `files/chat-context.txt`, and the turns your newest message was sent with, a reply's quote among them, to `files/chat-turns.txt`); `chat-card --es do <apply|undo>`; `chat-clear`.
-- `felix` (his state and last messages); `felix-check`; `felix-say --es reason <reason>` (a paid call); `memory`; `memory-tidy` (a paid call).
+- `felix` (his state, his last messages, and his notes and reminders); `felix-check`; `felix-say --es reason <reason>` (a paid call); `memory`; `memory-tidy` (a paid call).
 - `instruction --es text "<words>"` [`--es task <id>`, `--es event <key>` or `--es day <YYYY-MM-DD>`]; `instructions`; `instruction-discard --es id <id|all>`; `instruction-delete --es id <id>` (one applied taken back, as *Take back* does; one not applied discarded).
 
 **Tasks, settings and the week**
