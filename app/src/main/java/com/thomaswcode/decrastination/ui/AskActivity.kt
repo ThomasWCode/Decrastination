@@ -1161,6 +1161,7 @@ private fun Acts(graph: AppGraph, message: ChatMessage, live: Boolean) {
         }
     }
     val kept = remember(log, today) { graph.conversation.keptAt() }
+    val dayStart = remember(today) { today.atStartOfDay(graph.clock.zone()).toInstant().toEpochMilli() }
     val scope = rememberCoroutineScope()
     var said by remember(message.id) { mutableStateOf<String?>(null) }
     val quiet = MaterialTheme.colorScheme.onSurfaceVariant
@@ -1175,7 +1176,7 @@ private fun Acts(graph: AppGraph, message: ChatMessage, live: Boolean) {
             )
             when {
                 act.undone -> Text("Undone", style = MaterialTheme.typography.labelMedium, color = quiet, modifier = Modifier.padding(horizontal = 12.dp))
-                live && ChatActs.canUndo(act, tasks.tasks, settings, chat.messages, felix.notes, felix.reminders, kept, messageId = message.id, now = graph.clock.now(), readAt = { s -> tasks.status(s).lastSuccessAt }) -> TextButton(onClick = { scope.launch { said = graph.conversation.undoAct(message.id, i) } }) { Text("Undo") }
+                live && ChatActs.canUndo(act, tasks.tasks, settings, chat.messages, felix.notes, felix.reminders, kept, messageId = message.id, now = graph.clock.now(), dayStart = dayStart, readAt = { s -> tasks.status(s).lastSuccessAt }) -> TextButton(onClick = { scope.launch { said = graph.conversation.undoAct(message.id, i) } }) { Text("Undo") }
             }
         }
     }
