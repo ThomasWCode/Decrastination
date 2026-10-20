@@ -276,7 +276,8 @@
                             "cancelReminder",
                             "deleteNote",
                             "keepPiece",
-                            "unkeepPiece"
+                            "unkeepPiece",
+                            "sync"
                         ]
                     },
                     "taskId": {

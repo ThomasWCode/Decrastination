@@ -177,11 +177,12 @@ data class Proposal(
  * or deleted, and a setting about the work set, [setting] to [value]
  * ([FelixSettings]; [taskId] empty); since 4.1.0 a reminder set, moved or cancelled, and a note
  * added or deleted, the reminder's or the note's id its [value] ([taskId] its task's, or empty); since
- * 4.1.1 a piece kept as Day's Done keeps it, or kept no more, its key its [value] (G1).
+ * 4.1.1 a piece kept as Day's Done keeps it, or kept no more, its key its [value] (G1); and a source
+ * asked to read, its name its [setting], the task asked about its [taskId] (G2: said, with no Undo).
  */
 @Serializable
 data class ChatAction(val type: Type, val taskId: String, val stepIndex: Int? = null, val setting: String? = null, val value: String? = null) {
-    enum class Type { TickStep, Open, UntickStep, Done, Reopen, Delete, Setting, SetReminder, MoveReminder, CancelReminder, AddNote, DeleteNote, KeepPiece, UnkeepPiece }
+    enum class Type { TickStep, Open, UntickStep, Done, Reopen, Delete, Setting, SetReminder, MoveReminder, CancelReminder, AddNote, DeleteNote, KeepPiece, UnkeepPiece, Sync }
 }
 
 /**
@@ -306,6 +307,7 @@ object ChatActs {
             ChatAction.Type.DeleteNote -> note?.deletedAt != null
             ChatAction.Type.KeepPiece -> a.value in kept && task?.isOpen == true
             ChatAction.Type.UnkeepPiece -> a.value !in kept && task?.isOpen == true
+            ChatAction.Type.Sync -> false
         }
     }
 

@@ -83,7 +83,11 @@ class FelixHarness(start: String = "2026-10-19T16:30") : AutoCloseable {
         calendarTime = { NO_CALENDAR },
         answered = { message, words -> looks.answered(message, words) },
         draftReminders = { now -> looks.draftReminders(now) },
+        requestSync = { synced += it },
     )
+
+    /** The sources his `sync` asked to read (G2), in order. */
+    val synced: MutableList<Set<Source>> = Collections.synchronizedList(mutableListOf())
     val looks: Looks = Looks(
         stores.tasks, stores.settings, stores.model, stores.log, stores.chat, stores.felix, clock, scope, gateway, focus, planning, ports, outbox,
         calendarTime = { NO_CALENDAR },

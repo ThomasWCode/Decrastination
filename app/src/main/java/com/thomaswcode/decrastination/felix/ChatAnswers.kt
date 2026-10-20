@@ -347,6 +347,14 @@ object ChatAnswers {
     private fun action(a: GivenAction, byId: Map<String, TaskItem>, settings: Settings?, felix: FelixStore, context: ChatPrompts.Context?, leftOut: MutableList<String>): ChatAction? {
         fun act(t: ChatAction.Type, id: String, step: Int? = null) = ChatAction(t, id, step)
         fun no(why: String) = null.also { leftOut += why }
+        // A source read now (G2): one the app reads, by its name; about a listed task, or none.
+        if (a.type == "sync") {
+            val name = a.setting.trim()
+            val source = Source.SYNCED.firstOrNull { it.name.equals(name.replace(" ", ""), ignoreCase = true) || it.label.equals(name, ignoreCase = true) }
+                ?: return no("a source to read that the app doesn't (${name.take(20)})")
+            val about = a.taskId.trim().takeIf { it.isNotEmpty() }?.let { id -> byId[id]?.id ?: return no("a read about a task that isn't listed") }
+            return ChatAction(ChatAction.Type.Sync, about.orEmpty(), setting = source.name)
+        }
         // A piece kept as Day's Done keeps it, or taken back (G1): by its key, one the plan shown lists, or one kept today.
         if (a.type == "keepPiece" || a.type == "unkeepPiece") {
             val keep = a.type == "keepPiece"
