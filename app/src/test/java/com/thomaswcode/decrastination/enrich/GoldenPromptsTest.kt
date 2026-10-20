@@ -183,8 +183,13 @@ class GoldenPromptsTest {
         )
         val SCHOOL = SchoolCalendar(noSchool = listOf(NoSchool("2026-10-22", "2026-10-23", "Training days")))
         val MEMORY = MemoryState(
-            facts = listOf(Fact("football", "Training is on Tuesdays", NOW)),
-            rules = listOf(Rule("Don't message before 8 in the morning", NOW)),
+            facts = listOf(
+                Fact("football", "Training is on Tuesdays", NOW),
+                // Passing (10a): till a day, and with a task.
+                Fact("cold", "Feeling rough this week", NOW, until = Fixtures.at("2026-10-19T00:00")),
+                Fact("worksheet", "Can be handed in on paper", NOW, taskId = "teams:g1"),
+            ),
+            rules = listOf(Rule("Don't message before 8 in the morning", NOW), Rule("Not tonight", NOW, until = Fixtures.at("2026-10-15T07:00"))),
         )
         val TASK = TaskItem(
             id = "teams:g1", source = Source.Teams, sourceId = "g1", title = "Rates of reaction worksheet", detail = "",

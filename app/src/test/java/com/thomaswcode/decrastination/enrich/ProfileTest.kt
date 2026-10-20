@@ -61,6 +61,18 @@ class ProfileTest {
     }
 
     @Test
+    fun `what's passing says how long it holds, and its task by name`() {
+        val memory = MemoryState(
+            facts = listOf(Fact("cold", "feeling rough", now, until = Fixtures.at("2026-10-19T00:00")), Fact("maths", "can use the textbook's answers", now, taskId = maths.id)),
+            rules = listOf(Rule("not tonight", now, until = Fixtures.at("2026-10-15T07:00"))),
+        )
+        val block = Profile.block(settings, listOf(maths), null, SchoolCalendar(), memory, now, LONDON)
+        assertTrue("- not tonight (until Thu 15 Oct 07:00)" in block, block)
+        assertTrue("- cold: feeling rough (until Sun 18 Oct)" in block, block)
+        assertTrue("- maths: can use the textbook's answers (with “${maths.title}”)" in block, block)
+    }
+
+    @Test
     fun `the school day comes from the week's lessons, study periods by day`() {
         val week = Timetable(
             "2026-08-24T00:00:00",

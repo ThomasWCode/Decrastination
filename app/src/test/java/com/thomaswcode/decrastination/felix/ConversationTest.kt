@@ -7,11 +7,14 @@ import com.thomaswcode.decrastination.core.Change
 import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.core.ChatState
+import com.thomaswcode.decrastination.core.Fact
 import com.thomaswcode.decrastination.core.InstructionStatus
 import com.thomaswcode.decrastination.core.Kind
+import com.thomaswcode.decrastination.core.MemoryState
 import com.thomaswcode.decrastination.core.MessageKind
 import com.thomaswcode.decrastination.core.Proposal
 import com.thomaswcode.decrastination.core.ProposalState
+import com.thomaswcode.decrastination.core.Rule
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.core.TaskItem
@@ -53,6 +56,26 @@ class ConversationTest {
 
     /** His messages in the chat, oldest first. */
     private fun his() = stores.chat.value.messages.filter { it.from == Speaker.Felix }
+
+    @Test
+    fun `what's remembered that has run out isn't in the profile, and is let go of, silently`() = runBlocking {
+        val hour = 3_600_000L
+        stores.memory.update {
+            MemoryState(
+                facts = listOf(Fact("football", "on Tuesdays", now - hour), Fact("headache", "for the evening", now - hour, until = now + hour)),
+                rules = listOf(Rule("not tonight", now - hour, until = now - 1)),
+            )
+        }
+        val profile = conversation.profile(now).text
+        assertTrue("- headache: for the evening (until " in profile, profile)
+        assertFalse("not tonight" in profile, profile)
+        felix.settle()
+        assertEquals(emptyList(), stores.memory.value.rules)
+        // An hour on, the headache's gone too, with no line in the chat.
+        conversation.forgetExpired(now + 2 * hour)
+        assertEquals(listOf("football"), stores.memory.value.facts.map { it.topic })
+        assertTrue(stores.chat.value.messages.isEmpty())
+    }
 
     @Test
     fun `an answer's cards are made as it comes, and its Undo takes what it made back`() = runBlocking {
