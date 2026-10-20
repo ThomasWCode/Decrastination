@@ -94,34 +94,34 @@ class Focus(
 
     fun today(now: Long = clock.now()): LocalDate = Instant.ofEpochMilli(now).atZone(clock.zone()).toLocalDate()
 
-    /** Whether a blocked app may be in front now. */
-    fun verdict(now: Long = clock.now()): BlockPolicy.Verdict {
+    /** Whether a blocked app may be in front now, by [plan]: the plan now, or one Felix is shown, so they agree. */
+    fun verdict(now: Long = clock.now(), plan: Plan = this.plan(now)): BlockPolicy.Verdict {
         val state = protection.value
         return BlockPolicy.decide(
             BlockPolicy.Input(
                 now = now,
                 zone = clock.zone(),
                 settings = settings.value,
-                pressure = plan(now).pressure || missedKeepsPressure(now),
+                pressure = plan.pressure || missedKeepsPressure(now),
                 creditLeftMs = creditLeftMs(now),
                 overrideUntil = state.overrideUntil,
                 forceActiveUntil = state.forceActiveUntil,
                 schoolDay = schoolDay(today(now)),
-                gapUntil = gapUntil(now),
+                gapUntil = gapUntil(now, plan),
             ),
         )
     }
 
     /**
-     * The end of the gap after a slot kept today that [now] is in (BL-10), if it's in one. None once
+     * The end of the gap after a slot kept today that [now] is in (BL-10), by [plan], if it's in one. None once
      * a slot's been missed since: the gap ended when that one began, and its new time opens no other.
      */
-    fun gapUntil(now: Long = clock.now()): Long? {
+    fun gapUntil(now: Long = clock.now(), plan: Plan = this.plan(now)): Long? {
         val today = today(now).toString()
         val records = log.value.slots.filter { it.date == today }
         val keptAt = records.filter { it.outcome.kept }.maxOfOrNull { it.at } ?: return null
         if (records.any { it.outcome == SlotOutcome.Missed && it.at > keptAt }) return null
-        return plan(now).gapUntil(now, keptAt)
+        return plan.gapUntil(now, keptAt)
     }
 
     /**
@@ -202,7 +202,7 @@ class Focus(
         val today = today(now)
         // A slot missed today that went to tomorrow keeps it on till the day's hours end (BL-11), whatever's done.
         val spilledTill = if (missedKeepsPressure(now)) hoursEndMin(today) else null
-        return blockingLine(verdict(now), plan.todayBucket?.chunks.orEmpty(), (creditLeftMs(now) / 60_000L).toInt(), BlockPolicy.blockFromMin(settings.value, schoolDay(today)), rewardLine(plan, now), spilledTill)
+        return blockingLine(verdict(now, plan), plan.todayBucket?.chunks.orEmpty(), (creditLeftMs(now) / 60_000L).toInt(), BlockPolicy.blockFromMin(settings.value, schoolDay(today)), rewardLine(plan, now), spilledTill)
     }
 
     /** What lets a kept slot of [piece] earn (BL-08), by the settings. */
