@@ -187,11 +187,16 @@ object ChatPrompts {
         "steps" to mapOf("type" to "array", "items" to STEP),
     )
 
-    /** A memory to keep or forget (AI-21): a string each, so no union is added (the API takes 16). */
+    /**
+     * A memory to keep or forget (AI-21): a string each, so no union is added (the API takes 16); how long it holds
+     * and a fact's task (10a) plain strings too, empty for none.
+     */
     val MEMORY: Map<String, Any> = InstructionPrompts.obj(
         "topic" to STRING,
         "text" to STRING,
         "kind" to mapOf("type" to "string", "enum" to listOf(Given.FACT, Given.RULE)),
+        "until" to STRING,
+        "taskId" to STRING,
     )
 
     /** Something to do for the student (AI-14; 16 Oct, more of it; 4.1.0, a reminder cancelled, a note deleted; 4.1.1, a piece kept or not), plain fields so no union is added: stepIndex -1, setting and value empty for none. */

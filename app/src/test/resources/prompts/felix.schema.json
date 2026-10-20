@@ -37,12 +37,20 @@
                             "fact",
                             "rule"
                         ]
+                    },
+                    "until": {
+                        "type": "string"
+                    },
+                    "taskId": {
+                        "type": "string"
                     }
                 },
                 "required": [
                     "topic",
                     "text",
-                    "kind"
+                    "kind",
+                    "until",
+                    "taskId"
                 ],
                 "additionalProperties": false
             }
