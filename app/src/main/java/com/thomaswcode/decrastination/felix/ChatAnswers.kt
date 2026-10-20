@@ -94,14 +94,14 @@ object ChatAnswers {
     /**
      * [reading]'s cards, each made as it comes, with its Undo (your call, 16 Oct: nothing he does waits
      * for a button; AI-24 had only changes to what exists made so): its changes on one card, first;
-     * then its new tasks, a card each; then a card for each task to show (AI-14), with its Open.
+     * then its new tasks, a card each; then a card for each task to show (AI-14), with its Open; one opened where it lives (G3) has none.
      */
     fun cards(reading: Reading, tasks: Map<String, TaskItem>, zone: ZoneId, id: () -> String = { UUID.randomUUID().toString() }): List<Proposal> {
         val changes = reading.changes.takeIf { it.isNotEmpty() }?.let {
             Proposal(id(), changes = it, lines = it.map { c -> InstructionRules.describe(c, tasks, zone) }, instant = true)
         }
         val added = reading.tasks.map { Proposal(id(), task = it, instant = true) }
-        val opens = reading.actions.filter { it.type == ChatAction.Type.Open }.map { Proposal(id(), open = it.taskId) }
+        val opens = reading.actions.filter { it.type == ChatAction.Type.Open && it.value != OPEN_SOURCE }.map { Proposal(id(), open = it.taskId) }
         return listOfNotNull(changes) + added + opens
     }
 
@@ -153,6 +153,9 @@ object ChatAnswers {
 
     @Serializable
     private data class GivenAction(val type: String = "", val taskId: String = "", val stepIndex: Int = -1, val setting: String = "", val value: String = "")
+
+    /** An open's value that opens the task where it lives (G3), not its page here. */
+    const val OPEN_SOURCE = "source"
 
     /** The most actions one answer takes: a few at most is what's meant (ten since there are more kinds, 16 Oct). */
     private const val MAX_ACTIONS = 10
@@ -383,7 +386,8 @@ object ChatAnswers {
         val own = task.source == Source.Own
         val step = task.subSteps.getOrNull(a.stepIndex)
         return when (a.type) {
-            "open" -> act(ChatAction.Type.Open, task.id)
+            // Shown here, on a card; or where it lives (G3), at once: your own live here only.
+            "open" -> if (a.value.trim() == OPEN_SOURCE && !own) ChatAction(ChatAction.Type.Open, task.id, value = OPEN_SOURCE) else act(ChatAction.Type.Open, task.id)
             "tickStep" -> if (task.isOpen && step?.done == false) act(ChatAction.Type.TickStep, task.id, a.stepIndex) else no("a step to tick that isn't one of $name's still to do")
             "untickStep" -> if (task.isOpen && step?.done == true) act(ChatAction.Type.UntickStep, task.id, a.stepIndex) else no("a step to untick that isn't one of $name's done")
             // Done by you: your own, or one done by its tick (NF-06); another is done when its source says.

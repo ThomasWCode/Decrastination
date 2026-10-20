@@ -2,6 +2,7 @@ package com.thomaswcode.decrastination.ui
 
 import android.content.Context
 import android.content.Intent
+import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.core.AnkiRules
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
@@ -29,10 +30,13 @@ object TaskOpener {
      * Opens [task]; returns something to tell you (what went wrong, or what to look for), or null.
      * Felix sees it opened (LR-03), once it is: not when there was nothing to open it in.
      */
-    suspend fun open(context: Context, task: TaskItem): String? {
+    suspend fun open(context: Context, task: TaskItem): String? = opened(context, task).second
+
+    /** [task] opened where it lives, as [open], and whether it was: Felix's open (G3) says which. */
+    suspend fun opened(context: Context, task: TaskItem): Pair<Boolean, String?> {
         val (opened, say) = openIn(context, task)
-        if (opened) com.thomaswcode.decrastination.AppGraph.get(context).looks.noteActivity(listOf(task.id))
-        return say
+        if (opened) AppGraph.get(context).looks.noteActivity(listOf(task.id))
+        return opened to say
     }
 
     /** [task] opened where it lives: whether it was, and what to tell you. */

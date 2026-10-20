@@ -6,6 +6,8 @@ import com.thomaswcode.decrastination.core.ChatActs
 import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.MessageKind
+import com.thomaswcode.decrastination.core.OwnTask
+import com.thomaswcode.decrastination.core.OwnTaskRules
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.core.Status
@@ -120,6 +122,17 @@ class GapsTest {
         val refused = asked("check Moodle", answer("Can't.", listOf(sync("Moodle"))))
         assertTrue(refused.acts.isEmpty() && refused.note!!.contains("Moodle"))
         assertEquals(1, felix.synced.size)
+    }
+
+    @Test
+    fun `asked to open a task where it lives, it's opened at once with no card and said, and one of your own has its page here`() = runBlocking {
+        val own = OwnTaskRules.create(OwnTask(title = "Poster"), "p", now)
+        stores.tasks.update { it.copy(tasks = listOf(sheet, own)) }
+        val his = asked("open them in their apps", answer("Opening it in Teams.", listOf(action("open", sheet.id, "source"), action("open", own.id, "source"))))
+        assertEquals(listOf(sheet.id), felix.ports.opened)
+        assertEquals("Opened in Teams: Forces worksheet", his.acts.single().line)
+        assertNull(his.acts.single().action)
+        assertEquals(listOf(own.id), his.proposals.mapNotNull { it.open })
     }
 
     @Test
