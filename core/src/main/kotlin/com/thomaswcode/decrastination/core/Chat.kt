@@ -326,10 +326,17 @@ object ChatActs {
      * Whether [task], finished, was finished by a piece of it kept at [at] (G1): one of yours, or one done by its
      * tick, its finish then, as the app finishes it at once; not one finished another way since.
      */
+    fun finishedBy(task: TaskItem, at: Long): Boolean =
+        (task.source == Source.Own || task.tickDone) && !task.isOpen && task.doneAt?.let { it in at..at + FINISHED_BY_MS } == true
+
+    /** How soon after a piece's keep its task's finish is that keep's. */
+    private const val FINISHED_BY_MS = 60_000L
+
     /**
-     * Whether [step] is still done by [act]'s tick ([Act.after]): one by hand while the step's still ticked by hand, one
-     * kept as its piece while the record it made is its key's newest among today's [kept]; done another way since (kept
-     * in its slot, ticked again), it's another's to take back. An act from before this says nothing, and is as before.
+     * Whether [step] is still done by [act]'s tick ([Act.after]): one kept as its piece while the record it made is its
+     * key's newest among today's [kept], so a keep since (in its slot, or from Day) is another's to take back; one by
+     * hand while the step's still ticked by hand, which a later tick by hand from Day looks the same as (a step keeps
+     * no time of its tick), and is taken back with it. An act from before this says nothing, and is as before.
      */
     fun tickedBy(act: Act, taskId: String, index: Int, step: SubStep, kept: Map<String, Long>): Boolean = when (val after = act.after) {
         null -> true
@@ -339,12 +346,6 @@ object ChatActs {
 
     /** A tick's [Act.after] where it was by hand, not a keep of its piece ([tickedBy]). */
     const val TICKED_BY_HAND = "hand"
-
-    fun finishedBy(task: TaskItem, at: Long): Boolean =
-        (task.source == Source.Own || task.tickDone) && !task.isOpen && task.doneAt?.let { it in at..at + FINISHED_BY_MS } == true
-
-    /** How soon after a piece's keep its task's finish is that keep's. */
-    private const val FINISHED_BY_MS = 60_000L
 
     /**
      * Whether a message after the one holding [act] in [messages] ([messageId], else the first holding one
