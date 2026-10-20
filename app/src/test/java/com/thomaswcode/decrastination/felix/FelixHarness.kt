@@ -23,6 +23,7 @@ import com.thomaswcode.decrastination.learn.Learning
 import com.thomaswcode.decrastination.notify.NoticeId
 import com.thomaswcode.decrastination.notify.Notices
 import com.thomaswcode.decrastination.plan.Planning
+import java.io.File
 import java.nio.file.Files
 import java.util.Collections
 import java.util.UUID
@@ -45,17 +46,24 @@ import okhttp3.mockwebserver.MockWebServer
  * gateway, focus, plan and outbox, and his calls through the real readers, answered by a stand-in for
  * Claude's API ([server]). Android is a list of what it was asked ([ports]); the other owners
  * ([owners]: your own tasks, your instructions and the calendar's answers) do, simply, what AppGraph's
- * functions do.
+ * functions do. For the chat's eval ([com.thomaswcode.decrastination.enrich.EvalRunTest]): the stores
+ * [seed]ed with a copy of the phone's before they're read, the calendar as [calendar] judges it, and with
+ * a [key] his calls go to Claude's API itself, paid for.
  */
-class FelixHarness(start: String = "2026-10-19T16:30") : AutoCloseable {
-    private val dir = Files.createTempDirectory("felix").toFile()
+class FelixHarness(
+    start: String = "2026-10-19T16:30",
+    seed: (File) -> Unit = {},
+    private val key: String? = null,
+    private val calendar: (Stores) -> EventJudge.Time = { NO_CALENDAR },
+) : AutoCloseable {
+    private val dir = Files.createTempDirectory("felix").toFile().also(seed)
     val clock = FixedClock(Fixtures.at(start), LONDON)
     val stores = Stores(dir, Reverse, { clock.now() })
     private val job = SupervisorJob()
     private val scope = CoroutineScope(job + Dispatchers.Default)
     val server = MockWebServer().apply { start() }
-    private val gateway = ModelGateway(stores.settings, { "test-key" }, stores.model, stores.tasks, clock, NoAlerts, scope) {}
-        .also { it.endpoint = server.url("").toString().trimEnd('/') }
+    private val gateway = ModelGateway(stores.settings, { key ?: "test-key" }, stores.model, stores.tasks, clock, NoAlerts, scope) {}
+        .also { if (key == null) it.endpoint = server.url("").toString().trimEnd('/') }
     val ports = Ports()
     val owners = Owners()
 
@@ -67,7 +75,7 @@ class FelixHarness(start: String = "2026-10-19T16:30") : AutoCloseable {
     private val focus: Focus = Focus(stores.tasks, stores.settings, stores.session, stores.learning, stores.protection, stores.log, clock) { state, s, now -> planning.plan(state, s, now) }
     val planning: Planning = Planning(
         stores.tasks, stores.settings, stores.session, stores.learning, stores.model, stores.log, stores.instructions, stores.school, clock, scope, gateway,
-        calendarTime = { NO_CALENDAR },
+        calendarTime = { calendar(stores) },
         calendarChanges = emptyFlow<Unit>(),
         sweep = {},
         hooks = emptyList(),
@@ -80,7 +88,7 @@ class FelixHarness(start: String = "2026-10-19T16:30") : AutoCloseable {
     val conversation: Conversation = Conversation(
         stores.tasks, stores.settings, stores.runtime, stores.learning, stores.log, stores.instructions, stores.chat, stores.school, stores.memory, stores.felix,
         clock, scope, gateway, notices, focus, planning, ports, outbox, owners,
-        calendarTime = { NO_CALENDAR },
+        calendarTime = { calendar(stores) },
         answered = { message, words -> looks.answered(message, words) },
         draftReminders = { now -> looks.draftReminders(now) },
         requestSync = { synced += it },
@@ -95,7 +103,7 @@ class FelixHarness(start: String = "2026-10-19T16:30") : AutoCloseable {
     val synced: MutableList<Set<Source>> = Collections.synchronizedList(mutableListOf())
     val looks: Looks = Looks(
         stores.tasks, stores.settings, stores.model, stores.log, stores.chat, stores.felix, clock, scope, gateway, focus, planning, ports, outbox,
-        calendarTime = { NO_CALENDAR },
+        calendarTime = { calendar(stores) },
         profile = { conversation.profile(it) },
         remember = { conversation.remember(it) },
         addInstruction = { text, about, answer -> owners.instruction(text, about, answer) },
