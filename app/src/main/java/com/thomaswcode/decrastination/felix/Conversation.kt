@@ -1005,6 +1005,7 @@ class Conversation(
         val reminders = kept.reminders.map { r ->
             val state = when {
                 r.cancelledAt != null -> "cancelled"
+                r.letGoAt != null -> "let go"
                 r.doneAt != null -> "done"
                 !Reminders.pending(r) -> "sent"
                 r.sentAt != null -> "snoozed"

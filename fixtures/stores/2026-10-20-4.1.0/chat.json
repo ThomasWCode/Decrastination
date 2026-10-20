@@ -1183,6 +1183,7 @@
                         "snoozedTo": null,
                         "doneAt": null,
                         "cancelledAt": null,
+                        "letGoAt": null,
                         "draft": null,
                         "draftedAt": null,
                         "draftFor": null

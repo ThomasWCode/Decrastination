@@ -43,6 +43,9 @@ object FelixWords {
     /** A reminder of yours, [words], let go before it came, as its task, [title], [why]. */
     fun letGo(words: String, title: String, why: String): String = "Your reminder “$words” is let go: “$title” $why."
 
+    /** A reminder of yours, [words], let go and back, as its task, [title], [why]. */
+    fun back(words: String, title: String, why: String): String = "Your reminder “$words” is back: “$title” $why."
+
     /** A reminder's replies (Q11: A): it's done, or it comes again in 15 minutes or an hour, each with no call. */
     const val REMINDER_DONE = "Done"
     const val REMINDER_SNOOZE = "Snooze 15 min"
