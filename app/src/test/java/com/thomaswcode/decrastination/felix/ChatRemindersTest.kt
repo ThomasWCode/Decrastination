@@ -11,6 +11,7 @@ import com.thomaswcode.decrastination.core.FelixAnswer
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Note
 import com.thomaswcode.decrastination.core.NoteScope
+import com.thomaswcode.decrastination.core.Notes
 import com.thomaswcode.decrastination.core.Reminder
 import com.thomaswcode.decrastination.core.Reminders
 import com.thomaswcode.decrastination.core.Source
@@ -129,6 +130,29 @@ class ChatRemindersTest {
         val past = parse(answer(notes = listOf(note(sheet.id, "tenth"), note(sheet.id, "eleventh"))), full)
         assertEquals(listOf("tenth"), past.notes.map { it.text })
         assertTrue(past.leftOut.single().contains("has 10 already"))
+    }
+
+    private fun standing(text: String, subject: String = "", className: String = "", source: String = "", titleContains: String = "", taskId: String = "") =
+        """{"taskId":"$taskId","text":"$text","subject":"$subject","className":"$className","source":"$source","titleContains":"$titleContains"}"""
+
+    @Test
+    fun `a standing note is for every task of a subject, a class, a source or a word in its title, never a task too, and the source one the app reads`() {
+        val reading = parse(answer(notes = listOf(
+            standing("on sheets", subject = "Chemistry"),
+            standing("show the working", className = "12X/Ph1", source = "Power Planner"),
+            standing("read it twice", titleContains = "essay"),
+            standing("both", subject = "Chemistry", taskId = sheet.id),
+            standing("no such source", source = "Moodle"),
+        )))
+        assertEquals(
+            listOf(NoteScope(subject = "Chemistry"), NoteScope(className = "12X/Ph1", source = Source.PowerPlanner), NoteScope(titleContains = "essay")),
+            reading.notes.map { it.scope },
+        )
+        assertTrue(reading.notes.all { it.taskId == null })
+        assertEquals(2, reading.leftOut.size, reading.leftOut.joinToString("\n"))
+        // No more than twenty kept.
+        val full = FelixStore(notes = (1..Notes.MAX_STANDING).map { Note("s$it", "standing $it", now, By.Felix, scope = NoteScope(subject = "Physics")) })
+        assertTrue(parse(answer(notes = listOf(standing("one more", subject = "Physics"))), full).let { it.notes.isEmpty() && it.leftOut.single().contains("kept already") })
     }
 
     @Test

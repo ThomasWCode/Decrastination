@@ -363,11 +363,27 @@
                     },
                     "text": {
                         "type": "string"
+                    },
+                    "subject": {
+                        "type": "string"
+                    },
+                    "className": {
+                        "type": "string"
+                    },
+                    "source": {
+                        "type": "string"
+                    },
+                    "titleContains": {
+                        "type": "string"
                     }
                 },
                 "required": [
                     "taskId",
-                    "text"
+                    "text",
+                    "subject",
+                    "className",
+                    "source",
+                    "titleContains"
                 ],
                 "additionalProperties": false
             }

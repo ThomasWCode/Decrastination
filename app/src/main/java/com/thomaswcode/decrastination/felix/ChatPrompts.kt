@@ -118,8 +118,8 @@ object ChatPrompts {
      */
     private const val REMIND = "8. Remind (reminders): when they ask to be reminded of something, that's a reminder, not a task: text in their words, as you'd say them then; when \"at\" for a date and time (date, time); \"slotStart\" for the start of their next slot on a task (taskId, and date only where it's not to be from today); \"beforeDue\" for a while before a task's due (taskId, minutesBefore). To move or reword one already set (\"push it to 8\"), give its id from the reminders' list, with when and its time as they're to be, and text empty to keep its words; a new one's id is empty. Say when it'll come. Not for work to plan, which is a task; most messages need none."
 
-    /** A note on a task (Stage 8a): kept with it, told to him whenever it comes up. */
-    private const val NOTE = "9. Note (notes): something to keep with a task for when it comes up (what the teacher said, which source to use, what they've decided): taskId and the words. Not a reminder, nor a fact about them; most messages need none."
+    /** A note on a task, or standing, for every task its scope matches (Stage 8a, Q31: A): kept, told to him whenever one comes up. */
+    private const val NOTE = "9. Note (notes): something to keep with a task for when it comes up (what the teacher said, which source to use, what they've decided): taskId and the words; or, for every task of a subject, a class (its code), a source (Teams, Power Planner, Gmail, Anki, Yours) or with a word in its title (\"all her chemistry homework on sheets\"), those instead, taskId empty. Not a reminder, nor a fact about them; most messages need none."
 
     /** The chat's instructions, as Felix (AI-24; Q-44: the chat is him too), for a student in Year [year] (AI-06). */
     fun system(settings: Settings = Settings(), year: Int = 12): String = (
@@ -195,10 +195,14 @@ object ChatPrompts {
         "minutesBefore" to INTEGER,
     )
 
-    /** A note on a task (Stage 8a): plain strings. */
+    /** A note on a task, or standing, for every task its scope matches (Stage 8a, Q31: A): plain strings, empty for none, so no union is added. */
     private val NOTE_ON = InstructionPrompts.obj(
         "taskId" to STRING,
         "text" to STRING,
+        "subject" to STRING,
+        "className" to STRING,
+        "source" to STRING,
+        "titleContains" to STRING,
     )
 
     /** A reminder's [REMINDER] `when`s: at a time, at its task's next slot, before its task's due. */
