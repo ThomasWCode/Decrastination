@@ -216,6 +216,33 @@ class NotesAndRemindersTest {
     }
 
     @Test
+    fun `a reminder's snooze from its chips has it come again, with no call, and its Done ends it`() = runBlocking {
+        stores.felix.update { it.copy(reminders = listOf(at("call gran", now).copy(draft = FelixAnswer("oi"), draftedAt = now - MIN))) }
+        felix.looks.sweepReminders(now)
+        val sent = stores.chat.value.messages.single { it.kind == MessageKind.Reminder }
+        felix.clock.time = now + MIN
+        assertTrue(conversation.ask(FelixWords.REMINDER_SNOOZE, replyTo = sent.id))
+        felix.settle()
+        val snoozed = stores.felix.value.reminders.single()
+        assertEquals(now + 16 * MIN, snoozed.snoozedTo)
+        assertTrue(Reminders.pending(snoozed) && snoozed.draft == null)
+        // Kept under it, answered, and no call made.
+        assertEquals(0, felix.server.requestCount)
+        assertTrue(stores.chat.value.messages.any { it.from == Speaker.You && it.replyTo == sent.id && it.answeredAt != null })
+        assertNotNull(stores.chat.value.messages.first { it.id == sent.id }.answeredAt)
+        // It comes again at its snooze, and Done ends it.
+        felix.clock.time = now + 16 * MIN
+        felix.looks.sweepReminders(felix.clock.time)
+        val again = stores.chat.value.messages.last { it.kind == MessageKind.Reminder }
+        assertTrue(again.id != sent.id)
+        assertTrue(conversation.ask("Done", replyTo = again.id))
+        felix.settle()
+        assertEquals(now + 16 * MIN, stores.felix.value.reminders.single().doneAt)
+        assertFalse(Reminders.pending(stores.felix.value.reminders.single()))
+        assertEquals(0, felix.server.requestCount)
+    }
+
+    @Test
     fun `a cancel and a note's delete mark what they name, kept whole for their Undo, which brings it back`() = runBlocking {
         stores.tasks.update { it.copy(tasks = listOf(sheet)) }
         asked("remind me at 7 to call gran, and note the sheet", answer("Done.", reminders = listOf(reminder(time = "19:00")), notes = listOf("""{"taskId":"${sheet.id}","text":"show the working"}""")))
