@@ -333,10 +333,13 @@ class BackupTest {
         val over = full.copy(reminders = full.reminders + reminder.copy(id = "snoozed", sentAt = 9, snoozedTo = 2_000))
         assertNull(Backups.problem(backup.copy(felixStore = over)))
         assertEquals(1, Backups.mergedFelix(FelixStore(), over).second)
-        // A note on a task and a scope, or neither; a reminder's due missing what its kind needs; two of one id; words too long, or a scope's.
+        // A note on a task and a scope, or neither, or on a blank task id; a reminder's due missing what its kind needs, or its task's
+        // id blank; two of one id; words too long, or a scope's.
         for (bad in listOf(
             felix.copy(notes = listOf(note.copy(scope = NoteScope(subject = "Chemistry")))),
             felix.copy(notes = listOf(note.copy(taskId = null))),
+            felix.copy(notes = listOf(note.copy(taskId = ""))),
+            felix.copy(reminders = listOf(reminder.copy(taskId = " "))),
             felix.copy(reminders = listOf(reminder.copy(due = Due(DueKind.BeforeDue, minutesBefore = 30)))),
             felix.copy(reminders = listOf(reminder.copy(due = Due(DueKind.At)))),
             felix.copy(reminders = listOf(reminder, reminder.copy(text = "again"))),
