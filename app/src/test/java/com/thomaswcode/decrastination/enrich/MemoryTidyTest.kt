@@ -68,4 +68,16 @@ class MemoryTidyTest {
         // One remembered while the call was out: left for next week's.
         assertNull(MemoryTidy.applied(MemoryState(before + Fact("new", "since", now), rules), before, after))
     }
+
+    @Test
+    fun `a fact with an until or a task isn't tidied but counts to its being due, and is kept as it was`() {
+        val passing = listOf(Fact("cold", "x".repeat(2_000), now - day, until = now + day), Fact("trip", "x".repeat(2_000), now - 2 * day, taskId = "gmail:trip"))
+        val plain = facts(2, 200)
+        // Due by all of them: the passing ones alone fill most of the room.
+        assertFalse(MemoryTidy.due(plain))
+        assertTrue(MemoryTidy.due(plain + passing))
+        assertEquals(plain, (plain + passing).filter(MemoryTidy::tidied))
+        // Its answer for the plain ones, the passing ones beside it as they were.
+        assertEquals((listOf(Fact("all", "short", now)) + passing).sortedBy { it.at }, MemoryTidy.withExpiring(plain + passing, listOf(Fact("all", "short", now))))
+    }
 }

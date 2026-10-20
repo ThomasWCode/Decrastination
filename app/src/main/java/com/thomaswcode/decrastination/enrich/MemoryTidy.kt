@@ -22,6 +22,15 @@ object MemoryTidy {
 
     fun due(facts: List<Fact>): Boolean = Memories.chars(facts) > Memories.FACT_BUDGET_CHARS * DUE_SHARE
 
+    /**
+     * Whether [fact] is one a tidy may rewrite (10a): one with neither an until nor a task. Those with either go by
+     * themselves, and a merge would lose when; they count to [due] all the same.
+     */
+    fun tidied(fact: Fact): Boolean = fact.until == null && fact.taskId == null
+
+    /** [after], a tidy's facts from those [before] it could rewrite ([tidied]), with the rest of [before] as they were. */
+    fun withExpiring(before: List<Fact>, after: List<Fact>): List<Fact> = (after + before.filterNot(::tidied)).sortedBy { it.at }
+
     /** The most lines a tidy gives back: two thirds of those it was given, so it makes room. */
     fun maxLines(before: List<Fact>): Int = (before.size * 2 / 3).coerceAtLeast(1)
 
