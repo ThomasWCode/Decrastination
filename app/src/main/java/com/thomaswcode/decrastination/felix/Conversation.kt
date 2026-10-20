@@ -459,19 +459,19 @@ class Conversation(
     /**
      * What the chat tells Claude the app knows at [now] ([ChatPrompts.context]): the open tasks, the
      * calendar and the changes in use; and beside them the plan as the Day and Work tabs show it then, the
-     * slot under way included ([ChatPrompts.plan]). All of one [state], calendar [time] and
-     * [applied] instructions, so the list and the plan agree, and with the answer's checks where the
-     * caller passes it the same ones.
+     * slot under way included ([ChatPrompts.plan]). All of one [state], calendar [time],
+     * [applied] instructions and [kept] notes and reminders, so the list and the plan agree, and with
+     * the answer's checks where the caller passes it the same ones.
      */
     fun chatContext(
         now: Long = clock.now(),
         state: TaskState = tasks.value,
         time: EventJudge.Time = calendarTime(),
         applied: List<Instruction> = instructions.value.applied,
+        kept: FelixStore = felix.value,
     ): ChatPrompts.Context {
         val plan = planning.plan(state, now = now, applied = applied, time = time)
         // His notes and reminders (8a), each reminder with when it comes by this plan.
-        val kept = felix.value
         val byId = state.tasks.associateBy { it.id }
         val moments = kept.reminders.mapNotNull { r -> Reminders.moment(r, plan, byId, now)?.let { r.id to it } }.toMap()
         return ChatPrompts.Context(
@@ -495,9 +495,10 @@ class Conversation(
             if (chat.value.unanswered?.id != waiting.id) return@withLock
             val chatClient = gateway.client(ModelEffort.Job.Chat) ?: return@call gateway.because(ModelHold.Off)
             val researchClient = gateway.client(ModelEffort.Job.Research) ?: return@call gateway.because(ModelHold.Off)
-            // One snapshot of the tasks, the calendar and your changes: what Claude's shown is what its answer's checked against.
+            // One snapshot of the tasks, the calendar and your changes, and his notes and reminders: what Claude's shown is what its answer's checked against.
             val state = tasks.value
             val time = calendarTime()
+            val noted = felix.value
             // The conversation up to your message: what he wrote unasked after it isn't what it answers.
             fun upTo(messages: List<ChatMessage>) = messages.take(messages.indexOfFirst { it.id == waiting.id } + 1)
             // His answer, with what a web search he asked for found ([found], 16 Oct), and the tasks whose
@@ -510,7 +511,7 @@ class Conversation(
                     val sent = upTo(chat.value.messages)
                     // What a message of yours quotes from the archive, past the window: told to him all the same.
                     val quoted = sent.mapNotNull { m -> m.replyTo?.takeIf { r -> sent.none { it.id == r } }?.let { outbox.find(it) } }
-                    ChatReader(chatClient, clock.zone(), profile = profile(at), settings = settings.value).answer(sent, state.tasks, time.events, chatContext(at, state, time, instructions.value.applied), at, found, read, quoted)
+                    ChatReader(chatClient, clock.zone(), profile = profile(at), settings = settings.value).answer(sent, state.tasks, time.events, chatContext(at, state, time, instructions.value.applied, noted), at, found, read, quoted, noted)
                 } finally {
                     sentAt.value = null
                 }
