@@ -95,7 +95,8 @@ Before those words comes what they're about, in full (D-93): the task's whole te
 
 What the app knows when you send (`ChatPrompts.context`):
 - **Today**: the date, the time and the time zone.
-- **Open tasks**, up to 80, by the deadline in force: each with its id, title, source, kind, due date (marked "(a plan)" where the app or Claude set it), its minutes and what the plan makes of them at your pace, the minutes worked, and when it can start; under it, its steps, numbered for a tick, then its notes (4.1.0), its own and the standing ones it matches, each by its id and whose it is.
+- **Open tasks**, up to 80, by the deadline in force: each with its id, title, source, kind, due date (marked "(a plan)" where the app or Claude set it), its minutes and what the plan makes of them at your pace, the minutes worked, and when it can start; under it, its steps, numbered for a tick, then its own notes (4.1.0), each by its id and whose it is, and the ids of the standing ones it matches, all of them in a room of 6,000 characters (the rest are on their sheets).
+- **Standing notes** (4.1.0, Q31: A), each once: its id, whose it is, the tasks it's for and its words.
 - **Your pace**: each multiplier learned (by kind, and by class where it has its own), with the timed pieces it's from; or that none is learned yet.
 - **Tasks that look like the same work** (DX-15), where there are any.
 - **The calendar's events in the next fortnight**, up to 60, each with its eventKey.
@@ -151,9 +152,12 @@ Open tasks (id | title | from | kind | due, a real deadline unless marked a plan
 - powerplanner:p1 | Vectors exercise 4B | Power Planner | Homework | Fri 16 Oct 2026 23:59 | 60, planned as 69 at their pace | 0 | -
     step 0: Questions 1 to 6 (30 min)
     step 1: Questions 7 to 12 (30 min)
-    note n2 (theirs, for every Maths task): Do these on paper, not in the textbook
+    standing notes for it: n2
 - gmail:m1 | Trip consent form | Gmail | Admin | Fri 16 Oct 2026 23:59 (a plan) | 10 | 0 | -
 - own:o1 | Personal statement first draft | Yours | Admin | no date | 120 | 0 | -
+
+Standing notes, for every task they match (id | whose | the tasks they're for | their words):
+- n2 | theirs | every Maths task | Do these on paper, not in the textbook
 
 Their pace, learned from work they've finished (kind, and class where it's its own | how long their work takes against the app's own estimates): the plan stretches only the app's estimates by it.
 - Homework | ×1.15 (from 9 timed)

@@ -171,6 +171,19 @@ class ChatRemindersTest {
     }
 
     @Test
+    fun `many notes keep to their room, and twenty standing ones go once, so what comes after them stays`() {
+        val many = (1..80).map { task("teams:t$it", "Task $it", "2026-10-22T09:00", className = "12X/Ph1") }
+        val notes = many.flatMap { t -> (1..10).map { Note("${t.id}-$it", "x".repeat(Notes.MAX_TEXT), now, By.Felix, taskId = t.id) } } +
+            (1..Notes.MAX_STANDING).map { Note("s$it", "y".repeat(Notes.MAX_TEXT), now, By.You, scope = NoteScope(subject = "Physics")) }
+        val context = ChatPrompts.context(many, emptyList(), emptyList(), now, LONDON, classMap = mapOf("12X/Ph1" to "Physics"), notes = notes, reminders = listOf(listed), moments = mapOf("r1" to Fixtures.at("2026-10-20T19:00")))
+        // The notes in about their room and the standing ones' once, not 80 tasks' worth of each.
+        assertTrue(context.length < 30_000, "${context.length}")
+        assertTrue("more notes of it, on its sheet" in context)
+        assertEquals(Notes.MAX_STANDING, context.lines().count { it.startsWith("- s") && it.endsWith("y".repeat(Notes.MAX_TEXT)) })
+        assertTrue("- r1 | Tue 20 Oct 19:00 | call gran | -" in context.lines())
+    }
+
+    @Test
     fun `the context lists each task's notes under its steps, its own and the standing ones it matches, and the reminders still to come after the settings`() {
         val notes = listOf(
             Note("n1", "use the second source", now, By.Felix, taskId = sheet.id),
@@ -186,7 +199,10 @@ class ChatRemindersTest {
         val lines = context.lines()
         val step = lines.indexOfFirst { it.startsWith("    step 0: Questions 1 to 4") }
         assertEquals("    note n1 (yours): use the second source", lines[step + 1])
-        assertEquals("    note n2 (theirs, for every Physics task): on sheets, not in the book", lines[step + 2])
+        assertEquals("    standing notes for it: n2", lines[step + 2])
+        // The standing ones once, after the tasks.
+        assertEquals(1, lines.count { "on sheets, not in the book" in it })
+        assertTrue("- n2 | theirs | every Physics task | on sheets, not in the book" in lines)
         assertTrue("deleted" !in context)
         val header = lines.indexOf("Reminders set, still to come (id | when | their words | its task):")
         assertTrue(header > lines.indexOfFirst { it.startsWith("Calendar events") })
