@@ -298,16 +298,19 @@ class ChatTest {
     }
 
     @Test
-    fun `the week's numbers and the calendar take a round the first time each is asked for, never again`() {
+    fun `the week's numbers and each span of the calendar take a round the first time each is asked for, never again`() {
         val reading = parse("""{"reply":"Looking.","newTasks":[],$none,"memories":[],"suggestedReplies":[],"actions":[],"research":"","details":[]}""")!!
         assertEquals(ChatRounds.Next(null, emptyList(), stats = true), ChatRounds.next(reading.copy(stats = true), searched = false, searches = true, read = emptyList()))
-        assertEquals(ChatRounds.Next(null, emptyList(), calendar = "2026-12"), ChatRounds.next(reading.copy(calendar = "2026-12"), searched = false, searches = true, read = emptyList()))
-        // Brought already: nothing new, and the calendar first asked for is the one that comes.
+        assertEquals(ChatRounds.Next(null, emptyList(), calendar = listOf("2026-12")), ChatRounds.next(reading.copy(calendar = "2026-12"), searched = false, searches = true, read = emptyList()))
+        // Brought already: nothing new.
         assertNull(ChatRounds.next(reading.copy(stats = true), searched = false, searches = true, read = emptyList(), stats = true))
-        assertNull(ChatRounds.next(reading.copy(calendar = "2027-01"), searched = false, searches = true, read = emptyList(), calendar = "2026-12"))
+        assertNull(ChatRounds.next(reading.copy(calendar = "2026-12"), searched = false, searches = true, read = emptyList(), calendar = listOf("2026-12")))
+        // Another span after it: brought too, two at most.
+        assertEquals(listOf("", "2027-01"), ChatRounds.next(reading.copy(calendar = "2027-01"), searched = false, searches = true, read = emptyList(), calendar = listOf(""))!!.calendar)
+        assertNull(ChatRounds.next(reading.copy(calendar = "2027-02"), searched = false, searches = true, read = emptyList(), calendar = listOf("", "2027-01")))
         // With a text to read and what came before kept: one round for all of it.
         assertEquals(
-            ChatRounds.Next(null, listOf("teams:s1"), stats = true, calendar = ""),
+            ChatRounds.Next(null, listOf("teams:s1"), stats = true, calendar = listOf("")),
             ChatRounds.next(reading.copy(details = listOf("teams:s1"), calendar = ""), searched = false, searches = true, read = emptyList(), stats = true),
         )
     }

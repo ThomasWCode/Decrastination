@@ -654,7 +654,11 @@ object ChatPrompts {
         val readTo = CalendarTime.readUntil(now, zone)
         fun day(time: Long) = Instant.ofEpochMilli(time).atZone(zone).format(DAY)
         append("The calendar you asked for, ${calendarWhat(month, now, zone)} (eventKey | title | when; answer from it, and leave details empty):")
-        val within = events.filter { it.start < to && it.end > from }.sortedBy { it.start }
+        // An all-day event by its dates, as the calendar keeps it (midnight to midnight, UTC): by its times it would
+        // run into the day before a month in summer time.
+        val days = Instant.ofEpochMilli(from).atZone(zone).toLocalDate() to Instant.ofEpochMilli(to - 1).atZone(zone).toLocalDate()
+        fun within(e: CalendarEvent) = if (e.allDay) EventJudge.days(e, zone).any { it >= days.first && it <= days.second } else e.start < to && e.end > from
+        val within = events.filter(::within).sortedBy { it.start }
         when {
             to <= readFrom -> append("\n(none known: the calendar is read from ${day(readFrom)} on)")
             from >= readTo -> append("\n(none known: the calendar is read only to ${day(readTo - 1)}, as far as the plan reaches)")
