@@ -63,6 +63,10 @@ class RemindersTest {
         assertEquals(Fixtures.at("2026-10-20T19:00"), Reminders.nextWake(listOf(r.copy(draft = FelixAnswer("oi"), draftedAt = Fixtures.at("2026-10-20T18:51"), draftFor = Fixtures.at("2026-10-20T19:00"))), plan(), emptyMap(), now, ahead))
         assertEquals(Fixtures.at("2026-10-20T19:00"), Reminders.nextWake(listOf(r), plan(), emptyMap(), Fixtures.at("2026-10-20T18:55"), ahead))
         assertNull(Reminders.nextWake(listOf(r.copy(sentAt = now)), plan(), emptyMap(), now, ahead))
+        // Asked for and none came: no window to wake for, its moment only.
+        assertEquals(Fixtures.at("2026-10-20T19:00"), Reminders.nextWake(listOf(r.copy(draftFor = Fixtures.at("2026-10-20T19:00"))), plan(), emptyMap(), now, ahead))
+        // After a failed sweep, its moment gone by: not before the retry.
+        assertEquals(Fixtures.at("2026-10-20T19:06"), Reminders.nextWake(listOf(r), plan(), emptyMap(), Fixtures.at("2026-10-20T19:01"), ahead, notBefore = Fixtures.at("2026-10-20T19:06")))
     }
 
     @Test

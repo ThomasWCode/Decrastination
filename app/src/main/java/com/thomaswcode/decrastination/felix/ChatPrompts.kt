@@ -449,6 +449,21 @@ object ChatPrompts {
             appendLine("Standing notes, for every task they match (id | whose | the tasks they're for | their words):")
             standing.forEach { appendLine("- ${it.id} | ${if (it.by == By.Felix) "yours" else "theirs"} | ${Notes.scopeLine(it.scope!!)} | ${it.text.take(Notes.MAX_TEXT)}") }
         }
+        // A finished task's notes (8a), by id, so he can say or delete them: the newest first, in what's left of their room.
+        val closed = Notes.live(notes).filter { n -> byId[n.taskId]?.isOpen == false }.sortedByDescending { it.at }
+        if (closed.isNotEmpty()) {
+            appendLine()
+            appendLine("Notes on finished tasks (id | whose | its task | their words):")
+            for ((i, n) in closed.withIndex()) {
+                val line = "- ${n.id} | ${if (n.by == By.Felix) "yours" else "theirs"} | ${byId[n.taskId]?.title?.take(MAX_TITLE)} | ${n.text.take(Notes.MAX_TEXT)}"
+                if (line.length > noteRoom) {
+                    appendLine("(${closed.size - i} more, on their tasks' sheets)")
+                    break
+                }
+                appendLine(line)
+                noteRoom -= line.length
+            }
+        }
         // Their pace (17 Oct): what the app's own estimates are planned by, never minutes given.
         if (calibration != null) {
             appendLine()

@@ -435,10 +435,10 @@ class AppGraph private constructor(context: Context) {
     /**
      * Your reminders' alarm (8a) at the next moment by [plan] that one comes, or that one not yet written for has
      * his window to write it in begin ([Reminders.nextWake]), so he writes for it with the phone asleep; none with
-     * none to come.
+     * none to come. Not before [after], where a sweep failed ([SlotAlarms.REMINDER_RETRY_MS]).
      */
-    fun armReminder(plan: Plan = planning.plan()) =
-        SlotAlarms.armReminder(app, Reminders.nextWake(stores.felix.value.reminders, plan, tasks.value.tasks.associateBy { it.id }, clock.now(), FelixRules.AHEAD_MS))
+    fun armReminder(plan: Plan = planning.plan(), after: Long? = null) =
+        SlotAlarms.armReminder(app, Reminders.nextWake(stores.felix.value.reminders, plan, tasks.value.tasks.associateBy { it.id }, clock.now(), FelixRules.AHEAD_MS, after))
 
     /**
      * The completions syncs saved: free time and the log, then "How was it?" for finished homework
