@@ -116,6 +116,11 @@ class RemindersTest {
         // The sheet open again (a tick undone), the essay given a due date; the gone one still not listed.
         val again = mapOf("teams:sheet" to task("teams:sheet"), "teams:essay" to task("teams:essay", due = "2026-10-22T09:00"))
         assertEquals(listOf("s", "b"), Reminders.back(reminders, again, now) { now }.map { it.id })
+        // Only while there's room among those still to come: with 49, the first let go; with 50, none till one comes.
+        val toCome = (1 until Reminders.MAX_PENDING).map { at("2026-10-20T19:00").copy(id = "p$it") }
+        val first = reminders.map { if (it.id == "b") it.copy(letGoAt = now - 2 * min) else it }
+        assertEquals(listOf("b"), Reminders.back(toCome + first, again, now) { now }.map { it.id })
+        assertTrue(Reminders.back(toCome + at("2026-10-20T19:00").copy(id = "p50") + first, again, now) { now }.isEmpty())
     }
 
     @Test
