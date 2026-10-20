@@ -581,6 +581,12 @@ class Conversation(
         else -> null
     }
 
+    /** Today's kept pieces by key, each with its newest record's time (G1): a keep's Undo takes back only the record it made, while it's that one. */
+    fun keptAt(now: Long = clock.now()): Map<String, Long> {
+        val today = focus.today(now).toString()
+        return log.value.slots.filter { it.date == today && it.outcome.kept }.groupBy { it.key }.mapValues { (_, records) -> records.maxOf { it.at } }
+    }
+
     /** Today's slots kept (G1), newest last: what unkeepPiece takes back, and what a keep's Undo needs to find. */
     fun keptToday(now: Long = clock.now()): List<SlotRecord> {
         val today = focus.today(now).toString()
@@ -608,12 +614,15 @@ class Conversation(
             val noted = felix.value
             // The conversation up to your message: what he wrote unasked after it isn't what it answers.
             fun upTo(messages: List<ChatMessage>) = messages.take(messages.indexOfFirst { it.id == waiting.id } + 1)
+            // When the plan he was last shown was made: a piece he keeps is kept as of it (G1).
+            var shownAt = clock.now()
             // His answer, with what a web search he asked for found ([found], 16 Oct), and the tasks whose
             // whole text he asked to [read] (D-93).
             suspend fun ask(found: Found?, read: List<TaskItem> = emptyList()) = gateway.call(interactive = true, record = ModelCalls.OnRecord(ModelEffort.Job.Chat, waiting.text) { r: ChatReader.Result -> r.usage to ModelCalls.outcome(r.refused, r.reading == null) }, cost = { r: ChatReader.Result -> r.costUsd to r.refused }) { at ->
                 // Being asked now: whatever it said before (a failed call) is gone.
                 chat.update { s -> s.copy(messages = s.messages.map { if (it.id == waiting.id) it.copy(note = null, stuck = false) else it }) }
                 sentAt.value = at
+                shownAt = at
                 try {
                     val sent = upTo(chat.value.messages)
                     // What a message of yours quotes from the archive, past the window: told to him all the same.
@@ -714,6 +723,11 @@ class Conversation(
             }
             reading = reading.copy(research = null, details = emptyList())
             gathered = null
+            // Opened where it lives only while the chat's on screen (G3): from his notification's reply, a retry in the
+            // background or with the chat left, Android may block the start, and one long after would surprise you;
+            // a card then, its sheet's Open opening it there.
+            val unopened = if (chatInFront) emptyList() else reading.actions.filter { it.type == ChatAction.Type.Open && it.value == ChatAnswers.OPEN_SOURCE }
+            if (unopened.isNotEmpty()) reading = reading.copy(actions = reading.actions.map { if (it in unopened) it.copy(value = null) else it })
             val reply = ChatMessage(
                 id = UUID.randomUUID().toString(),
                 from = Speaker.Felix,
@@ -730,7 +744,7 @@ class Conversation(
                 acts = listOfNotNull(
                     notLooked?.let { Act(Act.NOT_LOOKED_UP + "$it.", problem = true) },
                     read.takeIf { it.isNotEmpty() }?.let { r -> Act("Read in full: " + r.joinToString("; ") { "“${it.title}”" } + ".") },
-                ),
+                ) + unopened.mapNotNull { a -> state.tasks.firstOrNull { it.id == a.taskId }?.let { t -> Act("On its card, not opened in ${t.source.label}: the chat wasn't on screen.") } },
             )
             var kept = false
             // What he was sent of the chat ([ChatPrompts.history]): yours before it that waited with it and went
@@ -759,7 +773,7 @@ class Conversation(
             if (edits.isNotEmpty()) chat.update { s -> s.copy(messages = s.messages.map { if (it.id == reply.id) it.copy(memoryEdits = edits) else it }) }
             // Its actions (AI-14; 16 Oct, everything he does), said under it with their Undo: before its
             // changes, as its steps are the ones it was shown.
-            val acts = if (kept) act(reading.actions) + keep(reading.reminders, reading.notes) else emptyList()
+            val acts = if (kept) act(reading.actions, shownAt) + keep(reading.reminders, reading.notes) else emptyList()
             if (acts.isNotEmpty()) chat.update { s -> s.copy(messages = s.messages.map { if (it.id == reply.id) it.copy(acts = acts + it.acts) else it }) }
             // A reminder set or moved into his window is written for at once, not at the next plan or look (8a).
             if (acts.any { it.action?.type == ChatAction.Type.SetReminder || it.action?.type == ChatAction.Type.MoveReminder }) scope.launch { draftReminders(clock.now()) }
@@ -793,9 +807,10 @@ class Conversation(
      * what exists (AI-24), each said under the answer with what its Undo needs ([undoAct]): a step
      * ticked (its piece kept where the plan has one, today or another day, earning as a tick does,
      * else ticked as on its sheet) or to do again; a task of yours done, open again or deleted; a
-     * setting set. None for one that couldn't be.
+     * setting set. None for one that couldn't be. A piece kept as of the plan he was shown, made at
+     * [shownAt] (G1): one kept from Day meanwhile isn't kept twice.
      */
-    private suspend fun act(actions: List<ChatAction>): List<Act> {
+    private suspend fun act(actions: List<ChatAction>, shownAt: Long): List<Act> {
         fun said(line: String, a: ChatAction) = Act(line, a)
         return actions.mapNotNull { a ->
             val task = tasks.value.tasks.firstOrNull { it.id == a.taskId }
@@ -871,7 +886,10 @@ class Conversation(
                 // A piece done that has no step to tick (G1): kept as Day's Done keeps it, earning as that does; or taken back.
                 ChatAction.Type.KeepPiece -> {
                     val label = planning.plan().let { p -> (p.todaySlots.mapNotNull { it.chunk } + p.ordered).firstOrNull { it.key == a.value } }?.label ?: task?.title
-                    said("Kept: $label", a).takeIf { focus.keepSlot(a.value.orEmpty()) }
+                    // As of the plan he was shown: kept from Day meanwhile, it isn't kept again (a box's next has its key).
+                    if (!focus.keepSlot(a.value.orEmpty(), seenAt = shownAt)) return@mapNotNull null
+                    // Its record's time with it, so its Undo takes back that record only, while it's the piece's newest.
+                    Act("Kept: $label", a, after = keptAt()[a.value]?.toString())
                 }
                 ChatAction.Type.UnkeepPiece -> {
                     val record = keptToday().lastOrNull { it.key == a.value }
@@ -994,8 +1012,8 @@ class Conversation(
                 if (back) ports.scheduleReminders()
                 back
             }
-            // A piece kept (G1): taken back, its record since the answer; one taken back, kept again as the chat keeps one.
-            ChatAction.Type.KeepPiece -> keptToday().any { it.key == a.value } && chat.value.messages.firstOrNull { it.id == messageId }?.let { m -> focus.unkeepSlot(a.value.orEmpty(), m.at) } == true
+            // A piece kept (G1): the record it made taken back, while it's the piece's newest; one taken back, kept again as the chat keeps one.
+            ChatAction.Type.KeepPiece -> act.after?.toLongOrNull()?.let { at -> keptAt()[a.value] == at && focus.unkeepSlot(a.value.orEmpty(), at) } == true
             ChatAction.Type.UnkeepPiece -> keptToday().none { it.key == a.value } && task?.isOpen == true && focus.keepSlot(a.value.orEmpty())
             // A reminder or a note (8a), while it's as the act left it: a reminder set goes, one moved has its time and
             // words back, one cancelled comes again; a note added goes, one deleted is back.
