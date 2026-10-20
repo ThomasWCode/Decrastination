@@ -95,7 +95,7 @@ Before those words comes what they're about, in full (D-93): the task's whole te
 
 What the app knows when you send (`ChatPrompts.context`):
 - **Today**: the date, the time and the time zone.
-- **Open tasks**, up to 80, by the deadline in force: each with its id, title, source, kind, due date (marked "(a plan)" where the app or Claude set it), its minutes and what the plan makes of them at your pace, the minutes worked, and when it can start; under it, its steps, numbered for a tick, then its own notes (4.1.0), each by its id and whose it is, and the ids of the standing ones it matches, all of them in a room of 6,000 characters (the rest are on their sheets).
+- **Open tasks**, up to 80, by the deadline in force: each with its id, title, source, its class and the subject the class map gives it (4.1.1), kind, due date (marked "(a plan)" where the app or Claude set it), its minutes and what the plan makes of them at your pace, the minutes worked, and when it can start; under it, its steps, numbered for a tick, then its own notes (4.1.0), each by its id and whose it is, and the ids of the standing ones it matches, all of them in a room of 6,000 characters (the rest are on their sheets).
 - **Standing notes** (4.1.0, Q31: A), each once: its id, whose it is, the tasks it's for and its words.
 - **Your pace**: each multiplier learned (by kind, and by class where it has its own), with the timed pieces it's from; or that none is learned yet.
 - **Tasks that look like the same work** (DX-15), where there are any.
