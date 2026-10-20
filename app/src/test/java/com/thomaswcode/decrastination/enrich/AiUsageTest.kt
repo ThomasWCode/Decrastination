@@ -1,5 +1,7 @@
 package com.thomaswcode.decrastination.enrich
 
+import com.anthropic.core.jsonMapper
+import com.anthropic.models.messages.Message
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
 import com.thomaswcode.decrastination.core.Enrichment
@@ -49,7 +51,10 @@ class AiUsageTest {
         // A photo check's three pictures among the rest (AI-17).
         val longest = Pricing.costUsd("claude-opus-4-8", input = 3L * (Pricing.MAX_INPUT_CHARS + Profile.MAX_BLOCK_CHARS) + 3 * 3_300 + 1_000, output = ClaudeEnricher.MAX_TOKENS)
         assertTrue(longest <= Pricing.WORST_CALL_USD, "$longest > ${Pricing.WORST_CALL_USD}")
-        assertEquals(1.295, Pricing.WORST_CALL_USD, 1e-9)
+        // And with its instructions written to the hour's cache, dearer than sent as input.
+        val written = Pricing.costUsd("claude-opus-4-8", input = 3L * (Pricing.MAX_INPUT_CHARS + Profile.MAX_BLOCK_CHARS) + 3 * 3_300, output = ClaudeEnricher.MAX_TOKENS, cacheWriteHour = 1_000)
+        assertTrue(written <= Pricing.WORST_CALL_USD, "$written > ${Pricing.WORST_CALL_USD}")
+        assertEquals(1.35, Pricing.WORST_CALL_USD, 1e-9)
         assertTrue(ReadingPrompts.MAX_TEXT + 1_000 < Pricing.MAX_INPUT_CHARS)
     }
 
@@ -139,5 +144,29 @@ class AiUsageTest {
         // A web search (16 Oct) is a cent beside its tokens.
         assertEquals(0.0308, Pricing.costUsd("claude-opus-5-5", input = 1_200, output = 300, searches = 2), 1e-9)
         assertEquals(0.0135, Pricing.costUsd("claude-opus-4-8", input = 1_200, output = 300), 1e-9)
+    }
+
+    @Test
+    fun `a write to the hour's cache is charged at the hour's rate, the five minutes' at theirs`() {
+        // The price list (20 Oct): Opus 5.5 writes at $5 a million for five minutes and $8 for an hour, the older Opus at $6.25 and $10.
+        assertEquals(0.005, Pricing.costUsd("claude-opus-5-5", input = 0, output = 0, cacheWrite = 1_000), 1e-12)
+        assertEquals(0.008, Pricing.costUsd("claude-opus-5-5", input = 0, output = 0, cacheWriteHour = 1_000), 1e-12)
+        assertEquals(0.00625, Pricing.costUsd("claude-opus-4-8", input = 0, output = 0, cacheWrite = 1_000), 1e-12)
+        assertEquals(0.010, Pricing.costUsd("claude-opus-4-8", input = 0, output = 0, cacheWriteHour = 1_000), 1e-12)
+        // An answer's writes as it breaks them down: the system prompt's for the hour, a web search's for five minutes.
+        // 1 200 in, 300 out and 5 000 read: $0.0118; 4 000 written for the hour, $0.032; 500 for five minutes, $0.0025.
+        val both = """"cache_creation":{"ephemeral_5m_input_tokens":500,"ephemeral_1h_input_tokens":4000}"""
+        assertEquals(0.0463, Pricing.costUsd(answer(written = 4_500, breakdown = both)), 1e-9)
+        // With no breakdown, every write is the hour's, as every system prompt is marked so (AC-01).
+        assertEquals(0.0118 + 0.036, Pricing.costUsd(answer(written = 4_500)), 1e-9)
+        // Nothing written, nothing charged for it.
+        assertEquals(0.0118, Pricing.costUsd(answer(written = 0)), 1e-9)
+    }
+
+    /** An answer of Opus 5.5's: 1 200 tokens in, 300 out, 5 000 read from the cache and [written] written to it, as [breakdown] says. */
+    private fun answer(written: Long, breakdown: String? = null): Message {
+        val usage = """"usage":{"input_tokens":1200,"output_tokens":300,"cache_read_input_tokens":5000,"cache_creation_input_tokens":$written${breakdown?.let { ",$it" }.orEmpty()}}"""
+        val json = """{"id":"msg_1","type":"message","role":"assistant","model":"claude-opus-5-5","content":[],"stop_reason":"end_turn","stop_sequence":null,$usage}"""
+        return jsonMapper().readValue(json, Message::class.java)
     }
 }

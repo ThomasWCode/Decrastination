@@ -191,7 +191,7 @@ Settings you can change (setting | what it is | its value now):
 - felixGraceMin | Felix asks this far into a slot with nothing done (minutes) | 10
 - felixDefaultCheckMin | Felix checks again after (minutes) | 20
 - briefingWeekdayMin | Morning briefing, school days | 07:00
-- briefingWeekendMin | Morning briefing, weekends | 08:30
+- briefingWeekendMin | Morning briefing, weekends and days off | 08:30
 - checkInMin | Sunday check-in | 19:30
 - weekdayHours | School-day working hours | 16:45-22:00
 - weekendHours | Weekend working hours | 08:30-22:30
@@ -421,7 +421,7 @@ Every half minute while the blocker runs, at each slot's alarm, and at the check
 He isn't asked in quiet hours, during a timed calendar event that takes its time, or with Claude off. His notifications off silence only them: what he writes is in the chat. A standing instruction can quiet him further: he gives an empty message.
 
 Also:
-- **Morning**: at the briefing (07:00 on school days, 08:30 at weekends, both in Settings, D-74), when today has work slots. He has 20 seconds; without his answer the day's list is the morning's message, in his name in the app's words.
+- **Morning**: at the briefing (07:00 on a school day, 08:30 on any other, a weekday off included, both in Settings, D-74), when today has work slots. He has 20 seconds; without his answer the day's list is the morning's message, in his name in the app's words.
 - **Written ahead** (AC-10): the next slot's SlotStart, up to 10 minutes before it's due, written as of that moment; sent as it is if it still fits then.
 - **Reminder** (4.1.0): a reminder of yours due within ten minutes, written for as of its moment, once a moment (`Looks.draftReminders`); with none of his words by then, yours go ([below](#in-his-name-but-not-his-words)).
 - A call held or failed puts nothing on record: it's tried again after 5 minutes while it's still to say.

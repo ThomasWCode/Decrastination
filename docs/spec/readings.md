@@ -179,8 +179,8 @@ A piece's first action, under two minutes and concrete, the next two, and what d
 ## Cost, the cap and rest after failures
 
 `enrich/AiUsage.kt`, `enrich/Failures.kt`, `enrich/ModelHold.kt`, and `enrich/ModelGateway.kt`, which every call goes through (`ModelGateway.call`).
-- **Cost** per call from its tokens at list price (`Pricing`): Opus 5.5 at $4 in, $20 out, $0.20 cache reads and $5 cache writes per million; an older Opus's $5, $25, $0.50 and $6.25; $0.01 a web search. Counted per calendar month, in US dollars.
-- **No cap** unless you set one (`aiMonthlyCapUsd`). With one, a call goes only if the month's spend, plus every call in flight and this one at their dearest ($1.295, `Pricing.WORST_CALL_USD`), stays within it (AC-05).
+- **Cost** per call from its tokens at list price (`Pricing`): Opus 5.5 at $4 in, $20 out, $0.20 cache reads, and $8 a million written to the cache kept an hour (every system prompt, AC-01) or $5 to the five minutes' (a web search's results); an older Opus's $5, $25, $0.50, $10 and $6.25; $0.01 a web search. The writes go by the answer's own breakdown, any it doesn't give at the hour's rate. Counted per calendar month, in US dollars.
+- **No cap** unless you set one (`aiMonthlyCapUsd`). With one, a call goes only if the month's spend, plus every call in flight and this one at their dearest ($1.35, `Pricing.WORST_CALL_USD`: the instructions counted as written to the hour's cache), stays within it (AC-05).
 - A call is counted once it comes back, whatever stopped waiting for it: once sent, it's paid for.
 - **Rest after a failure** (AC-04, `Failures.restMs`): busy (429, 529) 5, 15, then 60 minutes as failures come in a row; the server or a timeout 15, then 60; no network none; a request the API won't take none; the key 60; anything else 15.
 - A longer `Retry-After` stands, and more than three failures in an hour rest an hour. A failed call sent earlier than one that's gone through brings no rest.

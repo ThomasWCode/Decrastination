@@ -423,6 +423,8 @@ class AppGraph private constructor(context: Context) {
         scope.launch { stores.felix.state.drop(1).collect { runCatching { armReminder() }.onFailure { e -> Log.w(TAG, "Setting the reminders' alarm failed", e) } } }
         // A note added or deleted (8a): the plan made again, so the first steps of its task's pieces are written with it ([Ahead]).
         scope.launch { stores.felix.state.map { it.notes }.distinctUntilChanged().drop(1).collect { planning.watcher.poke() } }
+        // A day off added or taken away: the briefing's next time with it, as a day off has the weekends' (D-74).
+        scope.launch { school.state.drop(1).collect { runCatching { Daily.schedule(app) }.onFailure { e -> Log.w(TAG, "Setting the daily alarms failed", e) } } }
         // The files older shapes came from, a week after their migration, at a start that's got this far.
         scope.launch(Dispatchers.IO) { runCatching { stores.letGoOfOldShapes() }.onFailure { Log.w(TAG, "Letting go of old shapes failed", it) } }
         // The notifications Felix's messages have taken the place of, one still showing or held from

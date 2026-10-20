@@ -294,7 +294,7 @@ class SettingsActivity : ComponentActivity() {
 
                     NOTIFICATIONS -> item {
                         TimeField("Morning briefing, school days", draft.briefingWeekdayMin, "briefingWeekdayMin", form) { draft = draft.copy(briefingWeekdayMin = it) }
-                        TimeField("Morning briefing, weekends", draft.briefingWeekendMin, "briefingWeekendMin", form) { draft = draft.copy(briefingWeekendMin = it) }
+                        TimeField("Morning briefing, weekends and days off", draft.briefingWeekendMin, "briefingWeekendMin", form) { draft = draft.copy(briefingWeekendMin = it) }
                         TimeField("Sunday check-in", draft.checkInMin, "checkInMin", form) { draft = draft.copy(checkInMin = it) }
                         Note("The week's review follows the check-in an hour and a half later, answered or not. Those held back by quiet hours or the day's four go with the next briefing.")
                         // The weekly summary for home (NF-02): where it goes, and this week's to send now.
