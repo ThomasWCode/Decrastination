@@ -283,6 +283,8 @@ class AppGraph private constructor(context: Context) {
         calendarTime = { sync.calendarTime },
         answered = { record, words -> looks.answered(record, words) },
         draftReminders = { now -> looks.draftReminders(now) },
+        requestSync = { sources -> sync.syncNow(sources) },
+        requestTeamsSync = { sync.requestTeamsSync() },
     )
 
     /**
@@ -351,6 +353,8 @@ class AppGraph private constructor(context: Context) {
             // Only then is the day judged empty: a slot kept as the app stopped is work done.
             runCatching { focus.grantAllowanceIfDue() }.onFailure { Log.w(TAG, "Giving the day's free time failed", it) }
         }
+        // A task Felix asked a source to read about, changed by the read: said in his note (G2).
+        syncer.addAfterEverySync { conversation.afterSync() }
         // "How was it?" questions kept for his evening question, asked in the app's words once Claude's off.
         syncer.addAfterEverySync { conversation.askKept() }
         // A task back after aging out of the list (or new) takes the overrides its instructions give.

@@ -6,9 +6,11 @@ import com.thomaswcode.decrastination.Fixtures.LONDON
 import com.thomaswcode.decrastination.core.Blocklist
 import com.thomaswcode.decrastination.core.FixedClock
 import com.thomaswcode.decrastination.core.Kind
+import com.thomaswcode.decrastination.core.PpClass
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
+import com.thomaswcode.decrastination.core.Timetable
 import com.thomaswcode.decrastination.core.Uptime
 import com.thomaswcode.decrastination.data.ChatMigration
 import com.thomaswcode.decrastination.data.JsonStore
@@ -127,6 +129,9 @@ class SettingsScreenStateTest {
         screen.subject("12Ph", "Physics")
         val tasks = listOf(task("a", className = "12Ma"), task("b", className = " "), task("c", className = null))
         assertEquals(listOf("12Ma", "12Ph"), screen.classCodes(tasks))
+        // The timetable's classes with no task yet join them (G8), but its study period.
+        val timetable = Timetable(null, listOf(PpClass("c1", "Chem"), PpClass("s1", "Study Period"), PpClass("m1", "12Ma")))
+        assertEquals(listOf("12Ma", "12Ph", "Chem"), screen.classCodes(tasks, timetable))
         assertEquals(mapOf("12Ph" to "Physics"), screen.draft.classMap)
         // Blank leaves it the code.
         screen.subject("12Ph", " ")

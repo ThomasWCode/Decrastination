@@ -49,6 +49,8 @@ object InstructionAnswers {
         val steps: List<GivenStep> = emptyList(),
         /** The chat's only ([ChatPrompts]): a Minutes total that's the app's estimate at the student's pace. */
         val paced: Boolean = false,
+        /** The chat's only (G8): a DueBy at this class's next lesson, its date and time the app's to set. */
+        val lesson: String = "",
     ) {
         /** As given, but an empty string or a minutes of -1 is none: the schema has no nullable fields ([InstructionPrompts.CHANGE_FIELDS]). */
         fun normalised(): Given = copy(

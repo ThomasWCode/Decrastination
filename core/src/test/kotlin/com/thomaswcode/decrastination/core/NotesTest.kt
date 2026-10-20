@@ -49,6 +49,11 @@ class NotesTest {
         assertTrue(matches(NoteScope(titleContains = "art"), titled("Pop art essay")) && matches(NoteScope(titleContains = "art"), titled("Artwork")))
         assertTrue(!matches(NoteScope(titleContains = "art"), titled("Cartesian graphs")) && !matches(NoteScope(titleContains = "art"), titled("start revision")))
         assertTrue(matches(NoteScope(titleContains = "worksheet"), titled("Worksheets 3 and 4")) && matches(NoteScope(titleContains = "past paper"), titled("Physics: past papers")))
+        // A class given as its Power Planner class, named for its subject and teacher: of that subject, in whole words.
+        val perClass = mapOf("12X/Ph1" to "Physics HALE", "12X/Fm1" to "Further Maths NOVAK")
+        val further = task("teams:fm", "Vectors", "12X/Fm1")
+        assertTrue(Notes.matches(NoteScope(subject = "physics"), forces, perClass) && Notes.matches(NoteScope(subject = "Further Maths"), further, perClass))
+        assertTrue(!Notes.matches(NoteScope(subject = "Phys"), forces, perClass) && !Notes.matches(NoteScope(subject = "Maths"), further, perClass))
         // A subject no class is mapped to matches nothing; nor does an empty scope.
         assertTrue(!matches(NoteScope(subject = "History"), history) && !matches(NoteScope(), rates))
     }

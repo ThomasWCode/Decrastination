@@ -40,6 +40,27 @@ class ChatActsTest {
     }
 
     @Test
+    fun `a piece kept is taken back while the record it made is its key's newest, its task open or one of yours it finished, one taken back kept again while it isn't kept`() {
+        val task = essay()
+        val keep = Act("Kept: Essay", ChatAction(ChatAction.Type.KeepPiece, task.id, value = "own:e#-1#1"), after = "100")
+        assertTrue(ChatActs.canUndo(keep, listOf(task), settings, emptyList(), kept = mapOf("own:e#-1#1" to 100L)))
+        // Kept again since (taken back and kept from Day, or a box's next under its key): not this act's record.
+        assertFalse(ChatActs.canUndo(keep, listOf(task), settings, emptyList(), kept = mapOf("own:e#-1#1" to 200L)))
+        assertFalse(ChatActs.canUndo(keep, listOf(task), settings, emptyList(), kept = emptyMap()))
+        // One of yours it finished: its Undo opens it again, as a tick's does; one finished another way since, or a source's, isn't his to take back.
+        val keptNow = keep.copy(after = now.toString())
+        assertTrue(ChatActs.canUndo(keptNow, listOf(finished()), settings, emptyList(), kept = mapOf("own:e#-1#1" to now)))
+        assertFalse(ChatActs.canUndo(keptNow, listOf(finished().copy(doneAt = now + 600_000)), settings, emptyList(), kept = mapOf("own:e#-1#1" to now)))
+        val handedIn = finished().copy(id = "teams:e", source = Source.Teams)
+        assertFalse(ChatActs.canUndo(keep.copy(action = keep.action!!.copy(taskId = "teams:e")), listOf(handedIn), settings, emptyList(), kept = mapOf("own:e#-1#1" to 100L)))
+        // An unkeep's, by the record it took back (at 150): kept again since bars it, an older box's under the key doesn't.
+        val unkeep = keep.copy(action = keep.action!!.copy(type = ChatAction.Type.UnkeepPiece), after = "150")
+        assertTrue(ChatActs.canUndo(unkeep, listOf(task), settings, emptyList(), kept = emptyMap()))
+        assertTrue(ChatActs.canUndo(unkeep, listOf(task), settings, emptyList(), kept = mapOf("own:e#-1#1" to 100L)))
+        assertFalse(ChatActs.canUndo(unkeep, listOf(task), settings, emptyList(), kept = mapOf("own:e#-1#1" to 200L)))
+    }
+
+    @Test
     fun `a move's Undo looks for moves after its own message, though an earlier one reads the same`() {
         val r = Reminder("r", "call gran", 1, By.Felix, due = Due(DueKind.At, now + 7_200_000))
         val there = Act("Moved: “call gran” to 19:00", ChatAction(ChatAction.Type.MoveReminder, "", value = "r"), reminder = r.copy(due = Due(DueKind.At, now + 3_600_000)))

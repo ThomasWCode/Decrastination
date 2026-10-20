@@ -651,8 +651,11 @@ class FocusTest {
         session.update { it.copy(credit = it.credit.earn(monday, 10.0)) }
         tasks.update { it.copy(tasks = listOf(task("later", due = "2026-10-14T23:59").copy(notBefore = Fixtures.at("2026-10-13T00:00")))) }
         assertEquals(BlockPolicy.Verdict.Spend, focus.verdict())
+        val before = focus.plan()
         tasks.update { it.copy(tasks = it.tasks + task("tonight", due = "2026-10-12T23:59")) }
         assertEquals(BlockPolicy.Verdict.Block(BlockPolicy.Reason.TodayUndone), focus.verdict())
+        // By a plan given (one Felix was shown, made before it came): as that plan has it.
+        assertEquals(BlockPolicy.Verdict.Spend, focus.verdict(plan = before))
     }
 
     @Test

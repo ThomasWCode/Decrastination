@@ -19,7 +19,7 @@ data class ChatState(
     /** His state between looks (LR-03): his next check, what he wrote ahead, what waits to be asked, the check-in's answers so far. */
     val felix: FelixState = FelixState(),
     /** The shape this is in ([com.thomaswcode.decrastination.data.Migration]): raised with each change of it. */
-    val version: Int = 4,
+    val version: Int = 5,
 ) {
     /**
      * Your newest message still waiting for his answer: a message of his written since, unasked, doesn't
@@ -112,7 +112,7 @@ data class WebSource(val title: String, val url: String)
 data class ChatArchive(
     val messages: List<ChatMessage> = emptyList(),
     /** The shape this is in ([com.thomaswcode.decrastination.data.Migration]): raised with each change of it. */
-    val version: Int = 3,
+    val version: Int = 4,
 )
 
 /** The conversation read as a thread. Pure. */
@@ -176,18 +176,20 @@ data class Proposal(
  * since 16 Oct (your call: he changes everything) a step unticked, a task of yours done, open again
  * or deleted, and a setting about the work set, [setting] to [value]
  * ([FelixSettings]; [taskId] empty); since 4.1.0 a reminder set, moved or cancelled, and a note
- * added or deleted, the reminder's or the note's id its [value] ([taskId] its task's, or empty).
+ * added or deleted, the reminder's or the note's id its [value] ([taskId] its task's, or empty); since
+ * 4.1.1 a piece kept as Day's Done keeps it, or kept no more, its key its [value] (G1); and a source
+ * asked to read, its name its [setting], the task asked about its [taskId] (G2: said, with no Undo).
  */
 @Serializable
 data class ChatAction(val type: Type, val taskId: String, val stepIndex: Int? = null, val setting: String? = null, val value: String? = null) {
-    enum class Type { TickStep, Open, UntickStep, Done, Reopen, Delete, Setting, SetReminder, MoveReminder, CancelReminder, AddNote, DeleteNote }
+    enum class Type { TickStep, Open, UntickStep, Done, Reopen, Delete, Setting, SetReminder, MoveReminder, CancelReminder, AddNote, DeleteNote, KeepPiece, UnkeepPiece, Sync }
 }
 
 /**
  * What one of the chat's actions did (16 Oct), said under its answer as [line], with what its Undo
  * needs: the [action]; the task as it was before it ([was]: deleted, or finished before it was
  * opened again), and the cards that had added a deleted one ([cards], "message|card"); a setting's
- * value before and after ([before], [after]); a reminder before it was moved ([reminder]). [undone]
+ * value before and after ([before], [after]); a piece's kept record's time ([after], G1: the one a keep made, or the one an unkeep took back), and what one taken back was kept with ([before]: its extra minutes, its photo, its source's word, and its piece's minutes as the plan laid it again, its own and its step's other sittings'); a reminder before it was moved ([reminder]). [undone]
  * once Undo has taken it back. With no [action],
  * a line saying what came of the answer, with nothing to undo; a [problem] where something wasn't
  * made or looked up.
@@ -282,9 +284,12 @@ object ChatActs {
      * still gone, and none of the cards that had added it made again since (Redo makes it anew); a
      * setting still as it was set; a reminder set or moved still unsent, not snoozed nor cancelled, and
      * not moved again since; one cancelled still cancelled, with room for it among those still to come; a
-     * note added still there; one deleted still deleted, and kept, with room for it on its task.
+     * note added still there; one deleted still deleted, and kept, with room for it on its task; a piece
+     * kept still kept by the record it made, its key's newest among today's [kept] (each key's newest
+     * record's time), one kept no more still not, its task open, the record it took back today's (from
+     * [dayStart] on: past midnight its key names another day's piece).
      */
-    fun canUndo(act: Act, tasks: List<TaskItem>, settings: Settings, messages: List<ChatMessage>, notes: List<Note> = emptyList(), reminders: List<Reminder> = emptyList(), messageId: String? = null, now: Long? = null, readAt: (Source) -> Long? = { null }): Boolean {
+    fun canUndo(act: Act, tasks: List<TaskItem>, settings: Settings, messages: List<ChatMessage>, notes: List<Note> = emptyList(), reminders: List<Reminder> = emptyList(), kept: Map<String, Long> = emptyMap(), messageId: String? = null, now: Long? = null, dayStart: Long? = null, readAt: (Source) -> Long? = { null }): Boolean {
         if (act.undone) return false
         val a = act.action ?: return false
         val task = tasks.firstOrNull { it.id == a.taskId }
@@ -306,11 +311,26 @@ object ChatActs {
             ChatAction.Type.CancelReminder -> reminder?.cancelledAt != null && reminders.count(Reminders::pending) < Reminders.MAX_PENDING && comes(reminder.copy(cancelledAt = null), tasks, now, readAt)
             ChatAction.Type.AddNote -> note != null && note.deletedAt == null
             ChatAction.Type.DeleteNote -> note?.deletedAt != null && Notes.hasRoom(note, notes)
+            // One it finished (one of yours, or one done by its tick, its last piece) too: its Undo opens it again, as a tick's does.
+            ChatAction.Type.KeepPiece -> act.after?.toLongOrNull()?.let { at -> kept[a.value] == at && task != null && (task.isOpen || finishedBy(task, at)) } == true
+            // Kept again since it took one back (a newer record of its key) bars it; an older box's record under the key doesn't.
+            ChatAction.Type.UnkeepPiece -> act.after?.toLongOrNull()?.let { removed -> removed >= (dayStart ?: Long.MIN_VALUE) && kept[a.value]?.let { it < removed } ?: true } == true && task?.isOpen == true
+            ChatAction.Type.Sync -> false
         }
     }
 
     /** Whether [r], brought back, would still come at [now]: not let go at once, its task finished, gone or with no deadline ([Reminders.letGo]). */
     private fun comes(r: Reminder, tasks: List<TaskItem>, now: Long?, readAt: (Source) -> Long?): Boolean = now == null || Reminders.letGo(listOf(r), tasks.associateBy { it.id }, now, readAt).isEmpty()
+
+    /**
+     * Whether [task], finished, was finished by a piece of it kept at [at] (G1): one of yours, or one done by its
+     * tick, its finish then, as the app finishes it at once; not one finished another way since.
+     */
+    fun finishedBy(task: TaskItem, at: Long): Boolean =
+        (task.source == Source.Own || task.tickDone) && !task.isOpen && task.doneAt?.let { it in at..at + FINISHED_BY_MS } == true
+
+    /** How soon after a piece's keep its task's finish is that keep's. */
+    private const val FINISHED_BY_MS = 60_000L
 
     /**
      * Whether a message after the one holding [act] in [messages] ([messageId], else the first holding one

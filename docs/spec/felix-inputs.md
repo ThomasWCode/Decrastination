@@ -41,7 +41,7 @@ The part before the standing instructions is at most 2,000 characters, cut from 
 <!-- generated: profile -->
 ```text
 About the student
-Year 12 at a UK sixth form. Subjects: Physics (12X/Ph1), Maths (12X/Ma1), Chemistry (12X/Ch1).
+Year 12 at a UK sixth form. Subjects: Physics (12X/Ph1), Maths (12X/Ma1), Chemistry (12X/Ch1), Chemistry (Chem), Physics (Phys).
 School days: break 10:45–11:15; lunch 13:15–14:35 (eating 13:40–13:55).
 Works school days 16:45–22:00, weekends and days off 08:30–22:30. No school: 22 Oct–23 Oct (Training days).
 German textbook 1.
@@ -95,12 +95,13 @@ Before those words comes what they're about, in full (D-93): the task's whole te
 
 What the app knows when you send (`ChatPrompts.context`):
 - **Today**: the date, the time and the time zone.
-- **Open tasks**, up to 80, by the deadline in force: each with its id, title, source, kind, due date (marked "(a plan)" where the app or Claude set it), its minutes and what the plan makes of them at your pace, the minutes worked, and when it can start; under it, its steps, numbered for a tick, then its own notes (4.1.0), each by its id and whose it is, and the ids of the standing ones it matches, all of them in a room of 6,000 characters (the rest are on their sheets).
+- **Open tasks**, up to 80, by the deadline in force: each with its id, title, source, its class and the subject the class map gives it (4.1.1), kind, due date (marked "(a plan)" where the app or Claude set it), its minutes and what the plan makes of them at your pace, the minutes worked, and when it can start; under it, its steps, numbered for a tick, then its own notes (4.1.0), each by its id and whose it is, and the ids of the standing ones it matches, all of them in a room of 6,000 characters (the rest are on their sheets).
 - **Standing notes** (4.1.0, Q31: A), each once: its id, whose it is, the tasks it's for and its words.
 - **Notes on finished tasks** (4.1.0), the newest first, in what's left of the notes' room: each by its id, whose it is, its task and its words, so he can say or delete them.
 - **Your pace**: each multiplier learned (by kind, and by class where it has its own), with the timed pieces it's from; or that none is learned yet.
 - **Tasks that look like the same work** (DX-15), where there are any.
 - **The calendar's events in the next fortnight**, up to 60, each with its eventKey.
+- **The next lessons** (G8, 4.1.1): each class's next three, by subject, with its names (Power Planner's and Teams'), dated where the timetable's over a week old; none with no timetable read.
 - **The changes in use**, in words.
 - **Your own tasks finished in the last week**, up to 15, to open again.
 - **The settings he may change**, with their values now (`FelixSettings`).
@@ -114,7 +115,9 @@ Not sent: a task's reading, but as its minutes and steps; a finished task's text
 `ChatPrompts.plan`:
 - a paragraph on what the plan is, and what each `[why: …]` code means;
 - the slot under way, or the next thing to do, and the one after;
-- today's slots, each past, now or ahead;
+- whether blocking applies now and why, the free time, and what finishing today earns (G5, 4.1.1);
+- today's slots, each past, now or ahead, with its key (G1, 4.1.1);
+- the next piece of each task with no steps, by key, and the pieces kept today, which the plan no longer shows, by key (G1);
 - what isn't planned, and why;
 - events not under a day below;
 - what's planned after the fortnight, by task;
@@ -151,15 +154,15 @@ Reminders set, still to come (id | when | their words | its task):
 - r2 | at the start of “Rates of reaction worksheet”'s next slot, Tue 13 Oct 17:20 | Ask about question 7 | teams:t1
 - r1 | Wed 14 Oct 08:00 | Bring the signed consent form | gmail:m1
 
-Open tasks (id | title | from | kind | due, a real deadline unless marked a plan, which is never overdue and moves on once it passes | minutes in all, with what the plan makes of them at their pace where it's learned | minutes worked so far | can't start before):
-- teams:t1 | Rates of reaction worksheet | Teams | Homework | Thu 15 Oct 2026 08:30 | 45, planned as 59 at their pace | 0 | -
+Open tasks (id | title | from | its class, and its subject | kind | due, a real deadline unless marked a plan, which is never overdue and moves on once it passes | minutes in all, with what the plan makes of them at their pace where it's learned | minutes worked so far | can't start before):
+- teams:t1 | Rates of reaction worksheet | Teams | 12X/Ch1, Chemistry | Homework | Thu 15 Oct 2026 08:30 | 45, planned as 59 at their pace | 0 | -
     note n1 (yours): Use Monday's results table for question 5
-- powerplanner:p1 | Vectors exercise 4B | Power Planner | Homework | Fri 16 Oct 2026 23:59 | 60, planned as 69 at their pace | 0 | -
+- powerplanner:p1 | Vectors exercise 4B | Power Planner | 12X/Ma1, Maths | Homework | Fri 16 Oct 2026 23:59 | 60, planned as 69 at their pace | 0 | -
     step 0: Questions 1 to 6 (30 min)
     step 1: Questions 7 to 12 (30 min)
     standing notes for it: n2
-- gmail:m1 | Trip consent form | Gmail | Admin | Fri 16 Oct 2026 23:59 (a plan) | 10 | 0 | -
-- own:o1 | Personal statement first draft | Yours | Admin | no date | 120 | 0 | -
+- gmail:m1 | Trip consent form | Gmail | - | Admin | Fri 16 Oct 2026 23:59 (a plan) | 10 | 0 | -
+- own:o1 | Personal statement first draft | Yours | - | Admin | no date | 120 | 0 | -
 
 Standing notes, for every task they match (id | whose | the tasks they're for | their words):
 - n2 | theirs | every Maths task | Do these on paper, not in the textbook
@@ -171,6 +174,10 @@ Their pace, learned from work they've finished (kind, and class where it's its o
 Calendar events in the next fortnight (eventKey | title | when):
 - drum lesson | Drum lesson | Wed 14 Oct 2026 18:00 to Wed 14 Oct 2026 18:45
 - open day | Open day | all day Saturday 17 October 2026
+
+Next lessons (class: its subject, and its names | its next three):
+- Chemistry (Chem, 12X/Ch1) | Wed 14 Oct 10:00–11:00; Fri 16 Oct 14:00–15:00; Wed 21 Oct 10:00–11:00
+- Physics (Phys, 12X/Ph1) | Thu 15 Oct 12:20–13:15; Mon 19 Oct 08:50–09:45; Mon 26 Oct 08:50–09:45
 
 Changes already in use:
 - Fri 16 Oct: at most 1 h of work
@@ -215,9 +222,14 @@ The tasks' own text (id | from, and what comes with it; then its text: an assign
 
 The plan: the work the app has them do each day so every deadline is met, as its Day and Work tabs show it. Its minutes are the app's, from what it's learned of how long things take them, so they can differ from the task list's. While anything's planned for today, blocked apps stay blocked in blocking hours; otherwise they cost free time earned by working. Each piece's [why: …] says why it's on its day: duesoon (due today or tomorrow), overdue, spread (its share of the free time to its deadline), minimumtouch (kept within a week of its piece before), revisiongap (a day after its revision piece before), mostroom (a task in one piece, on the roomiest day before its deadline), soft (no due date: spare time this week), packed (its days are too tight to spread it, so as late as they allow), kept (where its slot today already was, under way or still to come), noroom (no room before its deadline).
 Now: 17:20–17:50 Rates of reaction worksheet: part 1 of 2 (30 min); then Vectors exercise 4B: Questions 1 to 6 (35 min)
+Blocking: on until today's work's done (2 pieces, 1 h 5 min); free time 0 min
 Today's slots (the times its pieces are laid at):
-- 17:20–17:50 Rates of reaction worksheet: part 1 of 2 (30 min) [now]
-- 17:55–18:30 Vectors exercise 4B: Questions 1 to 6 (35 min) [ahead]
+- 17:20–17:50 Rates of reaction worksheet: part 1 of 2 (30 min) [now] key teams:t1#-1#1
+- 17:55–18:30 Vectors exercise 4B: Questions 1 to 6 (35 min) [ahead] key powerplanner:p1#0
+The next piece of each task with no steps (task | the piece | its key, for keepPiece):
+- teams:t1 | Rates of reaction worksheet: part 1 of 2 (30 min) | teams:t1#-1#1
+- own:o1 | Personal statement first draft: part 1 of 4 (30 min) | own:o1#-1#1
+- gmail:m1 | Trip consent form (10 min) | gmail:m1#-1#1
 Day by day:
 - Today, Tuesday 13 October 2026: 65 min planned of 280 min of working time left
   - teams:t1 | Rates of reaction worksheet | 30 min: part 1 of 2 (30 min) [why: spread] | due Thu 15 Oct 2026 08:30
@@ -303,10 +315,10 @@ The whole text of the tasks you asked to read (answer and act on it, and leave d
 |---|---|---|
 | `reply` | one to three short sentences, or a short list | |
 | `newTasks` | tasks of your own to add: title, kind, subject, due date and time, start date, minutes, notes, steps | 10 |
-| `changes` | of the instructions' types (`NotATask` to `Rename`), each with its fields, and `paced` on a Minutes total worked out at your pace (D-69); and the chat's own two (4.1.0, Q13: B): `Remind`, a reminder set or one listed moved (words in `title`, when in `eventKey`, a listed one's id in `afterTaskId`), and `Note`, on a task or, its scope in `eventKey`, standing | 40, reminders and notes 10 each |
+| `changes` | of the instructions' types (`NotATask` to `Rename`), each with its fields, and `paced` on a Minutes total worked out at your pace (D-69); and the chat's own two (4.1.0, Q13: B): `Remind`, a reminder set or one listed moved (words in `title`, when in `eventKey`, a listed one's id in `afterTaskId`), and `Note`, on a task or, its scope in `eventKey`, standing; and `lesson` on a DueBy (4.1.1, G8): the class whose next lesson it's due at, its date and time the app's to set | 40, reminders and notes 10 each |
 | `memories` | a fact or a standing instruction, by topic | 5 |
 | `suggestedReplies` | replies you might give, in your words | 3, of 40 characters each |
-| `actions` | tick or untick a step, finish, reopen or delete one of your own, open a task, set a setting, cancel a reminder, delete a note | 10 |
+| `actions` | tick or untick a step, finish, reopen or delete one of your own, open a task (on a card, or where it lives: value `source`), set a setting, cancel a reminder, delete a note; and (4.1.1) keep a piece or take it back (`keepPiece`, `unkeepPiece`, by its key), and ask a source to read (`sync`, the source in `setting`) | 10 |
 | `research` | what to look up on the web, or empty | |
 | `details` | the tasks whose whole text to read before answering | 3 |
 
@@ -340,10 +352,11 @@ The student tells you about their work. You can:
 - Rename: the task's name as the app shows it (its source keeps its own). Needs taskId and title (the new name).
 
 Use the ids and event keys exactly as listed. Work out relative dates ("next Friday", "the weekend") from today; a weekday named alone ("on Saturday") means the next one, and only "every Saturday" or "on Saturdays" means each week. A stretch of days ("20 to 25 October", "this weekend") is one change per day, but for NoSchool, which takes the stretch whole. Leave every field a change type doesn't use empty: an empty string, minutes -1 (0 is a real value: a DayLimit's no work at all), and steps an empty list.
+A due date at a class's next lesson ("it's due next lesson", "next chemistry") is a DueBy with lesson the class, as the lessons' list names it (its subject or one of its names), and date and time empty: the app sets it to that lesson's start. Give lesson only for that; when it's refused, ask them the date.
 Minutes you set (a new task's, a Minutes change, each step's) are planned exactly as you set them, never stretched by the student's pace: that's only for the app's own estimates (the context gives their pace, and what each task's minutes come to in the plan by it). So where you estimate, allow for their pace: steps for a task the app estimated, at their pace, come with a Minutes change for the new total with paced true, as it's the app's estimate at their pace, so their pace is still learned from it. Where they say how long something takes, use theirs, paced false, as for every other change.
 3. Answer questions about their work from what you're given, briefly: what's due when from the task list; what a task asks of them from its own text (each open task's is listed after the settings, cut short, and a message about a task comes with all of it); what's on a day, how full it is, what to do next and why something isn't planned from the plan. The plan is what the app has them do and shows them, so say what it says rather than planning the work again yourself. The context gives the time now: a deadline later today is still ahead ("due at 16:00 today"), not past, and a slot marked past has gone by; say "overdue" only where the plan marks it so.
 4. Remember (memories): a fact about the student worth keeping for later (a preference, a pattern, something about their week: "football is on Tuesdays"), with a short topic, so a newer fact on the same topic replaces it; or, kind "rule", a standing instruction about how you should behave ("don't message before 8", "be blunter"). To forget one, give its topic (a rule's own words) and an empty text. Busy times, limits and days off are changes, not memories; most messages need none.
-5. Act (actions): tickStep when the student says a step is done, untickStep when one ticked isn't (taskId, and stepIndex from the list's steps); done when they've finished a task of their own (from Yours), or one whose tick finishes it; reopen for one of theirs finished by mistake (from the finished list); delete for a task of their own they no longer want (another source's they can only say isn't a task: NotATask); open to show them a task; setting to change one of the settings listed with their values (taskId empty, setting its name, value as the list writes it: a number, a time as HH:MM, hours as HH:MM-HH:MM); cancelReminder to cancel a reminder set (taskId empty, value its id from the reminders' list); deleteNote to delete a note (taskId empty, value its id from the task's notes). stepIndex is -1 but for steps, setting empty but for settings, and value empty but for settings, cancelReminder and deleteNote. A task from Teams, Power Planner, Gmail or Anki is done when its source says so (handed in, completed in Power Planner, unstarred, studied), so it can't be marked done. Most messages need none.
+5. Act (actions): tickStep when the student says a step is done, untickStep when one ticked isn't (taskId, and stepIndex from the list's steps); done when they've finished a task of their own (from Yours), or one whose tick finishes it; reopen for one of theirs finished by mistake (from the finished list); delete for a task of their own they no longer want (another source's they can only say isn't a task: NotATask); open to show them a task: value "app" for its page here, or "source" to open it where it lives (Teams, Power Planner, Gmail, AnkiDroid) when they ask for that; setting to change one of the settings listed with their values (taskId empty, setting its name, value as the list writes it: a number, a time as HH:MM, hours as HH:MM-HH:MM); cancelReminder to cancel a reminder set (taskId empty, value its id from the reminders' list); deleteNote to delete a note (taskId empty, value its id from the task's notes); keepPiece when they say a piece is done that has no step to tick (a task in boxes, or a slot of today's), as Day's Done keeps it (taskId, value its key from the plan); unkeepPiece when one kept today isn't (taskId, value its key from Kept today); sync when they say a source has news the app hasn't read ("I've handed it in, check Teams", "I've just starred it"): setting the source (Teams, Power Planner, Gmail or Anki), taskId the task it's about or empty; the source is read now, and you're told if the task changes, so say only that it's reading. stepIndex is -1 but for steps, setting empty but for settings and sync, and value empty but for settings, open, cancelReminder, deleteNote, keepPiece and unkeepPiece. A task from Teams, Power Planner, Gmail or Anki is done when its source says so (handed in, completed in Power Planner, unstarred, studied), so it can't be marked done. Most messages need none.
 6. Look things up (research): when their message needs facts that neither they nor the app have given you (a competition's rules and dates, an exam board's specification, what an event involves), give what to search the web for in a few words, reply only that you're looking it up, and change nothing: you'll be asked again with what's found, to answer and act on (its steps, dates and minutes). Never for what the lists here tell you, nor for anything about the student themselves; most messages need none, and research is then an empty string.
 7. Read a task in full (details): where you need more of a task's own text than the list shows (it says how much was left out), give its id, up to three, reply only that you're reading it, and change nothing: you'll be asked again with the whole text, to answer and act on. Not for the task a message is about, whose text comes whole; most messages need none, and details is then an empty list.
 8. Remind (changes, type Remind): when they ask to be reminded of something, that's a reminder, not a task: title its words, theirs, as you'd say them then; eventKey "at" for a date and time (date, time), "slotStart" for the start of their next slot on a task (taskId, and date only where it's not to be from today), or "beforeDue" for a while before a task's due (taskId, minutes before it). To move or reword one already set ("push it to 8"), afterTaskId its id from the reminders' list, with eventKey and its time as they're to be, and title empty to keep its words; a new one's afterTaskId is empty. Say when it'll come. Not for work to plan, which is a task; most messages need none.

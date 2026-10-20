@@ -46,6 +46,18 @@ object FelixWords {
     /** A reminder of yours, [words], let go and back, as its task, [title], [why]. */
     fun back(words: String, title: String, why: String): String = "Your reminder “$words” is back: “$title” $why."
 
+    /** His line under an answer that asked [source] to read (G2): no Undo, as a read takes nothing back. */
+    fun reading(source: String): String = "Asked $source to read"
+
+    /** Teams's, with the chat on screen (Q33: B): its widget asked to sync it, as a tap on its refresh asks it. */
+    const val TEAMS_SYNCING = "Asked Teams to read, the Teams widget syncing it now"
+
+    /** Teams's where its widget's sync wasn't started, [why]: what the widget has. */
+    fun readingWidget(why: String): String = "Asked Teams to read what the Teams widget has: $why"
+
+    /** [source]'s read of [title], as it changed (G2): "Teams says “Forces worksheet” is handed in." */
+    fun read(source: String, title: String, what: String): String = "$source says “$title” $what."
+
     /** A reminder's replies (Q11: A): it's done, or it comes again in 15 minutes or an hour, each with no call. */
     const val REMINDER_DONE = "Done"
     const val REMINDER_SNOOZE = "Snooze 15 min"

@@ -21,6 +21,7 @@ import com.thomaswcode.decrastination.core.Instruction
 import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.InstructionState
 import com.thomaswcode.decrastination.core.InstructionStatus
+import com.thomaswcode.decrastination.core.Lessons
 import com.thomaswcode.decrastination.core.Memories
 import com.thomaswcode.decrastination.core.MemoryEdit
 import com.thomaswcode.decrastination.core.MemoryState
@@ -29,12 +30,14 @@ import com.thomaswcode.decrastination.core.Note
 import com.thomaswcode.decrastination.core.Notes
 import com.thomaswcode.decrastination.core.OwnTask
 import com.thomaswcode.decrastination.core.OwnTaskRules
+import com.thomaswcode.decrastination.core.Proposal
 import com.thomaswcode.decrastination.core.ProposalState
 import com.thomaswcode.decrastination.core.Reminder
 import com.thomaswcode.decrastination.core.Reminders
 import com.thomaswcode.decrastination.core.SchoolCalendar
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.Source
+import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.WallClock
@@ -43,6 +46,7 @@ import com.thomaswcode.decrastination.data.FelixStore
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.LearningState
 import com.thomaswcode.decrastination.data.RuntimeState
+import com.thomaswcode.decrastination.data.SlotRecord
 import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.enrich.Called
 import com.thomaswcode.decrastination.enrich.Found
@@ -59,7 +63,11 @@ import com.thomaswcode.decrastination.learn.EventJudge
 import com.thomaswcode.decrastination.notify.Channels
 import com.thomaswcode.decrastination.notify.Notices
 import com.thomaswcode.decrastination.plan.Planning
+import java.time.Instant
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.Flow
@@ -113,6 +121,16 @@ class Conversation(
     private val answered: suspend (ChatMessage, String) -> Boolean,
     /** His words for the reminders due within his window, written now ([Looks.draftReminders]): after one's set, moved or brought back. */
     private val draftReminders: suspend (Long) -> Unit = {},
+    /**
+     * [Source]s read now, as a job (G2, [com.thomaswcode.decrastination.sync.Sync.syncNow]): a callback, as the Sync service
+     * calls this one (a calendar event's question), so this one mustn't call it back.
+     */
+    private val requestSync: (Set<Source>) -> Unit = {},
+    /**
+     * The Teams widget asked to sync Teams itself, as a tap on its refresh asks it (Q33: B,
+     * [com.thomaswcode.decrastination.sync.Sync.requestTeamsSync]): why it didn't start, or null where it did.
+     */
+    private val requestTeamsSync: suspend () -> String? = { null },
 ) {
     /**
      * What the chat changes through those who own it (`AppGraph`'s functions, till Stage 6 makes
@@ -509,10 +527,96 @@ class Conversation(
         // His notes and reminders (8a), each reminder with when it comes by this plan.
         val byId = state.tasks.associateBy { it.id }
         val moments = kept.reminders.mapNotNull { r -> Reminders.moment(r, plan, byId, now)?.let { r.id to it } }.toMap()
+        // The pieces he may keep (G1): today's slots', and each task with no steps' next; and those kept today, to take back.
+        val keepable = (plan.todaySlots.mapNotNull { it.chunk } + plan.ordered.filter { it.stepIndex == null }.distinctBy { it.taskId }).associate { it.key to it.taskId }
+        val keptToday = keptToday(now)
+        val lessons = lessons(state, now)
         return ChatPrompts.Context(
-            known = ChatPrompts.context(state.tasks, time.events, applied, now, clock.zone(), settings.value.classMap, runtime.value.notSame, settings.value, learning.value.calibration, kept.notes, kept.reminders, moments),
-            plan = ChatPrompts.plan(plan, clock.zone()),
+            known = ChatPrompts.context(state.tasks, time.events, applied, now, clock.zone(), settings.value.classMap, runtime.value.notSame, settings.value, learning.value.calibration, kept.notes, kept.reminders, moments, lessons),
+            plan = ChatPrompts.plan(plan, clock.zone(), keptToday.map { it.key to it.label }, focus.blockingLine(plan, now)),
+            keepable = keepable,
+            kept = keptToday.associate { it.key to it.taskId },
+            lessons = lessons,
         )
+    }
+
+    /**
+     * Each class's next lessons (G8), by subject, from Power Planner's timetable in [state] as of its last good
+     * read (DX-09), said to be stale past a week; none with no timetable read.
+     */
+    fun lessons(state: TaskState = tasks.value, now: Long = clock.now()): Lessons.Timetabled? {
+        val timetable = state.timetable ?: return null
+        val s = settings.value
+        val next = Lessons.next(timetable, now, clock.zone(), school.value, skip = setOf(s.studyPeriodName))
+        val readAt = state.status(Source.PowerPlanner).lastSuccessAt
+        return Lessons.Timetabled(Lessons.groups(next, s.classMap), readAt, Lessons.stale(readAt, now))
+    }
+
+    /** A task he asked a source to read about (G2), as it was then, watched till [until]. */
+    private data class Watch(val source: Source, val was: TaskItem, val until: Long)
+
+    /** The tasks he asked sources to read about (G2), by id: in memory, as a read comes within minutes or not at all. */
+    private val watching = ConcurrentHashMap<String, Watch>()
+
+    /**
+     * After every sync (G2): each task he asked a source to read about that the read changed (finished,
+     * open again, due another day, its words), said in a note of his in the app's words, then let go;
+     * one unchanged waits for a later read till its watch is over, so a sync already under way when he
+     * asked doesn't end it; one over, or its task gone, is let go first, whatever a later read finds.
+     */
+    suspend fun afterSync(now: Long = clock.now()) {
+        if (watching.isEmpty()) return
+        val byId = tasks.value.tasks.associateBy { it.id }
+        for ((id, watch) in watching.entries.toList()) {
+            val task = byId[id]
+            if (now >= watch.until || task == null) {
+                watching.remove(id, watch)
+                continue
+            }
+            val what = changed(watch.was, task, watch.source) ?: continue
+            watching.remove(id, watch)
+            outbox.send(ChatMessage(UUID.randomUUID().toString(), Speaker.Felix, FelixWords.read(watch.source.label, task.title, what), now, About(taskId = task.id, taskTitle = task.title), kind = MessageKind.Note, byApp = true))
+        }
+    }
+
+    /**
+     * How [now] differs from [was] as a read of [source] tells it, in words, by the source's own values: its finish
+     * (not one done by its tick, which is yours), its deadline and its name as it gives them, not what your
+     * instructions or a reading laid over them, so a change made here meanwhile isn't said as the source's. Null
+     * where nothing he'd say changed.
+     */
+    private fun changed(was: TaskItem, now: TaskItem, source: Source): String? {
+        fun due(t: TaskItem) = t.sourceValues.let { v -> if (v != null) v.dueAt else t.dueAt }
+        fun name(t: TaskItem) = t.sourceValues?.title ?: t.title
+        val theirs = !now.tickDone
+        return when {
+            // Finished as its source has it, done: a quota missed (taken over by homework) isn't studied.
+            theirs && was.isOpen && now.status == Status.Done -> when (source) {
+                Source.Teams -> "is handed in"
+                Source.Gmail -> "is unstarred, so it's done"
+                Source.Anki -> "is studied"
+                else -> "is done"
+            }
+            theirs && !was.isOpen && now.isOpen -> "is open again"
+            due(was) != due(now) -> due(now)?.let { "is due ${Instant.ofEpochMilli(it).atZone(clock.zone()).format(WHEN)} now" } ?: "has no due date now"
+            name(was) != name(now) || was.detail != now.detail -> "has changed"
+            else -> null
+        }
+    }
+
+    /** Today's kept pieces by key, each with its newest record's time (G1): a keep's Undo takes back only the record it made, while it's that one. */
+    fun keptAt(now: Long = clock.now()): Map<String, Long> {
+        val today = focus.today(now)
+        return log.value.slots.filter { it.outcome.kept && focus.today(it.at) == today }.groupBy { it.key }.mapValues { (_, records) -> records.maxOf { it.at } }
+    }
+
+    /**
+     * The pieces kept today (G1), whatever day their slot was for (one done ahead of it too), each key's newest
+     * record, newest last: what unkeepPiece takes back, so the line he's shown names that one.
+     */
+    fun keptToday(now: Long = clock.now()): List<SlotRecord> {
+        val today = focus.today(now)
+        return log.value.slots.filter { it.outcome.kept && focus.today(it.at) == today }.groupBy { it.key }.map { (_, records) -> records.maxBy { it.at } }.sortedBy { it.at }
     }
 
     /**
@@ -536,12 +640,15 @@ class Conversation(
             val noted = felix.value
             // The conversation up to your message: what he wrote unasked after it isn't what it answers.
             fun upTo(messages: List<ChatMessage>) = messages.take(messages.indexOfFirst { it.id == waiting.id } + 1)
+            // When the plan he was last shown was made: a piece he keeps is kept as of it (G1).
+            var shownAt = clock.now()
             // His answer, with what a web search he asked for found ([found], 16 Oct), and the tasks whose
             // whole text he asked to [read] (D-93).
             suspend fun ask(found: Found?, read: List<TaskItem> = emptyList()) = gateway.call(interactive = true, record = ModelCalls.OnRecord(ModelEffort.Job.Chat, waiting.text) { r: ChatReader.Result -> r.usage to ModelCalls.outcome(r.refused, r.reading == null) }, cost = { r: ChatReader.Result -> r.costUsd to r.refused }) { at ->
                 // Being asked now: whatever it said before (a failed call) is gone.
                 chat.update { s -> s.copy(messages = s.messages.map { if (it.id == waiting.id) it.copy(note = null, stuck = false) else it }) }
                 sentAt.value = at
+                shownAt = at
                 try {
                     val sent = upTo(chat.value.messages)
                     // What a message of yours quotes from the archive, past the window: told to him all the same.
@@ -687,7 +794,7 @@ class Conversation(
             if (edits.isNotEmpty()) chat.update { s -> s.copy(messages = s.messages.map { if (it.id == reply.id) it.copy(memoryEdits = edits) else it }) }
             // Its actions (AI-14; 16 Oct, everything he does), said under it with their Undo: before its
             // changes, as its steps are the ones it was shown.
-            val acts = if (kept) act(reading.actions) else emptyList()
+            val acts = if (kept) act(reading.actions, shownAt, reply.id) else emptyList()
             if (acts.isNotEmpty()) chat.update { s -> s.copy(messages = s.messages.map { if (it.id == reply.id) it.copy(acts = acts + it.acts) else it }) }
             // Its cards, made now, as if Apply were tapped: Undo takes them back.
             if (kept) {
@@ -726,14 +833,33 @@ class Conversation(
      * what exists (AI-24), each said under the answer with what its Undo needs ([undoAct]): a step
      * ticked (its piece kept where the plan has one, today or another day, earning as a tick does,
      * else ticked as on its sheet) or to do again; a task of yours done, open again or deleted; a
-     * setting set. None for one that couldn't be.
+     * setting set. None for one that couldn't be. A piece kept as of the plan he was shown, made at
+     * [shownAt] (G1): one kept from Day meanwhile isn't kept twice. A task to open where it lives with
+     * the chat not on screen comes on a card on his message ([replyId]) instead (G3).
      */
-    private suspend fun act(actions: List<ChatAction>): List<Act> {
+    private suspend fun act(actions: List<ChatAction>, shownAt: Long, replyId: String): List<Act> {
         fun said(line: String, a: ChatAction) = Act(line, a)
+        // A task's card on his message (G3), where it isn't, or mayn't have been, opened where it lives.
+        suspend fun card(t: TaskItem) = chat.update { s -> s.copy(messages = s.messages.map { m -> if (m.id == replyId) m.copy(proposals = m.proposals + Proposal(UUID.randomUUID().toString(), open = t.id)) else m }) }
         return actions.mapNotNull { a ->
             val task = tasks.value.tasks.firstOrNull { it.id == a.taskId }
             when (a.type) {
-                ChatAction.Type.Open -> null
+                // Shown on its card; or opened where it lives at once (G3), as its sheet's Open does, which notes it seen worked on.
+                ChatAction.Type.Open -> task?.takeIf { a.value == ChatAnswers.OPEN_SOURCE }?.let { t ->
+                    // Only while the chat's on screen, looked at as it opens: from his notification's reply, a retry in the
+                    // background or with the chat left, Android may block the start, and one long after would surprise
+                    // you; on a card then, its sheet's Open opening it there.
+                    if (!chatInFront) {
+                        card(t)
+                        return@let Act("On its card, not opened in ${t.source.label}: the chat wasn't on screen.")
+                    }
+                    val (opened, say) = ports.openSource(t)
+                    // Left while it opened (the opener waits on the source's app first), it mayn't have come up: its card's there too.
+                    val left = opened && !chatInFront
+                    if (left) card(t)
+                    if (opened) Act("Opened in ${t.source.label}: ${t.title}" + say?.let { ". $it" }.orEmpty() + if (left) ". The chat was left as it opened: its card's here if it didn't come up" else "")
+                    else Act("Couldn't open “${t.title}” in ${t.source.label}" + say?.let { ": $it" }.orEmpty(), problem = true)
+                }
                 ChatAction.Type.TickStep -> {
                     val index = a.stepIndex ?: return@mapNotNull null
                     val step = task?.subSteps?.getOrNull(index)?.takeIf { !it.done } ?: return@mapNotNull null
@@ -789,6 +915,47 @@ class Conversation(
                 }
                 // Made from the answer's reminders and notes ([keep]), not its actions.
                 ChatAction.Type.SetReminder, ChatAction.Type.MoveReminder, ChatAction.Type.AddNote -> null
+                // A source read now (G2), said with no Undo; the task asked about watched, so its change is said when it's read.
+                ChatAction.Type.Sync -> {
+                    val source = Source.entries.firstOrNull { it.name == a.setting } ?: return@mapNotNull null
+                    task?.let { watching[it.id] = Watch(source, it, clock.now() + WATCH_MS) }
+                    requestSync(setOf(source))
+                    // Teams (Q33: B): with the chat on screen, its widget's own sync too, as a tap on its refresh asks it, which
+                    // has the screen for a minute (D-11); else what the widget has, and the line says why.
+                    Act(
+                        when {
+                            source != Source.Teams -> FelixWords.reading(source.label)
+                            !chatInFront -> FelixWords.readingWidget("the chat wasn't on screen to start its sync")
+                            else -> requestTeamsSync()?.let { why -> FelixWords.readingWidget("its sync didn't start (${why.replaceFirstChar(Char::lowercase)})") } ?: FelixWords.TEAMS_SYNCING
+                        },
+                    )
+                }
+                // A piece done that has no step to tick (G1): kept as Day's Done keeps it, earning as that does; or taken back.
+                ChatAction.Type.KeepPiece -> {
+                    val label = planning.plan().let { p -> (p.todaySlots.mapNotNull { it.chunk } + p.ordered).firstOrNull { it.key == a.value } }?.label ?: task?.title
+                    // As of the plan he was shown: kept from Day meanwhile, it isn't kept again (a box's next has its key).
+                    if (!focus.keepSlot(a.value.orEmpty(), seenAt = shownAt)) return@mapNotNull null
+                    // Its record's time with it, so its Undo takes back that record only, while it's the piece's newest.
+                    Act("Kept: $label", a, after = keptAt()[a.value]?.toString())
+                }
+                ChatAction.Type.UnkeepPiece -> {
+                    // The record he was shown, its key's newest then: kept again since (taken back and kept from Day while he
+                    // answered), the newest is yours, not his to take back, and his answer says so.
+                    val at = keptAt()[a.value] ?: return@mapNotNull null
+                    val record = log.value.slots.lastOrNull { it.key == a.value && it.outcome.kept && it.at == at } ?: return@mapNotNull null
+                    if (at > shownAt) return@mapNotNull Act(Act.NOT_MADE + "“${record.label}” isn't taken back: it was kept again while he answered.", problem = true)
+                    // One of yours, or one done by its tick, that this record finished is open again with it, as a keep's Undo
+                    // opens one; finished another way since, it stays so, nothing's taken back, and his answer says so.
+                    val reopen = task != null && ChatActs.finishedBy(task, at)
+                    if (task != null && !task.isOpen && !reopen) return@mapNotNull Act(Act.NOT_MADE + "“${record.label}” isn't taken back: “${task.title}” was finished since, another way.", problem = true)
+                    if (!focus.unkeepSlot(record.key, at, reopen = reopen)) return@mapNotNull null
+                    // What it was kept with, so its Undo keeps it so again: its extra minutes past its piece as the plan lays it
+                    // again (its own and, a step's last sitting, its step's other sittings, to do again now, which a keep counts
+                    // again), its photo, its source's word; and that piece's minutes, so one laid otherwise since isn't kept for it.
+                    val (own, rest) = focus.pieceMinutes(record.key) ?: (record.plannedMin to 0)
+                    val with = "${(record.workedMin - own - rest).coerceAtLeast(0)}|${record.photo}|${record.earned}|$own|$rest"
+                    Act("Not kept after all: ${record.label}", a, before = with, after = record.at.toString())
+                }
             }
         }
     }
@@ -883,7 +1050,8 @@ class Conversation(
         val step = a.stepIndex?.let { i -> task?.subSteps?.getOrNull(i) }
         fun open(id: String) = tasks.value.tasks.firstOrNull { it.id == id }?.isOpen
         val undone = when (a.type) {
-            ChatAction.Type.Open -> false
+            // A task shown, a source read (G2): nothing to take back.
+            ChatAction.Type.Open, ChatAction.Type.Sync -> false
             // The step that finished one of yours: open again with it to do.
             ChatAction.Type.TickStep -> step?.done == true && focus.untickBlock(task!!.id, a.stepIndex!!, step.title, reopen = true)
             ChatAction.Type.UntickStep -> step?.done == false && task!!.isOpen && tick(task, a.stepIndex!!, step.title)
@@ -909,6 +1077,19 @@ class Conversation(
                 }
                 if (back) ports.scheduleReminders()
                 back
+            }
+            // A piece kept (G1): the record it made taken back, while it's the piece's newest; one taken back, kept again as the chat keeps one.
+            ChatAction.Type.KeepPiece -> act.after?.toLongOrNull()?.let { at ->
+                // Open again only where this keep finished it: one finished another way since stays so.
+                val reopen = task != null && ChatActs.finishedBy(task, at)
+                keptAt()[a.value] == at && (task?.isOpen == true || reopen) && focus.unkeepSlot(a.value.orEmpty(), at, reopen = reopen)
+            } == true
+            // As it was kept: its extra minutes, its photo, its source's word ([Act.before]); the day of the record it took back
+            // only, and while its piece is laid as it was then (its box's length, its task's minutes changed, it's another).
+            ChatAction.Type.UnkeepPiece -> act.after?.toLongOrNull()?.let { removed -> focus.today(removed) == focus.today() && keptAt()[a.value]?.let { it < removed } ?: true } == true && task?.isOpen == true && act.before.orEmpty().split('|').let { w ->
+                val photo = w.getOrNull(1) == "true"
+                val laid = w.getOrNull(3)?.toIntOrNull()?.let { own -> own to (w.getOrNull(4)?.toIntOrNull() ?: 0) }
+                laid != null && focus.pieceMinutes(a.value.orEmpty()) == laid && focus.keepSlot(a.value.orEmpty(), extraMin = w.getOrNull(0)?.toIntOrNull() ?: 0, photo = photo, verified = !photo && w.getOrNull(2) == "true")
             }
             // A reminder or a note (8a), while it's as the act left it: a reminder set goes, one moved has its time and
             // words back, one cancelled comes again; a note added goes, one deleted is back.
@@ -1245,5 +1426,11 @@ class Conversation(
 
         /** Completions kept for his evening question, at most: the newest. */
         private const val MAX_ASKS = 20
+
+        /** How long a task he asked a source to read about is watched (G2): a read is seconds, the Teams widget's own sync a minute or two. */
+        private const val WATCH_MS = 15 * 60_000L
+
+        /** A due date, as his note says it. */
+        private val WHEN = DateTimeFormatter.ofPattern("EEE d MMM HH:mm", Locale.UK)
     }
 }
