@@ -671,7 +671,7 @@ class Conversation(
                     // What a message of yours quotes from the archive, past the window: told to him all the same.
                     val quoted = sent.mapNotNull { m -> m.replyTo?.takeIf { r -> sent.none { it.id == r } }?.let { outbox.find(it) } }
                     val brought = listOfNotNull(ChatPrompts.statsBlock(Stats.weekLines(log.value, settings.value.classMap, at, clock.zone())).takeIf { stats }) +
-                        calendar.map { ChatPrompts.calendarBlock(time.events, it, at, clock.zone()) }
+                        calendar.map { ChatPrompts.calendarBlock(time.events, it, at, clock.zone(), time.read) }
                     ChatReader(chatClient, clock.zone(), profile = profile(at), settings = settings.value).answer(sent, state.tasks, time.events, chatContext(at, state, time, instructions.value.applied, noted), at, found, read, quoted, noted, brought, last, notLooked)
                 } finally {
                     sentAt.value = null

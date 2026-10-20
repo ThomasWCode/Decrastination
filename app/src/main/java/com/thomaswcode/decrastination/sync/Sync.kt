@@ -199,14 +199,14 @@ class Sync(
             .getOrNull() ?: run {
             // Not read this time: the events last read, judged again with the answers as they are
             // now, so an instruction applied or taken back counts all the same.
-            calendarTime = EventJudge.time(calendarTime.events, calendar.value.eventAnswers + yours, clock.zone(), askUntil = now + CalendarTime.ASK_AHEAD_MS)
+            calendarTime = EventJudge.time(calendarTime.events, calendar.value.eventAnswers + yours, clock.zone(), askUntil = now + CalendarTime.ASK_AHEAD_MS).copy(read = calendarTime.read)
             return@withLock
         }
         yours.keys.forEach { settleEvent(it) }
         // Not counted as asked: taken back, the instruction leaves it to be asked again.
         if (calendar.value.eventsAsked.any { it in yours }) calendar.update { it.copy(eventsAsked = it.eventsAsked - yours.keys) }
         val answers = calendar.value.eventAnswers + yours
-        val time = EventJudge.time(events, answers, clock.zone(), askUntil = now + CalendarTime.ASK_AHEAD_MS)
+        val time = EventJudge.time(events, answers, clock.zone(), askUntil = now + CalendarTime.ASK_AHEAD_MS).copy(read = (now - CalendarTime.DAY_MS) to CalendarTime.readUntil(now, clock.zone()))
         calendarTime = time
         // In the chat at once, whatever the hour: his notification leaves them out in quiet hours, till
         // the morning (NotifyRules.waitsForMorning).

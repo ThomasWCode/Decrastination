@@ -105,7 +105,8 @@ class EvalRunTest {
      * answered in one call. A case marked `twice` (the text cut's, 8c) is asked twice; `EVAL_CASES` (ids, by commas)
      * asks only those. Each case's score, rounds, tokens, cost and seconds printed and written to `runs/<n>.json`;
      * the run stops before a case once what's left of `EVAL_BUDGET_USD` (3 dollars unless set) is under twice the
-     * dearest case so far, half a dollar at least.
+     * dearest case so far, half a dollar at least: a soft budget, which a run can pass by a case's cost (a case is about
+     * $0.07 to $0.16 a call, where holding each to the worst call's $1.35 would stop a $3 run before it starts).
      */
     @Test
     fun `the chat's set asked of Felix and scored`() = runBlocking {
@@ -146,7 +147,7 @@ class EvalRunTest {
                 val seed = { into: File -> state.listFiles().orEmpty().filter { f -> f.isFile && f.name.endsWith(".json") && !f.name.startsWith("chat") && f.name != "model.json" }.forEach { it.copyTo(File(into, it.name)) } }
                 FelixHarness(start = now, seed = seed, key = key, calendar = { stores ->
                     val answers = stores.calendar.value.eventAnswers + InstructionRules.eventAnswers(stores.instructions.value.applied)
-                    EventJudge.time(events, answers, zone, askUntil = Fixtures.at(now) + CalendarTime.ASK_AHEAD_MS)
+                    EventJudge.time(events, answers, zone, askUntil = Fixtures.at(now) + CalendarTime.ASK_AHEAD_MS).copy(read = (Fixtures.at(now) - CalendarTime.DAY_MS) to CalendarTime.readUntil(Fixtures.at(now), zone))
                 }).use { h ->
                     val about = case["about"]?.jsonPrimitive?.contentOrNull?.let { taskId -> About(taskId = taskId, taskTitle = h.stores.tasks.value.tasks.firstOrNull { it.id == taskId }?.title) } ?: About()
                     val began = System.nanoTime()
@@ -169,7 +170,8 @@ class EvalRunTest {
                             what == "stats" -> acts.any { "week's numbers" in it }
                             // The very span: the month and its year, or the four weeks after the fortnight.
                             what == "calendar" || what.startsWith("calendar:") -> "Read: the calendar for " + ChatPrompts.calendarWhat(what.substringAfter(':', ""), Fixtures.at(now), zone) + "." in acts
-                            else -> acts.any { it.startsWith("Read in full") && titles[what]?.let { t -> t in it } == true }
+                            // The very task, by its whole title as the act lists them.
+                            else -> acts.any { it.startsWith("Read in full: ") && titles[what]?.let { t -> "“$t”" in it.removePrefix("Read in full: ").removeSuffix(".").split("; ") } == true }
                         }
                         checks += "reads $what" to read
                     }
