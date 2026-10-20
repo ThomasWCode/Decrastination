@@ -377,9 +377,9 @@ object ChatPrompts {
      * since 16 Oct the student's own finished lately (to open again) and the [settings] he may change,
      * with their values; since 17 Oct their pace as [calibration] has learned it, and what each task's
      * minutes come to in the plan by it, so he allows for it in the minutes he sets (planned as he
-     * sets them); since 4.1.0 each task's [notes] under its steps, its own and the standing ones it
-     * matches, and the [reminders] still to come, each by its id, when it comes ([moments], by id) and
-     * its words. The plan's sent beside it ([plan], [turns]).
+     * sets them); since 4.1.0 each task's own [notes] under its steps (within a room of their own) with the
+     * ids of the standing ones it matches, those listed once after the tasks, and the [reminders] still to
+     * come, each by its id, when it comes ([moments], by id) and its words. The plan's sent beside it ([plan], [turns]).
      */
     fun context(
         tasks: List<TaskItem>,
@@ -417,6 +417,9 @@ object ChatPrompts {
         appendLine("Open tasks (id | title | from | kind | due, a real deadline unless marked a plan, which is never overdue and moves on once it passes | minutes in all, with what the plan makes of them at their pace where it's learned | minutes worked so far | can't start before):")
         // By the date shown (the deadline in force, PL-14), so a plan's date gone by doesn't crowd nearer ones out of the list.
         val open = tasks.filter { it.isOpen && !it.hidden }.sortedBy { it.deadlineAt(now) ?: it.dueAt ?: Long.MAX_VALUE }
+        // The notes' room (8a), so many can't crowd out what comes after them; the standing ones, each once.
+        var noteRoom = MAX_NOTES_TEXT
+        val standing = Notes.live(notes).filter { it.scope != null }.sortedBy { it.at }
         if (open.isEmpty()) appendLine("(none)")
         open.take(InstructionPrompts.MAX_TASKS).forEach { t ->
             val start = listOfNotNull(t.availableFrom, t.mine.from?.value, t.notBefore).maxOrNull()?.takeIf { it > now }
@@ -425,11 +428,26 @@ object ChatPrompts {
             appendLine("- ${t.id} | ${t.title.take(MAX_TITLE)} | ${t.source.label} | ${t.kind.label} | $due | ${minutes(t)} | ${t.workedMin + t.photoMin} | ${start?.let(::at) ?: "-"}")
             // Its steps by their place, for a tick (AI-14).
             t.subSteps.take(OwnTaskRules.MAX_STEPS).forEachIndexed { i, step -> appendLine("    step $i: ${step.title.take(MAX_TITLE)} (${step.minutes} min)${if (step.done) ", done" else ""}") }
-            // Its notes (8a), by id for a delete: its own, then the standing ones it matches (Q31: A); whose each is.
-            Notes.forTask(t, notes, classMap).forEach { n ->
-                val whose = if (n.by == By.Felix) "yours" else "theirs"
-                appendLine("    note ${n.id} ($whose${n.scope?.let { ", for ${Notes.scopeLine(it)}" }.orEmpty()}): ${n.text.take(Notes.MAX_TEXT)}")
+            // Its own notes (8a), by id for a delete, whose each is, within their room; the standing ones it matches
+            // (Q31: A) by id, listed once below.
+            for ((i, n) in Notes.on(t.id, notes).withIndex()) {
+                val line = "    note ${n.id} (${if (n.by == By.Felix) "yours" else "theirs"}): ${n.text.take(Notes.MAX_TEXT)}"
+                if (line.length > noteRoom) {
+                    appendLine("    (${Notes.on(t.id, notes).size - i} more notes of it, on its sheet)")
+                    break
+                }
+                appendLine(line)
+                noteRoom -= line.length
             }
+            // The standing ones it matches by id, in the same room: they're listed once below either way.
+            standing.filter { Notes.matches(it.scope!!, t, classMap) }.takeIf { it.isNotEmpty() }?.let { "    standing notes for it: " + it.joinToString { n -> n.id } }
+                ?.takeIf { it.length <= noteRoom }?.let { line -> appendLine(line); noteRoom -= line.length }
+        }
+        // The standing notes once (Q31: A), each told under every task it matches by its id.
+        if (standing.isNotEmpty()) {
+            appendLine()
+            appendLine("Standing notes, for every task they match (id | whose | the tasks they're for | their words):")
+            standing.forEach { appendLine("- ${it.id} | ${if (it.by == By.Felix) "yours" else "theirs"} | ${Notes.scopeLine(it.scope!!)} | ${it.text.take(Notes.MAX_TEXT)}") }
         }
         // Their pace (17 Oct): what the app's own estimates are planned by, never minutes given.
         if (calibration != null) {
@@ -512,6 +530,9 @@ object ChatPrompts {
 
     /** All of their texts in the context, at most. */
     private const val MAX_TEXTS = 12_000
+
+    /** The tasks' own notes under them in the context, at most (8a): the rest are on their sheets. */
+    private const val MAX_NOTES_TEXT = 6_000
 
     /** A task's whole text, as a message about it, or his asking to read it, carries it (D-93). */
     const val WHOLE_TEXT = 8_000

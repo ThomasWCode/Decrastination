@@ -55,6 +55,17 @@ class RemindersTest {
     }
 
     @Test
+    fun `the app wakes for the start of his window to write one not yet written for, and for its moment`() {
+        val r = at("2026-10-20T19:00")
+        val ahead = 10 * min
+        assertEquals(Fixtures.at("2026-10-20T18:50"), Reminders.nextWake(listOf(r), plan(), emptyMap(), now, ahead))
+        // Written for already, or inside the window: its moment.
+        assertEquals(Fixtures.at("2026-10-20T19:00"), Reminders.nextWake(listOf(r.copy(draft = FelixAnswer("oi"), draftedAt = Fixtures.at("2026-10-20T18:51"))), plan(), emptyMap(), now, ahead))
+        assertEquals(Fixtures.at("2026-10-20T19:00"), Reminders.nextWake(listOf(r), plan(), emptyMap(), Fixtures.at("2026-10-20T18:55"), ahead))
+        assertNull(Reminders.nextWake(listOf(r.copy(sentAt = now)), plan(), emptyMap(), now, ahead))
+    }
+
+    @Test
     fun `an At comes in quiet hours too, as an alarm would (Q10)`() {
         val night = at("2026-10-20T23:30")
         assertEquals(listOf(night to Fixtures.at("2026-10-20T23:30")), Reminders.due(listOf(night), plan(), emptyMap(), Fixtures.at("2026-10-20T23:30")))
