@@ -13,6 +13,8 @@ import com.thomaswcode.decrastination.calendar.SlotCalendar
 import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.InstructionStatus
 import com.thomaswcode.decrastination.core.OwnTask
+import com.thomaswcode.decrastination.core.Plan
+import com.thomaswcode.decrastination.core.Reminders
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.WallClock
@@ -190,6 +192,8 @@ class AppGraph private constructor(context: Context) {
         sweep = { slots.sweep() },
         hooks = listOf(
             { made -> SlotAlarms.arm(app, made, clock.now()) },
+            // Your reminders' alarm (8a), at their next moment by this plan: a slot's or a deadline's moves with it.
+            { made -> armReminder(made) },
             // The calendar once plans have been quiet a while ([CalendarWriter.planned]).
             { made -> calendarWriter.planned(made) },
             { _ -> WidgetUpdater.update(app) },
@@ -238,7 +242,7 @@ class AppGraph private constructor(context: Context) {
 
     /** The voice of the app's messages (LR-03). */
     val looks: Looks = Looks(
-        tasks, settings, stores.model, log, chat, clock, scope, gateway, focus, planning, felixPorts, outbox,
+        tasks, settings, stores.model, log, chat, stores.felix, clock, scope, gateway, focus, planning, felixPorts, outbox,
         calendarTime = { sync.calendarTime },
         profile = { conversation.profile(it) },
         remember = { conversation.remember(it) },
@@ -397,7 +401,11 @@ class AppGraph private constructor(context: Context) {
         scope.launch {
             runCatching { slots.sweep() }.onFailure { Log.w(TAG, "Looking at missed slots failed", it) }
             planning.watcher.start()
+            // Your reminders gone by while the app wasn't running (the phone off): sent now, marked late (8a).
+            runCatching { looks.sweepReminders() }.onFailure { Log.w(TAG, "Sending the reminders gone by failed", it) }
         }
+        // Your reminders' alarm set again at every change to them (8a), as each plan sets it too.
+        scope.launch { stores.felix.state.drop(1).collect { runCatching { armReminder(planning.plan()) }.onFailure { e -> Log.w(TAG, "Setting the reminders' alarm failed", e) } } }
         // The files older shapes came from, a week after their migration, at a start that's got this far.
         scope.launch(Dispatchers.IO) { runCatching { stores.letGoOfOldShapes() }.onFailure { Log.w(TAG, "Letting go of old shapes failed", it) } }
         // The notifications Felix's messages have taken the place of, one still showing or held from
@@ -413,6 +421,10 @@ class AppGraph private constructor(context: Context) {
             }
         }
     }
+
+    /** Your reminders' alarm at their next moment by [plan] (8a), or none with none to come. */
+    private fun armReminder(plan: Plan) =
+        SlotAlarms.armReminder(app, Reminders.next(stores.felix.value.reminders, plan, tasks.value.tasks.associateBy { it.id }, clock.now()))
 
     /**
      * The completions syncs saved: free time and the log, then "How was it?" for finished homework
