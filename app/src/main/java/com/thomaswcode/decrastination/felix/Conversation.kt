@@ -162,10 +162,24 @@ class Conversation(
         val s = settings.value
         val state = tasks.value
         val zone = clock.zone()
+        // What's run out isn't told (10a): the profile never carries a stale line, and what's kept lets it go too.
+        val live = expired(remembered, now)
+        if (live !== remembered && remembered === memory.value) scope.launch { forgetExpired(now) }
         return Profile.Block(
             Profile.yearGroup(now, zone, s.yearGroupStart),
-            Profile.block(s, state.tasks, state.timetable, school.value, remembered, now, zone),
+            Profile.block(s, state.tasks, state.timetable, school.value, live, now, zone),
         )
+    }
+
+    /** [remembered] without what's run out at [now] (10a, [Memories.expired]): by the tasks, what the chat's acts can still bring back, and the sources' reads. */
+    private fun expired(remembered: MemoryState, now: Long): MemoryState {
+        val state = tasks.value
+        return Memories.expired(remembered, state.tasks.associateBy { it.id }, now, ChatActs.held(chat.value.messages)) { source -> state.status(source).lastSuccessAt }
+    }
+
+    /** What's run out of what's remembered let go of (10a), silently, as a person forgets: as the profile's read, and each morning. Written only where something has. */
+    suspend fun forgetExpired(now: Long = clock.now()) {
+        memory.update { expired(it, now) }
     }
 
     /** Said on a message whose answer you let go (AC-08). */

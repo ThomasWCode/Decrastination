@@ -96,9 +96,12 @@ object Memories {
     private val DAY = DateTimeFormatter.ofPattern("EEE d MMM", Locale.UK)
     private val DAY_TIME = DateTimeFormatter.ofPattern("EEE d MMM HH:mm", Locale.UK)
 
-    /** What a fact or a rule's line adds of how long it holds (10a): ", until Sun 25 Oct", ", with “Trip form”". */
-    private fun shelf(until: Long?, task: String?, zone: ZoneId): String =
-        (until?.let { ", until " + untilLine(it, zone) } ?: "") + (task?.let { ", with “$it”" } ?: "")
+    /** How long a fact or a rule holds, in words (10a): "until Sun 25 Oct", "with “Trip form”", both, or null for as long as it's true. */
+    fun held(until: Long?, task: String?, zone: ZoneId): String? =
+        listOfNotNull(until?.let { "until " + untilLine(it, zone) }, task?.let { "with “$it”" }).joinToString(", ").takeIf { it.isNotEmpty() }
+
+    /** What a line of [edit]'s adds of how long it holds: ", until Sun 25 Oct", ", with “Trip form”". */
+    private fun shelf(until: Long?, task: String?, zone: ZoneId): String = held(until, task, zone)?.let { ", $it" } ?: ""
 
     /**
      * [state] without what's run out at [now] (10a): a fact or a rule past its until; a fact with a task a
