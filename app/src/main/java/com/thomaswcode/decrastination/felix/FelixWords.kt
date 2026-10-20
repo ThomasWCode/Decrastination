@@ -49,6 +49,12 @@ object FelixWords {
     /** His line under an answer that asked [source] to read (G2): no Undo, as a read takes nothing back. */
     fun reading(source: String): String = "Asked $source to read"
 
+    /** Teams's, with the chat on screen (Q33: B): its widget asked to sync it, as a tap on its refresh asks it. */
+    const val TEAMS_SYNCING = "Asked Teams to read, the Teams widget syncing it now"
+
+    /** Teams's where its widget's sync wasn't started, [why]: what the widget has. */
+    fun readingWidget(why: String): String = "Asked Teams to read what the Teams widget has: $why"
+
     /** [source]'s read of [title], as it changed (G2): "Teams says “Forces worksheet” is handed in." */
     fun read(source: String, title: String, what: String): String = "$source says “$title” $what."
 

@@ -126,6 +126,11 @@ class Conversation(
      * calls this one (a calendar event's question), so this one mustn't call it back.
      */
     private val requestSync: (Set<Source>) -> Unit = {},
+    /**
+     * The Teams widget asked to sync Teams itself, as a tap on its refresh asks it (Q33: B,
+     * [com.thomaswcode.decrastination.sync.Sync.requestTeamsSync]): why it didn't start, or null where it did.
+     */
+    private val requestTeamsSync: suspend () -> String? = { null },
 ) {
     /**
      * What the chat changes through those who own it (`AppGraph`'s functions, till Stage 6 makes
@@ -915,7 +920,15 @@ class Conversation(
                     val source = Source.entries.firstOrNull { it.name == a.setting } ?: return@mapNotNull null
                     task?.let { watching[it.id] = Watch(source, it, clock.now() + WATCH_MS) }
                     requestSync(setOf(source))
-                    Act(FelixWords.reading(source.label))
+                    // Teams (Q33: B): with the chat on screen, its widget's own sync too, as a tap on its refresh asks it, which
+                    // has the screen for a minute (D-11); else what the widget has, and the line says why.
+                    Act(
+                        when {
+                            source != Source.Teams -> FelixWords.reading(source.label)
+                            !chatInFront -> FelixWords.readingWidget("the chat wasn't on screen to start its sync")
+                            else -> requestTeamsSync()?.let { why -> FelixWords.readingWidget("its sync didn't start (${why.replaceFirstChar(Char::lowercase)})") } ?: FelixWords.TEAMS_SYNCING
+                        },
+                    )
                 }
                 // A piece done that has no step to tick (G1): kept as Day's Done keeps it, earning as that does; or taken back.
                 ChatAction.Type.KeepPiece -> {

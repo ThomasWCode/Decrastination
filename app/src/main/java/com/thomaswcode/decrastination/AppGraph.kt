@@ -284,6 +284,7 @@ class AppGraph private constructor(context: Context) {
         answered = { record, words -> looks.answered(record, words) },
         draftReminders = { now -> looks.draftReminders(now) },
         requestSync = { sources -> sync.syncNow(sources) },
+        requestTeamsSync = { sync.requestTeamsSync() },
     )
 
     /**
