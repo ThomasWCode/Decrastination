@@ -182,6 +182,23 @@ class GapsTest {
         assertEquals(was.earned, again.earned)
     }
 
+    @Test
+    fun `an unkeep of a box's newest is undone though an older box of its key is still kept`() = runBlocking {
+        val long = sheet.copy(sourceEffortMin = 120)
+        stores.tasks.update { it.copy(tasks = listOf(long)) }
+        val key = felix.planning.plan().todaySlots.mapNotNull { it.chunk }.first { it.taskId == long.id }.key
+        assertTrue(felix.focusKeep(key))
+        // The next box has the key now: kept too, a minute on.
+        felix.clock.time = now + 60_000L
+        assertTrue(felix.focusKeep(key))
+        felix.clock.time = now + 2 * 60_000L
+        val taken = asked("actually I haven't done the second hour", answer("Taken back.", listOf(action("unkeepPiece", long.id, key))))
+        assertEquals(1, stores.log.value.slots.count { it.key == key && it.outcome.kept })
+        assertTrue(canUndo(taken, 0))
+        assertNull(conversation.undoAct(taken.id, 0))
+        assertEquals(2, stores.log.value.slots.count { it.key == key && it.outcome.kept })
+    }
+
     /** His sync action (G2): [source] read, about [taskId]. */
     private fun sync(source: String, taskId: String = "") = """{"type":"sync","taskId":"$taskId","stepIndex":-1,"setting":"$source","value":""}"""
 

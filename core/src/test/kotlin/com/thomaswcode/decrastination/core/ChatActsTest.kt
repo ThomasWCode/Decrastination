@@ -47,12 +47,16 @@ class ChatActsTest {
         // Kept again since (taken back and kept from Day, or a box's next under its key): not this act's record.
         assertFalse(ChatActs.canUndo(keep, listOf(task), settings, emptyList(), kept = mapOf("own:e#-1#1" to 200L)))
         assertFalse(ChatActs.canUndo(keep, listOf(task), settings, emptyList(), kept = emptyMap()))
-        // One of yours it finished: its Undo opens it again, as a tick's does; a source's, finished by its source, isn't his to take back.
-        assertTrue(ChatActs.canUndo(keep, listOf(finished()), settings, emptyList(), kept = mapOf("own:e#-1#1" to 100L)))
+        // One of yours it finished: its Undo opens it again, as a tick's does; one finished another way since, or a source's, isn't his to take back.
+        val keptNow = keep.copy(after = now.toString())
+        assertTrue(ChatActs.canUndo(keptNow, listOf(finished()), settings, emptyList(), kept = mapOf("own:e#-1#1" to now)))
+        assertFalse(ChatActs.canUndo(keptNow, listOf(finished().copy(doneAt = now + 600_000)), settings, emptyList(), kept = mapOf("own:e#-1#1" to now)))
         val handedIn = finished().copy(id = "teams:e", source = Source.Teams)
         assertFalse(ChatActs.canUndo(keep.copy(action = keep.action!!.copy(taskId = "teams:e")), listOf(handedIn), settings, emptyList(), kept = mapOf("own:e#-1#1" to 100L)))
-        val unkeep = keep.copy(action = keep.action!!.copy(type = ChatAction.Type.UnkeepPiece), after = null)
+        // An unkeep's, by the record it took back (at 150): kept again since bars it, an older box's under the key doesn't.
+        val unkeep = keep.copy(action = keep.action!!.copy(type = ChatAction.Type.UnkeepPiece), after = "150")
         assertTrue(ChatActs.canUndo(unkeep, listOf(task), settings, emptyList(), kept = emptyMap()))
+        assertTrue(ChatActs.canUndo(unkeep, listOf(task), settings, emptyList(), kept = mapOf("own:e#-1#1" to 100L)))
         assertFalse(ChatActs.canUndo(unkeep, listOf(task), settings, emptyList(), kept = mapOf("own:e#-1#1" to 200L)))
     }
 
