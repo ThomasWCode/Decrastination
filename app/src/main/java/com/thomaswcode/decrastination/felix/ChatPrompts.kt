@@ -36,9 +36,11 @@ import com.thomaswcode.decrastination.enrich.Pricing
 import com.thomaswcode.decrastination.enrich.ResearchPrompts
 import com.thomaswcode.decrastination.enrich.TaskText
 import com.thomaswcode.decrastination.learn.CalendarEvent
+import com.thomaswcode.decrastination.learn.CalendarTime
 import com.thomaswcode.decrastination.learn.EventJudge
 import java.time.Instant
 import java.time.LocalDate
+import java.time.YearMonth
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -105,14 +107,33 @@ object ChatPrompts {
         6. Look things up (research): when their message needs facts that neither they nor the app have given you (a competition's rules and dates, an exam board's specification, what an event involves), give what to search the web for in a few words, reply only that you're looking it up, and change nothing: you'll be asked again with what's found, to answer and act on (its steps, dates and minutes). Never for what the lists here tell you, nor for anything about the student themselves; most messages need none, and research is then an empty string.
     """.trimIndent()
 
+    /** What [READ]'s `details` asks for beside tasks' ids (8c): the week's numbers (G6), and the calendar past the fortnight (G7). */
+    const val ASK_STATS = "stats"
+    const val ASK_CALENDAR = "calendar"
+
+    /**
+     * [word] as a request for the calendar (G7, 8c): `calendar`, the four weeks after the fortnight (empty), or
+     * `calendar:yyyy-MM`, that month (yyyy-MM). Null for any other word, and for a month that isn't four digits of
+     * a year and two of a month, as one far off (a signed year) couldn't be made a time.
+     */
+    fun calendarAsk(word: String): String? {
+        val w = word.trim()
+        if (w.equals(ASK_CALENDAR, ignoreCase = true)) return ""
+        if (!w.startsWith("$ASK_CALENDAR:", ignoreCase = true)) return null
+        return w.substringAfter(':').trim().takeIf { MONTH_ASKED.matches(it) }?.let { runCatching { YearMonth.parse(it) }.getOrNull() }?.toString()
+    }
+
+    private val MONTH_ASKED = Regex("""\d{4}-\d{2}""")
+
     /** With looking things up off: the field it has is always empty. */
     private const val NO_RESEARCH = "6. research is always an empty string: you can't look things up."
 
     /**
-     * Reading a task's whole text (D-93), its text in the context being cut short ([BRIEF_TEXT]):
-     * asked for in the answer, and answered again with it ([turns]).
+     * What he can ask for before answering (8c): a task's whole text (D-93), its text in the context being cut
+     * short ([BRIEF_TEXT]); the week's numbers ([ASK_STATS], G6); the calendar past the fortnight
+     * ([ASK_CALENDAR], G7). Asked for in the answer, and answered again with them ([turns]).
      */
-    private const val READ = "7. Read a task in full (details): where you need more of a task's own text than the list shows (it says how much was left out), give its id, up to three, reply only that you're reading it, and change nothing: you'll be asked again with the whole text, to answer and act on. Not for the task a message is about, whose text comes whole; most messages need none, and details is then an empty list."
+    private const val READ = "7. Ask for more before answering (details), where your answer needs what the context doesn't give: a task's id, up to three, for its whole text (to quote it or answer from it: each task's line says how long its text is and what comes with it; the texts listed are cut short, a long one to its reading's summary, so where what they ask about, an amount, a name, an order or a date, isn't in what you're shown, ask for the text rather than say it isn't there); stats, for the week's numbers (this week so far and last week: time worked, slots kept and missed, work finished and deadlines met, by subject), for a message about how a week went; calendar, for the four weeks after the fortnight, or calendar:YYYY-MM for a month (calendar:2026-12), for anything after the fortnight's events listed. Then reply only that you're looking, and change nothing: you'll be asked again with what they bring, to answer and act on. Never a text for the task a message is about, which comes whole; most messages need none, and details is then an empty list."
 
     /**
      * A reminder (Stage 8a, Q9: B): its words theirs, at a time, at their next slot on a task, or a while before a
@@ -231,7 +252,10 @@ object ChatPrompts {
      * Where both can't be whole, the plan keeps at least a third of their room (its near days first),
      * so a long list of tasks can't push it out: the list loses its end, and the plan its far days.
      * Your newest words come after what they're about, in full ([aboutText], D-93), and before what
-     * a web search [found] and the tasks he asked to [read] whole ([readText]). A message of yours that
+     * a web search [found], the tasks he asked to [read] whole ([readText]), and what else he asked for
+     * [brought] (8c: the week's numbers, the calendar further out), each under its own heading, in a room of their own
+     * ([BROUGHT_ROOM], [fitted]); a search that couldn't be made said so ([notLooked]), so he doesn't ask again; at the last round a
+     * message has ([lastRound]), said to be the last, so he answers from what he has ([ChatRounds.MAX_ROUNDS]). A message of yours that
      * replies to one that isn't just before it starts with that one, quoted (5b), as the window may not
      * hold it.
      */
@@ -246,6 +270,9 @@ object ChatPrompts {
         read: List<TaskItem> = emptyList(),
         events: List<CalendarEvent> = emptyList(),
         quoted: List<ChatMessage> = emptyList(),
+        brought: List<String> = emptyList(),
+        lastRound: Boolean = false,
+        notLooked: String? = null,
     ): List<Pair<Speaker, String>> {
         val last = history(messages)
         // Before any of yours: an answer cut off from its question by the window goes; a message of
@@ -276,7 +303,12 @@ object ChatPrompts {
         // to the room they leave, however much it says.
         val words = texts.last().second
         val about = aboutText(recent.last { it.from == Speaker.You }.about, tasks, events)?.take((budget - words.length - 2).coerceAtLeast(0))?.takeIf { it.isNotEmpty() }
-        val newest = listOfNotNull(about, words, found?.let(ResearchPrompts::told), read.takeIf { it.isNotEmpty() }?.let(::readText)).joinToString("\n\n").take(budget)
+        val head = listOfNotNull(about, words, found?.let(ResearchPrompts::told), notLooked?.let { "Your web search couldn't be made ($it): answer without it, and leave research empty." }, read.takeIf { it.isNotEmpty() }?.let(::readText))
+        val tail = listOfNotNull(LAST.takeIf { lastRound })
+        // What else he asked for (8c) in a room of its own, so it can't crowd out the context the rest of the turn is
+        // cut to, nor be cut off its end unseen.
+        val broughtRoom = minOf(BROUGHT_ROOM, budget - (head + tail).sumOf { it.length + 2 } - 2 * brought.size).coerceAtLeast(0)
+        val newest = (head + fitted(brought, broughtRoom) + tail).joinToString("\n\n").take(budget)
         // The turns before it, newest first, while they fit their share, starting again with one of yours.
         var left = (budget - newest.length) / 4
         val earlier = texts.dropLast(1).reversed().takeWhile { (_, t) -> (t.length <= left).also { if (it) left -= t.length } }.reversed()
@@ -295,6 +327,42 @@ object ChatPrompts {
     }
 
     private const val PLAN_GAP = "\n\n"
+
+    /** The most of your newest turn what a round brings beside the texts takes (8c): the week's numbers, and sixty events of the calendar with room to spare. */
+    private const val BROUGHT_ROOM = 12_000
+
+    /**
+     * [blocks] within [room] in all: each an even share of what the shorter leave, a longer one cut short at a whole
+     * line, saying how many lines were left out, so what's cut is said rather than lost unseen.
+     */
+    private fun fitted(blocks: List<String>, room: Int): List<String> {
+        var left = room
+        val shares = blocks.withIndex().sortedBy { it.value.length }.mapIndexed { i, (index, block) ->
+            val share = minOf(block.length, left / (blocks.size - i))
+            left -= share
+            index to share
+        }.toMap()
+        return blocks.mapIndexed { i, block -> if (block.length <= shares.getValue(i)) block else cutAtLine(block, shares.getValue(i)) }
+    }
+
+    /** [block] cut to [max] characters at a whole line, its last line saying how many lines were left out for room. */
+    private fun cutAtLine(block: String, max: Int): String {
+        val lines = block.lines()
+        val kept = mutableListOf<String>()
+        var size = 0
+        for (line in lines) {
+            if (size + line.length + 1 + CUT_NOTE_ROOM > max) break
+            kept += line
+            size += line.length + 1
+        }
+        return (kept + "(… ${lines.size - kept.size} more lines left out for room)").joinToString("\n")
+    }
+
+    /** The room [cutAtLine]'s note takes. */
+    private const val CUT_NOTE_ROOM = 48
+
+    /** Said at the last round a message has ([turns]): nothing more can be brought for it. */
+    private const val LAST = "That's the last that can be brought for this message: answer it now from what you have, and leave details and research empty."
 
     /**
      * What the app knows, as the chat sends it: [known] ([context]), then the [plan] ([plan]), each with its share of the room ([turns]);
@@ -432,18 +500,22 @@ object ChatPrompts {
             appendLine("- ${r.id} | ${Reminders.whenLine(r, moments[r.id], title, zone)} | ${r.text.take(Reminders.MAX_TEXT)} | ${r.taskId ?: "-"}")
         }
         appendLine()
-        appendLine("Open tasks (id | title | from | its class, and its subject | kind | due, a real deadline unless marked a plan, which is never overdue and moves on once it passes | minutes in all, with what the plan makes of them at their pace where it's learned | minutes worked so far | can't start before):")
+        appendLine("Open tasks (id | title | from | its class, and its subject | kind | due, a real deadline unless marked a plan, which is never overdue and moves on once it passes | minutes in all, with what the plan makes of them at their pace where it's learned | minutes worked so far | can't start before | what its text holds: who an email's from, what's attached and linked, how long its text is):")
         // By the date shown (the deadline in force, PL-14), so a plan's date gone by doesn't crowd nearer ones out of the list.
         val open = tasks.filter { it.isOpen && !it.hidden }.sortedBy { it.deadlineAt(now) ?: it.dueAt ?: Long.MAX_VALUE }
         // The notes' room (8a), so many can't crowd out what comes after them; the standing ones, each once.
         var noteRoom = MAX_NOTES_TEXT
+        // What each task's text holds (8c), in a room of its own, spent by the deadline in force as the list is, so no
+        // task is crowded out of it: past the room, its length alone. A task the app made (an Anki quota) has none of its own.
+        var holdsRoom = MAX_HOLDS
         val standing = Notes.live(notes).filter { it.scope != null }.sortedBy { it.at }
         if (open.isEmpty()) appendLine("(none)")
         open.take(InstructionPrompts.MAX_TASKS).forEach { t ->
             val start = listOfNotNull(t.availableFrom, t.mine.from?.value, t.notBefore).maxOrNull()?.takeIf { it > now }
             // A date the app or Claude set is a plan, not a deadline (PL-14): said, so it's not called overdue.
             val due = (t.deadlineAt(now) ?: t.dueAt)?.let { at(it) + if (t.hardAt(now)) "" else " (a plan)" } ?: "no date"
-            appendLine("- ${t.id} | ${t.title.take(MAX_TITLE)} | ${t.source.label} | ${classOf(t, classMap)} | ${t.kind.label} | $due | ${minutes(t)} | ${t.workedMin + t.photoMin} | ${start?.let(::at) ?: "-"}")
+            val holds = if (t.derived) "-" else TaskText.holds(t, if (holdsRoom >= HOLDS_LINE) HOLDS_LINE else 0).also { holdsRoom -= it.length }
+            appendLine("- ${t.id} | ${t.title.take(MAX_TITLE)} | ${t.source.label} | ${classOf(t, classMap)} | ${t.kind.label} | $due | ${minutes(t)} | ${t.workedMin + t.photoMin} | ${start?.let(::at) ?: "-"} | $holds")
             // Its steps by their place, for a tick (AI-14).
             t.subSteps.take(OwnTaskRules.MAX_STEPS).forEachIndexed { i, step -> appendLine("    step $i: ${step.title.take(MAX_TITLE)} (${step.minutes} min)${if (step.done) ", done" else ""}") }
             // Its own notes (8a), by id for a delete, whose each is, within their room; the standing ones it matches
@@ -507,10 +579,7 @@ object ChatPrompts {
         // The calendar's read as far as the plan reaches (DX-14); the chat is told of the fortnight's.
         val fortnight = events.filter { it.start < now + InstructionPrompts.EVENTS_AHEAD_MS }
         if (fortnight.isEmpty()) appendLine("(none)")
-        fortnight.sortedBy { it.start }.take(InstructionPrompts.MAX_EVENTS).forEach { e ->
-            val time = if (e.allDay) "all day " + Instant.ofEpochMilli(e.start).atZone(ZoneId.of("UTC")).toLocalDate().format(DAY) else "${at(e.start)} to ${at(e.end)}"
-            appendLine("- ${EventJudge.key(e)} | ${e.title.take(MAX_TITLE)} | $time")
-        }
+        fortnight.sortedBy { it.start }.take(InstructionPrompts.MAX_EVENTS).forEach { e -> appendLine(eventLine(e, zone)) }
         // Each class's next lessons (G8), from Power Planner's timetable: none read, none said.
         if (lessons != null) {
             appendLine()
@@ -541,16 +610,16 @@ object ChatPrompts {
             appendLine("Settings you can change (setting | what it is | its value now):")
             FelixSettings.describe(settings).forEach { appendLine("- $it") }
         }
-        // Each open task's own text, cut short (D-93): what it asks of them, and what comes with it.
+        // Each open task's own text, cut short (D-93): what it asks of them; what comes with it is on its line (8c).
         // Last, so it's what a context too long for its room loses first ([turns]).
-        val withText = open.take(InstructionPrompts.MAX_TASKS).filter { !it.derived && TaskText.has(it) }
+        val withText = open.take(InstructionPrompts.MAX_TASKS).filter { !it.derived && it.detail.isNotBlank() }
         if (withText.isNotEmpty()) {
             appendLine()
-            appendLine("The tasks' own text (id | from, and what comes with it; then its text: an assignment's instructions, an email's conversation, a planner item's details, their notes), each at most $BRIEF_TEXT characters: a longer one as its reading's summary (each says of how much), or else its start and end (an email's newest replies are at its end):")
+            appendLine("The tasks' own text (id; then its text: an assignment's instructions, an email's conversation, a planner item's details, their notes), each at most $BRIEF_TEXT characters: a longer one as its reading's summary (each says of how much), or else its start and end (an email's newest replies are at its end); its line above says how long the whole is, and details reads it:")
             var room = MAX_TEXTS
             var shown = 0
             for (t in withText) {
-                val entry = "- ${t.id} | ${TaskText.about(t)}" + (TaskText.brief(t, BRIEF_TEXT, "    ")?.let { "\n$it" } ?: "")
+                val entry = "- ${t.id}" + (TaskText.brief(t, BRIEF_TEXT, "    ")?.let { "\n$it" } ?: "")
                 if (entry.length > room) break
                 appendLine(entry)
                 room -= entry.length
@@ -559,6 +628,73 @@ object ChatPrompts {
             if (shown < withText.size) appendLine("- …and ${withText.size - shown} more, left out for room")
         }
     }.trimEnd()
+
+    /** An event as the lists give it: its key, its title and when (an all-day one by its date, as the calendar keeps it, in UTC). */
+    private fun eventLine(e: CalendarEvent, zone: ZoneId): String {
+        val time = if (e.allDay) "all day " + Instant.ofEpochMilli(e.start).atZone(ZoneId.of("UTC")).toLocalDate().format(DAY) else "${Instant.ofEpochMilli(e.start).atZone(zone).format(WHEN)} to ${Instant.ofEpochMilli(e.end).atZone(zone).format(WHEN)}"
+        return "- ${EventJudge.key(e)} | ${e.title.take(MAX_TITLE)} | $time"
+    }
+
+    /** The week's numbers as a round brings them (G6, 8c): [lines] ([com.thomaswcode.decrastination.learn.Stats.weekLines]) under their own heading. */
+    fun statsBlock(lines: List<String>): String = buildString {
+        append("The week's numbers you asked for (answer from them, and leave details empty):")
+        lines.forEach { append("\n").append(it) }
+    }
+
+    /**
+     * The calendar a round brings (G7, 8c), its events listed as the fortnight's are: [month] (yyyy-MM), or with it
+     * empty the four weeks after the fortnight; at most [InstructionPrompts.MAX_EVENTS] events, saying how many more
+     * there are and from when, and where the calendar's last good [read] began and ended (a day back, and the plan's
+     * reach then, [CalendarTime.readUntil]), so a month crowded by repeating events, one past the read, or a calendar
+     * that couldn't be read at all, isn't taken for an empty one.
+     */
+    fun calendarBlock(events: List<CalendarEvent>, month: String, now: Long, zone: ZoneId, read: Pair<Long, Long>?): String = buildString {
+        val (from, to) = calendarSpan(month, now, zone)
+        append("The calendar you asked for, ${calendarWhat(month, now, zone)} (eventKey | title | when; answer from it, and leave details empty):")
+        if (read == null) {
+            append("\n(none known: the calendar couldn't be read)")
+            return@buildString
+        }
+        val (readFrom, readTo) = read
+        fun day(time: Long) = Instant.ofEpochMilli(time).atZone(zone).format(DAY)
+        // An all-day event by its dates, as the calendar keeps it (midnight to midnight, UTC): by its times it would
+        // run into the day before a month in summer time.
+        val days = Instant.ofEpochMilli(from).atZone(zone).toLocalDate() to Instant.ofEpochMilli(to - 1).atZone(zone).toLocalDate()
+        // The four weeks after the fortnight leave out what began before them, as the fortnight's list has it.
+        fun within(e: CalendarEvent) = (if (e.allDay) EventJudge.days(e, zone).any { it >= days.first && it <= days.second } else e.start < to && e.end > from) && (month.isNotEmpty() || e.start >= from)
+        val within = events.filter(::within).sortedBy { it.start }
+        when {
+            to <= readFrom -> append("\n(none known: the calendar is read from ${day(readFrom)} on)")
+            from >= readTo -> append("\n(none known: the calendar is read only to ${day(readTo - 1)}, as far as the plan reaches)")
+            within.isEmpty() -> append("\n(none)")
+        }
+        within.take(InstructionPrompts.MAX_EVENTS).forEach { append("\n").append(eventLine(it, zone)) }
+        if (within.size > InstructionPrompts.MAX_EVENTS) append("\n- …and ${within.size - InstructionPrompts.MAX_EVENTS} more from ${day(within[InstructionPrompts.MAX_EVENTS].start)}, left out for room")
+        if (from < readFrom && to > readFrom) append("\nThe calendar is read from ${day(readFrom)} on: what came before isn't known here.")
+        if (to > readTo && from < readTo) append("\nThe calendar is read only to ${day(readTo - 1)}, as far as the plan reaches: what comes after isn't known.")
+    }
+
+    /** What [month] of the calendar covers ([calendarAsk]): a month by its name ("December 2026"), or the four weeks after the fortnight, from its first day to its last. */
+    fun calendarWhat(month: String, now: Long, zone: ZoneId): String {
+        if (month.isNotEmpty()) return YearMonth.parse(month).format(MONTH)
+        val (from, to) = calendarSpan(month, now, zone)
+        return "the four weeks after the fortnight, ${Instant.ofEpochMilli(from).atZone(zone).format(DAY)} to ${Instant.ofEpochMilli(to - 1).atZone(zone).format(DAY)}"
+    }
+
+    /** From when to when [month] runs ([calendarAsk]): the month in [zone]; or, empty, the four weeks from the fortnight's end. */
+    private fun calendarSpan(month: String, now: Long, zone: ZoneId): Pair<Long, Long> {
+        if (month.isEmpty()) {
+            val from = now + InstructionPrompts.EVENTS_AHEAD_MS
+            return from to from + CALENDAR_AHEAD_MS
+        }
+        val m = YearMonth.parse(month)
+        return m.atDay(1).atStartOfDay(zone).toInstant().toEpochMilli() to m.plusMonths(1).atDay(1).atStartOfDay(zone).toInstant().toEpochMilli()
+    }
+
+    /** The calendar past the fortnight, asked for with no month (G7): four weeks of it. */
+    private const val CALENDAR_AHEAD_MS = 28 * 24 * 3_600_000L
+
+    private val MONTH = DateTimeFormatter.ofPattern("MMMM yyyy", Locale.UK)
 
     /** [t]'s class as its line says it (G8): its code, and the subject [classMap] gives it where that's another; "-" with none. */
     private fun classOf(t: TaskItem, classMap: Map<String, String>): String {
@@ -570,11 +706,18 @@ object ChatPrompts {
     /** A lesson's day and start, as the lessons' line says them. */
     private val LESSON_DAY = DateTimeFormatter.ofPattern("EEE d MMM HH:mm", Locale.UK)
 
-    /** Each open task's own text as the context gives it, at most (D-93). */
+    /**
+     * Each open task's own text as the context gives it, at most (D-93). Its cut to 250 (8c) didn't hold in the
+     * chat's eval by its rule (a round more on one of its cases), so it stays at 600, beside each line's room.
+     */
     const val BRIEF_TEXT = 600
 
     /** All of their texts in the context, at most. */
     private const val MAX_TEXTS = 12_000
+
+    /** What a task's text holds, on its line (8c): at most this much a line, and all the lines' together. */
+    private const val HOLDS_LINE = 160
+    private const val MAX_HOLDS = 6_000
 
     /** The tasks' own notes under them in the context, at most (8a): the rest are on their sheets. */
     private const val MAX_NOTES_TEXT = 6_000

@@ -4,6 +4,7 @@ import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.sources.gmail.GmailThreads
 import com.thomaswcode.decrastination.sources.teams.TeamsRows
+import java.util.Locale
 
 /**
  * A task's own text as the chat and Felix are told it (D-93): what its source wrote (an
@@ -28,6 +29,30 @@ object TaskText {
         items.take(MAX_ITEMS).joinToString(", ") { cut(it.trim()) } + (items.size - MAX_ITEMS).takeIf { it > 0 }?.let { ", and $it more" }.orEmpty()
 
     private fun cut(s: String): String = if (s.length <= MAX_ITEM) s else s.take(MAX_ITEM - 1) + "…"
+
+    /**
+     * What its text holds, as its line in the chat's list says it (8c): who an email's from, what's attached and
+     * linked, and how long its text is ("text 1,850 characters", or "no text"), within [max] characters; what's
+     * attached and linked cut first, the length always there.
+     */
+    fun holds(task: TaskItem, max: Int): String {
+        val text = task.detail.trim().length
+        val length = if (text == 0) "no text" else "text " + "%,d".format(Locale.UK, text) + " characters"
+        val with = listOfNotNull(
+            sender(task)?.let { "from ${cut(it)}" },
+            GmailThreads.attachmentsOf(task).takeIf { it.isNotEmpty() }?.let { files -> "attachments: " + listed(files.map { it.label }) },
+            TeamsRows.linksOf(task).takeIf { it.isNotEmpty() }?.let { "links: " + listed(it) },
+        ).joinToString("; ")
+        val room = max - length.length - 2
+        return when {
+            with.isEmpty() || room < MIN_HOLDS -> length
+            with.length <= room -> "$with; $length"
+            else -> with.take(room - 1) + "…; " + length
+        }
+    }
+
+    /** The least of what's attached and linked worth saying in [holds]: less, the length alone. */
+    private const val MIN_HOLDS = 20
 
     /** What [about] says at most: its files and links each, how many of them, and all of it. */
     private const val MAX_ITEM = 120
