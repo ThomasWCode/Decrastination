@@ -37,6 +37,7 @@ import com.thomaswcode.decrastination.core.Reminders
 import com.thomaswcode.decrastination.core.SchoolCalendar
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.Source
+import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.WallClock
@@ -581,7 +582,8 @@ class Conversation(
         fun name(t: TaskItem) = t.sourceValues?.title ?: t.title
         val theirs = !now.tickDone
         return when {
-            theirs && was.isOpen && !now.isOpen -> when (source) {
+            // Finished as its source has it, done: a quota missed (taken over by homework) isn't studied.
+            theirs && was.isOpen && now.status == Status.Done -> when (source) {
                 Source.Teams -> "is handed in"
                 Source.Gmail -> "is unstarred, so it's done"
                 Source.Anki -> "is studied"
@@ -916,11 +918,13 @@ class Conversation(
                     Act("Kept: $label", a, after = keptAt()[a.value]?.toString())
                 }
                 ChatAction.Type.UnkeepPiece -> {
-                    val record = keptToday().lastOrNull { it.key == a.value }
                     // The record he was shown, its key's newest then: kept again since (taken back and kept from Day while he
                     // answered), the newest is yours, not his to take back.
                     val at = keptAt()[a.value]?.takeIf { it <= shownAt } ?: return@mapNotNull null
-                    record?.let { said("Not kept after all: ${it.label}", a).takeIf { _ -> focus.unkeepSlot(it.key, at) } }
+                    val record = log.value.slots.lastOrNull { it.key == a.value && it.outcome.kept && it.at == at } ?: return@mapNotNull null
+                    // What it was kept with, so its Undo keeps it so again: its extra minutes, its photo, its source's word.
+                    val with = "${(record.workedMin - record.plannedMin).coerceAtLeast(0)}|${record.photo}|${record.earned}"
+                    Act("Not kept after all: ${record.label}", a, before = with).takeIf { focus.unkeepSlot(record.key, at) }
                 }
             }
         }
@@ -1045,8 +1049,12 @@ class Conversation(
                 back
             }
             // A piece kept (G1): the record it made taken back, while it's the piece's newest; one taken back, kept again as the chat keeps one.
-            ChatAction.Type.KeepPiece -> act.after?.toLongOrNull()?.let { at -> keptAt()[a.value] == at && focus.unkeepSlot(a.value.orEmpty(), at) } == true
-            ChatAction.Type.UnkeepPiece -> keptToday().none { it.key == a.value } && task?.isOpen == true && focus.keepSlot(a.value.orEmpty())
+            ChatAction.Type.KeepPiece -> act.after?.toLongOrNull()?.let { at -> keptAt()[a.value] == at && focus.unkeepSlot(a.value.orEmpty(), at, reopen = true) } == true
+            // As it was kept: its extra minutes, its photo, its source's word ([Act.before]).
+            ChatAction.Type.UnkeepPiece -> keptToday().none { it.key == a.value } && task?.isOpen == true && act.before.orEmpty().split('|').let { w ->
+                val photo = w.getOrNull(1) == "true"
+                focus.keepSlot(a.value.orEmpty(), extraMin = w.getOrNull(0)?.toIntOrNull() ?: 0, photo = photo, verified = !photo && w.getOrNull(2) == "true")
+            }
             // A reminder or a note (8a), while it's as the act left it: a reminder set goes, one moved has its time and
             // words back, one cancelled comes again; a note added goes, one deleted is back.
             ChatAction.Type.SetReminder, ChatAction.Type.MoveReminder, ChatAction.Type.CancelReminder, ChatAction.Type.AddNote, ChatAction.Type.DeleteNote -> {

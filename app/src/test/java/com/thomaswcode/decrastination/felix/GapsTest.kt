@@ -154,6 +154,34 @@ class GapsTest {
         assertEquals(listOf(key), conversation.keptToday().map { it.key })
     }
 
+    @Test
+    fun `his keep that finished one of yours is taken back by its Undo, the task open again`() = runBlocking {
+        val own = OwnTaskRules.create(OwnTask(title = "Poster"), "p", now)
+        stores.tasks.update { it.copy(tasks = listOf(own)) }
+        val key = felix.planning.plan().ordered.first { it.taskId == own.id }.key
+        val kept = asked("I've done the poster", answer("Kept.", listOf(action("keepPiece", own.id, key))))
+        // Its last piece finished it, as Day's Done does (the app's finish of your own, here by hand).
+        stores.tasks.update { s -> s.copy(tasks = s.tasks.map { it.copy(status = Status.Done, doneAt = now) }) }
+        assertTrue(canUndo(kept, 0))
+        assertNull(conversation.undoAct(kept.id, 0))
+        val back = stores.tasks.value.tasks.single()
+        assertTrue(back.isOpen && back.workedMin == 0, back.toString())
+    }
+
+    @Test
+    fun `an unkeep's Undo keeps the piece again as it was kept, with its extra minutes and its photo`() = runBlocking {
+        stores.tasks.update { it.copy(tasks = listOf(sheet)) }
+        val key = felix.planning.plan().todaySlots.mapNotNull { it.chunk }.single { it.taskId == sheet.id }.key
+        assertTrue(felix.focusKeep(key, extraMin = 10, photo = true))
+        val was = stores.log.value.slots.last { it.key == key && it.outcome.kept }
+        val taken = asked("actually I haven't done it", answer("Taken back.", listOf(action("unkeepPiece", sheet.id, key))))
+        assertTrue(stores.log.value.slots.none { it.key == key && it.outcome.kept })
+        assertNull(conversation.undoAct(taken.id, 0))
+        val again = stores.log.value.slots.last { it.key == key && it.outcome.kept }
+        assertEquals(listOf(was.workedMin, if (was.photo) 1 else 0), listOf(again.workedMin, if (again.photo) 1 else 0))
+        assertEquals(was.earned, again.earned)
+    }
+
     /** His sync action (G2): [source] read, about [taskId]. */
     private fun sync(source: String, taskId: String = "") = """{"type":"sync","taskId":"$taskId","stepIndex":-1,"setting":"$source","value":""}"""
 
@@ -167,7 +195,7 @@ class GapsTest {
         // A read that changes nothing says nothing, and he keeps watching.
         conversation.afterSync()
         assertTrue(stores.chat.value.messages.none { it.kind == MessageKind.Note })
-        // Teams' read finds it handed in: his note says so, once.
+        // Teams' read finds it handed in: his note says so, once. (A quota missed, not done, says nothing: Merge's Missed.)
         stores.tasks.update { s -> s.copy(tasks = s.tasks.map { it.copy(status = Status.Done, doneAt = now) }) }
         conversation.afterSync()
         conversation.afterSync()
