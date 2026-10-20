@@ -10,4 +10,4 @@ D-74 says "the briefing at 07:00 on school days and 08:30 at weekends", and Sett
 
 - **A.** As the code does: 07:00 Monday to Friday, school or not; D-74 and the Settings label say weekdays.
 - **B (recommended).** As D-74's words read: 07:00 on a school day by the school calendar (`SchoolDays.kindOf`, as blocking already reads it, BL-02), 08:30 on any other day, a weekday off included, as a weekend's. A day off is a lie-in, and the calendar's already there.
-- ANSWER:
+- ANSWER: B
