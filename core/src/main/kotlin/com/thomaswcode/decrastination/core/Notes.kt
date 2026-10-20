@@ -68,7 +68,9 @@ object Notes {
     /**
      * Whether [task] is one [scope] is for: its subject as [Duplicates.subject] gives it (the subject
      * [classMap] gives its class code, else the class's own name, as your own tasks' is their subject: a
-     * code no subject is mapped to matches no subject but itself); its class, its code; its source; a
+     * code no subject is mapped to matches no subject but itself), or one it begins in whole words (a class
+     * given as its Power Planner class, named for its subject and teacher: "Physics" is "Physics HALE"'s
+     * subject, "Maths" not "Further Maths"'s); its class, its code; its source; a
      * word in its title, from a word's start ("art" in "Pop art" or "Artwork", not "Cartesian" or "start";
      * "worksheet" in "Worksheets"). Case ignored; each given, all of them; an empty scope matches nothing.
      */
@@ -76,7 +78,8 @@ object Notes {
         if (scope.isEmpty) return false
         fun same(a: String?, b: String?) = a != null && b != null && a.trim().equals(b.trim(), ignoreCase = true)
         val subject = Duplicates.subject(task, classMap)
-        return (scope.subject.isNullOrBlank() || same(scope.subject, subject)) &&
+        fun ofSubject(given: String) = subject != null && given.trim().lowercase().let { g -> subject == g || subject.startsWith("$g ") }
+        return (scope.subject.isNullOrBlank() || ofSubject(scope.subject)) &&
             (scope.className.isNullOrBlank() || same(scope.className, task.className)) &&
             (scope.source == null || scope.source == task.source) &&
             (scope.titleContains.isNullOrBlank() || fromWordStart(task.title, scope.titleContains.trim()))
