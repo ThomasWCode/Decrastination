@@ -165,7 +165,9 @@ class ChatScreenState {
         // A question you've answered from his notification has been seen, as his button's count says; and
         // what it showed when it was left just now, whether or not that's reached the chat's read position.
         val readAt = maxOf(state.readAt, leftAt)
-        val unread = state.messages.filter { Outbox.unread(it, readAt) && it.answeredAt == null }
+        // One you've replied to from it too: seen, as you answered it.
+        val replied = Outbox.repliedTo(state)
+        val unread = state.messages.filter { Outbox.unread(it, readAt) && it.answeredAt == null && it.id !in replied }
         firstUnread = unread.firstOrNull()?.id
         unreadOnOpen = unread.mapTo(HashSet()) { it.id }
         since = now

@@ -94,6 +94,21 @@ class ChatActsTest {
     }
 
     @Test
+    fun `a tick's Undo is for its own tick, one by hand while still so, one kept while its record's the newest`() {
+        val open = essay().let { t -> t.copy(subSteps = t.subSteps.mapIndexed { i, s -> if (i == 1) s.copy(done = true, byHand = true) else s }) }
+        val byHand = Act("Ticked: Write, of Essay", ChatAction(ChatAction.Type.TickStep, open.id, 1), after = ChatActs.TICKED_BY_HAND)
+        assertTrue(ChatActs.canUndo(byHand, listOf(open), settings, emptyList()))
+        // Kept in its slot since (no longer by hand): another's to take back.
+        val kept = open.copy(subSteps = open.subSteps.mapIndexed { i, s -> if (i == 1) s.copy(byHand = false, timedMin = 40) else s })
+        assertFalse(ChatActs.canUndo(byHand, listOf(kept), settings, emptyList()))
+        // One kept as its piece: while the record it made is its key's newest today.
+        val asPiece = byHand.copy(after = "1000")
+        val key = Chunk.keyOf(open.id, 1, 0)
+        assertTrue(ChatActs.canUndo(asPiece, listOf(kept), settings, emptyList(), kept = mapOf(key to 1000L)))
+        assertFalse(ChatActs.canUndo(asPiece, listOf(kept), settings, emptyList(), kept = mapOf(key to 2000L)))
+    }
+
+    @Test
     fun `a tick that finished one of yours can be undone, and a setting while it's as it was set`() {
         val tick = Act("Ticked: Write, of Essay", ChatAction(ChatAction.Type.TickStep, "own:e", 1))
         assertTrue(ChatActs.canUndo(tick, listOf(finished()), settings, emptyList()))

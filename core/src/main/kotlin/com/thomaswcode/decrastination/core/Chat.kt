@@ -298,7 +298,7 @@ object ChatActs {
         val note = notes.firstOrNull { it.id == a.value }
         return when (a.type) {
             ChatAction.Type.Open -> false
-            ChatAction.Type.TickStep -> task != null && step?.done == true && (task.isOpen || task.source == Source.Own || task.tickDone)
+            ChatAction.Type.TickStep -> task != null && step?.done == true && (task.isOpen || task.source == Source.Own || task.tickDone) && tickedBy(act, task.id, a.stepIndex!!, step, kept)
             ChatAction.Type.UntickStep -> task?.isOpen == true && step?.done == false
             ChatAction.Type.Done -> task?.isOpen == false && (task.source == Source.Own || task.tickDone)
             ChatAction.Type.Reopen -> task != null && act.was != null && asReopened(task, act.was)
@@ -326,6 +326,20 @@ object ChatActs {
      * Whether [task], finished, was finished by a piece of it kept at [at] (G1): one of yours, or one done by its
      * tick, its finish then, as the app finishes it at once; not one finished another way since.
      */
+    /**
+     * Whether [step] is still done by [act]'s tick ([Act.after]): one by hand while the step's still ticked by hand, one
+     * kept as its piece while the record it made is its key's newest among today's [kept]; done another way since (kept
+     * in its slot, ticked again), it's another's to take back. An act from before this says nothing, and is as before.
+     */
+    fun tickedBy(act: Act, taskId: String, index: Int, step: SubStep, kept: Map<String, Long>): Boolean = when (val after = act.after) {
+        null -> true
+        TICKED_BY_HAND -> step.byHand
+        else -> after.toLongOrNull()?.let { at -> kept[Chunk.keyOf(taskId, index, 0)] == at } ?: true
+    }
+
+    /** A tick's [Act.after] where it was by hand, not a keep of its piece ([tickedBy]). */
+    const val TICKED_BY_HAND = "hand"
+
     fun finishedBy(task: TaskItem, at: Long): Boolean =
         (task.source == Source.Own || task.tickDone) && !task.isOpen && task.doneAt?.let { it in at..at + FINISHED_BY_MS } == true
 
