@@ -316,7 +316,14 @@ fun TaskSheet(
                 notes.forEach { n ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(n.line, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-                        TextButton(onClick = { scope.launch { sheet.unnote(n.id) } }) { Text("Delete") }
+                        TextButton(onClick = {
+                            // A standing one goes from every task it's for: asked first.
+                            if (n.every != null) {
+                                confirming = "unnote:${n.id}"
+                            } else {
+                                scope.launch { sheet.unnote(n.id) }
+                            }
+                        }) { Text("Delete") }
                     }
                 }
                 TextButton(onClick = { sheet.noting = true }) { Text("Add a note") }
@@ -482,6 +489,21 @@ fun TaskSheet(
             },
             dismissButton = { TextButton(onClick = { confirming = null }) { Text("Cancel") } },
         )
+        // A standing note's delete (8a): it goes from every task it's for, not only this one.
+        else -> TaskSheetModel.notes(task, felix.notes, graph.settings.value.classMap, graph.settings.value.felixName, now, zone).firstOrNull { it.every != null && confirming == "unnote:${it.id}" }?.let { n ->
+            AlertDialog(
+                onDismissRequest = { confirming = null },
+                title = { Text("Delete the note for ${n.every}?") },
+                text = { Text("It goes from every task it's for, not only this one.") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        confirming = null
+                        scope.launch { sheet.unnote(n.id) }
+                    }) { Text("Delete") }
+                },
+                dismissButton = { TextButton(onClick = { confirming = null }) { Text("Cancel") } },
+            )
+        }
     }
 }
 

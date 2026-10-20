@@ -186,7 +186,8 @@ class SlotReceiver : BroadcastReceiver() {
                     // Your reminder's moment (8a): sent now, with no call, so the receiver's time is enough; or the start of
                     // his window to write one, which the look after this writes. Either way the alarm's set for the next.
                     SlotAlarms.ACTION_REMINDER -> {
-                        graph.looks.sweepReminders()
+                        // A failure sending them is logged, so the alarm's still set again and the look queued.
+                        runCatching { graph.looks.sweepReminders() }.onFailure { Log.w(AppGraph.TAG, "Sending reminders failed", it) }
                         graph.armReminder()
                     }
                 }

@@ -94,7 +94,7 @@ class TaskSheetModelTest {
             Note("n4", "another task's", Fixtures.at("2026-10-12T17:00"), By.You, taskId = "teams:other"),
         )
         assertEquals(
-            listOf(TaskSheetModel.Noted("n1", "Fe, today 17:00: show the working"), TaskSheetModel.Noted("n2", "Note for every Physics task: on sheets, not in the book (yours, Sat 10 Oct 17:00)")),
+            listOf(TaskSheetModel.Noted("n1", "Fe, today 17:00: show the working"), TaskSheetModel.Noted("n2", "Note for every Physics task: on sheets, not in the book (yours, Sat 10 Oct 17:00)", "every Physics task")),
             TaskSheetModel.notes(sheet, notes, mapOf("12X/Ph1" to "Physics"), "Fe", now, LONDON),
         )
     }

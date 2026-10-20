@@ -360,8 +360,9 @@ object Backups {
     /**
      * Whether [felix] is what the app keeps (4.1.0): each note and reminder under an id of its own, with
      * words within their length; a note on a task or standing, never both nor neither; a reminder due as
-     * its kind needs (a time, its task's slot from a time, minutes before its task's deadline); no more
-     * still to come than the app keeps.
+     * its kind needs (a time, its task's slot from a time, minutes before its task's deadline). Not how
+     * many are still to come: a snooze brings one that came back among them past [Reminders.MAX_PENDING],
+     * and the restore adds a backup's within it ([mergedFelix]).
      */
     fun wellFormed(felix: FelixStore): Boolean {
         fun words(text: String, max: Int) = text.isNotBlank() && text.length <= max
@@ -373,8 +374,7 @@ object Backups {
                 DueKind.BeforeDue -> r.taskId != null && (r.due.minutesBefore ?: -1) in 0..Reminders.MAX_BEFORE_MIN
             }
         }
-        return notes && reminders && felix.notes.map { it.id }.toSet().size == felix.notes.size && felix.reminders.map { it.id }.toSet().size == felix.reminders.size &&
-            felix.reminders.count(Reminders::pending) <= Reminders.MAX_PENDING
+        return notes && reminders && felix.notes.map { it.id }.toSet().size == felix.notes.size && felix.reminders.map { it.id }.toSet().size == felix.reminders.size
     }
 
     /**
