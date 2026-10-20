@@ -1,5 +1,11 @@
 package com.thomaswcode.decrastination.core
 
+import java.time.Instant
+import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 import kotlinx.serialization.Serializable
 
 /** What Felix remembers (AI-21): facts about the student, each under a topic, and standing instructions on how he behaves. */
@@ -7,25 +13,31 @@ import kotlinx.serialization.Serializable
 data class MemoryState(
     val facts: List<Fact> = emptyList(),
     val rules: List<Rule> = emptyList(),
-    /** The shape this is in ([com.thomaswcode.decrastination.data.Migration]): raised with each change of it. */
-    val version: Int = 1,
+    /** The shape this is in ([com.thomaswcode.decrastination.data.Migration]): raised with each change of it (2: a fact's and a rule's until, a fact's task, 10a). */
+    val version: Int = 2,
 )
 
-/** A fact worth keeping ("football is on Tuesdays"), under a short [topic] that a newer fact replaces. */
+/**
+ * A fact worth keeping ("football is on Tuesdays"), under a short [topic] that a newer fact replaces; held
+ * till [until] where it has one ("a cold this week"), or while its task [taskId] matters ("for the trip, I'm
+ * sharing a room"), then forgotten ([Memories.expired], 10a).
+ */
 @Serializable
-data class Fact(val topic: String, val text: String, val at: Long)
+data class Fact(val topic: String, val text: String, val at: Long, val until: Long? = null, val taskId: String? = null)
 
-/** A standing instruction on how Felix behaves ("don't message before 8", "be blunter"). */
+/** A standing instruction on how Felix behaves ("don't message before 8", "be blunter"), held till [until] where it has one ("not tonight", 10a). */
 @Serializable
-data class Rule(val text: String, val at: Long)
+data class Rule(val text: String, val at: Long, val until: Long? = null)
 
 /**
  * What an answer asks to remember (AI-21): a fact under [topic], or ([kind] "rule") a standing
  * instruction in [text]. An empty [text] forgets: the fact of that topic, or the instruction whose
- * words [topic] gives.
+ * words [topic] gives. [until] (10a) how long it holds, a date (YYYY-MM-DD, through that day) or a date
+ * and time (YYYY-MM-DDTHH:MM), empty for as long as it's true; [taskId] a fact's task, empty for none.
+ * Plain strings, as the schema's list items' fields are kept.
  */
 @Serializable
-data class Given(val topic: String = "", val text: String = "", val kind: String = FACT) {
+data class Given(val topic: String = "", val text: String = "", val kind: String = FACT, val until: String = "", val taskId: String = "") {
     companion object {
         const val FACT = "fact"
         const val RULE = "rule"
@@ -55,6 +67,58 @@ data class MemoryEdit(
 object Memories {
     /** The facts' room: about 1 500 tokens, the profile's share of them. */
     const val FACT_BUDGET_CHARS = 6_000
+
+    /** The furthest an until reaches (10a): one further out is cut to it. */
+    const val MAX_UNTIL_MS = 365 * 24 * 3_600_000L
+
+    /** How long a fact with a task is kept once its task has finished: the fortnight a finished task keeps its text (Stage 7). */
+    const val TASK_KEEP_MS = 14 * 24 * 3_600_000L
+
+    /**
+     * [given]'s until, at [now] in [zone] (10a): a date holds through that day, so till the next one's start; a
+     * date and time, till then. Null for none, or for one that doesn't read.
+     */
+    fun untilOf(given: String, zone: ZoneId): Long? {
+        val g = given.trim().takeIf { it.isNotEmpty() } ?: return null
+        runCatching { LocalDate.parse(g) }.getOrNull()?.let { return it.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli() }
+        return runCatching { LocalDateTime.parse(g) }.getOrNull()?.atZone(zone)?.toInstant()?.toEpochMilli()
+    }
+
+    /**
+     * [until] as a line says it: the last day it holds where it ends at a day's start ("Sun 25 Oct"), else the
+     * day and the time it ends ("Wed 21 Oct 07:00").
+     */
+    fun untilLine(until: Long, zone: ZoneId): String {
+        val at = Instant.ofEpochMilli(until).atZone(zone)
+        return if (at.toLocalTime().toSecondOfDay() == 0) at.minusDays(1).format(DAY) else at.format(DAY_TIME)
+    }
+
+    private val DAY = DateTimeFormatter.ofPattern("EEE d MMM", Locale.UK)
+    private val DAY_TIME = DateTimeFormatter.ofPattern("EEE d MMM HH:mm", Locale.UK)
+
+    /** What a fact or a rule's line adds of how long it holds (10a): ", until Sun 25 Oct", ", with “Trip form”". */
+    private fun shelf(until: Long?, task: String?, zone: ZoneId): String =
+        (until?.let { ", until " + untilLine(it, zone) } ?: "") + (task?.let { ", with “$it”" } ?: "")
+
+    /**
+     * [state] without what's run out at [now] (10a): a fact or a rule past its until; a fact with a task a
+     * fortnight after its task finished ([TASK_KEEP_MS]: a finished task keeps its record past it, so it's there
+     * to read), or, its task gone from [tasks], once that task's delete can't be undone ([held], what the chat's
+     * acts still hold, as their Undo brings the task back), and, for a source's task, once that source has been
+     * read since the fact was kept ([readAt]), so one restored from a backup before a sync keeps it. Forgetting is
+     * silent. [state] itself where nothing has run out, so it's written only when it changes.
+     */
+    fun expired(state: MemoryState, tasks: Map<String, TaskItem>, now: Long, held: Set<String> = emptySet(), readAt: (Source) -> Long? = { null }): MemoryState {
+        fun lasts(f: Fact): Boolean {
+            if (f.until != null && f.until <= now) return false
+            val id = f.taskId ?: return true
+            val task = tasks[id] ?: return id in held || !TaskItem.goneSince(id, f.at, readAt)
+            return task.isOpen || (task.doneAt ?: now) + TASK_KEEP_MS > now
+        }
+        val facts = state.facts.filter(::lasts)
+        val rules = state.rules.filter { it.until == null || it.until > now }
+        return if (facts.size == state.facts.size && rules.size == state.rules.size) state else state.copy(facts = facts, rules = rules)
+    }
     const val RULE_MAX = 20
 
     /** A fact's topic, and a fact's or a rule's words, at most: what [apply] keeps. */
@@ -67,20 +131,29 @@ object Memories {
     /**
      * [given] laid on [state] at [now], and a line for each thing it did: "Remembered: football: on
      * Tuesdays", "Forgot: football", "Felix will: be blunter", "Felix won't any more: …". A fact
-     * replaces the one of its topic (trimmed, any case); a rule is added unless it's there already;
-     * facts past [FACT_BUDGET_CHARS] lose their oldest; a rule past [RULE_MAX] isn't added, and says so.
+     * replaces the one of its topic (trimmed, any case); a rule is added unless it's there already (with
+     * another until, its until is the new one's); facts past [FACT_BUDGET_CHARS] lose their oldest; a rule
+     * past [RULE_MAX] isn't added, and says so. Each until (10a) read in [zone] ([untilOf]): one gone by is
+     * refused, saying so; one more than a year ahead cut to a year; a fact's task one of [listed] (ids, their
+     * titles), else it's kept with none, and said.
      */
-    fun apply(state: MemoryState, given: List<Given>, now: Long): Pair<MemoryState, List<String>> =
-        edit(state, given, now).let { (after, edits) -> after to edits.map { it.line } }
+    fun apply(state: MemoryState, given: List<Given>, now: Long, zone: ZoneId = ZoneId.of("UTC"), listed: Map<String, String> = emptyMap()): Pair<MemoryState, List<String>> =
+        edit(state, given, now, zone, listed).let { (after, edits) -> after to edits.map { it.line } }
 
     /** [apply], with what each line did, for its Undo ([undo]). */
-    fun edit(state: MemoryState, given: List<Given>, now: Long): Pair<MemoryState, List<MemoryEdit>> {
+    fun edit(state: MemoryState, given: List<Given>, now: Long, zone: ZoneId = ZoneId.of("UTC"), listed: Map<String, String> = emptyMap()): Pair<MemoryState, List<MemoryEdit>> {
         var facts = state.facts
         var rules = state.rules
         val edits = mutableListOf<MemoryEdit>()
         for (g in given) {
             val topic = g.topic.trim().take(MAX_TOPIC)
             val text = g.text.trim().take(MAX_TEXT)
+            // How long it holds (10a): gone by refused, past a year cut to one.
+            val until = untilOf(g.until, zone)?.coerceAtMost(now + MAX_UNTIL_MS)
+            if (until != null && until <= now && text.isNotEmpty()) {
+                edits += MemoryEdit("Not remembered: ${if (g.kind == Given.RULE) text else "$topic: $text"}, as ${untilLine(until, zone)} has gone by")
+                continue
+            }
             if (g.kind == Given.RULE) {
                 if (text.isEmpty()) {
                     val gone = rules.filter { same(it.text, topic) }
@@ -88,12 +161,22 @@ object Memories {
                         rules = rules - gone.toSet()
                         edits += MemoryEdit("Felix won't any more: ${gone.first().text}", ruleBefore = gone.first())
                     }
-                } else if (rules.none { same(it.text, text) }) {
-                    if (rules.size >= RULE_MAX) edits += MemoryEdit("Too many standing instructions to add “$text”: drop one first")
-                    else {
-                        val rule = Rule(text, now)
-                        rules = rules + rule
-                        edits += MemoryEdit("Felix will: $text", ruleAfter = rule)
+                } else {
+                    val had = rules.firstOrNull { same(it.text, text) }
+                    when {
+                        had != null && had.until == until -> Unit
+                        // The same instruction, for another while: its until is the new one's.
+                        had != null -> {
+                            val rule = Rule(text, now, until)
+                            rules = rules - had + rule
+                            edits += MemoryEdit("Felix will: $text" + shelf(until, null, zone), ruleBefore = had, ruleAfter = rule)
+                        }
+                        rules.size >= RULE_MAX -> edits += MemoryEdit("Too many standing instructions to add “$text”: drop one first")
+                        else -> {
+                            val rule = Rule(text, now, until)
+                            rules = rules + rule
+                            edits += MemoryEdit("Felix will: $text" + shelf(until, null, zone), ruleAfter = rule)
+                        }
                     }
                 }
                 continue
@@ -104,12 +187,16 @@ object Memories {
             if (text.isEmpty()) {
                 if (had != null) edits += MemoryEdit("Forgot: $topic", factBefore = had)
             } else {
-                val fact = Fact(topic, text, now)
+                // Its task, where it's one of those listed; one that isn't is said, and the fact kept without it.
+                val asked = g.taskId.trim().takeIf { it.isNotEmpty() }
+                val task = asked?.takeIf { it in listed }
+                val fact = Fact(topic, text, now, until, task)
                 facts = facts + fact
                 // Within their room: the oldest go first, kept with the fact that took it, for its Undo.
                 val held = facts
                 while (facts.size > 1 && chars(facts) > FACT_BUDGET_CHARS) facts = facts.sortedBy { it.at }.drop(1)
-                edits += MemoryEdit("Remembered: $topic: $text", factBefore = had, factAfter = fact, evicted = held - facts.toSet())
+                val unlisted = if (asked != null && task == null) " (its task isn't listed, so it's kept without one)" else ""
+                edits += MemoryEdit("Remembered: $topic: $text" + shelf(until, task?.let(listed::get), zone) + unlisted, factBefore = had, factAfter = fact, evicted = held - facts.toSet())
             }
         }
         while (facts.size > 1 && chars(facts) > FACT_BUDGET_CHARS) facts = facts.sortedBy { it.at }.drop(1)
@@ -145,7 +232,9 @@ object Memories {
         }
         edit.ruleAfter?.let { after ->
             val now = state.rules.firstOrNull { it == after } ?: return null
-            return state.copy(rules = state.rules - now)
+            // One that took another's place (the same instruction, for another while): that one back.
+            val back = (state.rules - now) + listOfNotNull(edit.ruleBefore).filter { b -> state.rules.none { it != now && same(it.text, b.text) } }
+            return state.copy(rules = back.sortedBy { it.at })
         }
         edit.ruleBefore?.let { before ->
             if (state.rules.any { same(it.text, before.text) } || state.rules.size >= RULE_MAX) return null
