@@ -193,6 +193,14 @@ class Focus(
         return if (parts.isEmpty()) line else "$line → ${parts.joinToString(", ")}"
     }
 
+    /**
+     * Whether blocking applies now and why, the free time there is, and what finishing today earns (G5), as
+     * Felix's chat is told it: "Blocking: on until today's work's done (2 pieces, 1 h); free time 12 min.
+     * Finish today's 2 slots (1 h) → 20 min free" ([blockingLine]).
+     */
+    fun blockingLine(plan: Plan, now: Long = clock.now()): String =
+        blockingLine(verdict(now), plan.todayBucket?.chunks.orEmpty(), (creditLeftMs(now) / 60_000L).toInt(), BlockPolicy.blockFromMin(settings.value, schoolDay(today(now))), rewardLine(plan, now))
+
     /** What lets a kept slot of [piece] earn (BL-08), by the settings. */
     fun earnsBy(piece: Chunk): EarnsBy = piece.earnsBy(settings.value.photoFromMin)
 
@@ -795,6 +803,25 @@ class Focus(
     }
 
     companion object {
+        /**
+         * [verdict] in words, with today's [pieces] still to do, the [freeMin] there is, when blocking starts
+         * ([blockFromMin], minutes after midnight) and what finishing earns ([reward], [rewardLine]): pure.
+         */
+        fun blockingLine(verdict: BlockPolicy.Verdict, pieces: List<Chunk>, freeMin: Int, blockFromMin: Int, reward: String?): String {
+            val left = "${pieces.size} piece${if (pieces.size == 1) "" else "s"}, ${Format.minutes(pieces.sumOf { it.minutes })}"
+            val state = when (verdict) {
+                is BlockPolicy.Verdict.Block -> if (verdict.reason == BlockPolicy.Reason.TodayUndone) "on until today's work's done ($left)" else "on: no free time left today"
+                BlockPolicy.Verdict.Spend -> "off while their free time is spent"
+                is BlockPolicy.Verdict.Allow -> when (verdict.reason) {
+                    BlockPolicy.Reason.Quiet -> "off: quiet hours"
+                    BlockPolicy.Reason.BeforeBlock -> "off until %02d:%02d".format(blockFromMin / 60, blockFromMin % 60)
+                    BlockPolicy.Reason.Override -> "off: unblocked by a parent code"
+                    else -> "off"
+                }
+            }
+            return "Blocking: $state; free time ${Format.minutes(freeMin)}" + reward?.let { ". $it" }.orEmpty()
+        }
+
         /** How soon after a piece's Done a tick on it is that Done's tap again, whenever its screen saw it: no piece is worked in less. */
         private const val AGAIN_MS = 30_000L
         private const val PLAN_TTL_MS = 60_000L

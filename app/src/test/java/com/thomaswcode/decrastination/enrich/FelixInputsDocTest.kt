@@ -2,6 +2,8 @@ package com.thomaswcode.decrastination.enrich
 
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
+import com.thomaswcode.decrastination.block.BlockPolicy
+import com.thomaswcode.decrastination.block.Focus
 import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.By
 import com.thomaswcode.decrastination.core.Calibration
@@ -154,7 +156,8 @@ class FelixInputsDocTest {
         val moments = reminders.mapNotNull { r -> Reminders.moment(r, planned, byId, now)?.let { r.id to it } }.toMap()
         val context = ChatPrompts.Context(
             known = ChatPrompts.context(tasks, events, applied, now, LONDON, settings.classMap, emptyList(), settings, calibration, notes, reminders, moments),
-            plan = ChatPrompts.plan(planned, LONDON),
+            // With whether blocking applies, and the free time (G5), as Focus says it then.
+            plan = ChatPrompts.plan(planned, LONDON, blocking = Focus.blockingLine(BlockPolicy.Verdict.Block(BlockPolicy.Reason.TodayUndone), planned.todayBucket?.chunks.orEmpty(), 0, 16 * 60 + 45, null)),
         )
         ChatPrompts.turns(listOf(earlier, reply, asked), context.known, byId, LONDON, plan = context.plan, events = events).forEachIndexed { i, (from, text) -> out["chat turn $i: $from"] = text }
         // A reply from Felix's notification: his message leads your first turn.

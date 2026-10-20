@@ -544,9 +544,10 @@ object ChatPrompts {
      * *Coming up*. The days go last, the nearest first, so a plan cut to fit ([turns]) loses only its
      * far days; each summary is at most [PLAN_LIST] lines. Since 4.1.1 (G1) today's slots and the next
      * piece of each task with no steps say their keys, so he can keep one done, and the pieces [kept]
-     * today (their keys and labels), which the plan no longer shows, so he can take one back.
+     * today (their keys and labels), which the plan no longer shows, so he can take one back; and after
+     * the slot under way, [blocking]: whether blocking applies and why, and the free time (G5).
      */
-    fun plan(plan: Plan, zone: ZoneId, kept: List<Pair<String, String>> = emptyList()): String = buildString {
+    fun plan(plan: Plan, zone: ZoneId, kept: List<Pair<String, String>> = emptyList(), blocking: String? = null): String = buildString {
         fun at(time: Long) = Instant.ofEpochMilli(time).atZone(zone).format(WHEN)
         fun piece(chunk: Chunk) = "${chunk.label.take(MAX_TITLE)} (${chunk.minutes} min)"
         fun event(task: TaskItem) = "${task.id} | ${task.title.take(MAX_TITLE)} | ${task.source.label}"
@@ -568,6 +569,8 @@ object ChatPrompts {
             doing != null -> appendLine("Now: ${clock(doing.start)}–${clock(doing.end)} ${piece(doing.chunk!!)}$then")
             else -> plan.next?.let { appendLine("Next to do: ${piece(it)}$then") }
         }
+        // Whether blocking applies now and why, and their free time (G5): "how much free time have I got?"
+        blocking?.let { appendLine(it) }
         // Today's slots at their times, each gone by, under way or to come (AI-13), so a time today isn't taken for past.
         val slots = plan.todaySlots.filter { it.kind == SlotKind.Work && it.chunk != null }
         if (slots.isNotEmpty()) {
