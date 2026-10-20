@@ -156,7 +156,7 @@ object SettingsChanges {
         "aiEnabled" to "Claude",
         "aiMonthlyCapUsd" to "Claude's monthly cap ($)",
         "briefingWeekdayMin" to "Morning briefing, school days",
-        "briefingWeekendMin" to "Morning briefing, weekends",
+        "briefingWeekendMin" to "Morning briefing, weekends and days off",
         "checkInMin" to "Sunday check-in",
     )
 

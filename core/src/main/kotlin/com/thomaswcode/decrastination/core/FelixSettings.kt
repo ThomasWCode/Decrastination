@@ -36,7 +36,7 @@ object FelixSettings {
         number("felixGraceMin", "Felix asks this far into a slot with nothing done (minutes)", SettingsLimits.FELIX_GRACE_MIN, { it.felixGraceMin }) { s, v -> s.copy(felixGraceMin = v) },
         number("felixDefaultCheckMin", "Felix checks again after (minutes)", SettingsLimits.FELIX_CHECK_MIN, { it.felixDefaultCheckMin }) { s, v -> s.copy(felixDefaultCheckMin = v) },
         time("briefingWeekdayMin", "Morning briefing, school days", { it.briefingWeekdayMin }) { s, v -> s.copy(briefingWeekdayMin = v) },
-        time("briefingWeekendMin", "Morning briefing, weekends", { it.briefingWeekendMin }) { s, v -> s.copy(briefingWeekendMin = v) },
+        time("briefingWeekendMin", "Morning briefing, weekends and days off", { it.briefingWeekendMin }) { s, v -> s.copy(briefingWeekendMin = v) },
         time("checkInMin", "Sunday check-in", { it.checkInMin }) { s, v -> s.copy(checkInMin = v) },
         hours("weekdayHours", "School-day working hours", { it.weekdayHours }) { s, w -> s.copy(weekdayHours = w) },
         hours("weekendHours", "Weekend working hours", { it.weekendHours }) { s, w -> s.copy(weekendHours = w) },

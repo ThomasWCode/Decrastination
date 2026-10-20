@@ -10,6 +10,9 @@ import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
 import com.thomaswcode.decrastination.block.TeamsAutoSync
 import com.thomaswcode.decrastination.core.Calibration
+import com.thomaswcode.decrastination.core.HalfDay
+import com.thomaswcode.decrastination.core.NoSchool
+import com.thomaswcode.decrastination.core.SchoolCalendar
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Planner
 import com.thomaswcode.decrastination.core.Source
@@ -41,11 +44,25 @@ class DailyTest {
     @Test
     fun `the briefing is at 7 on school days and half past 8 at weekends`() {
         // Thursday evening: Friday 07:00.
-        assertEquals(Fixtures.at("2026-10-09T07:00"), Daily.nextBriefing(Fixtures.at("2026-10-08T21:00"), LONDON, settings))
+        assertEquals(Fixtures.at("2026-10-09T07:00"), Daily.nextBriefing(Fixtures.at("2026-10-08T21:00"), LONDON, settings, SchoolCalendar()))
         // Friday after the briefing: Saturday 08:30.
-        assertEquals(Fixtures.at("2026-10-10T08:30"), Daily.nextBriefing(Fixtures.at("2026-10-09T07:00"), LONDON, settings))
+        assertEquals(Fixtures.at("2026-10-10T08:30"), Daily.nextBriefing(Fixtures.at("2026-10-09T07:00"), LONDON, settings, SchoolCalendar()))
         // Sunday 09:00: Monday 07:00.
-        assertEquals(Fixtures.at("2026-10-12T07:00"), Daily.nextBriefing(Fixtures.at("2026-10-11T09:00"), LONDON, settings))
+        assertEquals(Fixtures.at("2026-10-12T07:00"), Daily.nextBriefing(Fixtures.at("2026-10-11T09:00"), LONDON, settings, SchoolCalendar()))
+    }
+
+    @Test
+    fun `a weekday with no school has the weekends' briefing, and a half day the school days'`() {
+        // Friday a day off: Thursday evening's next briefing is Friday 08:30, as a weekend's.
+        val dayOff = SchoolCalendar(noSchool = listOf(NoSchool("2026-10-09", "2026-10-09")))
+        assertEquals(Fixtures.at("2026-10-09T08:30"), Daily.nextBriefing(Fixtures.at("2026-10-08T21:00"), LONDON, settings, dayOff))
+        // A week off: every day of it at 08:30, and school again on the Monday after at 07:00.
+        val week = SchoolCalendar(noSchool = listOf(NoSchool("2026-10-12", "2026-10-16")))
+        assertEquals(Fixtures.at("2026-10-14T08:30"), Daily.nextBriefing(Fixtures.at("2026-10-13T09:00"), LONDON, settings, week))
+        assertEquals(Fixtures.at("2026-10-19T07:00"), Daily.nextBriefing(Fixtures.at("2026-10-18T09:00"), LONDON, settings, week))
+        // A half day is still a school day.
+        val half = SchoolCalendar(halfDays = listOf(HalfDay("2026-10-09", 12 * 60)))
+        assertEquals(Fixtures.at("2026-10-09T07:00"), Daily.nextBriefing(Fixtures.at("2026-10-08T21:00"), LONDON, settings, half))
     }
 
     @Test
@@ -179,9 +196,9 @@ class ReviewInputTest {
     fun `a briefing that ran today isn't run again when its time moves later`() {
         val ran = Fixtures.at("2026-10-12T07:00")
         val later = Settings(briefingWeekdayMin = 8 * 60)
-        assertEquals(Fixtures.at("2026-10-13T08:00"), Daily.nextBriefing(Daily.from(ran, Fixtures.at("2026-10-12T07:30"), LONDON), LONDON, later))
+        assertEquals(Fixtures.at("2026-10-13T08:00"), Daily.nextBriefing(Daily.from(ran, Fixtures.at("2026-10-12T07:30"), LONDON), LONDON, later, SchoolCalendar()))
         // Run yesterday, today's still to be delivered keeps its time.
-        assertEquals(Fixtures.at("2026-10-12T07:00"), Daily.nextBriefing(Daily.from(Fixtures.at("2026-10-11T08:30"), Fixtures.at("2026-10-12T07:05"), LONDON), LONDON, Settings()))
+        assertEquals(Fixtures.at("2026-10-12T07:00"), Daily.nextBriefing(Daily.from(Fixtures.at("2026-10-11T08:30"), Fixtures.at("2026-10-12T07:05"), LONDON), LONDON, Settings(), SchoolCalendar()))
     }
 
     @Test
