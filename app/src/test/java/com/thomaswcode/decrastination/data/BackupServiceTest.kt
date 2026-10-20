@@ -4,6 +4,9 @@ import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.core.Calibration
 import com.thomaswcode.decrastination.core.ChatArchive
 import com.thomaswcode.decrastination.core.ChatMessage
+import com.thomaswcode.decrastination.core.Rule
+import com.thomaswcode.decrastination.core.MemoryState
+import com.thomaswcode.decrastination.core.Fact
 import com.thomaswcode.decrastination.core.ChatState
 import com.thomaswcode.decrastination.core.FixedClock
 import com.thomaswcode.decrastination.core.MessageKind
@@ -178,6 +181,19 @@ class BackupServiceTest {
         assertEquals(listOf("n1", "h1", "n2"), chat.messages.map { it.id })
         // Read up to just before this phone's own unread: n1 read, as it was there; h1 and n2 not.
         assertEquals(219L, chat.readAt)
+    }
+
+    @Test
+    fun `what's remembered is merged once what's run out on either side is let go of, so a stale one here doesn't win`() = runTest {
+        val hour = 3_600_000L
+        val from = Phone(full = false)
+        from.stores.replace(from.stores.memory, MemoryState(facts = listOf(Fact("cold", "better now", clock.time - hour)), rules = listOf(Rule("be blunter", clock.time - hour))))
+        val to = Phone(full = false)
+        to.stores.replace(to.stores.memory, MemoryState(facts = listOf(Fact("cold", "feeling rough", clock.time - 2 * hour, until = clock.time - 1)), rules = listOf(Rule("Be blunter", clock.time - 2 * hour, until = clock.time - 1))))
+        to.service.importBackup(from.service.exportBackup())
+        settle()
+        assertEquals(listOf("better now"), to.stores.memory.value.facts.map { it.text })
+        assertEquals(listOf(Rule("be blunter", clock.time - hour)), to.stores.memory.value.rules)
     }
 
     @Test
