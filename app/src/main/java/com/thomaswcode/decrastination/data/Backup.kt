@@ -359,8 +359,8 @@ object Backups {
 
     /**
      * Whether [felix] is what the app keeps (4.1.0): each note and reminder under an id of its own, with
-     * words within their length; a note on a task or standing, never both nor neither, a standing one's scope
-     * named within [Notes.MAX_SCOPE]; a reminder due as
+     * words within their length, and a task's id, where one's given, not blank; a note on a task or standing,
+     * never both nor neither, a standing one's scope named within [Notes.MAX_SCOPE]; a reminder due as
      * its kind needs (a time, its task's slot from a time, minutes before its task's deadline). Not how
      * many are still to come: a snooze brings one that came back among them past [Reminders.MAX_PENDING],
      * and the restore adds a backup's within it ([mergedFelix]).
@@ -368,11 +368,11 @@ object Backups {
     fun wellFormed(felix: FelixStore): Boolean {
         fun words(text: String, max: Int) = text.isNotBlank() && text.length <= max
         val notes = felix.notes.all { n ->
-            n.id.isNotBlank() && words(n.text, Notes.MAX_TEXT) && (n.taskId != null) != (n.scope != null) && n.scope?.isEmpty != true &&
+            n.id.isNotBlank() && words(n.text, Notes.MAX_TEXT) && n.taskId?.isBlank() != true && (n.taskId != null) != (n.scope != null) && n.scope?.isEmpty != true &&
                 n.scope?.let { s -> listOfNotNull(s.subject, s.className, s.titleContains).all { it.length <= Notes.MAX_SCOPE } } != false
         }
         val reminders = felix.reminders.all { r ->
-            r.id.isNotBlank() && words(r.text, Reminders.MAX_TEXT) && when (r.due.kind) {
+            r.id.isNotBlank() && words(r.text, Reminders.MAX_TEXT) && r.taskId?.isBlank() != true && when (r.due.kind) {
                 DueKind.At -> r.due.at != null
                 DueKind.SlotStart -> r.taskId != null && r.due.at != null
                 DueKind.BeforeDue -> r.taskId != null && (r.due.minutesBefore ?: -1) in 0..Reminders.MAX_BEFORE_MIN
