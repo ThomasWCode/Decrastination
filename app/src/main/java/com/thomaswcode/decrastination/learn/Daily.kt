@@ -167,7 +167,12 @@ class DailyReceiver : BroadcastReceiver() {
                 // Noted first, so setting the alarms again doesn't bring this one back.
                 graph.runtime.update { it.copy(dailyRanAt = it.dailyRanAt + (action to graph.clock.now())) }
                 when (action) {
-                    Daily.ACTION_BRIEFING -> Briefing.run(context)
+                    Daily.ACTION_BRIEFING -> {
+                        Briefing.run(context)
+                        // Felix's notes and reminders kept as long as they're wanted (8a), each morning: not the briefing's
+                        // failure, so not one that runs it again.
+                        runCatching { graph.conversation.pruneFelix() }.onFailure { Log.w(AppGraph.TAG, "Pruning Felix's notes and reminders failed", it) }
+                    }
                     Daily.ACTION_CHECK_IN -> AppGraph.get(context).conversation.remindCheckIn()
                     // As a job: a model call can outlast what a receiver is let run.
                     Daily.ACTION_REVIEW -> ReviewWorker.enqueue(context, ifDue = true)

@@ -12,6 +12,8 @@ import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.MessageKind
 import com.thomaswcode.decrastination.core.Note
 import com.thomaswcode.decrastination.core.Notes
+import com.thomaswcode.decrastination.core.OwnTask
+import com.thomaswcode.decrastination.core.OwnTaskRules
 import com.thomaswcode.decrastination.core.Reminder
 import com.thomaswcode.decrastination.core.Reminders
 import com.thomaswcode.decrastination.core.Source
@@ -277,6 +279,29 @@ class NotesAndRemindersTest {
         val asked = felix.server.takeRequest().body.readUtf8()
         assertTrue("Notes on it: show the working" in asked, asked)
         assertTrue("Their reminder for this slot, sent at its start, so not to say again: “bring the form”" in asked, asked)
+    }
+
+    @Test
+    fun `the morning's prune keeps what an Undo can still bring back, a deleted own task's notes with it, and lets go of the rest`() = runBlocking {
+        val own = OwnTaskRules.create(OwnTask(title = "Poster"), "p", now)
+        stores.tasks.update { it.copy(tasks = listOf(sheet, own)) }
+        asked("note the poster: A3", answer("Noted.", notes = listOf("""{"taskId":"${own.id}","text":"A3"}""")))
+        // Deleted from the chat: its act keeps the task, and its note waits with it.
+        asked("delete the poster", answer("Deleted.", actions = listOf("""{"type":"delete","taskId":"${own.id}","stepIndex":-1,"setting":"","value":""}""")))
+        assertTrue(stores.tasks.value.tasks.none { it.id == own.id })
+        stores.felix.update { s ->
+            s.copy(
+                notes = s.notes + Note("gone", "deleted on its sheet", now, By.You, taskId = sheet.id, deletedAt = now),
+                reminders = listOf(at("old", now - 40 * 24 * 60 * MIN).copy(sentAt = now - 31 * 24 * 60 * MIN), at("let go", now + MIN).copy(cancelledAt = now), at("to come", now + 60 * MIN)),
+            )
+        }
+        conversation.pruneFelix(now)
+        assertEquals(listOf(own.id), stores.felix.value.notes.map { it.taskId })
+        assertEquals(listOf("to come"), stores.felix.value.reminders.map { it.text })
+        // The delete's message out of the window: nothing brings the task back, so its note goes too.
+        stores.chat.update { it.copy(messages = emptyList()) }
+        conversation.pruneFelix(now)
+        assertTrue(stores.felix.value.notes.isEmpty())
     }
 
     @Test
