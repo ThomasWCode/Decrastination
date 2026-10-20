@@ -37,7 +37,7 @@ It stays reported until an address is read again, the browser is blocked outrigh
 4. While today's work isn't done, blocking is strict (`Reason.TodayUndone`).
 5. Otherwise earned free time is spent while a blocked app is in front; with none left, it's blocked (`Reason.NoFreeTime`).
 
-**Today's work isn't done** (BL-01) while today's bucket holds pieces (`Plan.pressure`), or while a slot missed today has gone to tomorrow, until today's working hours end (BL-11, `Focus.missedKeepsPressure`). Tomorrow's work alone never blocks.
+**Today's work isn't done** (BL-01) while today's bucket holds pieces (`Plan.pressure`), or while a slot missed today has gone to tomorrow, until today's working hours end (BL-11, `Focus.missedKeepsPressure`). Tomorrow's work alone never blocks. A missed slot whose task has since finished went to no day: once the plan's made without it, it keeps nothing on (`SlotState.reconciled`).
 A piece you move yourself (a time, a day or a start you give its task) is recorded moved and its miss forgotten, so moving work doesn't keep the evening blocked the way letting it lapse does.
 
 From a PC, `force-block` makes blocking hours apply for up to two hours whatever the time, for testing (`ProtectionState.forceActiveUntil`); it can only tighten.
