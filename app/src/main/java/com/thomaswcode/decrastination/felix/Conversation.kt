@@ -1247,7 +1247,9 @@ class Conversation(
         if (given.isEmpty()) return emptyList()
         var edits = emptyList<MemoryEdit>()
         val listed = tasks.value.tasks.filter { it.isOpen && !it.hidden }.associate { it.id to it.title }
-        memory.update { state -> Memories.edit(state, given, clock.now(), clock.zone(), listed).also { edits = it.second }.first }
+        // What's run out let go of first, so it can't take a rule's place or push out a fact that lasts.
+        val now = clock.now()
+        memory.update { state -> Memories.edit(expired(state, now), given, now, clock.zone(), listed).also { edits = it.second }.first }
         return edits
     }
 

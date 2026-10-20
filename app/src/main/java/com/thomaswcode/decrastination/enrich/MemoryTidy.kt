@@ -28,8 +28,16 @@ object MemoryTidy {
      */
     fun tidied(fact: Fact): Boolean = fact.until == null && fact.taskId == null
 
-    /** [after], a tidy's facts from those [before] it could rewrite ([tidied]), with the rest of [before] as they were. */
-    fun withExpiring(before: List<Fact>, after: List<Fact>): List<Fact> = (after + before.filterNot(::tidied)).sortedBy { it.at }
+    /**
+     * [after], a tidy's facts from those [before] it could rewrite ([tidied]), with the rest of [before] as they were;
+     * null where one of its topics is one of theirs, which it wasn't shown, as one topic holds one fact.
+     */
+    fun withExpiring(before: List<Fact>, after: List<Fact>): List<Fact>? {
+        val kept = before.filterNot(::tidied)
+        val topics = kept.mapTo(HashSet()) { it.topic.trim().lowercase() }
+        if (after.any { it.topic.trim().lowercase() in topics }) return null
+        return (after + kept).sortedBy { it.at }
+    }
 
     /** The most lines a tidy gives back: two thirds of those it was given, so it makes room. */
     fun maxLines(before: List<Fact>): Int = (before.size * 2 / 3).coerceAtLeast(1)

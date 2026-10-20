@@ -96,12 +96,15 @@ object Memories {
     private val DAY = DateTimeFormatter.ofPattern("EEE d MMM", Locale.UK)
     private val DAY_TIME = DateTimeFormatter.ofPattern("EEE d MMM HH:mm", Locale.UK)
 
-    /** How long a fact or a rule holds, in words (10a): "until Sun 25 Oct", "with “Trip form”", both, or null for as long as it's true. */
-    fun held(until: Long?, task: String?, zone: ZoneId): String? =
-        listOfNotNull(until?.let { "until " + untilLine(it, zone) }, task?.let { "with “$it”" }).joinToString(", ").takeIf { it.isNotEmpty() }
+    /**
+     * How long a fact or a rule holds, in words (10a): "until Sun 25 Oct", "with “Trip form”", both, or null for as long
+     * as it's true; its task by [title] where it's still listed, else as one since deleted (held while its delete can be undone).
+     */
+    fun held(until: Long?, taskId: String?, title: (String) -> String?, zone: ZoneId): String? =
+        listOfNotNull(until?.let { "until " + untilLine(it, zone) }, taskId?.let { id -> title(id)?.let { "with “$it”" } ?: "with a task since deleted" }).joinToString(", ").takeIf { it.isNotEmpty() }
 
     /** What a line of [edit]'s adds of how long it holds: ", until Sun 25 Oct", ", with “Trip form”". */
-    private fun shelf(until: Long?, task: String?, zone: ZoneId): String = held(until, task, zone)?.let { ", $it" } ?: ""
+    private fun shelf(until: Long?, task: String?, zone: ZoneId): String = held(until, task, { it }, zone)?.let { ", $it" } ?: ""
 
     /**
      * [state] without what's run out at [now] (10a): a fact or a rule past its until; a fact with a task a
@@ -116,7 +119,8 @@ object Memories {
             if (f.until != null && f.until <= now) return false
             val id = f.taskId ?: return true
             val task = tasks[id] ?: return id in held || !TaskItem.goneSince(id, f.at, readAt)
-            return task.isOpen || (task.doneAt ?: now) + TASK_KEEP_MS > now
+            // A task closed with no time it was done at (a count missed) goes by when it was last seen.
+            return task.isOpen || (task.doneAt ?: task.lastSeenAt) + TASK_KEEP_MS > now
         }
         val facts = state.facts.filter(::lasts)
         val rules = state.rules.filter { it.until == null || it.until > now }

@@ -19,7 +19,7 @@ data class ChatState(
     /** His state between looks (LR-03): his next check, what he wrote ahead, what waits to be asked, the check-in's answers so far. */
     val felix: FelixState = FelixState(),
     /** The shape this is in ([com.thomaswcode.decrastination.data.Migration]): raised with each change of it. */
-    val version: Int = 5,
+    val version: Int = 6,
 ) {
     /**
      * Your newest message still waiting for his answer: a message of his written since, unasked, doesn't
@@ -112,7 +112,7 @@ data class WebSource(val title: String, val url: String)
 data class ChatArchive(
     val messages: List<ChatMessage> = emptyList(),
     /** The shape this is in ([com.thomaswcode.decrastination.data.Migration]): raised with each change of it. */
-    val version: Int = 4,
+    val version: Int = 5,
 )
 
 /** The conversation read as a thread. Pure. */
