@@ -125,10 +125,11 @@ object ChatPrompts {
     private const val NO_RESEARCH = "6. research is always an empty string: you can't look things up."
 
     /**
-     * Reading a task's whole text (D-93), its text in the context being cut short ([BRIEF_TEXT]):
-     * asked for in the answer, and answered again with it ([turns]).
+     * What he can ask for before answering (8c): a task's whole text (D-93), its text in the context being cut
+     * short ([BRIEF_TEXT]); the week's numbers ([ASK_STATS], G6); the calendar past the fortnight
+     * ([ASK_CALENDAR], G7). Asked for in the answer, and answered again with them ([turns]).
      */
-    private const val READ = "7. Read a task in full (details): where you need more of a task's own text than the list shows (it says how much was left out), give its id, up to three, reply only that you're reading it, and change nothing: you'll be asked again with the whole text, to answer and act on. Not for the task a message is about, whose text comes whole; most messages need none, and details is then an empty list."
+    private const val READ = "7. Ask for more before answering (details), where your answer needs what the context doesn't give: a task's id, up to three, for its whole text (to quote it or answer from it: each task's line says how long its text is and what comes with it, and the texts listed are cut short); stats, for the week's numbers (this week so far and last week: time worked, slots kept and missed, work finished and deadlines met, by subject), for a message about how a week went; calendar, for the four weeks after the fortnight, or calendar:YYYY-MM for a month (calendar:2026-12), for anything after the fortnight's events listed. Then reply only that you're looking, and change nothing: you'll be asked again with what they bring, to answer and act on. Never a text for the task a message is about, which comes whole; most messages need none, and details is then an empty list."
 
     /**
      * A reminder (Stage 8a, Q9: B): its words theirs, at a time, at their next slot on a task, or a while before a
