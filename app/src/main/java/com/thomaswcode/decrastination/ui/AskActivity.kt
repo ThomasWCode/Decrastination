@@ -1154,7 +1154,12 @@ private fun Acts(graph: AppGraph, message: ChatMessage, live: Boolean) {
     val felix by graph.stores.felix.state.collectAsStateWithLifecycle()
     // Today's kept pieces (G1), as the log changes, and the day.
     val log by graph.log.state.collectAsStateWithLifecycle()
-    val today = graph.focus.today()
+    val today by produceState(graph.focus.today()) {
+        while (true) {
+            delay((value.plusDays(1).atStartOfDay(graph.clock.zone()).toInstant().toEpochMilli() - graph.clock.now()).coerceAtLeast(1_000L))
+            value = graph.focus.today()
+        }
+    }
     val kept = remember(log, today) { graph.conversation.keptAt() }
     val scope = rememberCoroutineScope()
     var said by remember(message.id) { mutableStateOf<String?>(null) }

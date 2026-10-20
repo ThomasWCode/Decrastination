@@ -12,6 +12,7 @@ import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.SourceValues
 import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.core.Status
+import com.thomaswcode.decrastination.core.SubStep
 import com.thomaswcode.decrastination.core.TaskItem
 import kotlin.test.AfterTest
 import kotlin.test.Test
@@ -180,6 +181,33 @@ class GapsTest {
         val again = stores.log.value.slots.last { it.key == key && it.outcome.kept }
         assertEquals(listOf(was.workedMin, if (was.photo) 1 else 0), listOf(again.workedMin, if (again.photo) 1 else 0))
         assertEquals(was.earned, again.earned)
+    }
+
+    @Test
+    fun `an unkeep's Undo of a step's last sitting counts its step's other sitting once`() = runBlocking {
+        val stepped = sheet.copy(sourceEffortMin = 120, subSteps = listOf(SubStep("Write it up", 120)))
+        stores.tasks.update { it.copy(tasks = listOf(stepped)) }
+        val pieces = felix.planning.plan().chunksOf(stepped.id)
+        assertTrue(pieces.size >= 2 && pieces.any { it.key == "${stepped.id}#0" }, pieces.map { it.key }.toString())
+        // The last sitting kept from Day, ten minutes more: the step's other sitting counted in with it.
+        assertTrue(felix.focusKeep("${stepped.id}#0", extraMin = 10))
+        val worked = stores.tasks.value.tasks.single().workedMin
+        val was = stores.log.value.slots.last { it.key == "${stepped.id}#0" && it.outcome.kept }.workedMin
+        val taken = asked("actually I haven't written it up", answer("Taken back.", listOf(action("unkeepPiece", stepped.id, "${stepped.id}#0"))))
+        assertNull(conversation.undoAct(taken.id, 0))
+        assertEquals(worked, stores.tasks.value.tasks.single().workedMin)
+        assertEquals(was, stores.log.value.slots.last { it.key == "${stepped.id}#0" && it.outcome.kept }.workedMin)
+    }
+
+    @Test
+    fun `kept today names each key's newest record, the one his unkeep takes back`() = runBlocking {
+        val long = sheet.copy(sourceEffortMin = 120)
+        stores.tasks.update { it.copy(tasks = listOf(long)) }
+        val key = felix.planning.plan().todaySlots.mapNotNull { it.chunk }.first { it.taskId == long.id }.key
+        assertTrue(felix.focusKeep(key))
+        felix.clock.time = now + 60_000L
+        assertTrue(felix.focusKeep(key))
+        assertEquals(listOf(now + 60_000L), conversation.keptToday().map { it.at })
     }
 
     @Test
