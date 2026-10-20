@@ -170,6 +170,27 @@ class GapsTest {
     }
 
     @Test
+    fun `his unkeep of the piece that finished one of yours opens it again, and not one finished another way since`() = runBlocking {
+        val own = OwnTaskRules.create(OwnTask(title = "Poster"), "p", now)
+        stores.tasks.update { it.copy(tasks = listOf(own)) }
+        val key = felix.planning.plan().ordered.first { it.taskId == own.id }.key
+        // Kept from Day, its last piece finishing it (the app's finish of your own, here by hand).
+        assertTrue(felix.focusKeep(key))
+        stores.tasks.update { s -> s.copy(tasks = s.tasks.map { it.copy(status = Status.Done, doneAt = now) }) }
+        val taken = asked("actually I haven't finished the poster", answer("Taken back.", listOf(action("unkeepPiece", own.id, key))))
+        val back = stores.tasks.value.tasks.single()
+        assertTrue(back.isOpen && back.workedMin == 0, back.toString())
+        assertTrue(stores.log.value.slots.none { it.key == key && it.outcome.kept })
+        assertTrue(canUndo(taken, 0))
+        // Kept again, then finished another way a while after: his unkeep leaves it finished, and the record kept.
+        assertTrue(felix.focusKeep(key))
+        stores.tasks.update { s -> s.copy(tasks = s.tasks.map { it.copy(status = Status.Done, doneAt = now + 10 * 60_000L) }) }
+        asked("no, I haven't", answer("Taken back.", listOf(action("unkeepPiece", own.id, key))))
+        assertFalse(stores.tasks.value.tasks.single().isOpen)
+        assertTrue(stores.log.value.slots.any { it.key == key && it.outcome.kept })
+    }
+
+    @Test
     fun `an unkeep's Undo keeps the piece again as it was kept, with its extra minutes and its photo`() = runBlocking {
         stores.tasks.update { it.copy(tasks = listOf(sheet)) }
         val key = felix.planning.plan().todaySlots.mapNotNull { it.chunk }.single { it.taskId == sheet.id }.key
