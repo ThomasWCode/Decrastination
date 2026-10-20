@@ -63,7 +63,8 @@
                     }
                 ]
             },
-            "draftedAt": 1792279500000
+            "draftedAt": 1792279500000,
+            "draftFor": 1792279800000
         },
         {
             "id": "rem-form",
@@ -81,7 +82,8 @@
             "doneAt": null,
             "cancelledAt": null,
             "draft": null,
-            "draftedAt": null
+            "draftedAt": null,
+            "draftFor": null
         },
         {
             "id": "rem-print",
@@ -99,7 +101,8 @@
             "doneAt": 1792264260000,
             "cancelledAt": null,
             "draft": null,
-            "draftedAt": null
+            "draftedAt": null,
+            "draftFor": null
         },
         {
             "id": "rem-bus",
@@ -117,7 +120,8 @@
             "doneAt": null,
             "cancelledAt": 1792262040000,
             "draft": null,
-            "draftedAt": null
+            "draftedAt": null,
+            "draftFor": null
         }
     ],
     "version": 1

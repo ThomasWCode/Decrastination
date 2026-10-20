@@ -27,10 +27,14 @@ data class Reminder(
     val doneAt: Long? = null,
     /** Cancelled from the chat, or let go: kept, never delivered, till its act can no longer be undone; Undo clears it. */
     val cancelledAt: Long? = null,
-    /** His words for it, written ahead, and when. */
+    /** His words for it, written ahead, when, and for the moment they were written for: another moment's aren't sent. */
     val draft: FelixAnswer? = null,
     val draftedAt: Long? = null,
-)
+    val draftFor: Long? = null,
+) {
+    /** As it is, its words for before let go: moved, snoozed, sent or cancelled, it's another moment's. */
+    fun undrafted(): Reminder = copy(draft = null, draftedAt = null, draftFor = null)
+}
 
 /**
  * When a reminder comes ([kind]): [at] a moment (At); at the start of its task's first work slot from
@@ -95,7 +99,7 @@ object Reminders {
     fun nextWake(reminders: List<Reminder>, plan: Plan, tasks: Map<String, TaskItem>, now: Long, ahead: Long): Long? =
         reminders.filter(::pending).flatMap { r ->
             val at = moment(r, plan, tasks, now) ?: return@flatMap emptyList()
-            listOfNotNull(at, (at - ahead).takeIf { it > now && !drafted(r, at, ahead) })
+            listOfNotNull(at, (at - ahead).takeIf { it > now && !drafted(r, at) })
         }.minOrNull()
 
     /** Those of [reminders] still to come whose moment has come by [now], each with it, the earliest first. */
@@ -112,14 +116,13 @@ object Reminders {
     }
 
     /** [r] snoozed [minutes] from [now]: it comes again then, its draft for before let go. */
-    fun snoozed(r: Reminder, now: Long, minutes: Int): Reminder = r.copy(snoozedTo = now + minutes * 60_000L, draft = null, draftedAt = null)
+    fun snoozed(r: Reminder, now: Long, minutes: Int): Reminder = r.copy(snoozedTo = now + minutes * 60_000L).undrafted()
 
     /**
-     * Whether [r]'s draft is written for its [moment]: drafted within [ahead] of it at most (a move or a
-     * snooze lets it go; a slot moved later makes it another moment's).
+     * Whether [r]'s draft is written for its [moment]: the moment it was written for ([Reminder.draftFor]), so one
+     * whose slot or deadline has moved since, even within the window, is written for again.
      */
-    fun drafted(r: Reminder, moment: Long, ahead: Long): Boolean =
-        r.draft != null && r.draftedAt != null && r.draftedAt >= moment - ahead
+    fun drafted(r: Reminder, moment: Long): Boolean = r.draft != null && r.draftFor == moment
 
     private val WHEN = DateTimeFormatter.ofPattern("EEE d MMM HH:mm", Locale.UK)
 

@@ -87,9 +87,12 @@ class ChatRemindersTest {
             reminder(text = "no deadline", taskId = essay.id, whenIs = "beforeDue", minutesBefore = 30),
             reminder(text = "too long before", taskId = sheet.id, whenIs = "beforeDue", minutesBefore = 8 * 24 * 60),
             reminder(text = "next year", date = "2027-10-21", time = "19:00"),
+            // Due at 09:00 on Thursday, a week before is gone by.
+            reminder(text = "a week before", taskId = sheet.id, whenIs = "beforeDue", minutesBefore = 7 * 24 * 60),
         )))
         assertTrue(reading.reminders.isEmpty())
-        assertEquals(9, reading.leftOut.size, reading.leftOut.joinToString("\n"))
+        assertEquals(10, reading.leftOut.size, reading.leftOut.joinToString("\n"))
+        assertTrue(reading.leftOut.last().contains("which has gone by"))
         assertTrue(reading.leftOut.first().contains("16:00, which has gone by"))
         // A minute behind, as his reading of now may be, is now.
         assertEquals(1, parse(answer(listOf(reminder(time = "16:59")))).reminders.size)
