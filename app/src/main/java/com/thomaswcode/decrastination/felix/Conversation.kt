@@ -926,7 +926,7 @@ class Conversation(
                     val record = log.value.slots.lastOrNull { it.key == a.value && it.outcome.kept && it.at == at } ?: return@mapNotNull null
                     // What it was kept with, so its Undo keeps it so again: its extra minutes, its photo, its source's word.
                     val with = "${(record.workedMin - record.plannedMin).coerceAtLeast(0)}|${record.photo}|${record.earned}"
-                    Act("Not kept after all: ${record.label}", a, before = with).takeIf { focus.unkeepSlot(record.key, at) }
+                    Act("Not kept after all: ${record.label}", a, before = with, after = record.at.toString()).takeIf { focus.unkeepSlot(record.key, at) }
                 }
             }
         }
@@ -1051,9 +1051,13 @@ class Conversation(
                 back
             }
             // A piece kept (G1): the record it made taken back, while it's the piece's newest; one taken back, kept again as the chat keeps one.
-            ChatAction.Type.KeepPiece -> act.after?.toLongOrNull()?.let { at -> keptAt()[a.value] == at && focus.unkeepSlot(a.value.orEmpty(), at, reopen = true) } == true
+            ChatAction.Type.KeepPiece -> act.after?.toLongOrNull()?.let { at ->
+                // Open again only where this keep finished it: one finished another way since stays so.
+                val reopen = task != null && ChatActs.finishedBy(task, at)
+                keptAt()[a.value] == at && (task?.isOpen == true || reopen) && focus.unkeepSlot(a.value.orEmpty(), at, reopen = reopen)
+            } == true
             // As it was kept: its extra minutes, its photo, its source's word ([Act.before]).
-            ChatAction.Type.UnkeepPiece -> keptToday().none { it.key == a.value } && task?.isOpen == true && act.before.orEmpty().split('|').let { w ->
+            ChatAction.Type.UnkeepPiece -> act.after?.toLongOrNull()?.let { removed -> keptAt()[a.value]?.let { it < removed } ?: true } == true && task?.isOpen == true && act.before.orEmpty().split('|').let { w ->
                 val photo = w.getOrNull(1) == "true"
                 focus.keepSlot(a.value.orEmpty(), extraMin = w.getOrNull(0)?.toIntOrNull() ?: 0, photo = photo, verified = !photo && w.getOrNull(2) == "true")
             }

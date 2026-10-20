@@ -1152,9 +1152,10 @@ private fun Acts(graph: AppGraph, message: ChatMessage, live: Boolean) {
     val settings by graph.settings.state.collectAsStateWithLifecycle()
     val chat by graph.chat.state.collectAsStateWithLifecycle()
     val felix by graph.stores.felix.state.collectAsStateWithLifecycle()
-    // Today's kept pieces (G1), as the log changes.
+    // Today's kept pieces (G1), as the log changes, and the day.
     val log by graph.log.state.collectAsStateWithLifecycle()
-    val kept = remember(log) { graph.conversation.keptAt() }
+    val today = graph.focus.today()
+    val kept = remember(log, today) { graph.conversation.keptAt() }
     val scope = rememberCoroutineScope()
     var said by remember(message.id) { mutableStateOf<String?>(null) }
     val quiet = MaterialTheme.colorScheme.onSurfaceVariant
