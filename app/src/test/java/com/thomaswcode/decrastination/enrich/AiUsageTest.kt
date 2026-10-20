@@ -8,6 +8,7 @@ import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.core.TaskItem
+import com.thomaswcode.decrastination.core.yours
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -94,7 +95,7 @@ class AiUsageTest {
         assertEquals(1, ModelAlerts.unshown(standing, mapOf("gmail:t1" to "older")).size)
         // Done, or its plan kept since, or said not to be a task, not shown anywhere: nothing standing.
         assertEquals(0, ModelAlerts.standing(listOf(dropped.copy(status = Status.Done))).size)
-        assertEquals(0, ModelAlerts.standing(listOf(dropped.copy(userNotATask = true))).size)
+        assertEquals(0, ModelAlerts.standing(listOf(dropped.yours(notATask = true))).size)
         assertEquals(0, ModelAlerts.standing(listOf(dropped.copy(enrichment = dropped.enrichment!!.copy(dropped = null)))).size)
     }
 

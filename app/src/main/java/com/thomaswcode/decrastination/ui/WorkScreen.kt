@@ -15,7 +15,6 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -38,6 +37,7 @@ import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
+import com.thomaswcode.decrastination.core.longFinished
 import com.thomaswcode.decrastination.data.SourceStatus
 import com.thomaswcode.decrastination.sources.gmail.GmailThreads
 import kotlinx.coroutines.delay
@@ -56,6 +56,8 @@ fun WorkScreen(graph: AppGraph, activity: Activity, opening: String? = null, onO
     val state by graph.tasks.state.collectAsStateWithLifecycle()
     val settings by graph.settings.state.collectAsStateWithLifecycle()
     val runtime by graph.runtime.state.collectAsStateWithLifecycle()
+    val model by graph.stores.model.state.collectAsStateWithLifecycle()
+    val protection by graph.stores.protection.state.collectAsStateWithLifecycle()
     val instructions by graph.instructions.state.collectAsStateWithLifecycle()
     val calendar by graph.sync.calendarState.collectAsStateWithLifecycle()
     // The sections move with the clock as well as the data: deadlines pass, and midnight.
@@ -79,7 +81,7 @@ fun WorkScreen(graph: AppGraph, activity: Activity, opening: String? = null, onO
     val byId = state.tasks.associateBy { it.id }
     // What the plan leaves out, as the plan has it now.
     val plan = androidx.compose.runtime.remember(state, settings, now, instructions, calendar) { graph.planning.plan(state, settings, now) }
-    val trouble = trouble(state, runtime, now)
+    val trouble = trouble(state, runtime, protection, now)
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     var said by rememberSaveable { mutableStateOf<String?>(null) }
     // A photo of homework read into tasks (NF-01): the app's, so a turn of the phone or leaving Work loses nothing.
@@ -107,7 +109,7 @@ fun WorkScreen(graph: AppGraph, activity: Activity, opening: String? = null, onO
         LazyColumn(Modifier.fillMaxWidth(), contentPadding = PaddingValues(bottom = 200.dp)) {
             item(key = "hint") { Hint(graph, "work", "Work is what: every task, by when it's due or by subject. Day is when: today's slots, on the first tab.") }
             // Claude's key stopped working while it's on, and what else makes the plan less than all there is (IMP-P1-007).
-            runtime.aiUsage.keyProblem?.takeIf { settings.aiEnabled && settings.aiKeyActive }?.let { problem ->
+            model.aiUsage.keyProblem?.takeIf { settings.aiEnabled && settings.aiKeyActive }?.let { problem ->
                 item(key = "key") { KeyProblemCard(problem) { activity.startActivity(android.content.Intent(activity, SetupActivity::class.java)) } }
             }
             if (trouble.isNotEmpty()) {
@@ -177,13 +179,14 @@ fun WorkScreen(graph: AppGraph, activity: Activity, opening: String? = null, onO
             }
             // Tasks you've said aren't, or are the same work as another (DX-15): kept, off the plan, and
             // here to check (taken back in Ask Claude).
-            val notTasks = state.tasks.filter { it.isOpen && (it.userNotATask || it.userSameAs != null) && (only == null || it.source.name == only) }.sortedWith(compareBy(nullsLast()) { it.dueAt })
+            val notTasks = state.tasks.filter { it.isOpen && (it.mine.notATask != null || it.mine.sameAs?.value != null) && (only == null || it.source.name == only) }.sortedWith(compareBy(nullsLast()) { it.dueAt })
             if (notTasks.isNotEmpty()) {
                 val expanded = NOT_TASKS !in folded
                 item(key = NOT_TASKS) { FoldingHeading("Hidden, as you said", expanded, { toggle(NOT_TASKS) }, summary = "${notTasks.size}") }
                 if (expanded) itemsIndexed(notTasks, key = { _, it -> "not-" + it.id }) { index, task -> TaskTile(task, index, notTasks.size, now, zone, byId) { sheetFor = task.id } }
             }
-            val finished = state.tasks.filter { !it.isOpen && !it.hidden && (only == null || it.source.name == only) }.sortedByDescending { it.doneAt ?: it.lastSeenAt }
+            // Lately: a fortnight's, as before your own were kept for good; older ones are records alone (C-Q3).
+            val finished = state.tasks.filter { !it.isOpen && !it.hidden && !it.longFinished(now) && (only == null || it.source.name == only) }.sortedByDescending { it.doneAt ?: it.lastSeenAt }
             if (finished.isNotEmpty()) {
                 val expanded = FINISHED !in folded
                 item(key = FINISHED) { FoldingHeading("Finished or missed lately", expanded, { toggle(FINISHED) }, summary = "${finished.size}") }
@@ -258,12 +261,12 @@ private fun TaskTile(task: TaskItem, index: Int, count: Int, now: Long, zone: ja
     val hiddenUntil = task.availableFrom?.takeIf { it > now }
     // Claude's plan for it not used (out of range, or not adding up): said, so it can be checked.
     val dropped = Enrichments.current(task)?.dropped?.takeIf { task.isOpen }
-    val waits = task.isOpen && task.userAfter != null && InstructionRules.waiting(task, byId)
+    val waits = task.isOpen && task.mine.after?.value != null && InstructionRules.waiting(task, byId)
     // A start you gave (or one of your own's): planned from then on, not hidden.
-    val startsAt = (if (task.source == Source.Own) task.notBefore else task.userFrom)?.takeIf { task.isOpen && it > now }
+    val startsAt = (if (task.source == Source.Own) task.notBefore else task.mine.from?.value)?.takeIf { task.isOpen && it > now }
     val steps = task.subSteps.takeIf { it.isNotEmpty() && task.isOpen }
     // The same work as another, which is planned (DX-15).
-    val sameAs = task.userSameAs?.let { byId[it] }
+    val sameAs = task.mine.sameAs?.value?.let { byId[it] }
     ListTile(index, count, onClick = onClick) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(
@@ -290,16 +293,16 @@ private fun TaskTile(task: TaskItem, index: Int, count: Int, now: Long, zone: ja
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
-        val tags = dropped != null || hiddenUntil != null || waits || task.userDueAt != null || task.userEffortMin != null || startsAt != null || steps != null || task.userNotATask || sameAs != null
+        val tags = dropped != null || hiddenUntil != null || waits || task.mine.dueAt?.value != null || task.mine.minutes?.minutes != null || startsAt != null || steps != null || task.mine.notATask != null || sameAs != null
         if (task.isOpen && tags) {
             FlowRow(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                if (task.userNotATask) Pill("Not a task")
+                if (task.mine.notATask != null) Pill("Not a task")
                 sameAs?.let { Pill("Same as “${it.title}”") }
                 if (dropped != null) WarningPill("Claude's plan dropped")
                 if (hiddenUntil != null) Pill("Hidden till ${Format.at(hiddenUntil, now, zone)}")
                 if (waits) Pill("Waits for another task")
-                if (task.userDueAt != null) Pill("Due date yours")
-                if (task.userEffortMin != null) Pill(if (task.pacedMinutes) "Minutes at your pace" else "Minutes yours")
+                if (task.mine.dueAt?.value != null) Pill("Due date yours")
+                if (task.mine.minutes?.minutes != null) Pill(if (task.pacedMinutes) "Minutes at your pace" else "Minutes yours")
                 if (startsAt != null) Pill("Starts ${Format.at(startsAt, now, zone)}")
                 steps?.let { s -> Pill("${s.count { it.done }}/${s.size} steps") }
             }

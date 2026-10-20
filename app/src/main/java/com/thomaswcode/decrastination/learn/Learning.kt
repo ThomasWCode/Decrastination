@@ -11,8 +11,8 @@ import com.thomaswcode.decrastination.core.SettingsLimits
 import com.thomaswcode.decrastination.core.WallClock
 import com.thomaswcode.decrastination.data.ActivityLog
 import com.thomaswcode.decrastination.data.JsonStore
+import com.thomaswcode.decrastination.data.LearningState
 import com.thomaswcode.decrastination.data.MemoryTidyRecord
-import com.thomaswcode.decrastination.data.RuntimeState
 import com.thomaswcode.decrastination.data.WeeklyReview
 import com.thomaswcode.decrastination.enrich.Called
 import com.thomaswcode.decrastination.enrich.ClaudeReviewer
@@ -39,7 +39,7 @@ import java.time.LocalDate
  */
 class Learning(
     private val log: JsonStore<ActivityLog>,
-    private val runtime: JsonStore<RuntimeState>,
+    private val learning: JsonStore<LearningState>,
     private val settings: JsonStore<Settings>,
     private val memory: JsonStore<MemoryState>,
     /** The chat, read for what the week's review and summary are told of it. */
@@ -79,12 +79,12 @@ class Learning(
         val generation = resets()
         val learned = Calibrator.learn(
             log.value,
-            runtime.value.calibration,
+            learning.value.calibration,
             today = focus.today(now),
             zone = zone,
             defaultMargin = settings.value.marginDays,
         )
-        runtime.update { it.copy(calibration = learned.calibration) }
+        learning.update { it.copy(calibration = learned.calibration) }
         val findings = learned.changes + listOfNotNull(Days.capacityAdvice(log.value.days, focus.today(now)))
         val model = runCatching { modelReview(now, week, generation) }
             .onFailure { Log.w(AppGraph.TAG, "The model's weekly review failed; the rules' stands", it) }
@@ -125,7 +125,7 @@ class Learning(
     private suspend fun modelReview(now: Long, week: String, generation: Int): Outcome {
         val reviewer = gateway.client(ModelEffort.Job.Review)?.let { ClaudeReviewer(it, profile = profile(clock.now(), memory.value)) } ?: return Outcome(why = because(ModelHold.Off))
         val zone = clock.zone()
-        val input = ReviewInput.describe(log.value, runtime.value.calibration, settings.value, now, zone, week, chat.value.messages)
+        val input = ReviewInput.describe(log.value, learning.value.calibration, settings.value, now, zone, week, chat.value.messages)
         // Its room taken with every other model call's, then sent (AC-05). A failure is recorded
         // (Setup shows it; the model rests), then the rules' review stands.
         val current = gateway.client(ModelEffort.Job.Review)?.let { ClaudeReviewer(it, profile = profile(clock.now(), memory.value)) } ?: return Outcome(why = because(ModelHold.Off))
@@ -180,7 +180,7 @@ class Learning(
      */
     suspend fun forgetCalibration(key: String) {
         val now = clock.now()
-        runtime.update { s -> s.calibration.let { c -> s.copy(calibration = c.copy(multipliers = c.multipliers - key, timed = c.timed - key, forgotten = c.forgotten + (key to now))) } }
+        learning.update { s -> s.calibration.let { c -> s.copy(calibration = c.copy(multipliers = c.multipliers - key, timed = c.timed - key, forgotten = c.forgotten + (key to now))) } }
     }
 
     /**

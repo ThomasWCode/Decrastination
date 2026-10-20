@@ -5,12 +5,14 @@ package com.thomaswcode.decrastination.core
  *
  * - A task the source lists is updated from it, keeping this app's own bookkeeping (first seen,
  *   minutes worked, sub-steps, estimates, the enrichment, laid over the fresh values again). One the
- *   source lists as finished becomes [Status.Done].
+ *   source lists as finished becomes [Status.Done]. One finished a fortnight ago and finished still is
+ *   left as it was kept ([trimmed]), only seen again.
  * - An open task the source no longer lists is done: handed in, ticked, or an email unstarred
  *   (docs/spec/sources.md; DX-03: the star is the state, so an email's blocks or its reading still to come
  *   don't keep it). A [TaskItem.derived] one (the Anki quota) was missed instead: only its counts
  *   can say it's done.
  * - A done task the source lists again is open again: a hand-in undone, an email starred again.
+ *   One whose reading was let go ([trimmed]) is laid as one seen for the first time, and read again.
  *   A derived task once done stays done, even if the counts waver (Anki's learning cards come
  *   back within minutes); so does one done by its tick ([TaskItem.tickDone]: feedback you've read,
  *   which Teams goes on listing).
@@ -30,8 +32,12 @@ object Merge {
         val missed: List<TaskItem>,
     )
 
-    /** How long a finished task stays in the list after it was last seen or finished. */
+    /** How long a finished task stays in the list after it was last seen or finished; and keeps its text and reading ([trimmed], C-Q3). */
     const val KEEP_FINISHED_MS = 14 * 24 * 3_600_000L
+
+    /** [tasks], each finished more than [KEEP_FINISHED_MS] ago as it's kept ([TaskItem.trimmed]), the rest as they are. */
+    fun trimmed(tasks: List<TaskItem>, now: Long, bulky: Set<String>): List<TaskItem> =
+        tasks.map { if (it.longFinished(now)) it.trimmed(bulky) else it }
 
     fun apply(tasks: List<TaskItem>, source: Source, fetched: List<Fetched>, now: Long): Result {
         val byId = tasks.associateBy { it.id }
@@ -81,6 +87,12 @@ object Merge {
                 fresh[id] = task
                 continue
             }
+            // Finished a fortnight ago and finished still: kept as its record ([trimmed], C-Q3), what its
+            // reading laid as it was laid, only seen again.
+            if (old.longFinished(now) && (f.done || ((old.derived || old.tickDone) && old.status == Status.Done))) {
+                fresh[id] = old.copy(status = Status.Done, lastSeenAt = now)
+                continue
+            }
             // The source's steps, unless they're the same as before: then the ones kept here, with
             // what a session ticked off, until the source's counts catch up (Anki's cards).
             val sourceSteps = f.subSteps?.takeIf { new -> new.map { it.title } != old.subSteps.map { it.title } }
@@ -114,6 +126,7 @@ object Merge {
                 // A new round of it: the last round's minutes count towards neither this one's
                 // completion record nor what's left of it.
                 // Its steps too: none of the new round is done yet, by a session, a photo or by hand.
+                // Laid again as open: one whose reading was let go ([trimmed]) as one seen for the first time.
                 else -> updated.copy(
                     status = Status.Open,
                     doneAt = null,
@@ -122,7 +135,7 @@ object Merge {
                     stepsWorkedMin = 0,
                     firstProgress = f.sourceProgress,
                     subSteps = updated.subSteps.map { it.copy(done = false, byHand = false, timedMin = 0) },
-                ).also { reopened += it }
+                ).enriched().also { reopened += it }
             }
             fresh[id] = next
         }
@@ -133,7 +146,7 @@ object Merge {
             when {
                 // Done, kept a fortnight; and the same work as one still open for as long as that is,
                 // as its minutes worked count for it (DX-15).
-                old.status != Status.Open -> old.takeIf { now - (old.doneAt ?: old.lastSeenAt) < KEEP_FINISHED_MS || old.userSameAs?.let { byId[it]?.isOpen } == true }
+                old.status != Status.Open -> old.takeIf { now - (old.doneAt ?: old.lastSeenAt) < KEEP_FINISHED_MS || old.mine.sameAs?.value?.let { byId[it]?.isOpen } == true }
                 old.derived -> old.copy(status = Status.Missed).also { missed += it }
                 else -> old.copy(status = Status.Done, doneAt = now).also { completed += completion(old, it) }
             }

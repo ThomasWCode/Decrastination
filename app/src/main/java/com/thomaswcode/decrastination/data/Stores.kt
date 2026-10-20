@@ -25,27 +25,41 @@ class Stores(
     /** Fields moved between stores, run before any is read ([Move]). */
     moves: List<Move> = MOVES,
 ) {
-    init {
-        moves.forEach { it.run(dir) }
-    }
+    /** What the moves found they couldn't read, set aside before they wrote over it: said at this start as a store's file is ([problems]). */
+    private val movedAside: List<JsonStore.Unreadable> = moves.flatMap { it.run(dir) }
 
-    private fun <T> store(name: String, serializer: kotlinx.serialization.KSerializer<T>, default: () -> T, unreadable: () -> T = default, migrations: List<Migration> = emptyList()) =
-        JsonStore(File(dir, name), serializer, default, unreadable = unreadable, clock = clock, migrations = migrations)
+    private fun <T> store(name: String, serializer: kotlinx.serialization.KSerializer<T>, default: () -> T, unreadable: () -> T = default, migrations: List<Migration> = emptyList(), onWrite: (T) -> T = { it }) =
+        JsonStore(File(dir, name), serializer, default, unreadable = unreadable, clock = clock, migrations = migrations, onWrite = onWrite)
 
-    val tasks = store("tasks.json", TaskState.serializer(), ::TaskState)
+    val tasks = store("tasks.json", TaskState.serializer(), ::TaskState, migrations = listOf(TasksMigration.TASKS), onWrite = TaskState::withStepIds)
 
     // A file that can't be read at all starts armed while the device admin is on, as only arming
     // turns it on: a bad file never disarms protection (IMP-P1-003).
     val settings = store("settings.json", Settings.serializer(), ::Settings, unreadable = { Settings(armed = armedIfUnreadable()) })
     val secrets = SecretStore(File(dir, "secrets.bin"), cipher, clock)
-    val runtime = store("runtime.json", RuntimeState.serializer(), ::RuntimeState, migrations = listOf(ChatMigration.RUNTIME))
+    val runtime = store("runtime.json", RuntimeState.serializer(), ::RuntimeState, migrations = listOf(ChatMigration.RUNTIME, RuntimeSplit.RUNTIME))
+
+    /** What the blocker keeps from moment to moment, changing every half minute (Focus's). */
+    val session = store("session.json", SessionState.serializer(), ::SessionState)
+
+    /** Protection's own state: changes waiting, the override, what's armed, the watchdog's finding. */
+    val protection = store("protection.json", ProtectionState.serializer(), ::ProtectionState)
+
+    /** What calling Claude keeps: the month's cost, the last calls, what was refused, the micro-plans. */
+    val model = store("model.json", ModelState.serializer(), ::ModelState)
+
+    /** What the Anki watch keeps as AnkiDroid is used. */
+    val anki = store("anki.json", AnkiState.serializer(), ::AnkiState)
+
+    /** What the app has learned about how long things take you: the calibration. */
+    val learning = store("learning.json", LearningState.serializer(), ::LearningState)
     val log = store("log.json", ActivityLog.serializer(), ::ActivityLog, migrations = listOf(ChatMigration.LOG))
 
     /** Your instructions about tasks, events and days, and what Claude read them as. */
-    val instructions = store("instructions.json", InstructionState.serializer(), ::InstructionState)
+    val instructions = store("instructions.json", InstructionState.serializer(), ::InstructionState, migrations = listOf(TasksMigration.INSTRUCTIONS), onWrite = InstructionState::withStepIds)
 
     /** Your chat with Felix, the live window of it: every message of his and yours, what became of his cards, and his state. */
-    val chat = store("chat.json", ChatState.serializer(), ::ChatState, migrations = listOf(ChatMigration.CHAT))
+    val chat = store("chat.json", ChatState.serializer(), ::ChatState, migrations = listOf(ChatMigration.CHAT, TasksMigration.CHAT))
 
     /**
      * The chat's messages past its window, oldest first, a month a file: each read only when it's wanted
@@ -59,7 +73,7 @@ class Stores(
      * start ([problems]), and what could be kept of it goes into its months; let go once its copy is made.
      */
     private val unsplit: JsonStore.Unreadable? = File(dir, ChatArchiveStore.NAME).takeIf { it.isFile }?.let { file ->
-        val whole = JsonStore(file, ChatArchive.serializer(), ::ChatArchive, clock = clock)
+        val whole = JsonStore(file, ChatArchive.serializer(), ::ChatArchive, clock = clock, migrations = ChatArchiveStore.MIGRATIONS)
         runBlocking {
             chatArchive.add(whole.value.messages)
             // Let go only where it was read whole, or read and set aside with what was kept written: not where
@@ -75,10 +89,10 @@ class Stores(
     /** What Felix remembers (AI-21): facts, and standing instructions. */
     val memory = store("memory.json", MemoryState.serializer(), ::MemoryState)
 
-    /** The versions of its events the app has written to calendars, so a copy of one is known. */
-    val calendarVersions = store("calendar.json", CalendarVersions.serializer(), ::CalendarVersions)
+    /** The versions of its events the app has written to calendars, so a copy of one is known; what it wrote where; your answers about events. */
+    val calendar = store("calendar.json", CalendarState.serializer(), ::CalendarState, migrations = listOf(RuntimeSplit.CALENDAR))
 
-    private val json = listOf(tasks, settings, runtime, log, instructions, chat, school, memory, calendarVersions)
+    private val json = listOf(tasks, settings, runtime, session, protection, model, anki, learning, log, instructions, chat, school, memory, calendar)
 
     /**
      * A store, what a backup keeps of it ([backup]; none, and [why] says why), and the resets that
@@ -96,21 +110,26 @@ class Stores(
         Kept("tasks.json", backup = "your own tasks, which no source gives back"),
         Kept("settings.json", backup = "the settings as asked for, a change still waiting among them", resets = setOf(Reset.Memories)),
         Kept("secrets.bin", backup = null, why = "passwords and keys stay on this phone (D-78)"),
-        Kept("runtime.json", backup = "the calibration, your calendar answers, Claude's month and today's slots", resets = setOf(Reset.Stats, Reset.Calibration)),
+        Kept("runtime.json", backup = null, why = "the notifications held, the daily runs and the files found unreadable are this phone's"),
+        Kept("session.json", backup = "today's slots"),
+        Kept("protection.json", backup = null, why = "protection is this phone's; a change still waiting goes with the settings"),
+        Kept("model.json", backup = "Claude's month"),
+        Kept("anki.json", backup = null, why = "what AnkiDroid showed this phone"),
+        Kept("learning.json", backup = "the calibration", resets = setOf(Reset.Stats, Reset.Calibration)),
         Kept("log.json", backup = "all of it", resets = setOf(Reset.Stats)),
         Kept("instructions.json", backup = "the instructions in use", resets = setOf(Reset.Instructions)),
         Kept("chat.json", backup = "all of it, Felix's state with it", resets = setOf(Reset.Chat)),
         Kept("chat-archive.json", backup = "the chat's earlier messages, while the backup has room for them, the oldest left out first", resets = setOf(Reset.Chat)),
         Kept("school.json", backup = "all of it"),
         Kept("memory.json", backup = "all of it", resets = setOf(Reset.Memories)),
-        Kept("calendar.json", backup = null, why = "the versions this phone wrote to its calendars mean nothing to another's"),
+        Kept("calendar.json", backup = "your answers about events (what this phone wrote to its calendars means nothing to another's)"),
     )
 
     /** Each JSON store's shape now, by file: what a backup's parts from it are brought to ([Backups.decode]). */
-    val shapes: Map<String, Shape> get() = json.associate { it.name to Shape(it.version, it.migrations) } + (chatArchive.name to Shape(chatArchive.version, emptyList()))
+    val shapes: Map<String, Shape> get() = json.associate { it.name to Shape(it.version, it.migrations) } + (chatArchive.name to Shape(chatArchive.version, ChatArchiveStore.MIGRATIONS))
 
     /** Files that couldn't be read whole at this start, and where each was set aside (the archive's months, read later: [ChatArchiveStore.onProblem]). */
-    val problems: List<JsonStore.Unreadable> get() = json.mapNotNull { it.problem } + chatArchive.problems + listOfNotNull(unsplit, secrets.problem)
+    val problems: List<JsonStore.Unreadable> get() = json.mapNotNull { it.problem } + movedAside + chatArchive.problems + listOfNotNull(unsplit, secrets.problem)
 
     /** What was kept of each file that didn't read whole written over it, now its problem is on record ([JsonStore.keepRecovered]). */
     suspend fun keepRecovered() {
@@ -146,8 +165,12 @@ class Stores(
     }
 
     companion object {
-        /** The moves between stores this build makes at start: Felix's records and state into the chat (4.0.0); the chat's archive into its months (4.0.4). */
-        val MOVES: List<Move> = listOf(ChatMigration.MOVE, ChatArchiveStore.SPLIT)
+        /**
+         * The moves between stores this build makes at start: Felix's records and state into the chat (4.0.0); the
+         * chat's archive into its months (4.0.4); your instructions' step ids onto the tasks they're laid on, and
+         * Felix's instructions marked from the chat, and runtime.json split by owner (4.0.13).
+         */
+        val MOVES: List<Move> = listOf(ChatMigration.MOVE, ChatArchiveStore.SPLIT, TasksMigration.MOVE, RuntimeSplit.MOVE)
 
         /** How long the file an older shape came from is kept after its migration. */
         const val OLD_SHAPE_KEPT_MS = 7 * 24 * 3_600_000L

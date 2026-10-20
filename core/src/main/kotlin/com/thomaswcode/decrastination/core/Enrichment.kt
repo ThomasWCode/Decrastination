@@ -71,33 +71,45 @@ data class Enrichment(
 fun TaskItem.enriched(): TaskItem = enrichedOnly().let { t ->
     // Your instructions over both: the deadline you gave; your name for it and your steps (16 Oct),
     // their ticks kept by name. A start you gave isn't laid here: the planner places the work from
-    // then on ([TaskItem.userFrom]), so it's seen coming.
+    // then on ([TaskItem.mine.from?.value]), so it's seen coming.
     t.copy(
-        dueAt = userDueAt ?: t.dueAt,
-        title = userTitle ?: sourceValues?.title ?: t.title,
-        subSteps = userSteps?.let { mine -> carryMarks(mine.map { it.asSubStep() }, t.subSteps) } ?: t.subSteps,
+        dueAt = mine.dueAt?.value ?: t.dueAt,
+        title = mine.title?.value ?: sourceValues?.title ?: t.title,
+        subSteps = mine.steps?.let { yours -> carryMarks(yours.steps.map { it.asSubStep(yours.by) }, t.subSteps) } ?: t.subSteps,
     )
 }
 
 /**
- * [steps], each with the marks (done, and ticked by hand) of the one of [before] at the same place
- * among its name's (the second "Apply" the second's): two steps of one name aren't both ticked by
- * one, and a mark stays on the step it was made on.
+ * [steps], each with the marks (done, and ticked by hand) of the one of [before] with its id; one
+ * whose id isn't there (a reading made again, a step new to the list) takes those of the one at the
+ * same place among its name's, of those no id matched (the second "Apply" the second's): two steps
+ * of one name aren't both ticked by one, and a mark stays on the step it was made on. Matched so, one
+ * with no id of its own (a reading's steps come without) takes that one's: the same step, read again.
  */
 fun carryMarks(steps: List<SubStep>, before: List<SubStep>): List<SubStep> {
-    val was = before.groupBy { it.title }
+    val byId = before.filter { it.id.isNotEmpty() }.associateBy { it.id }
+    val matched = steps.mapNotNull { s -> s.id.takeIf { it.isNotEmpty() && it in byId } }.toSet()
+    val was = before.filter { it.id !in matched }.groupBy { it.title }
     val seen = HashMap<String, Int>()
     return steps.map { step ->
-        val place = seen.merge(step.title, 1, Int::plus)!! - 1
-        val old = was[step.title]?.getOrNull(place)
-        if (old?.done == true) step.copy(done = true, byHand = old.byHand, timedMin = old.timedMin) else step
+        val old = byId[step.id]?.takeIf { step.id in matched } ?: run {
+            val place = seen.merge(step.title, 1, Int::plus)!! - 1
+            was[step.title]?.getOrNull(place)
+        }
+        val same = if (step.id.isEmpty() && old != null) step.copy(id = old.id) else step
+        if (old?.done == true) same.copy(done = true, byHand = old.byHand, timedMin = old.timedMin) else same
     }
 }
 
-/** A step you gave as the task keeps it: where it's done as the planner reads it (PL-15). */
-fun OwnStep.asSubStep(): SubStep = SubStep(title.trim().take(OwnTaskRules.MAX_TITLE), minutes, from = from, dueAt = dueAt, where = Where.of(where)?.name?.lowercase())
+/** A step you or Felix ([by]) gave, as the task keeps it: where it's done as the planner reads it (PL-15), with its id. */
+fun OwnStep.asSubStep(by: By = By.You): SubStep =
+    SubStep(title.trim().take(OwnTaskRules.MAX_TITLE), minutes, from = from, dueAt = dueAt, where = Where.of(where)?.name?.lowercase(), id = id, origin = if (by == By.Felix) StepOrigin.Felix else StepOrigin.Yours)
 
 private fun TaskItem.enrichedOnly(): TaskItem {
+    // Finished, its reading let go a fortnight on ([trimmed], C-Q3): what the reading laid stays on its
+    // record (its estimate, its steps and their ticks), as nothing plans it. Listed again as open, the
+    // merge lays it as one seen for the first time.
+    if (enrichment == null && !isOpen) return this
     // Always from what the source said, so a changed enrichment doesn't leave the last one's dates.
     val base = sourceValues ?: SourceValues(kind, dueAt, availableFrom)
     // None, or one of content that has since changed (new instructions, a new email in the thread):
@@ -138,7 +150,8 @@ private fun TaskItem.enrichedOnly(): TaskItem {
         availableFrom = if (source == Source.Gmail && e.kind != null) from else listOfNotNull(base.availableFrom, from).maxOrNull(),
         // This enrichment's estimate, or none: an older one's doesn't outlive it.
         aiEffortMin = e.effortMin,
-        subSteps = if (subSteps.isEmpty()) e.subSteps.orEmpty() else subSteps,
+        // Laid as the reading's: the rules' where they made it ([StepOrigin.Rules]), else Claude's.
+        subSteps = if (subSteps.isEmpty()) e.subSteps.orEmpty().map { if (it.origin == StepOrigin.Rules) it else it.copy(origin = StepOrigin.Reading) } else subSteps,
     )
 }
 
@@ -150,7 +163,7 @@ private fun TaskItem.enrichedOnly(): TaskItem {
 /** This task with its enrichment forgotten, and the steps it gave with it (the source's own stay): to be asked about afresh. */
 fun TaskItem.withoutEnrichment(): TaskItem = copy(enrichment = null, subSteps = if (stepsFromEnrichment()) emptyList() else subSteps)
 
-private fun TaskItem.stepsFromEnrichment(): Boolean = subSteps.isNotEmpty() && enrichment?.subSteps?.map { it.title } == subSteps.map { it.title }
+private fun TaskItem.stepsFromEnrichment(): Boolean = subSteps.isNotEmpty() && subSteps.all { it.origin == StepOrigin.Reading || it.origin == StepOrigin.Rules }
 
 /**
  * Whether some of the steps its enrichment gave are done: newer prompts could give its work as other
@@ -188,7 +201,7 @@ object Enrichments {
     fun jobFor(task: TaskItem, textRead: (TaskItem) -> Boolean): Job? = when {
         !task.isOpen || task.derived -> null
         // You've said it isn't a task: nothing to read it for. Nor feedback to read (NF-06): ten minutes, as it is.
-        task.userNotATask || task.tickDone -> null
+        task.mine.notATask != null || task.tickDone -> null
         // Its text not read yet (more new emails than one read takes), or not as far as reads now
         // go (cut by an older, lower limit): asked about once it is.
         task.source == Source.Gmail && !textRead(task) -> null

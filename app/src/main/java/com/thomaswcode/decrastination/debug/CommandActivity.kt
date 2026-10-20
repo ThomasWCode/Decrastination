@@ -10,14 +10,16 @@ import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.block.FocusService
 import com.thomaswcode.decrastination.block.TeamsAutoSync
 import com.thomaswcode.decrastination.core.About
+import com.thomaswcode.decrastination.core.AnkiRules
 import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.ChatHistory
 import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.Fact
+import com.thomaswcode.decrastination.core.FelixSettings
 import com.thomaswcode.decrastination.core.Instruction
-import com.thomaswcode.decrastination.core.InstructionStatus
 import com.thomaswcode.decrastination.core.InstructionRules
+import com.thomaswcode.decrastination.core.InstructionStatus
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.OwnTask
 import com.thomaswcode.decrastination.core.OwnTaskRules
@@ -26,14 +28,8 @@ import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.withoutEnrichment
 import com.thomaswcode.decrastination.data.Secret
-import com.thomaswcode.decrastination.core.FelixSettings
-import com.thomaswcode.decrastination.felix.ChatPrompts
-import com.thomaswcode.decrastination.felix.ChatReader
-import com.thomaswcode.decrastination.felix.Conversation
 import com.thomaswcode.decrastination.enrich.ClaudeEnricher
 import com.thomaswcode.decrastination.enrich.ClaudeReviewer
-import com.thomaswcode.decrastination.felix.FelixCaller
-import com.thomaswcode.decrastination.felix.FelixPrompts
 import com.thomaswcode.decrastination.enrich.InstructionReader
 import com.thomaswcode.decrastination.enrich.MemoryTidier
 import com.thomaswcode.decrastination.enrich.MicroPlanner
@@ -45,14 +41,17 @@ import com.thomaswcode.decrastination.enrich.PhotoTaskReader
 import com.thomaswcode.decrastination.enrich.ReadingPrompts
 import com.thomaswcode.decrastination.enrich.SummaryWriter
 import com.thomaswcode.decrastination.enrich.WebResearcher
+import com.thomaswcode.decrastination.felix.ChatPrompts
+import com.thomaswcode.decrastination.felix.ChatReader
+import com.thomaswcode.decrastination.felix.Conversation
+import com.thomaswcode.decrastination.felix.FelixCaller
+import com.thomaswcode.decrastination.felix.FelixPrompts
 import com.thomaswcode.decrastination.learn.Assessment
 import com.thomaswcode.decrastination.learn.Briefing
 import com.thomaswcode.decrastination.learn.CalendarTime
 import com.thomaswcode.decrastination.learn.EventJudge
-import com.thomaswcode.decrastination.learn.Review
 import com.thomaswcode.decrastination.protect.Watchdog
 import com.thomaswcode.decrastination.sources.anki.AnkiProvider
-import com.thomaswcode.decrastination.core.AnkiRules
 import com.thomaswcode.decrastination.sources.gmail.GmailThreads
 import com.thomaswcode.decrastination.sync.SyncWorker
 import com.thomaswcode.decrastination.ui.OpenTaskActivity
@@ -170,7 +169,7 @@ class CommandActivity : Activity() {
                     val slots = bucket.slots.joinToString { "${it.kind} ${hm(it.start)}-${hm(it.end)} ${it.key}${if (it.pinned) " pinned" else ""}" }
                     Log.i(TAG, "plan ${bucket.date}: ${bucket.plannedMin} of ${bucket.capacityMin} min; slots [$slots]; unslotted ${bucket.unslotted.map { it.key }}")
                 }
-                Log.i(TAG, "plan next ${plan.next?.key}, then ${plan.then?.key}; kept ${graph.runtime.value.slots}; ${graph.runtime.value.calendarWritten.size} written to calendar ${graph.settings.value.calendarWriteId}")
+                Log.i(TAG, "plan next ${plan.next?.key}, then ${plan.then?.key}; kept ${graph.stores.session.value.slots}; ${graph.stores.calendar.value.calendarWritten.size} written to calendar ${graph.settings.value.calendarWriteId}")
             }
             // The app's events in the calendar written to, with their reminders (NF-07: it sets none,
             // but a calendar's own default notifications could be laid on them as they sync).
@@ -252,14 +251,14 @@ class CommandActivity : Activity() {
                 // Testing at night: blocking hours apply for this many minutes (tightening only).
                 val minutes = intent.getIntExtra("minutes", 10).coerceIn(0, 120)
                 val until = graph.clock.now() + minutes * 60_000L
-                graph.runtime.update { it.copy(forceActiveUntil = if (minutes == 0) null else until) }
+                graph.stores.protection.update { it.copy(forceActiveUntil = if (minutes == 0) null else until) }
                 Log.i(TAG, "Blocking hours apply for $minutes min; verdict now ${graph.focus.verdict()}")
             }
             // Test hooks, from a PC only: arming and disarming at once, as no screen can.
             "test-arm" -> graph.settings.update { it.copy(armed = true) }.also { Log.i(TAG, "Armed (test)") }
             "test-disarm" -> {
                 graph.settings.update { it.copy(armed = false) }
-                graph.runtime.update { it.copy(pending = it.pending.filterNot { change -> change.field == "armed" }) }
+                graph.stores.protection.update { it.copy(pending = it.pending.filterNot { change -> change.field == "armed" }) }
                 Log.i(TAG, "Disarmed (test)")
             }
             "remove-admin" -> {
@@ -274,9 +273,9 @@ class CommandActivity : Activity() {
                 graph.log.update { log ->
                     log.copy(reviews = log.reviews.filter { r -> java.time.Instant.ofEpochMilli(r.at).atZone(zone).let { it.dayOfWeek == java.time.DayOfWeek.SUNDAY && it.hour * 60 + it.minute >= graph.settings.value.checkInMin } })
                 }
-                graph.runtime.update {
+                graph.runtime.update { it.copy(teamsAuto = TeamsAutoSync.State()) }
+                graph.stores.protection.update {
                     it.copy(
-                        teamsAuto = TeamsAutoSync.State(),
                         forceActiveUntil = null,
                         protection = it.protection.copy(stoppedSince = null, restartedAt = null, restartTries = 0),
                     )
@@ -295,7 +294,7 @@ class CommandActivity : Activity() {
             "offer-teams-sync" -> sendBroadcast(Intent(FocusService.ACTION_OFFER_TEAMS_SYNC).setPackage(packageName)).also { Log.i(TAG, "Asked the focus service to offer a Teams sync") }
             "protection" -> {
                 Watchdog.check(this, repair = intent.getBooleanExtra("repair", false))
-                Log.i(TAG, "Protection: ${Watchdog.report(this)}; problems ${graph.runtime.value.protection.problems}")
+                Log.i(TAG, "Protection: ${Watchdog.report(this)}; problems ${graph.stores.protection.value.protection.problems}")
             }
             "enrich" -> {
                 graph.readings.enrichNow()
@@ -318,7 +317,7 @@ class CommandActivity : Activity() {
             "backup-now" -> Log.i(TAG, "Backup: ${if (graph.backups.backupNow()) "written" else "not written"}; last ${graph.runtime.value.lastBackupAt}")
             "review" -> {
                 graph.learning.review(ifDue = false)
-                Log.i(TAG, "Review: ${graph.log.value.reviews.lastOrNull()?.lines}; calibration ${graph.runtime.value.calibration}")
+                Log.i(TAG, "Review: ${graph.log.value.reviews.lastOrNull()?.lines}; calibration ${graph.stores.learning.value.calibration}")
             }
             "calendar" -> {
                 // --ez again true: the questions still unanswered are asked again (their notifications
@@ -326,7 +325,7 @@ class CommandActivity : Activity() {
                 if (intent.getBooleanExtra("again", false)) {
                     graph.sync.refreshCalendar()
                     val keys = graph.sync.calendarTime.toAsk.map(EventJudge::key).toSet()
-                    graph.runtime.update { it.copy(eventsAsked = it.eventsAsked - keys) }
+                    graph.stores.calendar.update { it.copy(eventsAsked = it.eventsAsked - keys) }
                     Log.i(TAG, "Asking again about ${keys.size}: ${keys.joinToString()}")
                 }
                 graph.sync.refreshCalendar()
@@ -608,7 +607,7 @@ class CommandActivity : Activity() {
             graph.secrets.put(reset + secrets)
             // A new Claude key, as from Setup: the last one's failure and alert aren't its.
             if (Secret.AnthropicApiKey in secrets) {
-                graph.runtime.update { it.copy(aiUsage = it.aiUsage.newKey()) }
+                graph.stores.model.update { it.copy(aiUsage = it.aiUsage.newKey()) }
                 ModelAlerts.keyFixed(this)
             }
             Log.i(TAG, "Imported ${secrets.keys.joinToString()}; ignored ${(values.keys - secrets.keys.map { it.name }.toSet()).size} unknown")

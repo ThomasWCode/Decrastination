@@ -2,13 +2,14 @@ package com.thomaswcode.decrastination.data
 
 import com.thomaswcode.decrastination.core.Calibration
 import com.thomaswcode.decrastination.core.Change
-import com.thomaswcode.decrastination.core.ChatArchive
 import com.thomaswcode.decrastination.core.ChangeType
+import com.thomaswcode.decrastination.core.ChatArchive
 import com.thomaswcode.decrastination.core.Instruction
+import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.InstructionState
 import com.thomaswcode.decrastination.core.InstructionStatus
-import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.Kind
+import com.thomaswcode.decrastination.core.Mine
 import com.thomaswcode.decrastination.core.OwnTaskRules
 import com.thomaswcode.decrastination.core.SchoolCalendar
 import com.thomaswcode.decrastination.core.Settings
@@ -16,8 +17,8 @@ import com.thomaswcode.decrastination.core.SettingsLimits
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.enriched
-import com.thomaswcode.decrastination.learn.Calibrator
 import com.thomaswcode.decrastination.enrich.AiUsage
+import com.thomaswcode.decrastination.learn.Calibrator
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import kotlinx.serialization.Serializable
@@ -144,8 +145,8 @@ object Backups {
         "settings" to ("settings.json" to null), "log" to ("log.json" to null), "school" to ("school.json" to null),
         "memory" to ("memory.json" to null), "chat" to ("chat.json" to null), "archive" to ("chat-archive.json" to null),
         "instructions" to ("instructions.json" to "instructions"), "ownTasks" to ("tasks.json" to "tasks"),
-        "calibration" to ("runtime.json" to "calibration"), "eventAnswers" to ("runtime.json" to "eventAnswers"),
-        "aiUsage" to ("runtime.json" to "aiUsage"), "slots" to ("runtime.json" to "slots"),
+        "calibration" to ("learning.json" to "calibration"), "eventAnswers" to ("calendar.json" to "eventAnswers"),
+        "aiUsage" to ("model.json" to "aiUsage"), "slots" to ("session.json" to "slots"),
     )
 
     /**
@@ -177,6 +178,11 @@ object Backups {
         val given = (backup["versions"] as? JsonObject).orEmpty()
         // Moves between stores first, as at a start ([Stores.MOVES]): the chat's says its new version.
         val versions = given + listOfNotNull(moved(backup, out, (given["chat.json"] as? JsonPrimitive)?.intOrNull, shapes["chat.json"])?.let { "chat.json" to JsonPrimitive(it) })
+        // The tasks' ([TasksMigration.MOVE]): its instructions marked Felix's where the chat it carries holds their cards.
+        val instructionsAt = (given["instructions.json"] as? JsonPrimitive)?.intOrNull ?: (backup["instructions"] as? JsonObject)?.let(Migration::versionOf) ?: 1
+        if (instructionsAt < 2 && (shapes["instructions.json"]?.version ?: 1) >= 2) {
+            (backup["instructions"] as? JsonArray)?.let { out["instructions"] = TasksMigration.backedUp(it, listOfNotNull(backup["chat"] as? JsonObject, backup["archive"] as? JsonObject)) }
+        }
         for ((file, shape) in shapes) {
             val said = (versions[file] as? JsonPrimitive)?.intOrNull
             // A store the backup carries (PARTS) that's newer than this build's isn't read, wherever its parts
@@ -192,7 +198,8 @@ object Backups {
                 out[whole] = Migration.upgrade(JsonObject(part + (Migration.VERSION to JsonPrimitive(at))), shape.version, shape.migrations) ?: return null
             } else {
                 // The fields a store's parts are, put together as its file would hold them, and taken out again.
-                val held = JsonObject(parts.associate { PARTS.getValue(it).second!! to backup.getValue(it) } + (Migration.VERSION to JsonPrimitive(said ?: 1)))
+                // As the moves left them ([out]).
+                val held = JsonObject(parts.associate { PARTS.getValue(it).second!! to out.getValue(it) } + (Migration.VERSION to JsonPrimitive(said ?: 1)))
                 val brought = Migration.upgrade(held, shape.version, shape.migrations) ?: return null
                 parts.forEach { part -> brought[PARTS.getValue(part).second!!]?.let { out[part] = it } }
             }
@@ -275,7 +282,7 @@ object Backups {
         val minutes = 0..OwnTaskRules.MINUTES.last
         return task.source == Source.Own && task.id == TaskItem.id(Source.Own, task.sourceId) &&
             task.workedMin in minutes && task.photoMin in minutes && task.stepsWorkedMin in minutes &&
-            (task.userEffortMin == null || task.userEffortMin in OwnTaskRules.MINUTES) &&
+            (task.mine.minutes?.minutes == null || task.mine.minutes?.minutes in OwnTaskRules.MINUTES) &&
             (task.peakEffortMin == null || task.peakEffortMin in minutes) &&
             // No source to say how far it is: yours are done or not, never part way. Nor to hide it
             // till a day: a start of yours is when its work is planned from (notBefore).
@@ -298,7 +305,7 @@ object Backups {
      * instructions here. One here wins: it's the newer.
      */
     fun restoredOwnTasks(backed: List<TaskItem>, here: List<TaskItem>): List<TaskItem> = backed.filter { b -> here.none { it.id == b.id } }
-        .map { it.copy(userNotATask = false, userFrom = null, userAfter = null, userDueAt = null, userEffortMin = null, userEffortPacedFrom = null, userEffortPacedHash = null, userOnDay = null, userAtTime = null, userSteps = null, userTitle = null).enriched() }
+        .map { it.copy(mine = Mine(sameAs = it.mine.sameAs)).enriched() }
 
     /** The most changes one instruction holds, as Claude's reading of one is held to. */
     private const val MAX_CHANGES = 40

@@ -9,7 +9,7 @@ import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.WallClock
 import com.thomaswcode.decrastination.data.CallRecord
 import com.thomaswcode.decrastination.data.JsonStore
-import com.thomaswcode.decrastination.data.RuntimeState
+import com.thomaswcode.decrastination.data.ModelState
 import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.data.plusCall
 import java.util.concurrent.atomic.AtomicInteger
@@ -37,7 +37,7 @@ class ModelGateway(
     private val settings: JsonStore<Settings>,
     /** The API key kept in the secrets, or null. */
     private val savedKey: () -> String?,
-    private val runtime: JsonStore<RuntimeState>,
+    private val model: JsonStore<ModelState>,
     private val tasks: JsonStore<TaskState>,
     private val clock: WallClock,
     private val alerts: Alerts,
@@ -105,7 +105,7 @@ class ModelGateway(
         // Rested by what failed (AC-04): busy, the server, a timeout, no network, a request it won't take.
         val kind = Failures.classify(error)
         var rest = 0L
-        val after = runtime.update { state ->
+        val after = model.update { state ->
             val usage = state.aiUsage.forCall(month)
             // Older than a call that's gone through since: no rest comes of it.
             rest = if (usage.stale(at)) 0L else usage.restAfter(kind, at, Failures.retryAfterMs(error))
@@ -130,7 +130,7 @@ class ModelGateway(
     fun reconcileAlerts() {
         scope.launch {
             runCatching {
-                alertKeyProblem(runtime.value.aiUsage)
+                alertKeyProblem(model.value.aiUsage)
                 droppedAlerts(tasks.value.tasks)
             }.onFailure { Log.w(TAG, "Showing waiting alerts failed", it) }
         }
@@ -144,8 +144,8 @@ class ModelGateway(
     suspend fun droppedAlerts(all: List<TaskItem>) {
         val standing = ModelAlerts.standing(all)
         alerts.withdrawExcept(standing.mapTo(HashSet()) { it.first.id })
-        val shown = ModelAlerts.unshown(standing, runtime.value.droppedAlerted).filter { (task, why) -> alerts.dropped(task, why) }
-        runtime.update { state ->
+        val shown = ModelAlerts.unshown(standing, model.value.droppedAlerted).filter { (task, why) -> alerts.dropped(task, why) }
+        model.update { state ->
             val kept = state.droppedAlerted.filterKeys { id -> standing.any { it.first.id == id } }
             state.copy(droppedAlerted = kept + shown.mapNotNull { (task, _) -> task.enrichment?.let { task.id to it.inputHash } })
         }
@@ -157,7 +157,7 @@ class ModelGateway(
      */
     private suspend fun alertKeyProblem(usage: AiUsage) {
         val problem = usage.keyProblem?.takeIf { usage.keyAlertDue } ?: return
-        if (alerts.keyProblem(problem)) runtime.update { it.copy(aiUsage = it.aiUsage.alerted(problem)) }
+        if (alerts.keyProblem(problem)) model.update { it.copy(aiUsage = it.aiUsage.alerted(problem)) }
     }
 
     /**
@@ -167,7 +167,7 @@ class ModelGateway(
      */
     suspend fun worked(costUsd: Double, refused: Boolean, month: String, at: Long) {
         var mended = false
-        runtime.update { state ->
+        model.update { state ->
             val before = state.aiUsage.forCall(month)
             val after = before.record(costUsd, refused, at)
             mended = before.keyProblem != null && after.keyProblem == null
@@ -182,7 +182,7 @@ class ModelGateway(
      */
     fun hold(interactive: Boolean = false): ModelHold? {
         val s = settings.value
-        return ModelHold.of(claudeKey() != null, runtime.value.aiUsage, clock.now(), clock.zone(), s.aiMonthlyCapUsd, interactive)
+        return ModelHold.of(claudeKey() != null, model.value.aiUsage, clock.now(), clock.zone(), s.aiMonthlyCapUsd, interactive)
     }
 
     /**
@@ -204,7 +204,7 @@ class ModelGateway(
     suspend fun <T> call(interactive: Boolean, task: TaskItem? = null, record: ModelCalls.OnRecord<T>? = null, cost: (T) -> Pair<Double, Boolean>, send: suspend (at: Long) -> T): Called<T> {
         val held = calling.withLock {
             val hold = hold(interactive) ?: ModelHold.Capped.takeIf {
-                !runtime.value.aiUsage.forMonth(AiUsage.monthOf(clock.now(), clock.zone())).allows(settings.value.aiMonthlyCapUsd, inFlight.get())
+                !model.value.aiUsage.forMonth(AiUsage.monthOf(clock.now(), clock.zone())).allows(settings.value.aiMonthlyCapUsd, inFlight.get())
             }
             if (hold == null) inFlight.incrementAndGet()
             hold
@@ -241,7 +241,7 @@ class ModelGateway(
             at = at, job = r.job.name, title = r.title?.trim()?.take(MAX_CALL_TITLE), effort = ModelEffort.of(r.job).toString().lowercase(),
             inTokens = usage.inTokens, outTokens = usage.outTokens, cacheRead = usage.cacheRead, latencyMs = clock.now() - at, stop = usage.stop, outcome = outcome, costUsd = usd,
         )
-        runtime.update { it.copy(calls = it.calls.plusCall(call)) }
+        model.update { it.copy(calls = it.calls.plusCall(call)) }
     }
 
     /**
@@ -254,12 +254,12 @@ class ModelGateway(
     /** Why a call waits, in words, by what [hold]s it: an instruction's or a chat message's note. */
     fun because(hold: ModelHold): String = when (hold) {
         ModelHold.Off -> "Waiting for Claude, which is off (Settings)"
-        ModelHold.Resting -> "Waiting for Claude, resting ${ModelHold.restLeftMin(runtime.value.aiUsage, clock.now())} min more after a failed call"
+        ModelHold.Resting -> "Waiting for Claude, resting ${ModelHold.restLeftMin(model.value.aiUsage, clock.now())} min more after a failed call"
         ModelHold.Capped -> "Waiting for Claude: this month's cap is reached"
     }
 
     /** When a failed call is tried again (AC-04): after its rest, or at the next chance where it has none. */
-    fun retryWords(): String = ModelHold.restLeftMin(runtime.value.aiUsage, clock.now()).let { if (it > 0) "it's tried again in $it min" else "it's tried again at the next chance" }
+    fun retryWords(): String = ModelHold.restLeftMin(model.value.aiUsage, clock.now()).let { if (it > 0) "it's tried again in $it min" else "it's tried again at the next chance" }
 
     companion object {
         /**

@@ -22,7 +22,7 @@ An answer about a calendar event makes today's record again with what the day ca
 
 ## Calibration
 
-`Calibration` (`core/Plan.kt`, kept in `RuntimeState.calibration`) is learned by `Calibrator.learn` at each weekly review, and the planner uses it at once:
+`Calibration` (`core/Plan.kt`, kept in `learning.json`, `LearningState.calibration`) is learned by `Calibrator.learn` at each weekly review, and the planner uses it at once:
 - `multipliers`, with `timed`: the pace, per kind and class (`Kind|class`) and per kind (`Kind|`);
 - `marginDays`: a safety margin per kind;
 - `yields`, with `yieldDays`: how much of each kind of day's free time is used (PL-06);
@@ -43,8 +43,8 @@ A completion is timed (`Calibrator.isTimed`) when it has an estimate and kept-sl
 ## What a completion teaches
 
 - **Your own reckoning teaches nothing.** A task you gave minutes (a Minutes change), or one of your own, is recorded `yourEstimate` and left out, answer and all: the pace corrects the app's estimates, not yours.
-- **A total Felix works out at your pace still teaches** (`TaskItem.pacedMinutes`). When he sizes a task's steps to your pace he gives it a new total, marked paced (his answer's `paced`, which the app reads into `Change.pacedFrom` and `Change.pacedHash`, kept on the task as `userEffortPacedFrom` and `userEffortPacedHash`; D-69).
-- It's planned as given, like any minutes of yours, but its completion is measured against the app's estimate it came from (`userEffortPacedFrom`), not against the new total.
+- **A total Felix works out at your pace still teaches** (`TaskItem.pacedMinutes`). When he sizes a task's steps to your pace he gives it a new total, marked paced (his answer's `paced`, which the app reads into `Change.pacedFrom` and `Change.pacedHash`, kept on the task as `mine.minutes.paced`, its `from` and `contentHash`; D-69).
+- It's planned as given, like any minutes of yours, but its completion is measured against the app's estimate it came from (`mine.minutes.paced.from`), not against the new total.
 - It teaches only while the task's content stays as it is when Felix paces it (`TaskItem.pacedTeaches`: its content hash, `Enrichments.inputHash`, unchanged).
 - Read again for newer prompts, or with *Read again with Claude*, its content stays the same, so it still teaches, whatever the new estimate.
 - A change to the task's own text (an assignment's instructions, a new email in its thread), your answers to its question, or a photo of the work changes its content: it then teaches nothing, as the work may be different.

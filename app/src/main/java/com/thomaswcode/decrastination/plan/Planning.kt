@@ -6,6 +6,7 @@ import com.thomaswcode.decrastination.core.Duplicates
 import com.thomaswcode.decrastination.core.Instruction
 import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.InstructionState
+import com.thomaswcode.decrastination.core.Mine
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Planner
 import com.thomaswcode.decrastination.core.SchoolCalendar
@@ -13,18 +14,19 @@ import com.thomaswcode.decrastination.core.SchoolDays
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.SlotKind
 import com.thomaswcode.decrastination.core.TaskItem
-import com.thomaswcode.decrastination.core.TaskOverrides
 import com.thomaswcode.decrastination.core.WallClock
-import com.thomaswcode.decrastination.core.overrides
-import com.thomaswcode.decrastination.core.withOverrides
+import com.thomaswcode.decrastination.core.withMine
 import com.thomaswcode.decrastination.data.ActivityLog
 import com.thomaswcode.decrastination.data.JsonStore
-import com.thomaswcode.decrastination.data.RuntimeState
+import com.thomaswcode.decrastination.data.LearningState
+import com.thomaswcode.decrastination.data.ModelState
+import com.thomaswcode.decrastination.data.SessionState
 import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.enrich.ModelGateway
 import com.thomaswcode.decrastination.enrich.Profile
 import com.thomaswcode.decrastination.learn.Days
 import com.thomaswcode.decrastination.learn.EventJudge
+import kotlinx.coroutines.flow.combine
 import java.time.Instant
 import java.time.ZoneId
 import kotlinx.coroutines.CoroutineScope
@@ -44,7 +46,9 @@ import kotlinx.coroutines.launch
 class Planning(
     private val tasks: JsonStore<TaskState>,
     private val settings: JsonStore<Settings>,
-    private val runtime: JsonStore<RuntimeState>,
+    private val session: JsonStore<SessionState>,
+    private val learning: JsonStore<LearningState>,
+    private val model: JsonStore<ModelState>,
     private val log: JsonStore<ActivityLog>,
     private val instructions: JsonStore<InstructionState>,
     private val school: JsonStore<SchoolCalendar>,
@@ -73,8 +77,8 @@ class Planning(
     fun asPlanned(state: TaskState = tasks.value, applied: List<Instruction> = instructions.value.applied): List<TaskItem> {
         val overrides = InstructionRules.taskOverrides(applied)
         return state.tasks.map { task ->
-            val o = overrides[task.id] ?: TaskOverrides.NONE
-            if (o == task.overrides()) task else task.withOverrides(o)
+            val o = overrides[task.id] ?: Mine.NONE
+            if (o == task.mine) task else task.withMine(o)
         }.let(Duplicates::linksPresent).let(Duplicates::credited)
     }
 
@@ -102,7 +106,7 @@ class Planning(
                 now = now,
                 zone = zone,
                 settings = settings,
-                calibration = runtime.value.calibration,
+                calibration = learning.value.calibration,
                 busy = time.busy,
                 hardBusy = InstructionRules.busy(applied, zone, today, reach),
                 dayLoads = time.dayLoads,
@@ -112,8 +116,8 @@ class Planning(
                 dayKinds = dayKinds,
                 // Today's pieces where the last plan laid them, where that's still free, and those whose
                 // slots went by undone (PL-13).
-                previousSlots = runtime.value.slots.on(today).previous,
-                missedSlots = runtime.value.slots.on(today).missed.map { it.key }.toSet(),
+                previousSlots = session.value.slots.on(today).previous,
+                missedSlots = session.value.slots.on(today).missed.map { it.key }.toSet(),
             ),
         )
     }
@@ -123,7 +127,7 @@ class Planning(
         Days.workedOn(log.value, Instant.ofEpochMilli(now).atZone(zone).toLocalDate().toString()).values.sum()
 
     /** The pieces' first steps and Felix's next message, written after each plan (AC-10, AI-15). */
-    private val ahead: Ahead = Ahead(tasks, settings, runtime, gateway, profile, draftAhead) { watcher.poke() }
+    private val ahead: Ahead = Ahead(tasks, settings, model, gateway, profile, draftAhead) { watcher.poke() }
 
     /**
      * The plan made again as what it depends on changes (PL-13): today's slot starts kept, then the
@@ -137,7 +141,7 @@ class Planning(
             instructions.state,
             calendarChanges,
             school.state,
-            runtime.state.map { it.slots.previous to it.calibration }.distinctUntilChanged(),
+            session.state.combine(learning.state) { s, l -> s.slots.previous to l.calibration }.distinctUntilChanged(),
         ),
         plan = { plan() },
         keep = ::keepSlots,
@@ -158,7 +162,7 @@ class Planning(
         // start is replaced by where this plan moved it, nothing would know it was.
         runCatching { sweep() }.onFailure { Log.w(AppGraph.TAG, "Looking at missed slots failed", it) }
         val starts = made.todaySlots.filter { it.kind == SlotKind.Work }.associate { it.chunk!!.key to it.start }
-        runtime.update { state ->
+        session.update { state ->
             val kept = state.slots.on(made.today).copy(previous = starts).reconciled(made)
             if (kept == state.slots) state else state.copy(slots = kept)
         }

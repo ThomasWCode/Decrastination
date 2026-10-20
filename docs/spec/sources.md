@@ -136,7 +136,7 @@ Made in the app, not read from anywhere (Q28): `Source.Own` ("Yours"), keyed `ow
 - And where it can be done: home or anywhere (PL-15). An event needs its date and time and has no minutes.
 - Kept as a source's values are (`sourceValues`), so instructions lay over it as over any task. A due date, start, minutes, steps or name an instruction gives is made on the task itself (`OwnTaskRules.changed`, `OwnTaskRules.MADE_ON_IT`), as the form would make it.
 - Steps edited in the form are matched to their old steps by place, so a renamed step keeps its tick (UI-15).
-- **Done** when you tap *All of it done*, or once every step is done. It earns no free time of itself; its kept slots earn theirs. *Not done* opens it again; *Delete* removes it. A fortnight after it's done, it goes (`OwnTasks.pruneOwn`).
+- **Done** when you tap *All of it done*, or once every step is done. It earns no free time of itself; its kept slots earn theirs. *Not done* opens it again; *Delete* removes it, and only *Delete* does: a fortnight after it's done, it's kept as its record, its notes let go (`OwnTasks.pruneOwn`, C-Q3).
 - Claude doesn't read it: its minutes and steps are yours, planned as given (readings.md).
 - `tasks/OwnTasks.kt` keeps, finishes, opens again, deletes and lets go of them, its rules `core/OwnTasks.kt`'s; `tasks/OwnTasksTest` drives it on temporary stores.
 
@@ -161,6 +161,7 @@ Made in the app, not read from anywhere (Q28): `Source.Own` ("Yours"), keyed `ow
 - **Listed as finished** (Power Planner at 100 %, a deck studied), an open task is done. **Not listed**, an open task is done: handed in, ticked, unstarred. A derived task (Anki's) is missed instead: only its counts say it's done.
 - **Listed again**, a done task opens again afresh, its minutes worked and its steps' ticks starting from nothing. A derived task once done stays done, as does one done by its tick.
 - A task already finished when first seen isn't added (a derived one is, as done). A finished task is kept 14 days from its finish, or from its last sighting (`Merge.KEEP_FINISHED_MS`), and longer while it's the same work as an open task.
+- A fortnight after it's finished, a task still kept keeps only its record (`Merge.trimmed`, after every merge, C-Q3): its text, reading, answers, photo and an email's text and message ids go; its title, dates, estimates, minutes, steps and their ticks, and your values stay, as the reading laid them, and while its source lists it as finished still, the merge leaves it so. Listed again as open, its text comes back and it's read again, as a task seen for the first time.
 
 Every merge lays the rest over the source's values (`TaskItem.enriched`, `core/Enrichment.kt`):
 - **The reading** (readings.md), always over what the source says now (`sourceValues`), so a new reading leaves none of the last one's dates.
@@ -168,7 +169,7 @@ Every merge lays the rest over the source's values (`TaskItem.enriched`, `core/E
 - Claude's start counts where it's later than the source's (for an email, it replaces the rules' guess), and is dropped if it's after the deadline.
 - The reading gives its estimate, and its steps where the task has none of its own. An email is always Admin.
 - A reading whose task's content has changed (`Enrichments.current` is null) lays nothing: the source's values stand, and the reading's steps go, until it's read again.
-- **Your overrides**, last: your due date, your name for it (the source's kept in `SourceValues.title`) and your steps (`TaskItem.userSteps`), their ticks carried by name (`carryMarks`).
+- **Your overrides**, last: your due date, your name for it (the source's kept in `SourceValues.title`) and your steps (`TaskItem.mine.steps`), their ticks carried by each step's id, or by its name and place for a step new to the list (`carryMarks`).
 - Your other overrides (not a task, a start, after another task, a day, a time, the same as another, your minutes) are kept on the task and read by the planner (planner.md).
 - The estimate in force is yours, else the reading's, else the source's or the rules', else its kind's default (`TaskItem.effortMin`).
 
@@ -177,7 +178,7 @@ Every merge lays the rest over the source's values (`TaskItem.enriched`, `core/E
 `core/Duplicates.kt` finds open tasks from two sources that look like the same work (`Duplicates.candidates`). Never Anki's, nor hidden tasks.
 
 - Alike means the same subject (by Settings' class map, or the same class), due within a day of each other or both undated, and titles sharing at least 60 % of the shorter one's words of three letters or more.
-- Work shows each such pair with *Same?*. Yes makes one the other's same work (a `SameAs` change, `TaskItem.userSameAs`): it's off the plan and the lists, and its minutes worked count for the one kept (`Duplicates.credited`). No keeps the pair from being asked about again (`RuntimeState.notSame`).
+- Work shows each such pair with *Same?*. Yes makes one the other's same work (a `SameAs` change, `TaskItem.mine.sameAs`): it's off the plan and the lists, and its minutes worked count for the one kept (`Duplicates.credited`). No keeps the pair from being asked about again (`RuntimeState.notSame`).
 - Felix is told which tasks look alike, for a `SameAs` you ask him for.
 - A link to a task that's gone is let go at every merge, and the hidden task comes back (`Duplicates.linksPresent`).
 

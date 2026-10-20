@@ -1,0 +1,25 @@
+{
+    "facts": [
+        {
+            "topic": "football",
+            "text": "Training on Tuesdays",
+            "at": 1792083600000
+        },
+        {
+            "topic": "essay",
+            "text": "Two sources are enough",
+            "at": 1792338720000
+        }
+    ],
+    "rules": [
+        {
+            "text": "Be blunter",
+            "at": 1792083600000
+        },
+        {
+            "text": "No messages after 21:30",
+            "at": 1791198000000
+        }
+    ],
+    "version": 1
+}

@@ -7,6 +7,7 @@ import com.thomaswcode.decrastination.block.Focus
 import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.Act
 import com.thomaswcode.decrastination.core.AssessLater
+import com.thomaswcode.decrastination.core.By
 import com.thomaswcode.decrastination.core.ChatAction
 import com.thomaswcode.decrastination.core.ChatActs
 import com.thomaswcode.decrastination.core.ChatMessage
@@ -34,6 +35,7 @@ import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.WallClock
 import com.thomaswcode.decrastination.data.ActivityLog
 import com.thomaswcode.decrastination.data.JsonStore
+import com.thomaswcode.decrastination.data.LearningState
 import com.thomaswcode.decrastination.data.RuntimeState
 import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.enrich.Called
@@ -81,6 +83,7 @@ class Conversation(
     private val tasks: JsonStore<TaskState>,
     private val settings: JsonStore<Settings>,
     private val runtime: JsonStore<RuntimeState>,
+    private val learning: JsonStore<LearningState>,
     private val log: JsonStore<ActivityLog>,
     private val instructions: JsonStore<InstructionState>,
     private val chat: JsonStore<ChatState>,
@@ -463,7 +466,7 @@ class Conversation(
         applied: List<Instruction> = instructions.value.applied,
     ): ChatPrompts.Context {
         return ChatPrompts.Context(
-            known = ChatPrompts.context(state.tasks, time.events, applied, now, clock.zone(), settings.value.classMap, runtime.value.notSame, settings.value, runtime.value.calibration),
+            known = ChatPrompts.context(state.tasks, time.events, applied, now, clock.zone(), settings.value.classMap, runtime.value.notSame, settings.value, learning.value.calibration),
             plan = ChatPrompts.plan(planning.plan(state, now = now, applied = applied, time = time), clock.zone()),
         )
     }
@@ -921,7 +924,7 @@ class Conversation(
             val own = tasks.value.tasks.filter { it.source == Source.Own }.associateBy { it.id }
             before = proposal.changes.filter { it.type in OwnTaskRules.MADE_ON_IT }.mapNotNull { it.taskId }.distinct()
                 .mapNotNull { tid -> own[tid]?.let { tid to OwnTaskRules.draftOf(it) } }.toMap()
-            val instruction = Instruction(id, asked?.text ?: message.text, asked?.about ?: About(), clock.now(), state = InstructionStatus.Understood, changes = proposal.changes)
+            val instruction = Instruction(id, asked?.text ?: message.text, asked?.about ?: About(), clock.now(), state = InstructionStatus.Understood, changes = proposal.changes, by = By.Felix)
             instructions.update { it.copy(instructions = it.instructions + instruction) }
             val calendar = school.value
             owners.applyInstruction(id)

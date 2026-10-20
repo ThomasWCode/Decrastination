@@ -34,6 +34,7 @@ import com.thomaswcode.decrastination.core.Unplanned
 import com.thomaswcode.decrastination.core.Why
 import com.thomaswcode.decrastination.core.WindowKind
 import com.thomaswcode.decrastination.core.Settings
+import com.thomaswcode.decrastination.core.yours
 import com.thomaswcode.decrastination.enrich.Found
 import com.thomaswcode.decrastination.enrich.InstructionPrompts
 import com.thomaswcode.decrastination.enrich.ResearchPrompts
@@ -364,14 +365,14 @@ class ChatTest {
         // Your call (17 Oct): Felix knows the pace, so he allows for it; minutes given are planned as given.
         val pace = Calibration(multipliers = mapOf("Homework|" to 1.5, "Homework|Physics" to 1.25), timed = mapOf("Homework|" to 6, "Homework|Physics" to 3))
         val physics = bridge.copy(id = "teams:physics", sourceId = "physics", title = "Physics", className = "Physics")
-        val given = bridge.copy(id = "teams:given", sourceId = "given", title = "Given", subSteps = listOf(SubStep("All of it", 100)), userSteps = listOf(OwnStep("All of it", 100)))
+        val given = bridge.copy(id = "teams:given", sourceId = "given", title = "Given", subSteps = listOf(SubStep("All of it", 100))).yours(steps = listOf(OwnStep("All of it", 100)))
         val context = ChatPrompts.context(listOf(bridge, physics, given), emptyList(), emptyList(), now, LONDON, calibration = pace)
         assertTrue("- teams:bridge | Bridge and Balances Beam Q's | Teams | Homework | Tue 13 Oct 2026 08:30 | 100, planned as 150 at their pace | 0 | -" in context, context)
         assertTrue("| Physics | Teams | Homework | Tue 13 Oct 2026 08:30 | 100, planned as 125 at their pace |" in context, context)
         assertTrue("| Given | Teams | Homework | Tue 13 Oct 2026 08:30 | 100, as given |" in context, context)
         // A total Felix worked out at their pace, said so, with the app's estimate it came from.
-        val unpaced = bridge.copy(id = "teams:paced", sourceId = "paced", title = "Paced", userEffortMin = 150, userEffortPacedFrom = 100)
-        val paced = unpaced.copy(userEffortPacedHash = Enrichments.inputHash(unpaced))
+        val unpaced = bridge.copy(id = "teams:paced", sourceId = "paced", title = "Paced").yours(minutes = 150, pacedFrom = 100)
+        val paced = unpaced.yours(pacedHash = Enrichments.inputHash(unpaced))
         fun line(t: TaskItem) = ChatPrompts.context(listOf(t), emptyList(), emptyList(), now, LONDON, calibration = pace)
         assertTrue("| Paced | Teams | Homework | Tue 13 Oct 2026 08:30 | 150, as given: the app's 100 at their pace |" in line(paced), line(paced))
         // The app's estimate changed since, or the task itself: said, so he can set it again.

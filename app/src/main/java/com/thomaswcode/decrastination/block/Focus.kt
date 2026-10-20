@@ -11,7 +11,6 @@ import com.thomaswcode.decrastination.core.Slotter
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.core.TaskItem
-import com.thomaswcode.decrastination.core.Uptime
 import com.thomaswcode.decrastination.core.WallClock
 import com.thomaswcode.decrastination.core.WindowKind
 import com.thomaswcode.decrastination.data.ActivityLog
@@ -21,7 +20,9 @@ import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.Keeping
 import com.thomaswcode.decrastination.data.PhotoDone
 import com.thomaswcode.decrastination.data.Rewarded
-import com.thomaswcode.decrastination.data.RuntimeState
+import com.thomaswcode.decrastination.data.LearningState
+import com.thomaswcode.decrastination.data.ProtectionState
+import com.thomaswcode.decrastination.data.SessionState
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.data.SlotOutcome
 import com.thomaswcode.decrastination.data.SlotRecord
@@ -48,7 +49,11 @@ import kotlinx.coroutines.sync.withLock
 class Focus(
     private val tasks: JsonStore<TaskState>,
     private val settings: JsonStore<Settings>,
-    private val runtime: JsonStore<RuntimeState>,
+    private val session: JsonStore<SessionState>,
+    /** What's learned of your pace (read): the calibration's. */
+    private val learning: JsonStore<LearningState>,
+    /** Protection's state (read): the parent code's override, a PC's forced blocking. */
+    private val protection: JsonStore<ProtectionState>,
     private val log: JsonStore<ActivityLog>,
     private val clock: WallClock,
     /** One of your own whose work a kept slot finished (LR-09): finished, as Done does. */
@@ -91,7 +96,7 @@ class Focus(
 
     /** Whether a blocked app may be in front now. */
     fun verdict(now: Long = clock.now()): BlockPolicy.Verdict {
-        val state = runtime.value
+        val state = protection.value
         return BlockPolicy.decide(
             BlockPolicy.Input(
                 now = now,
@@ -142,15 +147,15 @@ class Focus(
         if (minutes <= 0) return
         val today = today(now)
         val day = today.toString()
-        if (runtime.value.credit.on(today).allowanceOn == day) return
+        if (session.value.credit.on(today).allowanceOn == day) return
         // Not while a stop's left work part-way recorded (a slot kept, a photo, a completion): it's finished first.
-        if (runtime.value.keeping.isNotEmpty() || runtime.value.photosDone.isNotEmpty() || tasks.value.unrewarded.isNotEmpty()) return
+        if (session.value.keeping.isNotEmpty() || session.value.photosDone.isNotEmpty() || tasks.value.unrewarded.isNotEmpty()) return
         val dayStart = today.atStartOfDay(clock.zone()).toInstant().toEpochMilli()
         if (Source.SYNCED.any { source -> tasks.value.status(source).lastSuccessAt?.let { it < dayStart } == true }) return
         val plan = plan(now)
         if (plan.todayBucket?.chunks.orEmpty().isNotEmpty() || plan.ordered.any { it.overdue }) return
         if (log.value.slots.any { it.date == day } || log.value.days.any { it.date == day && it.plannedMin > 0 }) return
-        runtime.update { state ->
+        session.update { state ->
             val credit = state.credit.on(today)
             if (credit.allowanceOn == day) state else state.copy(credit = credit.copy(earnedMs = credit.earnedMs + minutes * 60_000L, allowanceOn = day))
         }
@@ -168,7 +173,7 @@ class Focus(
         if (pieces.isEmpty()) {
             val free = (creditLeftMs(now) / 60_000L).toInt()
             if (free <= 0) return null
-            val empty = runtime.value.credit.on(today(now)).allowanceOn == today(now).toString()
+            val empty = session.value.credit.on(today(now)).allowanceOn == today(now).toString()
             return if (empty) "Nothing planned today: ${Format.minutes(free)} free." else "Today's plan is done. ${Format.minutes(free)} free."
         }
         fun earned(of: List<Chunk>) = Credit.forSlot(of.sumOf { it.minutes }, s.workMinPerFreeMin).roundToInt()
@@ -197,7 +202,7 @@ class Focus(
      */
     fun missedKeepsPressure(now: Long = clock.now()): Boolean {
         val today = today(now)
-        if (runtime.value.slots.on(today).missed.none { it.spilled }) return false
+        if (session.value.slots.on(today).missed.none { it.spilled }) return false
         val hours = if (schoolDay(today)) settings.value.weekdayHours else settings.value.weekendHours
         return BlockPolicy.minuteOfDay(now, clock.zone()) < hours.endMin
     }
@@ -231,11 +236,11 @@ class Focus(
     private val unsavedMs = AtomicLong()
 
     /** Today's free time left, less what was spent a moment ago and is still being saved. */
-    fun creditLeftMs(now: Long = clock.now()): Long = (runtime.value.credit.on(today(now)).leftMs - unsavedMs.get()).coerceAtLeast(0)
+    fun creditLeftMs(now: Long = clock.now()): Long = (session.value.credit.on(today(now)).leftMs - unsavedMs.get()).coerceAtLeast(0)
 
     suspend fun spend(ms: Long, day: LocalDate = today()) {
         if (ms <= 0) return
-        runtime.update { it.copy(credit = it.credit.spend(day, ms)) }
+        session.update { it.copy(credit = it.credit.spend(day, ms)) }
     }
 
     /**
@@ -331,7 +336,7 @@ class Focus(
             end = missed?.end ?: slot?.end ?: now,
             window = missed?.window ?: slot?.window ?: WindowKind.Evening,
             // Late: missed first, or past its slot's grace.
-            outcome = if (missed != null || runtime.value.slots.on(today).missed.any { it.key == key } || (slot != null && now > slot.end + Slotter.GRACE_MS)) SlotOutcome.KeptLate else SlotOutcome.Kept,
+            outcome = if (missed != null || session.value.slots.on(today).missed.any { it.key == key } || (slot != null && now > slot.end + Slotter.GRACE_MS)) SlotOutcome.KeptLate else SlotOutcome.Kept,
             workedMin = worked,
             photo = photo,
             earned = earns,
@@ -340,7 +345,7 @@ class Focus(
         val earning = if (earns) minOf(Credit.forSlot(chunk.minutes, ratio), slotRoomMin(now, ratio, keeping = record)) else 0.0
         // On record before anything changes: a stop part-way is carried through at start-up.
         val journal = Keeping(record, ticks, chunk.step, task.workedMin, earning, replaces = missed, photo = photoDone)
-        runtime.update { it.copy(keeping = it.keeping + journal) }
+        session.update { it.copy(keeping = it.keeping + journal) }
         return finish(journal, now, recovering = false)
     }
 
@@ -377,7 +382,7 @@ class Focus(
             )
         }
         if (!carried) {
-            runtime.update { it.copy(keeping = it.keeping - k) }
+            session.update { it.copy(keeping = it.keeping - k) }
             return null
         }
         // A slot of it missed today and kept after all is one slot, kept late: that miss gives way.
@@ -391,12 +396,12 @@ class Focus(
             }
         }
         if (!recorded) {
-            runtime.update { it.copy(keeping = it.keeping - k) }
+            session.update { it.copy(keeping = it.keeping - k) }
             return null
         }
         val today = today(now)
         val day = today(record.at)
-        runtime.update { state ->
+        session.update { state ->
             if (k !in state.keeping) {
                 state
             } else {
@@ -411,13 +416,13 @@ class Focus(
         // One of your own finished by it: its last step (seen to as its steps are), or its minutes all
         // worked; so too one done by its tick (NF-06).
         val task = tasks.value.tasks.firstOrNull { it.id == record.taskId }.takeUnless { k.earnOnly }
-        return Kept(task?.takeIf { (it.source == Source.Own || it.tickDone) && it.isOpen && it.subSteps.isEmpty() && Planner.remaining(it, runtime.value.calibration.multiplierFor(it)) <= 0 }?.id)
+        return Kept(task?.takeIf { (it.source == Source.Own || it.tickDone) && it.isOpen && it.subSteps.isEmpty() && Planner.remaining(it, learning.value.calibration.multiplierFor(it)) <= 0 }?.id)
     }
 
     /** Carries through the slots a stop left part-way kept ([RuntimeState.keeping]): at start-up, before the photo checks. */
     suspend fun finishKeeps() {
         val now = clock.now()
-        for (k in runtime.value.keeping) keeping.withLock { finish(k, now, recovering = true) }?.ownDone?.let { onOwnTaskDone(it) }
+        for (k in session.value.keeping) keeping.withLock { finish(k, now, recovering = true) }?.ownDone?.let { onOwnTaskDone(it) }
     }
 
     /**
@@ -447,7 +452,7 @@ class Focus(
         val missed = record.takeIf { it.outcome == SlotOutcome.KeptLate }?.copy(outcome = SlotOutcome.Missed, workedMin = 0, photo = false, earned = false, at = minOf(record.end + Slotter.GRACE_MS, now))
         log.update { state -> state.copy(slots = state.slots - record + listOfNotNull(missed)) }
         val today = today(now)
-        runtime.update { state ->
+        session.update { state ->
             state.copy(
                 credit = if (record.earned) state.credit.takeBack(today, Credit.forSlot(record.plannedMin, settings.value.workMinPerFreeMin)) else state.credit,
                 slots = when {
@@ -513,7 +518,7 @@ class Focus(
      */
     suspend fun photoChecked(taskId: String, step: String?, minutes: Int, stepIndex: Int? = null, key: String, takenAt: Long? = null): Boolean {
         val done = PhotoDone(UUID.randomUUID().toString(), taskId, step, minutes, clock.now(), stepIndex, key, takenAt)
-        runtime.update { it.copy(photosDone = it.photosDone + done) }
+        session.update { it.copy(photosDone = it.photosDone + done) }
         return finishPhoto(done)
     }
 
@@ -535,7 +540,7 @@ class Focus(
                     // The timed minutes not yet taken up by its other steps were worked on this one
                     // (stopped early, then ticked): it keeps them, up to its length, so they aren't
                     // taken off the next step as well.
-                    val multiplier = runtime.value.calibration.stepMultiplierFor(t)
+                    val multiplier = learning.value.calibration.stepMultiplierFor(t)
                     val taken = t.subSteps.filter { it.done }.sumOf { if (it.byHand) it.timedMin.toDouble() else it.minutes * multiplier }
                     val spare = (t.workedMin + t.photoMin - t.stepsWorkedMin - taken).roundToInt().coerceAtLeast(0)
                     val kept = minOf(spare, (step.minutes * multiplier).roundToInt())
@@ -590,7 +595,7 @@ class Focus(
 
     /** Gives the photo checks a stop left part-way ([RuntimeState.photosDone]) what they're owed: at start-up. */
     suspend fun finishPhotos() {
-        runtime.value.photosDone.forEach { finishPhoto(it) }
+        session.value.photosDone.forEach { finishPhoto(it) }
     }
 
     /**
@@ -601,7 +606,7 @@ class Focus(
      */
     private suspend fun finishPhoto(done: PhotoDone): Boolean {
         val earned = done.key?.let { photoEarns(done, it) } ?: false
-        runtime.update { it.copy(photosDone = it.photosDone - done) }
+        session.update { it.copy(photosDone = it.photosDone - done) }
         return earned
     }
 
@@ -642,7 +647,7 @@ class Focus(
         // On record before anything changes, as a keep is: a stop part-way is carried through at start-up, once.
         val journal = Keeping(unearned.copy(earned = true, photo = unearned.photo || photo), null, null, 0, earning, replaces = unearned, photo = letGo, earnOnly = true)
         var saved = false
-        runtime.update { state -> if (letGo != null && letGo !in state.photosDone) state else state.copy(keeping = state.keeping + journal).also { saved = true } }
+        session.update { state -> if (letGo != null && letGo !in state.photosDone) state else state.copy(keeping = state.keeping + journal).also { saved = true } }
         return saved && finish(journal, now, recovering = false) != null
     }
 
@@ -700,7 +705,7 @@ class Focus(
                 }
             }
         val room = slotRoomMin(now, ratio)
-        runtime.update { state ->
+        session.update { state ->
             val fresh = completed.filter { key(it) !in state.rewarded }
             // Reading or archiving an email, or an event passing, isn't work that earns time. Free
             // time is for the day the work was confirmed: given late (the app stopped first), after
@@ -720,7 +725,7 @@ class Focus(
                  * slots earned theirs.
                  */
                 fun owed(t: TaskItem): Double {
-                    val multiplier = state.calibration.stepMultiplierFor(t)
+                    val multiplier = learning.value.calibration.stepMultiplierFor(t)
                     // Vocabulary its deck tasks hold earns its time through them, not again here: all
                     // of it once they're done, else as far as their kept slots and photo checks went. No
                     // more, as a deck left unfinished when the work closes is dropped, and mustn't take
@@ -736,13 +741,13 @@ class Focus(
                     // Nor for blocks you ticked off by hand: done, but not timed or checked (bar what
                     // was timed on them first, which counts as worked).
                     val hand = (stored?.subSteps ?: t.subSteps).filter { it.done && it.byHand }.sumOf { (it.minutes * multiplier - it.timedMin).coerceAtLeast(0.0) }
-                    return Planner.remaining(t, state.calibration.multiplierFor(t)) - delegated - hand
+                    return Planner.remaining(t, learning.value.calibration.multiplierFor(t)) - delegated - hand
                 }
                 // By your minutes or by the app's estimate, each in its own scale, the less: raising a
                 // task's minutes plans more time for it, but can't make finishing it earn more. The app's
                 // estimate leaves out your steps as well as your minutes (#49's review): yours are planned
                 // as given, its by the pace learned.
-                val remaining = minOf(owed(counted), owed(counted.copy(userEffortMin = null, userSteps = null)))
+                val remaining = minOf(owed(counted), owed(counted.copy(mine = counted.mine.copy(minutes = null, steps = null))))
                 Credit.forCompletion(remaining.roundToInt().coerceAtLeast(0), ratio)
             }
             // Its slots kept without earning: given with it, once, within today's plan.
@@ -768,7 +773,7 @@ class Focus(
                         // What was left of it when first seen: progress it already had isn't work done here,
                         // nor is vocabulary its decks hold (their own records learn from it). A total Felix
                         // worked out at your pace, against the app's estimate it came from (17 Oct; #50's review).
-                        estimateMin = ((if (task.pacedTeaches) task.userEffortPacedFrom ?: task.appEffortMin else task.effortMin) * (1 - task.sourceProgress.coerceIn(0.0, 1.0)) - deckMinutes(task)).roundToInt().coerceAtLeast(1),
+                        estimateMin = ((if (task.pacedTeaches) task.mine.minutes?.paced?.from ?: task.appEffortMin else task.effortMin) * (1 - task.sourceProgress.coerceIn(0.0, 1.0)) - deckMinutes(task)).roundToInt().coerceAtLeast(1),
                         workedMin = worked(task),
                         // The deadline in force when it was done (a plan's gone by gives way to the real one
                         // behind it); one split into dated blocks with none of its own, its last block's.

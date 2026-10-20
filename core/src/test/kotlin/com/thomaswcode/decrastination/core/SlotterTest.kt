@@ -203,6 +203,19 @@ class SlotterTest {
     }
 
     @Test
+    fun `a break outside starts by six in the evening at the latest, or isn't laid`() {
+        val day = listOf(w("08:30", "22:30"))
+        // Busy through the afternoon till 17:55: the 16:00 break goes at 17:55, the latest it may.
+        val late = slot(saturday, emptyList(), day, busy = listOf(Busy(Fixtures.at("2026-10-17T15:00"), Fixtures.at("2026-10-17T17:55"))), outside = true)
+        assertEquals(listOf("outside 09:30–09:50", "outside 13:00–13:20", "outside 17:55–18:15"), late.first.described())
+        // Till 18:05: none in the evening, so two.
+        val evening = slot(saturday, emptyList(), day, busy = listOf(Busy(Fixtures.at("2026-10-17T15:00"), Fixtures.at("2026-10-17T18:05"))), outside = true)
+        assertEquals(listOf("outside 09:30–09:50", "outside 13:00–13:20"), evening.first.described())
+        // A free day planned after 18:00: none is left to lay.
+        assertTrue(slot(saturday, emptyList(), day, now = "2026-10-17T18:10", outside = true).first.isEmpty())
+    }
+
+    @Test
     fun `a piece due today at a set time goes only in a slot over by then`() {
         val evening = listOf(w("16:45", "22:00"))
         // Due at 17:00: 16:45 to 17:15 would be late, so it has no slot.

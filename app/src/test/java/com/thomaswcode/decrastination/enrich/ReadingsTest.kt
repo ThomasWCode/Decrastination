@@ -10,8 +10,11 @@ import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.data.ChatMigration
 import com.thomaswcode.decrastination.data.JsonStore
+import com.thomaswcode.decrastination.data.ModelState
+import com.thomaswcode.decrastination.data.RuntimeSplit
 import com.thomaswcode.decrastination.data.RuntimeState
 import com.thomaswcode.decrastination.data.TaskState
+import com.thomaswcode.decrastination.data.TasksMigration
 import java.io.File
 import java.nio.file.Files
 import kotlin.test.AfterTest
@@ -35,16 +38,17 @@ import okhttp3.mockwebserver.MockWebServer
 class ReadingsTest {
     private val dir: File = Files.createTempDirectory("readings").toFile()
     private val clock = FixedClock(Fixtures.at("2026-10-19T16:00"), LONDON)
-    private val tasks = JsonStore(File(dir, "tasks.json"), TaskState.serializer(), ::TaskState)
+    private val tasks = JsonStore(File(dir, "tasks.json"), TaskState.serializer(), ::TaskState, migrations = listOf(TasksMigration.TASKS))
     private val settings = JsonStore(File(dir, "settings.json"), Settings.serializer(), ::Settings)
-    private val runtime = JsonStore(File(dir, "runtime.json"), RuntimeState.serializer(), ::RuntimeState, migrations = listOf(ChatMigration.RUNTIME))
+    private val runtime = JsonStore(File(dir, "runtime.json"), RuntimeState.serializer(), ::RuntimeState, migrations = listOf(ChatMigration.RUNTIME, RuntimeSplit.RUNTIME))
+    private val model = JsonStore(File(dir, "model.json"), ModelState.serializer(), ::ModelState)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val server = MockWebServer().apply { start() }
 
     /** Claude's key, while there is one. */
     @Volatile private var key: String? = null
-    private val gateway = ModelGateway(settings, { key }, runtime, tasks, clock, NoAlerts, scope) {}.also { it.endpoint = server.url("").toString().trimEnd('/') }
-    private val readings = Readings(tasks, runtime, clock, scope, gateway, profile = { Profile.Block.NONE }, queueQuestion = { _, _, _ -> }, readDecks = {})
+    private val gateway = ModelGateway(settings, { key }, model, tasks, clock, NoAlerts, scope) {}.also { it.endpoint = server.url("").toString().trimEnd('/') }
+    private val readings = Readings(tasks, model, clock, scope, gateway, profile = { Profile.Block.NONE }, queueQuestion = { _, _, _ -> }, readDecks = {})
 
     private val essay = TaskItem(
         id = "teams:essay", source = Source.Teams, sourceId = "essay", title = "Essay", dueAt = Fixtures.at("2026-10-23T09:00"), kind = Kind.Homework,
@@ -74,7 +78,7 @@ class ReadingsTest {
         key = "test-key"
         settings.update { it.copy(aiEnabled = true, aiKeyActive = true) }
         tasks.update { it.copy(tasks = listOf(essay)) }
-        runtime.update { it.copy(enrichFailed = mapOf(essay.id to Enrichments.inputHash(essay))) }
+        model.update { it.copy(enrichFailed = mapOf(essay.id to Enrichments.inputHash(essay))) }
         // Claude could be asked: only the refusal keeps the call from being sent.
         assertTrue(gateway.claudeKey() != null && gateway.available(), "Claude can be asked")
         readings.enrichNow()

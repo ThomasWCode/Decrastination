@@ -114,8 +114,8 @@ class Slots(private val graph: AppGraph) {
             return
         }
         Log.i(AppGraph.TAG, "Slot missed: $key")
-        graph.focus.missSlot(key, laid ?: graph.runtime.value.slots.on(plan.today).previous[key]?.let { Focus.Laid(it, it + chunk.minutes * 60_000L, WindowKind.Evening) }, now)
-        graph.runtime.update { it.copy(slots = it.slots.on(plan.today).missed(key, chunk.taskId, now)) }
+        graph.focus.missSlot(key, laid ?: graph.stores.session.value.slots.on(plan.today).previous[key]?.let { Focus.Laid(it, it + chunk.minutes * 60_000L, WindowKind.Evening) }, now)
+        graph.stores.session.update { it.copy(slots = it.slots.on(plan.today).missed(key, chunk.taskId, now)) }
         graph.planning.watcher.poke()
     }
 
@@ -134,7 +134,7 @@ class Slots(private val graph: AppGraph) {
      */
     suspend fun sweep(now: Long = graph.clock.now()) {
         val today = Instant.ofEpochMilli(now).atZone(graph.clock.zone()).toLocalDate()
-        val state = graph.runtime.value.slots.on(today)
+        val state = graph.stores.session.value.slots.on(today)
         val missed = state.missed.map { it.key }.toSet()
         val started = state.previous.filter { (key, start) -> key !in missed && start + SlotAlarms.GRACE_MS < now }
         if (started.isEmpty()) return

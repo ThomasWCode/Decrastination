@@ -3,12 +3,13 @@ package com.thomaswcode.decrastination.notify
 import android.app.Notification
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.core.FixedClock
-import com.thomaswcode.decrastination.data.HeldNotification
+import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.data.ChatMigration
+import com.thomaswcode.decrastination.data.HeldNotification
 import com.thomaswcode.decrastination.data.HeldTap
 import com.thomaswcode.decrastination.data.JsonStore
+import com.thomaswcode.decrastination.data.RuntimeSplit
 import com.thomaswcode.decrastination.data.RuntimeState
-import com.thomaswcode.decrastination.core.Settings
 import java.io.File
 import java.nio.file.Files
 import kotlin.test.Test
@@ -16,7 +17,6 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.runBlocking
@@ -25,7 +25,7 @@ import kotlinx.coroutines.runBlocking
 class NotifierTest {
     private val dir: File = Files.createTempDirectory("notifier").toFile()
     private val clock = FixedClock(Fixtures.at("2026-10-14T18:00"), Fixtures.LONDON)
-    private val runtime = JsonStore(File(dir, "runtime.json"), RuntimeState.serializer(), ::RuntimeState, migrations = listOf(ChatMigration.RUNTIME))
+    private val runtime = JsonStore(File(dir, "runtime.json"), RuntimeState.serializer(), ::RuntimeState, migrations = listOf(ChatMigration.RUNTIME, RuntimeSplit.RUNTIME))
     private val settings = JsonStore(File(dir, "settings.json"), Settings.serializer(), ::Settings)
     private val job = SupervisorJob()
     private val tray = FakeTray()

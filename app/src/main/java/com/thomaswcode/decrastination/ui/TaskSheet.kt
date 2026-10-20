@@ -41,12 +41,12 @@ import com.thomaswcode.decrastination.core.Change
 import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.InstructionRules
+import com.thomaswcode.decrastination.core.Invite
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.OwnTaskRules
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Status
-import com.thomaswcode.decrastination.core.Invite
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.invite
 import com.thomaswcode.decrastination.enrich.Readings
@@ -113,7 +113,8 @@ fun TaskSheet(
     val state by graph.tasks.state.collectAsStateWithLifecycle()
     // Read so a change taken back redraws what's yours.
     val instructions by graph.instructions.state.collectAsStateWithLifecycle()
-    val runtime by graph.runtime.state.collectAsStateWithLifecycle()
+    val learning by graph.stores.learning.state.collectAsStateWithLifecycle()
+    val model by graph.stores.model.state.collectAsStateWithLifecycle()
     // His messages unread, worn by Ask Felix about it as by his button elsewhere (UI-16).
     val unread by graph.conversation.unread.collectAsStateWithLifecycle(0)
     val task = state.tasks.firstOrNull { it.id == taskId }
@@ -251,7 +252,7 @@ fun TaskSheet(
                         }
                     },
                     note = listOfNotNull(
-                        if (!own && task.userDueAt != null) "Yours: ${task.source.label} says ${sourceDue?.let { Format.at(it, now, zone) } ?: "no date"}" else null,
+                        if (!own && task.mine.dueAt?.value != null) "Yours: ${task.source.label} says ${sourceDue?.let { Format.at(it, now, zone) } ?: "no date"}" else null,
                         // Where Claude's reading came from (AI-09); one from a photo says what it saw, under Takes.
                         Enrichments.current(task)?.reason?.takeUnless { fromPhoto(task) }?.let { "Claude: “$it” in ${if (task.source == com.thomaswcode.decrastination.core.Source.Gmail) "the email" else "the instructions"}" },
                     ).joinToString(". ").takeIf { it.isNotEmpty() },
@@ -267,29 +268,29 @@ fun TaskSheet(
                     "Takes",
                     "${Format.minutes(task.effortMin)} in all" + if (task.workedMin > 0) ", ${Format.minutes(task.workedMin)} worked" else "",
                     note = listOfNotNull(
-                        if (!own && task.userEffortMin != null) {
+                        if (!own && task.mine.minutes?.minutes != null) {
                             // A total Felix worked out at your pace (17 Oct), or your own.
                             if (task.pacedMinutes) {
-                                "The app's ${Format.minutes(task.userEffortPacedFrom ?: task.appEffortMin)} at your pace" +
-                                    if (task.userEffortPacedFrom == null || task.userEffortPacedFrom == task.appEffortMin) "" else ", which it now reckons ${Format.minutes(task.appEffortMin)}"
+                                "The app's ${Format.minutes(task.mine.minutes?.paced?.from ?: task.appEffortMin)} at your pace" +
+                                    if (task.mine.minutes?.paced?.from == null || task.mine.minutes?.paced?.from == task.appEffortMin) "" else ", which it now reckons ${Format.minutes(task.appEffortMin)}"
                             } else {
                                 "Yours: the app reckoned ${Format.minutes(task.appEffortMin)}"
                             }
                         } else {
                             null
                         },
-                        if (task.subSteps.isNotEmpty() && task.userEffortMin != null) "Its steps are scaled to match" else null,
+                        if (task.subSteps.isNotEmpty() && task.mine.minutes?.minutes != null) "Its steps are scaled to match" else null,
                         // Read from its photo (AI-23), with what Claude saw in it.
                         if (fromPhoto(task)) "From your photo" + (Enrichments.current(task)?.reason?.takeIf { it.isNotBlank() }?.let { ": “$it”" } ?: "") else null,
                         // The app's estimate as the plan takes it: by how long such work has taken you.
-                        runtime.calibration.multiplierFor(task).takeIf { kotlin.math.abs(it - 1.0) >= 0.05 }?.let { m ->
+                        learning.calibration.multiplierFor(task).takeIf { kotlin.math.abs(it - 1.0) >= 0.05 }?.let { m ->
                             "Planned as ${Format.minutes((task.effortMin * m).roundToInt())}: such work has taken you ${if (m > 1) "longer" else "less time"}"
                         },
                     ).joinToString(". ").takeIf { it.isNotEmpty() },
                     onChange = if (changeable) ({ picking = OwnChange.Minutes }) else null,
                     undo = if (!own && changeable && quick(ChangeType.Minutes)) "Undo" to { scope.launch { sheet.undo(task, ChangeType.Minutes) } } else null,
                 )
-                val start = if (own) task.notBefore else task.userFrom
+                val start = if (own) task.notBefore else task.mine.from?.value
                 val hiddenUntil = task.availableFrom?.takeIf { it > now && !own }
                 Field(
                     "Can't start before",
@@ -306,7 +307,7 @@ fun TaskSheet(
             Notes(task, now, zone, byId, onOpen = { scope.launch { TaskOpener.open(activity, task)?.let { message = it } } }, onLink = { message = openLink(activity, it) })
             if (!ticksHere) Steps(graph, task, now, zone)
             // Its next piece's first steps (AI-15), as written ahead.
-            next?.let { runtime.microPlans[it.key] }?.let(com.thomaswcode.decrastination.enrich.MicroPlans::lines)?.takeIf { it.isNotEmpty() }?.let { lines ->
+            next?.let { model.microPlans[it.key] }?.let(com.thomaswcode.decrastination.enrich.MicroPlans::lines)?.takeIf { it.isNotEmpty() }?.let { lines ->
                 Text("Its next piece", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 lines.forEach { Text(it, style = MaterialTheme.typography.bodyMedium) }
             }
@@ -336,7 +337,7 @@ fun TaskSheet(
                     }
                     OutlinedButton(onClick = { onMove(piece.key) }) { Text("Move…") }
                 }
-                if (changeable && !task.userNotATask) OutlinedButton(onClick = { confirming = "not-a-task" }) { Text("Not a task") }
+                if (changeable && task.mine.notATask == null) OutlinedButton(onClick = { confirming = "not-a-task" }) { Text("Not a task") }
                 if (task.isOpen) {
                     OutlinedButton(onClick = onInstruct) {
                         Text("Ask ${graph.settings.value.felixName} about it")
@@ -468,8 +469,8 @@ private fun Field(label: String, value: String, note: String? = null, urgent: Bo
 @Composable
 private fun Notes(task: TaskItem, now: Long, zone: java.time.ZoneId, byId: Map<String, TaskItem>, onOpen: () -> Unit, onLink: (String) -> Unit) {
     val lines = buildList {
-        task.userAfter?.takeIf { task.isOpen && InstructionRules.waiting(task, byId) }?.let { add("Waits, as you said, until “${byId[it]?.title ?: it}” is done" to false) }
-        if (task.userNotATask) add("You said it isn't a task: take that back in Felix's chat, under Your changes" to false)
+        task.mine.after?.value?.takeIf { task.isOpen && InstructionRules.waiting(task, byId) }?.let { add("Waits, as you said, until “${byId[it]?.title ?: it}” is done" to false) }
+        if (task.mine.notATask != null) add("You said it isn't a task: take that back in Felix's chat, under Your changes" to false)
         Enrichments.current(task)?.dropped?.takeIf { task.isOpen }?.let { add("Claude's plan was dropped ($it): planned as one piece" to true) }
         // Steps kept with their dates left out (AI-01).
         Enrichments.current(task)?.adjusted?.takeIf { it.isNotEmpty() && task.isOpen }?.let { lines ->

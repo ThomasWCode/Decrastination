@@ -11,18 +11,21 @@ import com.thomaswcode.decrastination.core.DayBucket
 import com.thomaswcode.decrastination.core.FixedClock
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Plan
+import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.Slot
 import com.thomaswcode.decrastination.core.SlotKind
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
-import com.thomaswcode.decrastination.core.WindowKind
 import com.thomaswcode.decrastination.core.Why
-import com.thomaswcode.decrastination.data.CalendarVersions
+import com.thomaswcode.decrastination.core.WindowKind
+import com.thomaswcode.decrastination.data.CalendarState
 import com.thomaswcode.decrastination.data.ChatMigration
 import com.thomaswcode.decrastination.data.JsonStore
+import com.thomaswcode.decrastination.data.ModelState
+import com.thomaswcode.decrastination.data.RuntimeSplit
 import com.thomaswcode.decrastination.data.RuntimeState
-import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.data.TaskState
+import com.thomaswcode.decrastination.data.TasksMigration
 import java.io.File
 import java.nio.file.Files
 import java.time.Instant
@@ -52,10 +55,11 @@ import kotlinx.coroutines.withTimeout
 class CalendarWriterTest {
     private val dir: File = Files.createTempDirectory("calendar").toFile()
     private val clock = FixedClock(Fixtures.at("2026-10-19T16:00"), LONDON)
-    private val tasks = JsonStore(File(dir, "tasks.json"), TaskState.serializer(), ::TaskState)
+    private val tasks = JsonStore(File(dir, "tasks.json"), TaskState.serializer(), ::TaskState, migrations = listOf(TasksMigration.TASKS))
     private val settings = JsonStore(File(dir, "settings.json"), Settings.serializer(), ::Settings)
-    private val runtime = JsonStore(File(dir, "runtime.json"), RuntimeState.serializer(), ::RuntimeState, migrations = listOf(ChatMigration.RUNTIME))
-    private val versions = JsonStore(File(dir, "calendar.json"), CalendarVersions.serializer(), ::CalendarVersions)
+    private val runtime = JsonStore(File(dir, "runtime.json"), RuntimeState.serializer(), ::RuntimeState, migrations = listOf(ChatMigration.RUNTIME, RuntimeSplit.RUNTIME))
+    private val model = JsonStore(File(dir, "model.json"), ModelState.serializer(), ::ModelState)
+    private val versions = JsonStore(File(dir, "calendar.json"), CalendarState.serializer(), ::CalendarState, migrations = listOf(RuntimeSplit.CALENDAR))
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val calendar = Calendar()
 
@@ -71,7 +75,7 @@ class CalendarWriterTest {
 
     /** A writer as AppGraph makes one at a start, on these stores and this calendar, plans quiet after [quietMs]. */
     private fun writer(quietMs: Long = 100) = CalendarWriter(
-        tasks, settings, runtime, versions, clock, scope, calendar,
+        tasks, settings, model, versions, clock, scope, calendar,
         sayRefused = { move, _, why -> refused += move.desired.uri to why },
         addOwnChange = { _, text, _, change ->
             check(!changesFail) { "stopped before the change was in" }
@@ -110,7 +114,7 @@ class CalendarWriterTest {
 
     private fun pickCalendar(id: Long) = runBlocking {
         settings.update { it.copy(calendarWriteId = id) }
-        runtime.update { it.copy(calendarWrittenTo = id) }
+        versions.update { it.copy(calendarWrittenTo = id) }
     }
 
     @Test
@@ -122,7 +126,7 @@ class CalendarWriterTest {
         writer.writeSlots(made)
         val uri = SlotCalendarDiff.desired(made, LONDON).single().uri
         assertEquals(listOf(uri to at("17:00")), calendar.events.map { it.uri to it.start })
-        assertEquals(mapOf(uri to at("17:00")), runtime.value.calendarWritten)
+        assertEquals(mapOf(uri to at("17:00")), versions.value.calendarWritten)
         assertEquals(1, versions.value.written.size)
         assertEquals(2 to 1, calendar.reads to calendar.batches)
         // As written, and nothing changed in the calendar since (AR-08): not read again.
@@ -186,7 +190,7 @@ class CalendarWriterTest {
         calendar.move(uri, at("18:00"))
         changesFail = true
         assertFailsWith<IllegalStateException> { writer.writeSlots(made) }
-        assertEquals(mapOf(uri to at("17:00")), runtime.value.calendarWritten, "not counted as written: found a move again")
+        assertEquals(mapOf(uri to at("17:00")), versions.value.calendarWritten, "not counted as written: found a move again")
         assertEquals(at("18:00"), calendar.events.single().start, "not put back")
         // The next start finds it a move again, and takes it as your time.
         changesFail = false
@@ -194,7 +198,7 @@ class CalendarWriterTest {
         val (text, change) = changes.single()
         assertEquals("Moved in the calendar", text)
         assertEquals(Change(ChangeType.AtTime, taskId = "teams:essay", date = "2026-10-19", startMin = 18 * 60, time = at("18:00")), change)
-        assertEquals(mapOf(uri to at("18:00")), runtime.value.calendarWritten)
+        assertEquals(mapOf(uri to at("18:00")), versions.value.calendarWritten)
         assertEquals(at("18:00"), calendar.events.single().start)
         assertEquals(emptyList(), refused)
     }
@@ -214,7 +218,7 @@ class CalendarWriterTest {
         assertEquals(listOf(essay to "it's due before then", old to "its task is no longer there"), refused.sortedBy { it.first })
         assertEquals(mapOf(essay to at("17:00"), old to at("17:40")), calendar.events.associate { it.uri!! to it.start }, "both written back")
         assertEquals(emptyList(), changes)
-        assertEquals(mapOf(essay to at("17:00"), old to at("17:40")), runtime.value.calendarWritten)
+        assertEquals(mapOf(essay to at("17:00"), old to at("17:40")), versions.value.calendarWritten)
     }
 
     @Test
@@ -230,13 +234,13 @@ class CalendarWriterTest {
         writer.start()
         settings.update { it.copy(calendarWriteId = 8) }
         until("the switch is seen") { replans.get() == 1 }
-        assertEquals(listOf(7L), runtime.value.calendarsToClear)
-        assertEquals(8L, runtime.value.calendarWrittenTo)
-        assertEquals(emptyMap<String, Long>(), runtime.value.calendarWritten)
+        assertEquals(listOf(7L), versions.value.calendarsToClear)
+        assertEquals(8L, versions.value.calendarWrittenTo)
+        assertEquals(emptyMap<String, Long>(), versions.value.calendarWritten)
         // Allowed again: the next write clears it first, the app's event and its copy, not yours.
         calendar.writable = true
         writer.writeSlots(made)
-        assertEquals(emptyList(), runtime.value.calendarsToClear)
+        assertEquals(emptyList(), versions.value.calendarsToClear)
         assertEquals(listOf(yours), calendar.events.filter { it.calendarId == 7L }.map { it.id })
         assertTrue(copy !in calendar.events.map { it.id })
         assertEquals(listOf(event.uri), calendar.events.filter { it.calendarId == 8L }.map { it.uri })
@@ -259,12 +263,12 @@ class CalendarWriterTest {
     @Test
     fun `your answer about an event is kept for every event of its name, his question settled and the calendar read again`() = runBlocking {
         writer.answer("open day", "busy")
-        assertEquals(mapOf("open day" to "busy"), runtime.value.eventAnswers)
+        assertEquals(mapOf("open day" to "busy"), versions.value.eventAnswers)
         assertEquals(listOf("open day"), settled)
         assertEquals(1, rereads.get())
         // Forgotten: for the rules to judge again.
         writer.answer("open day", null)
-        assertEquals(emptyMap<String, String>(), runtime.value.eventAnswers)
+        assertEquals(emptyMap<String, String>(), versions.value.eventAnswers)
         assertEquals(2, rereads.get())
     }
 

@@ -38,7 +38,6 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.thomaswcode.decrastination.AppGraph
-import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.SettingsLimits
 import com.thomaswcode.decrastination.core.Window
 import com.thomaswcode.decrastination.data.Reset
@@ -71,8 +70,11 @@ class SettingsActivity : ComponentActivity() {
     private fun Editor(graph: AppGraph) {
         val saved by graph.settings.state.collectAsStateWithLifecycle()
         val runtime by graph.runtime.state.collectAsStateWithLifecycle()
+        val model by graph.stores.model.state.collectAsStateWithLifecycle()
+        val protection by graph.stores.protection.state.collectAsStateWithLifecycle()
+        val learning by graph.stores.learning.state.collectAsStateWithLifecycle()
         // What's been asked for, waiting changes included: setting one back cancels it.
-        val asked = SettingsChanges.requested(saved, runtime.pending)
+        val asked = SettingsChanges.requested(saved, protection.pending)
         // Your edits over what the screen showed as you began, each field as typed, which don't parse,
         // the page open and the apps' search ([SettingsScreenState]): kept through the screen being
         // made again, a turn of the phone (BUG-P2-013, BUG-P2-027).
@@ -124,9 +126,9 @@ class SettingsActivity : ComponentActivity() {
                                 Text(page.says, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
-                        if (runtime.pending.isNotEmpty()) {
+                        if (protection.pending.isNotEmpty()) {
                             item { Section("Waiting (protection is armed)") }
-                            items(runtime.pending, key = { it.id }) { change ->
+                            items(protection.pending, key = { it.id }) { change ->
                                 Note(
                                     "${change.description}: applies about ${Format.at(change.applyAt, graph.clock.now(), graph.clock.zone())}, and is shown on its page as if it had. " +
                                         "Set it back and save to cancel it; a parent code under Blocking and protection applies it now.",
@@ -249,7 +251,7 @@ class SettingsActivity : ComponentActivity() {
                     CLAUDE -> {
                         item { SetupScreen(graph, this@SettingsActivity, setOf(SetupPart.Claude), scroll = false) }
                         item {
-                            val usage = runtime.aiUsage.forMonth(AiUsage.monthOf(graph.clock.now(), graph.clock.zone()))
+                            val usage = model.aiUsage.forMonth(AiUsage.monthOf(graph.clock.now(), graph.clock.zone()))
                             SwitchRow("Use Claude for steps, estimates and email triage", draft.aiEnabled) { draft = draft.copy(aiEnabled = it) }
                             Note(
                                 "Off, nothing is sent to Claude; the rules do what they can. On, it needs its API key, above; with no cap, it stops when the account's credit runs out. " +
@@ -262,7 +264,7 @@ class SettingsActivity : ComponentActivity() {
                             ModelEffort.table().forEach { (effort, jobs) -> Note("$effort: $jobs") }
                             Note("By job, not set here: high for what the plan is made from, medium for what someone's waiting for (AC-02).")
                         }
-                        item { RecentCalls(runtime.calls, graph.clock.zone()) }
+                        item { RecentCalls(model.calls, graph.clock.zone()) }
                         item { LastCrash(this@SettingsActivity) }
                     }
 
@@ -279,7 +281,7 @@ class SettingsActivity : ComponentActivity() {
                         item {
                             TimeField("Daily cards due by", draft.ankiDeadlineMin, "ankiDeadlineMin", form) { draft = draft.copy(ankiDeadlineMin = it) }
                             // What a card takes in each deck, as learned from time in AnkiDroid (DX-11).
-                            com.thomaswcode.decrastination.learn.AnkiProgress.lines(graph.runtime.value.calibration, graph.tasks.value.tasks).forEach {
+                            com.thomaswcode.decrastination.learn.AnkiProgress.lines(learning.calibration, graph.tasks.value.tasks).forEach {
                                 Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp))
                             }
                         }
