@@ -110,6 +110,11 @@ class ChatAskedTest {
         assertFalse("November's" in block || "January's" in block, block)
         // An empty month is said to be so, inside the read.
         assertTrue(ChatPrompts.calendarBlock(others, "2026-12", now, LONDON).endsWith("\n(none)"))
+        // An all-day event by its date, as the calendar keeps it (midnight to midnight, UTC): one on the last day of
+        // September isn't October's in summer time, and one on the first of October is.
+        fun allDay(id: Long, title: String, date: String) = CalendarEvent(id, title, java.time.LocalDate.parse(date).atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli(), java.time.LocalDate.parse(date).plusDays(1).atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli(), allDay = true)
+        val october = ChatPrompts.calendarBlock(listOf(allDay(1, "Last of September", "2026-09-30"), allDay(2, "First of October", "2026-10-01")), "2026-10", Fixtures.at("2026-09-20T12:00"), LONDON)
+        assertTrue("| First of October |" in october && "Last of September" !in october, october)
     }
 
     @Test
