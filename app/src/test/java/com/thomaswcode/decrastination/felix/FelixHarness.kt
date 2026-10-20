@@ -83,7 +83,16 @@ class FelixHarness(start: String = "2026-10-19T16:30") : AutoCloseable {
         calendarTime = { NO_CALENDAR },
         answered = { message, words -> looks.answered(message, words) },
         draftReminders = { now -> looks.draftReminders(now) },
+        requestSync = { synced += it },
+        requestTeamsSync = { teamsSyncs++; teamsRefusal },
     )
+
+    /** How often the Teams widget was asked to sync (Q33: B), and why it didn't start, as the test says. */
+    var teamsSyncs = 0
+    var teamsRefusal: String? = null
+
+    /** The sources his `sync` asked to read (G2), in order. */
+    val synced: MutableList<Set<Source>> = Collections.synchronizedList(mutableListOf())
     val looks: Looks = Looks(
         stores.tasks, stores.settings, stores.model, stores.log, stores.chat, stores.felix, clock, scope, gateway, focus, planning, ports, outbox,
         calendarTime = { NO_CALENDAR },
@@ -92,6 +101,12 @@ class FelixHarness(start: String = "2026-10-19T16:30") : AutoCloseable {
         addInstruction = { text, about, answer -> owners.instruction(text, about, answer) },
         assess = { taskId, doneAt, answer -> assessed += Triple(taskId, doneAt, answer) },
     )
+
+    /** [key]'s piece kept as Day's Done keeps it ([Focus.keepSlot]), with [extraMin] more and a [photo]. */
+    suspend fun focusKeep(key: String, extraMin: Int = 0, photo: Boolean = false): Boolean = focus.keepSlot(key, extraMin, photo)
+
+    /** [key]'s last piece kept since [since] taken back, as Day's Undo does ([Focus.unkeepSlot]). */
+    suspend fun focusUnkeep(key: String, since: Long): Boolean = focus.unkeepSlot(key, since)
 
     /** How work went, as it was put on record ([Looks.answered]): the task, when it was done, the answer. */
     val assessed: MutableList<Triple<String, Long, String>> = Collections.synchronizedList(mutableListOf())
@@ -178,6 +193,18 @@ class FelixHarness(start: String = "2026-10-19T16:30") : AutoCloseable {
 
         override fun remindForm() {
             forms++
+        }
+
+        /** The tasks opened where they live (G3), in order: each opened. */
+        val opened: MutableList<String> = Collections.synchronizedList(mutableListOf())
+
+        /** Done as each opens, as if you'd done it meanwhile (the chat left). */
+        var whileOpening: () -> Unit = {}
+
+        override suspend fun openSource(task: TaskItem): Pair<Boolean, String?> {
+            whileOpening()
+            opened += task.id
+            return true to null
         }
     }
 

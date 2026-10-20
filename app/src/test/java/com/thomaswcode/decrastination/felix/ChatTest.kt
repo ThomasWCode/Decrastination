@@ -333,14 +333,14 @@ class ChatTest {
     fun `the context lists the open tasks with their ids, minutes, minutes worked and dates, and the changes in use`() {
         val context = ChatPrompts.context(listOf(bridge.copy(workedMin = 25)), emptyList(), emptyList(), now, LONDON)
         assertTrue(context.startsWith("Today: Monday 12 October 2026, 22:45 (Europe/London)"))
-        assertTrue("- teams:bridge | Bridge and Balances Beam Q's | Teams | Homework | Tue 13 Oct 2026 08:30 | 100 | 25 | -" in context, context)
+        assertTrue("- teams:bridge | Bridge and Balances Beam Q's | Teams | - | Homework | Tue 13 Oct 2026 08:30 | 100 | 25 | -" in context, context)
         assertFalse("Changes already in use" in context)
         // An email's date Claude didn't quote is a plan, and said to be (PL-14).
         val unread = bridge.copy(id = "gmail:form", source = Source.Gmail, title = "Form", dueAt = Fixtures.at("2026-10-14T23:59"))
         val reading = Enrichment(inputHash = Enrichments.inputHash(unread), by = "claude", at = now, kind = Kind.Admin, deadline = Fixtures.at("2026-10-14T23:59"))
         val email = unread.copy(enrichment = reading)
         val withEmail = ChatPrompts.context(listOf(email), emptyList(), emptyList(), now, LONDON)
-        assertTrue("| Gmail | Homework | Wed 14 Oct 2026 23:59 (a plan) |" in withEmail, withEmail)
+        assertTrue("| Gmail | - | Homework | Wed 14 Oct 2026 23:59 (a plan) |" in withEmail, withEmail)
         assertFalse("(a plan)" in ChatPrompts.context(listOf(email.copy(enrichment = reading.copy(deadlineQuoted = true))), emptyList(), emptyList(), now, LONDON))
         // The calendar's read as far as the plan reaches (DX-14); the chat's told of the fortnight's events.
         val drums = CalendarEvent(1, "Drums", Fixtures.at("2026-10-15T18:00"), Fixtures.at("2026-10-15T19:00"), allDay = false)
@@ -367,14 +367,14 @@ class ChatTest {
         val physics = bridge.copy(id = "teams:physics", sourceId = "physics", title = "Physics", className = "Physics")
         val given = bridge.copy(id = "teams:given", sourceId = "given", title = "Given", subSteps = listOf(SubStep("All of it", 100))).yours(steps = listOf(OwnStep("All of it", 100)))
         val context = ChatPrompts.context(listOf(bridge, physics, given), emptyList(), emptyList(), now, LONDON, calibration = pace)
-        assertTrue("- teams:bridge | Bridge and Balances Beam Q's | Teams | Homework | Tue 13 Oct 2026 08:30 | 100, planned as 150 at their pace | 0 | -" in context, context)
-        assertTrue("| Physics | Teams | Homework | Tue 13 Oct 2026 08:30 | 100, planned as 125 at their pace |" in context, context)
-        assertTrue("| Given | Teams | Homework | Tue 13 Oct 2026 08:30 | 100, as given |" in context, context)
+        assertTrue("- teams:bridge | Bridge and Balances Beam Q's | Teams | - | Homework | Tue 13 Oct 2026 08:30 | 100, planned as 150 at their pace | 0 | -" in context, context)
+        assertTrue("| Physics | Teams | Physics | Homework | Tue 13 Oct 2026 08:30 | 100, planned as 125 at their pace |" in context, context)
+        assertTrue("| Given | Teams | - | Homework | Tue 13 Oct 2026 08:30 | 100, as given |" in context, context)
         // A total Felix worked out at their pace, said so, with the app's estimate it came from.
         val unpaced = bridge.copy(id = "teams:paced", sourceId = "paced", title = "Paced").yours(minutes = 150, pacedFrom = 100)
         val paced = unpaced.yours(pacedHash = Enrichments.inputHash(unpaced))
         fun line(t: TaskItem) = ChatPrompts.context(listOf(t), emptyList(), emptyList(), now, LONDON, calibration = pace)
-        assertTrue("| Paced | Teams | Homework | Tue 13 Oct 2026 08:30 | 150, as given: the app's 100 at their pace |" in line(paced), line(paced))
+        assertTrue("| Paced | Teams | - | Homework | Tue 13 Oct 2026 08:30 | 150, as given: the app's 100 at their pace |" in line(paced), line(paced))
         // The app's estimate changed since, or the task itself: said, so he can set it again.
         assertTrue("| 150, as given: the app's 100 at their pace, which it now puts at 120 |" in line(paced.copy(sourceEffortMin = 120)))
         assertTrue("| 150, as given: the app's 100 at their pace, the task changed since |" in line(paced.copy(detail = "Also questions 9 to 12.")))
@@ -392,7 +392,7 @@ class ChatTest {
         val faded = (1..80).map { i -> bridge.copy(id = "teams:t$i", sourceId = "t$i", title = "t$i", dueAt = Fixtures.at("2026-10-01T08:30"), sourceValues = SourceValues(Kind.Homework, Fixtures.at("2026-11-30T23:59"), null)) }
         val context = ChatPrompts.context(faded + bridge, emptyList(), emptyList(), now, LONDON)
         assertTrue("- teams:bridge |" in context, context)
-        assertTrue("- teams:t1 | t1 | Teams | Homework | Mon 30 Nov 2026 23:59 |" in context, context)
+        assertTrue("- teams:t1 | t1 | Teams | - | Homework | Mon 30 Nov 2026 23:59 |" in context, context)
     }
 
     @Test

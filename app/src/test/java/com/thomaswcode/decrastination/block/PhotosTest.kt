@@ -57,7 +57,7 @@ class PhotosTest {
     private val protection = JsonStore(File(dir, "protection.json"), ProtectionState.serializer(), ::ProtectionState)
     private val session = JsonStore(File(dir, "session.json"), SessionState.serializer(), ::SessionState)
     private val log = JsonStore(File(dir, "log.json"), ActivityLog.serializer(), ::ActivityLog, migrations = listOf(ChatMigration.LOG))
-    private val chat = JsonStore(File(dir, "chat.json"), ChatState.serializer(), ::ChatState, migrations = listOf(ChatMigration.CHAT, TasksMigration.CHAT, FelixStore.CHAT))
+    private val chat = JsonStore(File(dir, "chat.json"), ChatState.serializer(), ::ChatState, migrations = listOf(ChatMigration.CHAT, TasksMigration.CHAT, FelixStore.CHAT, FelixStore.CHAT_PIECES))
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val gateway = ModelGateway(settings, { null }, model, tasks, clock, NoAlerts, scope) {}
     private val focus = Focus(tasks, settings, session, learning, protection, log, clock) { state, s, now -> Planner.plan(Planner.Input(state.tasks, now, LONDON, s)) }

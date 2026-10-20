@@ -12,6 +12,7 @@ import com.thomaswcode.decrastination.core.FelixSettings
 import com.thomaswcode.decrastination.core.Given
 import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.Kind
+import com.thomaswcode.decrastination.core.Lessons
 import com.thomaswcode.decrastination.core.Note
 import com.thomaswcode.decrastination.core.NoteScope
 import com.thomaswcode.decrastination.core.Notes
@@ -94,14 +95,14 @@ object ChatAnswers {
     /**
      * [reading]'s cards, each made as it comes, with its Undo (your call, 16 Oct: nothing he does waits
      * for a button; AI-24 had only changes to what exists made so): its changes on one card, first;
-     * then its new tasks, a card each; then a card for each task to show (AI-14), with its Open.
+     * then its new tasks, a card each; then a card for each task to show (AI-14), with its Open; one opened where it lives (G3) has none.
      */
     fun cards(reading: Reading, tasks: Map<String, TaskItem>, zone: ZoneId, id: () -> String = { UUID.randomUUID().toString() }): List<Proposal> {
         val changes = reading.changes.takeIf { it.isNotEmpty() }?.let {
             Proposal(id(), changes = it, lines = it.map { c -> InstructionRules.describe(c, tasks, zone) }, instant = true)
         }
         val added = reading.tasks.map { Proposal(id(), task = it, instant = true) }
-        val opens = reading.actions.filter { it.type == ChatAction.Type.Open }.map { Proposal(id(), open = it.taskId) }
+        val opens = reading.actions.filter { it.type == ChatAction.Type.Open && it.value != OPEN_SOURCE }.map { Proposal(id(), open = it.taskId) }
         return listOfNotNull(changes) + added + opens
     }
 
@@ -154,6 +155,9 @@ object ChatAnswers {
     @Serializable
     private data class GivenAction(val type: String = "", val taskId: String = "", val stepIndex: Int = -1, val setting: String = "", val value: String = "")
 
+    /** An open's value that opens the task where it lives (G3), not its page here. */
+    const val OPEN_SOURCE = "source"
+
     /** The most actions one answer takes: a few at most is what's meant (ten since there are more kinds, 16 Oct). */
     private const val MAX_ACTIONS = 10
 
@@ -193,7 +197,7 @@ object ChatAnswers {
     /** The most memories one answer gives: a few at most is what's meant. */
     private const val MAX_MEMORIES = 5
 
-    fun parse(text: String, tasks: List<TaskItem>, events: List<CalendarEvent>, about: About, now: Long, zone: ZoneId, settings: Settings? = null, felix: FelixStore = FelixStore()): Reading? {
+    fun parse(text: String, tasks: List<TaskItem>, events: List<CalendarEvent>, about: About, now: Long, zone: ZoneId, settings: Settings? = null, felix: FelixStore = FelixStore(), context: ChatPrompts.Context? = null): Reading? {
         val answer = runCatching { json.decodeFromString(Answer.serializer(), text) }.getOrNull() ?: return null
         val reply = answer.reply.trim().takeIf { it.isNotEmpty() } ?: return null
         val leftOut = mutableListOf<String>()
@@ -208,7 +212,9 @@ object ChatAnswers {
         val titles = events.associate { EventJudge.key(it) to it.title } + listOfNotNull(about.eventKey?.let { it to (about.eventTitle ?: it) })
         // His reminders and notes come as changes of their own types (8a, Q13: B): taken out first, made their own way.
         val (kept, given) = answer.changes.take(MAX_CHANGES).map(InstructionAnswers.Given::normalised).partition { it.type == ChatPrompts.REMIND_TYPE || it.type == ChatPrompts.NOTE_TYPE }
-        var changes = given.mapNotNull { g ->
+        var changes = given.map { lessonOf(it, context, now, zone) ?: it }.mapNotNull { g ->
+            // A due date at a class's next lesson it can't be set from (G8): refused, saying why, so he asks.
+            if (g.type == ChangeType.DueBy.name && g.lesson.isNotBlank()) return@mapNotNull null.also { leftOut += "a change (${lessonProblem(g.lesson, context, zone)})" }
             InstructionAnswers.change(g, byId, titles, now, zone).also { if (it == null) leftOut += "a change (${InstructionAnswers.problem(g, byId, titles)})" }
         }
         if (answer.changes.size > MAX_CHANGES) leftOut += "${answer.changes.size - MAX_CHANGES} more changes than the app takes at once"
@@ -226,7 +232,7 @@ object ChatAnswers {
         val replies = answer.suggestedReplies.map { it.trim().take(FelixAnswers.MAX_REPLY) }.filter { it.isNotEmpty() }.distinct().take(FelixAnswers.MAX_REPLIES)
         // A step ticked or unticked, a listed task shown (AI-14); a task of yours done, open again or
         // deleted, a setting set (16 Oct): each only as the task, or the setting, can be.
-        val actions = answer.actions.take(MAX_ACTIONS).mapNotNull { a -> action(a, byId, settings, felix, leftOut) }.distinct()
+        val actions = answer.actions.take(MAX_ACTIONS).mapNotNull { a -> action(a, byId, settings, felix, context, leftOut) }.distinct()
         // Tasks to read in full (D-93): listed and open, not the one the message is about (it came whole).
         val details = answer.details.map(String::trim).filter { id -> id != about.taskId && byId[id]?.let { it.isOpen && !it.hidden } == true }.distinct().take(ChatPrompts.MAX_READ)
         // Reminders and notes (Stage 8a): each as the app can keep it, the rest said.
@@ -351,6 +357,27 @@ object ChatAnswers {
         }
     }
 
+    /**
+     * [g], a DueBy at a class's next lesson (G8), as one at that lesson's start, its own date and time not read;
+     * null where it isn't one, or where the lesson can't be found ([lessonProblem] says why).
+     */
+    private fun lessonOf(g: InstructionAnswers.Given, context: ChatPrompts.Context?, now: Long, zone: ZoneId): InstructionAnswers.Given? {
+        if (g.type != ChangeType.DueBy.name || g.lesson.isBlank()) return null
+        val lessons = context?.lessons?.takeIf { !it.stale } ?: return null
+        val at = Lessons.nextOf(g.lesson, lessons.groups, emptyMap()) ?: return null
+        val start = Instant.ofEpochMilli(at.start).atZone(zone)
+        return g.copy(date = start.toLocalDate().toString(), time = start.toLocalTime().format(CLOCK), lesson = "")
+    }
+
+    /** Why a due date at [lesson]'s next lesson can't be set (G8): no timetable read, one over a week old or of no known age, or no such class with a lesson ahead. */
+    private fun lessonProblem(lesson: String, context: ChatPrompts.Context?, zone: ZoneId): String {
+        val lessons = context?.lessons ?: return "a due date at the next lesson, with no timetable read: ask them the date"
+        if (lessons.stale) {
+            val read = lessons.readAt?.let { "read on " + Instant.ofEpochMilli(it).atZone(zone).toLocalDate().format(DateTimeFormatter.ofPattern("EEE d MMM", Locale.UK)) + ", over a week ago" } ?: "of no known age"
+            return "a due date at the next lesson, from a timetable $read: ask them the date"
+        }
+        return "a due date at the next lesson of “${lesson.trim().take(40)}”, a class the lessons' list doesn't have, or with none ahead: ask them"
+    }
     /** The deadlines [changes] set (DueBy), by task id: what a reminder before one goes by, made before their lay comes. */
     fun deadlines(changes: List<Change>): Map<String, Long> =
         changes.filter { it.type == ChangeType.DueBy && it.time != null }.mapNotNull { c -> c.taskId?.let { it to c.time!! } }.toMap()
@@ -360,10 +387,34 @@ object ChatAnswers {
     private const val YEAR_MS = 366 * DAY_MS
     private val CLOCK = DateTimeFormatter.ofPattern("HH:mm", Locale.UK)
 
-    /** [a] as an action the app can take, checked against the tasks there are ([byId]), the [settings] and [felix]'s reminders and notes; null, and why in [leftOut], if it can't be. */
-    private fun action(a: GivenAction, byId: Map<String, TaskItem>, settings: Settings?, felix: FelixStore, leftOut: MutableList<String>): ChatAction? {
+    /**
+     * [a] as an action the app can take, checked against the tasks there are ([byId]), the [settings], [felix]'s
+     * reminders and notes, and the pieces the [context] listed; null, and why in [leftOut], if it can't be.
+     */
+    private fun action(a: GivenAction, byId: Map<String, TaskItem>, settings: Settings?, felix: FelixStore, context: ChatPrompts.Context?, leftOut: MutableList<String>): ChatAction? {
         fun act(t: ChatAction.Type, id: String, step: Int? = null) = ChatAction(t, id, step)
         fun no(why: String) = null.also { leftOut += why }
+        // A source read now (G2): one the app reads, by its name; about a listed task, or none.
+        if (a.type == "sync") {
+            val name = a.setting.trim()
+            val source = Source.SYNCED.firstOrNull { it.name.equals(name.replace(" ", ""), ignoreCase = true) || it.label.equals(name, ignoreCase = true) }
+                ?: return no("a source to read that the app doesn't (${name.take(20)})")
+            val about = a.taskId.trim().takeIf { it.isNotEmpty() }?.let { id -> byId[id] ?: return no("a read about a task that isn't listed") }
+            // Watched by a read of its own source only: another's can't say how it changed. The read's made all the same.
+            if (about != null && about.source != source) leftOut += "watching “${about.title.take(40)}” with a read of ${source.label}: it's from ${about.source.label}"
+            return ChatAction(ChatAction.Type.Sync, about?.takeIf { it.source == source }?.id.orEmpty(), setting = source.name)
+        }
+        // A piece kept as Day's Done keeps it, or taken back (G1): by its key, one the plan shown lists, or one kept today.
+        if (a.type == "keepPiece" || a.type == "unkeepPiece") {
+            val keep = a.type == "keepPiece"
+            val key = a.value.trim()
+            val of = (if (keep) context?.keepable else context?.kept)?.get(key)
+                ?: return no(if (keep) "a piece to keep that the plan shown doesn't list" else "a piece to take back that isn't one kept today")
+            // A finished task's piece isn't kept, nor taken back, but for one of yours (or one done by its tick) that the
+            // piece may have finished: taken back, that opens it again (Conversation.act judges it was that piece).
+            if (byId[of]?.let { it.isOpen || (!keep && (it.source == Source.Own || it.tickDone)) } != true) return no("a piece of a task that's finished")
+            return ChatAction(if (keep) ChatAction.Type.KeepPiece else ChatAction.Type.UnkeepPiece, of, value = key)
+        }
         // A reminder cancelled, still to come; a note deleted, still kept (Stage 8a): by id, their task's taken from them.
         if (a.type == "cancelReminder") {
             val r = felix.reminders.firstOrNull { it.id == a.value.trim() }?.takeIf(Reminders::pending) ?: return no("a reminder to cancel that isn't one still to come")
@@ -383,7 +434,8 @@ object ChatAnswers {
         val own = task.source == Source.Own
         val step = task.subSteps.getOrNull(a.stepIndex)
         return when (a.type) {
-            "open" -> act(ChatAction.Type.Open, task.id)
+            // Shown here, on a card; or where it lives (G3), at once: your own live here only.
+            "open" -> if (a.value.trim() == OPEN_SOURCE && !own) ChatAction(ChatAction.Type.Open, task.id, value = OPEN_SOURCE) else act(ChatAction.Type.Open, task.id)
             "tickStep" -> if (task.isOpen && step?.done == false) act(ChatAction.Type.TickStep, task.id, a.stepIndex) else no("a step to tick that isn't one of $name's still to do")
             "untickStep" -> if (task.isOpen && step?.done == true) act(ChatAction.Type.UntickStep, task.id, a.stepIndex) else no("a step to untick that isn't one of $name's done")
             // Done by you: your own, or one done by its tick (NF-06); another is done when its source says.

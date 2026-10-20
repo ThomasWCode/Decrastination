@@ -1144,6 +1144,9 @@ private fun Remembered(graph: AppGraph, message: ChatMessage, live: Boolean) {
  * deleted, a setting set; 4.1.0, a reminder set, moved or cancelled, a note added or deleted), a line each in small type, each with its Undo while it can be taken back;
  * and the lines with nothing to undo (a change not made, where a time went, a text read in full).
  */
+/** The longest the chat's Undo buttons wait before reading the day again (a delay doesn't count deep sleep). */
+private const val DAY_CHECK_MS = 5 * 60_000L
+
 @Composable
 private fun Acts(graph: AppGraph, message: ChatMessage, live: Boolean) {
     if (message.acts.isEmpty()) return
@@ -1152,6 +1155,18 @@ private fun Acts(graph: AppGraph, message: ChatMessage, live: Boolean) {
     val settings by graph.settings.state.collectAsStateWithLifecycle()
     val chat by graph.chat.state.collectAsStateWithLifecycle()
     val felix by graph.stores.felix.state.collectAsStateWithLifecycle()
+    // Today's kept pieces (G1), as the log changes, and the day.
+    val log by graph.log.state.collectAsStateWithLifecycle()
+    val today by produceState(graph.focus.today()) {
+        while (true) {
+            // Till midnight, but a few minutes at most: a delay doesn't count the phone's deep sleep, so the chat left open
+            // overnight reads the new day within minutes of waking.
+            delay((value.plusDays(1).atStartOfDay(graph.clock.zone()).toInstant().toEpochMilli() - graph.clock.now()).coerceIn(1_000L, DAY_CHECK_MS))
+            value = graph.focus.today()
+        }
+    }
+    val kept = remember(log, today) { graph.conversation.keptAt() }
+    val dayStart = remember(today) { today.atStartOfDay(graph.clock.zone()).toInstant().toEpochMilli() }
     val scope = rememberCoroutineScope()
     var said by remember(message.id) { mutableStateOf<String?>(null) }
     val quiet = MaterialTheme.colorScheme.onSurfaceVariant
@@ -1166,7 +1181,7 @@ private fun Acts(graph: AppGraph, message: ChatMessage, live: Boolean) {
             )
             when {
                 act.undone -> Text("Undone", style = MaterialTheme.typography.labelMedium, color = quiet, modifier = Modifier.padding(horizontal = 12.dp))
-                live && ChatActs.canUndo(act, tasks.tasks, settings, chat.messages, felix.notes, felix.reminders, messageId = message.id, now = graph.clock.now(), readAt = { s -> tasks.status(s).lastSuccessAt }) -> TextButton(onClick = { scope.launch { said = graph.conversation.undoAct(message.id, i) } }) { Text("Undo") }
+                live && ChatActs.canUndo(act, tasks.tasks, settings, chat.messages, felix.notes, felix.reminders, kept, messageId = message.id, now = graph.clock.now(), dayStart = dayStart, readAt = { s -> tasks.status(s).lastSuccessAt }) -> TextButton(onClick = { scope.launch { said = graph.conversation.undoAct(message.id, i) } }) { Text("Undo") }
             }
         }
     }

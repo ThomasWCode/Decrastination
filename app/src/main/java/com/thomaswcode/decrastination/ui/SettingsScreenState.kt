@@ -9,6 +9,7 @@ import com.thomaswcode.decrastination.core.Blocklist
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.SettingsLimits
 import com.thomaswcode.decrastination.core.TaskItem
+import com.thomaswcode.decrastination.core.Timetable
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.protect.Protection
 import com.thomaswcode.decrastination.protect.SettingsChanges
@@ -88,9 +89,15 @@ class SettingsScreenState(asked: Settings) {
         draft = draft.copy(blockedSites = text.lines().map { it.trim().lowercase() }.filter { it.isNotEmpty() }.distinct())
     }
 
-    /** Each class code the sources give in [tasks], and those named already: the ones to say the subject of. */
-    fun classCodes(tasks: List<TaskItem>): List<String> =
-        (draft.classMap.keys + tasks.mapNotNull { it.className?.trim()?.takeIf(String::isNotEmpty) }).distinct().sorted().take(SettingsLimits.MAX_CLASSES)
+    /**
+     * Each class code the sources give in [tasks], those named already, and since 4.1.1 the [timetable]'s classes
+     * with no task yet but its study period (G8), so each Power Planner class can be given the subject that ties
+     * it to its Teams code: the ones to say the subject of.
+     */
+    fun classCodes(tasks: List<TaskItem>, timetable: Timetable? = null): List<String> =
+        (draft.classMap.keys + tasks.mapNotNull { it.className?.trim()?.takeIf(String::isNotEmpty) } +
+            timetable?.classes.orEmpty().map { it.name.trim() }.filter { it.isNotEmpty() && !it.equals(draft.studyPeriodName.trim(), ignoreCase = true) })
+            .distinct().sorted().take(SettingsLimits.MAX_CLASSES)
 
     /** The class [code] is [subject]: blank leaves it the code. */
     fun subject(code: String, subject: String) {

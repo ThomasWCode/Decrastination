@@ -94,34 +94,34 @@ class Focus(
 
     fun today(now: Long = clock.now()): LocalDate = Instant.ofEpochMilli(now).atZone(clock.zone()).toLocalDate()
 
-    /** Whether a blocked app may be in front now. */
-    fun verdict(now: Long = clock.now()): BlockPolicy.Verdict {
+    /** Whether a blocked app may be in front now, by [plan]: the plan now, or one Felix is shown, so they agree. */
+    fun verdict(now: Long = clock.now(), plan: Plan = this.plan(now)): BlockPolicy.Verdict {
         val state = protection.value
         return BlockPolicy.decide(
             BlockPolicy.Input(
                 now = now,
                 zone = clock.zone(),
                 settings = settings.value,
-                pressure = plan(now).pressure || missedKeepsPressure(now),
+                pressure = plan.pressure || missedKeepsPressure(now),
                 creditLeftMs = creditLeftMs(now),
                 overrideUntil = state.overrideUntil,
                 forceActiveUntil = state.forceActiveUntil,
                 schoolDay = schoolDay(today(now)),
-                gapUntil = gapUntil(now),
+                gapUntil = gapUntil(now, plan),
             ),
         )
     }
 
     /**
-     * The end of the gap after a slot kept today that [now] is in (BL-10), if it's in one. None once
+     * The end of the gap after a slot kept today that [now] is in (BL-10), by [plan], if it's in one. None once
      * a slot's been missed since: the gap ended when that one began, and its new time opens no other.
      */
-    fun gapUntil(now: Long = clock.now()): Long? {
+    fun gapUntil(now: Long = clock.now(), plan: Plan = this.plan(now)): Long? {
         val today = today(now).toString()
         val records = log.value.slots.filter { it.date == today }
         val keptAt = records.filter { it.outcome.kept }.maxOfOrNull { it.at } ?: return null
         if (records.any { it.outcome == SlotOutcome.Missed && it.at > keptAt }) return null
-        return plan(now).gapUntil(now, keptAt)
+        return plan.gapUntil(now, keptAt)
     }
 
     /**
@@ -193,6 +193,18 @@ class Focus(
         return if (parts.isEmpty()) line else "$line → ${parts.joinToString(", ")}"
     }
 
+    /**
+     * Whether blocking applies now and why, the free time there is, and what finishing today earns (G5), as
+     * Felix's chat is told it: "Blocking: on until today's work's done (2 pieces, 1 h); free time 12 min.
+     * Finish today's 2 slots (1 h) → 20 min free" ([blockingLine]).
+     */
+    fun blockingLine(plan: Plan, now: Long = clock.now()): String {
+        val today = today(now)
+        // A slot missed today that went to tomorrow keeps it on till the day's hours end (BL-11), whatever's done.
+        val spilledTill = if (missedKeepsPressure(now)) hoursEndMin(today) else null
+        return blockingLine(verdict(now, plan), plan.todayBucket?.chunks.orEmpty(), (creditLeftMs(now) / 60_000L).toInt(), BlockPolicy.blockFromMin(settings.value, schoolDay(today)), rewardLine(plan, now), spilledTill)
+    }
+
     /** What lets a kept slot of [piece] earn (BL-08), by the settings. */
     fun earnsBy(piece: Chunk): EarnsBy = piece.earnsBy(settings.value.photoFromMin)
 
@@ -203,9 +215,11 @@ class Focus(
     fun missedKeepsPressure(now: Long = clock.now()): Boolean {
         val today = today(now)
         if (session.value.slots.on(today).missed.none { it.spilled }) return false
-        val hours = if (schoolDay(today)) settings.value.weekdayHours else settings.value.weekendHours
-        return BlockPolicy.minuteOfDay(now, clock.zone()) < hours.endMin
+        return BlockPolicy.minuteOfDay(now, clock.zone()) < hoursEndMin(today)
     }
+
+    /** When [today]'s work hours end, in minutes after midnight: a school day's or another's. */
+    private fun hoursEndMin(today: LocalDate): Int = (if (schoolDay(today)) settings.value.weekdayHours else settings.value.weekendHours).endMin
 
     /** [pkg] as something the blocker covers outright (an app, or a browser whose sites can't be read). */
     fun target(pkg: String): Target? {
@@ -426,15 +440,29 @@ class Focus(
     }
 
     /**
+     * [key]'s piece as a keep of it counts it now ([keepSlot]): its own minutes, and its step's other sittings
+     * still to do where it's the step's last. Null with no such piece on the plan.
+     */
+    fun pieceMinutes(key: String, now: Long = clock.now()): Pair<Int, Int>? {
+        val plan = plan(now)
+        val chunk = (plan.todaySlots + plan.buckets.flatMap { it.slots }).firstOrNull { it.kind == SlotKind.Work && it.chunk?.key == key }?.chunk ?: plan.ordered.firstOrNull { it.key == key } ?: return null
+        val rest = if (chunk.stepIndex == null || chunk.ticks == null) 0 else plan.chunksOf(chunk.taskId).filter { it.stepIndex == chunk.stepIndex && it.key != key }.sumOf { it.minutes }
+        return chunk.minutes to rest
+    }
+
+    /**
      * The last slot of [key]'s kept since [since] taken back (UI-03's Undo): its record gone (one kept
      * late is the miss it was again, on record and in today's misses), its step to do again (the key
      * says which) or a box's minutes off its task, and the free time it earned given back, as far as
      * it's left. Not once its task has finished by it (one of your own, its last piece): false then,
-     * and with none to take back.
+     * and with none to take back; with [reopen], one of your own, or one done by its tick (NF-06), that it
+     * finished is open again, in the same write, as a tick's Undo opens one ([untickBlock]).
      */
-    suspend fun unkeepSlot(key: String, since: Long, now: Long = clock.now()): Boolean = keeping.withLock {
+    suspend fun unkeepSlot(key: String, since: Long, now: Long = clock.now(), reopen: Boolean = false): Boolean = keeping.withLock {
         val record = log.value.slots.lastOrNull { it.key == key && it.outcome.kept && it.at >= since } ?: return@withLock false
-        if (tasks.value.tasks.firstOrNull { it.id == record.taskId }?.isOpen != true) return@withLock false
+        val task = tasks.value.tasks.firstOrNull { it.id == record.taskId }
+        val opens = reopen && task != null && !task.isOpen && (task.source == Source.Own || task.tickDone) && task.status == Status.Done
+        if (task?.isOpen != true && !opens) return@withLock false
         // A step's key is its task and its place ("id#2"); a sitting before its step's last has how
         // many come after it too ("id#2#1"), and a box its part after a -1 ("id#-1#1"): only a step's
         // tick is taken back, the others' minutes alone.
@@ -444,7 +472,7 @@ class Focus(
                 tasks = state.tasks.map { t ->
                     if (t.id != record.taskId) return@map t
                     val steps = if (stepIndex == null) t.subSteps else t.subSteps.mapIndexed { i, s -> if (i == stepIndex) s.copy(done = false, timedMin = 0) else s }
-                    t.copy(subSteps = steps, workedMin = (t.workedMin - record.workedMin).coerceAtLeast(0))
+                    t.copy(subSteps = steps, workedMin = (t.workedMin - record.workedMin).coerceAtLeast(0)).let { if (opens) it.copy(status = Status.Open, doneAt = null) else it }
                 },
             )
         }
@@ -795,6 +823,31 @@ class Focus(
     }
 
     companion object {
+        /**
+         * [verdict] in words, with today's [pieces] still to do, the [freeMin] there is, when blocking starts
+         * ([blockFromMin], minutes after midnight) and what finishing earns ([reward], [rewardLine]); where a slot
+         * missed today went to tomorrow (BL-11), when the day's hours end ([spilledTillMin]), till which it's on: pure.
+         */
+        fun blockingLine(verdict: BlockPolicy.Verdict, pieces: List<Chunk>, freeMin: Int, blockFromMin: Int, reward: String?, spilledTillMin: Int? = null): String {
+            val left = "${pieces.size} piece${if (pieces.size == 1) "" else "s"}, ${Format.minutes(pieces.sumOf { it.minutes })}"
+            val state = when (verdict) {
+                is BlockPolicy.Verdict.Block -> when {
+                    verdict.reason != BlockPolicy.Reason.TodayUndone -> "on: no free time left today"
+                    // On till the day's hours end, whatever's done: letting a slot lapse doesn't buy the evening.
+                    spilledTillMin != null -> "on till %02d:%02d: a slot missed today went to tomorrow".format(spilledTillMin / 60, spilledTillMin % 60) + if (pieces.isEmpty()) "" else "; today's work left: $left"
+                    else -> "on until today's work's done ($left)"
+                }
+                BlockPolicy.Verdict.Spend -> "off while their free time is spent"
+                is BlockPolicy.Verdict.Allow -> when (verdict.reason) {
+                    BlockPolicy.Reason.Quiet -> "off: quiet hours"
+                    BlockPolicy.Reason.BeforeBlock -> "off until %02d:%02d".format(blockFromMin / 60, blockFromMin % 60)
+                    BlockPolicy.Reason.Override -> "off: unblocked by a parent code"
+                    else -> "off"
+                }
+            }
+            return "Blocking: $state; free time ${Format.minutes(freeMin)}" + reward?.let { ". $it" }.orEmpty()
+        }
+
         /** How soon after a piece's Done a tick on it is that Done's tap again, whenever its screen saw it: no piece is worked in less. */
         private const val AGAIN_MS = 30_000L
         private const val PLAN_TTL_MS = 60_000L

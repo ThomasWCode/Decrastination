@@ -3,8 +3,12 @@ package com.thomaswcode.decrastination.block
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
 import com.thomaswcode.decrastination.core.Blocklist
+import com.thomaswcode.decrastination.core.Chunk
+import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Settings
+import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Uptime
+import com.thomaswcode.decrastination.core.Why
 import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -117,6 +121,26 @@ class BlockPolicyTest {
     fun `a parent's unblock lets everything through until it ends`() {
         assertEquals(BlockPolicy.Verdict.Allow(BlockPolicy.Reason.Override), decide("2026-10-10T12:00", overrideUntil = "2026-10-10T13:00"))
         assertIs<BlockPolicy.Verdict.Block>(decide("2026-10-10T13:00", overrideUntil = "2026-10-10T13:00"))
+    }
+
+    @Test
+    fun `the chat is told whether blocking applies and why, the free time, and what finishing earns (G5)`() {
+        fun piece(minutes: Int) = Chunk("teams:t", Source.Teams, Kind.Homework, "Sheet", null, minutes, null, 0, soft = false, overdue = false, dueToday = false, behind = false, part = 1, parts = 1, taskMinutes = minutes, why = Why.Spread)
+        val two = listOf(piece(30), piece(30))
+        assertEquals(
+            "Blocking: on until today's work's done (2 pieces, 1 h); free time 12 min. Finish today's 2 slots (1 h) → 20 min free",
+            Focus.blockingLine(BlockPolicy.Verdict.Block(BlockPolicy.Reason.TodayUndone), two, 12, 16 * 60 + 45, "Finish today's 2 slots (1 h) → 20 min free"),
+        )
+        assertEquals("Blocking: on: no free time left today; free time 0 min", Focus.blockingLine(BlockPolicy.Verdict.Block(BlockPolicy.Reason.NoFreeTime), emptyList(), 0, 16 * 60 + 45, null))
+        assertEquals("Blocking: off until 16:45; free time 5 min", Focus.blockingLine(BlockPolicy.Verdict.Allow(BlockPolicy.Reason.BeforeBlock), two, 5, 16 * 60 + 45, null))
+        assertEquals("Blocking: off: quiet hours; free time 0 min", Focus.blockingLine(BlockPolicy.Verdict.Allow(BlockPolicy.Reason.Quiet), emptyList(), 0, 16 * 60 + 45, null))
+        assertEquals("Blocking: off while their free time is spent; free time 25 min", Focus.blockingLine(BlockPolicy.Verdict.Spend, emptyList(), 25, 16 * 60 + 45, null))
+        // A slot missed today went to tomorrow (BL-11): on till the day's hours end, with work left or none.
+        assertEquals("Blocking: on till 18:30: a slot missed today went to tomorrow; free time 0 min", Focus.blockingLine(BlockPolicy.Verdict.Block(BlockPolicy.Reason.TodayUndone), emptyList(), 0, 16 * 60 + 45, null, 18 * 60 + 30))
+        assertEquals(
+            "Blocking: on till 18:30: a slot missed today went to tomorrow; today's work left: 2 pieces, 1 h; free time 12 min",
+            Focus.blockingLine(BlockPolicy.Verdict.Block(BlockPolicy.Reason.TodayUndone), two, 12, 16 * 60 + 45, null, 18 * 60 + 30),
+        )
     }
 
     @Test
