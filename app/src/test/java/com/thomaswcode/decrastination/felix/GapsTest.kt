@@ -5,8 +5,10 @@ import com.thomaswcode.decrastination.core.ChatAction
 import com.thomaswcode.decrastination.core.ChatActs
 import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.core.Kind
+import com.thomaswcode.decrastination.core.MessageKind
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Speaker
+import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.core.TaskItem
 import kotlin.test.AfterTest
 import kotlin.test.Test
@@ -82,6 +84,42 @@ class GapsTest {
         assertTrue(canUndo(taken, 0))
         assertNull(conversation.undoAct(taken.id, 0))
         assertEquals(listOf(key), conversation.keptToday().map { it.key })
+    }
+
+    /** His sync action (G2): [source] read, about [taskId]. */
+    private fun sync(source: String, taskId: String = "") = """{"type":"sync","taskId":"$taskId","stepIndex":-1,"setting":"$source","value":""}"""
+
+    @Test
+    fun `asked to check a source, it's read now, said with no Undo, and his note says how the task he was asked about changed`() = runBlocking {
+        stores.tasks.update { it.copy(tasks = listOf(sheet)) }
+        val his = asked("I've handed it in, check Teams", answer("Reading Teams.", listOf(sync("Teams", sheet.id))))
+        assertEquals(listOf(setOf(Source.Teams)), felix.synced)
+        assertEquals("Asked Teams to read", his.acts.single().line)
+        assertNull(his.acts.single().action)
+        // A read that changes nothing says nothing, and he keeps watching.
+        conversation.afterSync()
+        assertTrue(stores.chat.value.messages.none { it.kind == MessageKind.Note })
+        // Teams' read finds it handed in: his note says so, once.
+        stores.tasks.update { s -> s.copy(tasks = s.tasks.map { it.copy(status = Status.Done, doneAt = now) }) }
+        conversation.afterSync()
+        conversation.afterSync()
+        val note = stores.chat.value.messages.single { it.kind == MessageKind.Note }
+        assertEquals("Teams says “Forces worksheet” is handed in.", note.text)
+        assertTrue(note.byApp && note.about.taskId == sheet.id)
+    }
+
+    @Test
+    fun `a read past the watch says nothing, and a source the app doesn't read is refused`() = runBlocking {
+        stores.tasks.update { it.copy(tasks = listOf(sheet)) }
+        asked("check Teams", answer("Reading Teams.", listOf(sync("Teams", sheet.id))))
+        felix.clock.time = now + 20 * 60_000L
+        conversation.afterSync()
+        stores.tasks.update { s -> s.copy(tasks = s.tasks.map { it.copy(dueAt = Fixtures.at("2026-10-23T09:00")) }) }
+        conversation.afterSync()
+        assertTrue(stores.chat.value.messages.none { it.kind == MessageKind.Note })
+        val refused = asked("check Moodle", answer("Can't.", listOf(sync("Moodle"))))
+        assertTrue(refused.acts.isEmpty() && refused.note!!.contains("Moodle"))
+        assertEquals(1, felix.synced.size)
     }
 
     @Test

@@ -59,7 +59,11 @@ import com.thomaswcode.decrastination.learn.EventJudge
 import com.thomaswcode.decrastination.notify.Channels
 import com.thomaswcode.decrastination.notify.Notices
 import com.thomaswcode.decrastination.plan.Planning
+import java.time.Instant
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.Flow
@@ -113,6 +117,11 @@ class Conversation(
     private val answered: suspend (ChatMessage, String) -> Boolean,
     /** His words for the reminders due within his window, written now ([Looks.draftReminders]): after one's set, moved or brought back. */
     private val draftReminders: suspend (Long) -> Unit = {},
+    /**
+     * [Source]s read now, as a job (G2, [com.thomaswcode.decrastination.sync.Sync.syncNow]): a callback, as the Sync service
+     * calls this one (a calendar event's question), so this one mustn't call it back.
+     */
+    private val requestSync: (Set<Source>) -> Unit = {},
 ) {
     /**
      * What the chat changes through those who own it (`AppGraph`'s functions, till Stage 6 makes
@@ -517,6 +526,45 @@ class Conversation(
         )
     }
 
+    /** A task he asked a source to read about (G2), as it was then, watched till [until]. */
+    private data class Watch(val source: Source, val was: TaskItem, val until: Long)
+
+    /** The tasks he asked sources to read about (G2), by id: in memory, as a read comes within minutes or not at all. */
+    private val watching = ConcurrentHashMap<String, Watch>()
+
+    /**
+     * After every sync (G2): each task he asked a source to read about that the read changed (finished,
+     * open again, due another day, its words), said in a note of his in the app's words, then let go;
+     * one unchanged waits for a later read till its watch is over, so a sync already under way when he
+     * asked doesn't end it.
+     */
+    suspend fun afterSync(now: Long = clock.now()) {
+        if (watching.isEmpty()) return
+        val byId = tasks.value.tasks.associateBy { it.id }
+        for ((id, watch) in watching.entries.toList()) {
+            val task = byId[id]
+            val what = task?.let { changed(watch.was, it, watch.source) }
+            if (what == null && now < watch.until && task != null) continue
+            watching.remove(id, watch)
+            if (what == null || task == null) continue
+            outbox.send(ChatMessage(UUID.randomUUID().toString(), Speaker.Felix, FelixWords.read(watch.source.label, task.title, what), now, About(taskId = task.id, taskTitle = task.title), kind = MessageKind.Note, byApp = true))
+        }
+    }
+
+    /** How [now] differs from [was], as a read of [source] tells it, in words; null where nothing he'd say changed. */
+    private fun changed(was: TaskItem, now: TaskItem, source: Source): String? = when {
+        was.isOpen && !now.isOpen -> when (source) {
+            Source.Teams -> "is handed in"
+            Source.Gmail -> "is unstarred, so it's done"
+            Source.Anki -> "is studied"
+            else -> "is done"
+        }
+        !was.isOpen && now.isOpen -> "is open again"
+        was.dueAt != now.dueAt -> now.dueAt?.let { "is due ${Instant.ofEpochMilli(it).atZone(clock.zone()).format(WHEN)} now" } ?: "has no due date now"
+        was.title != now.title || was.detail != now.detail -> "has changed"
+        else -> null
+    }
+
     /** Today's slots kept (G1), newest last: what unkeepPiece takes back, and what a keep's Undo needs to find. */
     fun keptToday(now: Long = clock.now()): List<SlotRecord> {
         val today = focus.today(now).toString()
@@ -790,6 +838,13 @@ class Conversation(
                 }
                 // Made from the answer's reminders and notes ([keep]), not its actions.
                 ChatAction.Type.SetReminder, ChatAction.Type.MoveReminder, ChatAction.Type.AddNote -> null
+                // A source read now (G2), said with no Undo; the task asked about watched, so its change is said when it's read.
+                ChatAction.Type.Sync -> {
+                    val source = Source.entries.firstOrNull { it.name == a.setting } ?: return@mapNotNull null
+                    task?.let { watching[it.id] = Watch(source, it, clock.now() + WATCH_MS) }
+                    requestSync(setOf(source))
+                    Act(FelixWords.reading(source.label))
+                }
                 // A piece done that has no step to tick (G1): kept as Day's Done keeps it, earning as that does; or taken back.
                 ChatAction.Type.KeepPiece -> {
                     val label = planning.plan().let { p -> (p.todaySlots.mapNotNull { it.chunk } + p.ordered).firstOrNull { it.key == a.value } }?.label ?: task?.title
@@ -866,7 +921,8 @@ class Conversation(
         val step = a.stepIndex?.let { i -> task?.subSteps?.getOrNull(i) }
         fun open(id: String) = tasks.value.tasks.firstOrNull { it.id == id }?.isOpen
         val undone = when (a.type) {
-            ChatAction.Type.Open -> false
+            // A task shown, a source read (G2): nothing to take back.
+            ChatAction.Type.Open, ChatAction.Type.Sync -> false
             // The step that finished one of yours: open again with it to do.
             ChatAction.Type.TickStep -> step?.done == true && focus.untickBlock(task!!.id, a.stepIndex!!, step.title, reopen = true)
             ChatAction.Type.UntickStep -> step?.done == false && task!!.isOpen && tick(task, a.stepIndex!!, step.title)
@@ -1230,5 +1286,11 @@ class Conversation(
 
         /** Completions kept for his evening question, at most: the newest. */
         private const val MAX_ASKS = 20
+
+        /** How long a task he asked a source to read about is watched (G2): a read is seconds, the Teams widget's own sync a minute or two. */
+        private const val WATCH_MS = 15 * 60_000L
+
+        /** A due date, as his note says it. */
+        private val WHEN = DateTimeFormatter.ofPattern("EEE d MMM HH:mm", Locale.UK)
     }
 }

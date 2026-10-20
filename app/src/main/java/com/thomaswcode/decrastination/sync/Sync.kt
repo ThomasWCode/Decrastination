@@ -120,6 +120,9 @@ class Sync(
     /** Every source read now, or only [only], one sync at a time ([Syncer.sync]). */
     suspend fun sync(only: Set<Source>? = null): SyncReport = syncer.sync(only)
 
+    /** [sources] read now, or every one, as a job that keeps its network after what asked has gone (Felix's `sync`, G2). */
+    fun syncNow(sources: Set<Source>? = null) = ports.syncNow(sources)
+
     /**
      * The calendar's busy time and per-day loads (Phase 5), as last read and judged: the calendar as the
      * planner counts it, from its last read. A plan made before that read is dropped with it.
