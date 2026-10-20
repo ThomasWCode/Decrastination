@@ -644,16 +644,19 @@ object ChatPrompts {
     /**
      * The calendar a round brings (G7, 8c), its events listed as the fortnight's are: [month] (yyyy-MM), or with it
      * empty the four weeks after the fortnight; at most [InstructionPrompts.MAX_EVENTS] events, saying how many more
-     * there are and from when, and where the calendar's read begins and ends (a day back, and the plan's reach,
-     * [CalendarTime.readUntil]), so a month crowded by repeating events, or one past the read, isn't taken for an
-     * empty one.
+     * there are and from when, and where the calendar's last good [read] began and ended (a day back, and the plan's
+     * reach then, [CalendarTime.readUntil]), so a month crowded by repeating events, one past the read, or a calendar
+     * that couldn't be read at all, isn't taken for an empty one.
      */
-    fun calendarBlock(events: List<CalendarEvent>, month: String, now: Long, zone: ZoneId): String = buildString {
+    fun calendarBlock(events: List<CalendarEvent>, month: String, now: Long, zone: ZoneId, read: Pair<Long, Long>?): String = buildString {
         val (from, to) = calendarSpan(month, now, zone)
-        val readFrom = now - CalendarTime.DAY_MS
-        val readTo = CalendarTime.readUntil(now, zone)
-        fun day(time: Long) = Instant.ofEpochMilli(time).atZone(zone).format(DAY)
         append("The calendar you asked for, ${calendarWhat(month, now, zone)} (eventKey | title | when; answer from it, and leave details empty):")
+        if (read == null) {
+            append("\n(none known: the calendar couldn't be read)")
+            return@buildString
+        }
+        val (readFrom, readTo) = read
+        fun day(time: Long) = Instant.ofEpochMilli(time).atZone(zone).format(DAY)
         // An all-day event by its dates, as the calendar keeps it (midnight to midnight, UTC): by its times it would
         // run into the day before a month in summer time.
         val days = Instant.ofEpochMilli(from).atZone(zone).toLocalDate() to Instant.ofEpochMilli(to - 1).atZone(zone).toLocalDate()
