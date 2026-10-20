@@ -280,6 +280,7 @@ object ChatAnswers {
                     if (kind == ChatPrompts.WHEN_SLOT) {
                         // From the day it's asked for, or now.
                         val from = g.date.trim().takeIf { it.isNotEmpty() }?.let { at(it, null, LocalTime.MIDNIGHT, zone) ?: return@mapNotNull no("“${words.take(60)}” from a day that doesn't read") }
+                        if (from != null && from > now + YEAR_MS) return@mapNotNull no("“${words.take(60)}” more than a year ahead")
                         Due(DueKind.SlotStart, maxOf(from ?: now, now))
                     } else {
                         if (on.deadlineAt(now) == null) return@mapNotNull no("“${words.take(60)}” before “${on.title.take(60)}” is due, which has no due date")

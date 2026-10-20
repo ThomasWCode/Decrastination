@@ -13,6 +13,7 @@ import com.thomaswcode.decrastination.core.ChatActs
 import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.core.ChatState
 import com.thomaswcode.decrastination.core.CheckInDraft
+import com.thomaswcode.decrastination.core.DueKind
 import com.thomaswcode.decrastination.core.Duplicates
 import com.thomaswcode.decrastination.core.FelixSettings
 import com.thomaswcode.decrastination.core.Given
@@ -806,6 +807,9 @@ class Conversation(
                 val was = kept.firstOrNull { it.id == r.id }
                 val at = Reminders.whenLine(r, Reminders.moment(r, plan, byId, now), title(r.taskId), zone)
                 when {
+                    // Its slot's or its deadline's task finished, gone or dateless while he answered: it would never come.
+                    r.due.kind != DueKind.At && Reminders.letGo(listOf(r), byId, now).isNotEmpty() ->
+                        acts += Act(Act.NOT_MADE + "the reminder “${r.text}”: “${title(r.taskId) ?: "its task"}” is finished, gone or without a due date now.", problem = true)
                     was == null && room <= 0 -> acts += Act(Act.NOT_MADE + "the reminder “${r.text}”: ${Reminders.MAX_PENDING} are still to come.", problem = true)
                     was == null -> {
                         kept = kept + r

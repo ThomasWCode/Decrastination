@@ -330,6 +330,19 @@ class NotesAndRemindersTest {
     }
 
     @Test
+    fun `a slot's reminder whose task is finished while he answers isn't made, and says so`() = runBlocking {
+        stores.tasks.update { it.copy(tasks = listOf(sheet)) }
+        felix.answers(answer("I'll remind you when you next sit down to it.", reminders = listOf(reminder(text = "bring the form", taskId = sheet.id, whenIs = "slotStart"))), delayMs = 1_500)
+        assertTrue(conversation.ask("remind me to bring the form when I next do the worksheet"))
+        delay(500)
+        stores.tasks.update { s -> s.copy(tasks = s.tasks.map { it.copy(status = Status.Done, doneAt = now) }) }
+        felix.settle()
+        val his = stores.chat.value.messages.last { it.from == Speaker.Felix }
+        assertTrue(stores.felix.value.reminders.isEmpty())
+        assertTrue(his.acts.single().let { it.problem && it.line.contains("bring the form") }, his.acts.toString())
+    }
+
+    @Test
     fun `a cancel and a note's delete mark what they name, kept whole for their Undo, which brings it back`() = runBlocking {
         stores.tasks.update { it.copy(tasks = listOf(sheet)) }
         asked("remind me at 7 to call gran, and note the sheet", answer("Done.", reminders = listOf(reminder(time = "19:00")), notes = listOf(note(sheet.id, "show the working"))))

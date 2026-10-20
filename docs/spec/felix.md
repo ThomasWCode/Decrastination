@@ -79,7 +79,7 @@ A task from Teams, Power Planner, Gmail or AnkiDroid is done when its source say
 - Each card says *Done* or *Added*, with *Undo* (`Conversation.undoProposal`); a task he added has *Change* (the form); one undone has *Redo*.
 - One that couldn't be made says "Not made: …" under his answer; a time the plan couldn't keep says where it went: "06:35 had no free time: it's at 10:45." (`ChatAnswers.movedPins`, PL-04).
 - His actions are listed under his answer (`ChatMessage.acts`, `Act` in `core/Chat.kt`), each with its *Undo* while `ChatActs.canUndo` finds it as he left it (`Conversation.undoAct`).
-- Reminders and notes are acts too (`Conversation.keep`): "Reminder set: Tue 20 Oct 19:00, “call gran”", "Moved: “call gran” to …" (its old time and words kept on the act), "Cancelled: the reminder …", "Noted on “…”: …", "Note deleted: …". A cancel and a delete only mark what they name, kept whole for the Undo. A reminder set or moved can be taken back while it's never come nor been snoozed, and not moved again since; Undo of a set takes it away, of a move puts its time and words back, of a cancel brings it back.
+- Reminders and notes are acts too (`Conversation.keep`): "Reminder set: Tue 20 Oct 19:00, “call gran”", "Moved: “call gran” to …" (its old time and words kept on the act), "Cancelled: the reminder …", "Noted on “…”: …", "Note deleted: …". A cancel and a delete only mark what they name, kept whole for the Undo. A reminder set or moved can be taken back while it's never come nor been snoozed, and not moved again since; Undo of a set takes it away, of a move puts its time and words back, of a cancel brings it back, while there's room for it among those still to come (a deleted note's, on its task).
 - Undo takes back a tick (one of yours it finished opens again), ticks an untick again, opens a finished task again or finishes a reopened one as it stood, restores a deleted task with the cards that added it, and puts a setting back.
 - Once something else has changed it, its Undo says it can't be undone any more.
 
@@ -131,7 +131,7 @@ What comes back, and what's done with it:
 - An At comes whatever the hour, as an alarm would (Q10: A); a SlotStart or a BeforeDue follows its slot or its deadline.
 - One more than five minutes late (the phone off through it) comes in your words, marked "(late: it was for 19:00)".
 - One whose task closes, goes from the list, or (a BeforeDue's) loses its deadline before it comes is let go, said in a note of his in the app's words (kind Note).
-- What changed while he answered is counted again as it's made: a reminder come meanwhile isn't moved or cancelled, and a note past its task's ten (one added on its sheet meanwhile) isn't kept, each said under his reply as not made.
+- What changed while he answered is counted again as it's made: a reminder come meanwhile isn't moved or cancelled, one whose slot's or deadline's task finished meanwhile isn't set, and a note past its task's ten (one added on its sheet meanwhile) isn't kept, each said under his reply as not made.
 - His replies are *Done*, *Snooze 15 min* and *Snooze 1 h* (Q11: A), each taken with no call: a snooze has it come again then, written for again near the time. Any other words are a turn of the chat with it quoted.
 - Each morning after the briefing (`Conversation.pruneFelix`), a reminder sent or done a month ago goes, as do a cancelled one and a deleted note once their act's Undo has left the chat's window with its message, and a deleted task's notes once its delete can't be undone.
 

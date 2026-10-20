@@ -42,6 +42,12 @@ object Notes {
     /** The most standing notes kept at once: each goes with every task it matches. */
     const val MAX_STANDING = 20
 
+    /** Whether [note], not kept now (deleted), has room to be again: its task under [PER_TASK] notes, or standing ones under [MAX_STANDING]. */
+    fun hasRoom(note: Note, notes: List<Note>): Boolean {
+        val live = live(notes).filter { it.id != note.id }
+        return if (note.taskId != null) live.count { it.taskId == note.taskId } < PER_TASK else live.count { it.scope != null } < MAX_STANDING
+    }
+
     /** Those of [notes] not deleted. */
     fun live(notes: List<Note>): List<Note> = notes.filter { it.deletedAt == null }
 

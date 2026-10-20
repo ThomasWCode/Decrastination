@@ -93,6 +93,8 @@ class ChatRemindersTest {
         assertTrue(reading.reminders.isEmpty())
         assertEquals(10, reading.leftOut.size, reading.leftOut.joinToString("\n"))
         assertTrue(reading.leftOut.last().contains("which has gone by"))
+        // A slot's from a day past the year ahead never comes in reach: refused as an At's would be.
+        assertTrue(parse(answer(listOf(reminder(text = "in 2099", date = "2099-10-21", taskId = sheet.id, whenIs = "slotStart")))).leftOut.single().contains("more than a year ahead"))
         assertTrue(reading.leftOut.first().contains("16:00, which has gone by"))
         // A minute behind, as his reading of now may be, is now.
         assertEquals(1, parse(answer(listOf(reminder(time = "16:59")))).reminders.size)
