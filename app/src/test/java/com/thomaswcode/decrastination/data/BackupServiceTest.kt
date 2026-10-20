@@ -197,6 +197,21 @@ class BackupServiceTest {
     }
 
     @Test
+    fun `a fact whose task the backup's chat can still bring back is kept, into an empty phone`() = runTest {
+        val hour = 3_600_000L
+        val from = Phone(full = false)
+        val gone = com.thomaswcode.decrastination.core.TaskItem(id = "own:gone", source = com.thomaswcode.decrastination.core.Source.Own, sourceId = "gone", title = "A task since deleted", kind = com.thomaswcode.decrastination.core.Kind.Admin, firstSeenAt = clock.time - hour, lastSeenAt = clock.time - hour)
+        // Its delete's act in the chat, not undone: its Undo brings the task back.
+        val act = com.thomaswcode.decrastination.core.Act("Deleted “A task since deleted”.", action = com.thomaswcode.decrastination.core.ChatAction(com.thomaswcode.decrastination.core.ChatAction.Type.Delete, gone.id), was = gone)
+        from.stores.replace(from.stores.chat, ChatState(listOf(ChatMessage("f1", Speaker.Felix, "Deleted it.", clock.time - hour, acts = listOf(act)))))
+        from.stores.replace(from.stores.memory, MemoryState(facts = listOf(Fact("deadline", "the essay can be late", clock.time - hour, taskId = gone.id))))
+        val to = Phone(full = false)
+        to.service.importBackup(from.service.exportBackup())
+        settle()
+        assertEquals(listOf("deadline"), to.stores.memory.value.facts.map { it.topic })
+    }
+
+    @Test
     fun `where Documents can't take the copy, it goes in the app's own files, listed and restored from there`() = runTest {
         val phone = Phone(full = true)
         phone.folder.available = false

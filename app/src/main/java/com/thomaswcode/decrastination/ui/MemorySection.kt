@@ -9,6 +9,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
@@ -34,6 +35,8 @@ import kotlinx.coroutines.launch
 fun MemorySection(graph: AppGraph) {
     val memory by graph.memory.state.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
+    // What's run out let go of as the list opens (10a), so it never shows what he no longer uses.
+    LaunchedEffect(Unit) { graph.conversation.forgetExpired() }
     var rule by rememberSaveable { mutableStateOf("") }
     // What adding one did ("Felix will: …", or why it wasn't added).
     var said by rememberSaveable { mutableStateOf<String?>(null) }

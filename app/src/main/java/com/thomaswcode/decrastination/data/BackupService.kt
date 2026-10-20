@@ -147,11 +147,12 @@ class BackupService(
         stores.replace(stores.tasks) { state -> state.copy(tasks = state.tasks + Backups.restoredOwnTasks(backup.ownTasks, state.tasks)) }
         if (ownAdded.isNotEmpty()) layTaskOverrides()
         // The backup's days off and half-days beside those here (PL-16); and what it remembered (AI-21), what's run
-        // out on either side let go of first (10a), so one here can't take the place of the backup's that holds.
+        // out on either side let go of first (10a), so one here can't take the place of the backup's that holds. A
+        // delete the backup's chat can still undo holds its task's facts too, as that chat's restored after.
         stores.replace(stores.school) { it.withAll(backup.school) }
         val now = clock.now()
         val tasks = stores.tasks.value
-        val held = ChatActs.held(stores.chat.value.messages)
+        val held = ChatActs.held(stores.chat.value.messages) + ChatActs.held(backup.chat.messages)
         fun live(memory: MemoryState) = Memories.expired(memory, tasks.tasks.associateBy { it.id }, now, held) { source -> tasks.status(source).lastSuccessAt }
         stores.replace(stores.memory) { Backups.mergedMemory(live(it), live(backup.memory)) }
         // The chat where this phone's is empty (a reset's copy brings it back, LR-08), with its earlier
