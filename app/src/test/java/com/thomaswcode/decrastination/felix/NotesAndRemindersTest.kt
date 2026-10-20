@@ -27,6 +27,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 
 /**
@@ -150,8 +151,8 @@ class NotesAndRemindersTest {
         val moment = now + 5 * MIN
         stores.felix.update { s ->
             s.copy(reminders = listOf(
-                at("call gran", moment).copy(draft = FelixAnswer("oi, you said to call gran. between slots now, so good time"), draftedAt = moment - 8 * MIN),
-                at("stretch", now - 40 * MIN).copy(draft = FelixAnswer("stretch now"), draftedAt = now - 45 * MIN),
+                at("call gran", moment).copy(draft = FelixAnswer("oi, you said to call gran. between slots now, so good time"), draftedAt = moment - 8 * MIN, draftFor = moment),
+                at("stretch", now - 40 * MIN).copy(draft = FelixAnswer("stretch now"), draftedAt = now - 45 * MIN, draftFor = now - 40 * MIN),
             ))
         }
         felix.clock.time = moment
@@ -307,6 +308,25 @@ class NotesAndRemindersTest {
         stores.chat.update { it.copy(messages = emptyList()) }
         conversation.pruneFelix(now)
         assertTrue(stores.felix.value.notes.isEmpty())
+    }
+
+    @Test
+    fun `what changed while he answered is counted again as it's made, and what no longer can be is said, not dropped`() = runBlocking {
+        stores.tasks.update { it.copy(tasks = listOf(sheet)) }
+        repeat(9) { assertNull(conversation.addNote(sheet.id, "note $it")) }
+        stores.felix.update { it.copy(reminders = listOf(at("call gran", now + 60 * MIN))) }
+        felix.answers(answer("Noted, and cancelled.", notes = listOf(note(sheet.id, "his tenth")), actions = listOf(action("cancelReminder", "r-call gran"))), delayMs = 1_500)
+        assertTrue(conversation.ask("note the sheet, and cancel gran"))
+        // Meanwhile a tenth from the sheet, and the reminder came.
+        delay(500)
+        assertNull(conversation.addNote(sheet.id, "your tenth"))
+        stores.felix.update { s -> s.copy(reminders = s.reminders.map { it.copy(sentAt = now) }) }
+        felix.settle()
+        val his = stores.chat.value.messages.last { it.from == Speaker.Felix }
+        assertEquals(10, Notes.on(sheet.id, stores.felix.value.notes).size)
+        assertTrue(his.acts.all { it.problem && it.action == null }, his.acts.toString())
+        assertEquals(2, his.acts.size)
+        assertNull(stores.felix.value.reminders.single().cancelledAt)
     }
 
     @Test

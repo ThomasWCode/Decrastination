@@ -47,7 +47,7 @@ class RemindersTest {
         val sent = r.copy(sentAt = Fixtures.at("2026-10-20T19:00"))
         assertFalse(Reminders.pending(sent))
         val snoozed = Reminders.snoozed(sent.copy(draft = FelixAnswer("oi"), draftedAt = now), Fixtures.at("2026-10-20T19:01"), 15)
-        assertTrue(Reminders.pending(snoozed) && snoozed.draft == null && snoozed.draftedAt == null)
+        assertTrue(Reminders.pending(snoozed) && snoozed.draft == null && snoozed.draftedAt == null && snoozed.draftFor == null)
         assertEquals(Fixtures.at("2026-10-20T19:16"), Reminders.next(listOf(snoozed), plan(), emptyMap(), now))
         assertTrue(Reminders.due(listOf(snoozed), plan(), emptyMap(), Fixtures.at("2026-10-20T19:10")).isEmpty())
         // Moved and reworded only while it's never been sent.
@@ -60,7 +60,7 @@ class RemindersTest {
         val ahead = 10 * min
         assertEquals(Fixtures.at("2026-10-20T18:50"), Reminders.nextWake(listOf(r), plan(), emptyMap(), now, ahead))
         // Written for already, or inside the window: its moment.
-        assertEquals(Fixtures.at("2026-10-20T19:00"), Reminders.nextWake(listOf(r.copy(draft = FelixAnswer("oi"), draftedAt = Fixtures.at("2026-10-20T18:51"))), plan(), emptyMap(), now, ahead))
+        assertEquals(Fixtures.at("2026-10-20T19:00"), Reminders.nextWake(listOf(r.copy(draft = FelixAnswer("oi"), draftedAt = Fixtures.at("2026-10-20T18:51"), draftFor = Fixtures.at("2026-10-20T19:00"))), plan(), emptyMap(), now, ahead))
         assertEquals(Fixtures.at("2026-10-20T19:00"), Reminders.nextWake(listOf(r), plan(), emptyMap(), Fixtures.at("2026-10-20T18:55"), ahead))
         assertNull(Reminders.nextWake(listOf(r.copy(sentAt = now)), plan(), emptyMap(), now, ahead))
     }
@@ -100,13 +100,14 @@ class RemindersTest {
     }
 
     @Test
-    fun `a draft is its moment's while it was written within the window before it`() {
+    fun `a draft is the moment's it was written for, and no other's, even within the window`() {
         val moment = Fixtures.at("2026-10-20T19:00")
-        val r = at("2026-10-20T19:00").copy(draft = FelixAnswer("oi, call gran"), draftedAt = moment - 8 * min)
-        assertTrue(Reminders.drafted(r, moment, 10 * min))
-        // The slot moved to tomorrow: written for another moment.
-        assertFalse(Reminders.drafted(r, moment + 24 * 60 * min, 10 * min))
-        assertFalse(Reminders.drafted(r.copy(draft = null), moment, 10 * min))
+        val r = at("2026-10-20T19:00").copy(draft = FelixAnswer("oi, call gran"), draftedAt = moment - 8 * min, draftFor = moment)
+        assertTrue(Reminders.drafted(r, moment))
+        // Its slot moved three minutes earlier, or to tomorrow: written for another moment.
+        assertFalse(Reminders.drafted(r, moment - 3 * min))
+        assertFalse(Reminders.drafted(r, moment + 24 * 60 * min))
+        assertFalse(Reminders.drafted(r.undrafted(), moment))
     }
 
     @Test

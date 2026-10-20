@@ -194,8 +194,12 @@ class AppGraph private constructor(context: Context) {
         sweep = { slots.sweep() },
         hooks = listOf(
             { made -> SlotAlarms.arm(app, made, clock.now()) },
-            // Your reminders' alarm (8a), at their next moment by this plan: a slot's or a deadline's moves with it.
-            { made -> armReminder(made) },
+            // Your reminders (8a): any this plan lets go (its task closed) or brings due said and sent, then their alarm
+            // set by it, as a slot's or a deadline's moment moves with it.
+            { made ->
+                runCatching { looks.sweepReminders() }.onFailure { Log.w(TAG, "Sending the reminders due failed", it) }
+                armReminder(made)
+            },
             // The calendar once plans have been quiet a while ([CalendarWriter.planned]).
             { made -> calendarWriter.planned(made) },
             { _ -> WidgetUpdater.update(app) },

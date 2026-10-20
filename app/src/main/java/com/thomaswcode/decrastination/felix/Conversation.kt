@@ -478,7 +478,7 @@ class Conversation(
                     found = true
                     when {
                         r.doneAt != null || r.cancelledAt != null -> r
-                        route.snoozeMin == null -> r.copy(doneAt = now, draft = null, draftedAt = null)
+                        route.snoozeMin == null -> r.copy(doneAt = now).undrafted()
                         else -> Reminders.snoozed(r, now, route.snoozeMin)
                     }
                 },
@@ -766,15 +766,17 @@ class Conversation(
                     made
                 }
                 // A reminder cancelled, a note deleted (8a): marked, kept whole for the Undo, never removed here.
+                // One come, or gone, while he answered: not made, and said so under his reply.
                 ChatAction.Type.CancelReminder -> {
                     var was: Reminder? = null
-                    felix.update { st -> st.copy(reminders = st.reminders.map { r -> if (r.id == a.value && Reminders.pending(r)) r.copy(cancelledAt = clock.now(), draft = null, draftedAt = null).also { was = r } else r }) }
+                    felix.update { st -> st.copy(reminders = st.reminders.map { r -> if (r.id == a.value && Reminders.pending(r)) r.copy(cancelledAt = clock.now()).undrafted().also { was = r } else r }) }
                     was?.let { Act("Cancelled: the reminder “${it.text}”", a) }
+                        ?: Act(Act.NOT_MADE + "the reminder “${felix.value.reminders.firstOrNull { it.id == a.value }?.text ?: "it"}” isn't cancelled: it came, or went, while he answered.", problem = true)
                 }
                 ChatAction.Type.DeleteNote -> {
                     var was: Note? = null
                     felix.update { st -> st.copy(notes = st.notes.map { n -> if (n.id == a.value && n.deletedAt == null) n.copy(deletedAt = clock.now()).also { was = n } else n }) }
-                    was?.let { Act("Note deleted: “${it.text}”", a) }
+                    was?.let { Act("Note deleted: “${it.text}”", a) } ?: Act(Act.NOT_MADE + "the note wasn't deleted: it went while he answered.", problem = true)
                 }
                 // Made from the answer's reminders and notes ([keep]), not its actions.
                 ChatAction.Type.SetReminder, ChatAction.Type.MoveReminder, ChatAction.Type.AddNote -> null
@@ -797,23 +799,42 @@ class Conversation(
         val acts = mutableListOf<Act>()
         felix.update { st ->
             acts.clear()
+            // Counted again as they're made: a note added on its sheet, or a reminder set, while he answered counts too.
             var kept = st.reminders
+            var room = Reminders.MAX_PENDING - kept.count(Reminders::pending)
             for (r in reminders) {
                 val was = kept.firstOrNull { it.id == r.id }
                 val at = Reminders.whenLine(r, Reminders.moment(r, plan, byId, now), title(r.taskId), zone)
-                if (was == null) {
-                    kept = kept + r
-                    acts += Act("Reminder set: $at, “${r.text}”", ChatAction(ChatAction.Type.SetReminder, r.taskId.orEmpty(), value = r.id))
-                } else if (Reminders.unsent(was)) {
-                    kept = kept.map { if (it.id == r.id) r else it }
-                    acts += Act("Moved: “${r.text}” to $at", ChatAction(ChatAction.Type.MoveReminder, r.taskId.orEmpty(), value = r.id), reminder = was)
+                when {
+                    was == null && room <= 0 -> acts += Act(Act.NOT_MADE + "the reminder “${r.text}”: ${Reminders.MAX_PENDING} are still to come.", problem = true)
+                    was == null -> {
+                        kept = kept + r
+                        room--
+                        acts += Act("Reminder set: $at, “${r.text}”", ChatAction(ChatAction.Type.SetReminder, r.taskId.orEmpty(), value = r.id))
+                    }
+                    Reminders.unsent(was) -> {
+                        kept = kept.map { if (it.id == r.id) r else it }
+                        acts += Act("Moved: “${r.text}” to $at", ChatAction(ChatAction.Type.MoveReminder, r.taskId.orEmpty(), value = r.id), reminder = was)
+                    }
+                    else -> acts += Act(Act.NOT_MADE + "the reminder “${was.text}” isn't moved: it came while he answered.", problem = true)
                 }
             }
-            notes.forEach { n ->
+            val live = Notes.live(st.notes)
+            val onTask = live.filter { it.taskId != null }.groupingBy { it.taskId!! }.eachCount().toMutableMap()
+            var standing = live.count { it.scope != null }
+            val added = notes.filter { n ->
                 val on = n.scope?.let { "for ${Notes.scopeLine(it)}" } ?: "on “${title(n.taskId) ?: "it"}”"
-                acts += Act("Noted $on: ${n.text}", ChatAction(ChatAction.Type.AddNote, n.taskId.orEmpty(), value = n.id))
+                val task = n.taskId
+                val fits = if (task != null) (onTask[task] ?: 0) < Notes.PER_TASK else standing < Notes.MAX_STANDING
+                if (fits) {
+                    if (task != null) onTask[task] = (onTask[task] ?: 0) + 1 else standing++
+                    acts += Act("Noted $on: ${n.text}", ChatAction(ChatAction.Type.AddNote, n.taskId.orEmpty(), value = n.id))
+                } else {
+                    acts += Act(Act.NOT_MADE + "the note $on: it has as many as are kept already.", problem = true)
+                }
+                fits
             }
-            st.copy(reminders = kept, notes = st.notes + notes)
+            st.copy(reminders = kept, notes = st.notes + added)
         }
         return acts
     }
@@ -880,7 +901,7 @@ class Conversation(
                     back = true
                     when (a.type) {
                         ChatAction.Type.SetReminder -> st.copy(reminders = st.reminders.filterNot { it.id == a.value })
-                        ChatAction.Type.MoveReminder -> act.reminder!!.let { was -> st.copy(reminders = st.reminders.map { r -> if (r.id == a.value) r.copy(text = was.text, due = was.due, taskId = was.taskId, draft = null, draftedAt = null) else r }) }
+                        ChatAction.Type.MoveReminder -> act.reminder!!.let { was -> st.copy(reminders = st.reminders.map { r -> if (r.id == a.value) r.copy(text = was.text, due = was.due, taskId = was.taskId).undrafted() else r }) }
                         ChatAction.Type.CancelReminder -> st.copy(reminders = st.reminders.map { r -> if (r.id == a.value) r.copy(cancelledAt = null) else r })
                         ChatAction.Type.AddNote -> st.copy(notes = st.notes.filterNot { it.id == a.value })
                         else -> st.copy(notes = st.notes.map { n -> if (n.id == a.value) n.copy(deletedAt = null) else n })
