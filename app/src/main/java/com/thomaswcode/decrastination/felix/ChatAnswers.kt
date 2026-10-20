@@ -408,7 +408,9 @@ object ChatAnswers {
             val key = a.value.trim()
             val of = (if (keep) context?.keepable else context?.kept)?.get(key)
                 ?: return no(if (keep) "a piece to keep that the plan shown doesn't list" else "a piece to take back that isn't one kept today")
-            if (byId[of]?.isOpen != true) return no("a piece of a task that's finished")
+            // A finished task's piece isn't kept, nor taken back, but for one of yours (or one done by its tick) that the
+            // piece may have finished: taken back, that opens it again (Conversation.act judges it was that piece).
+            if (byId[of]?.let { it.isOpen || (!keep && (it.source == Source.Own || it.tickDone)) } != true) return no("a piece of a task that's finished")
             return ChatAction(if (keep) ChatAction.Type.KeepPiece else ChatAction.Type.UnkeepPiece, of, value = key)
         }
         // A reminder cancelled, still to come; a note deleted, still kept (Stage 8a): by id, their task's taken from them.
