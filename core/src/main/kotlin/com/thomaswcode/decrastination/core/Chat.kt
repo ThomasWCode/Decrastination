@@ -189,7 +189,7 @@ data class ChatAction(val type: Type, val taskId: String, val stepIndex: Int? = 
  * What one of the chat's actions did (16 Oct), said under its answer as [line], with what its Undo
  * needs: the [action]; the task as it was before it ([was]: deleted, or finished before it was
  * opened again), and the cards that had added a deleted one ([cards], "message|card"); a setting's
- * value before and after ([before], [after]); a piece's kept record's time ([after], G1: the one a keep made, or the one an unkeep took back), and what one taken back was kept with ([before]: its extra minutes, its photo, its source's word); a reminder before it was moved ([reminder]). [undone]
+ * value before and after ([before], [after]); a piece's kept record's time ([after], G1: the one a keep made, or the one an unkeep took back), and what one taken back was kept with ([before]: its extra minutes, its photo, its source's word, and its piece's minutes as the plan laid it again, its own and its step's other sittings'); a reminder before it was moved ([reminder]). [undone]
  * once Undo has taken it back. With no [action],
  * a line saying what came of the answer, with nothing to undo; a [problem] where something wasn't
  * made or looked up.
@@ -286,9 +286,10 @@ object ChatActs {
      * not moved again since; one cancelled still cancelled, with room for it among those still to come; a
      * note added still there; one deleted still deleted, and kept, with room for it on its task; a piece
      * kept still kept by the record it made, its key's newest among today's [kept] (each key's newest
-     * record's time), one kept no more still not, its task open.
+     * record's time), one kept no more still not, its task open, the record it took back today's (from
+     * [dayStart] on: past midnight its key names another day's piece).
      */
-    fun canUndo(act: Act, tasks: List<TaskItem>, settings: Settings, messages: List<ChatMessage>, notes: List<Note> = emptyList(), reminders: List<Reminder> = emptyList(), kept: Map<String, Long> = emptyMap(), messageId: String? = null, now: Long? = null, readAt: (Source) -> Long? = { null }): Boolean {
+    fun canUndo(act: Act, tasks: List<TaskItem>, settings: Settings, messages: List<ChatMessage>, notes: List<Note> = emptyList(), reminders: List<Reminder> = emptyList(), kept: Map<String, Long> = emptyMap(), messageId: String? = null, now: Long? = null, dayStart: Long? = null, readAt: (Source) -> Long? = { null }): Boolean {
         if (act.undone) return false
         val a = act.action ?: return false
         val task = tasks.firstOrNull { it.id == a.taskId }
@@ -313,7 +314,7 @@ object ChatActs {
             // One it finished (one of yours, or one done by its tick, its last piece) too: its Undo opens it again, as a tick's does.
             ChatAction.Type.KeepPiece -> act.after?.toLongOrNull()?.let { at -> kept[a.value] == at && task != null && (task.isOpen || finishedBy(task, at)) } == true
             // Kept again since it took one back (a newer record of its key) bars it; an older box's record under the key doesn't.
-            ChatAction.Type.UnkeepPiece -> act.after?.toLongOrNull()?.let { removed -> kept[a.value]?.let { it < removed } ?: true } == true && task?.isOpen == true
+            ChatAction.Type.UnkeepPiece -> act.after?.toLongOrNull()?.let { removed -> removed >= (dayStart ?: Long.MIN_VALUE) && kept[a.value]?.let { it < removed } ?: true } == true && task?.isOpen == true
             ChatAction.Type.Sync -> false
         }
     }

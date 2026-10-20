@@ -931,11 +931,11 @@ class Conversation(
                     val at = keptAt()[a.value]?.takeIf { it <= shownAt } ?: return@mapNotNull null
                     val record = log.value.slots.lastOrNull { it.key == a.value && it.outcome.kept && it.at == at } ?: return@mapNotNull null
                     if (!focus.unkeepSlot(record.key, at)) return@mapNotNull null
-                    // What it was kept with, so its Undo keeps it so again: its extra minutes (past its own and, a step's last
-                    // sitting, its step's other sittings, to do again now, which a keep counts again), its photo, its source's word.
-                    val step = record.key.removePrefix(record.taskId + "#").toIntOrNull()?.takeIf { it >= 0 }
-                    val others = step?.let { s -> planning.plan().chunksOf(record.taskId).filter { it.stepIndex == s && it.key != record.key }.sumOf { it.minutes } } ?: 0
-                    val with = "${(record.workedMin - record.plannedMin - others).coerceAtLeast(0)}|${record.photo}|${record.earned}"
+                    // What it was kept with, so its Undo keeps it so again: its extra minutes past its piece as the plan lays it
+                    // again (its own and, a step's last sitting, its step's other sittings, to do again now, which a keep counts
+                    // again), its photo, its source's word; and that piece's minutes, so one laid otherwise since isn't kept for it.
+                    val (own, rest) = focus.pieceMinutes(record.key) ?: (record.plannedMin to 0)
+                    val with = "${(record.workedMin - own - rest).coerceAtLeast(0)}|${record.photo}|${record.earned}|$own|$rest"
                     Act("Not kept after all: ${record.label}", a, before = with, after = record.at.toString())
                 }
             }
@@ -1066,10 +1066,12 @@ class Conversation(
                 val reopen = task != null && ChatActs.finishedBy(task, at)
                 keptAt()[a.value] == at && (task?.isOpen == true || reopen) && focus.unkeepSlot(a.value.orEmpty(), at, reopen = reopen)
             } == true
-            // As it was kept: its extra minutes, its photo, its source's word ([Act.before]).
-            ChatAction.Type.UnkeepPiece -> act.after?.toLongOrNull()?.let { removed -> keptAt()[a.value]?.let { it < removed } ?: true } == true && task?.isOpen == true && act.before.orEmpty().split('|').let { w ->
+            // As it was kept: its extra minutes, its photo, its source's word ([Act.before]); the day of the record it took back
+            // only, and while its piece is laid as it was then (its box's length, its task's minutes changed, it's another).
+            ChatAction.Type.UnkeepPiece -> act.after?.toLongOrNull()?.let { removed -> focus.today(removed) == focus.today() && keptAt()[a.value]?.let { it < removed } ?: true } == true && task?.isOpen == true && act.before.orEmpty().split('|').let { w ->
                 val photo = w.getOrNull(1) == "true"
-                focus.keepSlot(a.value.orEmpty(), extraMin = w.getOrNull(0)?.toIntOrNull() ?: 0, photo = photo, verified = !photo && w.getOrNull(2) == "true")
+                val laid = w.getOrNull(3)?.toIntOrNull()?.let { own -> own to (w.getOrNull(4)?.toIntOrNull() ?: 0) }
+                laid != null && focus.pieceMinutes(a.value.orEmpty()) == laid && focus.keepSlot(a.value.orEmpty(), extraMin = w.getOrNull(0)?.toIntOrNull() ?: 0, photo = photo, verified = !photo && w.getOrNull(2) == "true")
             }
             // A reminder or a note (8a), while it's as the act left it: a reminder set goes, one moved has its time and
             // words back, one cancelled comes again; a note added goes, one deleted is back.

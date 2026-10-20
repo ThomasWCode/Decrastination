@@ -440,6 +440,17 @@ class Focus(
     }
 
     /**
+     * [key]'s piece as a keep of it counts it now ([keepSlot]): its own minutes, and its step's other sittings
+     * still to do where it's the step's last. Null with no such piece on the plan.
+     */
+    fun pieceMinutes(key: String, now: Long = clock.now()): Pair<Int, Int>? {
+        val plan = plan(now)
+        val chunk = (plan.todaySlots + plan.buckets.flatMap { it.slots }).firstOrNull { it.kind == SlotKind.Work && it.chunk?.key == key }?.chunk ?: plan.ordered.firstOrNull { it.key == key } ?: return null
+        val rest = if (chunk.stepIndex == null || chunk.ticks == null) 0 else plan.chunksOf(chunk.taskId).filter { it.stepIndex == chunk.stepIndex && it.key != key }.sumOf { it.minutes }
+        return chunk.minutes to rest
+    }
+
+    /**
      * The last slot of [key]'s kept since [since] taken back (UI-03's Undo): its record gone (one kept
      * late is the miss it was again, on record and in today's misses), its step to do again (the key
      * says which) or a box's minutes off its task, and the free time it earned given back, as far as

@@ -57,9 +57,9 @@ class GapsTest {
         stores.chat.value.messages.last { it.from == Speaker.Felix }
     }
 
-    private fun canUndo(message: ChatMessage, i: Int): Boolean {
+    private fun canUndo(message: ChatMessage, i: Int, dayStart: Long? = null): Boolean {
         val m = stores.chat.value.messages.first { it.id == message.id }
-        return ChatActs.canUndo(m.acts[i], stores.tasks.value.tasks, stores.settings.value, stores.chat.value.messages, kept = conversation.keptAt())
+        return ChatActs.canUndo(m.acts[i], stores.tasks.value.tasks, stores.settings.value, stores.chat.value.messages, kept = conversation.keptAt(), dayStart = dayStart)
     }
 
     @Test
@@ -197,6 +197,25 @@ class GapsTest {
         assertNull(conversation.undoAct(taken.id, 0))
         assertEquals(worked, stores.tasks.value.tasks.single().workedMin)
         assertEquals(was, stores.log.value.slots.last { it.key == "${stepped.id}#0" && it.outcome.kept }.workedMin)
+    }
+
+    @Test
+    fun `an unkeep's Undo isn't done once its piece is laid otherwise, nor offered once its day is over`() = runBlocking {
+        stores.tasks.update { it.copy(tasks = listOf(sheet)) }
+        val key = felix.planning.plan().todaySlots.mapNotNull { it.chunk }.single { it.taskId == sheet.id }.key
+        assertTrue(felix.focusKeep(key))
+        val taken = asked("actually I haven't done it", answer("Taken back.", listOf(action("unkeepPiece", sheet.id, key))))
+        // Its task's minutes changed since: the piece under its key is another, not the one taken back.
+        stores.tasks.update { s -> s.copy(tasks = s.tasks.map { it.copy(sourceEffortMin = 20) }) }
+        assertEquals("It's changed since, so it can't be undone here", conversation.undoAct(taken.id, 0))
+        assertTrue(stores.log.value.slots.none { it.key == key && it.outcome.kept })
+        // As it was again, it's there, till midnight: then its key names another day's piece.
+        stores.tasks.update { s -> s.copy(tasks = s.tasks.map { it.copy(sourceEffortMin = sheet.sourceEffortMin) }) }
+        assertTrue(canUndo(taken, 0, dayStart = Fixtures.at("2026-10-20T00:00")))
+        felix.clock.time = Fixtures.at("2026-10-21T00:05")
+        assertFalse(canUndo(taken, 0, dayStart = Fixtures.at("2026-10-21T00:00")))
+        assertEquals("It's changed since, so it can't be undone here", conversation.undoAct(taken.id, 0))
+        assertTrue(stores.log.value.slots.none { it.key == key && it.outcome.kept })
     }
 
     @Test
