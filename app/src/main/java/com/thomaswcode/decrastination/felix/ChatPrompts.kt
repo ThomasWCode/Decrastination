@@ -414,6 +414,16 @@ object ChatPrompts {
         val byId = tasks.associateBy { it.id }
         appendLine("Today: ${Instant.ofEpochMilli(now).atZone(zone).format(TODAY)} (${zone.id})")
         appendLine()
+        // The reminders still to come (8a), by id, to move or cancel; so one isn't set twice. First, so a context too
+        // long for its room never loses them ([turns]): the lists after them can run long.
+        appendLine("Reminders set, still to come (id | when | their words | its task):")
+        val toCome = reminders.filter(Reminders::pending).sortedBy { moments[it.id] ?: Long.MAX_VALUE }
+        if (toCome.isEmpty()) appendLine("(none)")
+        toCome.forEach { r ->
+            val title = r.taskId?.let(byId::get)?.title?.take(MAX_TITLE)
+            appendLine("- ${r.id} | ${Reminders.whenLine(r, moments[r.id], title, zone)} | ${r.text.take(Reminders.MAX_TEXT)} | ${r.taskId ?: "-"}")
+        }
+        appendLine()
         appendLine("Open tasks (id | title | from | kind | due, a real deadline unless marked a plan, which is never overdue and moves on once it passes | minutes in all, with what the plan makes of them at their pace where it's learned | minutes worked so far | can't start before):")
         // By the date shown (the deadline in force, PL-14), so a plan's date gone by doesn't crowd nearer ones out of the list.
         val open = tasks.filter { it.isOpen && !it.hidden }.sortedBy { it.deadlineAt(now) ?: it.dueAt ?: Long.MAX_VALUE }
@@ -511,15 +521,6 @@ object ChatPrompts {
             appendLine()
             appendLine("Settings you can change (setting | what it is | its value now):")
             FelixSettings.describe(settings).forEach { appendLine("- $it") }
-        }
-        // The reminders still to come (8a), by id, to move or cancel; so one isn't set twice.
-        appendLine()
-        appendLine("Reminders set, still to come (id | when | their words | its task):")
-        val toCome = reminders.filter(Reminders::pending).sortedBy { moments[it.id] ?: Long.MAX_VALUE }
-        if (toCome.isEmpty()) appendLine("(none)")
-        toCome.forEach { r ->
-            val title = r.taskId?.let(byId::get)?.title?.take(MAX_TITLE)
-            appendLine("- ${r.id} | ${Reminders.whenLine(r, moments[r.id], title, zone)} | ${r.text.take(Reminders.MAX_TEXT)} | ${r.taskId ?: "-"}")
         }
         // Each open task's own text, cut short (D-93): what it asks of them, and what comes with it.
         // Last, so it's what a context too long for its room loses first ([turns]).
