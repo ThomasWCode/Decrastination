@@ -117,7 +117,7 @@ data class Settings(
      */
     val aiMonthlyCapUsd: Int? = null,
 
-    /** The morning briefing (Q13): 07:00 Monday to Friday, 08:30 at weekends. */
+    /** The morning briefing: 07:00 on a school day by the school calendar, 08:30 on any other, a weekday off included (D-74). */
     val briefingWeekdayMin: Int = 7 * 60,
     val briefingWeekendMin: Int = 8 * 60 + 30,
     /** The Sunday check-in's reminder; the week's review follows it. */

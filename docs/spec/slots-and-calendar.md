@@ -46,7 +46,7 @@ A piece's key is its task and its step's place (`Chunk.key`: sittings counted fr
 A slot just over stays where it is for `Slotter.GRACE_MS` (10 minutes), its piece still to tick.
 - `SlotAlarms.arm` sets an alarm at the next slot's start, which makes the plan again, and one at the next slot's end plus its grace (`Slots.onEnd`).
 - At the end, a piece still planned is missed: recorded once (`Focus.missSlot`, `SlotOutcome.Missed`), and its start no longer kept (`SlotState.missed`), so the plan moves it to the next free time and says so (`Why.Refitted`).
-- Whether that took it to another day is noted (`MissedSlot.spilled`, by `SlotState.reconciled`). A slot missed today that went to tomorrow keeps today blocked till the day's hours end (BL-11, [blocking-and-protection.md](blocking-and-protection.md)).
+- Whether that took it to another day is noted (`MissedSlot.spilled`, by `SlotState.reconciled`): its task still in the plan and the piece in none of today's slots. A slot missed today that went to tomorrow keeps today blocked till the day's hours end (BL-11, [blocking-and-protection.md](blocking-and-protection.md)); one whose task the plan no longer holds (finished since, or deleted) went to no day, and isn't kept as having gone once it finishes.
 - A slot whose alarm couldn't ring (the phone off) is found at the next plan (`Slots.sweep`).
 - A time, a day or a start you then give the task is a move on purpose: the slots of today's it moves are recorded moved (`InstructionRules.movedSlots`: a time, its next piece's; another day, all of today's; a start, those before it; `Focus.moveSlot`, `SlotOutcome.Moved`), and its missed slots forgotten (`SlotState.moved`).
 
