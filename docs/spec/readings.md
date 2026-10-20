@@ -27,13 +27,13 @@ What a job is sent is `ReadingPrompts.describe`; what it answers is `ReadingProm
 - Revising for a test after the hand-in gets no step: its day goes in `testDate`, read as 08:30 that day, which brings the task's date forward when it's earlier than the source's.
 
 **Effort**: a Power Planner task.
-- Sent: today, its title, class, due date and details. Returns `effortMin`, `blocks` only where its details list pieces of work with dates of their own, and `summary`.
+- Sent: today, its title, class, due date, its blocks as last planned, and its details. Returns `effortMin`, `blocks` only where its details list pieces of work with dates of their own, and `summary`.
 - An appointment isn't work: only the time to prepare for it, at least a minute.
 
 Every job:
 - Its prompt (`ReadingPrompts.system`) is its brief, the limits its answer is checked against, from the checks' own values (`ReadingPrompts.limits`, AI-03), and made-up worked examples (`enrich/Examples.kt`, AI-07), each an answer the checks pass whole.
-- Each schema field says what it's for and its limit (AI-20). The year group comes from the profile (AI-06).
-- `reason` quotes the phrase that gave the date, kind or test date, at most 160 characters (AI-09), shown under the due date on the task's sheet.
+- The schema says what the minutes, the dates, `where`, a step's `ankiSections`, `reason` and `summary` are for, with the limits of the minutes, `reason` and `summary` (AI-20); the brief describes the rest. The year group comes from the profile (AI-06).
+- `reason` (Email and Assignment) quotes the phrase that gave the date, kind or test date, at most 160 characters (AI-09), shown under the due date on the task's sheet.
 - `summary`, last (D-93): for a text over about 600 characters, what it asks of the student from all of it, in at most 400 characters (500 kept): an email's what to do and by when, what to bring, send or pay, and what a later message changed; an assignment's work, parts, needs, dates and hand-in. Empty for a shorter text. Felix is told it in place of a text too long for his room ([felix.md](felix.md)); the readings made before it have none, and his room keeps the text's start and end instead.
 
 ## Steps: as few as the work has
@@ -51,10 +51,10 @@ Emails' and planner items' blocks follow the same rule: only separately dated pi
 ## The checks on an answer
 
 `ReadingAnswers.read` checks every answer; what's out of range is dropped, not trusted.
-- **A task's dates** (deadline, start, test date): `YYYY-MM-DD` or `YYYY-MM-DDTHH:MM`, a date alone being 23:59 (a start, midnight). One that can't be read, or is over 400 days ahead, is a complaint; one more than a month gone is left out quietly.
+- **A task's dates** (deadline, start, test date): a deadline is `YYYY-MM-DD` or `YYYY-MM-DDTHH:MM`, a date alone being 23:59; a start is read as its day's midnight, and a test date as 08:30 that day. One that can't be read, or is over 400 days ahead, is a complaint; one more than a month gone is left out quietly.
 - **A step's or block's dates** out of that range, or unreadable, fail all the steps.
 - **Lengths**: a title 80 characters, a next step 120, a question 200, a reason 160. Only sections like "1.2" are kept.
-- **An email's kind** must be Admin; any other is no answer, and the rules' reading stands.
+- **An email's kind** must be Admin (an older answer's Event is read as Admin); any other is no answer, and the rules' reading stands.
 - **An estimate** is 1 to 600 minutes (`ReadingAnswers.MAX_EFFORT`, ten hours), and so is each step or block.
 - **Steps**: at most 12 (`ReadingAnswers.MAX_STEPS`). With more, the first eleven stay and the rest are folded, each run of plain steps into one "The rest: …" step, while vocabulary and dated steps keep their own (`ReadingAnswers.fold`).
 - They must add up to `effortMin` within a tenth or 10 minutes, whichever is more, both within 600 minutes. Otherwise the steps are dropped (below), and the task is planned as one piece at Claude's total, or at its own estimate where that total is out of range.
@@ -126,9 +126,9 @@ It runs again once Claude can be asked again (its rest over, `EnrichWorker.retry
 - Read for such a reason, Claude is told which steps are done: each listed "(N min, done)", to be kept exactly as it is (title and minutes, still in `effortMin`), with only the work left given in the others (AI-08, `ReadingPrompts.describe`).
 - A re-read for the version alone that gets no answer keeps its reading, marked as these prompts'; one past the run's calls waits for the next run.
 - **The version is raised** with any change to a reading's prompt, schema or examples, or to the profile's shape.
-- `GoldenPromptsTest` (AR-01) keeps a golden copy of every prompt and schema in `app/src/test/resources/prompts/` and fails on any difference, with its diff; `-PupdateGolden=true` writes them again.
+- `GoldenPromptsTest` (AR-01) keeps a golden copy of every prompt and schema in `app/src/test/resources/prompts/`, but the web search's prompt (which `FelixInputsDocTest` holds in [felix-inputs.md](felix-inputs.md)), and fails on any difference, with its diff; `-PupdateGolden=true` writes them again.
 - Where an `enrich-*` copy or `profile.txt` differs from HEAD's, the same test fails unless `ReadingPrompts.VERSION` differs from HEAD's too.
-- **Every schema compiles.** The API turns a schema into a grammar that holds the answer to it as it's written, and refuses one whose grammar is too large. A nullable field is a union in it, and unions inside a list's items weigh most: the chat's and the instructions reader's lists have none, an unused field being empty (a number -1). `SchemaLimitsTest` holds every schema to 16 unions and two inside a list; `SchemaCompileTest`, asked for with `-PcheckSchemas=true`, has the API compile each one ([development.md](../development.md#building-and-testing)).
+- **Every schema compiles.** The API turns a schema into a grammar that holds the answer to it as it's written, and refuses one whose grammar is too large. A nullable field is a union in it, and unions inside a list's items weigh most: the chat's and the instructions reader's lists have none, an unused field being empty (a number -1). `SchemaLimitsTest` holds every schema but the week's summary's (one plain string) to 16 unions and two inside a list; `SchemaCompileTest`, asked for with `-PcheckSchemas=true`, has the API compile each of those ([development.md](../development.md#building-and-testing)).
 
 ## Questions (AI-10)
 
@@ -172,8 +172,8 @@ Felix's look-ups are a call of their own (`enrich/WebResearcher.kt`), never part
 
 A piece's first action, under two minutes and concrete, the next two, and what done looks like (`enrich/MicroPlans.kt`).
 - Written ahead after each plan (`plan/Ahead.kt`) for today's and tomorrow's work slots' pieces: the piece of Felix's next message first, then the rest; at most 8 a run, one run at a time, each a call under the cap at medium effort (`MicroPlanner`).
-- Sent, with the profile: the task's title and subject, the piece and its minutes, attachments by name, and its instructions (1 500 characters).
-- Written once for a piece and its task as they stand (`MicroPlans.hashOf`: the input hash and the piece). One declined or unreadable is kept empty, so it isn't paid for again; those for days gone go.
+- Sent, with the profile: the task's title and subject, the piece and its minutes, attachments by name, the notes kept with its task (its own and the standing ones it matches), and its instructions (1 500 characters).
+- Written once for a piece and its task as they stand (`MicroPlans.hashOf`: the input hash, the piece, and the task's notes where it has any). One declined or unreadable is kept empty, so it isn't paid for again; those for days gone go.
 - Shown on Day's slot and *Do now* card, the piece's and task's sheets, the widget, the calendar's event, and in Felix's messages.
 
 ## Cost, the cap and rest after failures
@@ -201,7 +201,7 @@ Every call goes through `ModelGateway.call`, so the cap and rests above apply; e
 | The weekly review | high | learning.md |
 | Felix's messages, the chat, the tidy of what he remembers, web research | medium | felix.md |
 | Micro-plans | medium | this file |
-| A photo check | medium | planner.md |
+| A photo check | medium | blocking-and-protection.md |
 | The week's summary | medium | learning.md |
 
 ## The evaluation set

@@ -34,9 +34,9 @@ Decrastination has no Teams reader of its own. A separate app, the Teams Assignm
 - **Done.** An assignment gone from `/assignments` is handed in. Listed again, the same task opens again.
 
 Freshness:
-- A Teams sync takes over the screen, so the widget syncs only when asked. Decrastination asks (`Sync.requestTeamsSync`) when you tap **Refresh Teams**.
+- A Teams sync takes over the screen, so the widget syncs only when asked. Decrastination asks (`Sync.requestTeamsSync`) when you tap **Refresh Teams** on a piece, **Sync Teams** on Work's trouble card or the widget's ↻, and when you ask Felix to check Teams with the chat on screen (D-11).
 - It also asks on its own (Q21, `block/TeamsAutoSync.kt`): at the first unlock after 16:45 (`teamsFirstUnlockMin`), every three hours (`teamsSyncEveryMin`), and at an unlock soon after the morning briefing.
-- Automatic syncs come only while the phone is unlocked and in use, never in quiet hours, and not within 30 minutes of a Teams sync.
+- Automatic syncs come only while the phone is unlocked and in use, never in quiet hours, and not within 30 minutes of a Teams sync; one put off (*Delay 5 min*, or offered again) comes once its delay is up.
 - On weekdays the first-unlock and three-hourly ones wait for the school-day blocking time (`weekdayBlockFromMin`); the morning's comes at an unlock within an hour and a half of the briefing.
 - Each is announced by a banner counting down 10 s, with **Cancel** and **Delay 5 min** (`block/CountdownBanner.kt`).
 - One the widget didn't start is offered again 15 minutes later, twice at most; then the next comes at its usual time.
@@ -49,7 +49,7 @@ Freshness:
 Power Planner's Android app exposes nothing readable, so the app uses the web API its open-source web app uses (`sources/powerplanner/`).
 
 - **Calls** (`PowerPlannerApi`): JSON `POST`s to `https://web.api.powerplanner.net/api`, each with the web app's public development key: `LoginWeb`, `GetSelectedSemesterId`, `GetClassesAndSchedules` and `GetAgenda`. The session token goes in the login's `Password` field, as the web app sends it.
-- **Login.** Your username and password are in the encrypted secrets file. The session is kept and reused until a call fails; then one fresh login is tried, and the semester read again (`PowerPlannerSource`).
+- **Login.** Your username and password are in the encrypted secrets file. The session is kept and reused until the API answers a call with an error (an expired session, say); then one fresh login is tried, and the semester read again (`PowerPlannerSource`). A call that doesn't get through (no network, an HTTP error) fails the read.
 - **Semester and timetable** are read at most every six hours, so a read is usually one `GetAgenda` call.
 
 An item as a task (`PowerPlannerItems.fetched`):
@@ -125,7 +125,7 @@ The rules' triage (`EmailRules.triage`) is what a conversation is until Claude r
 
 **Open** launches Gmail and says what to look for, the subject and sender: Gmail can't be opened on one conversation from outside. An invite's sheet has **Add to calendar**.
 
-Every sync not started from a screen in use runs as a WorkManager job: Android 15 and later cut a background app's network a few seconds after it leaves the screen, mid-connection.
+Every sync that may need the network and isn't started from a screen in use runs as a WorkManager job (`SyncWorker.syncNow`): Android 15 and later cut a background app's network a few seconds after it leaves the screen, mid-connection. The reads of Teams and Anki that the widget's changes and AnkiDroid's leaving start run in place, as they need none.
 
 ## Your own tasks
 
@@ -138,19 +138,19 @@ Made in the app, not read from anywhere (Q28): `Source.Own` ("Yours"), keyed `ow
 - Steps edited in the form are matched to their old steps by place, so a renamed step keeps its tick (UI-15).
 - **Done** when you tap *All of it done*, or once every step is done. It earns no free time of itself; its kept slots earn theirs. *Not done* opens it again; *Delete* removes it, and only *Delete* does: a fortnight after it's done, it's kept as its record, its notes let go (`OwnTasks.pruneOwn`, C-Q3).
 - Claude doesn't read it: its minutes and steps are yours, planned as given (readings.md).
-- `tasks/OwnTasks.kt` keeps, finishes, opens again, deletes and lets go of them, its rules `core/OwnTasks.kt`'s; `tasks/OwnTasksTest` drives it on temporary stores.
+- `tasks/OwnTasks.kt` keeps, finishes, opens again and deletes them, and trims those long done to their record, its rules `core/OwnTasks.kt`'s; `tasks/OwnTasksTest` drives it on temporary stores.
 
 ## The sync
 
 - **When.** `sync/SyncWorker.kt` reads every source every 15 minutes (WorkManager's shortest period), with no network constraint, and at once when asked (`SyncWorker.syncNow`, all sources or some).
-- A sync of all or some sources also runs on a refresh (Work, the widget, Settings), when the Teams widget's list changes, when AnkiDroid leaves the screen, when Anki's settings change, when a reading finds new deck sections, and from Setup.
+- A sync of all or some sources also runs on a refresh (Work, the widget, Settings), when the Teams widget's list changes, when AnkiDroid leaves the screen, when Anki's settings change, when a reading finds new deck sections, when Felix reads a source for you from the chat (G2), and from Setup.
 - *Check it's done* on a piece reads just its task's source and says whether it agrees (`ui/PieceActions.kt`).
 - **How** (`sync/Syncer.kt`, which the app reaches through `sync/Sync.kt`): one sync at a time; the sources in turn, Anki last, as its deck tasks come from the others' homework; each read on its own, waited for at most 90 s.
 - **A failed source fails only itself.** Its error is kept in its `SourceStatus` with the time of the attempt; its tasks stay as they are, and the other sources carry on.
 - A read that overruns is cancelled and left to wind down, and no other read of that source starts beside it (BUG-P2-020).
 - A good read records its time, the source's own "as of" time and note, and Anki's day, the decks' topics and Power Planner's timetable (`TaskState`).
 - `Sync` is built like `Focus`: its stores, the clock, the syncer, and `SyncPorts` for what Android does (a sync as a job, the Teams widget asked and watched, the calendar read, the widget drawn); `SyncTest` drives it on temporary stores with made-up sources, `SyncerTest` the syncer itself.
-- **After each sync**: completions are settled (free time and the log, learning.md); your instructions' overrides are laid on new and returning tasks (`Instructions.layTaskOverrides`); your own tasks long done go; and readings are queued where any task's is out of date (`EnrichWorker`, readings.md).
+- **After each sync**: completions are settled (free time and the log, learning.md); your instructions' overrides are laid on new and returning tasks (`Instructions.layTaskOverrides`); your own tasks finished a fortnight ago are kept as their record (`OwnTasks.pruneOwn`); and readings are queued where any task's is out of date (`EnrichWorker`, readings.md).
 
 ## The merge
 
@@ -161,7 +161,7 @@ Made in the app, not read from anywhere (Q28): `Source.Own` ("Yours"), keyed `ow
 - **Listed as finished** (Power Planner at 100 %, a deck studied), an open task is done. **Not listed**, an open task is done: handed in, ticked, unstarred. A derived task (Anki's) is missed instead: only its counts say it's done.
 - **Listed again**, a done task opens again afresh, its minutes worked and its steps' ticks starting from nothing. A derived task once done stays done, as does one done by its tick.
 - A task already finished when first seen isn't added (a derived one is, as done). A finished task is kept 14 days from its finish, or from its last sighting (`Merge.KEEP_FINISHED_MS`), and longer while it's the same work as an open task.
-- A fortnight after it's finished, a task still kept keeps only its record (`Merge.trimmed`, after every merge, C-Q3): its text, reading, answers, photo and an email's text and message ids go; its title, dates, estimates, minutes, steps and their ticks, and your values stay, as the reading laid them, and while its source lists it as finished still, the merge leaves it so. Listed again as open, its text comes back and it's read again, as a task seen for the first time.
+- A fortnight after it's finished, a task still kept keeps only its record (`Merge.trimmed`, after every merge, C-Q3): its text, reading, answers and photo go, with an email's message ids and how far its text was read, and its attachments' list (an assignment's reference materials too); its title, dates, estimates, minutes, steps and their ticks, and your values stay, as the reading laid them, and while its source lists it as finished still, the merge leaves it so. Listed again as open, its text comes back and it's read again, as a task seen for the first time.
 
 Every merge lays the rest over the source's values (`TaskItem.enriched`, `core/Enrichment.kt`):
 - **The reading** (readings.md), always over what the source says now (`sourceValues`), so a new reading leaves none of the last one's dates.

@@ -18,7 +18,7 @@ A completion's record is made as it's confirmed (`Focus.onCompleted`):
 - `yourEstimate`: its minutes are your own reckoning; `hardDeadline`: its date is a real deadline (PL-14); and your answer to "How was it?".
 
 A day's record is made at the morning briefing (`Days.record`) and finished the next morning (`Days.finish`): a task confirmed done that day counts in full, any other as far as its kept slots that day went.
-An answer about a calendar event makes today's record again with what the day can hold now (`Days.replan`).
+An answer about a calendar event, or a change applied or taken back (yours or Felix's; a restored backup's answers too), makes today's record again with what the day can hold now (`Briefing.replanToday`, `Days.replan`).
 
 ## Calibration
 
@@ -29,7 +29,7 @@ An answer about a calendar event makes today's record again with what the day ca
 - `ankiSecondsPerCard`, with `ankiStretches`: learned as AnkiDroid is used, not at the review;
 - `forgotten` and `learnFrom`: what *Forget* and *Reset* leave out (LR-06, LR-08).
 
-A calibration without its counts (`Calibration.counted` false) is made again from the record at the next start, or as a backup is restored (`Calibrator.upgraded`).
+A calibration without its counts (`Calibration.counted` false) has its multipliers and their counts made again from the record at the next start, or as a backup is restored (`Calibrator.upgraded`); its margins and yields stand till the next review.
 
 ## The pace
 
@@ -72,7 +72,7 @@ The planner uses a kind's learned margin in place of your setting ([planner.md](
 
 Each kind of day learns how much of its free time gets used (`DayKind`: weekday evenings, weekends, school windows):
 - weekday evenings and weekends: the median of done over planned on the kind's last 14 finished days with work planned, once it has 7, kept between a half and all of it;
-- school windows: the minutes kept there in their own time over the minutes laid there that morning, on its last 14 days with any, once it has 7.
+- school windows: the median, over its last 14 days with any, of the minutes kept there in their own time over the minutes laid there that morning, once it has 7, kept between a half and all of it.
 
 Each kind learns from its own days, so a run of bad Saturdays doesn't move the weekdays. Until a kind has its 7 days, it's all of its free time.
 The planner multiplies each day's evening by its kind's yield, and its school windows by school's; a limit you set on a day is of the work, after the yield.
@@ -125,7 +125,7 @@ It writes a note of at most five lines, opening on how last week's change went, 
 It never changes `boxMin` (a piece's length is yours: your decision), what's blocked, quiet hours, protection, or any hours but a school day's; the free-time rate is the only blocking setting in its reach.
 Its changes apply at once, armed or not (`Protection.applyReviewChanges`, IMP-P2-015), in place of any waiting change of yours to the same setting; each is kept with its value before it (`WeeklyReview.changes`, `settingsBefore`).
 
-After it, what Felix remembers is tidied once it's past 70 % of its room (AI-21, [felix.md](felix.md)); the week's totals are kept (`Stats.rollup`, PL-10); the week's summary for home is written (NF-02); and Felix's message in the chat says it, with *Open the review* (`Conversation.reviewed`), on his notification.
+After it, what Felix remembers is tidied once it's past 70 % of its room (AI-21, [felix.md](felix.md)); the week's totals are kept (`Stats.rollup`, PL-10); Felix's message in the chat gives the review's first line, with *Open the review* (`Conversation.reviewed`), on his notification; then the week's summary for home is written (NF-02), with a message of his offering to send it (`Conversation.summaryReady`).
 The Reviews page (LR-01) lists each review with its note, each change with *Undo* while it's still what the review left (a change of yours, so once armed one that loosens blocking waits).
 
 ## Stats
@@ -142,7 +142,7 @@ The Reviews page (LR-01) lists each review with its note, each change with *Undo
 
 `learn/Daily.kt` keeps three alarms, each set again once it has run: one that ran today stands for today, and one that failed is tried again 10 minutes later, up to three times (`Daily.failed`).
 - **The morning briefing** (`learn/Briefing.kt`): 07:00 Monday to Friday, 08:30 at weekends (`briefingWeekdayMin`, `briefingWeekendMin`).
-  It posts what the night held back, reads the calendar, finishes yesterday's day record and makes today's, offers the morning's Teams sync for 90 minutes, then sends Felix's message or the day's list.
+  It posts what the night held back, reads the calendar, finishes yesterday's day record and makes today's, offers the morning's Teams sync for 90 minutes, then sends Felix's message or the day's list; after it, Felix's notes and reminders no longer wanted are let go (`Conversation.pruneFelix`).
 - **The check-in**, on Sundays at `checkInMin`, above.
 - **The weekly review**, 90 minutes after it, above.
 

@@ -10,7 +10,7 @@ Protection never locks you out of your phone: it guards only the app's own pages
 - **Sites**: in the browsers whose address bar is read (Chrome and Brave, `<browser>:id/url_bar`), the address is read as it changes, at most every 400 ms, so a blocked site is covered as soon as its address is typed, ahead of the page loading.
 - **Picture-in-picture**: the block screen starts with `FLAG_ACTIVITY_NO_USER_ACTION`, so covering a playing video never sends it into a floating window. A blocked app already floating is closed where its window allows, else brought back to full screen and covered (`closeBlockedPictureInPicture`).
 - **A hidden address** (a video full screen): judged by the page that browser last showed while the service watched. With none seen in this connection, it gets Back once, to leave full screen; one beside another app is brought forward once. One that still hides its address counts as not blocked.
-- **Every half minute** (`FocusService.tick`) it judges the whole screen again, so an app already open when blocking begins, or when free time runs out, is covered then.
+- **Every half minute** (`FocusService.tick`) it judges the whole screen again, so an app already open when blocking begins is covered then; one spending free time is covered the moment it runs out, by the spending's own check.
 - One block a burst (`BLOCK_GAP_MS`), each logged as a `BlockRecord` (when, what, why) for Stats.
 
 On the same tick it also:
@@ -26,7 +26,7 @@ On the same tick it also:
 - **Browsers blocked outright**: Firefox (three builds) and Tor, whose address bars aren't read.
 
 An address bar that can't be read is a protection problem (IMP-P1-005, `block/AddressHealth.kt`). After ten visits in a row to Chrome or Brave with its address never read, the watchdog reports that browser's blocked sites as uncovered, armed or not.
-It stays reported until an address is read again, or the browser is blocked outright.
+It stays reported until an address is read again, the browser is blocked outright or no longer checked, or the focus service connects again, which starts the count afresh.
 
 ## When blocking applies
 
@@ -73,7 +73,7 @@ What today's slots earn is at most today's plan's share at the ratio: the pieces
 - An event (`Kind.Event`), one of your own you say is done, and feedback done by its tick (NF-06) earn nothing; an email you unstar is its source confirming it, and earns as any completion does.
 - Each completion earns once (`SessionState.rewarded`), and only on the day it's confirmed.
 
-**A day with nothing to do** starts with an hour (`freeAllowanceMin`, BL-07), given once: nothing planned today or overdue, no slot of today's kept, missed or moved, the morning's record planning nothing, and every source read that day (`Focus.grantAllowanceIfDue`).
+**A day with nothing to do** starts with an hour (`freeAllowanceMin`, BL-07), given once: nothing planned today or overdue, no slot of today's kept, missed or moved, the morning's record planning nothing, and every source read that day, but one never read (`Focus.grantAllowanceIfDue`).
 
 **Taken back**: a keep undone (UI-03, `Focus.unkeepSlot`) gives back the free time it earned, as far as it's unspent (`Credit.takeBack`).
 
@@ -87,7 +87,7 @@ A keep, a photo's earning and a completion are each saved first (`SessionState.k
 `Photos.check` (`block/Photos.kt`) sends photos of written work to Claude (`enrich/PhotoChecker.kt`), shrunk and turned by `block/PhotoChecks.kt`: only homework that isn't Anki's (`Chunk.photoCheckable`), and only while Claude is on.
 - Up to three pages make one check (AI-17), with *Add another page?* after each. Each is shrunk to 1 568 pixels on its long side and turned upright by its EXIF note; if any page can't be read, no check is made.
 - Claude is given the piece and its minutes, the task's title, subject, steps done and instructions (AI-16, `PhotoChecker.context`), and told that blank or crossed-out pages, a photo of a screen, printed answers or another task's work aren't done. It answers `{done, confidence, reason, seen}`.
-- Done with a confidence of 0.7 or more (`PhotoChecker.ACCEPT`) keeps the piece's slot, earning, or makes a slot kept without earning earn now (`Focus.photoChecked`). A photo counts only for a keep of its piece made after the photo.
+- Done with a confidence of 0.7 or more (`PhotoChecker.ACCEPT`) keeps the piece's slot, earning, or makes a slot kept without earning earn now (`Focus.photoChecked`). A photo counts only for a keep of its piece made after it was taken, or in the half minute before (a **Done**, then the photo at once).
 - The photos are deleted whatever happens. The check runs in the app's scope, so leaving the screen doesn't cancel a call already paid for; it goes through Claude's rest after a failure, but not past a key problem or the cap.
 
 ## Protection
@@ -103,9 +103,9 @@ Nothing on an unrooted phone is unbypassable: the layers make every impulsive ro
 | 5. Watchdog | `protect/Watchdog.kt`, `protect/ProtectionCheck.kt` | Leaving the service off, or on a shortcut |
 | 6. Parent code | `protect/Totp.kt`: an authenticator app's codes, held by a parent | Being stuck when a change is really needed |
 
-**Unarmed** (`Settings.armed` false), blocking works, but the guard is off, every change applies at once, and the watchdog warns without repairing (a crashed service it still restarts). **Armed**, all six layers act.
+**Unarmed** (`Settings.armed` false), blocking works, but the guard is off, every change applies at once, and the watchdog warns without repairing (a crashed service it still restarts, given self-repair). **Armed**, all six layers act.
 
-`protect/Protection.kt` makes every settings change (`changeSettings`: at once, or waiting), counts the waits and applies what's due, uses a parent code, and keeps the device admin in step with arming. It's built like `Focus`: the settings, the runtime, the secrets, the clock, and callbacks for the device admin; `ProtectionTest` drives it on temporary stores, armed and unarmed. Settings saves through it from its state holder (`ui/SettingsScreenState.kt`: your edits over what the screen showed, only what you changed saved, BUG-P2-014), tested without Compose (`SettingsScreenStateTest`).
+`protect/Protection.kt` makes every settings change (`changeSettings`: at once, or waiting), counts the waits and applies what's due, uses a parent code, and keeps the device admin in step with arming. It's built like `Focus`: the settings, protection's own state (`protection.json`), the secrets, the clock, and callbacks for the device admin; `ProtectionTest` drives it on temporary stores, armed and unarmed. Settings saves through it from its state holder (`ui/SettingsScreenState.kt`: your edits over what the screen showed, only what you changed saved, BUG-P2-014), tested without Compose (`SettingsScreenStateTest`).
 
 **Arming** (`protect/ProtectionActivity.kt`: its own page, and Settings → Blocking and protection) asks for the device admin, then sets up the parent code:
 - a QR code for the parent's authenticator, checked with a code from it; or, with one set already, kept once a code from it is typed (IMP-P2-012); or skipped;
@@ -127,7 +127,7 @@ Everything else applies at once, armed or not:
 - instructions, quick changes and Felix's changes, due dates and minutes included; your own tasks;
 - a restored backup's instructions, log, calibration and calendar answers; and every reset.
 
-The weekly review's bounded changes apply at once too, armed or not (IMP-P2-015, `Protection.applyReviewChanges`): margins, undated work a day, a school day's hours within an hour, and the minutes of work for a minute of free time between 2 and 5 (`ReviewInput.BOUNDS`).
+The weekly review's bounded changes apply at once too, armed or not (IMP-P2-015, `Protection.applyReviewChanges`): margins, undated work a day, a school day's hours within an hour, and the minutes of work for a minute of free time between 2 and 5 (`ReviewInput.bounds`).
 Undone on the Reviews page, one that loosens the blocker waits as yours do.
 
 A waiting change is a `PendingChange` in `protection.json`, listed under *Waiting* with when it applies.
@@ -152,22 +152,21 @@ Once armed, the focus service reads the windows of Settings, Device Care (`com.s
 - the *Date and time* page, as setting the date forward would hurry an hour's unblock;
 - the confirmation pages of *Reset all settings* and *Reset accessibility settings*.
 
-A tap on the service's name on an accessibility-shortcut page is undone at once (`FocusService.onClick`), and the watchdog takes it off any shortcut. Back is pressed only once Settings is the window in use, and never within a second of the last.
+A tap on the service's name on an accessibility-shortcut page is undone at once (`FocusService.onClick`), and the watchdog takes it off any shortcut. Back is pressed only once the guarded page's window is the one in use, and never within a second of the last.
 
 ## The watchdog
 
 `protect/Watchdog.kt` runs from the focus service every five minutes, as a job every 15 (`WatchdogWorker`, which applies waiting changes too), at boot and after an update (`BootReceiver`), and the moment the service disconnects. `ProtectionCheck.problems` reads what it finds:
 - the service switched on, accessibility on, and the service really running (its own connection, checked every half minute);
-- the service on none of the four accessibility shortcuts; a setting Android won't let it read is reported unknown, never clear;
 - every checked browser's address bar readable, armed or not;
-- armed: the device admin active, self-repair granted, and protection's alerts able to show.
+- armed: the service on none of the four accessibility shortcuts (one Android won't let it read shows as unknown on the Protection page, never as clear), the device admin active, self-repair granted, and protection's alerts able to show.
 
 Armed, with `WRITE_SECURE_SETTINGS` (granted once over adb, Q19), it switches the service back on and takes it off every shortcut itself.
-A service switched on that has stopped (a crash) is switched off and on, armed or not, after a minute's grace and at most every ten minutes, with one quick retry when the first doesn't take.
+A service switched on that has stopped (a crash) is switched off and on, armed or not, once self-repair is granted: after a minute's grace and at most every ten minutes, with one quick retry when the first doesn't take.
 
 Anything wrong is an ongoing notification on the *Protection* channel ("PROTECTION OFF" armed, "Blocking is off" unarmed), a line on the widget, and a `ProtectionRecord` in the log each time it changes, saying whether it got repaired.
 
-A settings file that can't be read never disarms (IMP-P1-003): unreadable settings start armed while the device admin is on ([storage-and-backups.md](storage-and-backups.md)). Disarming, once it applies, gives up the device admin, so the app can be uninstalled (`AppGraph`'s watch on `armed`).
+A settings file that can't be read never disarms (IMP-P1-003): unreadable settings start armed while the device admin is on ([storage-and-backups.md](storage-and-backups.md)). Disarming, once it applies, gives up the device admin, so the app can be uninstalled (`Protection.start`'s watch on `armed`).
 
 ## Never break the phone
 
