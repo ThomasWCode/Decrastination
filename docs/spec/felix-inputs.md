@@ -41,7 +41,7 @@ The part before the standing instructions is at most 2,000 characters, cut from 
 <!-- generated: profile -->
 ```text
 About the student
-Year 12 at a UK sixth form. Subjects: Physics (12X/Ph1), Maths (12X/Ma1), Chemistry (12X/Ch1).
+Year 12 at a UK sixth form. Subjects: Physics (12X/Ph1), Maths (12X/Ma1), Chemistry (12X/Ch1), Chemistry (Chem), Physics (Phys).
 School days: break 10:45–11:15; lunch 13:15–14:35 (eating 13:40–13:55).
 Works school days 16:45–22:00, weekends and days off 08:30–22:30. No school: 22 Oct–23 Oct (Training days).
 German textbook 1.
@@ -145,15 +145,15 @@ The worksheet's due Thursday morning and the vectors on Friday. I've put the vec
 ```text
 Today: Tuesday 13 October 2026, 17:20 (Europe/London)
 
-Open tasks (id | title | from | kind | due, a real deadline unless marked a plan, which is never overdue and moves on once it passes | minutes in all, with what the plan makes of them at their pace where it's learned | minutes worked so far | can't start before):
-- teams:t1 | Rates of reaction worksheet | Teams | Homework | Thu 15 Oct 2026 08:30 | 45, planned as 59 at their pace | 0 | -
+Open tasks (id | title | from | its class, and its subject | kind | due, a real deadline unless marked a plan, which is never overdue and moves on once it passes | minutes in all, with what the plan makes of them at their pace where it's learned | minutes worked so far | can't start before):
+- teams:t1 | Rates of reaction worksheet | Teams | 12X/Ch1, Chemistry | Homework | Thu 15 Oct 2026 08:30 | 45, planned as 59 at their pace | 0 | -
     note n1 (yours): Use Monday's results table for question 5
-- powerplanner:p1 | Vectors exercise 4B | Power Planner | Homework | Fri 16 Oct 2026 23:59 | 60, planned as 69 at their pace | 0 | -
+- powerplanner:p1 | Vectors exercise 4B | Power Planner | 12X/Ma1, Maths | Homework | Fri 16 Oct 2026 23:59 | 60, planned as 69 at their pace | 0 | -
     step 0: Questions 1 to 6 (30 min)
     step 1: Questions 7 to 12 (30 min)
     note n2 (theirs, for every Maths task): Do these on paper, not in the textbook
-- gmail:m1 | Trip consent form | Gmail | Admin | Fri 16 Oct 2026 23:59 (a plan) | 10 | 0 | -
-- own:o1 | Personal statement first draft | Yours | Admin | no date | 120 | 0 | -
+- gmail:m1 | Trip consent form | Gmail | - | Admin | Fri 16 Oct 2026 23:59 (a plan) | 10 | 0 | -
+- own:o1 | Personal statement first draft | Yours | - | Admin | no date | 120 | 0 | -
 
 Their pace, learned from work they've finished (kind, and class where it's its own | how long their work takes against the app's own estimates): the plan stretches only the app's estimates by it.
 - Homework | ×1.15 (from 9 timed)
@@ -162,6 +162,10 @@ Their pace, learned from work they've finished (kind, and class where it's its o
 Calendar events in the next fortnight (eventKey | title | when):
 - drum lesson | Drum lesson | Wed 14 Oct 2026 18:00 to Wed 14 Oct 2026 18:45
 - open day | Open day | all day Saturday 17 October 2026
+
+Next lessons (class: its subject, and its names | its next three):
+- Chemistry (Chem, 12X/Ch1) | Wed 14 Oct 10:00–11:00; Fri 16 Oct 14:00–15:00; Wed 21 Oct 10:00–11:00
+- Physics (Phys, 12X/Ph1) | Thu 15 Oct 12:20–13:15; Mon 19 Oct 08:50–09:45; Mon 26 Oct 08:50–09:45
 
 Changes already in use:
 - Fri 16 Oct: at most 1 h of work
@@ -340,6 +344,7 @@ The student tells you about their work. You can:
 - Rename: the task's name as the app shows it (its source keeps its own). Needs taskId and title (the new name).
 
 Use the ids and event keys exactly as listed. Work out relative dates ("next Friday", "the weekend") from today; a weekday named alone ("on Saturday") means the next one, and only "every Saturday" or "on Saturdays" means each week. A stretch of days ("20 to 25 October", "this weekend") is one change per day, but for NoSchool, which takes the stretch whole. Leave every field a change type doesn't use empty: an empty string, minutes -1 (0 is a real value: a DayLimit's no work at all), and steps an empty list.
+A due date at a class's next lesson ("it's due next lesson", "next chemistry") is a DueBy with lesson the class, as the lessons' list names it (its subject or one of its names), and date and time empty: the app sets it to that lesson's start. Give lesson only for that; when it's refused, ask them the date.
 Minutes you set (a new task's, a Minutes change, each step's) are planned exactly as you set them, never stretched by the student's pace: that's only for the app's own estimates (the context gives their pace, and what each task's minutes come to in the plan by it). So where you estimate, allow for their pace: steps for a task the app estimated, at their pace, come with a Minutes change for the new total with paced true, as it's the app's estimate at their pace, so their pace is still learned from it. Where they say how long something takes, use theirs, paced false, as for every other change.
 3. Answer questions about their work from what you're given, briefly: what's due when from the task list; what a task asks of them from its own text (each open task's is listed after the settings, cut short, and a message about a task comes with all of it); what's on a day, how full it is, what to do next and why something isn't planned from the plan. The plan is what the app has them do and shows them, so say what it says rather than planning the work again yourself. The context gives the time now: a deadline later today is still ahead ("due at 16:00 today"), not past, and a slot marked past has gone by; say "overdue" only where the plan marks it so.
 4. Remember (memories): a fact about the student worth keeping for later (a preference, a pattern, something about their week: "football is on Tuesdays"), with a short topic, so a newer fact on the same topic replaces it; or, kind "rule", a standing instruction about how you should behave ("don't message before 8", "be blunter"). To forget one, give its topic (a rule's own words) and an empty text. Busy times, limits and days off are changes, not memories; most messages need none.

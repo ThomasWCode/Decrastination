@@ -20,6 +20,7 @@ import com.thomaswcode.decrastination.core.Instruction
 import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.InstructionState
 import com.thomaswcode.decrastination.core.InstructionStatus
+import com.thomaswcode.decrastination.core.Lessons
 import com.thomaswcode.decrastination.core.Memories
 import com.thomaswcode.decrastination.core.MemoryEdit
 import com.thomaswcode.decrastination.core.MemoryState
@@ -518,12 +519,26 @@ class Conversation(
         // The pieces he may keep (G1): today's slots', and each task with no steps' next; and those kept today, to take back.
         val keepable = (plan.todaySlots.mapNotNull { it.chunk } + plan.ordered.filter { it.stepIndex == null }.distinctBy { it.taskId }).associate { it.key to it.taskId }
         val keptToday = keptToday(now)
+        val lessons = lessons(state, now)
         return ChatPrompts.Context(
-            known = ChatPrompts.context(state.tasks, time.events, applied, now, clock.zone(), settings.value.classMap, runtime.value.notSame, settings.value, learning.value.calibration, kept.notes, kept.reminders, moments),
+            known = ChatPrompts.context(state.tasks, time.events, applied, now, clock.zone(), settings.value.classMap, runtime.value.notSame, settings.value, learning.value.calibration, kept.notes, kept.reminders, moments, lessons),
             plan = ChatPrompts.plan(plan, clock.zone(), keptToday.map { it.key to it.label }, focus.blockingLine(plan, now)),
             keepable = keepable,
             kept = keptToday.associate { it.key to it.taskId },
+            lessons = lessons,
         )
+    }
+
+    /**
+     * Each class's next lessons (G8), by subject, from Power Planner's timetable in [state] as of its last good
+     * read (DX-09), said to be stale past a week; none with no timetable read.
+     */
+    fun lessons(state: TaskState = tasks.value, now: Long = clock.now()): Lessons.Timetabled? {
+        val timetable = state.timetable ?: return null
+        val s = settings.value
+        val next = Lessons.next(timetable, now, clock.zone(), school.value, skip = setOf(s.studyPeriodName))
+        val readAt = state.status(Source.PowerPlanner).lastSuccessAt
+        return Lessons.Timetabled(Lessons.groups(next, s.classMap), readAt, readAt != null && now - readAt > Lessons.STALE_MS)
     }
 
     /** A task he asked a source to read about (G2), as it was then, watched till [until]. */

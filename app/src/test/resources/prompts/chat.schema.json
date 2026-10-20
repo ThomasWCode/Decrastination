@@ -204,6 +204,9 @@
                     },
                     "paced": {
                         "type": "boolean"
+                    },
+                    "lesson": {
+                        "type": "string"
                     }
                 },
                 "required": [
@@ -220,7 +223,8 @@
                     "endTime",
                     "title",
                     "steps",
-                    "paced"
+                    "paced",
+                    "lesson"
                 ],
                 "additionalProperties": false
             }

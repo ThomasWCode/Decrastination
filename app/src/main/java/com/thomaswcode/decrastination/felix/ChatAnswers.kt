@@ -12,6 +12,7 @@ import com.thomaswcode.decrastination.core.FelixSettings
 import com.thomaswcode.decrastination.core.Given
 import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.Kind
+import com.thomaswcode.decrastination.core.Lessons
 import com.thomaswcode.decrastination.core.Note
 import com.thomaswcode.decrastination.core.NoteScope
 import com.thomaswcode.decrastination.core.Notes
@@ -211,7 +212,9 @@ object ChatAnswers {
         val titles = events.associate { EventJudge.key(it) to it.title } + listOfNotNull(about.eventKey?.let { it to (about.eventTitle ?: it) })
         // His reminders and notes come as changes of their own types (8a, Q13: B): taken out first, made their own way.
         val (kept, given) = answer.changes.take(MAX_CHANGES).map(InstructionAnswers.Given::normalised).partition { it.type == ChatPrompts.REMIND_TYPE || it.type == ChatPrompts.NOTE_TYPE }
-        var changes = given.mapNotNull { g ->
+        var changes = given.map { lessonOf(it, context, now, zone) ?: it }.mapNotNull { g ->
+            // A due date at a class's next lesson it can't be set from (G8): refused, saying why, so he asks.
+            if (g.type == ChangeType.DueBy.name && g.lesson.isNotBlank()) return@mapNotNull null.also { leftOut += "a change (${lessonProblem(g.lesson, context, zone)})" }
             InstructionAnswers.change(g, byId, titles, now, zone).also { if (it == null) leftOut += "a change (${InstructionAnswers.problem(g, byId, titles)})" }
         }
         if (answer.changes.size > MAX_CHANGES) leftOut += "${answer.changes.size - MAX_CHANGES} more changes than the app takes at once"
@@ -336,6 +339,28 @@ object ChatAnswers {
             added[task.id] = (added[task.id] ?: 0) + 1
             Note(UUID.randomUUID().toString(), words, now, By.Felix, taskId = task.id)
         }
+    }
+
+    /**
+     * [g], a DueBy at a class's next lesson (G8), as one at that lesson's start, its own date and time not read;
+     * null where it isn't one, or where the lesson can't be found ([lessonProblem] says why).
+     */
+    private fun lessonOf(g: InstructionAnswers.Given, context: ChatPrompts.Context?, now: Long, zone: ZoneId): InstructionAnswers.Given? {
+        if (g.type != ChangeType.DueBy.name || g.lesson.isBlank()) return null
+        val lessons = context?.lessons?.takeIf { !it.stale } ?: return null
+        val at = Lessons.nextOf(g.lesson, lessons.groups, emptyMap()) ?: return null
+        val start = Instant.ofEpochMilli(at.start).atZone(zone)
+        return g.copy(date = start.toLocalDate().toString(), time = start.toLocalTime().format(CLOCK), lesson = "")
+    }
+
+    /** Why a due date at [lesson]'s next lesson can't be set (G8): no timetable read, one over a week old, or no such class with a lesson ahead. */
+    private fun lessonProblem(lesson: String, context: ChatPrompts.Context?, zone: ZoneId): String {
+        val lessons = context?.lessons ?: return "a due date at the next lesson, with no timetable read: ask them the date"
+        if (lessons.stale) {
+            val read = lessons.readAt?.let { " on " + Instant.ofEpochMilli(it).atZone(zone).toLocalDate().format(DateTimeFormatter.ofPattern("EEE d MMM", Locale.UK)) }.orEmpty()
+            return "a due date at the next lesson, from a timetable read$read, over a week ago: ask them the date"
+        }
+        return "a due date at the next lesson of “${lesson.trim().take(40)}”, a class the lessons' list doesn't have, or with none ahead: ask them"
     }
 
     /** A reminder's time may be this far behind now (his reading of a minute), and no more. */

@@ -13,6 +13,7 @@ import com.thomaswcode.decrastination.core.Given
 import com.thomaswcode.decrastination.core.Instruction
 import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.Kind
+import com.thomaswcode.decrastination.core.Lessons
 import com.thomaswcode.decrastination.core.MessageKind
 import com.thomaswcode.decrastination.core.Note
 import com.thomaswcode.decrastination.core.Notes
@@ -132,6 +133,7 @@ object ChatPrompts {
         1. Add tasks of their own (newTasks): something to do that isn't listed ("write my UCAS statement by 1 December", "buy mum a present before Sunday"). Give a short title in their words; kind: Homework, Revision, Admin, or Event for something that happens at a time (an appointment, a match); subject if it's for one (else an empty string); dueDate and dueTime if they gave them (an event's start; with no time, an event starts at 09:00 and anything else is due by the end of that day); minutes for the whole thing (your best estimate if they didn't say, and say so in your reply); startDate if it can't be started before a day; notes only for something worth keeping (else an empty string); and steps only for a big task worth splitting, each with minutes (adding up to the task's) and its own dates where it has them.
         2. Change their tasks and days (changes), with these:
 """ + InstructionPrompts.CHANGE_TYPES.prependIndent("        ") + """
+        A due date at a class's next lesson ("it's due next lesson", "next chemistry") is a DueBy with lesson the class, as the lessons' list names it (its subject or one of its names), and date and time empty: the app sets it to that lesson's start. Give lesson only for that; when it's refused, ask them the date.
         Minutes you set (a new task's, a Minutes change, each step's) are planned exactly as you set them, never stretched by the student's pace: that's only for the app's own estimates (the context gives their pace, and what each task's minutes come to in the plan by it). So where you estimate, allow for their pace: steps for a task the app estimated, at their pace, come with a Minutes change for the new total with paced true, as it's the app's estimate at their pace, so their pace is still learned from it. Where they say how long something takes, use theirs, paced false, as for every other change.
         3. Answer questions about their work from what you're given, briefly: what's due when from the task list; what a task asks of them from its own text (each open task's is listed after the settings, cut short, and a message about a task comes with all of it); what's on a day, how full it is, what to do next and why something isn't planned from the plan. The plan is what the app has them do and shows them, so say what it says rather than planning the work again yourself. The context gives the time now: a deadline later today is still ahead ("due at 16:00 today"), not past, and a slot marked past has gone by; say "overdue" only where the plan marks it so.
         4. Remember (memories): a fact about the student worth keeping for later (a preference, a pattern, something about their week: "football is on Tuesdays"), with a short topic, so a newer fact on the same topic replaces it; or, kind "rule", a standing instruction about how you should behave ("don't message before 8", "be blunter"). To forget one, give its topic (a rule's own words) and an empty text. Busy times, limits and days off are changes, not memories; most messages need none.
@@ -195,13 +197,14 @@ object ChatPrompts {
     /**
      * A change as the chat gives it: the instructions' reader's, and whether a Minutes total is the
      * app's estimate at the student's pace (17 Oct), so the pace still learns from the task. A plain
-     * boolean, so no union is added. Its types gain the chat's own two (8a, [REMIND_TYPE], [NOTE_TYPE]).
+     * boolean, so no union is added. Its types gain the chat's own two (8a, [REMIND_TYPE], [NOTE_TYPE]); and
+     * a DueBy's class whose next lesson it's due at (G8, 4.1.1), a plain string, empty for none.
      */
     private val CHANGE = InstructionPrompts.obj(
         *(
             // Its types the instructions' and the chat's own two (8a): a reminder and a note, on the same fields.
             listOf("type" to mapOf("type" to "string", "enum" to ChangeType.entries.map { it.name } + REMIND_TYPE + NOTE_TYPE)) +
-                InstructionPrompts.CHANGE_FIELDS.filterNot { it.first == "type" } + ("paced" to mapOf("type" to "boolean"))
+                InstructionPrompts.CHANGE_FIELDS.filterNot { it.first == "type" } + ("paced" to mapOf("type" to "boolean")) + ("lesson" to STRING)
             ).toTypedArray(),
     )
 
@@ -296,9 +299,9 @@ object ChatPrompts {
     /**
      * What the app knows, as the chat sends it: [known] ([context]), then the [plan] ([plan]), each with its share of the room ([turns]);
      * and what its answer is checked against that isn't in words: the pieces it lists to keep ([keepable]) and those
-     * kept today ([kept]), each key with its task's id (G1).
+     * kept today ([kept]), each key with its task's id (G1); the next lessons a due date at one is set from ([lessons], G8).
      */
-    data class Context(val known: String, val plan: String, val keepable: Map<String, String> = emptyMap(), val kept: Map<String, String> = emptyMap()) {
+    data class Context(val known: String, val plan: String, val keepable: Map<String, String> = emptyMap(), val kept: Map<String, String> = emptyMap(), val lessons: Lessons.Timetabled? = null) {
         /** All of it, as it's sent when there's room. */
         val whole: String get() = if (plan.isEmpty()) known else known + PLAN_GAP + plan
     }
@@ -398,6 +401,7 @@ object ChatPrompts {
         notes: List<Note> = emptyList(),
         reminders: List<Reminder> = emptyList(),
         moments: Map<String, Long> = emptyMap(),
+        lessons: Lessons.Timetabled? = null,
     ): String = buildString {
         fun at(time: Long) = Instant.ofEpochMilli(time).atZone(zone).format(WHEN)
         // A task's minutes, and where a pace is learned for its kind and class, what the plan makes of them:
@@ -418,7 +422,7 @@ object ChatPrompts {
         val byId = tasks.associateBy { it.id }
         appendLine("Today: ${Instant.ofEpochMilli(now).atZone(zone).format(TODAY)} (${zone.id})")
         appendLine()
-        appendLine("Open tasks (id | title | from | kind | due, a real deadline unless marked a plan, which is never overdue and moves on once it passes | minutes in all, with what the plan makes of them at their pace where it's learned | minutes worked so far | can't start before):")
+        appendLine("Open tasks (id | title | from | its class, and its subject | kind | due, a real deadline unless marked a plan, which is never overdue and moves on once it passes | minutes in all, with what the plan makes of them at their pace where it's learned | minutes worked so far | can't start before):")
         // By the date shown (the deadline in force, PL-14), so a plan's date gone by doesn't crowd nearer ones out of the list.
         val open = tasks.filter { it.isOpen && !it.hidden }.sortedBy { it.deadlineAt(now) ?: it.dueAt ?: Long.MAX_VALUE }
         if (open.isEmpty()) appendLine("(none)")
@@ -426,7 +430,7 @@ object ChatPrompts {
             val start = listOfNotNull(t.availableFrom, t.mine.from?.value, t.notBefore).maxOrNull()?.takeIf { it > now }
             // A date the app or Claude set is a plan, not a deadline (PL-14): said, so it's not called overdue.
             val due = (t.deadlineAt(now) ?: t.dueAt)?.let { at(it) + if (t.hardAt(now)) "" else " (a plan)" } ?: "no date"
-            appendLine("- ${t.id} | ${t.title.take(MAX_TITLE)} | ${t.source.label} | ${t.kind.label} | $due | ${minutes(t)} | ${t.workedMin + t.photoMin} | ${start?.let(::at) ?: "-"}")
+            appendLine("- ${t.id} | ${t.title.take(MAX_TITLE)} | ${t.source.label} | ${classOf(t, classMap)} | ${t.kind.label} | $due | ${minutes(t)} | ${t.workedMin + t.photoMin} | ${start?.let(::at) ?: "-"}")
             // Its steps by their place, for a tick (AI-14).
             t.subSteps.take(OwnTaskRules.MAX_STEPS).forEachIndexed { i, step -> appendLine("    step $i: ${step.title.take(MAX_TITLE)} (${step.minutes} min)${if (step.done) ", done" else ""}") }
             // Its notes (8a), by id for a delete: its own, then the standing ones it matches (Q31: A); whose each is.
@@ -463,6 +467,17 @@ object ChatPrompts {
         fortnight.sortedBy { it.start }.take(InstructionPrompts.MAX_EVENTS).forEach { e ->
             val time = if (e.allDay) "all day " + Instant.ofEpochMilli(e.start).atZone(ZoneId.of("UTC")).toLocalDate().format(DAY) else "${at(e.start)} to ${at(e.end)}"
             appendLine("- ${EventJudge.key(e)} | ${e.title.take(MAX_TITLE)} | $time")
+        }
+        // Each class's next lessons (G8), from Power Planner's timetable: none read, none said.
+        if (lessons != null) {
+            appendLine()
+            val read = lessons.readAt?.takeIf { lessons.stale }?.let { ", from the timetable read on ${Instant.ofEpochMilli(it).atZone(zone).format(DAY)}, over a week ago" }.orEmpty()
+            appendLine("Next lessons$read (class: its subject, and its names | its next three):")
+            if (lessons.groups.isEmpty()) appendLine("(none ahead)")
+            lessons.groups.forEach { g ->
+                val name = g.subject?.let { "$it (${g.names.joinToString()})" } ?: "${g.names.joinToString()} (no subject given, so tied to no class code)"
+                appendLine("- $name | " + g.lessons.joinToString("; ") { "${Instant.ofEpochMilli(it.start).atZone(zone).format(LESSON_DAY)}–${Instant.ofEpochMilli(it.end).atZone(zone).format(CLOCK)}" })
+            }
         }
         val inUse = applied.flatMap { it.changes }
         if (inUse.isNotEmpty()) {
@@ -510,6 +525,16 @@ object ChatPrompts {
             if (shown < withText.size) appendLine("- …and ${withText.size - shown} more, left out for room")
         }
     }.trimEnd()
+
+    /** [t]'s class as its line says it (G8): its code, and the subject [classMap] gives it where that's another; "-" with none. */
+    private fun classOf(t: TaskItem, classMap: Map<String, String>): String {
+        val code = t.className?.trim()?.takeIf { it.isNotEmpty() } ?: return "-"
+        val subject = classMap.entries.firstOrNull { it.key.trim().equals(code, ignoreCase = true) }?.value?.trim()?.takeIf { it.isNotEmpty() && !it.equals(code, ignoreCase = true) }
+        return subject?.let { "$code, $it" } ?: code
+    }
+
+    /** A lesson's day and start, as the lessons' line says them. */
+    private val LESSON_DAY = DateTimeFormatter.ofPattern("EEE d MMM HH:mm", Locale.UK)
 
     /** Each open task's own text as the context gives it, at most (D-93). */
     const val BRIEF_TEXT = 600
