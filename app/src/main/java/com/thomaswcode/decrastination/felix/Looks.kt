@@ -458,7 +458,7 @@ class Looks(
         }
     }
 
-    /** The trigger and moment his words were last asked for ahead ([draft]): once, whatever came back. */
+    /** The trigger and moment his words were last asked for ahead and none came back ([draft]): not asked again. */
     private var draftAsked: Pair<String?, Long>? = null
 
     /**
@@ -474,7 +474,8 @@ class Looks(
         if (!gateway.available()) return
         val caller = gateway.client(ModelEffort.Job.Felix)?.let { FelixCaller(it) } ?: return
         val called = ask(caller, trigger, at, interactive = false) as? Called.Answered ?: return
-        draftAsked = trigger.key to at
+        // Only where none came back: a draft that came, made stale since by a message of his, is written again ahead.
+        draftAsked = (trigger.key to at).takeIf { called.value.answer == null }
         val answer = called.value.answer ?: return
         chat.update { it.copy(felix = it.felix.copy(draft = FelixDraft(trigger.reason.name, trigger.key, answer, now))) }
         Log.i(AppGraph.TAG, "Felix wrote ahead for ${trigger.key}, due at ${Instant.ofEpochMilli(at).atZone(clock.zone()).toLocalTime()}")
