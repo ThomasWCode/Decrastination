@@ -1,9 +1,12 @@
 package com.thomaswcode.decrastination.data
 
 import com.thomaswcode.decrastination.Fixtures
+import com.thomaswcode.decrastination.core.By
 import com.thomaswcode.decrastination.core.ChangeType
+import com.thomaswcode.decrastination.core.ChatAction
 import com.thomaswcode.decrastination.core.ChatArchive
 import com.thomaswcode.decrastination.core.ChatState
+import com.thomaswcode.decrastination.core.DueKind
 import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.InstructionState
 import com.thomaswcode.decrastination.core.InstructionStatus
@@ -71,6 +74,7 @@ class StoresDecodeTest {
         store("chat-archive.json", ChatArchive.serializer(), ::ChatArchive, since = "2026-10-19"),
         store("school.json", SchoolCalendar.serializer(), ::SchoolCalendar),
         store("memory.json", MemoryState.serializer(), ::MemoryState),
+        store("felix.json", FelixStore.serializer(), ::FelixStore, since = "2026-10-20-4.1.0"),
         store("calendar.json", CalendarState.serializer(), ::CalendarState),
     )
 
@@ -98,7 +102,7 @@ class StoresDecodeTest {
             val stores = Stores(copy, Reverse)
             // The chat's archive, a month a file: all of it read, then what couldn't be.
             if (store.file == stores.chatArchive.name) return stores.chatArchive.value.let { it to stores.chatArchive.problems.firstOrNull() }
-            val read = stores.let { s -> listOf(s.tasks, s.settings, s.runtime, s.session, s.protection, s.model, s.anki, s.learning, s.log, s.instructions, s.chat, s.school, s.memory, s.calendar) }.single { it.name == store.file }
+            val read = stores.let { s -> listOf(s.tasks, s.settings, s.runtime, s.session, s.protection, s.model, s.anki, s.learning, s.log, s.instructions, s.chat, s.school, s.memory, s.felix, s.calendar) }.single { it.name == store.file }
             return read.value to read.problem
         } finally {
             copy.deleteRecursively()
@@ -246,12 +250,31 @@ class StoresDecodeTest {
         val chat = read(store("chat.json"), now).first as ChatState
         assertEquals(Speaker.You, chat.unanswered?.from)
         val his = chat.messages.filter { it.from == Speaker.Felix }
-        assertEquals(FelixPrompts.Reason.entries.map { it.name }.filter { it != FelixPrompts.Reason.Reply.name }.toSet() + MessageKind.Chat.name, his.map { it.kind.name }.toSet())
+        // Every reason he writes for, and from 4.1.0 the app's own notes in his name too.
+        val kinds = his.map { it.kind.name }.toSet()
+        val reasons = FelixPrompts.Reason.entries.map { it.name }.filter { it != FelixPrompts.Reason.Reply.name }.toSet() + MessageKind.Chat.name
+        assertTrue(kinds.containsAll(reasons), "no message of his of the kinds ${reasons - kinds}")
         assertTrue(chat.messages.count { it.from == Speaker.You && it.replyTo != null } >= 4)
         assertTrue(chat.felix.checkInDraft != null && chat.felix.assessLater.isNotEmpty() && chat.readAt > 0)
         // A card of Felix's that made an instruction in use.
         assertTrue("i-felix-steps" in chat.messages.flatMap { it.proposals }.mapNotNull { it.made })
         assertTrue((read(store("chat-archive.json"), now).first as ChatArchive).messages.isNotEmpty())
+    }
+
+    @Test
+    fun `Felix's store now holds a note on a task, a standing one, a deleted one, and a reminder of each kind in each state`() {
+        val store = read(store("felix.json"), now).first as FelixStore
+        val notes = store.notes
+        assertTrue(notes.any { it.taskId != null && it.deletedAt == null } && notes.any { it.scope != null && it.taskId == null } && notes.any { it.deletedAt != null })
+        assertEquals(By.entries.toSet(), notes.map { it.by }.toSet())
+        val reminders = store.reminders
+        assertEquals(DueKind.entries.toSet(), reminders.map { it.due.kind }.toSet())
+        assertTrue(reminders.any { it.draft != null } && reminders.any { it.snoozedTo != null } && reminders.any { it.doneAt != null } && reminders.any { it.cancelledAt != null })
+        // The chat's acts on them, a moved one's Undo with what it was, and a reminder's message with its replies.
+        val chat = read(store("chat.json"), now).first as ChatState
+        val acts = chat.messages.flatMap { it.acts }.mapNotNull { it.action?.type }.toSet()
+        assertTrue(acts.containsAll(listOf(ChatAction.Type.SetReminder, ChatAction.Type.MoveReminder, ChatAction.Type.CancelReminder, ChatAction.Type.AddNote, ChatAction.Type.DeleteNote)))
+        assertTrue(chat.messages.any { m -> m.kind == MessageKind.Reminder && m.reminderId in reminders.map { it.id } } && chat.messages.any { it.kind == MessageKind.Note })
     }
 
     private companion object {

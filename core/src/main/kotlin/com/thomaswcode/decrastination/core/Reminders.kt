@@ -1,0 +1,124 @@
+package com.thomaswcode.decrastination.core
+
+import kotlinx.serialization.Serializable
+
+/**
+ * A reminder Felix keeps at your asking (docs/plan_v4/07-notes-and-reminders.md, Stage 8a): your
+ * [text], delivered as his message when it's [due], in his words for that moment written just before
+ * ([draft], Q9: B; Q24), or yours as you set them where he can't write. Set from the chat ([by]);
+ * [sentAt] once delivered, [snoozedTo] by a snooze (it comes again then), [doneAt] by its *Done*.
+ * Cancelled ([cancelledAt]), it's never delivered and kept whole for the cancel's Undo; one whose task
+ * closes before it comes is let go the same way, said in the chat ([Reminders.letGo]).
+ */
+@Serializable
+data class Reminder(
+    val id: String,
+    val text: String,
+    val at: Long,
+    val by: By,
+    val taskId: String? = null,
+    val due: Due,
+    val sentAt: Long? = null,
+    val snoozedTo: Long? = null,
+    val doneAt: Long? = null,
+    /** Cancelled from the chat, or let go: kept, never delivered, till its act can no longer be undone; Undo clears it. */
+    val cancelledAt: Long? = null,
+    /** His words for it, written ahead, and when. */
+    val draft: FelixAnswer? = null,
+    val draftedAt: Long? = null,
+)
+
+/**
+ * When a reminder comes ([kind]): [at] a moment (At); at the start of its task's first work slot from
+ * [at] on, the day it was asked for or the moment it was set (SlotStart); or [minutesBefore] its task's
+ * deadline in force (BeforeDue), following the deadline as it moves.
+ */
+@Serializable
+data class Due(val kind: DueKind, val at: Long? = null, val minutesBefore: Int? = null)
+
+@Serializable
+enum class DueKind { At, SlotStart, BeforeDue }
+
+/** The reminders (docs/plan_v4/07-notes-and-reminders.md): when each comes, which are due, which are kept. Pure. */
+object Reminders {
+    /** A reminder's words, at most. */
+    const val MAX_TEXT = 300
+
+    /** The most reminders still to come at once. */
+    const val MAX_PENDING = 50
+
+    /** The most minutes before its task's deadline a BeforeDue comes: a week. */
+    const val MAX_BEFORE_MIN = 7 * 24 * 60
+
+    /** How long one sent or done is kept: its record, then it goes. */
+    const val KEEP_MS = 30 * 24 * 3_600_000L
+
+    /** How long after its time one comes before it's marked late (the phone off, or asleep through it). */
+    const val LATE_MS = 5 * 60_000L
+
+    /** Whether [r] is still to come: not done nor cancelled, and not sent but for a snooze since. */
+    fun pending(r: Reminder): Boolean =
+        r.doneAt == null && r.cancelledAt == null && (r.sentAt == null || (r.snoozedTo != null && r.snoozedTo > r.sentAt))
+
+    /** Whether [r] can still be moved or reworded: still to come, and never sent. */
+    fun unsent(r: Reminder): Boolean = pending(r) && r.sentAt == null && r.snoozedTo == null
+
+    /**
+     * When [r] comes, by [plan] and the [tasks] as they are at [now]: its snooze; else an At's time; a
+     * SlotStart's task's first work slot starting at or after its [Due.at]; a BeforeDue's task's deadline
+     * in force, less its minutes. Null where that isn't known (no slot for its task yet, no deadline).
+     */
+    fun moment(r: Reminder, plan: Plan, tasks: Map<String, TaskItem>, now: Long): Long? {
+        r.snoozedTo?.let { return it }
+        return when (r.due.kind) {
+            DueKind.At -> r.due.at
+            DueKind.SlotStart -> plan.buckets.asSequence().flatMap { it.slots }
+                .filter { it.kind == SlotKind.Work && it.chunk?.taskId == r.taskId && it.start >= (r.due.at ?: r.at) }
+                .minOfOrNull { it.start }
+            DueKind.BeforeDue -> r.taskId?.let(tasks::get)?.deadlineAt(now)?.minus((r.due.minutesBefore ?: 0) * 60_000L)
+        }
+    }
+
+    /** The earliest moment any of [reminders] still to come is due ([moment]): what the alarm is set to; null, none. */
+    fun next(reminders: List<Reminder>, plan: Plan, tasks: Map<String, TaskItem>, now: Long): Long? =
+        reminders.filter(::pending).mapNotNull { moment(it, plan, tasks, now) }.minOrNull()
+
+    /** Those of [reminders] still to come whose moment has come by [now], each with it, the earliest first. */
+    fun due(reminders: List<Reminder>, plan: Plan, tasks: Map<String, TaskItem>, now: Long): List<Pair<Reminder, Long>> =
+        reminders.filter(::pending).mapNotNull { r -> moment(r, plan, tasks, now)?.takeIf { it <= now }?.let { r to it } }.sortedBy { it.second }
+
+    /**
+     * Those of [reminders] to let go, never sent, as what they wait on is gone: a SlotStart's or a
+     * BeforeDue's task closed or no longer listed, or a BeforeDue's with no deadline. An At comes at its
+     * time whatever becomes of its task, as an alarm would.
+     */
+    fun letGo(reminders: List<Reminder>, tasks: Map<String, TaskItem>, now: Long): List<Reminder> = reminders.filter { r ->
+        unsent(r) && r.due.kind != DueKind.At && r.taskId?.let(tasks::get).let { task -> task == null || !task.isOpen || (r.due.kind == DueKind.BeforeDue && task.deadlineAt(now) == null) }
+    }
+
+    /** [r] snoozed [minutes] from [now]: it comes again then, its draft for before let go. */
+    fun snoozed(r: Reminder, now: Long, minutes: Int): Reminder = r.copy(snoozedTo = now + minutes * 60_000L, draft = null, draftedAt = null)
+
+    /**
+     * Whether [r]'s draft is written for its [moment]: drafted within [ahead] of it at most (a move or a
+     * snooze lets it go; a slot moved later makes it another moment's).
+     */
+    fun drafted(r: Reminder, moment: Long, ahead: Long): Boolean =
+        r.draft != null && r.draftedAt != null && r.draftedAt >= moment - ahead
+
+    /**
+     * [reminders] kept (the nightly prune): one sent or done more than [KEEP_MS] before [now] goes, as does
+     * one cancelled (or let go) once no message in the chat's window, [messages], holds its cancel's act
+     * not undone; the rest stay.
+     */
+    fun prune(reminders: List<Reminder>, now: Long, messages: List<ChatMessage>): List<Reminder> {
+        val held = ChatActs.held(messages)
+        return reminders.filter { r ->
+            when {
+                r.cancelledAt != null -> r.id in held
+                pending(r) -> true
+                else -> (listOfNotNull(r.doneAt, r.sentAt).maxOrNull() ?: r.at) >= now - KEEP_MS
+            }
+        }
+    }
+}

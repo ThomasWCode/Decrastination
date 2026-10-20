@@ -1,6 +1,7 @@
 package com.thomaswcode.decrastination.data
 
 import com.thomaswcode.decrastination.Fixtures
+import com.thomaswcode.decrastination.core.By
 import com.thomaswcode.decrastination.core.Calibration
 import com.thomaswcode.decrastination.core.Change
 import com.thomaswcode.decrastination.core.ChangeType
@@ -8,14 +9,20 @@ import com.thomaswcode.decrastination.core.ChatArchive
 import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.core.ChatState
 import com.thomaswcode.decrastination.core.DayKind
+import com.thomaswcode.decrastination.core.Due
+import com.thomaswcode.decrastination.core.DueKind
 import com.thomaswcode.decrastination.core.FelixState
 import com.thomaswcode.decrastination.core.HalfDay
 import com.thomaswcode.decrastination.core.Instruction
 import com.thomaswcode.decrastination.core.InstructionStatus
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.NoSchool
+import com.thomaswcode.decrastination.core.Note
+import com.thomaswcode.decrastination.core.NoteScope
+import com.thomaswcode.decrastination.core.Notes
 import com.thomaswcode.decrastination.core.OwnTask
 import com.thomaswcode.decrastination.core.OwnTaskRules
+import com.thomaswcode.decrastination.core.Reminder
 import com.thomaswcode.decrastination.core.SchoolCalendar
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.SlotState
@@ -277,7 +284,7 @@ class BackupTest {
     }
 
     @Test
-    fun `format 7 keeps the chat with Felix's state, its earlier messages and today's slots, and a newer one is refused`() {
+    fun `format 7's chat with Felix's state, its earlier messages and today's slots are kept, and a newer format is refused`() {
         val chat = ChatState(listOf(ChatMessage("m1", Speaker.You, "move the physics to Thursday", 5)), felix = FelixState(nextCheckAt = 42))
         val archive = ChatArchive(listOf(ChatMessage("m0", Speaker.You, "what's due?", 1)))
         val backup = Backup(
@@ -285,14 +292,41 @@ class BackupTest {
             slots = SlotState("2026-10-15", previous = mapOf("teams:a#0" to 7L)),
         )
         val back = Backups.decode(Backups.encode(backup), emptyMap())!!
-        assertEquals(7, back.format)
+        assertEquals(Backup.FORMAT, back.format)
         assertEquals(chat, back.chat)
         assertEquals(42L, back.chat.felix.nextCheckAt)
         assertEquals(archive, back.archive)
         // None in one from before.
         assertEquals(ChatState(), Backups.decode("""{"app":"Decrastination","format":5,"exportedAt":0,"settings":{},"log":{}}""", emptyMap())!!.chat)
         assertEquals(mapOf("teams:a#0" to 7L), back.slots.previous)
-        assertEquals(null, Backups.decode(Backups.encode(backup).replace("\"format\": 7", "\"format\": 8"), emptyMap()))
+        assertEquals(null, Backups.decode(Backups.encode(backup).replace("\"format\": ${Backup.FORMAT}", "\"format\": ${Backup.FORMAT + 1}"), emptyMap()))
+    }
+
+    @Test
+    fun `format 8 keeps Felix's notes and reminders, restored by id beside this phone's, and refuses what the app never keeps`() {
+        val note = Note("n1", "Use the second source", 3, By.Felix, taskId = "teams:essay")
+        val standing = Note("n2", "On sheets, not in the book", 4, By.You, scope = NoteScope(subject = "Chemistry"))
+        val reminder = Reminder("r1", "call gran", 5, By.Felix, due = Due(DueKind.At, 1_000))
+        val felix = FelixStore(listOf(note, standing), listOf(reminder))
+        val backup = Backup(exportedAt = 1, settings = Settings(), log = ActivityLog(), felixStore = felix)
+        val back = Backups.decode(Backups.encode(backup), emptyMap())!!
+        assertEquals(8, Backup.FORMAT)
+        assertEquals(felix, back.felixStore)
+        assertNull(Backups.problem(back))
+        // None in one from before.
+        assertEquals(FelixStore(), Backups.decode("""{"app":"Decrastination","format":7,"exportedAt":0,"settings":{},"log":{}}""", emptyMap())!!.felixStore)
+        // This phone's own win; the backup's it hasn't come back.
+        val here = FelixStore(listOf(note.copy(text = "Use the first source")), emptyList())
+        assertEquals(FelixStore(listOf(here.notes.single(), standing), listOf(reminder)), Backups.mergedFelix(here, felix))
+        // A note on a task and a scope, or neither; a reminder's due missing what its kind needs; two of one id; words too long.
+        for (bad in listOf(
+            felix.copy(notes = listOf(note.copy(scope = NoteScope(subject = "Chemistry")))),
+            felix.copy(notes = listOf(note.copy(taskId = null))),
+            felix.copy(reminders = listOf(reminder.copy(due = Due(DueKind.BeforeDue, minutesBefore = 30)))),
+            felix.copy(reminders = listOf(reminder.copy(due = Due(DueKind.At)))),
+            felix.copy(reminders = listOf(reminder, reminder.copy(text = "again"))),
+            felix.copy(notes = listOf(note.copy(text = "x".repeat(Notes.MAX_TEXT + 1)))),
+        )) assertTrue(Backups.problem(backup.copy(felixStore = bad))?.contains("Felix's notes and reminders") == true, "$bad")
     }
 
     @Test

@@ -1,0 +1,55 @@
+{
+    "aiUsage": {
+        "month": "2026-10",
+        "spentUsd": 3.25,
+        "calls": 120,
+        "refused": 1,
+        "failed": 2,
+        "lastError": "Read timed out",
+        "lastCallAt": 1792311120000,
+        "keyProblem": "Rejected",
+        "keyProblemSince": 1791795600000,
+        "keyAlerted": true,
+        "restUntil": 1791799200000,
+        "failuresInRow": 1,
+        "lastFailureClass": "Timeout",
+        "failedAt": [
+            1792310400000
+        ],
+        "lastWorkedAt": 1792311120000
+    },
+    "calls": [
+        {
+            "at": 1792311120000,
+            "job": "Felix",
+            "title": "SlotStart",
+            "effort": "medium",
+            "inTokens": 4000,
+            "outTokens": 120,
+            "cacheRead": 3000,
+            "latencyMs": 2500,
+            "stop": "end_turn",
+            "outcome": "used",
+            "costUsd": 0.02
+        }
+    ],
+    "enrichFailed": {
+        "gmail:thr-news": "99aa88bb77cc66dd"
+    },
+    "droppedAlerted": {
+        "teams:as-essay": "a1b2c3d4e5f60718"
+    },
+    "microPlans": {
+        "teams:as-essay#1": {
+            "key": "teams:as-essay#1",
+            "first": "Write the essay's three headings",
+            "next": [
+                "Fill in a point for each"
+            ],
+            "doneWhen": "Each heading has a point",
+            "inputHash": "a1b2c3d4e5f60718",
+            "at": 1792338600000
+        }
+    },
+    "version": 1
+}
