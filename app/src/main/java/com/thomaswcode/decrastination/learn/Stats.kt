@@ -6,10 +6,12 @@ import com.thomaswcode.decrastination.core.Window
 import com.thomaswcode.decrastination.data.ActivityLog
 import com.thomaswcode.decrastination.data.SlotOutcome
 import com.thomaswcode.decrastination.data.WeekRollup
+import com.thomaswcode.decrastination.ui.Format
 import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 /**
@@ -112,6 +114,40 @@ object Stats {
             protectionRepaired = protection.count { it.repaired },
         )
     }
+
+    /**
+     * This week so far and last week in figures, as Felix is told them when he asks (G6, 8c): each week's time
+     * worked in kept slots, its slots kept and missed, its work finished and the real deadlines among it met
+     * (PL-14), then its subjects, busiest first, as [bySubject] names them; [MAX_WEEK_LINES] lines at most,
+     * the subjects sharing what the two weeks' own lines leave.
+     */
+    fun weekLines(log: ActivityLog, classMap: Map<String, String>, now: Long, zone: ZoneId): List<String> {
+        val today = Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
+        val monday = today.minusDays((today.dayOfWeek.value - 1).toLong())
+        val weeks = listOf(Triple("This week so far", monday, today), Triple("Last week", monday.minusDays(7), monday.minusDays(1)))
+        val each = (MAX_WEEK_LINES - weeks.size) / weeks.size
+        return weeks.flatMap { (label, first, last) ->
+            fun inWeek(date: LocalDate) = !date.isBefore(first) && !date.isAfter(last)
+            val slots = log.slots.filter { inWeek(LocalDate.parse(it.date)) && it.outcome != SlotOutcome.Moved }
+            val kept = slots.filter { it.outcome.kept }
+            val done = log.completions.filter { inWeek(Instant.ofEpochMilli(it.doneAt).atZone(zone).toLocalDate()) }
+            val dated = done.filter { it.dueAt != null && it.hardDeadline }
+            val head = "$label (${first.format(WEEK_DAY)} to ${last.format(WEEK_DAY)}): ${Format.minutes(kept.sumOf { it.workedMin })} worked in ${kept.size} slots kept, " +
+                "${slots.count { it.outcome == SlotOutcome.Missed }} missed; ${done.size} finished, ${dated.count { it.doneAt <= it.dueAt!! }} of ${dated.size} deadlines met"
+            fun subject(className: String?) = className?.trim()?.takeIf { it.isNotEmpty() }?.let { classMap[it]?.trim()?.takeIf { s -> s.isNotEmpty() } ?: it } ?: OTHER
+            val subjects = (kept.map { subject(it.className) } + done.map { subject(it.className) }).distinct().map { s ->
+                val theirs = kept.filter { subject(it.className) == s }
+                Triple(s, theirs.sumOf { it.workedMin }, theirs.size) to done.count { subject(it.className) == s }
+            }.sortedWith(compareByDescending<Pair<Triple<String, Int, Int>, Int>> { it.first.second }.thenBy { it.first.first })
+            listOf(head) + subjects.take(each).map { (s, finished) -> "  - ${s.first}: ${Format.minutes(s.second)} in ${s.third} slots; $finished finished" } +
+                listOfNotNull((subjects.size - each).takeIf { it > 0 }?.let { "  - and $it more subjects" })
+        }.take(MAX_WEEK_LINES)
+    }
+
+    /** The most lines [weekLines] gives. */
+    const val MAX_WEEK_LINES = 20
+
+    private val WEEK_DAY = DateTimeFormatter.ofPattern("EEE d MMM", Locale.UK)
 
     /** A subject's period (PL-08): its kept slots' minutes and pieces, its deadlines met of those it had, and its timed work's time over its estimates, from [timed] pieces. */
     data class SubjectRow(val subject: String, val minutes: Int, val pieces: Int, val dated: Int, val onTime: Int, val timed: Int, val ratio: Double?)

@@ -36,6 +36,7 @@ import com.thomaswcode.decrastination.enrich.Pricing
 import com.thomaswcode.decrastination.enrich.ResearchPrompts
 import com.thomaswcode.decrastination.enrich.TaskText
 import com.thomaswcode.decrastination.learn.CalendarEvent
+import com.thomaswcode.decrastination.learn.CalendarTime
 import com.thomaswcode.decrastination.learn.EventJudge
 import java.time.Instant
 import java.time.LocalDate
@@ -248,7 +249,8 @@ object ChatPrompts {
      * Where both can't be whole, the plan keeps at least a third of their room (its near days first),
      * so a long list of tasks can't push it out: the list loses its end, and the plan its far days.
      * Your newest words come after what they're about, in full ([aboutText], D-93), and before what
-     * a web search [found] and the tasks he asked to [read] whole ([readText]). A message of yours that
+     * a web search [found], the tasks he asked to [read] whole ([readText]), and what else he asked for
+     * [brought] (8c: the week's numbers, the calendar further out), each under its own heading. A message of yours that
      * replies to one that isn't just before it starts with that one, quoted (5b), as the window may not
      * hold it.
      */
@@ -263,6 +265,7 @@ object ChatPrompts {
         read: List<TaskItem> = emptyList(),
         events: List<CalendarEvent> = emptyList(),
         quoted: List<ChatMessage> = emptyList(),
+        brought: List<String> = emptyList(),
     ): List<Pair<Speaker, String>> {
         val last = history(messages)
         // Before any of yours: an answer cut off from its question by the window goes; a message of
@@ -293,7 +296,7 @@ object ChatPrompts {
         // to the room they leave, however much it says.
         val words = texts.last().second
         val about = aboutText(recent.last { it.from == Speaker.You }.about, tasks, events)?.take((budget - words.length - 2).coerceAtLeast(0))?.takeIf { it.isNotEmpty() }
-        val newest = listOfNotNull(about, words, found?.let(ResearchPrompts::told), read.takeIf { it.isNotEmpty() }?.let(::readText)).joinToString("\n\n").take(budget)
+        val newest = (listOfNotNull(about, words, found?.let(ResearchPrompts::told), read.takeIf { it.isNotEmpty() }?.let(::readText)) + brought).joinToString("\n\n").take(budget)
         // The turns before it, newest first, while they fit their share, starting again with one of yours.
         var left = (budget - newest.length) / 4
         val earlier = texts.dropLast(1).reversed().takeWhile { (_, t) -> (t.length <= left).also { if (it) left -= t.length } }.reversed()
@@ -524,10 +527,7 @@ object ChatPrompts {
         // The calendar's read as far as the plan reaches (DX-14); the chat is told of the fortnight's.
         val fortnight = events.filter { it.start < now + InstructionPrompts.EVENTS_AHEAD_MS }
         if (fortnight.isEmpty()) appendLine("(none)")
-        fortnight.sortedBy { it.start }.take(InstructionPrompts.MAX_EVENTS).forEach { e ->
-            val time = if (e.allDay) "all day " + Instant.ofEpochMilli(e.start).atZone(ZoneId.of("UTC")).toLocalDate().format(DAY) else "${at(e.start)} to ${at(e.end)}"
-            appendLine("- ${EventJudge.key(e)} | ${e.title.take(MAX_TITLE)} | $time")
-        }
+        fortnight.sortedBy { it.start }.take(InstructionPrompts.MAX_EVENTS).forEach { e -> appendLine(eventLine(e, zone)) }
         // Each class's next lessons (G8), from Power Planner's timetable: none read, none said.
         if (lessons != null) {
             appendLine()
@@ -576,6 +576,65 @@ object ChatPrompts {
             if (shown < withText.size) appendLine("- …and ${withText.size - shown} more, left out for room")
         }
     }.trimEnd()
+
+    /** An event as the lists give it: its key, its title and when (an all-day one by its date, as the calendar keeps it, in UTC). */
+    private fun eventLine(e: CalendarEvent, zone: ZoneId): String {
+        val time = if (e.allDay) "all day " + Instant.ofEpochMilli(e.start).atZone(ZoneId.of("UTC")).toLocalDate().format(DAY) else "${Instant.ofEpochMilli(e.start).atZone(zone).format(WHEN)} to ${Instant.ofEpochMilli(e.end).atZone(zone).format(WHEN)}"
+        return "- ${EventJudge.key(e)} | ${e.title.take(MAX_TITLE)} | $time"
+    }
+
+    /** The week's numbers as a round brings them (G6, 8c): [lines] ([com.thomaswcode.decrastination.learn.Stats.weekLines]) under their own heading. */
+    fun statsBlock(lines: List<String>): String = buildString {
+        append("The week's numbers you asked for (answer from them, and leave details empty):")
+        lines.forEach { append("\n").append(it) }
+    }
+
+    /**
+     * The calendar a round brings (G7, 8c), its events listed as the fortnight's are: [month] (yyyy-MM), or with it
+     * empty the four weeks after the fortnight; at most [InstructionPrompts.MAX_EVENTS] events, saying how many more
+     * there are and from when, and where the calendar's read begins and ends (a day back, and the plan's reach,
+     * [CalendarTime.readUntil]), so a month crowded by repeating events, or one past the read, isn't taken for an
+     * empty one.
+     */
+    fun calendarBlock(events: List<CalendarEvent>, month: String, now: Long, zone: ZoneId): String = buildString {
+        val (from, to) = calendarSpan(month, now, zone)
+        val readFrom = now - CalendarTime.DAY_MS
+        val readTo = CalendarTime.readUntil(now, zone)
+        fun day(time: Long) = Instant.ofEpochMilli(time).atZone(zone).format(DAY)
+        append("The calendar you asked for, ${calendarWhat(month, now, zone)} (eventKey | title | when; answer from it, and leave details empty):")
+        val within = events.filter { it.start < to && it.end > from }.sortedBy { it.start }
+        when {
+            to <= readFrom -> append("\n(none known: the calendar is read from ${day(readFrom)} on)")
+            from >= readTo -> append("\n(none known: the calendar is read only to ${day(readTo - 1)}, as far as the plan reaches)")
+            within.isEmpty() -> append("\n(none)")
+        }
+        within.take(InstructionPrompts.MAX_EVENTS).forEach { append("\n").append(eventLine(it, zone)) }
+        if (within.size > InstructionPrompts.MAX_EVENTS) append("\n- …and ${within.size - InstructionPrompts.MAX_EVENTS} more from ${day(within[InstructionPrompts.MAX_EVENTS].start)}, left out for room")
+        if (from < readFrom && to > readFrom) append("\nThe calendar is read from ${day(readFrom)} on: what came before isn't known here.")
+        if (to > readTo && from < readTo) append("\nThe calendar is read only to ${day(readTo - 1)}, as far as the plan reaches: what comes after isn't known.")
+    }
+
+    /** What [month] of the calendar covers ([calendarAsk]): a month by its name ("December 2026"), or the four weeks after the fortnight, from its first day to its last. */
+    fun calendarWhat(month: String, now: Long, zone: ZoneId): String {
+        if (month.isNotEmpty()) return YearMonth.parse(month).format(MONTH)
+        val (from, to) = calendarSpan(month, now, zone)
+        return "the four weeks after the fortnight, ${Instant.ofEpochMilli(from).atZone(zone).format(DAY)} to ${Instant.ofEpochMilli(to - 1).atZone(zone).format(DAY)}"
+    }
+
+    /** From when to when [month] runs ([calendarAsk]): the month in [zone]; or, empty, the four weeks from the fortnight's end. */
+    private fun calendarSpan(month: String, now: Long, zone: ZoneId): Pair<Long, Long> {
+        if (month.isEmpty()) {
+            val from = now + InstructionPrompts.EVENTS_AHEAD_MS
+            return from to from + CALENDAR_AHEAD_MS
+        }
+        val m = YearMonth.parse(month)
+        return m.atDay(1).atStartOfDay(zone).toInstant().toEpochMilli() to m.plusMonths(1).atDay(1).atStartOfDay(zone).toInstant().toEpochMilli()
+    }
+
+    /** The calendar past the fortnight, asked for with no month (G7): four weeks of it. */
+    private const val CALENDAR_AHEAD_MS = 28 * 24 * 3_600_000L
+
+    private val MONTH = DateTimeFormatter.ofPattern("MMMM yyyy", Locale.UK)
 
     /** [t]'s class as its line says it (G8): its code, and the subject [classMap] gives it where that's another; "-" with none. */
     private fun classOf(t: TaskItem, classMap: Map<String, String>): String {
