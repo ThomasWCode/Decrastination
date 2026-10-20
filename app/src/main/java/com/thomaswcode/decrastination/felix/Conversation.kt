@@ -863,7 +863,9 @@ class Conversation(
                 ChatAction.Type.TickStep -> {
                     val index = a.stepIndex ?: return@mapNotNull null
                     val step = task?.subSteps?.getOrNull(index)?.takeIf { !it.done } ?: return@mapNotNull null
-                    said("Ticked: ${step.title}, of ${task.title}", a).takeIf { tick(task, index, step.title) }
+                    // What its Undo is tied to: the record its piece's keep made, or a tick by hand ([ChatActs.tickedBy]).
+                    val ticked = tick(task, index, step.title) ?: return@mapNotNull null
+                    Act("Ticked: ${step.title}, of ${task.title}", a, after = ticked)
                 }
                 ChatAction.Type.UntickStep -> {
                     val index = a.stepIndex ?: return@mapNotNull null
@@ -1029,10 +1031,12 @@ class Conversation(
      * today or another day (earning as a tick does; in sittings, its last, which ticks it), else
      * ticked as on its sheet, where that can be.
      */
-    private suspend fun tick(task: TaskItem, index: Int, title: String): Boolean {
+    private suspend fun tick(task: TaskItem, index: Int, title: String): String? {
         val plan = planning.plan()
         val piece = (plan.todaySlots.mapNotNull { it.chunk } + plan.ordered).firstOrNull { it.taskId == task.id && it.ticks == index }
-        return if (piece != null) focus.keepSlot(piece.key) else runCatching { focus.tickBlock(task.id, index, title) }.getOrDefault(false)
+        // Kept as its piece, the record that made; else by hand. Null, nothing ticked.
+        if (piece != null) return if (focus.keepSlot(piece.key)) keptAt()[piece.key]?.toString() else null
+        return ChatActs.TICKED_BY_HAND.takeIf { runCatching { focus.tickBlock(task.id, index, title) }.getOrDefault(false) }
     }
 
     /**
@@ -1053,8 +1057,8 @@ class Conversation(
             // A task shown, a source read (G2): nothing to take back.
             ChatAction.Type.Open, ChatAction.Type.Sync -> false
             // The step that finished one of yours: open again with it to do.
-            ChatAction.Type.TickStep -> step?.done == true && focus.untickBlock(task!!.id, a.stepIndex!!, step.title, reopen = true)
-            ChatAction.Type.UntickStep -> step?.done == false && task!!.isOpen && tick(task, a.stepIndex!!, step.title)
+            ChatAction.Type.TickStep -> step?.done == true && ChatActs.tickedBy(act, task!!.id, a.stepIndex!!, step, keptAt()) && focus.untickBlock(task.id, a.stepIndex!!, step.title, reopen = true)
+            ChatAction.Type.UntickStep -> step?.done == false && task!!.isOpen && tick(task, a.stepIndex!!, step.title) != null
             ChatAction.Type.Done -> task?.isOpen == false && (task.source == Source.Own || task.tickDone) && run { owners.reopenOwnTask(task.id); open(task.id) == true }
             ChatAction.Type.Reopen -> task?.isOpen == true && act.was.let { was -> was != null && refinish(was) }
             // Not once a card that had added it is made again: that's the task anew.
@@ -1244,9 +1248,10 @@ class Conversation(
 
     /**
      * How many of his messages wait unread (docs/plan_v4/05-the-chat.md §4), the badge on his button:
-     * those he's written since you last left the chat, but a question you've answered from his notification.
+     * those he's written since you last left the chat, but a question you've answered, or a message you've replied to,
+     * from his notification.
      */
-    val unread: Flow<Int> = chat.state.map { s -> s.messages.count { Outbox.unread(it, s.readAt) && it.answeredAt == null } }.distinctUntilChanged()
+    val unread: Flow<Int> = chat.state.map { s -> Outbox.repliedTo(s).let { replied -> s.messages.count { Outbox.unread(it, s.readAt) && it.answeredAt == null && it.id !in replied } } }.distinctUntilChanged()
 
     /**
      * Your [text] in reply to his message [id] from his notification (AI-24): asked as any reply is

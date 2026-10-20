@@ -298,7 +298,7 @@ object ChatActs {
         val note = notes.firstOrNull { it.id == a.value }
         return when (a.type) {
             ChatAction.Type.Open -> false
-            ChatAction.Type.TickStep -> task != null && step?.done == true && (task.isOpen || task.source == Source.Own || task.tickDone)
+            ChatAction.Type.TickStep -> task != null && step?.done == true && (task.isOpen || task.source == Source.Own || task.tickDone) && tickedBy(act, task.id, a.stepIndex!!, step, kept)
             ChatAction.Type.UntickStep -> task?.isOpen == true && step?.done == false
             ChatAction.Type.Done -> task?.isOpen == false && (task.source == Source.Own || task.tickDone)
             ChatAction.Type.Reopen -> task != null && act.was != null && asReopened(task, act.was)
@@ -331,6 +331,21 @@ object ChatActs {
 
     /** How soon after a piece's keep its task's finish is that keep's. */
     private const val FINISHED_BY_MS = 60_000L
+
+    /**
+     * Whether [step] is still done by [act]'s tick ([Act.after]): one kept as its piece while the record it made is its
+     * key's newest among today's [kept], so a keep since (in its slot, or from Day) is another's to take back; one by
+     * hand while the step's still ticked by hand, which a later tick by hand from Day looks the same as (a step keeps
+     * no time of its tick), and is taken back with it. An act from before this says nothing, and is as before.
+     */
+    fun tickedBy(act: Act, taskId: String, index: Int, step: SubStep, kept: Map<String, Long>): Boolean = when (val after = act.after) {
+        null -> true
+        TICKED_BY_HAND -> step.byHand
+        else -> after.toLongOrNull()?.let { at -> kept[Chunk.keyOf(taskId, index, 0)] == at } ?: true
+    }
+
+    /** A tick's [Act.after] where it was by hand, not a keep of its piece ([tickedBy]). */
+    const val TICKED_BY_HAND = "hand"
 
     /**
      * Whether a message after the one holding [act] in [messages] ([messageId], else the first holding one

@@ -118,17 +118,25 @@ class Outbox(
         const val WINDOW = 200
         const val WINDOW_MS = 14 * 24 * 3_600_000L
 
+        /**
+         * His messages you've replied to ([ChatMessage.replyTo]): seen, as you answered them, from his notification too,
+         * though the read position stays for it. Only those: what the notification left out of its room stays unread.
+         */
+        fun repliedTo(state: ChatState): Set<String> = state.messages.mapNotNullTo(HashSet()) { m -> m.replyTo.takeIf { m.from == Speaker.You } }
+
         /** Whether [message] is his, with words, and unread at [readAt]: shown nowhere yet, so never moved. */
         fun unread(message: ChatMessage, readAt: Long): Boolean = message.from == Speaker.Felix && message.at > readAt && message.text.isNotBlank()
 
         /**
          * The messages of [state] past its live window at [now]: older than the newest [WINDOW] and than
-         * [WINDOW_MS] both, and read; never an unread one, nor yours waiting for its answer.
+         * [WINDOW_MS] both, and read; never an unread one, nor yours waiting for its answer, nor yours replying to
+         * one of his still unread, which says that one's seen ([repliedTo]).
          */
         fun past(state: ChatState, now: Long): List<ChatMessage> {
             val newest = state.messages.takeLast(WINDOW).mapTo(HashSet()) { it.id }
             val waiting = state.unanswered?.id
-            return state.messages.filter { m -> m.id !in newest && m.at < now - WINDOW_MS && m.id != waiting && !unread(m, state.readAt) }
+            val unreadIds = state.messages.filter { unread(it, state.readAt) }.mapTo(HashSet()) { it.id }
+            return state.messages.filter { m -> m.id !in newest && m.at < now - WINDOW_MS && m.id != waiting && !unread(m, state.readAt) && m.replyTo !in unreadIds }
         }
 
         /**
@@ -148,7 +156,9 @@ class Outbox(
             // In the chat's order, which is the order they were said in.
             val lines = after.filter { it.id in shown || (it.from == Speaker.You && it.replyTo in shown) }.map { Notice.Line(it.id, line(it), it.at, it.from == Speaker.You) }
             val newest = his.last()
-            return Notice(name, roomed(lines), newest.id, newest.suggestedReplies, his.first().id, alert = alertFor != null && alertFor in shown)
+            // A tap opens at the first you haven't replied to: one you have, you've seen.
+            val replied = repliedTo(state)
+            return Notice(name, roomed(lines), newest.id, newest.suggestedReplies, (his.firstOrNull { it.id !in replied } ?: newest).id, alert = alertFor != null && alertFor in shown)
         }
 
         /**
