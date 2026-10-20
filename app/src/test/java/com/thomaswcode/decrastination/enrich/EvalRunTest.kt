@@ -10,6 +10,7 @@ import com.thomaswcode.decrastination.core.ProposalState
 import com.thomaswcode.decrastination.core.SchoolCalendar
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.Speaker
+import com.thomaswcode.decrastination.felix.ChatPrompts
 import com.thomaswcode.decrastination.felix.FelixHarness
 import com.thomaswcode.decrastination.learn.CalendarEvent
 import com.thomaswcode.decrastination.learn.CalendarTime
@@ -123,6 +124,10 @@ class EvalRunTest {
         val state = File(dir, "state/files")
         val budget = System.getenv("EVAL_BUDGET_USD")?.let { text -> text.toDoubleOrNull()?.takeIf { it.isFinite() && it >= 0 } ?: fail("EVAL_BUDGET_USD should be a number of dollars, not $text") } ?: 3.0
         val only = System.getenv("EVAL_CASES")?.split(',')?.map(String::trim)?.filter(String::isNotEmpty)?.toSet()
+        // -Peffort=low|medium|high|max for the chat's calls and its searches, as the readings' set takes it.
+        val effort = System.getProperty("effort").orEmpty().ifBlank { null }?.let { OutputConfig.Effort.of(it.lowercase(Locale.ROOT)) }
+        val jobs = listOf(ModelEffort.Job.Chat, ModelEffort.Job.Research)
+        if (effort != null) jobs.forEach { ModelEffort.overrides[it] = effort }
         val runs = File(dir, "runs").apply { mkdirs() }
         val run = (runs.listFiles().orEmpty().mapNotNull { it.nameWithoutExtension.toIntOrNull() }.maxOrNull() ?: 0) + 1
         var spent = 0.0
@@ -162,11 +167,8 @@ class EvalRunTest {
                         val what = r.jsonPrimitive.content
                         val read = when {
                             what == "stats" -> acts.any { "week's numbers" in it }
-                            what.startsWith("calendar:") -> {
-                                val month = java.time.YearMonth.parse(what.removePrefix("calendar:")).month.getDisplayName(java.time.format.TextStyle.FULL, Locale.UK)
-                                acts.any { "calendar" in it.lowercase() && month in it }
-                            }
-                            what == "calendar" -> acts.any { "calendar" in it.lowercase() }
+                            // The very span: the month and its year, or the four weeks after the fortnight.
+                            what == "calendar" || what.startsWith("calendar:") -> "Read: the calendar for " + ChatPrompts.calendarWhat(what.substringAfter(':', ""), Fixtures.at(now), zone) + "." in acts
                             else -> acts.any { it.startsWith("Read in full") && titles[what]?.let { t -> t in it } == true }
                         }
                         checks += "reads $what" to read
@@ -200,6 +202,7 @@ class EvalRunTest {
                 }
             }
         }
+        if (effort != null) jobs.forEach { ModelEffort.overrides.remove(it) }
         File(runs, "$run.json").writeText(JsonArray(results).toString())
         println("Run $run: ${results.size} answers, ${dollars(spent)} in all; mean score ${"%.3f".format(Locale.UK, results.map { it.getValue("score").jsonPrimitive.content.toDouble() }.average())}: ${File(runs, "$run.json").path}")
     }
