@@ -92,14 +92,14 @@ Every PR is a release ([development.md](../development.md)): cleanup-only releas
 | 7 | Who set what (`Mine`, `By`, steps with ids) and the stores split, trimmed: one data release | 4.0.13, done (#89) | cleanup, data | 0, 3, 6, 9 | 2½ |
 | 8a | Notes, standing notes and reminders | 4.1.0, done (#91) | feature, data | 2, 3, 4, 5, 7 | 3 |
 | 8b | The gaps: keep a piece, check a source, open where it lives, free time and the next lessons in his context | 4.1.1, done (#92) | feature | 5, 6d, 6f, 8a | 1½ |
-| — | From the 20 Oct phone session: a message you've replied to from his notification isn't new in the chat; his words for a slot asked for once a moment; a slot's alarm that fails logged, not a crash; a tick's Undo for its own tick | 4.1.2 | fix | 8b | ¼ |
+| — | From the 20 Oct phone session: a message you've replied to from his notification isn't new in the chat; his words for a slot asked for once a moment; a slot's alarm that fails logged, not a crash; a tick's Undo for its own tick | 4.1.2, done (#93) | fix | 8b | ¼ |
 | 8c | Less sent, more asked for: the week's numbers and the calendar further out asked for; each task's line saying what its text holds, the text cut shorter if the chat's eval holds | 4.1.3 | feature | 6e, 8b | 1½ |
 | 10a | Memory that expires | 4.2.0 | feature, data | 3, 4, 7, 9 | 1 |
 | 10b | His voice; just talk; the summary email in the third person | 4.2.1 | feature | 5, 6e, 9 | ½ |
 | 11 | Emails done | 4.3.0 | feature, data | 1, 3, 6d, 7 | 1½ |
 | 12 | The sweep: imports, comments, the architecture test complete, baselines compared | 4.3.1 | cleanup | all | ½ |
 
-About twenty-five days in 29 PRs (28 releases), 3.3.4 to 3.3.6, 4.0.3, 4.0.4 and 4.0.10 among them, evenings and weekends. After it, the conversation digest as 4.4.0 ([13](13-summaries.md)). You've said you won't use the app until the whole of it is in (Q21): each release is still built and checked on the phone, but nothing between releases has to serve a day's use.
+About twenty-five days in 30 PRs (29 releases), 3.3.4 to 3.3.6, 4.0.3, 4.0.4, 4.0.10 and 4.1.2 among them, evenings and weekends. After it, the conversation digest as 4.4.0 ([13](13-summaries.md)). You've said you won't use the app until the whole of it is in (Q21): each release is still built and checked on the phone, but nothing between releases has to serve a day's use.
 
 ## What changes substantially
 

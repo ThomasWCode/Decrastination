@@ -184,7 +184,7 @@ Day shows "6 h left, 4 h free before Sat 09:00", with *What gives?* to ask Felix
 - `OpensLater`: it, or a run of its blocks, opens after the plan's last day;
 - `NoRoom`: there's no room for it by the plan's last day within each day's limits (a deck past its 90 days, undated work past its allowance).
 
-A task's runs left out for the same reason are one line. Hidden tasks and events aren't listed, nor Anki's derived tasks as not open or waiting (a deck with no room is). The list only explains: it changes neither the days nor blocking.
+A task's runs left out for the same reason are one line. Hidden tasks and events aren't listed, nor Anki's derived tasks as not open or waiting (one with no room, or opening after the plan's last day, is). The list only explains: it changes neither the days nor blocking.
 
 ## Within a day
 

@@ -135,7 +135,7 @@ It's tried again at each write till it works (the permission back, the provider 
 `Sync.refreshCalendar` reads the phone's calendar (`READ_CALENDAR`) from a day back to the end of the plan's last day, 90 days on (`CalendarTime.readUntil`, DX-14).
 - Only the calendars ticked in Settings → Calendar (`Settings.calendarsExcluded`, DX-13), never the one written to; events you've declined are left out.
 - Each event's location and description (its first 500 characters) are read too (DX-12).
-- It's read at the app's start, when the calendar changes (once quiet 5 seconds) or the calendars picked do, after a sync that adds, finishes, reopens or misses a task, when an answer about an event or a change of yours is laid again, and at the morning briefing; a failed read judges the last events read again.
+- It's read at the app's start, when the calendar changes (once quiet 5 seconds) or the calendars picked do, after a sync that adds, finishes, reopens or misses a task, when an answer about an event or a change of yours is laid again, and at the morning briefing, among others (a time-zone change, the calendar permission granted in Setup, Settings' Calendar section); a failed read judges the last events read again.
 
 `EventJudge.judge` judges each event:
 - your answer for events of that name comes first (an instruction's over one given to Felix's question);
