@@ -97,8 +97,8 @@ class FelixHarness(start: String = "2026-10-19T16:30") : AutoCloseable {
         assess = { taskId, doneAt, answer -> assessed += Triple(taskId, doneAt, answer) },
     )
 
-    /** [key]'s piece kept as Day's Done keeps it ([Focus.keepSlot]). */
-    suspend fun focusKeep(key: String): Boolean = focus.keepSlot(key)
+    /** [key]'s piece kept as Day's Done keeps it ([Focus.keepSlot]), with [extraMin] more and a [photo]. */
+    suspend fun focusKeep(key: String, extraMin: Int = 0, photo: Boolean = false): Boolean = focus.keepSlot(key, extraMin, photo)
 
     /** [key]'s last piece kept since [since] taken back, as Day's Undo does ([Focus.unkeepSlot]). */
     suspend fun focusUnkeep(key: String, since: Long): Boolean = focus.unkeepSlot(key, since)

@@ -444,11 +444,14 @@ class Focus(
      * late is the miss it was again, on record and in today's misses), its step to do again (the key
      * says which) or a box's minutes off its task, and the free time it earned given back, as far as
      * it's left. Not once its task has finished by it (one of your own, its last piece): false then,
-     * and with none to take back.
+     * and with none to take back; with [reopen], one of your own, or one done by its tick (NF-06), that it
+     * finished is open again, in the same write, as a tick's Undo opens one ([untickBlock]).
      */
-    suspend fun unkeepSlot(key: String, since: Long, now: Long = clock.now()): Boolean = keeping.withLock {
+    suspend fun unkeepSlot(key: String, since: Long, now: Long = clock.now(), reopen: Boolean = false): Boolean = keeping.withLock {
         val record = log.value.slots.lastOrNull { it.key == key && it.outcome.kept && it.at >= since } ?: return@withLock false
-        if (tasks.value.tasks.firstOrNull { it.id == record.taskId }?.isOpen != true) return@withLock false
+        val task = tasks.value.tasks.firstOrNull { it.id == record.taskId }
+        val opens = reopen && task != null && !task.isOpen && (task.source == Source.Own || task.tickDone) && task.status == Status.Done
+        if (task?.isOpen != true && !opens) return@withLock false
         // A step's key is its task and its place ("id#2"); a sitting before its step's last has how
         // many come after it too ("id#2#1"), and a box its part after a -1 ("id#-1#1"): only a step's
         // tick is taken back, the others' minutes alone.
@@ -458,7 +461,7 @@ class Focus(
                 tasks = state.tasks.map { t ->
                     if (t.id != record.taskId) return@map t
                     val steps = if (stepIndex == null) t.subSteps else t.subSteps.mapIndexed { i, s -> if (i == stepIndex) s.copy(done = false, timedMin = 0) else s }
-                    t.copy(subSteps = steps, workedMin = (t.workedMin - record.workedMin).coerceAtLeast(0))
+                    t.copy(subSteps = steps, workedMin = (t.workedMin - record.workedMin).coerceAtLeast(0)).let { if (opens) it.copy(status = Status.Open, doneAt = null) else it }
                 },
             )
         }

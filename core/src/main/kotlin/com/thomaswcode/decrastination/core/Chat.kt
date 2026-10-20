@@ -189,7 +189,7 @@ data class ChatAction(val type: Type, val taskId: String, val stepIndex: Int? = 
  * What one of the chat's actions did (16 Oct), said under its answer as [line], with what its Undo
  * needs: the [action]; the task as it was before it ([was]: deleted, or finished before it was
  * opened again), and the cards that had added a deleted one ([cards], "message|card"); a setting's
- * value before and after ([before], [after]); a piece's kept record's time ([after], G1); a reminder before it was moved ([reminder]). [undone]
+ * value before and after ([before], [after]); a piece's kept record's time ([after], G1), and what one taken back was kept with ([before]: its extra minutes, its photo, its source's word); a reminder before it was moved ([reminder]). [undone]
  * once Undo has taken it back. With no [action],
  * a line saying what came of the answer, with nothing to undo; a [problem] where something wasn't
  * made or looked up.
@@ -308,7 +308,8 @@ object ChatActs {
             ChatAction.Type.CancelReminder -> reminder?.cancelledAt != null && reminders.count(Reminders::pending) < Reminders.MAX_PENDING
             ChatAction.Type.AddNote -> note != null && note.deletedAt == null
             ChatAction.Type.DeleteNote -> note?.deletedAt != null && Notes.hasRoom(note, notes)
-            ChatAction.Type.KeepPiece -> act.after?.toLongOrNull()?.let { kept[a.value] == it } == true && task?.isOpen == true
+            // One it finished (one of yours, or one done by its tick, its last piece) too: its Undo opens it again, as a tick's does.
+            ChatAction.Type.KeepPiece -> act.after?.toLongOrNull()?.let { kept[a.value] == it } == true && task != null && (task.isOpen || task.source == Source.Own || task.tickDone)
             ChatAction.Type.UnkeepPiece -> a.value !in kept && task?.isOpen == true
             ChatAction.Type.Sync -> false
         }
