@@ -1223,11 +1223,15 @@ class Conversation(
         felix.update { s -> s.copy(notes = s.notes.map { if (it.id == id && it.deletedAt == null) it.copy(deletedAt = clock.now()) else it }) }
     }
 
-    /** [given] kept in what's remembered (AI-21), and what each thing did ([com.thomaswcode.decrastination.core.MemoryEdit.line] says it). */
+    /**
+     * [given] kept in what's remembered (AI-21), and what each thing did ([com.thomaswcode.decrastination.core.MemoryEdit.line]
+     * says it): each until read where you are, and a fact's task one of the open tasks he's shown (10a).
+     */
     suspend fun remember(given: List<Given>): List<MemoryEdit> {
         if (given.isEmpty()) return emptyList()
         var edits = emptyList<MemoryEdit>()
-        memory.update { state -> Memories.edit(state, given, clock.now()).also { edits = it.second }.first }
+        val listed = tasks.value.tasks.filter { it.isOpen && !it.hidden }.associate { it.id to it.title }
+        memory.update { state -> Memories.edit(state, given, clock.now(), clock.zone(), listed).also { edits = it.second }.first }
         return edits
     }
 

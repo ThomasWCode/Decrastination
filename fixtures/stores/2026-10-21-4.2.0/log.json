@@ -1,0 +1,239 @@
+{
+    "slots": [
+        {
+            "date": "2026-10-17",
+            "key": "teams:as-essay#0",
+            "taskId": "teams:as-essay",
+            "kind": "Homework",
+            "className": "12X/Hi1",
+            "label": "History essay: causes of the war: Read the two sources",
+            "plannedMin": 30,
+            "start": 1792252800000,
+            "end": 1792254600000,
+            "window": "Evening",
+            "outcome": "Kept",
+            "workedMin": 30,
+            "photo": true,
+            "earned": true,
+            "at": 1792254600000
+        },
+        {
+            "date": "2026-10-17",
+            "key": "teams:as-sheet#0",
+            "taskId": "teams:as-sheet",
+            "kind": "Homework",
+            "className": "12X/Hi1",
+            "label": "History essay: causes of the war: Read the two sources",
+            "plannedMin": 20,
+            "start": 1792254900000,
+            "end": 1792256100000,
+            "window": "Evening",
+            "outcome": "KeptLate",
+            "workedMin": 20,
+            "photo": false,
+            "earned": true,
+            "at": 1792256100000
+        },
+        {
+            "date": "2026-10-17",
+            "key": "teams:as-sheet#1",
+            "taskId": "teams:as-sheet",
+            "kind": "Homework",
+            "className": "12X/Hi1",
+            "label": "History essay: causes of the war: Read the two sources",
+            "plannedMin": 20,
+            "start": 1792256400000,
+            "end": 1792257600000,
+            "window": "Evening",
+            "outcome": "Missed",
+            "workedMin": 0,
+            "photo": false,
+            "earned": false,
+            "at": 1792257600000
+        },
+        {
+            "date": "2026-10-17",
+            "key": "powerplanner:pp-poster#0",
+            "taskId": "powerplanner:pp-poster",
+            "kind": "Homework",
+            "className": "12X/Hi1",
+            "label": "History essay: causes of the war: Read the two sources",
+            "plannedMin": 15,
+            "start": 1792258200000,
+            "end": 1792259100000,
+            "window": "Evening",
+            "outcome": "Moved",
+            "workedMin": 0,
+            "photo": false,
+            "earned": false,
+            "at": 1792259100000
+        }
+    ],
+    "completions": [
+        {
+            "taskId": "teams:as-done",
+            "title": "Chemistry practical write-up",
+            "source": "Teams",
+            "kind": "Homework",
+            "className": "12X/Ch1",
+            "estimateMin": 50,
+            "workedMin": 55,
+            "dueAt": 1791964800000,
+            "firstSeenAt": 1790870400000,
+            "doneAt": 1791918000000,
+            "assessment": "Harder",
+            "note": "The graph took ages",
+            "byHand": true,
+            "photo": true,
+            "yourEstimate": true,
+            "hardDeadline": false
+        },
+        {
+            "taskId": "gmail:thr-done",
+            "title": "Library book due",
+            "source": "Gmail",
+            "kind": "Admin",
+            "className": null,
+            "estimateMin": 5,
+            "workedMin": 0,
+            "dueAt": null,
+            "firstSeenAt": 1791187200000,
+            "doneAt": 1791532800000,
+            "assessment": null,
+            "note": null,
+            "byHand": false,
+            "photo": false,
+            "yourEstimate": false,
+            "hardDeadline": true
+        }
+    ],
+    "blocks": [
+        {
+            "at": 1792253400000,
+            "target": "com.example.video",
+            "reason": "work due"
+        }
+    ],
+    "protection": [
+        {
+            "at": 1792148400000,
+            "problems": [
+                "The focus service is off"
+            ],
+            "repaired": true
+        }
+    ],
+    "days": [
+        {
+            "date": "2026-10-16",
+            "plannedMin": 85,
+            "chunks": [
+                {
+                    "taskId": "teams:as-essay",
+                    "minutes": 30
+                },
+                {
+                    "taskId": "teams:as-sheet",
+                    "minutes": 40
+                },
+                {
+                    "taskId": "powerplanner:pp-poster",
+                    "minutes": 15
+                }
+            ],
+            "doneMin": 50,
+            "full": false,
+            "zone": "Europe/London",
+            "kind": "Weekday",
+            "schoolMin": 25
+        }
+    ],
+    "checkIns": [
+        {
+            "weekOf": "2026-10-05",
+            "at": 1791744000000,
+            "feel": 4,
+            "avoided": "the essay",
+            "inTheWay": "football",
+            "change": "start earlier",
+            "energy": "ok"
+        }
+    ],
+    "reviews": [
+        {
+            "at": 1791744300000,
+            "lines": [
+                "The margin is two days now",
+                "Undated work: 45 minutes a day"
+            ],
+            "by": "claude-opus-5-5",
+            "week": "2026-10-05",
+            "why": null,
+            "memoryTidy": {
+                "before": [
+                    {
+                        "topic": "football",
+                        "text": "Training on Tuesdays",
+                        "at": 1790874000000,
+                        "until": null,
+                        "taskId": null
+                    },
+                    {
+                        "topic": "sport",
+                        "text": "Plays football",
+                        "at": 1790960400000,
+                        "until": null,
+                        "taskId": null
+                    }
+                ],
+                "after": [
+                    {
+                        "topic": "football",
+                        "text": "Plays football; training on Tuesdays",
+                        "at": 1791744300000,
+                        "until": null,
+                        "taskId": null
+                    }
+                ]
+            },
+            "changes": [
+                {
+                    "setting": "marginDays",
+                    "value": 2,
+                    "why": "Work was finished late twice"
+                }
+            ],
+            "settingsBefore": {
+                "marginDays": 1
+            },
+            "summary": "They finished the practical write-up and most of the worksheet."
+        },
+        {
+            "at": 1791139500000,
+            "lines": [
+                "Nothing to change"
+            ],
+            "by": "rules",
+            "week": "2026-09-28",
+            "why": "Claude was off",
+            "memoryTidy": null,
+            "changes": [],
+            "settingsBefore": {},
+            "summary": null
+        }
+    ],
+    "weeks": [
+        {
+            "week": "2026-10-05",
+            "minutes": 310,
+            "finished": 6,
+            "onTime": 4,
+            "dated": 5,
+            "blocks": 3,
+            "fullDays": 2,
+            "slotsKept": 11,
+            "slotsMissed": 3
+        }
+    ],
+    "version": 2
+}

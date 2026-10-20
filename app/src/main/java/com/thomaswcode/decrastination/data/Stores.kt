@@ -86,8 +86,8 @@ class Stores(
     /** Days with no school and half-days (PL-16), told to the chat or added in Settings. */
     val school = store("school.json", SchoolCalendar.serializer(), ::SchoolCalendar)
 
-    /** What Felix remembers (AI-21): facts, and standing instructions. */
-    val memory = store("memory.json", MemoryState.serializer(), ::MemoryState)
+    /** What Felix remembers (AI-21): facts, and standing instructions; from version 1 read as it is, as a file from before has no until and no task (10a). */
+    val memory = store("memory.json", MemoryState.serializer(), ::MemoryState, migrations = listOf(Migration(1) { it }))
 
     /** What Felix keeps at your asking (Stage 8a): notes on tasks, standing notes, and reminders with their drafts. */
     val felix = store("felix.json", FelixStore.serializer(), ::FelixStore)
