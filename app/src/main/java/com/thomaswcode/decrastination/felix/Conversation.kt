@@ -602,10 +602,13 @@ class Conversation(
         return log.value.slots.filter { it.outcome.kept && focus.today(it.at) == today }.groupBy { it.key }.mapValues { (_, records) -> records.maxOf { it.at } }
     }
 
-    /** The pieces kept today (G1), whatever day their slot was for (one done ahead of it too), newest last: what unkeepPiece takes back. */
+    /**
+     * The pieces kept today (G1), whatever day their slot was for (one done ahead of it too), each key's newest
+     * record, newest last: what unkeepPiece takes back, so the line he's shown names that one.
+     */
     fun keptToday(now: Long = clock.now()): List<SlotRecord> {
         val today = focus.today(now)
-        return log.value.slots.filter { it.outcome.kept && focus.today(it.at) == today }.distinctBy { it.key }
+        return log.value.slots.filter { it.outcome.kept && focus.today(it.at) == today }.groupBy { it.key }.map { (_, records) -> records.maxBy { it.at } }.sortedBy { it.at }
     }
 
     /**
@@ -924,9 +927,13 @@ class Conversation(
                     // answered), the newest is yours, not his to take back.
                     val at = keptAt()[a.value]?.takeIf { it <= shownAt } ?: return@mapNotNull null
                     val record = log.value.slots.lastOrNull { it.key == a.value && it.outcome.kept && it.at == at } ?: return@mapNotNull null
-                    // What it was kept with, so its Undo keeps it so again: its extra minutes, its photo, its source's word.
-                    val with = "${(record.workedMin - record.plannedMin).coerceAtLeast(0)}|${record.photo}|${record.earned}"
-                    Act("Not kept after all: ${record.label}", a, before = with, after = record.at.toString()).takeIf { focus.unkeepSlot(record.key, at) }
+                    if (!focus.unkeepSlot(record.key, at)) return@mapNotNull null
+                    // What it was kept with, so its Undo keeps it so again: its extra minutes (past its own and, a step's last
+                    // sitting, its step's other sittings, to do again now, which a keep counts again), its photo, its source's word.
+                    val step = record.key.removePrefix(record.taskId + "#").toIntOrNull()?.takeIf { it >= 0 }
+                    val others = step?.let { s -> planning.plan().chunksOf(record.taskId).filter { it.stepIndex == s && it.key != record.key }.sumOf { it.minutes } } ?: 0
+                    val with = "${(record.workedMin - record.plannedMin - others).coerceAtLeast(0)}|${record.photo}|${record.earned}"
+                    Act("Not kept after all: ${record.label}", a, before = with, after = record.at.toString())
                 }
             }
         }
