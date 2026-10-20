@@ -37,10 +37,11 @@ class ChatActsTest {
         assertFalse(ChatActs.canUndo(act, emptyList(), settings, redone))
         // Back already.
         assertFalse(ChatActs.canUndo(act, listOf(task), settings, messages))
-        // What it holds (its notes, its facts) only while its Undo would bring it back: not once the card's made again.
+        // What it holds (its notes, its facts) all the while it stands: the card made again can be undone itself,
+        // which brings this Undo back.
         val acted = ChatMessage("d", Speaker.Felix, "Deleted it.", now, acts = listOf(act))
         assertTrue(task.id in ChatActs.held(messages + acted))
-        assertFalse(task.id in ChatActs.held(redone + acted))
+        assertTrue(task.id in ChatActs.held(redone + acted))
     }
 
     @Test

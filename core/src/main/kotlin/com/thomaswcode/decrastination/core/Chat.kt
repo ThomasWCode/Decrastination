@@ -372,8 +372,9 @@ object ChatActs {
         val a = act.action ?: return@mapNotNullTo null
         when (a.type) {
             ChatAction.Type.DeleteNote, ChatAction.Type.CancelReminder -> a.value
-            // A deleted task while its Undo would still bring it back: not once the card that made it is applied again.
-            ChatAction.Type.Delete -> a.taskId.takeIf { act.was != null && !redone(act.cards, messages) }
+            // A deleted task while its act stands, the card that had added it made again too: that card's Undo
+            // brings the delete's back.
+            ChatAction.Type.Delete -> a.taskId.takeIf { act.was != null }
             else -> null
         }
     }

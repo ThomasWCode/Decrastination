@@ -70,12 +70,16 @@ class MemoryTidyTest {
     }
 
     @Test
-    fun `a fact with an until or a task isn't tidied but counts to its being due, and is kept as it was`() {
+    fun `a fact with an until or a task isn't tidied but leaves the rest less room, and is kept as it was`() {
         val passing = listOf(Fact("cold", "x".repeat(2_000), now - day, until = now + day), Fact("trip", "x".repeat(2_000), now - 2 * day, taskId = "gmail:trip"))
         val plain = facts(2, 200)
-        // Due by all of them: the passing ones alone fill most of the room.
+        // The passing ones fill most of the room, but go by themselves: two short plain ones are within their share of the rest.
         assertFalse(MemoryTidy.due(plain))
-        assertTrue(MemoryTidy.due(plain + passing))
+        assertFalse(MemoryTidy.due(plain + passing))
+        // Plain ones past their share of the room the passing ones leave: due, though under it by themselves.
+        val more = facts(6, 300)
+        assertFalse(MemoryTidy.due(more))
+        assertTrue(MemoryTidy.due(more + passing))
         assertEquals(plain, (plain + passing).filter(MemoryTidy::tidied))
         // Its answer for the plain ones, the passing ones beside it as they were.
         assertEquals((listOf(Fact("all", "short", now)) + passing).sortedBy { it.at }, MemoryTidy.withExpiring(plain + passing, listOf(Fact("all", "short", now))))

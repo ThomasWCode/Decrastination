@@ -20,11 +20,18 @@ object MemoryTidy {
     /** Due past this share of the facts' room ([Memories.FACT_BUDGET_CHARS]). */
     const val DUE_SHARE = 0.7
 
-    fun due(facts: List<Fact>): Boolean = Memories.chars(facts) > Memories.FACT_BUDGET_CHARS * DUE_SHARE
+    /**
+     * Whether a tidy's due: once the facts it may rewrite ([tidied]) are past [DUE_SHARE] of the room the rest leave
+     * them, as it makes room only among those; the rest go by themselves.
+     */
+    fun due(facts: List<Fact>): Boolean {
+        val (plain, kept) = facts.partition(::tidied)
+        return Memories.chars(plain) > (Memories.FACT_BUDGET_CHARS - Memories.chars(kept)) * DUE_SHARE
+    }
 
     /**
      * Whether [fact] is one a tidy may rewrite (10a): one with neither an until nor a task. Those with either go by
-     * themselves, and a merge would lose when; they count to [due] all the same.
+     * themselves, and a merge would lose when; they leave the rest less room ([due]).
      */
     fun tidied(fact: Fact): Boolean = fact.until == null && fact.taskId == null
 

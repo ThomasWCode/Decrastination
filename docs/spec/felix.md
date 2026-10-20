@@ -178,7 +178,7 @@ A reply, from his notification (`felix/FelixReplyReceiver.kt`), one of his chips
 - All of it goes in every call's profile: every standing instruction, and the facts newest first, a passing one saying so ("- cold: feeling rough (until Sun 25 Oct)").
 
 **The tidy** (`enrich/MemoryTidy.kt`, its call `enrich/MemoryTidier.kt`): past 70 % of the room, Sunday's review sends the facts to Claude in a call of its own, which gives back at most two thirds as many lines.
-They're kept only if they make room and the facts are unchanged meanwhile (`MemoryTidy.after`, `applied`). The facts ahead of the tidy and after it go with the week's review, whose page can undo it. Standing instructions are never tidied, nor a fact with an until or a task (`MemoryTidy.tidied`: they go by themselves, and a merge would lose when), which still count to its being due.
+They're kept only if they make room and the facts are unchanged meanwhile (`MemoryTidy.after`, `applied`). The facts ahead of the tidy and after it go with the week's review, whose page can undo it. Standing instructions are never tidied, nor a fact with an until or a task (`MemoryTidy.tidied`: they go by themselves, and a merge would lose when); they leave the rest less room, so it's due once the facts it may rewrite are past 70 % of the room the others leave (`MemoryTidy.due`), what's run out let go of first.
 
 ## The instructions screen
 
