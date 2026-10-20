@@ -100,6 +100,9 @@ class FelixHarness(start: String = "2026-10-19T16:30") : AutoCloseable {
     /** [key]'s piece kept as Day's Done keeps it ([Focus.keepSlot]). */
     suspend fun focusKeep(key: String): Boolean = focus.keepSlot(key)
 
+    /** [key]'s last piece kept since [since] taken back, as Day's Undo does ([Focus.unkeepSlot]). */
+    suspend fun focusUnkeep(key: String, since: Long): Boolean = focus.unkeepSlot(key, since)
+
     /** How work went, as it was put on record ([Looks.answered]): the task, when it was done, the answer. */
     val assessed: MutableList<Triple<String, Long, String>> = Collections.synchronizedList(mutableListOf())
 

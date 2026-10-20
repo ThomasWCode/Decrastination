@@ -40,15 +40,17 @@ class ChatActsTest {
     }
 
     @Test
-    fun `a piece kept is taken back while it's among today's kept, one taken back kept again while it isn't, its task open`() {
+    fun `a piece kept is taken back while the record it made is its key's newest, one taken back kept again while it isn't kept, its task open`() {
         val task = essay()
-        val keep = Act("Kept: Essay", ChatAction(ChatAction.Type.KeepPiece, task.id, value = "own:e#-1#1"))
-        assertTrue(ChatActs.canUndo(keep, listOf(task), settings, emptyList(), kept = setOf("own:e#-1#1")))
-        assertFalse(ChatActs.canUndo(keep, listOf(task), settings, emptyList(), kept = emptySet()))
-        assertFalse(ChatActs.canUndo(keep, listOf(finished()), settings, emptyList(), kept = setOf("own:e#-1#1")))
-        val unkeep = keep.copy(action = keep.action!!.copy(type = ChatAction.Type.UnkeepPiece))
-        assertTrue(ChatActs.canUndo(unkeep, listOf(task), settings, emptyList(), kept = emptySet()))
-        assertFalse(ChatActs.canUndo(unkeep, listOf(task), settings, emptyList(), kept = setOf("own:e#-1#1")))
+        val keep = Act("Kept: Essay", ChatAction(ChatAction.Type.KeepPiece, task.id, value = "own:e#-1#1"), after = "100")
+        assertTrue(ChatActs.canUndo(keep, listOf(task), settings, emptyList(), kept = mapOf("own:e#-1#1" to 100L)))
+        // Kept again since (taken back and kept from Day, or a box's next under its key): not this act's record.
+        assertFalse(ChatActs.canUndo(keep, listOf(task), settings, emptyList(), kept = mapOf("own:e#-1#1" to 200L)))
+        assertFalse(ChatActs.canUndo(keep, listOf(task), settings, emptyList(), kept = emptyMap()))
+        assertFalse(ChatActs.canUndo(keep, listOf(finished()), settings, emptyList(), kept = mapOf("own:e#-1#1" to 100L)))
+        val unkeep = keep.copy(action = keep.action!!.copy(type = ChatAction.Type.UnkeepPiece), after = null)
+        assertTrue(ChatActs.canUndo(unkeep, listOf(task), settings, emptyList(), kept = emptyMap()))
+        assertFalse(ChatActs.canUndo(unkeep, listOf(task), settings, emptyList(), kept = mapOf("own:e#-1#1" to 200L)))
     }
 
     @Test

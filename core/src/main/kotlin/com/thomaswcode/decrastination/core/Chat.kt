@@ -189,7 +189,7 @@ data class ChatAction(val type: Type, val taskId: String, val stepIndex: Int? = 
  * What one of the chat's actions did (16 Oct), said under its answer as [line], with what its Undo
  * needs: the [action]; the task as it was before it ([was]: deleted, or finished before it was
  * opened again), and the cards that had added a deleted one ([cards], "message|card"); a setting's
- * value before and after ([before], [after]); a reminder before it was moved ([reminder]). [undone]
+ * value before and after ([before], [after]); a piece's kept record's time ([after], G1); a reminder before it was moved ([reminder]). [undone]
  * once Undo has taken it back. With no [action],
  * a line saying what came of the answer, with nothing to undo; a [problem] where something wasn't
  * made or looked up.
@@ -283,9 +283,10 @@ object ChatActs {
      * setting still as it was set; a reminder set or moved still unsent, not snoozed nor cancelled, and
      * not moved again since; one cancelled still cancelled, with room for it among those still to come; a
      * note added still there; one deleted still deleted, and kept, with room for it on its task; a piece
-     * kept still among today's [kept] (their keys), one kept no more still not, its task open.
+     * kept still kept by the record it made, its key's newest among today's [kept] (each key's newest
+     * record's time), one kept no more still not, its task open.
      */
-    fun canUndo(act: Act, tasks: List<TaskItem>, settings: Settings, messages: List<ChatMessage>, notes: List<Note> = emptyList(), reminders: List<Reminder> = emptyList(), kept: Set<String> = emptySet()): Boolean {
+    fun canUndo(act: Act, tasks: List<TaskItem>, settings: Settings, messages: List<ChatMessage>, notes: List<Note> = emptyList(), reminders: List<Reminder> = emptyList(), kept: Map<String, Long> = emptyMap()): Boolean {
         if (act.undone) return false
         val a = act.action ?: return false
         val task = tasks.firstOrNull { it.id == a.taskId }
@@ -306,7 +307,7 @@ object ChatActs {
             ChatAction.Type.CancelReminder -> reminder?.cancelledAt != null && reminders.count(Reminders::pending) < Reminders.MAX_PENDING
             ChatAction.Type.AddNote -> note != null && note.deletedAt == null
             ChatAction.Type.DeleteNote -> note?.deletedAt != null && Notes.hasRoom(note, notes)
-            ChatAction.Type.KeepPiece -> a.value in kept && task?.isOpen == true
+            ChatAction.Type.KeepPiece -> act.after?.toLongOrNull()?.let { kept[a.value] == it } == true && task?.isOpen == true
             ChatAction.Type.UnkeepPiece -> a.value !in kept && task?.isOpen == true
             ChatAction.Type.Sync -> false
         }

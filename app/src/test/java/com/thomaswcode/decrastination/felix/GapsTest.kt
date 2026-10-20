@@ -19,6 +19,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 
 /**
@@ -56,7 +57,7 @@ class GapsTest {
 
     private fun canUndo(message: ChatMessage, i: Int): Boolean {
         val m = stores.chat.value.messages.first { it.id == message.id }
-        return ChatActs.canUndo(m.acts[i], stores.tasks.value.tasks, stores.settings.value, stores.chat.value.messages, kept = conversation.keptToday().mapTo(HashSet()) { it.key })
+        return ChatActs.canUndo(m.acts[i], stores.tasks.value.tasks, stores.settings.value, stores.chat.value.messages, kept = conversation.keptAt())
     }
 
     @Test
@@ -85,6 +86,39 @@ class GapsTest {
         // Its Undo keeps it again.
         assertTrue(canUndo(taken, 0))
         assertNull(conversation.undoAct(taken.id, 0))
+        assertEquals(listOf(key), conversation.keptToday().map { it.key })
+    }
+
+    @Test
+    fun `a piece kept from Day while he answered isn't kept again by him, its next box having its key`() = runBlocking {
+        val long = sheet.copy(sourceEffortMin = 120)
+        stores.tasks.update { it.copy(tasks = listOf(long)) }
+        val key = felix.planning.plan().todaySlots.mapNotNull { it.chunk }.first { it.taskId == long.id }.key
+        felix.answers(answer("Kept: nice one.", listOf(action("keepPiece", long.id, key))), delayMs = 1_500)
+        assertTrue(conversation.ask("I've done the first hour"))
+        delay(500)
+        // Kept from Day meanwhile: the next box has its key now.
+        assertTrue(felix.focusKeep(key))
+        val worked = stores.tasks.value.tasks.single().workedMin
+        assertTrue(felix.planning.plan().ordered.any { it.key == key }, "the next box under the same key")
+        felix.settle()
+        val his = stores.chat.value.messages.last { it.from == Speaker.Felix }
+        assertTrue(his.acts.none { it.action?.type == ChatAction.Type.KeepPiece }, his.acts.toString())
+        assertEquals(worked, stores.tasks.value.tasks.single().workedMin)
+    }
+
+    @Test
+    fun `his keep's Undo takes back the record it made, and isn't offered once the piece is kept again another way`() = runBlocking {
+        stores.tasks.update { it.copy(tasks = listOf(sheet)) }
+        val key = felix.planning.plan().todaySlots.mapNotNull { it.chunk }.single { it.taskId == sheet.id }.key
+        val kept = asked("I've done the worksheet", answer("Kept.", listOf(action("keepPiece", sheet.id, key))))
+        assertTrue(canUndo(kept, 0))
+        // Taken back from Day, then kept there again: his Undo would take back yours.
+        assertTrue(felix.focusUnkeep(key, now))
+        felix.clock.time = now + 60_000L
+        assertTrue(felix.focusKeep(key))
+        assertFalse(canUndo(kept, 0))
+        assertEquals("It's changed since, so it can't be undone here", conversation.undoAct(kept.id, 0))
         assertEquals(listOf(key), conversation.keptToday().map { it.key })
     }
 
@@ -128,11 +162,22 @@ class GapsTest {
     fun `asked to open a task where it lives, it's opened at once with no card and said, and one of your own has its page here`() = runBlocking {
         val own = OwnTaskRules.create(OwnTask(title = "Poster"), "p", now)
         stores.tasks.update { it.copy(tasks = listOf(sheet, own)) }
+        conversation.chatInFront = true
         val his = asked("open them in their apps", answer("Opening it in Teams.", listOf(action("open", sheet.id, "source"), action("open", own.id, "source"))))
         assertEquals(listOf(sheet.id), felix.ports.opened)
         assertEquals("Opened in Teams: Forces worksheet", his.acts.single().line)
         assertNull(his.acts.single().action)
         assertEquals(listOf(own.id), his.proposals.mapNotNull { it.open })
+    }
+
+    @Test
+    fun `with the chat not on screen, a task to open where it lives comes on a card instead, and says why`() = runBlocking {
+        stores.tasks.update { it.copy(tasks = listOf(sheet)) }
+        conversation.chatInFront = false
+        val his = asked("open it in Teams", answer("Opening it in Teams.", listOf(action("open", sheet.id, "source"))))
+        assertTrue(felix.ports.opened.isEmpty())
+        assertEquals(listOf(sheet.id), his.proposals.mapNotNull { it.open })
+        assertEquals("On its card, not opened in Teams: the chat wasn't on screen.", his.acts.single().line)
     }
 
     @Test
