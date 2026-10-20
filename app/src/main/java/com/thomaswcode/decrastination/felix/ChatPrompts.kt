@@ -3,6 +3,7 @@ package com.thomaswcode.decrastination.felix
 import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.By
 import com.thomaswcode.decrastination.core.Calibration
+import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.ChatHistory
 import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.core.Chunk
@@ -114,12 +115,13 @@ object ChatPrompts {
 
     /**
      * A reminder (Stage 8a, Q9: B): its words theirs, at a time, at their next slot on a task, or a while before a
-     * task's due; one listed moved or reworded in place by its id.
+     * task's due; one listed moved or reworded in place by its id. A change of its own type, on the changes' fields,
+     * as a list of its own made the chat's grammar too large for the API to compile (Q13: B).
      */
-    private const val REMIND = "8. Remind (reminders): when they ask to be reminded of something, that's a reminder, not a task: text in their words, as you'd say them then; when \"at\" for a date and time (date, time); \"slotStart\" for the start of their next slot on a task (taskId, and date only where it's not to be from today); \"beforeDue\" for a while before a task's due (taskId, minutesBefore). To move or reword one already set (\"push it to 8\"), give its id from the reminders' list, with when and its time as they're to be, and text empty to keep its words; a new one's id is empty. Say when it'll come. Not for work to plan, which is a task; most messages need none."
+    private const val REMIND = "8. Remind (changes, type Remind): when they ask to be reminded of something, that's a reminder, not a task: title its words, theirs, as you'd say them then; eventKey \"at\" for a date and time (date, time), \"slotStart\" for the start of their next slot on a task (taskId, and date only where it's not to be from today), or \"beforeDue\" for a while before a task's due (taskId, minutes before it). To move or reword one already set (\"push it to 8\"), afterTaskId its id from the reminders' list, with eventKey and its time as they're to be, and title empty to keep its words; a new one's afterTaskId is empty. Say when it'll come. Not for work to plan, which is a task; most messages need none."
 
-    /** A note on a task, or standing, for every task its scope matches (Stage 8a, Q31: A): kept, told to him whenever one comes up. */
-    private const val NOTE = "9. Note (notes): something to keep with a task for when it comes up (what the teacher said, which source to use, what they've decided): taskId and the words; or, for every task of a subject, a class (its code), a source (Teams, Power Planner, Gmail, Anki, Yours) or with a word in its title (\"all her chemistry homework on sheets\"), those instead, taskId empty. Not a reminder, nor a fact about them; most messages need none."
+    /** A note on a task, or standing, for every task its scope matches (Stage 8a, Q31: A): a change of its own type, as [REMIND] is. */
+    private const val NOTE = "9. Note (changes, type Note): something to keep with a task for when it comes up (what the teacher said, which source to use, what they've decided): taskId, and title the words; or, for every task of a subject, a class, a source or with a word in its title (\"all her chemistry homework on sheets\"), taskId empty and eventKey what it's for, as kind:value: subject:Chemistry, class:12X/Ch1 (its code), source:Teams (or Power Planner, Gmail, Anki, Yours), title:essay, several joined by ; (subject:Chemistry;source:Teams). Not a reminder, nor a fact about them; most messages need none."
 
     /** The chat's instructions, as Felix (AI-24; Q-44: the chat is him too), for a student in Year [year] (AI-06). */
     fun system(settings: Settings = Settings(), year: Int = 12): String = (
@@ -181,31 +183,11 @@ object ChatPrompts {
         "value" to STRING,
     )
 
-    /**
-     * A reminder to set, or one listed (by its [id]) to move or reword (Stage 8a): plain fields, empty or -1 for
-     * none, as the lists' are kept (3.1.6), so the grammar the API compiles stays small.
-     */
-    private val REMINDER = InstructionPrompts.obj(
-        "id" to STRING,
-        "text" to STRING,
-        "date" to DATE,
-        "time" to TIME,
-        "taskId" to STRING,
-        "when" to mapOf("type" to "string", "enum" to listOf(WHEN_AT, WHEN_SLOT, WHEN_BEFORE)),
-        "minutesBefore" to INTEGER,
-    )
+    /** The chat's change types beyond the instructions' (Stage 8a, Q13: B): a reminder, and a note. */
+    const val REMIND_TYPE = "Remind"
+    const val NOTE_TYPE = "Note"
 
-    /** A note on a task, or standing, for every task its scope matches (Stage 8a, Q31: A): plain strings, empty for none, so no union is added. */
-    private val NOTE_ON = InstructionPrompts.obj(
-        "taskId" to STRING,
-        "text" to STRING,
-        "subject" to STRING,
-        "className" to STRING,
-        "source" to STRING,
-        "titleContains" to STRING,
-    )
-
-    /** A reminder's [REMINDER] `when`s: at a time, at its task's next slot, before its task's due. */
+    /** A Remind change's `eventKey`s: at a time, at its task's next slot, before its task's due. */
     const val WHEN_AT = "at"
     const val WHEN_SLOT = "slotStart"
     const val WHEN_BEFORE = "beforeDue"
@@ -213,9 +195,15 @@ object ChatPrompts {
     /**
      * A change as the chat gives it: the instructions' reader's, and whether a Minutes total is the
      * app's estimate at the student's pace (17 Oct), so the pace still learns from the task. A plain
-     * boolean, so no union is added.
+     * boolean, so no union is added. Its types gain the chat's own two (8a, [REMIND_TYPE], [NOTE_TYPE]).
      */
-    private val CHANGE = InstructionPrompts.obj(*(InstructionPrompts.CHANGE_FIELDS + ("paced" to mapOf("type" to "boolean"))).toTypedArray())
+    private val CHANGE = InstructionPrompts.obj(
+        *(
+            // Its types the instructions' and the chat's own two (8a): a reminder and a note, on the same fields.
+            listOf("type" to mapOf("type" to "string", "enum" to ChangeType.entries.map { it.name } + REMIND_TYPE + NOTE_TYPE)) +
+                InstructionPrompts.CHANGE_FIELDS.filterNot { it.first == "type" } + ("paced" to mapOf("type" to "boolean"))
+            ).toTypedArray(),
+    )
 
     val SCHEMA: Map<String, Any> = InstructionPrompts.obj(
         "reply" to STRING,
@@ -228,9 +216,6 @@ object ChatPrompts {
         "research" to STRING,
         // The tasks whose whole text to read (D-93), none for nothing.
         "details" to mapOf("type" to "array", "items" to STRING),
-        // Reminders set or moved, and notes on tasks (Stage 8a), none for nothing.
-        "reminders" to mapOf("type" to "array", "items" to REMINDER),
-        "notes" to mapOf("type" to "array", "items" to NOTE_ON),
     )
 
     /**

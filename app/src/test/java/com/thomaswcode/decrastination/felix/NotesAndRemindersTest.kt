@@ -53,11 +53,16 @@ class NotesAndRemindersTest {
         kind = Kind.Homework, sourceEffortMin = 30, firstSeenAt = now, lastSeenAt = now,
     )
 
+    /** A Remind change (Q13: B), as his answer gives one. */
     private fun reminder(id: String = "", text: String = "call gran", time: String = "", taskId: String = "", whenIs: String = "at") =
-        """{"id":"$id","text":"$text","date":"","time":"$time","taskId":"$taskId","when":"$whenIs","minutesBefore":-1}"""
+        """{"type":"Remind","taskId":"$taskId","afterTaskId":"$id","eventKey":"$whenIs","eventTime":"","minutes":-1,"date":"","endDate":"","weekday":"","time":"$time","endTime":"","title":"$text","steps":[],"paced":false}"""
+
+    /** A Note change on [taskId]. */
+    private fun note(taskId: String, text: String) =
+        """{"type":"Note","taskId":"$taskId","afterTaskId":"","eventKey":"","eventTime":"","minutes":-1,"date":"","endDate":"","weekday":"","time":"","endTime":"","title":"$text","steps":[],"paced":false}"""
 
     private fun answer(reply: String, reminders: List<String> = emptyList(), notes: List<String> = emptyList(), actions: List<String> = emptyList()) =
-        """{"reply":"$reply","newTasks":[],"changes":[],"memories":[],"suggestedReplies":[],"actions":[${actions.joinToString(",")}],"research":"","details":[],"reminders":[${reminders.joinToString(",")}],"notes":[${notes.joinToString(",")}]}"""
+        """{"reply":"$reply","newTasks":[],"changes":[${(reminders + notes).joinToString(",")}],"memories":[],"suggestedReplies":[],"actions":[${actions.joinToString(",")}],"research":"","details":[]}"""
 
     private fun action(type: String, value: String) = """{"type":"$type","taskId":"","stepIndex":-1,"setting":"","value":"$value"}"""
 
@@ -79,7 +84,7 @@ class NotesAndRemindersTest {
         stores.tasks.update { it.copy(tasks = listOf(sheet)) }
         val his = asked(
             "remind me at 7 to call gran, and note on the sheet to show the working",
-            answer("I'll remind you at 7, and it's noted.", reminders = listOf(reminder(time = "19:00")), notes = listOf("""{"taskId":"${sheet.id}","text":"show the working"}""")),
+            answer("I'll remind you at 7, and it's noted.", reminders = listOf(reminder(time = "19:00")), notes = listOf(note(sheet.id, "show the working"))),
         )
         val reminder = stores.felix.value.reminders.single()
         assertEquals(Due(DueKind.At, Fixtures.at("2026-10-20T19:00")) to "call gran", reminder.due to reminder.text)
@@ -285,7 +290,7 @@ class NotesAndRemindersTest {
     fun `the morning's prune keeps what an Undo can still bring back, a deleted own task's notes with it, and lets go of the rest`() = runBlocking {
         val own = OwnTaskRules.create(OwnTask(title = "Poster"), "p", now)
         stores.tasks.update { it.copy(tasks = listOf(sheet, own)) }
-        asked("note the poster: A3", answer("Noted.", notes = listOf("""{"taskId":"${own.id}","text":"A3"}""")))
+        asked("note the poster: A3", answer("Noted.", notes = listOf(note(own.id, "A3"))))
         // Deleted from the chat: its act keeps the task, and its note waits with it.
         asked("delete the poster", answer("Deleted.", actions = listOf("""{"type":"delete","taskId":"${own.id}","stepIndex":-1,"setting":"","value":""}""")))
         assertTrue(stores.tasks.value.tasks.none { it.id == own.id })
@@ -307,7 +312,7 @@ class NotesAndRemindersTest {
     @Test
     fun `a cancel and a note's delete mark what they name, kept whole for their Undo, which brings it back`() = runBlocking {
         stores.tasks.update { it.copy(tasks = listOf(sheet)) }
-        asked("remind me at 7 to call gran, and note the sheet", answer("Done.", reminders = listOf(reminder(time = "19:00")), notes = listOf("""{"taskId":"${sheet.id}","text":"show the working"}""")))
+        asked("remind me at 7 to call gran, and note the sheet", answer("Done.", reminders = listOf(reminder(time = "19:00")), notes = listOf(note(sheet.id, "show the working"))))
         val r = stores.felix.value.reminders.single()
         val n = stores.felix.value.notes.single()
         val gone = asked("cancel that and delete the note", answer("Cancelled, and deleted.", actions = listOf(action("cancelReminder", r.id), action("deleteNote", n.id))))
