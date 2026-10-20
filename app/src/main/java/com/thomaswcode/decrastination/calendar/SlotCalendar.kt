@@ -63,8 +63,8 @@ interface CalendarProvider {
  * The calendar provider on the phone, as [CalendarWriter] writes the plan's slots to the calendar you
  * picked (NF-07): the next seven days', as events the app knows by their URI ([SlotCalendarDiff]),
  * free (so a read never counts them busy, though the calendar's left out of reading anyway, DX-13),
- * with no reminders of their own. One query and one batch a write, so a replan's write is cheap and
- * an unchanged plan writes nothing.
+ * with no reminders of their own. Two queries ([unmarked], [existing]) and at most one batch a write,
+ * so a replan's write is cheap and an unchanged plan writes nothing.
  */
 class SlotCalendar(private val context: Context) : CalendarProvider {
     /** A calendar on the phone, and whether events can be added to it. */
