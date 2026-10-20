@@ -210,6 +210,7 @@ The tasks' own text (id | from, and what comes with it; then its text: an assign
 
 The plan: the work the app has them do each day so every deadline is met, as its Day and Work tabs show it. Its minutes are the app's, from what it's learned of how long things take them, so they can differ from the task list's. While anything's planned for today, blocked apps stay blocked in blocking hours; otherwise they cost free time earned by working. Each piece's [why: …] says why it's on its day: duesoon (due today or tomorrow), overdue, spread (its share of the free time to its deadline), minimumtouch (kept within a week of its piece before), revisiongap (a day after its revision piece before), mostroom (a task in one piece, on the roomiest day before its deadline), soft (no due date: spare time this week), packed (its days are too tight to spread it, so as late as they allow), kept (where its slot today already was, under way or still to come), noroom (no room before its deadline).
 Now: 17:20–17:50 Rates of reaction worksheet: part 1 of 2 (30 min); then Vectors exercise 4B: Questions 1 to 6 (35 min)
+Blocking: on until today's work's done (2 pieces, 1 h 5 min); free time 0 min
 Today's slots (the times its pieces are laid at):
 - 17:20–17:50 Rates of reaction worksheet: part 1 of 2 (30 min) [now] key teams:t1#-1#1
 - 17:55–18:30 Vectors exercise 4B: Questions 1 to 6 (35 min) [ahead] key powerplanner:p1#0

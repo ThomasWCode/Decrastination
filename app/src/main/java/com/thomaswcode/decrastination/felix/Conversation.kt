@@ -520,7 +520,7 @@ class Conversation(
         val keptToday = keptToday(now)
         return ChatPrompts.Context(
             known = ChatPrompts.context(state.tasks, time.events, applied, now, clock.zone(), settings.value.classMap, runtime.value.notSame, settings.value, learning.value.calibration, kept.notes, kept.reminders, moments),
-            plan = ChatPrompts.plan(plan, clock.zone(), keptToday.map { it.key to it.label }),
+            plan = ChatPrompts.plan(plan, clock.zone(), keptToday.map { it.key to it.label }, focus.blockingLine(plan, now)),
             keepable = keepable,
             kept = keptToday.associate { it.key to it.taskId },
         )
