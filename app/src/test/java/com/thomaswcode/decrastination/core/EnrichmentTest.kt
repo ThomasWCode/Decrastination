@@ -57,7 +57,8 @@ class EnrichmentTest {
         val steps = listOf(SubStep("Pages 7-9", 30), SubStep("Pages 10-11", 20))
         val enriched = task.copy(enrichment = enrichment(task).copy(actionableFrom = opens, subSteps = steps)).enriched()
         assertEquals(opens, enriched.availableFrom)
-        assertEquals(steps, enriched.subSteps)
+        // Laid as the reading's.
+        assertEquals(steps.map { it.copy(origin = StepOrigin.Reading) }, enriched.subSteps)
         val own = listOf(SubStep("20 new cards", 9))
         assertEquals(own, task.copy(subSteps = own, enrichment = enrichment(task).copy(subSteps = steps)).enriched().subSteps)
     }
@@ -186,6 +187,17 @@ class EnrichmentTest {
     }
 
     @Test
+    fun `read again, a step of the same name keeps its id, done or not, and a new one has none till it's stored`() {
+        val task = assignment()
+        val first = task.withEnrichment(enrichment(task).copy(subSteps = listOf(SubStep("Pages 7-9", 30), SubStep("Pages 10-11", 20)))).let { it.copy(subSteps = it.subSteps.withIds()) }
+        val worked = first.copy(subSteps = first.subSteps.mapIndexed { i, s -> if (i == 0) s.copy(done = true) else s })
+        // Read again, in another order, with a step more.
+        val second = worked.withEnrichment(enrichment(task).copy(subSteps = listOf(SubStep("Pages 10-11", 25), SubStep("Pages 7-9", 25), SubStep("Check and hand in", 5))))
+        assertEquals(listOf(first.subSteps[1].id, first.subSteps[0].id, ""), second.subSteps.map { it.id })
+        assertEquals(listOf(false, true, false), second.subSteps.map { it.done })
+    }
+
+    @Test
     fun `a task changed since it was enriched is stale, and so is one only the rules saw once the model is on`() {
         val task = email()
         val done = task.copy(enrichment = enrichment(task, by = "rules"))
@@ -227,7 +239,7 @@ class EnrichmentTest {
     @Test
     fun `steps an enrichment gave go when the content changes, the source's own stay`() {
         val task = assignment()
-        val steps = listOf(SubStep("Pages 7-9", 30, done = true), SubStep("Pages 10-11", 20))
+        val steps = listOf(SubStep("Pages 7-9", 30, done = true, origin = StepOrigin.Reading), SubStep("Pages 10-11", 20, origin = StepOrigin.Reading))
         val split = task.copy(subSteps = steps, enrichment = enrichment(task).copy(subSteps = steps.map { it.copy(done = false) }))
         assertEquals(steps, split.enriched().subSteps)
         // New instructions: the task's own estimate until it's split again.
@@ -241,7 +253,7 @@ class EnrichmentTest {
     fun `a block ticked by hand stays so through a fresh enrichment, at its minutes now`() {
         val task = email()
         val first = listOf(SubStep("Reply", 20))
-        val ticked = task.copy(subSteps = listOf(SubStep("Reply", 20, done = true, byHand = true)), enrichment = enrichment(task).copy(subSteps = first))
+        val ticked = task.copy(subSteps = listOf(SubStep("Reply", 20, done = true, byHand = true, origin = StepOrigin.Reading)), enrichment = enrichment(task).copy(subSteps = first))
         val again = ticked.withEnrichment(enrichment(task).copy(subSteps = listOf(SubStep("Reply", 25))))
         assertEquals(listOf(true), again.subSteps.map { it.byHand })
         assertEquals(25, again.handMin)

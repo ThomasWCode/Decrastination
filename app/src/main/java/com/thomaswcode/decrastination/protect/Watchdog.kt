@@ -24,7 +24,7 @@ import com.thomaswcode.decrastination.R
 import com.thomaswcode.decrastination.block.FocusService
 import com.thomaswcode.decrastination.core.Blocklist
 import com.thomaswcode.decrastination.data.ProtectionRecord
-import com.thomaswcode.decrastination.data.ProtectionState
+import com.thomaswcode.decrastination.data.WatchdogState
 import com.thomaswcode.decrastination.learn.Daily
 import com.thomaswcode.decrastination.notify.Channels
 import com.thomaswcode.decrastination.notify.NoticeId
@@ -181,7 +181,7 @@ object Watchdog {
             }
         }
         val now = graph.clock.now()
-        val before = graph.runtime.value.protection
+        val before = graph.stores.protection.value.protection
         var stoppedSince = if (ProtectionCheck.stopped(report)) before.stoppedSince ?: now else null
         var restartedAt = before.restartedAt
         var tries = if (stoppedSince == null) 0 else before.restartTries
@@ -200,9 +200,9 @@ object Watchdog {
             // Look again when the restart is due, rather than at the next periodic run.
             WatchdogReceiver.checkIn(context, restartAt - now)
         }
-        graph.runtime.update {
+        graph.stores.protection.update {
             it.copy(
-                protection = ProtectionState(
+                protection = WatchdogState(
                     problems = problems,
                     offSince = if (problems.isEmpty()) null else before.offSince ?: now,
                     checkedAt = now,

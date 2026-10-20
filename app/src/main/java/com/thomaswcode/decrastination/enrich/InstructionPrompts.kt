@@ -138,9 +138,9 @@ object InstructionPrompts {
                 appendLine("  From: ${task.source.label}" + (task.extra["from"]?.let { " ($it)" } ?: ""))
                 task.className?.let { appendLine("  Class: $it") }
                 // As it is now, an earlier instruction's date included, so "two days later" counts from it.
-                appendLine("  Due: " + due(task) + (if (task.userDueAt != null) " (set by an earlier instruction)" else ""))
-                appendLine("  Takes: ${task.effortMin} min in all" + (if (task.userEffortMin != null) " (set by an earlier instruction)" else "") + "; ${task.workedMin} min worked on it so far")
-                listOfNotNull(task.availableFrom, task.userFrom).maxOrNull()?.let { appendLine("  Can't start before: ${at(it)}") }
+                appendLine("  Due: " + due(task) + (if (task.mine.dueAt?.value != null) " (set by an earlier instruction)" else ""))
+                appendLine("  Takes: ${task.effortMin} min in all" + (if (task.mine.minutes?.minutes != null) " (set by an earlier instruction)" else "") + "; ${task.workedMin} min worked on it so far")
+                listOfNotNull(task.availableFrom, task.mine.from?.value).maxOrNull()?.let { appendLine("  Can't start before: ${at(it)}") }
                 task.detail.trim().takeIf { it.isNotEmpty() }?.let { appendLine("  Details: " + it.take(MAX_DETAIL).replace("\n", "\n    ")) }
             }
             about.eventKey != null -> appendLine(

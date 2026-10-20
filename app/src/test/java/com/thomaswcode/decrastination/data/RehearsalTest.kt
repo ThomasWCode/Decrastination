@@ -1,15 +1,18 @@
 package com.thomaswcode.decrastination.data
 
+import com.thomaswcode.decrastination.core.By
+import com.thomaswcode.decrastination.core.Calibration
 import com.thomaswcode.decrastination.core.ChatArchive
 import com.thomaswcode.decrastination.core.ChatState
 import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.InstructionState
 import com.thomaswcode.decrastination.core.MemoryState
+import com.thomaswcode.decrastination.core.Mine
 import com.thomaswcode.decrastination.core.SchoolCalendar
 import com.thomaswcode.decrastination.core.Settings
+import com.thomaswcode.decrastination.core.SlotState
 import com.thomaswcode.decrastination.core.Status
-import com.thomaswcode.decrastination.core.TaskOverrides
-import com.thomaswcode.decrastination.core.overrides
+import com.thomaswcode.decrastination.enrich.AiUsage
 import java.io.File
 import java.nio.file.Files
 import kotlin.test.Test
@@ -123,13 +126,18 @@ class RehearsalTest {
             before(files, "tasks.json", TaskState.serializer()),
             before(files, "settings.json", Settings.serializer()),
             before(files, "runtime.json", RuntimeState.serializer()),
+            before(files, "session.json", SessionState.serializer()),
+            before(files, "protection.json", ProtectionState.serializer()),
+            before(files, "model.json", ModelState.serializer()),
+            before(files, "anki.json", AnkiState.serializer()),
+            before(files, "learning.json", LearningState.serializer()),
             before(files, "log.json", ActivityLog.serializer()),
             before(files, "instructions.json", InstructionState.serializer()),
             before(files, "chat.json", ChatState.serializer()),
             before(files, "chat-archive.json", ChatArchive.serializer()),
             before(files, "school.json", SchoolCalendar.serializer()),
             before(files, "memory.json", MemoryState.serializer()),
-            before(files, "calendar.json", CalendarVersions.serializer()),
+            before(files, "calendar.json", CalendarState.serializer()),
         )
         // As the app will read them, on a copy of the stores alone (the secrets can't be read off the phone),
         // the copy, the phone's own data, deleted once read.
@@ -150,7 +158,7 @@ class RehearsalTest {
         STORES.map { File(files, it) }.filter { it.isFile }.forEach { it.copyTo(File(moved, it.name)) }
         Stores.MOVES.forEach { it.run(moved) }
         val stores = Stores(copy, NoKeystore)
-        fun there(name: String) = File(files, name).isFile
+        fun there(name: String) = File(files, name).isFile || (name in SPLIT && File(files, "runtime.json").isFile)
         // Each file as the moves and its migrations leave it: what the store decodes, and should write back whole.
         fun migrated(name: String): JsonElement? = runCatching {
             val json = JsonStore.json.parseToJsonElement(File(moved, name).readText()) as JsonObject
@@ -159,11 +167,14 @@ class RehearsalTest {
         fun <T> after(store: JsonStore<T>, serializer: KSerializer<T>, name: String) = after(store, serializer, there(name), migrated(name))
         val migrated = listOf(
             after(stores.tasks, TaskState.serializer(), "tasks.json"), after(stores.settings, Settings.serializer(), "settings.json"),
-            after(stores.runtime, RuntimeState.serializer(), "runtime.json"), after(stores.log, ActivityLog.serializer(), "log.json"),
+            after(stores.runtime, RuntimeState.serializer(), "runtime.json"),
+            after(stores.session, SessionState.serializer(), "session.json"), after(stores.protection, ProtectionState.serializer(), "protection.json"),
+            after(stores.model, ModelState.serializer(), "model.json"), after(stores.anki, AnkiState.serializer(), "anki.json"),
+            after(stores.learning, LearningState.serializer(), "learning.json"), after(stores.log, ActivityLog.serializer(), "log.json"),
             after(stores.instructions, InstructionState.serializer(), "instructions.json"), after(stores.chat, ChatState.serializer(), "chat.json"),
             after(stores.chatArchive, there("chat-archive.json"), migrated("chat-archive.json")),
             after(stores.school, SchoolCalendar.serializer(), "school.json"), after(stores.memory, MemoryState.serializer(), "memory.json"),
-            after(stores.calendarVersions, CalendarVersions.serializer(), "calendar.json"),
+            after(stores.calendar, CalendarState.serializer(), "calendar.json"),
         )
         val ran = stores.shapes.filter { (name, shape) -> (versions[name] ?: shape.version) < shape.version }.map { (name, shape) -> "$name ${versions[name]} to ${shape.version}" }
         val was = describe(reads)
@@ -171,9 +182,9 @@ class RehearsalTest {
         val now = describe(migrated)
         // Each store's lists before (from its file) and after (from what the app writes): a difference is data moved or
         // lost. Those a migration moves are compared through it instead, in the counts above ([MOVED]).
-        val lists = reads.zip(migrated).flatMap { (b, a) ->
-            (b.lists.keys + a.lists.keys).sorted().filter { b.lists[it] != a.lists[it] && "${b.file} $it" !in MOVED }.map { "  ${b.file} ${it}: ${b.lists[it] ?: "none"} before, ${a.lists[it] ?: "none"} after" }
-        }
+        val before = keyed(reads)
+        val after = keyed(migrated)
+        val lists = (before.keys + after.keys).sorted().filter { before[it] != after[it] && it !in MOVED }.map { "  $it: ${before[it] ?: "none"} before, ${after[it] ?: "none"} after" }
         // Nothing of the chat's, nor any of Felix's records, gone: every message and record by its id in the chat after.
         val gone = ids(reads, "chat.json") + records(reads.json("log.json")).mapNotNull { it.string("id") } - ids(migrated, "chat.json")
         val report = buildString {
@@ -205,6 +216,29 @@ class RehearsalTest {
     }
 
     private fun List<Read>.json(file: String): JsonObject? = firstOrNull { it.file == file }?.json
+
+    /** Each read's lists by "<file> <path>", the runtime's moved fields' under the file each went to (4.0.13), so a move compares. */
+    private fun keyed(reads: List<Read>): Map<String, Int> = reads.flatMap { r ->
+        r.lists.map { (path, n) ->
+            val file = if (r.file == "runtime.json") RuntimeSplit.FIELDS.entries.firstOrNull { path.substringBefore("[") in it.value }?.key ?: r.file else r.file
+            "$file $path" to n
+        }
+    }.groupBy({ it.first }, { it.second }).mapValues { it.value.sum() }
+
+    /** The tasks as the tasks' move leaves them (4.0.13): a file of before through its migration, so your values count in both. */
+    private fun tasksThrough(reads: List<Read>): TaskState? {
+        val read = reads.first { it.file == "tasks.json" }
+        val json = read.json ?: return read.value as TaskState?
+        if (Migration.versionOf(json) >= 2) return read.value as TaskState?
+        return runCatching { JsonStore.json.decodeFromJsonElement(TaskState.serializer(), TasksMigration.TASKS.apply(json)) }.getOrNull()
+    }
+
+    /** [mine] with who set each value left aside: the move labels them all yours, the first lay Felix's where his. */
+    private fun unlabelled(mine: Mine): Mine = mine.copy(
+        notATask = mine.notATask?.copy(by = By.You), from = mine.from?.copy(by = By.You), after = mine.after?.copy(by = By.You), dueAt = mine.dueAt?.copy(by = By.You),
+        minutes = mine.minutes?.copy(by = By.You), onDay = mine.onDay?.copy(by = By.You), atTime = mine.atTime?.copy(by = By.You), sameAs = mine.sameAs?.copy(by = By.You),
+        steps = mine.steps?.let { it.copy(steps = it.steps.map { s -> s.copy(id = "") }, by = By.You) }, title = mine.title?.copy(by = By.You),
+    )
 
     private fun JsonObject.string(key: String): String? = (this[key] as? JsonPrimitive)?.takeIf { it !is JsonNull }?.contentOrNull
 
@@ -256,19 +290,21 @@ class RehearsalTest {
             @Suppress("UNCHECKED_CAST")
             it as T
         }
-        appendLine("Stores: ${reads.count { it.value != null }} of ${reads.size} there; read whole: ${reads.count { it.value != null && it.problem == null }}; the same written again: ${reads.count { it.value != null && it.roundTrip }}")
-        reads.filter { it.problem != null }.forEach { appendLine("  ${it.file} didn't read whole${if (it.problem!!.kept) ", some of it kept" else ""}") }
-        reads.filter { !it.roundTrip }.forEach { appendLine("  ${it.file} changed read and written again") }
-        reads.filter { it.value == null && it.problem == null }.forEach { appendLine("  ${it.file} isn't there${if (it.file in REQUIRED) ": every phone has it" else ""}") }
-        reads.filter { it.dropped.isNotEmpty() }.forEach { appendLine("  ${it.file} holds what the app doesn't keep: ${it.dropped.joinToString()}") }
-        val tasks = of<TaskState>("tasks.json")
+        // The split's files (4.0.13) aside: each is counted through it, by what it holds, below; read whole, it's checked after.
+        val counted = reads.filter { it.file !in SPLIT }
+        appendLine("Stores: ${counted.count { it.value != null }} of ${counted.size} there; read whole: ${counted.count { it.value != null && it.problem == null }}; the same written again: ${counted.count { it.value != null && it.roundTrip }}")
+        counted.filter { it.problem != null }.forEach { appendLine("  ${it.file} didn't read whole${if (it.problem!!.kept) ", some of it kept" else ""}") }
+        counted.filter { !it.roundTrip }.forEach { appendLine("  ${it.file} changed read and written again") }
+        counted.filter { it.value == null && it.problem == null }.forEach { appendLine("  ${it.file} isn't there${if (it.file in REQUIRED) ": every phone has it" else ""}") }
+        counted.filter { it.dropped.isNotEmpty() }.forEach { appendLine("  ${it.file} holds what the app doesn't keep: ${it.dropped.joinToString()}") }
+        val tasks = tasksThrough(reads)
         val instructions = of<InstructionState>("instructions.json")
         if (tasks != null) {
             val all = tasks.tasks
             val open = all.filter { it.status == Status.Open }
             appendLine("Tasks: ${all.size}; open ${open.size}, done ${all.count { it.status == Status.Done }}, missed ${all.count { it.status == Status.Missed }}; by source ${all.groupingBy { it.source.name }.eachCount().toSortedMap()}")
             appendLine("  steps ${all.sumOf { it.subSteps.size }}, ticked ${all.sumOf { t -> t.subSteps.count { it.done } }}; on open tasks ${open.sumOf { it.subSteps.size }}, ticked ${open.sumOf { t -> t.subSteps.count { it.done } }}")
-            appendLine("  with values of yours ${all.count { it.overrides() != TaskOverrides.NONE }}; your steps ${all.count { it.userSteps != null }}; your minutes ${all.count { it.userEffortMin != null }} (paced ${all.count { it.userEffortPacedFrom != null }}); pins ${all.count { it.userAtTime != null }}")
+            appendLine("  with values of yours ${all.count { it.mine != Mine.NONE }}; your steps ${all.count { it.mine.steps?.steps != null }} (${all.sumOf { it.mine.steps?.steps.orEmpty().size }} steps); your minutes ${all.count { it.mine.minutes?.minutes != null }} (paced ${all.count { it.mine.minutes?.paced?.from != null }}); pins ${all.count { it.mine.atTime?.value != null }}; days ${all.count { it.mine.onDay != null }}; due dates ${all.count { it.mine.dueAt != null }}; not tasks ${all.count { it.hidden }}")
             appendLine("  read by Claude ${all.count { it.enrichment.let { e -> e != null && e.by != "rules" } }}, by the rules ${all.count { it.enrichment?.by == "rules" }}; with a photo ${all.count { it.photo != null }}; waiting to be rewarded ${tasks.unrewarded.size}")
             appendLine("  ids unique: ${all.map { it.id }.toSet().size == all.size}")
         }
@@ -279,7 +315,7 @@ class RehearsalTest {
                 val ids = tasks.tasks.map { it.id }.toSet()
                 val named = applied.flatMap { i -> i.changes.mapNotNull { it.taskId } }.toSet()
                 val laid = InstructionRules.taskOverrides(applied)
-                appendLine("  tasks they name: ${named.size}, not among the tasks ${named.count { it !in ids }}; tasks whose values aren't their instructions' ${tasks.tasks.count { (laid[it.id] ?: TaskOverrides.NONE) != it.overrides() }}")
+                appendLine("  tasks they name: ${named.size}, not among the tasks ${named.count { it !in ids }}; tasks whose values aren't their instructions' ${tasks.tasks.count { unlabelled(laid[it.id] ?: Mine.NONE) != unlabelled(it.mine) }}")
             }
         }
         of<ChatState>("chat.json")?.let { chat ->
@@ -290,13 +326,20 @@ class RehearsalTest {
         of<ActivityLog>("log.json")?.let { log ->
             appendLine("Log: slots ${log.slots.size}, completions ${log.completions.size}, days ${log.days.size}, check-ins ${log.checkIns.size}, reviews ${log.reviews.size}, weeks ${log.weeks.size}")
         }
-        of<RuntimeState>("runtime.json")?.let { runtime ->
-            appendLine("Runtime: the month ${runtime.aiUsage.month}, spent \$${"%.2f".format(java.util.Locale.UK, runtime.aiUsage.spentUsd)} in ${runtime.aiUsage.calls} calls; calls kept ${runtime.calls.size}; Anki readings ${runtime.ankiReadings.size}; micro-plans ${runtime.microPlans.size}")
-            appendLine("  today's slots ${runtime.slots.previous.size}, missed ${runtime.slots.missed.size}; changes waiting ${runtime.pending.size}; held notifications ${runtime.heldNotifications.size}")
+        reads.json("runtime.json")?.let { runtime ->
+            // Each field wherever it is: runtime.json's before the split, its own file's after (RuntimeSplit).
+            fun field(name: String): JsonElement? = runtime[name] ?: RuntimeSplit.FIELDS.entries.firstOrNull { name in it.value }?.let { reads.json(it.key)?.get(name) }
+            fun size(name: String) = when (val f = field(name)) { is JsonArray -> f.size; is JsonObject -> f.size; else -> 0 }
+            val usage = field("aiUsage")?.let { JsonStore.json.decodeFromJsonElement(AiUsage.serializer(), it) } ?: AiUsage()
+            val slots = field("slots")?.let { JsonStore.json.decodeFromJsonElement(SlotState.serializer(), it) } ?: SlotState()
+            val calibration = field("calibration")?.let { JsonStore.json.decodeFromJsonElement(Calibration.serializer(), it) } ?: Calibration()
+            appendLine("Runtime: the month ${usage.month}, spent \$${"%.2f".format(java.util.Locale.UK, usage.spentUsd)} in ${usage.calls} calls; calls kept ${size("calls")}; Anki readings ${size("ankiReadings")}; micro-plans ${size("microPlans")}")
+            appendLine("  today's slots ${slots.previous.size}, missed ${slots.missed.size}; changes waiting ${size("pending")}; held notifications ${size("heldNotifications")}; kept slots under way ${size("keeping")}; rewarded ${size("rewarded")}")
+            appendLine("  your event answers ${size("eventAnswers")}, asked ${size("eventsAsked")}; calendar events written ${size("calendarWritten")}; calibration ${calibration.multipliers.size} multipliers, ${calibration.timed.size} timed")
         }
         of<MemoryState>("memory.json")?.let { appendLine("Memory: facts ${it.facts.size}, rules ${it.rules.size}") }
         of<SchoolCalendar>("school.json")?.let { appendLine("School: days off ${it.noSchool.size}, half-days ${it.halfDays.size}") }
-        of<CalendarVersions>("calendar.json")?.let { appendLine("Calendar: versions written ${it.written.size}") }
+        of<CalendarState>("calendar.json")?.let { appendLine("Calendar: versions written ${it.written.size}") }
         of<Settings>("settings.json")?.let { appendLine("Settings: armed ${it.armed}, Claude ${it.aiEnabled && it.aiKeyActive}, classes ${it.classMap.size}") }
     }
 
@@ -321,7 +364,10 @@ class RehearsalTest {
         val REQUIRED = listOf("tasks.json", "settings.json", "runtime.json", "log.json")
 
         /** Every store's file, the secrets aside (they can't be read off the phone). */
-        val STORES = REQUIRED + listOf("instructions.json", "chat.json", "chat-archive.json", "school.json", "memory.json", "calendar.json")
+        val STORES = REQUIRED + listOf("instructions.json", "chat.json", "chat-archive.json", "school.json", "memory.json", "calendar.json") + listOf("session.json", "protection.json", "model.json", "anki.json", "learning.json")
+
+        /** The files runtime.json's split made (4.0.13): there, through it, wherever the runtime was. */
+        val SPLIT = setOf("session.json", "protection.json", "model.json", "anki.json", "learning.json")
 
         /**
          * The lists 4.0.0's move reshapes, by file and path: Felix's records and their lists from the log into
@@ -332,6 +378,8 @@ class RehearsalTest {
             "log.json felix", "log.json felix[].replies", "log.json felix[].asks", "runtime.json assessLater",
             "chat.json messages", "chat.json messages[].suggestedReplies", "chat.json messages[].asks",
             "chat.json messages[].acts", "chat.json messages[].done", "chat.json messages[].memoryEdits", "chat.json messages[].remembered",
+            // 4.0.13's: a task's steps of yours into its mine (counted in [describe], your steps).
+            "tasks.json tasks[].userSteps", "tasks.json unrewarded[].userSteps",
         )
     }
 }

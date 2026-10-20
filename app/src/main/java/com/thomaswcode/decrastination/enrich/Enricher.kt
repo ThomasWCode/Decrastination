@@ -3,6 +3,7 @@ package com.thomaswcode.decrastination.enrich
 import com.thomaswcode.decrastination.core.AnkiRules
 import com.thomaswcode.decrastination.core.Enrichment
 import com.thomaswcode.decrastination.core.Enrichments
+import com.thomaswcode.decrastination.core.StepOrigin
 import com.thomaswcode.decrastination.core.SubStep
 import com.thomaswcode.decrastination.core.TaskItem
 
@@ -75,7 +76,7 @@ class RuleEnricher : Enricher {
             return items.map { item ->
                 // Tagged only if learning the words is all it asks: other work in it stays planned.
                 val sections = if (AnkiRules.vocabularyOnly(item)) AnkiRules.linkedSections(item).map { (major, minor) -> "$major.$minor" } else emptyList()
-                SubStep(title(item), each, ankiSections = sections)
+                SubStep(title(item), each, ankiSections = sections, origin = StepOrigin.Rules)
             }
         }
 

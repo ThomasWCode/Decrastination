@@ -1,21 +1,20 @@
 package com.thomaswcode.decrastination.data
 
 import com.thomaswcode.decrastination.Fixtures
+import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.ChatArchive
 import com.thomaswcode.decrastination.core.ChatState
-import com.thomaswcode.decrastination.core.ChangeType
+import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.InstructionState
 import com.thomaswcode.decrastination.core.InstructionStatus
-import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.MemoryState
 import com.thomaswcode.decrastination.core.MessageKind
+import com.thomaswcode.decrastination.core.Mine
 import com.thomaswcode.decrastination.core.SchoolCalendar
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.core.Status
-import com.thomaswcode.decrastination.core.TaskOverrides
-import com.thomaswcode.decrastination.core.overrides
 import com.thomaswcode.decrastination.felix.FelixPrompts
 import java.io.File
 import java.nio.file.Files
@@ -61,13 +60,18 @@ class StoresDecodeTest {
         store("tasks.json", TaskState.serializer(), ::TaskState),
         store("settings.json", Settings.serializer(), ::Settings),
         store("runtime.json", RuntimeState.serializer(), ::RuntimeState),
+        store("session.json", SessionState.serializer(), ::SessionState, since = "2026-10-20"),
+        store("protection.json", ProtectionState.serializer(), ::ProtectionState, since = "2026-10-20"),
+        store("model.json", ModelState.serializer(), ::ModelState, since = "2026-10-20"),
+        store("anki.json", AnkiState.serializer(), ::AnkiState, since = "2026-10-20"),
+        store("learning.json", LearningState.serializer(), ::LearningState, since = "2026-10-20"),
         store("log.json", ActivityLog.serializer(), ::ActivityLog),
         store("instructions.json", InstructionState.serializer(), ::InstructionState),
         store("chat.json", ChatState.serializer(), ::ChatState),
         store("chat-archive.json", ChatArchive.serializer(), ::ChatArchive, since = "2026-10-19"),
         store("school.json", SchoolCalendar.serializer(), ::SchoolCalendar),
         store("memory.json", MemoryState.serializer(), ::MemoryState),
-        store("calendar.json", CalendarVersions.serializer(), ::CalendarVersions),
+        store("calendar.json", CalendarState.serializer(), ::CalendarState),
     )
 
     /** The stores there are in the shape of [dir]. */
@@ -94,7 +98,7 @@ class StoresDecodeTest {
             val stores = Stores(copy, Reverse)
             // The chat's archive, a month a file: all of it read, then what couldn't be.
             if (store.file == stores.chatArchive.name) return stores.chatArchive.value.let { it to stores.chatArchive.problems.firstOrNull() }
-            val read = stores.let { s -> listOf(s.tasks, s.settings, s.runtime, s.log, s.instructions, s.chat, s.school, s.memory, s.calendarVersions) }.single { it.name == store.file }
+            val read = stores.let { s -> listOf(s.tasks, s.settings, s.runtime, s.session, s.protection, s.model, s.anki, s.learning, s.log, s.instructions, s.chat, s.school, s.memory, s.calendar) }.single { it.name == store.file }
             return read.value to read.problem
         } finally {
             copy.deleteRecursively()
@@ -194,15 +198,15 @@ class StoresDecodeTest {
         // Steps of each kind: the reading's, the rules', yours, Felix's (by an instruction), your own task's, the source's.
         assertTrue(byId.getValue("teams:as-essay").let { t -> t.enrichment?.by != "rules" && t.subSteps.map { it.title } == t.enrichment?.subSteps?.map { it.title } })
         assertEquals("rules", byId.getValue("gmail:thr-trip").enrichment?.by)
-        assertNotNull(byId.getValue("teams:as-sheet").userSteps)
-        assertNotNull(byId.getValue("powerplanner:pp-poster").userSteps)
+        assertNotNull(byId.getValue("teams:as-sheet").mine.steps?.steps)
+        assertNotNull(byId.getValue("powerplanner:pp-poster").mine.steps?.steps)
         assertTrue(byId.getValue("own:own-1").subSteps.isNotEmpty())
         assertTrue(byId.getValue("anki:deck-2.3").let { it.derived && it.subSteps.isNotEmpty() })
         // A paced total, and every one of your values on some task.
-        assertTrue(byId.getValue("teams:as-essay").let { it.userEffortPacedFrom != null && it.userEffortPacedHash != null && it.userEffortMin != null })
+        assertTrue(byId.getValue("teams:as-essay").let { it.mine.minutes?.paced?.from != null && it.mine.minutes?.paced?.contentHash != null && it.mine.minutes?.minutes != null })
         val yours = state.tasks.flatMap { t ->
-            listOfNotNull("notATask".takeIf { t.userNotATask }, "from".takeIf { t.userFrom != null }, "after".takeIf { t.userAfter != null }, "dueAt".takeIf { t.userDueAt != null },
-                "onDay".takeIf { t.userOnDay != null }, "atTime".takeIf { t.userAtTime != null }, "sameAs".takeIf { t.userSameAs != null }, "steps".takeIf { t.userSteps != null }, "title".takeIf { t.userTitle != null })
+            listOfNotNull("notATask".takeIf { t.mine.notATask != null }, "from".takeIf { t.mine.from?.value != null }, "after".takeIf { t.mine.after?.value != null }, "dueAt".takeIf { t.mine.dueAt?.value != null },
+                "onDay".takeIf { t.mine.onDay?.value != null }, "atTime".takeIf { t.mine.atTime?.value != null }, "sameAs".takeIf { t.mine.sameAs?.value != null }, "steps".takeIf { t.mine.steps?.steps != null }, "title".takeIf { t.mine.title?.value != null })
         }.toSet()
         assertEquals(setOf("notATask", "from", "after", "dueAt", "onDay", "atTime", "sameAs", "steps", "title"), yours)
         // Finished: done, missed; an email's extras.
@@ -218,7 +222,7 @@ class StoresDecodeTest {
         // What's in use is what the tasks carry: laid again, nothing on them would change.
         val tasks = (read(store("tasks.json"), now).first as TaskState).tasks
         val laid = InstructionRules.taskOverrides(state.applied)
-        for (task in tasks) assertEquals(laid[task.id] ?: TaskOverrides.NONE, task.overrides(), "${task.id}'s values aren't its instructions'")
+        for (task in tasks) assertEquals(laid[task.id] ?: Mine.NONE, task.mine, "${task.id}'s values aren't its instructions'")
     }
 
     @Test

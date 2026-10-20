@@ -45,6 +45,8 @@ class JsonStore<T>(
     private val default: () -> T,
     /** Tidies a state as loaded: drops what has expired, fixes what a crash left half done. */
     private val onLoad: (T) -> T = { it },
+    /** What every state written keeps true, whoever changes it: each task step given its id ([TaskState.withStepIds]). */
+    private val onWrite: (T) -> T = { it },
     /** What a file that can't be read starts from, under what can be kept of it: [default], unless it's safer otherwise. */
     private val unreadable: () -> T = default,
     private val clock: () -> Long = System::currentTimeMillis,
@@ -101,7 +103,7 @@ class JsonStore<T>(
 
     /** Applies [transform] and saves the result, if it changed anything. Returns the new state. */
     suspend fun update(transform: (T) -> T): T = mutex.withLock {
-        val next = transform(_state.value)
+        val next = onWrite(transform(_state.value))
         if (next != _state.value) {
             withContext(Dispatchers.IO) { write(next) }
             _state.value = next
@@ -201,14 +203,19 @@ class JsonStore<T>(
                         "without your dad's authenticator, loosening waits the full delay till protection is armed again with a new one" + copied
                     "settings.json" -> "Settings"
                     "tasks.json" -> "The task list"
-                    "runtime.json" -> "The app's running state (free time, today's slots, calendar answers)"
+                    "runtime.json" -> "The app's running state (held notifications, the daily jobs' runs, the Teams sync)"
+                    "session.json" -> "Today's free time and slots, and work under way"
+                    "protection.json" -> "Protection's state (waiting changes, the code lock)"
+                    "model.json" -> "Claude's month and its recent calls"
+                    "anki.json" -> "What the app read of AnkiDroid"
+                    "learning.json" -> "What the app has learned of your pace"
                     "log.json" -> "The activity log"
                     "instructions.json" -> "Your instructions"
                     "chat.json" -> "The chat"
                     "chat-archive.json" -> "The chat's earlier messages"
                     "school.json" -> "Your school calendar (days off and half-days)"
                     "memory.json" -> "What Felix remembers"
-                    "calendar.json" -> "The record of what the app wrote to your calendar"
+                    "calendar.json" -> "The record of what the app wrote to your calendar, and your answers about its events"
                     else -> if (file.startsWith("chat-archive-")) "The chat's earlier messages from ${file.removePrefix("chat-archive-").removeSuffix(".json")}" else file
                 }
                 val how = if (kept) "couldn't be read whole: what could be was kept, the rest is back to its defaults" else "couldn't be read: it started afresh"

@@ -1,88 +1,33 @@
 package com.thomaswcode.decrastination.data
 
-import com.thomaswcode.decrastination.block.Credit
 import com.thomaswcode.decrastination.block.TeamsAutoSync
-import com.thomaswcode.decrastination.core.Calibration
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Source
-import com.thomaswcode.decrastination.core.Uptime
 import com.thomaswcode.decrastination.core.WindowKind
-import com.thomaswcode.decrastination.enrich.AiUsage
 import com.thomaswcode.decrastination.learn.CheckIn
 import com.thomaswcode.decrastination.learn.DayRecord
-import com.thomaswcode.decrastination.protect.CodeLock
-import com.thomaswcode.decrastination.protect.PendingChange
 import kotlinx.serialization.Serializable
 
-/** What the blocker and its protection keep from moment to moment. Kept in `runtime.json`. */
+/**
+ * What's left of the app's state from moment to moment once each owner has its own file (Stage 7): the
+ * notifier's counts and held list, the daily runs, the last backup, Teams' syncs, duplicates told apart,
+ * the files found unreadable. Kept in `runtime.json`.
+ */
 @Serializable
 data class RuntimeState(
-    val credit: Credit = Credit(),
-    /** Today's slot starts as the last plan laid them, and the slots missed (PL-13). */
-    val slots: com.thomaswcode.decrastination.core.SlotState = com.thomaswcode.decrastination.core.SlotState(),
-    /** Each slot event's start as the app last wrote it to the calendar, by its URI (NF-07): one since moved was moved by you. */
-    val calendarWritten: Map<String, Long> = emptyMap(),
-    /** The calendar those were written to, so a change of calendar takes them out of the old one. */
-    val calendarWrittenTo: Long? = null,
-    /** Calendars no longer written to whose events of the app's are still to be taken out (no permission, or a failure, the last time). */
-    val calendarsToClear: List<Long> = emptyList(),
-    /** Photo checks found done whose due (the task's step or minutes, the log, free time) isn't all given yet. */
-    val photosDone: List<PhotoDone> = emptyList(),
-    /** Slots being kept whose due (the task's step or minutes, the log, free time) isn't all given yet (LR-09). */
-    val keeping: List<Keeping> = emptyList(),
     /** The routine notifications gone today, by date (LR-07): only today's kept. */
     val notifiedToday: Map<String, Int> = emptyMap(),
     /** Those held back by the ceiling or quiet hours (LR-07), to go at the next briefing. */
     val heldNotifications: List<HeldNotification> = emptyList(),
-    /** The decks' counts read as AnkiDroid came and went (NF-03): the last [com.thomaswcode.decrastination.learn.AnkiProgress.KEEP]. */
-    val ankiReadings: List<com.thomaswcode.decrastination.learn.AnkiReading> = emptyList(),
-    /** Since when AnkiDroid has been in front, read coming in; null when it isn't. */
-    val ankiFrontSince: Long? = null,
-    /** AnkiDroid time on deck tasks today not in a kept slot yet (NF-03): the visits before the one that finishes their cards. */
-    val ankiWorked: AnkiWorked = AnkiWorked(),
-    /** Tasks whose call the API wouldn't take as asked (AC-04), with the input it refused: sent again once that changes. */
-    val enrichFailed: Map<String, String> = emptyMap(),
-    /** Loosening changes waiting their delay. */
-    val pending: List<PendingChange> = emptyList(),
-    /** A parent code unblocked everything until then. */
-    val overrideUntil: Long? = null,
     /** When each of the daily alarms (briefing, check-in, review) last ran, so a late one isn't run twice. */
     val dailyRanAt: Map<String, Long> = emptyMap(),
     /** Daily alarms whose last run failed, to be tried again ([DailyRetry]). */
     val dailyRetries: Map<String, DailyRetry> = emptyMap(),
-    /** Whether the device admin was last left for an armed phone, so a disarm the app didn't see through is finished at start. */
-    val adminArmed: Boolean = false,
-    val codeLock: CodeLock = CodeLock(),
     val teamsAuto: TeamsAutoSync.State = TeamsAutoSync.State(),
-    val protection: ProtectionState = ProtectionState(),
-    /** Testing from a PC (adb only): blocking hours apply until then, whatever the time. */
-    val forceActiveUntil: Long? = null,
-    /** Up to when the pending changes' waits have been counted, by the uptime clock. */
-    val uptimeMark: Uptime? = null,
-    /** What the model has cost this month. */
-    val aiUsage: AiUsage = AiUsage(),
-    /** What the app has learned about how long things take you (docs/spec/learning.md). */
-    val calibration: Calibration = Calibration(),
-    /** Your answers about calendar events, by name: "free", "busy" or "load:<minutes>" (Q7). */
-    val eventAnswers: Map<String, String> = emptyMap(),
-    /** Events you've been asked about, by name, so each is asked once. */
-    val eventsAsked: Set<String> = emptySet(),
-    /**
-     * Dropped-plan warnings shown: each task's id, and the content (its enrichment's input hash) of
-     * the plan it was about. One not here (laid while notifications couldn't show it) is shown once
-     * they can; a later plan dropped for changed content is another warning.
-     */
-    val droppedAlerted: Map<String, String> = emptyMap(),
     /** When the nightly backup was last written (AR-07): null before the first. */
     val lastBackupAt: Long? = null,
-    /** The model's last calls (AC-07), oldest first: [CallRecord.MAX] of them. */
-    val calls: List<CallRecord> = emptyList(),
     /** Pairs of tasks you've said aren't the same work (DX-15), by [com.thomaswcode.decrastination.core.Duplicates.key]: not asked about again. */
     val notSame: List<String> = emptyList(),
-    /** Today's and tomorrow's pieces' first steps (AI-15), by piece key: written ahead, as the plan has them. */
-    val microPlans: Map<String, com.thomaswcode.decrastination.enrich.MicroPlan> = emptyMap(),
-    /** Completions whose free time has been given, so each is given once (`Focus.onCompleted`); kept a fortnight. */
-    val rewarded: List<Rewarded> = emptyList(),
     /** Saved files found unreadable at a start (IMP-P1-003), till you've seen them in Setup. */
     val unreadable: List<JsonStore.Unreadable> = emptyList(),
     /**
@@ -91,7 +36,7 @@ data class RuntimeState(
      */
     val unreadableSeen: List<String> = emptyList(),
     /** The shape this is in ([Migration]): raised with each change of it, a migration bringing older files to it. */
-    val version: Int = 2,
+    val version: Int = 3,
 ) {
     /** With [found] (this start's) on Setup's list: each once, and none you've seen. */
     fun withUnreadable(found: List<JsonStore.Unreadable>): RuntimeState {
@@ -110,21 +55,6 @@ data class RuntimeState(
         const val MAX_UNREADABLE_SEEN = 24
     }
 }
-
-/** The watchdog's last finding. */
-@Serializable
-data class ProtectionState(
-    val problems: List<String> = emptyList(),
-    /** Since when something has been wrong; null while all is well. */
-    val offSince: Long? = null,
-    val checkedAt: Long? = null,
-    /** Since when the service has been switched on but not running (crashed). */
-    val stoppedSince: Long? = null,
-    /** When the watchdog last switched a stopped service off and on. */
-    val restartedAt: Long? = null,
-    /** Restarts in a row that it hasn't stayed up after; back to 0 once it's seen running. */
-    val restartTries: Int = 0,
-)
 
 /**
  * What happened, for calibration, the weekly review and the stats (docs/spec/learning.md): slots
@@ -287,58 +217,6 @@ data class BlockRecord(val at: Long, val target: String, val reason: String)
 @Serializable
 data class ProtectionRecord(val at: Long, val problems: List<String>, val repaired: Boolean)
 
-/** A completion that has had its free time: the task, and when it was confirmed done. */
-@Serializable
-data class Rewarded(val taskId: String, val doneAt: Long)
-
-/** A piece a photo check found done: what it's owed, saved before any of it is given (`Focus.photoChecked`). */
-@Serializable
-data class PhotoDone(
-    val id: String,
-    val taskId: String,
-    val step: String?,
-    val minutes: Int,
-    val at: Long,
-    /** Its step's place in its task's list; null from before this was kept. */
-    val stepIndex: Int? = null,
-    /** The piece it was for ([com.thomaswcode.decrastination.core.Chunk.key], LR-09): its slot is kept by it. */
-    val key: String? = null,
-    /** When the photo was taken (the check began): a slot of its key kept before then is another's. */
-    val takenAt: Long? = null,
-)
-
-/**
- * A slot being kept (LR-09), saved before anything changes, so a stop part-way is carried through at
- * start-up (`Focus.finishKeeps`): its [record]; its task's step to tick ([stepIndex], still [step]),
- * none for a box of time or a sitting before its step's last, and the minutes worked on the task
- * before ([workedBefore]), so the task's change
- * is made once; the free time it earns; the miss of it today it [replaces]; and the [photo] that
- * kept it, let go with it. [earnOnly]: a slot kept already, earning now (its photo passed): the
- * record it [replaces] marked, nothing done to the task.
- */
-@Serializable
-data class Keeping(
-    val record: SlotRecord,
-    val stepIndex: Int?,
-    val step: String?,
-    val workedBefore: Int,
-    val earningMin: Double,
-    val replaces: SlotRecord? = null,
-    val photo: PhotoDone? = null,
-    val earnOnly: Boolean = false,
-)
-
-/** Minutes in AnkiDroid on each deck task on [date] (NF-03), kept till the visit that finishes its cards. */
-@Serializable
-data class AnkiWorked(val date: String = "", val minutes: Map<String, Int> = emptyMap()) {
-    /** As it stands on [date]: a new day starts empty. */
-    fun on(date: String): AnkiWorked = if (this.date == date) this else AnkiWorked(date)
-
-    fun plus(taskId: String, add: Int): AnkiWorked = copy(minutes = minutes + (taskId to (minutes[taskId] ?: 0) + add))
-
-    fun without(taskId: String): AnkiWorked = copy(minutes = minutes - taskId)
-}
-
 /** A notification held back (LR-07): where it was to go, what it said, and its tap and buttons ([taps]), to be made again with. */
 @Serializable
 data class HeldNotification(val channel: String, val id: Int, val tag: String? = null, val at: Long, val title: String, val text: String, val taps: List<HeldTap> = emptyList())
@@ -357,44 +235,3 @@ data class HeldReply(val key: String, val label: String, val choices: List<Strin
 /** A daily alarm's run that failed: tried again [at], this being try [tries] (`Daily.failed`). */
 @Serializable
 data class DailyRetry(val at: Long, val tries: Int)
-
-/**
- * One model call as it went (AC-07): when, its job and what it was about, how hard it thought, its
- * tokens (in, out, and read from the cache), how long it took, why it stopped, how it went (used,
- * repaired, salvaged, dropped:<why>, refused, failed:<why>, empty), and what it cost.
- */
-@Serializable
-data class CallRecord(
-    val at: Long,
-    val job: String,
-    val title: String? = null,
-    val effort: String,
-    val inTokens: Long = 0,
-    val outTokens: Long = 0,
-    val cacheRead: Long = 0,
-    val latencyMs: Long = 0,
-    val stop: String? = null,
-    val outcome: String,
-    val costUsd: Double = 0.0,
-) {
-    /** All of it as the record's row shows it opened, to copy. */
-    fun details(zone: java.time.ZoneId): String = buildString {
-        append(java.time.Instant.ofEpochMilli(at).atZone(zone).toLocalDateTime().withNano(0).toString().replace('T', ' '))
-        append(" · ").append(job)
-        title?.let { append(" · “").append(it).append('”') }
-        append('\n').append("Effort ").append(effort).append(" · ").append(inTokens).append(" in")
-        if (cacheRead > 0) append(" (").append(cacheRead).append(" from the cache)")
-        append(", ").append(outTokens).append(" out · ").append("%.1f s".format(java.util.Locale.UK, latencyMs / 1000.0))
-        stop?.let { append(" · ").append(it) }
-        append('\n').append(outcome).append(" · ").append("$%.4f".format(java.util.Locale.UK, costUsd))
-    }
-
-    companion object {
-        /** The most kept: the last hundred. */
-        const val MAX = 100
-    }
-}
-
-/** These calls and [call], by when each began (one comes back after another sent since), as many as are kept. */
-fun List<CallRecord>.plusCall(call: CallRecord): List<CallRecord> = (this + call).sortedBy { it.at }.takeLast(CallRecord.MAX)
-

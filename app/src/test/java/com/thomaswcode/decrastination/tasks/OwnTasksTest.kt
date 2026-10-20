@@ -78,17 +78,22 @@ class OwnTasksTest {
     }
 
     @Test
-    fun `yours done a fortnight ago go, and the card that added one can add it again`() = runBlocking {
-        h.ownTasks.saveOwnTask("old", OwnTask(title = "Old one"))
-        h.ownTasks.saveOwnTask("new", OwnTask(title = "New one"))
+    fun `yours done a fortnight ago are kept as their record, and the card that added one stays made`() = runBlocking {
+        h.ownTasks.saveOwnTask("old", OwnTask(title = "Old one", notes = "Pages 4 to 9", steps = listOf(OwnStep("Read", 15), OwnStep("Note", 15))))
+        h.ownTasks.saveOwnTask("new", OwnTask(title = "New one", notes = "Pages 10 to 12"))
         h.ownTasks.finishOwnTask("own:old")
         h.clock.time += 10 * DAY_MS
         h.ownTasks.finishOwnTask("own:new")
         h.clock.time += 5 * DAY_MS
         card("own:old")
+        val made = cardState()
+        val old = h.stores.tasks.value.tasks.first { it.id == "own:old" }
         h.ownTasks.pruneOwn()
-        assertEquals(listOf("own:new"), h.stores.tasks.value.tasks.map { it.id })
-        assertEquals(ProposalState.Proposed to null, cardState())
+        // Both kept: the older without its notes, the rest of it (its title, steps, when it was done) as it was.
+        assertEquals(listOf("own:old", "own:new"), h.stores.tasks.value.tasks.map { it.id })
+        assertEquals(old.copy(detail = ""), h.stores.tasks.value.tasks.first { it.id == "own:old" })
+        assertEquals("Pages 10 to 12", h.stores.tasks.value.tasks.first { it.id == "own:new" }.detail)
+        assertEquals(made, cardState())
     }
 
     @Test
@@ -97,7 +102,7 @@ class OwnTasksTest {
         val notATask = Instruction("not", "Not a task", About(taskId = "own:mine"), h.clock.now(), state = InstructionStatus.Applied, changes = listOf(Change(ChangeType.NotATask, taskId = "own:mine")), appliedAt = h.clock.now())
         h.stores.instructions.update { it.copy(instructions = listOf(notATask)) }
         h.ownTasks.saveOwnTask("mine", OwnTask(title = "Revise"))
-        assertTrue(own().userNotATask)
+        assertTrue(own().mine.notATask != null)
         assertNull(own().doneAt)
     }
 

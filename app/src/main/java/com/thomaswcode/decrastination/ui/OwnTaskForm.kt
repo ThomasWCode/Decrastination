@@ -93,7 +93,7 @@ fun OwnTaskForm(graph: AppGraph, editing: TaskItem?, initial: OwnTask? = null, o
         // The steps as listed, each with its own dates as it had them.
         steps = rows.map { r ->
             val was = r.wasIndex?.let { start.steps.getOrNull(it) }
-            OwnStep(r.title.trim(), r.min, was?.from, was?.dueAt, r.where, r.wasIndex)
+            OwnStep(r.title.trim(), r.min, was?.from, was?.dueAt, r.where, id = was?.id.orEmpty(), wasIndex = r.wasIndex)
         },
         fromForm = true,
     )

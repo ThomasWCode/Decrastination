@@ -12,6 +12,8 @@ import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.Uptime
 import com.thomaswcode.decrastination.data.ChatMigration
 import com.thomaswcode.decrastination.data.JsonStore
+import com.thomaswcode.decrastination.data.ProtectionState
+import com.thomaswcode.decrastination.data.RuntimeSplit
 import com.thomaswcode.decrastination.data.RuntimeState
 import com.thomaswcode.decrastination.data.SecretCipher
 import com.thomaswcode.decrastination.data.SecretStore
@@ -40,9 +42,10 @@ class SettingsScreenStateTest {
     private val dir: File = Files.createTempDirectory("settings-screen").toFile()
     private val clock = FixedClock(Fixtures.at("2026-10-19T16:00"), LONDON, up = Uptime(boot = 1, elapsedMs = 1_000_000))
     private val settings = JsonStore(File(dir, "settings.json"), Settings.serializer(), ::Settings)
-    private val runtime = JsonStore(File(dir, "runtime.json"), RuntimeState.serializer(), ::RuntimeState, migrations = listOf(ChatMigration.RUNTIME))
+    private val runtime = JsonStore(File(dir, "runtime.json"), RuntimeState.serializer(), ::RuntimeState, migrations = listOf(ChatMigration.RUNTIME, RuntimeSplit.RUNTIME))
+    private val protectionState = JsonStore(File(dir, "protection.json"), ProtectionState.serializer(), ::ProtectionState)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-    private val protection = Protection(settings, runtime, SecretStore(File(dir, "secrets.bin"), Reverse, clock = { clock.now() }), clock, scope, adminActive = { false }) {}
+    private val protection = Protection(settings, protectionState, SecretStore(File(dir, "secrets.bin"), Reverse, clock = { clock.now() }), clock, scope, adminActive = { false }) {}
 
     /** How often the reminders' alarms were set again after a save. */
     private var scheduled = 0

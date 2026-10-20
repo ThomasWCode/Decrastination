@@ -12,11 +12,12 @@ import com.thomaswcode.decrastination.core.SubStep
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.WindowKind
 import com.thomaswcode.decrastination.data.ProtectionState
-import com.thomaswcode.decrastination.data.RuntimeState
+import com.thomaswcode.decrastination.data.SessionState
 import com.thomaswcode.decrastination.data.SlotOutcome
 import com.thomaswcode.decrastination.data.SlotRecord
 import com.thomaswcode.decrastination.data.SourceStatus
 import com.thomaswcode.decrastination.data.TaskState
+import com.thomaswcode.decrastination.data.WatchdogState
 import com.thomaswcode.decrastination.ui.Format
 import java.time.LocalDate
 import kotlin.test.Test
@@ -118,16 +119,16 @@ class WidgetModelTest {
 
     @Test
     fun `protection trouble comes first, loudest when armed`() {
-        val off = RuntimeState(protection = ProtectionState(problems = listOf("The focus service is off: nothing is blocked")))
+        val off = ProtectionState(protection = WatchdogState(problems = listOf("The focus service is off: nothing is blocked")))
         val plan = Planner.plan(Planner.Input(emptyList(), now, LONDON, Settings()))
-        assertEquals("The focus service is off: nothing is blocked", WidgetModel.from(plan, TaskState(), LONDON, off, armed = false).warning)
-        assertEquals("PROTECTION OFF: The focus service is off: nothing is blocked", WidgetModel.from(plan, TaskState(), LONDON, off, armed = true).warning)
+        assertEquals("The focus service is off: nothing is blocked", WidgetModel.from(plan, TaskState(), LONDON, protection = off, armed = false).warning)
+        assertEquals("PROTECTION OFF: The focus service is off: nothing is blocked", WidgetModel.from(plan, TaskState(), LONDON, protection = off, armed = true).warning)
     }
 
     @Test
     fun `free time shows in the summary`() {
         val plan = Planner.plan(Planner.Input(emptyList(), now, LONDON, Settings()))
-        val credit = RuntimeState(credit = com.thomaswcode.decrastination.block.Credit().earn(java.time.LocalDate.of(2026, 10, 9), 15.0))
+        val credit = SessionState(credit = com.thomaswcode.decrastination.block.Credit().earn(java.time.LocalDate.of(2026, 10, 9), 15.0))
         assertEquals("Nothing due soon · 15 min of free time", WidgetModel.from(plan, TaskState(), LONDON, credit).summary)
     }
 

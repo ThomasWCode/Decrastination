@@ -14,8 +14,11 @@ import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.data.ChatMigration
 import com.thomaswcode.decrastination.data.JsonStore
+import com.thomaswcode.decrastination.data.ModelState
+import com.thomaswcode.decrastination.data.RuntimeSplit
 import com.thomaswcode.decrastination.data.RuntimeState
 import com.thomaswcode.decrastination.data.TaskState
+import com.thomaswcode.decrastination.data.TasksMigration
 import java.io.File
 import java.net.UnknownHostException
 import java.nio.file.Files
@@ -41,13 +44,14 @@ class ModelGatewayTest {
     private val dir: File = Files.createTempDirectory("gateway").toFile()
     private val clock = FixedClock(Fixtures.at("2026-10-14T18:00"), Fixtures.LONDON)
     private val settings = JsonStore(File(dir, "settings.json"), Settings.serializer(), { Settings(aiEnabled = true, aiKeyActive = true) })
-    private val runtime = JsonStore(File(dir, "runtime.json"), RuntimeState.serializer(), ::RuntimeState, migrations = listOf(ChatMigration.RUNTIME))
-    private val tasks = JsonStore(File(dir, "tasks.json"), TaskState.serializer(), ::TaskState)
+    private val runtime = JsonStore(File(dir, "runtime.json"), RuntimeState.serializer(), ::RuntimeState, migrations = listOf(ChatMigration.RUNTIME, RuntimeSplit.RUNTIME))
+    private val model = JsonStore(File(dir, "model.json"), ModelState.serializer(), ::ModelState)
+    private val tasks = JsonStore(File(dir, "tasks.json"), TaskState.serializer(), ::TaskState, migrations = listOf(TasksMigration.TASKS))
     private var key: String? = "test-key"
     private val alerts = Alerts()
     private val retries = mutableListOf<Long>()
     private val job = SupervisorJob()
-    private val gateway = ModelGateway(settings, { key }, runtime, tasks, clock, alerts, CoroutineScope(job + Dispatchers.Default)) { retries += it }
+    private val gateway = ModelGateway(settings, { key }, model, tasks, clock, alerts, CoroutineScope(job + Dispatchers.Default)) { retries += it }
 
     private val chat = ModelCalls.OnRecord<String>(ModelEffort.Job.Chat, "A question") { ModelCalls.Usage(1_200, 80, 900, "end_turn") to "used" }
 
@@ -71,9 +75,9 @@ class ModelGatewayTest {
     fun `a call that goes through is counted, its cost kept and put on record`() = runTest {
         val called = ask()
         assertEquals(Called.Answered("an answer"), called)
-        assertEquals(0.05, runtime.value.aiUsage.spentUsd, 1e-9)
-        assertEquals(1, runtime.value.aiUsage.calls)
-        val record = runtime.value.calls.single()
+        assertEquals(0.05, model.value.aiUsage.spentUsd, 1e-9)
+        assertEquals(1, model.value.aiUsage.calls)
+        val record = model.value.calls.single()
         assertEquals(listOf("Chat", "A question", "medium", "used"), listOf(record.job, record.title, record.effort, record.outcome))
         assertEquals(listOf(1_200L, 80L, 900L), listOf(record.inTokens, record.outTokens, record.cacheRead))
         assertEquals(0.05, record.costUsd, 1e-9)
@@ -83,19 +87,19 @@ class ModelGatewayTest {
     fun `a failure rests the model by its kind, a background call held through it, one someone waits for asked`() = runTest {
         // No network: no rest, the next try waits for one.
         assertIs<Called.Failed>(ask { throw UnknownHostException("no network") })
-        assertNull(runtime.value.aiUsage.restUntil)
-        assertEquals("Network", runtime.value.aiUsage.lastFailureClass)
+        assertNull(model.value.aiUsage.restUntil)
+        assertEquals("Network", model.value.aiUsage.lastFailureClass)
         // A failure of no known kind: a quarter of an hour's rest, and the readings asked again after it.
         assertIs<Called.Failed>(ask { throw IllegalStateException("something else") })
-        assertEquals(clock.time + 15 * 60_000L, runtime.value.aiUsage.restUntil)
+        assertEquals(clock.time + 15 * 60_000L, model.value.aiUsage.restUntil)
         assertEquals(listOf(15 * 60_000L + 60_000L), retries)
-        assertEquals("failed:unknown", runtime.value.calls.last().outcome)
+        assertEquals("failed:unknown", model.value.calls.last().outcome)
         assertEquals(ModelHold.Resting, gateway.hold(interactive = false))
         assertNull(gateway.hold(interactive = true))
         assertIs<Called.Held>(ask(interactive = false))
         assertEquals(Called.Answered("an answer"), ask(interactive = true))
         // It went through: the rest is over.
-        assertNull(runtime.value.aiUsage.restUntil)
+        assertNull(model.value.aiUsage.restUntil)
         assertTrue(gateway.available())
     }
 
@@ -103,8 +107,8 @@ class ModelGatewayTest {
     fun `a key that's rejected is alerted once, holds even what someone waits for, and its alert goes once a call works`() = runTest {
         assertIs<Called.Failed>(ask { throw keyRejected })
         settle()
-        assertEquals(KeyProblem.Rejected, runtime.value.aiUsage.keyProblem)
-        assertEquals("Key", runtime.value.aiUsage.lastFailureClass)
+        assertEquals(KeyProblem.Rejected, model.value.aiUsage.keyProblem)
+        assertEquals("Key", model.value.aiUsage.lastFailureClass)
         assertEquals(listOf(KeyProblem.Rejected), alerts.keyProblems)
         // The key is what failed: not even a call someone waits for goes through its rest.
         assertEquals(ModelHold.Resting, gateway.hold(interactive = true))
@@ -114,7 +118,7 @@ class ModelGatewayTest {
         assertEquals(listOf(KeyProblem.Rejected), alerts.keyProblems)
         clock.time += 2 * 60 * 60_000L
         assertEquals(Called.Answered("an answer"), ask())
-        assertNull(runtime.value.aiUsage.keyProblem)
+        assertNull(model.value.aiUsage.keyProblem)
         assertEquals(1, alerts.fixed)
     }
 
@@ -122,21 +126,21 @@ class ModelGatewayTest {
     fun `a key problem that couldn't be shown is shown when the alerts are put right`() = runTest {
         alerts.showing = false
         assertIs<Called.Failed>(ask { throw keyRejected })
-        assertTrue(alerts.keyProblems.isEmpty() && runtime.value.aiUsage.keyAlertDue)
+        assertTrue(alerts.keyProblems.isEmpty() && model.value.aiUsage.keyAlertDue)
         alerts.showing = true
         gateway.reconcileAlerts()
         settle()
         assertEquals(listOf(KeyProblem.Rejected), alerts.keyProblems)
-        assertFalse(runtime.value.aiUsage.keyAlertDue)
+        assertFalse(model.value.aiUsage.keyAlertDue)
     }
 
     @Test
     fun `the cap holds a call that could pass it, the calls in flight counted at their dearest`() = runTest {
         settings.update { it.copy(aiMonthlyCapUsd = 2) }
-        runtime.update { it.copy(aiUsage = it.aiUsage.forMonth(AiUsage.monthOf(clock.time, clock.zone())).copy(spentUsd = 2.0 - Pricing.WORST_CALL_USD + 0.01)) }
+        model.update { it.copy(aiUsage = it.aiUsage.forMonth(AiUsage.monthOf(clock.time, clock.zone())).copy(spentUsd = 2.0 - Pricing.WORST_CALL_USD + 0.01)) }
         assertEquals(ModelHold.Capped, gateway.hold())
         assertEquals(Called.Held(ModelHold.Capped), ask(interactive = true))
-        runtime.update { it.copy(aiUsage = it.aiUsage.copy(spentUsd = 0.0)) }
+        model.update { it.copy(aiUsage = it.aiUsage.copy(spentUsd = 0.0)) }
         // One in flight counts at its dearest: a second beside it would pass $2, so it waits; alone, it goes.
         var second: Called<String>? = null
         assertEquals(Called.Answered("an answer"), ask { second = ask(); "an answer" })
@@ -149,8 +153,8 @@ class ModelGatewayTest {
         val task = TaskItem(id = "teams:a", source = Source.Teams, sourceId = "a", title = "A task", kind = Kind.Homework, firstSeenAt = clock.time, lastSeenAt = clock.time)
         val refused = com.anthropic.errors.BadRequestException.builder().headers(Headers.builder().build()).body(JsonValue.from(mapOf("type" to "error", "error" to mapOf("type" to "invalid_request_error", "message" to "no")))).build()
         assertIs<Called.Failed>(ask(task = task) { throw refused })
-        assertEquals(mapOf("teams:a" to Enrichments.inputHash(task)), runtime.value.enrichFailed)
-        assertEquals("BadRequest", runtime.value.aiUsage.lastFailureClass)
+        assertEquals(mapOf("teams:a" to Enrichments.inputHash(task)), model.value.enrichFailed)
+        assertEquals("BadRequest", model.value.aiUsage.lastFailureClass)
     }
 
     @Test
@@ -182,12 +186,12 @@ class ModelGatewayTest {
         val dropped = read.copy(enrichment = Enrichment(Enrichments.inputHash(read), "claude-opus-5-5", clock.time, dropped = "its steps didn't add up"))
         gateway.droppedAlerts(listOf(dropped))
         assertEquals(listOf("teams:b"), alerts.dropped)
-        assertEquals(mapOf("teams:b" to Enrichments.inputHash(read)), runtime.value.droppedAlerted)
+        assertEquals(mapOf("teams:b" to Enrichments.inputHash(read)), model.value.droppedAlerted)
         gateway.droppedAlerts(listOf(dropped))
         assertEquals(listOf("teams:b"), alerts.dropped)
         gateway.droppedAlerts(listOf(dropped.copy(status = Status.Done)))
         assertEquals(emptySet(), alerts.standing)
-        assertTrue(runtime.value.droppedAlerted.isEmpty())
+        assertTrue(model.value.droppedAlerted.isEmpty())
     }
 
     /** The HTTP client under [this] (the SDK wraps it afresh for each job's options, its retries around it): its connections. */

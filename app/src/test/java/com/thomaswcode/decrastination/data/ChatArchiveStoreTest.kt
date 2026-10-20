@@ -176,7 +176,7 @@ class ChatArchiveStoreTest {
     fun `a store read lazily reads its file only when it's first wanted`() = runBlocking {
         val file = File(dir, "chat-archive-2026-08.json").apply { writeText("{not json, but longer than an empty archive written is}") }
         val found = mutableListOf<JsonStore.Unreadable>()
-        val store = JsonStore(file, ChatArchive.serializer(), ::ChatArchive, lazily = true).also { s -> s.onProblem = { found += it } }
+        val store = JsonStore(file, ChatArchive.serializer(), ::ChatArchive, lazily = true, migrations = ChatArchiveStore.MIGRATIONS).also { s -> s.onProblem = { found += it } }
         assertFalse(store.isLoaded)
         assertNull(store.problem)
         assertEquals(ChatArchive(), store.value)

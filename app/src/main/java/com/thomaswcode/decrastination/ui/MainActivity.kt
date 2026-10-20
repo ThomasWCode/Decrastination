@@ -101,12 +101,14 @@ class MainActivity : ComponentActivity() {
         val syncing = syncs.any { !it.state.isFinished }
         val tasks by graph.tasks.state.collectAsStateWithLifecycle()
         val runtime by graph.runtime.state.collectAsStateWithLifecycle()
+        val model by graph.stores.model.state.collectAsStateWithLifecycle()
+        val protection by graph.stores.protection.state.collectAsStateWithLifecycle()
         val settings by graph.settings.state.collectAsStateWithLifecycle()
         // What Setup would show in red, as a mark that opens it (UI-18): a source failing, Claude's key,
         // protection, a file unreadable; and, the first run, no source read yet.
         val attention = Source.SYNCED.any { tasks.status(it).error != null } ||
-            (runtime.aiUsage.keyProblem != null && settings.aiEnabled && settings.aiKeyActive) ||
-            runtime.protection.problems.isNotEmpty() || runtime.unreadable.isNotEmpty() ||
+            (model.aiUsage.keyProblem != null && settings.aiEnabled && settings.aiKeyActive) ||
+            protection.protection.problems.isNotEmpty() || runtime.unreadable.isNotEmpty() ||
             Source.SYNCED.all { tasks.status(it).lastSuccessAt == null && tasks.status(it).error == null }
         var menu by remember { mutableStateOf(false) }
         Scaffold(

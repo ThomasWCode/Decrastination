@@ -69,6 +69,8 @@ fun SetupScreen(graph: AppGraph, activity: Activity, parts: Set<SetupPart> = Set
     val state by graph.tasks.state.collectAsStateWithLifecycle()
     val secrets by graph.secrets.present.collectAsStateWithLifecycle()
     val runtime by graph.runtime.state.collectAsStateWithLifecycle()
+    val model by graph.stores.model.state.collectAsStateWithLifecycle()
+    val protection by graph.stores.protection.state.collectAsStateWithLifecycle()
     val settings by graph.settings.state.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     var refresh by remember { mutableIntStateOf(0) }
@@ -178,7 +180,7 @@ fun SetupScreen(graph: AppGraph, activity: Activity, parts: Set<SetupPart> = Set
             )
         }
         if (SetupPart.Claude in parts) Group("Claude") {
-            val usage = runtime.aiUsage.forMonth(AiUsage.monthOf(graph.clock.now(), graph.clock.zone()))
+            val usage = model.aiUsage.forMonth(AiUsage.monthOf(graph.clock.now(), graph.clock.zone()))
             SetupItem(
                 title = "Claude",
                 done = settings.aiEnabled && settings.aiKeyActive && Secret.AnthropicApiKey in secrets && usage.lastError == null && usage.keyProblem == null,
@@ -206,8 +208,8 @@ fun SetupScreen(graph: AppGraph, activity: Activity, parts: Set<SetupPart> = Set
             if (calendarAllowed) CalendarSection(graph, activity, reading = false)
             SetupItem(
                 title = "Blocking and protection",
-                done = runtime.protection.problems.isEmpty() && runtime.protection.checkedAt != null,
-                detail = runtime.protection.problems.firstOrNull() ?: if (settings.armed) "Armed." else "Blocking works; protection isn't armed.",
+                done = protection.protection.problems.isEmpty() && protection.protection.checkedAt != null,
+                detail = protection.protection.problems.firstOrNull() ?: if (settings.armed) "Armed." else "Blocking works; protection isn't armed.",
                 action = "Open" to { activity.startActivity(Intent(activity, ProtectionActivity::class.java)) },
             )
         }
@@ -234,7 +236,7 @@ fun SetupScreen(graph: AppGraph, activity: Activity, parts: Set<SetupPart> = Set
                 graph.secrets.put(Secret.AnthropicApiKey, key)
                 // The last key's failure isn't this one's: it's tried at once, not after the rest, and
                 // its alert goes.
-                graph.runtime.update { it.copy(aiUsage = it.aiUsage.newKey()) }
+                graph.stores.model.update { it.copy(aiUsage = it.aiUsage.newKey()) }
                 ModelAlerts.keyFixed(activity)
                 // Put to use at once, armed or not: Claude works on the plan, not the blocker (12 Oct).
                 graph.protection.changeSettings { it.copy(aiKeyActive = true) }

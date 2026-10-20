@@ -4,6 +4,11 @@ import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
 import com.thomaswcode.decrastination.core.Calibration
 import java.time.LocalDate
+import com.thomaswcode.decrastination.core.yours
+import com.thomaswcode.decrastination.data.LearningState
+import com.thomaswcode.decrastination.data.ProtectionState
+import com.thomaswcode.decrastination.data.RuntimeSplit
+import com.thomaswcode.decrastination.data.SessionState
 import com.thomaswcode.decrastination.data.SlotOutcome
 import com.thomaswcode.decrastination.core.WindowKind
 import com.thomaswcode.decrastination.core.Slotter
@@ -19,7 +24,6 @@ import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.core.SubStep
 import com.thomaswcode.decrastination.core.TaskItem
-import com.thomaswcode.decrastination.core.Uptime
 import com.thomaswcode.decrastination.data.ActivityLog
 import com.thomaswcode.decrastination.data.ChatMigration
 import com.thomaswcode.decrastination.data.JsonStore
@@ -30,6 +34,7 @@ import com.thomaswcode.decrastination.data.SourceStatus
 import com.thomaswcode.decrastination.data.RuntimeState
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.data.TaskState
+import com.thomaswcode.decrastination.data.TasksMigration
 import java.io.File
 import java.nio.file.Files
 import java.util.concurrent.CountDownLatch
@@ -50,11 +55,14 @@ import kotlinx.coroutines.test.runTest
 class FocusTest {
     private val dir: File = Files.createTempDirectory("focus").toFile()
     private val clock = FixedClock(Fixtures.at("2026-10-10T12:00"), LONDON)
-    private val tasks = JsonStore(File(dir, "tasks.json"), TaskState.serializer(), ::TaskState)
+    private val tasks = JsonStore(File(dir, "tasks.json"), TaskState.serializer(), ::TaskState, migrations = listOf(TasksMigration.TASKS))
     private val settings = JsonStore(File(dir, "settings.json"), Settings.serializer(), ::Settings)
-    private val runtime = JsonStore(File(dir, "runtime.json"), RuntimeState.serializer(), ::RuntimeState, migrations = listOf(ChatMigration.RUNTIME))
+    private val runtime = JsonStore(File(dir, "runtime.json"), RuntimeState.serializer(), ::RuntimeState, migrations = listOf(ChatMigration.RUNTIME, RuntimeSplit.RUNTIME))
+    private val protection = JsonStore(File(dir, "protection.json"), ProtectionState.serializer(), ::ProtectionState)
+    private val session = JsonStore(File(dir, "session.json"), SessionState.serializer(), ::SessionState)
+    private val learning = JsonStore(File(dir, "learning.json"), LearningState.serializer(), ::LearningState)
     private val log = JsonStore(File(dir, "log.json"), ActivityLog.serializer(), ::ActivityLog, migrations = listOf(ChatMigration.LOG))
-    private val focus = Focus(tasks, settings, runtime, log, clock) { state, s, now -> Planner.plan(Planner.Input(state.tasks, now, LONDON, s)) }
+    private val focus = Focus(tasks, settings, session, learning, protection, log, clock) { state, s, now -> Planner.plan(Planner.Input(state.tasks, now, LONDON, s)) }
 
     private fun task(id: String, kind: Kind = Kind.Homework, due: String? = "2026-10-20T09:00", steps: List<SubStep> = emptyList(), effort: Int = 45) = TaskItem(
         id = "teams:$id", source = Source.Teams, sourceId = id, title = id, dueAt = due?.let(Fixtures::at), kind = kind,
@@ -83,12 +91,12 @@ class FocusTest {
 
     @Test
     fun `minutes you raise plan more time, but finishing earns no more than the app's estimate`() = runTest {
-        val raised = task("hw", effort = 30).copy(userEffortMin = 300, status = Status.Done, doneAt = clock.time)
+        val raised = task("hw", effort = 30).copy( status = Status.Done, doneAt = clock.time).yours(minutes = 300)
         focus.onCompleted(listOf(raised))
         // 30 minutes of the app's estimate, a third of it: not 30 minutes of credit for 300.
         assertEquals(10 * 60_000L, focus.creditLeftMs())
         // Lowered, it earns by yours.
-        val lowered = task("other", effort = 30).copy(userEffortMin = 15, status = Status.Done, doneAt = clock.time)
+        val lowered = task("other", effort = 30).copy( status = Status.Done, doneAt = clock.time).yours(minutes = 15)
         focus.onCompleted(listOf(lowered))
         assertEquals(15 * 60_000L, focus.creditLeftMs())
     }
@@ -97,11 +105,9 @@ class FocusTest {
     fun `a total Felix works out at your pace still teaches the pace, measured against the app's estimate`() = runTest {
         // 17 Oct: 40 minutes of the app's, Felix's steps and total of 60 at a pace of 1.5; and two hours of your own reckoning.
         val base = task("paced", effort = 40, steps = listOf(SubStep("Past paper", 60)))
-        val paced = base.copy(
-            userSteps = listOf(com.thomaswcode.decrastination.core.OwnStep("Past paper", 60)), userEffortMin = 60, userEffortPacedFrom = 40,
-            userEffortPacedHash = com.thomaswcode.decrastination.core.Enrichments.inputHash(base), status = Status.Done, doneAt = clock.time,
-        )
-        val yours = task("yours", effort = 40).copy(userEffortMin = 120, status = Status.Done, doneAt = clock.time)
+        val paced = base.copy( status = Status.Done, doneAt = clock.time,
+        ).yours(steps = listOf(com.thomaswcode.decrastination.core.OwnStep("Past paper", 60)), minutes = 60, pacedFrom = 40, pacedHash = com.thomaswcode.decrastination.core.Enrichments.inputHash(base))
+        val yours = task("yours", effort = 40).copy( status = Status.Done, doneAt = clock.time).yours(minutes = 120)
         // #50's review: estimated anew at 80 since, its content the same (read again for newer prompts):
         // still measured against the 40 Felix worked from. Its content changed: as a total of yours.
         val anew = paced.copy(id = "teams:anew", sourceId = "anew", sourceEffortMin = 80)
@@ -117,9 +123,9 @@ class FocusTest {
     @Test
     fun `with your steps and minutes, finishing earns no more than the app's estimate at the pace learned`() = runTest {
         // #49's review: 40 minutes of the app's at a pace of 1.5 is an hour; your steps and minutes say 80.
-        runtime.update { it.copy(calibration = Calibration(multipliers = mapOf(Calibration.key(Kind.Homework, null) to 1.5))) }
+        learning.update { it.copy(calibration = Calibration(multipliers = mapOf(Calibration.key(Kind.Homework, null) to 1.5))) }
         val steps = listOf(SubStep("Past paper", 80))
-        val given = task("hw", effort = 40, steps = steps).copy(userSteps = listOf(com.thomaswcode.decrastination.core.OwnStep("Past paper", 80)), userEffortMin = 80, status = Status.Done, doneAt = clock.time)
+        val given = task("hw", effort = 40, steps = steps).copy( status = Status.Done, doneAt = clock.time).yours(steps = listOf(com.thomaswcode.decrastination.core.OwnStep("Past paper", 80)), minutes = 80)
         focus.onCompleted(listOf(given))
         // The less of the two, each in its own scale: the app's hour, a third of it.
         assertEquals(20 * 60_000L, focus.creditLeftMs())
@@ -129,7 +135,7 @@ class FocusTest {
     fun `with your minutes raised and a step ticked, each estimate takes off its own share`() = runTest {
         // Two 30-minute steps, raised to two hours, one ticked off by hand.
         val steps = listOf(SubStep("Q1-8", 30, done = true, byHand = true), SubStep("Q9-16", 30))
-        val raised = task("hw", effort = 60, steps = steps).copy(userEffortMin = 120, status = Status.Done, doneAt = clock.time)
+        val raised = task("hw", effort = 60, steps = steps).copy( status = Status.Done, doneAt = clock.time).yours(minutes = 120)
         focus.onCompleted(listOf(raised))
         // By the app's estimate, 30 of its 60 minutes were left: a third of them.
         assertEquals(10 * 60_000L, focus.creditLeftMs())
@@ -164,13 +170,13 @@ class FocusTest {
         entered.await()
         val saving = focus.spendSoon(4 * 60_000L, CoroutineScope(Dispatchers.Default))
         // Not saved yet, and already counted.
-        assertEquals(10 * 60_000L, runtime.value.credit.on(focus.today()).leftMs)
+        assertEquals(10 * 60_000L, session.value.credit.on(focus.today()).leftMs)
         assertEquals(6 * 60_000L, focus.creditLeftMs())
         release.countDown()
         saving?.join()
         holder.join()
         // Saved, and counted once.
-        assertEquals(6 * 60_000L, runtime.value.credit.on(focus.today()).leftMs)
+        assertEquals(6 * 60_000L, session.value.credit.on(focus.today()).leftMs)
         assertEquals(6 * 60_000L, focus.creditLeftMs())
     }
 
@@ -276,7 +282,7 @@ class FocusTest {
     @Test
     fun `a completion earns from the calibrated estimate, as the plan and its kept slots do`() = runTest {
         // Learned to take half its estimate: a 100-minute task is 50 minutes of pieces, both kept.
-        runtime.update { it.copy(calibration = Calibration(multipliers = mapOf("Homework|" to 0.5))) }
+        learning.update { it.copy(calibration = Calibration(multipliers = mapOf("Homework|" to 0.5))) }
         tasks.update { it.copy(tasks = listOf(task("hw", effort = 100))) }
         repeat(2) { assertTrue(focus.keepSlot("teams:hw#-1#1")) }
         assertEquals(50, tasks.value.tasks.single().workedMin)
@@ -310,14 +316,14 @@ class FocusTest {
         // Saved, then the app stopped before its piece was kept.
         val done = PhotoDone("p1", "teams:hw", null, 30, clock.time, key = "teams:hw#-1#1")
         tasks.update { it.copy(tasks = listOf(task("hw", effort = 30))) }
-        runtime.update { it.copy(photosDone = listOf(done)) }
+        session.update { it.copy(photosDone = listOf(done)) }
         focus.finishPhotos()
         assertEquals(30, tasks.value.tasks.single().workedMin)
         assertTrue(log.value.slots.single().let { it.photo && it.earned })
         assertEquals(10 * 60_000L, focus.creditLeftMs())
-        assertEquals(emptyList(), runtime.value.photosDone)
+        assertEquals(emptyList(), session.value.photosDone)
         // Stopped again after keeping it, before letting the photo go: finished again, nothing more.
-        runtime.update { it.copy(photosDone = listOf(done)) }
+        session.update { it.copy(photosDone = listOf(done)) }
         focus.finishPhotos()
         assertEquals(30, tasks.value.tasks.single().workedMin)
         assertEquals(1, log.value.slots.size)
@@ -327,7 +333,7 @@ class FocusTest {
     @Test
     fun `a plan dropped is worked out again, not taken from the minute's keeping`() {
         var made = 0
-        val counting = Focus(tasks, settings, runtime, log, clock) { state, s, now -> made++; Planner.plan(Planner.Input(state.tasks, now, LONDON, s)) }
+        val counting = Focus(tasks, settings, session, learning, protection, log, clock) { state, s, now -> made++; Planner.plan(Planner.Input(state.tasks, now, LONDON, s)) }
         counting.plan()
         counting.plan()
         assertEquals(1, made)
@@ -434,15 +440,15 @@ class FocusTest {
     private val evening = mapOf(monday to listOf(DayWindow(17 * 60, 22 * 60, WindowKind.Evening)))
     private val ownDone = mutableListOf<String>()
     private fun input(state: TaskState, s: Settings, now: Long) =
-        Planner.Input(state.tasks, now, LONDON, s, windows = evening, previousSlots = runtime.value.slots.on(monday).previous)
-    private val slotted = Focus(tasks, settings, runtime, log, clock, onOwnTaskDone = { ownDone += it }) { state, s, now -> Planner.plan(input(state, s, now)) }
+        Planner.Input(state.tasks, now, LONDON, s, windows = evening, previousSlots = session.value.slots.on(monday).previous)
+    private val slotted = Focus(tasks, settings, session, learning, protection, log, clock, onOwnTaskDone = { ownDone += it }) { state, s, now -> Planner.plan(input(state, s, now)) }
 
     /** Monday 16:00 with [list] planned into the evening, its starts kept as the watcher keeps them: its work slots. */
     private suspend fun laid(vararg list: TaskItem): List<Slot> {
         clock.time = Fixtures.at("2026-10-12T16:00")
         tasks.update { it.copy(tasks = list.toList()) }
         val work = Planner.plan(input(tasks.value, settings.value, clock.time)).todaySlots.filter { it.kind == SlotKind.Work }
-        runtime.update { it.copy(slots = SlotState(monday.toString(), previous = work.associate { s -> s.chunk!!.key to s.start })) }
+        session.update { it.copy(slots = SlotState(monday.toString(), previous = work.associate { s -> s.chunk!!.key to s.start })) }
         return work
     }
 
@@ -463,7 +469,7 @@ class FocusTest {
         assertEquals(first.start to first.end, record.start to record.end)
         assertEquals(30 to 35, record.plannedMin to record.workedMin)
         // Off the starts the plan keeps; kept again, nothing, as its step is done.
-        assertFalse(key in runtime.value.slots.previous)
+        assertFalse(key in session.value.slots.previous)
         assertFalse(slotted.keepSlot(key))
         assertEquals(1, log.value.slots.size)
     }
@@ -525,7 +531,7 @@ class FocusTest {
         // Its end and grace go by: missed, as its alarm says, and said again changes nothing.
         clock.time = first.end + Slotter.GRACE_MS + 60_000L
         repeat(2) { slotted.missSlot(key, Focus.Laid(first.start, first.end, first.window)) }
-        runtime.update { it.copy(slots = it.slots.on(monday).missed(key, first.chunk!!.taskId, clock.time)) }
+        session.update { it.copy(slots = it.slots.on(monday).missed(key, first.chunk!!.taskId, clock.time)) }
         assertEquals(SlotOutcome.Missed, log.value.slots.single().outcome)
         // Ticked at 19:00 after all: the one slot it was, kept late, at its own time.
         clock.time = Fixtures.at("2026-10-12T19:00")
@@ -624,12 +630,12 @@ class FocusTest {
         // Tuesday's piece ticked on Monday too: Monday's plan was the 15 minutes, so 5 earned from slots.
         val tuesday = monday.plusDays(1)
         val both = evening + (tuesday to listOf(DayWindow(17 * 60, 22 * 60, WindowKind.Evening)))
-        val ahead = Focus(tasks, settings, runtime, log, clock) { state, s, now ->
-            Planner.plan(Planner.Input(state.tasks, now, LONDON, s, windows = both, previousSlots = runtime.value.slots.on(monday).previous))
+        val ahead = Focus(tasks, settings, session, learning, protection, log, clock) { state, s, now ->
+            Planner.plan(Planner.Input(state.tasks, now, LONDON, s, windows = both, previousSlots = session.value.slots.on(monday).previous))
         }
         laid(task("a", due = "2026-10-12T23:59", effort = 15), task("b", due = "2026-10-13T23:59", effort = 15).copy(notBefore = Fixtures.at("2026-10-13T00:00")))
         // Ten minutes earned already today by a completion, which stands beside the plan's share.
-        runtime.update { it.copy(credit = it.credit.earn(monday, 10.0)) }
+        session.update { it.copy(credit = it.credit.earn(monday, 10.0)) }
         clock.time = Fixtures.at("2026-10-12T18:00")
         assertTrue(ahead.keepSlot("teams:a#-1#1"))
         assertEquals(15 * 60_000L, ahead.creditLeftMs())
@@ -645,7 +651,7 @@ class FocusTest {
     fun `tomorrow's work alone doesn't block, today's does`() = runTest {
         // Monday 20:00 with ten minutes of free time: work that can't start till tomorrow leaves today free.
         clock.time = Fixtures.at("2026-10-12T20:00")
-        runtime.update { it.copy(credit = it.credit.earn(monday, 10.0)) }
+        session.update { it.copy(credit = it.credit.earn(monday, 10.0)) }
         tasks.update { it.copy(tasks = listOf(task("later", due = "2026-10-14T23:59").copy(notBefore = Fixtures.at("2026-10-13T00:00")))) }
         assertEquals(BlockPolicy.Verdict.Spend, focus.verdict())
         tasks.update { it.copy(tasks = it.tasks + task("tonight", due = "2026-10-12T23:59")) }
@@ -656,17 +662,17 @@ class FocusTest {
     fun `a slot missed today that went to tomorrow blocks till the hours end, and a move of yours lifts it`() = runTest {
         clock.time = Fixtures.at("2026-10-12T20:00")
         val missed = MissedSlot("teams:t#-1#1", "teams:t", clock.time - 3_600_000L, spilled = true)
-        runtime.update { it.copy(credit = it.credit.earn(monday, 10.0), slots = SlotState(monday.toString(), missed = listOf(missed))) }
+        session.update { it.copy(credit = it.credit.earn(monday, 10.0), slots = SlotState(monday.toString(), missed = listOf(missed))) }
         assertEquals(BlockPolicy.Verdict.Block(BlockPolicy.Reason.TodayUndone), focus.verdict())
         // The day's hours end at 22:00: free time again till the quiet hours.
         clock.time = Fixtures.at("2026-10-12T22:05")
         assertEquals(BlockPolicy.Verdict.Spend, focus.verdict())
         // Missed but still today's (not spilled): nothing more than today's plan says.
         clock.time = Fixtures.at("2026-10-12T20:00")
-        runtime.update { it.copy(slots = SlotState(monday.toString(), missed = listOf(missed.copy(spilled = false)))) }
+        session.update { it.copy(slots = SlotState(monday.toString(), missed = listOf(missed.copy(spilled = false)))) }
         assertEquals(BlockPolicy.Verdict.Spend, focus.verdict())
         // Moved on purpose (a time you gave its task): forgotten.
-        runtime.update { it.copy(slots = SlotState(monday.toString(), missed = listOf(missed)).moved("teams:t")) }
+        session.update { it.copy(slots = SlotState(monday.toString(), missed = listOf(missed)).moved("teams:t")) }
         assertEquals(BlockPolicy.Verdict.Spend, focus.verdict())
     }
 
@@ -686,7 +692,7 @@ class FocusTest {
         // Nothing left today: what there is to spend; with none, nothing to say.
         tasks.update { it.copy(tasks = emptyList()) }
         assertNull(focus.rewardLine(focus.plan()))
-        runtime.update { it.copy(credit = it.credit.earn(monday, 25.0)) }
+        session.update { it.copy(credit = it.credit.earn(monday, 25.0)) }
         assertEquals("Today's plan is done. 25 min free.", focus.rewardLine(focus.plan()))
     }
 
@@ -718,7 +724,7 @@ class FocusTest {
         clock.time = first.end - 2 * 60_000L
         assertEquals(null, slotted.gapUntil())
         assertTrue(slotted.keepSlot(first.chunk!!.key))
-        runtime.update { it.copy(credit = it.credit.earn(monday, 10.0)) }
+        session.update { it.copy(credit = it.credit.earn(monday, 10.0)) }
         assertEquals(second.start, slotted.gapUntil())
         assertEquals(BlockPolicy.Verdict.Spend, slotted.verdict())
         // Free time runs only till the next slot's start, however much there is.
@@ -733,8 +739,8 @@ class FocusTest {
     fun `a short piece of a later day's ticked ahead earns nothing today`() = runTest {
         val tuesday = monday.plusDays(1)
         val both = evening + (tuesday to listOf(DayWindow(17 * 60, 22 * 60, WindowKind.Evening)))
-        val ahead = Focus(tasks, settings, runtime, log, clock) { state, s, now ->
-            Planner.plan(Planner.Input(state.tasks, now, LONDON, s, windows = both, previousSlots = runtime.value.slots.on(monday).previous))
+        val ahead = Focus(tasks, settings, session, learning, protection, log, clock) { state, s, now ->
+            Planner.plan(Planner.Input(state.tasks, now, LONDON, s, windows = both, previousSlots = session.value.slots.on(monday).previous))
         }
         laid(task("later", due = "2026-10-13T23:59", effort = 15).copy(notBefore = Fixtures.at("2026-10-13T00:00")))
         clock.time = Fixtures.at("2026-10-12T18:00")
@@ -755,23 +761,23 @@ class FocusTest {
         )
         // Stopped after its step was ticked, before its record and free time: those given, once.
         tasks.update { state -> state.copy(tasks = state.tasks.map { t -> t.copy(subSteps = t.subSteps.mapIndexed { i, s -> if (i == 0) s.copy(done = true, timedMin = 15) else s }, workedMin = 15) }) }
-        runtime.update { it.copy(keeping = listOf(Keeping(record(first), 0, "Q1", workedBefore = 0, earningMin = 5.0))) }
+        session.update { it.copy(keeping = listOf(Keeping(record(first), 0, "Q1", workedBefore = 0, earningMin = 5.0))) }
         repeat(2) { slotted.finishKeeps() }
         assertEquals(15, tasks.value.tasks.single().workedMin)
         assertEquals(listOf(record(first)), log.value.slots)
         assertEquals(5 * 60_000L, slotted.creditLeftMs())
-        assertEquals(emptyList(), runtime.value.keeping)
-        assertFalse(first.chunk!!.key in runtime.value.slots.previous)
+        assertEquals(emptyList(), session.value.keeping)
+        assertFalse(first.chunk!!.key in session.value.slots.previous)
         // Stopped before anything changed, a photo's keep: all of it, the photo let go with it, and nothing more from the photo.
         val photo = PhotoDone("p", "teams:t", "Q2", 15, clock.time, 1, second.chunk!!.key)
-        runtime.update { it.copy(photosDone = listOf(photo), keeping = listOf(Keeping(record(second).copy(photo = true), 1, "Q2", workedBefore = 15, earningMin = 5.0, photo = photo))) }
+        session.update { it.copy(photosDone = listOf(photo), keeping = listOf(Keeping(record(second).copy(photo = true), 1, "Q2", workedBefore = 15, earningMin = 5.0, photo = photo))) }
         slotted.finishKeeps()
         slotted.finishPhotos()
         assertEquals(listOf(true, true), tasks.value.tasks.single().subSteps.map { it.done })
         assertEquals(30, tasks.value.tasks.single().workedMin)
         assertEquals(2, log.value.slots.size)
         assertEquals(10 * 60_000L, slotted.creditLeftMs())
-        assertEquals(emptyList(), runtime.value.photosDone)
+        assertEquals(emptyList(), session.value.photosDone)
     }
 
     @Test
@@ -802,17 +808,17 @@ class FocusTest {
     fun `a slot missed today that went to tomorrow, done tonight, earns as today's`() = runTest {
         // Evenings all week; Wednesday's work laid on Monday at 17:00.
         val week = (0L..4L).associate { monday.plusDays(it) to listOf(DayWindow(17 * 60, 22 * 60, WindowKind.Evening)) }
-        val twoDays = Focus(tasks, settings, runtime, log, clock) { state, s, now ->
-            Planner.plan(Planner.Input(state.tasks, now, LONDON, s, windows = week, previousSlots = runtime.value.slots.on(monday).previous))
+        val twoDays = Focus(tasks, settings, session, learning, protection, log, clock) { state, s, now ->
+            Planner.plan(Planner.Input(state.tasks, now, LONDON, s, windows = week, previousSlots = session.value.slots.on(monday).previous))
         }
         clock.time = Fixtures.at("2026-10-12T16:00")
         tasks.update { it.copy(tasks = listOf(task("t", due = "2026-10-14T23:59", effort = 15))) }
         val first = twoDays.plan().todaySlots.single { it.kind == SlotKind.Work }
         val key = first.chunk!!.key
-        runtime.update { it.copy(slots = SlotState(monday.toString(), previous = mapOf(key to first.start))) }
+        session.update { it.copy(slots = SlotState(monday.toString(), previous = mapOf(key to first.start))) }
         clock.time = first.end + Slotter.GRACE_MS + 60_000L
         twoDays.missSlot(key, Focus.Laid(first.start, first.end, first.window))
-        runtime.update { it.copy(slots = it.slots.on(monday).missed(key, "teams:t", clock.time)) }
+        session.update { it.copy(slots = it.slots.on(monday).missed(key, "teams:t", clock.time)) }
         // Monday's hours over, it's tomorrow's in the plan, in a slot; done now, it's the slot missed, kept late, and earns.
         clock.time = Fixtures.at("2026-10-12T22:45")
         assertTrue(twoDays.plan().tomorrowBucket?.slots.orEmpty().any { it.chunk?.key == key })
@@ -827,11 +833,11 @@ class FocusTest {
         val (first, second) = laid(task("t", due = "2026-10-12T23:59", steps = steps(), effort = 60))
         clock.time = first.end
         assertTrue(slotted.keepSlot(first.chunk!!.key))
-        runtime.update { it.copy(credit = it.credit.earn(monday, 10.0)) }
+        session.update { it.copy(credit = it.credit.earn(monday, 10.0)) }
         // The next goes by undone and is laid again later: today's work, blocked, not a gap till then.
         clock.time = second.end + Slotter.GRACE_MS + 60_000L
         slotted.missSlot(second.chunk!!.key, Focus.Laid(second.start, second.end, second.window))
-        runtime.update { it.copy(slots = it.slots.on(monday).missed(second.chunk!!.key, "teams:t", clock.time)) }
+        session.update { it.copy(slots = it.slots.on(monday).missed(second.chunk!!.key, "teams:t", clock.time)) }
         assertTrue(slotted.plan().todaySlots.filter { it.kind == SlotKind.Work }.all { it.start > clock.time })
         assertNull(slotted.gapUntil())
         assertEquals(BlockPolicy.Verdict.Block(BlockPolicy.Reason.TodayUndone), slotted.verdict())
@@ -883,13 +889,13 @@ class FocusTest {
         val photo = PhotoDone("p", "teams:long", null, 30, clock.time, key = long.chunk!!.key, takenAt = clock.time - 60_000L)
         val journal = Keeping(unearned.copy(earned = true, photo = true), null, null, 0, 10.0, replaces = unearned, photo = photo, earnOnly = true)
         // Stopped after the record was marked, before the free time: given, once, and the photo let go.
-        runtime.update { it.copy(photosDone = listOf(photo), keeping = listOf(journal)) }
+        session.update { it.copy(photosDone = listOf(photo), keeping = listOf(journal)) }
         log.update { it.copy(slots = listOf(journal.record)) }
         repeat(2) { slotted.finishKeeps() }
         slotted.finishPhotos()
         assertEquals(10 * 60_000L, slotted.creditLeftMs())
         assertEquals(listOf(journal.record), log.value.slots)
-        assertEquals(emptyList(), runtime.value.photosDone)
+        assertEquals(emptyList(), session.value.photosDone)
         assertEquals(30, tasks.value.tasks.single().workedMin)
     }
 
@@ -924,7 +930,7 @@ class FocusTest {
             date = "2026-10-12", key = "teams:a#-1#1", taskId = "teams:a", kind = Kind.Homework, label = "a", plannedMin = 15,
             start = clock.time, end = clock.time, window = WindowKind.Evening, outcome = SlotOutcome.Kept, workedMin = 15, at = clock.time,
         )
-        runtime.update { it.copy(keeping = listOf(Keeping(record, null, null, 0, 5.0))) }
+        session.update { it.copy(keeping = listOf(Keeping(record, null, null, 0, 5.0))) }
         focus.grantAllowanceIfDue()
         assertEquals(0L, focus.creditLeftMs())
     }
@@ -982,7 +988,7 @@ class FocusTest {
         assertEquals(emptyList(), log.value.slots)
         assertEquals(0L, slotted.creditLeftMs())
         // And its slot where it was, so the next plan keeps it there rather than laying it anew.
-        assertEquals(first.start, runtime.value.slots.previous[first.chunk!!.key])
+        assertEquals(first.start, session.value.slots.previous[first.chunk!!.key])
         // Nothing kept since: nothing to take back.
         assertFalse(slotted.unkeepSlot(first.chunk!!.key, since))
     }
@@ -1001,6 +1007,6 @@ class FocusTest {
         val back = log.value.slots.single()
         assertEquals(SlotOutcome.Missed to 0, back.outcome to back.workedMin)
         assertEquals(first.end + Slotter.GRACE_MS, back.at)
-        assertTrue(runtime.value.slots.missed.any { it.key == key })
+        assertTrue(session.value.slots.missed.any { it.key == key })
     }
 }

@@ -60,10 +60,10 @@ class TaskSheetStateTest {
         assertTrue(quick.quick)
         assertEquals(InstructionStatus.Applied, quick.state)
         assertEquals(text, quick.text)
-        assertEquals(90, task("teams:essay").userEffortMin)
+        assertEquals(90, task("teams:essay").mine.minutes?.minutes)
         sheet.undo(task("teams:essay"), ChangeType.Minutes)
         assertEquals(emptyList(), h.instructions.value.instructions)
-        assertNull(task("teams:essay").userEffortMin)
+        assertNull(task("teams:essay").mine.minutes?.minutes)
     }
 
     @Test
@@ -73,7 +73,7 @@ class TaskSheetStateTest {
         assertEquals("Tomorrow: undone in the chat's Your changes", sheet.said)
         assertEquals(Change(ChangeType.OnDay, taskId = "teams:essay", date = "2026-10-20"), h.instructions.value.applied.single().changes.single())
         sheet.notATask(task("teams:essay"), LocalDate.parse("2026-10-19"), LONDON)
-        assertTrue(task("teams:essay").userNotATask)
+        assertTrue(task("teams:essay").mine.notATask != null)
         // Off the plan now: today has no time for its piece.
         sheet.later(piece("teams:essay"), h.clock.now(), LONDON)
         assertEquals("No time left today for it", sheet.said)

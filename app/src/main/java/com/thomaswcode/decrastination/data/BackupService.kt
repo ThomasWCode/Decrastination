@@ -94,16 +94,16 @@ class BackupService(
             versionName = versionName,
             // As asked for: a change still waiting its delay is in it, and restored goes through
             // the same wait (or, restored here, keeps waiting) rather than being lost.
-            settings = SettingsChanges.requested(stores.settings.value, stores.runtime.value.pending),
+            settings = SettingsChanges.requested(stores.settings.value, stores.protection.value.pending),
             log = stores.log.value,
-            calibration = stores.runtime.value.calibration,
-            eventAnswers = stores.runtime.value.eventAnswers,
-            aiUsage = stores.runtime.value.aiUsage,
+            calibration = stores.learning.value.calibration,
+            eventAnswers = stores.calendar.value.eventAnswers,
+            aiUsage = stores.model.value.aiUsage,
             instructions = stores.instructions.value.applied,
             ownTasks = stores.tasks.value.tasks.filter { it.source == Source.Own },
             school = stores.school.value,
             memory = stores.memory.value,
-            slots = stores.runtime.value.slots,
+            slots = stores.session.value.slots,
             chat = stores.chat.value,
             archive = stores.chatArchive.value,
             versions = stores.shapes.mapValues { it.value.version },
@@ -183,21 +183,22 @@ class BackupService(
         }.takeIf { it.isNotEmpty() }?.joinToString(", ", prefix = " ", postfix = ".") ?: ""
         // Today's slots, restored the same day (AR-07).
         val today = Instant.ofEpochMilli(clock.now()).atZone(clock.zone()).toLocalDate().toString()
-        stores.replace(stores.runtime) { s ->
+        stores.replace(stores.session) { s ->
             s.copy(slots = if (backup.slots.date == today && s.slots.on(LocalDate.parse(today)).let { it.previous.isEmpty() && it.missed.isEmpty() }) backup.slots else s.slots)
         }
         // This month's spend on Claude, armed or not: it can only rise, so the cap isn't given again.
         val month = AiUsage.monthOf(clock.now(), clock.zone())
-        stores.replace(stores.runtime) { it.copy(aiUsage = Backups.mergeUsage(it.aiUsage, backup.aiUsage, month)) }
+        stores.replace(stores.model) { it.copy(aiUsage = Backups.mergeUsage(it.aiUsage, backup.aiUsage, month)) }
         // The reminders' alarms at the restored times, as a save in Settings sets them.
         schedule()
-        val waiting = stores.runtime.value.pending.size
+        val waiting = stores.protection.value.pending.size
         val waits = if (waiting > 0) " $waiting change${if (waiting == 1) " that loosens blocking waits" else "s that loosen blocking wait"} ${stores.settings.value.loosenDelayHours} hours." else ""
         stores.replace(stores.log) { Backups.mergeLog(it, backup.log, clock.now()) }
         // Your answers on this phone win over the backup's.
         // One from before 1.8.0 under its rule now, as at a start, from the log as merged.
         val calibration = Calibrator.upgraded(backup.calibration, stores.log.value.completions) ?: backup.calibration
-        stores.replace(stores.runtime) { it.copy(calibration = calibration, eventAnswers = backup.eventAnswers + it.eventAnswers) }
+        stores.replace(stores.learning) { it.copy(calibration = calibration) }
+        stores.replace(stores.calendar) { it.copy(eventAnswers = backup.eventAnswers + it.eventAnswers) }
         // Read with the restored answers, and today's record made again, as an answer given here does.
         scope.launch { reread() }
         return "Restored the settings, ${backup.log.completions.size} completions and ${backup.log.slots.size} slots, what the app had learned, and your calendar answers.$waits$told"
@@ -250,9 +251,9 @@ class BackupService(
         if (all || what == Reset.Stats) {
             resets.incrementAndGet()
             stores.replace(stores.log, ActivityLog())
-            stores.replace(stores.runtime) { it.copy(calibration = Calibration()) }
+            stores.replace(stores.learning) { it.copy(calibration = Calibration()) }
         }
-        if (what == Reset.Calibration) stores.replace(stores.runtime) { it.copy(calibration = Calibration(learnFrom = now)) }
+        if (what == Reset.Calibration) stores.replace(stores.learning) { it.copy(calibration = Calibration(learnFrom = now)) }
         if (all || what == Reset.Memories) {
             stores.replace(stores.memory, MemoryState())
             changeSettings { it.copy(profileLines = emptyList()) }

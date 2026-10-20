@@ -37,6 +37,11 @@ data class Instruction(
      * not left for you to check (16 Oct).
      */
     val answer: Boolean = false,
+    /**
+     * Who set what it changes: you (the instructions screen, a sheet's quick change, your answer to
+     * Felix's question) or Felix (a card of his in the chat). It only labels (D-4).
+     */
+    val by: By = By.You,
 )
 
 @Serializable
@@ -162,37 +167,18 @@ data class Change(
 data class InstructionState(
     val instructions: List<Instruction> = emptyList(),
     /** The shape this is in ([com.thomaswcode.decrastination.data.Migration]): raised with each change of it. */
-    val version: Int = 1,
+    val version: Int = 2,
 ) {
+    /** Every step a change holds with an id ([withIds]): given as it's first stored, so the task steps it's laid as keep it. */
+    fun withStepIds(): InstructionState {
+        fun Change.ided(): Change = steps?.withIds()?.takeIf { it !== steps }?.let { copy(steps = it) } ?: this
+        fun Instruction.ided(): Instruction = changes.map { it.ided() }.let { c -> if (c.indices.all { c[it] === changes[it] }) this else copy(changes = c) }
+        val all = instructions.map { it.ided() }
+        return if (all.indices.all { all[it] === instructions[it] }) this else copy(instructions = all)
+    }
+
     /** Those in use, in the order they were applied: a later one's change wins over an earlier's. */
     val applied: List<Instruction> get() = instructions.filter { it.state == InstructionStatus.Applied }.sortedBy { it.appliedAt ?: it.at }
-}
-
-/** What applied instructions say about one task. */
-data class TaskOverrides(
-    val notATask: Boolean = false,
-    val from: Long? = null,
-    val after: String? = null,
-    val dueAt: Long? = null,
-    val minutes: Int? = null,
-    /** All of it on this day, YYYY-MM-DD (PL-04). */
-    val onDay: String? = null,
-    /** Its next piece at this time (PL-04). */
-    val atTime: Long? = null,
-    /** The same work as this task, which is kept (DX-15): this one's hidden. */
-    val sameAs: String? = null,
-    /** Its steps, in place of the source's and the enrichment's (16 Oct). */
-    val steps: List<OwnStep>? = null,
-    /** Its name in the app (16 Oct). */
-    val title: String? = null,
-    /** [minutes] are the app's estimate at your pace, from this estimate of the app's ([Change.pacedFrom]). */
-    val minutesPacedFrom: Int? = null,
-    /** The task's content then ([Change.pacedHash]). */
-    val minutesPacedHash: String? = null,
-) {
-    companion object {
-        val NONE = TaskOverrides()
-    }
 }
 
 /**
@@ -215,14 +201,14 @@ object InstructionRules {
      * never be planned, so neither waits.
      */
     fun waiting(task: TaskItem, byId: Map<String, TaskItem>): Boolean {
-        val first = task.userAfter ?: return false
+        val first = task.mine.after?.value ?: return false
         // Done, gone, or one you said isn't a task (it may stay open for ever): nothing to wait for.
         if (byId[first]?.let { it.isOpen && !it.hidden } != true) return false
         val seen = hashSetOf(task.id)
         var next: String? = first
         while (next != null) {
             if (!seen.add(next)) return next != task.id
-            next = byId[next]?.takeIf { it.isOpen && !it.hidden }?.userAfter
+            next = byId[next]?.takeIf { it.isOpen && !it.hidden }?.mine?.after?.value
         }
         return true
     }
@@ -265,27 +251,29 @@ object InstructionRules {
         }.distinct()
     }
 
-    /** Each task's overrides from [applied] (in order: a later one's wins). */
-    fun taskOverrides(applied: List<Instruction>): Map<String, TaskOverrides> {
-        val out = HashMap<String, TaskOverrides>()
+    /** Each task's values of yours from [applied] (in order: a later one's wins), each with who set it ([Instruction.by]). */
+    fun taskOverrides(applied: List<Instruction>): Map<String, Mine> {
+        val out = HashMap<String, Mine>()
         // The day of each task's time in force: a day given after it keeps it where it's that day.
         val timeOn = HashMap<String, String?>()
-        for (change in applied.flatMap { it.changes }) {
+        for (instruction in applied) for (change in instruction.changes) {
             val id = change.taskId ?: continue
-            val o = out[id] ?: TaskOverrides.NONE
+            val by = instruction.by
+            fun <T> set(value: T?): SetBy<T>? = value?.let { SetBy(it, by) }
+            val o = out[id] ?: Mine.NONE
             out[id] = when (change.type) {
-                ChangeType.NotATask -> o.copy(notATask = true)
-                ChangeType.StartFrom -> o.copy(from = change.time)
-                ChangeType.After -> o.copy(after = change.afterTaskId)
-                ChangeType.DueBy -> o.copy(dueAt = change.time)
-                ChangeType.Minutes -> o.copy(minutes = change.minutes, minutesPacedFrom = change.pacedFrom, minutesPacedHash = change.pacedHash)
+                ChangeType.NotATask -> o.copy(notATask = set(true))
+                ChangeType.StartFrom -> o.copy(from = set(change.time))
+                ChangeType.After -> o.copy(after = set(change.afterTaskId))
+                ChangeType.DueBy -> o.copy(dueAt = set(change.time))
+                ChangeType.Minutes -> o.copy(minutes = change.minutes?.let { SetMinutes(it, by, change.pacedFrom?.let { from -> Paced(from, change.pacedHash) }) })
                 // The later of a day for all of it and a time for its next piece wins, but a time on the day
                 // it's kept to stays, whichever came first.
-                ChangeType.OnDay -> o.copy(onDay = change.date, atTime = o.atTime?.takeIf { timeOn[id] == change.date })
-                ChangeType.AtTime -> o.copy(atTime = change.time, onDay = o.onDay?.takeIf { it == change.date }).also { timeOn[id] = change.date }
-                ChangeType.SameAs -> o.copy(sameAs = change.afterTaskId)
-                ChangeType.Steps -> o.copy(steps = change.steps)
-                ChangeType.Rename -> o.copy(title = change.title)
+                ChangeType.OnDay -> o.copy(onDay = set(change.date), atTime = o.atTime?.takeIf { timeOn[id] == change.date })
+                ChangeType.AtTime -> o.copy(atTime = set(change.time), onDay = o.onDay?.takeIf { it.value == change.date }).also { timeOn[id] = change.date }
+                ChangeType.SameAs -> o.copy(sameAs = set(change.afterTaskId))
+                ChangeType.Steps -> o.copy(steps = change.steps?.let { SetSteps(it, by) })
+                ChangeType.Rename -> o.copy(title = set(change.title))
                 else -> o
             }
         }
@@ -293,7 +281,7 @@ object InstructionRules {
         // said the same as each other are both off the plan.
         val laid = out.toMap()
         for ((id, o) in laid) {
-            val kept = o.sameAs ?: continue
+            val kept = o.sameAs?.value ?: continue
             if (kept == id || laid[kept]?.sameAs != null) out[id] = o.copy(sameAs = null)
         }
         return out
@@ -367,7 +355,7 @@ object InstructionRules {
             ChangeType.DueBy -> {
                 val task = change.taskId?.let { tasks[it] }
                 // Against the date as it is now; once this is the date in use, against the source's.
-                val inUse = task?.userDueAt != null && task.userDueAt == change.time
+                val inUse = task?.mine?.dueAt != null && task.mine.dueAt.value == change.time
                 val was = if (inUse) task?.sourceValues?.dueAt else task?.dueAt
                 "${title(change.taskId)}: due ${at(change.time)?.format(DAY_TIME) ?: "on another date"}" +
                     when {
@@ -379,7 +367,7 @@ object InstructionRules {
             ChangeType.Minutes -> {
                 val task = change.taskId?.let { tasks[it] }
                 // Against the estimate as it is now; once this is the one in use, against the app's own.
-                val inUse = task?.userEffortMin != null && task.userEffortMin == change.minutes
+                val inUse = task?.mine?.minutes != null && task.mine.minutes.minutes == change.minutes
                 val was = if (inUse) task?.appEffortMin else task?.effortMin
                 "${title(change.taskId)}: takes ${hours(change.minutes ?: 0)} in all" + (if (change.pacedFrom != null) " at your pace" else "") +
                     when {
@@ -416,7 +404,7 @@ object InstructionRules {
             ChangeType.Rename -> {
                 val task = change.taskId?.let { tasks[it] }
                 // Against its name as it is now; once this is the name in use, against its source's.
-                val was = task?.let { t -> t.sourceValues?.title?.takeIf { t.userTitle != null && t.userTitle == change.title } ?: t.title } ?: "a task no longer listed"
+                val was = task?.let { t -> t.sourceValues?.title?.takeIf { t.mine.title != null && t.mine.title.value == change.title } ?: t.title } ?: "a task no longer listed"
                 "“$was” renamed “${change.title}”"
             }
         }
@@ -455,9 +443,6 @@ object InstructionRules {
     private fun date(text: String?): LocalDate? = text?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
 }
 
-/** What [task]'s instructions say of it now, as [TaskOverrides] holds it. */
-fun TaskItem.overrides(): TaskOverrides = TaskOverrides(userNotATask, userFrom, userAfter, userDueAt, userEffortMin, userOnDay, userAtTime, userSameAs, userSteps, userTitle, userEffortPacedFrom, userEffortPacedHash)
-
 /**
  * The task with [o] as its instructions' say: kept on it, and laid over what the source and the
  * enrichment say at every merge ([enriched]). The source's own values are kept first, if they
@@ -465,25 +450,14 @@ fun TaskItem.overrides(): TaskOverrides = TaskOverrides(userNotATask, userFrom, 
  * source's task, never one derived from Anki's counts (its steps are its cards, its name their
  * count); one of your own has them made on it ([OwnTaskRules.MADE_ON_IT]).
  */
-fun TaskItem.withOverrides(o: TaskOverrides): TaskItem {
+fun TaskItem.withMine(o: Mine): TaskItem {
     val laidOver = source != Source.Own && !derived
-    val steps = o.steps?.takeIf { laidOver && it.isNotEmpty() }
+    val steps = o.steps?.takeIf { laidOver && it.steps.isNotEmpty() }
     val laid = copy(
         sourceValues = (sourceValues ?: SourceValues(kind, dueAt, availableFrom)).let { if (it.title == null) it.copy(title = title) else it },
-        userNotATask = o.notATask,
-        userFrom = o.from,
-        userAfter = o.after,
-        userDueAt = o.dueAt,
-        userEffortMin = o.minutes,
-        userEffortPacedFrom = o.minutesPacedFrom?.takeIf { o.minutes != null },
-        userEffortPacedHash = o.minutesPacedHash?.takeIf { o.minutes != null },
-        userOnDay = o.onDay,
-        userAtTime = o.atTime,
-        userSameAs = o.sameAs,
-        userSteps = steps,
-        userTitle = o.title?.takeIf { laidOver },
+        mine = o.copy(steps = steps, title = o.title?.takeIf { laidOver }),
     )
     // Your steps taken back: the enrichment's come back, as they're laid where there are none, their ticks kept by name.
-    if (userSteps == null || steps != null) return laid.enriched()
+    if (mine.steps == null || steps != null) return laid.enriched()
     return laid.copy(subSteps = emptyList()).enriched().let { it.copy(subSteps = carryMarks(it.subSteps, subSteps)) }
 }
