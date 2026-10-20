@@ -138,7 +138,8 @@ class Looks(
             // Said first, under an id of its own, then marked: a failure between leaves it to be let go again, its
             // message replacing itself, rather than gone with nothing said.
             outbox.send(ChatMessage("letgo-${r.id}", Speaker.Felix, FelixWords.letGo(r.text, task?.title ?: "its task", why), now, About(taskId = r.taskId, taskTitle = task?.title), kind = MessageKind.Note, byApp = true))
-            felix.update { s -> s.copy(reminders = s.reminders.map { if (it.id == r.id && Reminders.unsent(it)) it.copy(cancelledAt = now).undrafted() else it }) }
+            // Only as it was let go: one moved meanwhile is another moment's, to come then.
+            felix.update { s -> s.copy(reminders = s.reminders.map { if (it.id == r.id && it.undrafted() == r.undrafted() && Reminders.unsent(it)) it.copy(cancelledAt = now).undrafted() else it }) }
         }
         for ((r, moment) in Reminders.due(felix.value.reminders, focus.plan(now), tasks, now)) deliver(r, moment, now, tasks)
     }
@@ -150,7 +151,7 @@ class Looks(
     private suspend fun deliver(r: Reminder, moment: Long, now: Long, tasks: Map<String, TaskItem>) {
         val late = now - moment > Reminders.LATE_MS
         // Written for this moment, it's sent on time; late, the moment it was written for has gone.
-        val draft = r.draft?.takeIf { !late && it.message.isNotBlank() && Reminders.drafted(r, moment) }
+        val draft = r.draft?.let(FelixAnswers::bounded)?.takeIf { !late && it.message.isNotBlank() && Reminders.drafted(r, moment) }
         val words = draft?.message ?: FelixWords.reminder(r.text)
         val zone = clock.zone()
         val at = Instant.ofEpochMilli(moment).atZone(zone)

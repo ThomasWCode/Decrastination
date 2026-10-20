@@ -278,7 +278,7 @@ object ChatActs {
     /**
      * Whether [act] can still be taken back, with [tasks], [settings], the chat's [messages] and Felix's
      * [notes] and [reminders] as they are, [messageId] the message holding it (where known: an act can read
-     * the same as an earlier one): a step ticked still done (one of yours, or one done by its tick, it finished, too); one unticked still to do;
+     * the same as an earlier one), at [now] (where given, a reminder brought back is one that would still come): a step ticked still done (one of yours, or one done by its tick, it finished, too); one unticked still to do;
      * a task done still done; one opened again still as that left it ([asReopened]); one deleted
      * still gone, and none of the cards that had added it made again since (Redo makes it anew); a
      * setting still as it was set; a reminder set or moved still unsent, not snoozed nor cancelled, and
@@ -287,7 +287,7 @@ object ChatActs {
      * kept still kept by the record it made, its key's newest among today's [kept] (each key's newest
      * record's time), one kept no more still not, its task open.
      */
-    fun canUndo(act: Act, tasks: List<TaskItem>, settings: Settings, messages: List<ChatMessage>, notes: List<Note> = emptyList(), reminders: List<Reminder> = emptyList(), kept: Map<String, Long> = emptyMap(), messageId: String? = null): Boolean {
+    fun canUndo(act: Act, tasks: List<TaskItem>, settings: Settings, messages: List<ChatMessage>, notes: List<Note> = emptyList(), reminders: List<Reminder> = emptyList(), kept: Map<String, Long> = emptyMap(), messageId: String? = null, now: Long? = null): Boolean {
         if (act.undone) return false
         val a = act.action ?: return false
         val task = tasks.firstOrNull { it.id == a.taskId }
@@ -303,9 +303,10 @@ object ChatActs {
             ChatAction.Type.Delete -> act.was != null && task == null && !redone(act.cards, messages)
             ChatAction.Type.Setting -> act.before != null && FelixSettings.field(a.setting.orEmpty())?.get(settings) == act.after
             ChatAction.Type.SetReminder -> reminder != null && Reminders.unsent(reminder) && !movedSince(act, messages, messageId)
-            ChatAction.Type.MoveReminder -> reminder != null && act.reminder != null && Reminders.unsent(reminder) && !movedSince(act, messages, messageId)
+            ChatAction.Type.MoveReminder -> reminder != null && act.reminder != null && Reminders.unsent(reminder) && !movedSince(act, messages, messageId) &&
+                comes(reminder.copy(text = act.reminder.text, due = act.reminder.due, taskId = act.reminder.taskId), tasks, now)
             // Brought back only where there's room for it: not past the reminders still to come, nor a task's notes, kept.
-            ChatAction.Type.CancelReminder -> reminder?.cancelledAt != null && reminders.count(Reminders::pending) < Reminders.MAX_PENDING
+            ChatAction.Type.CancelReminder -> reminder?.cancelledAt != null && reminders.count(Reminders::pending) < Reminders.MAX_PENDING && comes(reminder.copy(cancelledAt = null), tasks, now)
             ChatAction.Type.AddNote -> note != null && note.deletedAt == null
             ChatAction.Type.DeleteNote -> note?.deletedAt != null && Notes.hasRoom(note, notes)
             // One it finished (one of yours, or one done by its tick, its last piece) too: its Undo opens it again, as a tick's does.
@@ -314,6 +315,9 @@ object ChatActs {
             ChatAction.Type.Sync -> false
         }
     }
+
+    /** Whether [r], brought back, would still come at [now]: not let go at once, its task finished, gone or with no deadline ([Reminders.letGo]). */
+    private fun comes(r: Reminder, tasks: List<TaskItem>, now: Long?): Boolean = now == null || Reminders.letGo(listOf(r), tasks.associateBy { it.id }, now).isEmpty()
 
     /**
      * Whether a message after the one holding [act] in [messages] ([messageId], else the first holding one

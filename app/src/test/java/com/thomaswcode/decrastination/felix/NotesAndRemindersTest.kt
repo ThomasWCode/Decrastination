@@ -167,6 +167,17 @@ class NotesAndRemindersTest {
     }
 
     @Test
+    fun `a draft past his bounds, as a restored backup's could be, goes held to them`() = runBlocking {
+        val moment = now + 5 * MIN
+        val long = FelixAnswer("call gran now. " + "on and on ".repeat(100), replies = (1..9).map { "reply $it" })
+        stores.felix.update { it.copy(reminders = listOf(Reminder("r-gran", "call gran", now - 10 * MIN, By.Felix, due = Due(DueKind.At, moment), draft = long, draftedAt = now, draftFor = moment))) }
+        felix.clock.time = moment
+        felix.looks.sweepReminders(moment)
+        val sent = stores.chat.value.messages.single { it.kind == MessageKind.Reminder }
+        assertTrue(sent.text.length <= FelixAnswers.MAX_MESSAGE && sent.text.startsWith("call gran now."), sent.text)
+    }
+
+    @Test
     fun `a reminder before a deadline the same answer sets is made, its changes being made first`() = runBlocking {
         stores.tasks.update { it.copy(tasks = listOf(sheet.copy(dueAt = null))) }
         val due = """{"type":"DueBy","taskId":"${sheet.id}","afterTaskId":"","eventKey":"","eventTime":"","minutes":-1,"date":"2026-10-23","endDate":"","weekday":"","time":"09:00","endTime":"","title":"","steps":[],"paced":false}"""
