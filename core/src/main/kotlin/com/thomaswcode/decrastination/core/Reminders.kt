@@ -27,7 +27,7 @@ data class Reminder(
     val doneAt: Long? = null,
     /** Cancelled from the chat, or let go: kept, never delivered, till its act can no longer be undone; Undo clears it. */
     val cancelledAt: Long? = null,
-    /** His words for it, written ahead, when, and for the moment they were written for: another moment's aren't sent. */
+    /** His words for it, written ahead, when, and for the moment they were written for (or asked for, where none came): another moment's aren't sent. */
     val draft: FelixAnswer? = null,
     val draftedAt: Long? = null,
     val draftFor: Long? = null,
@@ -123,6 +123,12 @@ object Reminders {
      * whose slot or deadline has moved since, even within the window, is written for again.
      */
     fun drafted(r: Reminder, moment: Long): Boolean = r.draft != null && r.draftFor == moment
+
+    /**
+     * Whether his words for [r]'s [moment] have been asked for: written ([drafted]), or asked for and none came
+     * (refused, or none that could be read), so that moment isn't paid for again and yours go.
+     */
+    fun asked(r: Reminder, moment: Long): Boolean = r.draftFor == moment
 
     private val WHEN = DateTimeFormatter.ofPattern("EEE d MMM HH:mm", Locale.UK)
 

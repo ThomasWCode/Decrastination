@@ -329,6 +329,10 @@ class BackupTest {
         assertEquals(Reminders.MAX_PENDING, merged.reminders.count(Reminders::pending))
         assertTrue(merged.reminders.any { it.id == "sent" })
         assertNull(Backups.problem(backup.copy(felixStore = merged)))
+        // Past 50 still to come by a snooze, as the app can keep them: not refused, and restored within 50, the rest left out.
+        val over = full.copy(reminders = full.reminders + reminder.copy(id = "snoozed", sentAt = 9, snoozedTo = 2_000))
+        assertNull(Backups.problem(backup.copy(felixStore = over)))
+        assertEquals(1, Backups.mergedFelix(FelixStore(), over).second)
         // A note on a task and a scope, or neither; a reminder's due missing what its kind needs; two of one id; words too long.
         for (bad in listOf(
             felix.copy(notes = listOf(note.copy(scope = NoteScope(subject = "Chemistry")))),

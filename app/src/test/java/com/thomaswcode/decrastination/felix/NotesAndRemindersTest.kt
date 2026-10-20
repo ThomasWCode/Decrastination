@@ -226,6 +226,20 @@ class NotesAndRemindersTest {
     }
 
     @Test
+    fun `a reminder's words that came back with none aren't paid for again for its moment, and yours go`() = runBlocking {
+        stores.felix.update { it.copy(reminders = listOf(at("call gran", now + 8 * MIN))) }
+        felix.answers("not an answer")
+        felix.looks.draftReminders(now)
+        felix.looks.draftReminders(now + MIN)
+        assertEquals(1, felix.server.requestCount)
+        val asked = stores.felix.value.reminders.single()
+        assertTrue(asked.draft == null && asked.draftFor == now + 8 * MIN, asked.toString())
+        felix.clock.time = now + 8 * MIN
+        felix.looks.sweepReminders(felix.clock.time)
+        assertEquals(FelixWords.reminder("call gran"), stores.chat.value.messages.single { it.kind == MessageKind.Reminder }.text)
+    }
+
+    @Test
     fun `a reminder's snooze from its chips has it come again, with no call, and its Done ends it`() = runBlocking {
         stores.felix.update { it.copy(reminders = listOf(at("call gran", now).copy(draft = FelixAnswer("oi"), draftedAt = now - MIN))) }
         felix.looks.sweepReminders(now)

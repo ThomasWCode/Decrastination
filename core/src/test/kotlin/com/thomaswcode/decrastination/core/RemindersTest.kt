@@ -108,6 +108,10 @@ class RemindersTest {
         assertFalse(Reminders.drafted(r, moment - 3 * min))
         assertFalse(Reminders.drafted(r, moment + 24 * 60 * min))
         assertFalse(Reminders.drafted(r.undrafted(), moment))
+        // Asked for and none came: not written, but asked for that moment, so not again.
+        val none = r.copy(draft = null)
+        assertFalse(Reminders.drafted(none, moment))
+        assertTrue(Reminders.asked(none, moment) && !Reminders.asked(none, moment - 3 * min))
     }
 
     @Test
