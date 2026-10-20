@@ -13,6 +13,7 @@ import com.thomaswcode.decrastination.core.Given
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.MemoryEdit
 import com.thomaswcode.decrastination.core.MessageKind
+import com.thomaswcode.decrastination.core.Notes
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Reminder
 import com.thomaswcode.decrastination.core.Reminders
@@ -104,6 +105,7 @@ class Looks(
             sweepReminders(now)
             val trigger = due(now)
             if (trigger != null) write(trigger, now) else draft(focus.plan(now), now)
+            writeReminders(focus.plan(now), now)
             arm(now)
         } finally {
             writing.unlock()
@@ -344,14 +346,22 @@ class Looks(
     /**
      * His answer for [trigger] as it stands at [at] (now, or when a draft's for), as the call went;
      * [interactive], due now, it goes through a rest (AC-04: as the chat does, but for a key that
-     * failed or the cap).
+     * failed or the cap). About [task] (its trigger's, or a reminder's), with your [reminder]'s words
+     * and the task's [notes] where there are any (8a).
      */
-    private suspend fun ask(caller: FelixCaller, trigger: FelixRules.Trigger, at: Long, interactive: Boolean): Called<FelixCaller.Result> {
+    private suspend fun ask(
+        caller: FelixCaller,
+        trigger: FelixRules.Trigger,
+        at: Long,
+        interactive: Boolean,
+        task: TaskItem? = trigger.taskId?.let { id -> this.tasks.value.tasks.firstOrNull { it.id == id } },
+        reminder: String? = null,
+        notes: List<String> = emptyList(),
+    ): Called<FelixCaller.Result> {
         val settings = this.settings.value
         val profile = this.profile(at)
-        val task = trigger.taskId?.let { id -> this.tasks.value.tasks.firstOrNull { it.id == id } }
         val free = (focus.creditLeftMs(at) / 60_000L).toInt().takeIf { trigger.reason == FelixPrompts.Reason.DayDone || trigger.reason == FelixPrompts.Reason.SlotKept }
-        val user = FelixPrompts.describe(trigger.reason, planning.plan(), trigger.slot, task, today(at), chat.value.messages, trigger.question?.question, settings, at, clock.zone(), free, trigger.record, trigger.asks.map { it.title }, firstAction = trigger.slot?.chunk?.key?.let { model.value.microPlans[it] }?.first?.takeIf { it.isNotEmpty() })
+        val user = FelixPrompts.describe(trigger.reason, planning.plan(), trigger.slot, task, today(at), chat.value.messages, trigger.question?.question, settings, at, clock.zone(), free, trigger.record, trigger.asks.map { it.title }, firstAction = trigger.slot?.chunk?.key?.let { model.value.microPlans[it] }?.first?.takeIf { it.isNotEmpty() }, reminder = reminder, notes = notes)
         val called = gateway.call(interactive = interactive, record = ModelCalls.OnRecord(ModelEffort.Job.Felix, trigger.reason.name) { r: FelixCaller.Result -> r.usage to ModelCalls.outcome(r.refused, r.answer == null) }, cost = { r: FelixCaller.Result -> r.costUsd to r.refused }) { caller.say(FelixPrompts.system(settings, profile.year), profile.text, user) }
         if (called is Called.Failed) Log.w(AppGraph.TAG, "Felix's message failed", called.error)
         return called
@@ -367,8 +377,42 @@ class Looks(
         if (!writing.tryLock()) return
         try {
             draft(plan, now)
+            writeReminders(plan, now)
         } finally {
             writing.unlock()
+        }
+    }
+
+    /**
+     * His words for the reminders due within [FelixRules.AHEAD_MS] (Stage 8a): at once after one's set,
+     * moved or brought back, so one due inside the window has them without waiting for a plan or a look.
+     */
+    suspend fun draftReminders(now: Long = clock.now()) = writeReminders(planning.plan(now = now), now)
+
+    /** Held while his words for reminders are written, so each is asked for once. */
+    private val drafting = Mutex()
+
+    /**
+     * His words for each reminder of yours due within [FelixRules.AHEAD_MS] of [now] by [plan] and not
+     * written for its moment yet ([Reminders.drafted]): one call each (Q9: B; Q24), written as of its
+     * moment, kept on it unless it changed meanwhile. None with Claude off, resting or over the cap: the
+     * sweep sends your words then.
+     */
+    private suspend fun writeReminders(plan: Plan, now: Long): Unit = drafting.withLock {
+        val tasks = this.tasks.value.tasks.associateBy { it.id }
+        val due = felix.value.reminders.filter(Reminders::pending).mapNotNull { r ->
+            Reminders.moment(r, plan, tasks, now)?.takeIf { it > now && it - now <= FelixRules.AHEAD_MS && !Reminders.drafted(r, it, FelixRules.AHEAD_MS) }?.let { r to it }
+        }
+        if (due.isEmpty() || !gateway.available()) return@withLock
+        val caller = gateway.client(ModelEffort.Job.Felix)?.let { FelixCaller(it) } ?: return@withLock
+        for ((r, moment) in due) {
+            val task = r.taskId?.let(tasks::get)
+            val notes = task?.let { Notes.forTask(it, felix.value.notes, settings.value.classMap).map { n -> n.text } }.orEmpty()
+            val trigger = FelixRules.Trigger(FelixPrompts.Reason.Reminder, slot = plan.slotAt(moment) ?: plan.nextSlot(moment))
+            val answer = (ask(caller, trigger, moment, interactive = false, task = task, reminder = r.text, notes = notes) as? Called.Answered)?.value?.answer ?: continue
+            // Kept only on the reminder as it was asked for: moved, snoozed, sent or cancelled meanwhile, it's another moment's.
+            felix.update { s -> s.copy(reminders = s.reminders.map { if (it.id == r.id && it.copy(draft = null, draftedAt = null) == r.copy(draft = null, draftedAt = null)) it.copy(draft = answer, draftedAt = now) else it }) }
+            Log.i(AppGraph.TAG, "Felix wrote ahead for a reminder, due at ${Instant.ofEpochMilli(moment).atZone(clock.zone()).toLocalTime()}")
         }
     }
 
