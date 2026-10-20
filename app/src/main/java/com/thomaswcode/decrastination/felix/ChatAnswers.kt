@@ -286,6 +286,8 @@ object ChatAnswers {
                         ?: return@mapNotNull no("“${words.take(60)}” at a task's ${if (kind == ChatPrompts.WHEN_SLOT) "slot" else "deadline"}, with no listed task")
                     if (!on.isOpen) return@mapNotNull no("“${words.take(60)}” on “${on.title.take(60)}”, which is finished")
                     if (kind == ChatPrompts.WHEN_SLOT) {
+                        // An event, or one off the plan as you said, never has a slot of work for it to come at.
+                        if (Reminders.offPlan(on)) return@mapNotNull no("“${words.take(60)}” at a slot of “${on.title.take(60)}”, which never has one: it's ${if (on.kind == Kind.Event) "an event" else "off the plan"}")
                         // From the day it's asked for, or now.
                         val from = g.date.trim().takeIf { it.isNotEmpty() }?.let { at(it, null, LocalTime.MIDNIGHT, zone) ?: return@mapNotNull no("“${words.take(60)}” from a day that doesn't read") }
                         if (from != null && from > now + YEAR_MS) return@mapNotNull no("“${words.take(60)}” more than a year ahead")
