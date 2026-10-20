@@ -103,8 +103,8 @@ data class Settings(
      */
     val aiEnabled: Boolean = false,
     /**
-     * Whether the saved API key may be used: set when a key is saved, and, once armed, after the
-     * same wait as switching Claude on, so a key can't switch on triage that's already on.
+     * Whether the saved API key may be used: set when a key is saved, at once, armed or not, as
+     * switching Claude on is (only what loosens blocking waits once armed).
      */
     val aiKeyActive: Boolean = false,
     /**
@@ -117,7 +117,7 @@ data class Settings(
      */
     val aiMonthlyCapUsd: Int? = null,
 
-    /** The morning briefing (Q13): 07:00 on school days, 08:30 at weekends. */
+    /** The morning briefing (Q13): 07:00 Monday to Friday, 08:30 at weekends. */
     val briefingWeekdayMin: Int = 7 * 60,
     val briefingWeekendMin: Int = 8 * 60 + 30,
     /** The Sunday check-in's reminder; the week's review follows it. */
