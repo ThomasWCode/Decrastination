@@ -23,10 +23,24 @@ data class SlotState(val date: String = "", val previous: Map<String, Long> = em
     /** [taskId] moved on purpose (a time, a day or a start you gave): its missed slots forgotten. */
     fun moved(taskId: String): SlotState = copy(missed = missed.filterNot { it.taskId == taskId })
 
-    /** As [plan] leaves today: a missed piece in none of today's slots went to another day ([MissedSlot.spilled]). */
+    /**
+     * As [plan] leaves today: a missed piece in none of today's slots, its task still in the plan, went to
+     * another day ([MissedSlot.spilled]). One whose task the plan no longer holds (finished since, or
+     * deleted) went to no day, so it isn't taken as gone to one, nor kept so once its task has finished:
+     * the work it was for is done (BL-11).
+     */
     fun reconciled(plan: Plan): SlotState {
         val slotted = plan.todaySlots.mapNotNull { it.chunk?.key }.toSet()
-        return copy(missed = missed.map { if (!it.spilled && it.key !in slotted) it.copy(spilled = true) else it })
+        val held = plan.ordered.map { it.taskId }.toSet() + plan.unplanned.map { it.taskId } + plan.wontFit.map { it.taskId }
+        return copy(
+            missed = missed.map {
+                when {
+                    it.taskId !in held -> if (it.spilled) it.copy(spilled = false) else it
+                    !it.spilled && it.key !in slotted -> it.copy(spilled = true)
+                    else -> it
+                }
+            },
+        )
     }
 }
 

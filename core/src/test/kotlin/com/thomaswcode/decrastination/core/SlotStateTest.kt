@@ -35,15 +35,41 @@ class SlotStateTest {
 
     @Test
     fun `a missed piece in none of today's slots went to another day`() {
-        // Today's one slot is b's: a's piece, missed, is somewhere else.
-        val chunk = Chunk(
-            taskId = "teams:b", source = Source.Teams, kind = Kind.Homework, title = "b", step = null, minutes = 30, dueAt = null,
-            deadline = Fixtures.at("2026-10-20T09:00"), soft = false, overdue = false, dueToday = false, behind = false, part = 1, parts = 1,
-            taskMinutes = 30, why = Why.Spread,
-        )
-        val slot = Slot(SlotKind.Work, chunk, Fixtures.at("2026-10-13T17:00"), Fixtures.at("2026-10-13T17:30"), WindowKind.Evening, pinned = false)
-        val plan = Plan(Fixtures.at("2026-10-13T16:00"), tuesday, listOf(DayBucket(tuesday, 315, listOf(chunk), listOf(slot))), emptyList())
-        val reconciled = state.missed("teams:a#-1#1", "teams:a", 10L).missed("teams:b#-1#1", "teams:b", 11L).reconciled(plan)
+        // Today's one slot is b's: a's piece, missed, is on Wednesday.
+        val reconciled = state.missed("teams:a#-1#1", "teams:a", 10L).missed("teams:b#-1#1", "teams:b", 11L).reconciled(plan(chunk("teams:b"), later = chunk("teams:a")))
         assertEquals(listOf(true, false), reconciled.missed.map { it.spilled })
+    }
+
+    @Test
+    fun `a missed piece whose task has since finished went to no day, and one taken as gone isn't once it finishes`() {
+        // a's piece missed, and a finished before the plan: it's in none of the plan's days, so it went nowhere.
+        val missed = state.missed("teams:a#-1#1", "teams:a", 10L).missed("teams:b#-1#1", "teams:b", 11L)
+        val withoutA = plan(chunk("teams:b"))
+        assertEquals(listOf(false, false), missed.reconciled(withoutA).missed.map { it.spilled })
+        // a's piece went to tomorrow (spilled), then a finished: no longer kept as spilled; its miss is still recorded.
+        val spilled = missed.reconciled(plan(chunk("teams:b"), later = chunk("teams:a")))
+        assertEquals(listOf(true, false), spilled.missed.map { it.spilled })
+        val after = spilled.reconciled(withoutA)
+        assertEquals(listOf(false, false), after.missed.map { it.spilled })
+        assertEquals(listOf("teams:a#-1#1", "teams:b#-1#1"), after.missed.map { it.key })
+        // Still open but planned on no day (no room): as before, taken as gone from today.
+        val noRoom = withoutA.copy(unplanned = listOf(Unplanned("teams:a", Source.Teams, "a", 30, 1, Unplanned.Reason.NoRoom)))
+        assertEquals(listOf(true, false), missed.reconciled(noRoom).missed.map { it.spilled })
+        // Run twice, the same.
+        assertEquals(after, after.reconciled(withoutA))
+    }
+
+    private fun chunk(taskId: String) = Chunk(
+        taskId = taskId, source = Source.Teams, kind = Kind.Homework, title = taskId.removePrefix("teams:"), step = null, minutes = 30, dueAt = null,
+        deadline = Fixtures.at("2026-10-20T09:00"), soft = false, overdue = false, dueToday = false, behind = false, part = 1, parts = 1,
+        taskMinutes = 30, why = Why.Spread,
+    )
+
+    /** Tuesday's plan: [today] in its one slot at 17:00, and [later] on Wednesday where given. */
+    private fun plan(today: Chunk, later: Chunk? = null): Plan {
+        val slot = Slot(SlotKind.Work, today, Fixtures.at("2026-10-13T17:00"), Fixtures.at("2026-10-13T17:30"), WindowKind.Evening, pinned = false)
+        val buckets = listOf(DayBucket(tuesday, 315, listOf(today), listOf(slot))) +
+            listOfNotNull(later?.let { DayBucket(tuesday.plusDays(1), 315, listOf(it)) })
+        return Plan(Fixtures.at("2026-10-13T16:00"), tuesday, buckets, emptyList())
     }
 }
