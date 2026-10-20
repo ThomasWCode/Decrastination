@@ -19,6 +19,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -115,6 +116,8 @@ fun TaskSheet(
     val instructions by graph.instructions.state.collectAsStateWithLifecycle()
     val learning by graph.stores.learning.state.collectAsStateWithLifecycle()
     val model by graph.stores.model.state.collectAsStateWithLifecycle()
+    // Its notes, read as they change (8a).
+    val felix by graph.stores.felix.state.collectAsStateWithLifecycle()
     // His messages unread, worn by Ask Felix about it as by his button elsewhere (UI-16).
     val unread by graph.conversation.unread.collectAsStateWithLifecycle(0)
     val task = state.tasks.firstOrNull { it.id == taskId }
@@ -128,7 +131,9 @@ fun TaskSheet(
     val today = Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
     val scope = rememberCoroutineScope()
     // The sheet's state and its changes ([TaskSheetState]), kept through a turn of the phone.
-    val sheet = rememberSaveable(saver = TaskSheetState.saver(graph.instructions, graph.ownTasks)) { TaskSheetState(graph.instructions, graph.ownTasks) }
+    val sheet = rememberSaveable(saver = TaskSheetState.saver(graph.instructions, graph.ownTasks, graph.conversation::addNote, graph.conversation::deleteNote)) {
+        TaskSheetState(graph.instructions, graph.ownTasks, graph.conversation::addNote, graph.conversation::deleteNote)
+    }
     var picking by sheet::picking
     var confirming by sheet::confirming
     var message by sheet::message
@@ -305,6 +310,17 @@ fun TaskSheet(
                 )
             }
             Notes(task, now, zone, byId, onOpen = { scope.launch { TaskOpener.open(activity, task)?.let { message = it } } }, onLink = { message = openLink(activity, it) })
+            // What's kept with it (8a): Felix's notes and yours, the standing ones it matches, each with its delete; yours added here (Q14: A).
+            TaskSheetModel.notes(task, felix.notes, graph.settings.value.classMap, graph.settings.value.felixName, now, zone).let { notes ->
+                if (notes.isNotEmpty()) Text("Notes", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                notes.forEach { n ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(n.line, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                        TextButton(onClick = { scope.launch { sheet.unnote(n.id) } }) { Text("Delete") }
+                    }
+                }
+                TextButton(onClick = { sheet.noting = true }) { Text("Add a note") }
+            }
             if (!ticksHere) Steps(graph, task, now, zone)
             // Its next piece's first steps (AI-15), as written ahead.
             next?.let { model.microPlans[it.key] }?.let(com.thomaswcode.decrastination.enrich.MicroPlans::lines)?.takeIf { it.isNotEmpty() }?.let { lines ->
@@ -421,6 +437,24 @@ fun TaskSheet(
             make(change, text)
         }
         else -> Unit
+    }
+
+    // Your note on it (8a): kept with it, told to Felix whenever it comes up.
+    if (sheet.noting) {
+        var words by rememberSaveable { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { sheet.noting = false },
+            title = { Text("A note on “${task.title}”") },
+            text = {
+                OutlinedTextField(
+                    words, { words = it.take(TaskSheetModel.MAX_NOTE) },
+                    label = { Text("Kept with it, and told to ${graph.settings.value.felixName} whenever it comes up") },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            },
+            confirmButton = { TextButton(enabled = words.isNotBlank(), onClick = { scope.launch { sheet.note(task, words) } }) { Text("Keep") } },
+            dismissButton = { TextButton(onClick = { sheet.noting = false }) { Text("Cancel") } },
+        )
     }
 
     when (confirming) {

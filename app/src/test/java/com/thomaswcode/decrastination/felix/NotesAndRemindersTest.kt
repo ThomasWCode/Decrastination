@@ -10,6 +10,8 @@ import com.thomaswcode.decrastination.core.DueKind
 import com.thomaswcode.decrastination.core.FelixAnswer
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.MessageKind
+import com.thomaswcode.decrastination.core.Note
+import com.thomaswcode.decrastination.core.Notes
 import com.thomaswcode.decrastination.core.Reminder
 import com.thomaswcode.decrastination.core.Reminders
 import com.thomaswcode.decrastination.core.Source
@@ -240,6 +242,41 @@ class NotesAndRemindersTest {
         assertEquals(now + 16 * MIN, stores.felix.value.reminders.single().doneAt)
         assertFalse(Reminders.pending(stores.felix.value.reminders.single()))
         assertEquals(0, felix.server.requestCount)
+    }
+
+    @Test
+    fun `a note from the sheet is yours, ten a task at most, and one deleted there is marked and shown nowhere`() = runBlocking {
+        stores.tasks.update { it.copy(tasks = listOf(sheet)) }
+        assertNull(conversation.addNote(sheet.id, "  show the working  "))
+        val note = stores.felix.value.notes.single()
+        assertEquals(Triple(sheet.id, "show the working", By.You), Triple(note.taskId, note.text, note.by))
+        assertEquals("A note needs some words", conversation.addNote(sheet.id, " "))
+        assertEquals("That task isn't there now", conversation.addNote("teams:gone", "words"))
+        repeat(9) { assertNull(conversation.addNote(sheet.id, "note $it")) }
+        assertEquals("It has 10 notes already: delete one first", conversation.addNote(sheet.id, "eleventh"))
+        conversation.deleteNote(note.id)
+        assertNotNull(stores.felix.value.notes.first { it.id == note.id }.deletedAt)
+        assertTrue(Notes.on(sheet.id, stores.felix.value.notes).none { it.id == note.id })
+    }
+
+    @Test
+    fun `his message at a slot's start is told its task's notes and your reminder that came at it, so he doesn't say it twice`() = runBlocking {
+        // Due tomorrow morning, so it's planned this evening.
+        stores.tasks.update { it.copy(tasks = listOf(sheet.copy(dueAt = Fixtures.at("2026-10-21T09:00")))) }
+        val slot = felix.planning.plan().let { it.slotAt(now) ?: it.nextSlot(now) }
+        assertNotNull(slot)
+        assertEquals(sheet.id, slot.chunk?.taskId)
+        stores.felix.update { s ->
+            s.copy(
+                notes = listOf(Note("n1", "show the working", now, By.Felix, taskId = sheet.id)),
+                reminders = listOf(Reminder("r1", "bring the form", now - 10 * MIN, By.Felix, sheet.id, Due(DueKind.SlotStart, now - 10 * MIN), sentAt = slot.start)),
+            )
+        }
+        felix.answers(his("Starting the worksheet? Show the working."))
+        felix.looks.say(FelixPrompts.Reason.SlotStart, now)
+        val asked = felix.server.takeRequest().body.readUtf8()
+        assertTrue("Notes on it: show the working" in asked, asked)
+        assertTrue("Their reminder for this slot, sent at its start, so not to say again: “bring the form”" in asked, asked)
     }
 
     @Test

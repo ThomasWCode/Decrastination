@@ -3,12 +3,15 @@ package com.thomaswcode.decrastination.ui
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
 import com.thomaswcode.decrastination.core.About
+import com.thomaswcode.decrastination.core.By
 import com.thomaswcode.decrastination.core.Change
 import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.DayWindow
 import com.thomaswcode.decrastination.core.Instruction
 import com.thomaswcode.decrastination.core.InstructionStatus
 import com.thomaswcode.decrastination.core.Kind
+import com.thomaswcode.decrastination.core.Note
+import com.thomaswcode.decrastination.core.NoteScope
 import com.thomaswcode.decrastination.core.Planner
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.Source
@@ -78,6 +81,22 @@ class TaskSheetModelTest {
         assertTrue(TaskSheetModel.canGo(later, monday.plusDays(2), now, LONDON))
         // Overdue, its deadline gone by, it can go to any day (D-30).
         assertTrue(TaskSheetModel.canGo(a, monday.plusDays(1), Fixtures.at("2026-10-13T08:00"), LONDON))
+    }
+
+    @Test
+    fun `a task's notes are listed, its own then the standing ones it matches, each with who wrote it and when, none deleted`() {
+        val now = Fixtures.at("2026-10-12T18:00")
+        val sheet = task("sheet", 30).copy(className = "12X/Ph1")
+        val notes = listOf(
+            Note("n2", "on sheets, not in the book", Fixtures.at("2026-10-10T17:00"), By.You, scope = NoteScope(subject = "Physics")),
+            Note("n1", "show the working", Fixtures.at("2026-10-12T17:00"), By.Felix, taskId = sheet.id),
+            Note("n3", "deleted", Fixtures.at("2026-10-12T17:00"), By.You, taskId = sheet.id, deletedAt = now),
+            Note("n4", "another task's", Fixtures.at("2026-10-12T17:00"), By.You, taskId = "teams:other"),
+        )
+        assertEquals(
+            listOf(TaskSheetModel.Noted("n1", "Fe, today 17:00: show the working"), TaskSheetModel.Noted("n2", "For every Physics task: on sheets, not in the book (yours, Sat 10 Oct 17:00)")),
+            TaskSheetModel.notes(sheet, notes, mapOf("12X/Ph1" to "Physics"), "Fe", now, LONDON),
+        )
     }
 
     @Test

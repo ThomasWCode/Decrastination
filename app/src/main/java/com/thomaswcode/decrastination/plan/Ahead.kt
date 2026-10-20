@@ -4,6 +4,7 @@ import android.util.Log
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Settings
+import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.ModelState
 import com.thomaswcode.decrastination.data.TaskState
@@ -31,6 +32,8 @@ class Ahead(
     private val profile: (Long) -> Profile.Block,
     /** Felix's next message written ahead ([com.thomaswcode.decrastination.felix.Looks.draftAhead]). */
     private val draftAhead: suspend (Plan, Long) -> Unit,
+    /** The notes kept with a task, its own and the standing ones it matches, as the micro-planner's told them (8a, Q14: A). */
+    private val notes: (TaskItem) -> List<String>,
     /** The plan made again (its watcher poked), so its calendar events carry the first steps written. */
     private val replan: () -> Unit,
 ) {
@@ -62,14 +65,17 @@ class Ahead(
         var written = false
         try {
             val tasks = this.tasks.value.tasks.associateBy { it.id }
-            model.update { it.copy(microPlans = MicroPlans.kept(plan, it.microPlans, tasks)) }
+            // The notes of the tasks with pieces ahead, which their plans are written with.
+            val noted = plan.ordered.map { it.taskId }.distinct().mapNotNull { id -> tasks[id]?.let { t -> notes(t).takeIf { it.isNotEmpty() }?.let { id to it } } }.toMap()
+            model.update { it.copy(microPlans = MicroPlans.kept(plan, it.microPlans, tasks, noted)) }
             val caller = gateway.client(ModelEffort.Job.MicroPlan)?.let { MicroPlanner(it) } ?: return
-            for ((chunk, task) in MicroPlans.due(plan, tasks, model.value.microPlans).filter { only == null || it.first.key == only }.take(MicroPlans.MAX_A_RUN)) {
+            for ((chunk, task) in MicroPlans.due(plan, tasks, model.value.microPlans, noted).filter { only == null || it.first.key == only }.take(MicroPlans.MAX_A_RUN)) {
+                val its = noted[task.id].orEmpty()
                 if (!gateway.available()) return
                 val profile = profile(now).text
-                val called = gateway.call(interactive = false, task = task, record = ModelCalls.OnRecord(ModelEffort.Job.MicroPlan, task.title) { r: MicroPlanner.Result -> r.usage to ModelCalls.outcome(r.refused, r.text == null) }, cost = { r: MicroPlanner.Result -> r.costUsd to r.refused }) { caller.plan(profile, MicroPlans.describe(chunk, task)) }
+                val called = gateway.call(interactive = false, task = task, record = ModelCalls.OnRecord(ModelEffort.Job.MicroPlan, task.title) { r: MicroPlanner.Result -> r.usage to ModelCalls.outcome(r.refused, r.text == null) }, cost = { r: MicroPlanner.Result -> r.costUsd to r.refused }) { caller.plan(profile, MicroPlans.describe(chunk, task, its)) }
                 val made = when (called) {
-                    is Called.Answered -> called.value.text?.let { MicroPlans.parse(it, chunk, task, now) } ?: MicroPlans.none(chunk, task, now)
+                    is Called.Answered -> called.value.text?.let { MicroPlans.parse(it, chunk, task, now, its) } ?: MicroPlans.none(chunk, task, now, its)
                     is Called.Failed -> {
                         Log.w(AppGraph.TAG, "A piece's first steps failed", called.error)
                         return
