@@ -10,6 +10,8 @@ import com.thomaswcode.decrastination.core.ChatState
 import com.thomaswcode.decrastination.core.Fact
 import com.thomaswcode.decrastination.core.InstructionStatus
 import com.thomaswcode.decrastination.core.Kind
+import com.thomaswcode.decrastination.core.Given
+import com.thomaswcode.decrastination.core.Memories
 import com.thomaswcode.decrastination.core.MemoryState
 import com.thomaswcode.decrastination.core.MessageKind
 import com.thomaswcode.decrastination.core.Proposal
@@ -75,6 +77,15 @@ class ConversationTest {
         conversation.forgetExpired(now + 2 * hour)
         assertEquals(listOf("football"), stores.memory.value.facts.map { it.topic })
         assertTrue(stores.chat.value.messages.isEmpty())
+    }
+
+    @Test
+    fun `what's run out is let go of before anything's remembered, so it takes no rule's place`() = runBlocking {
+        val hour = 3_600_000L
+        stores.memory.update { MemoryState(rules = (1..Memories.RULE_MAX).map { Rule("rule $it", now - 2 * hour, until = now - hour) }) }
+        val edits = conversation.remember(listOf(Given(text = "be blunter", kind = Given.RULE)))
+        assertEquals(listOf("Felix will: be blunter"), edits.map { it.line })
+        assertEquals(listOf("be blunter"), stores.memory.value.rules.map { it.text })
     }
 
     @Test

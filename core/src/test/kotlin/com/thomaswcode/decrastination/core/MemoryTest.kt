@@ -221,5 +221,9 @@ class MemoryTest {
         assertEquals(listOf("for good", "length"), Memories.expired(dayOn, unlisted, now + 2 * day) { now + day }.facts.map { it.topic })
         // Twice, the same.
         assertEquals(dayOn, Memories.expired(dayOn, tasks, now + day))
+        // A task closed with no time it was done at (a count missed): a fortnight from when it was last seen.
+        val missed = tasks + (essay.id to essay.copy(status = Status.Missed, doneAt = null, lastSeenAt = now + day))
+        assertEquals(listOf("for good", "room", "length"), Memories.expired(dayOn, missed, now + 14 * day).facts.map { it.topic })
+        assertEquals(listOf("for good", "room"), Memories.expired(dayOn, missed, now + 16 * day).facts.map { it.topic })
     }
 }

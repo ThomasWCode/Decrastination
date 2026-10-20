@@ -79,5 +79,7 @@ class MemoryTidyTest {
         assertEquals(plain, (plain + passing).filter(MemoryTidy::tidied))
         // Its answer for the plain ones, the passing ones beside it as they were.
         assertEquals((listOf(Fact("all", "short", now)) + passing).sortedBy { it.at }, MemoryTidy.withExpiring(plain + passing, listOf(Fact("all", "short", now))))
+        // One of its topics one of theirs, which it wasn't shown: not a tidy, as one topic holds one fact.
+        assertNull(MemoryTidy.withExpiring(plain + passing, listOf(Fact("Cold ", "merged", now))))
     }
 }

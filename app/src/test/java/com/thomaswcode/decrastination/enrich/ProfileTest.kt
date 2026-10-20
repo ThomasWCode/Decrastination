@@ -70,6 +70,9 @@ class ProfileTest {
         assertTrue("- not tonight (until Thu 15 Oct 07:00)" in block, block)
         assertTrue("- cold: feeling rough (until Sun 18 Oct)" in block, block)
         assertTrue("- maths: can use the textbook's answers (with “${maths.title}”)" in block, block)
+        // Its task deleted, held while the delete can be undone: said so, not by its id.
+        val gone = Profile.block(settings, emptyList(), null, SchoolCalendar(), memory, now, LONDON)
+        assertTrue("- maths: can use the textbook's answers (with a task since deleted)" in gone, gone)
     }
 
     @Test
