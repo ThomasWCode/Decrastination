@@ -1,24 +1,33 @@
 package com.thomaswcode.decrastination.felix
 
 import com.thomaswcode.decrastination.core.About
+import com.thomaswcode.decrastination.core.By
 import com.thomaswcode.decrastination.core.Change
 import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.ChatAction
 import com.thomaswcode.decrastination.core.DayBucket
+import com.thomaswcode.decrastination.core.Due
+import com.thomaswcode.decrastination.core.DueKind
 import com.thomaswcode.decrastination.core.FelixSettings
 import com.thomaswcode.decrastination.core.Given
 import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.Kind
+import com.thomaswcode.decrastination.core.Note
+import com.thomaswcode.decrastination.core.NoteScope
+import com.thomaswcode.decrastination.core.Notes
 import com.thomaswcode.decrastination.core.OwnStep
 import com.thomaswcode.decrastination.core.OwnTask
 import com.thomaswcode.decrastination.core.OwnTaskRules
 import com.thomaswcode.decrastination.core.Proposal
+import com.thomaswcode.decrastination.core.Reminder
+import com.thomaswcode.decrastination.core.Reminders
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.SlotKind
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.shareOut
+import com.thomaswcode.decrastination.data.FelixStore
 import com.thomaswcode.decrastination.enrich.InstructionAnswers
 import com.thomaswcode.decrastination.enrich.ResearchPrompts
 import com.thomaswcode.decrastination.enrich.filled
@@ -76,6 +85,10 @@ object ChatAnswers {
         val research: String? = null,
         /** The tasks whose whole text it asks to read first (D-93): its answer is then only that it's reading. */
         val details: List<String> = emptyList(),
+        /** Reminders to set, and those listed to move or reword under their own ids (Stage 8a), each checked. */
+        val reminders: List<Reminder> = emptyList(),
+        /** Notes to keep on tasks (Stage 8a), each checked. */
+        val notes: List<Note> = emptyList(),
     )
 
     /**
@@ -103,6 +116,40 @@ object ChatAnswers {
         val research: String = "",
         val details: List<String> = emptyList(),
     )
+
+    /**
+     * A reminder as his answer gives it (Stage 8a): from a change of type Remind (Q13: B), its words its
+     * title, when it comes its eventKey, a listed reminder's id to move its afterTaskId, a BeforeDue's
+     * minutes its minutes ([fromChange]).
+     */
+    private data class GivenReminder(
+        val id: String = "",
+        val text: String = "",
+        val date: String = "",
+        val time: String = "",
+        val taskId: String = "",
+        val `when`: String = ChatPrompts.WHEN_AT,
+        val minutesBefore: Int = -1,
+    )
+
+    /** A note as his answer gives it (Stage 8a): from a change of type Note, its words its title; on a task, or for every task its scope matches (Q31: A), read from its eventKey ([fromChange]). */
+    private data class GivenNote(val taskId: String = "", val text: String = "", val subject: String = "", val className: String = "", val source: String = "", val titleContains: String = "")
+
+    /** [c], a Remind change, as a reminder. */
+    private fun reminderOf(c: InstructionAnswers.Given) = GivenReminder(
+        id = c.afterTaskId.orEmpty(), text = c.title, date = c.date.orEmpty(), time = c.time.orEmpty(), taskId = c.taskId.orEmpty(),
+        `when` = c.eventKey?.trim()?.ifEmpty { null } ?: ChatPrompts.WHEN_AT, minutesBefore = c.minutes ?: -1,
+    )
+
+    /** [c], a Note change, as a note: its eventKey's scope as kind:value parts joined by ; (subject:, class:, source:, title:). */
+    private fun noteOf(c: InstructionAnswers.Given): GivenNote {
+        val parts = c.eventKey.orEmpty().split(';').mapNotNull { part -> part.split(':', limit = 2).takeIf { it.size == 2 }?.let { (k, v) -> k.trim().lowercase() to v.trim() } }.toMap()
+        return GivenNote(c.taskId.orEmpty(), c.title, parts["subject"].orEmpty(), parts["class"].orEmpty(), parts["source"].orEmpty(), parts["title"].orEmpty())
+    }
+
+    /** The most reminders, and the most notes, one answer gives: a few at most is what's meant. */
+    private const val MAX_REMINDERS = 10
+    private const val MAX_NOTES = 10
 
     @Serializable
     private data class GivenAction(val type: String = "", val taskId: String = "", val stepIndex: Int = -1, val setting: String = "", val value: String = "")
@@ -146,7 +193,7 @@ object ChatAnswers {
     /** The most memories one answer gives: a few at most is what's meant. */
     private const val MAX_MEMORIES = 5
 
-    fun parse(text: String, tasks: List<TaskItem>, events: List<CalendarEvent>, about: About, now: Long, zone: ZoneId, settings: Settings? = null): Reading? {
+    fun parse(text: String, tasks: List<TaskItem>, events: List<CalendarEvent>, about: About, now: Long, zone: ZoneId, settings: Settings? = null, felix: FelixStore = FelixStore()): Reading? {
         val answer = runCatching { json.decodeFromString(Answer.serializer(), text) }.getOrNull() ?: return null
         val reply = answer.reply.trim().takeIf { it.isNotEmpty() } ?: return null
         val leftOut = mutableListOf<String>()
@@ -159,7 +206,9 @@ object ChatAnswers {
         if (answer.newTasks.size > MAX_TASKS) leftOut += "${answer.newTasks.size - MAX_TASKS} more tasks than the app takes at once"
         val byId = tasks.associateBy { it.id }
         val titles = events.associate { EventJudge.key(it) to it.title } + listOfNotNull(about.eventKey?.let { it to (about.eventTitle ?: it) })
-        var changes = answer.changes.take(MAX_CHANGES).map(InstructionAnswers.Given::normalised).mapNotNull { g ->
+        // His reminders and notes come as changes of their own types (8a, Q13: B): taken out first, made their own way.
+        val (kept, given) = answer.changes.take(MAX_CHANGES).map(InstructionAnswers.Given::normalised).partition { it.type == ChatPrompts.REMIND_TYPE || it.type == ChatPrompts.NOTE_TYPE }
+        var changes = given.mapNotNull { g ->
             InstructionAnswers.change(g, byId, titles, now, zone).also { if (it == null) leftOut += "a change (${InstructionAnswers.problem(g, byId, titles)})" }
         }
         if (answer.changes.size > MAX_CHANGES) leftOut += "${answer.changes.size - MAX_CHANGES} more changes than the app takes at once"
@@ -177,16 +226,153 @@ object ChatAnswers {
         val replies = answer.suggestedReplies.map { it.trim().take(FelixAnswers.MAX_REPLY) }.filter { it.isNotEmpty() }.distinct().take(FelixAnswers.MAX_REPLIES)
         // A step ticked or unticked, a listed task shown (AI-14); a task of yours done, open again or
         // deleted, a setting set (16 Oct): each only as the task, or the setting, can be.
-        val actions = answer.actions.take(MAX_ACTIONS).mapNotNull { a -> action(a, byId, settings, leftOut) }.distinct()
+        val actions = answer.actions.take(MAX_ACTIONS).mapNotNull { a -> action(a, byId, settings, felix, leftOut) }.distinct()
         // Tasks to read in full (D-93): listed and open, not the one the message is about (it came whole).
         val details = answer.details.map(String::trim).filter { id -> id != about.taskId && byId[id]?.let { it.isOpen && !it.hidden } == true }.distinct().take(ChatPrompts.MAX_READ)
-        return Reading(reply.take(ChatPrompts.MAX_TEXT), made, changes, leftOut, answer.memories.take(MAX_MEMORIES), replies, actions, answer.research.trim().take(ResearchPrompts.MAX_QUESTION).takeIf { it.isNotEmpty() }, details)
+        // Reminders and notes (Stage 8a): each as the app can keep it, the rest said.
+        // Those the answer cancels make room, as they're cancelled before its reminders are made.
+        val cancelled = actions.filter { it.type == ChatAction.Type.CancelReminder }.mapNotNull { it.value }.toSet()
+        // A deadline the answer sets is the one a reminder before it's due goes by, as its changes are made first.
+        val dueBy = deadlines(changes)
+        val reopened = actions.filter { it.type == ChatAction.Type.Reopen }.mapTo(HashSet()) { it.taskId }
+        val reminders = reminders(kept.filter { it.type == ChatPrompts.REMIND_TYPE }.map(::reminderOf), byId, felix, now, zone, leftOut, cancelled, dueBy, reopened)
+        // Those the answer deletes make room too.
+        val deleted = actions.filter { it.type == ChatAction.Type.DeleteNote }.mapNotNull { it.value }.toSet()
+        val notes = notes(kept.filter { it.type == ChatPrompts.NOTE_TYPE }.map(::noteOf), byId, felix, now, leftOut, deleted)
+        return Reading(reply.take(ChatPrompts.MAX_TEXT), made, changes, leftOut, answer.memories.take(MAX_MEMORIES), replies, actions, answer.research.trim().take(ResearchPrompts.MAX_QUESTION).takeIf { it.isNotEmpty() }, details, reminders, notes)
     }
 
-    /** [a] as an action the app can take, checked against the tasks there are ([byId]) and the [settings]; null, and why in [leftOut], if it can't be. */
-    private fun action(a: GivenAction, byId: Map<String, TaskItem>, settings: Settings?, leftOut: MutableList<String>): ChatAction? {
+    /**
+     * [given] as reminders the app keeps, at most [MAX_REMINDERS], checked against the tasks there are
+     * ([byId]) and [felix]'s reminders, at [now]: a new one with its words, at a time from now to a year
+     * ahead (one gone by refused), at its task's next slot (a listed open task), or minutes before a
+     * listed open task's deadline, within a week; one with a listed reminder's id, still to come and never
+     * sent, moved or reworded in place (its words, or its time where none is given, kept), its draft let
+     * go; no more still to come than [Reminders.MAX_PENDING], those the same answer cancels ([cancelled]) not
+     * counted; before a deadline the same answer sets ([dueBy], by task id) by that one; on a task it opens
+     * again ([reopened], its actions being made first) as on an open one. What can't be is said in [leftOut].
+     */
+    private fun reminders(given: List<GivenReminder>, byId: Map<String, TaskItem>, felix: FelixStore, now: Long, zone: ZoneId, leftOut: MutableList<String>, cancelled: Set<String> = emptySet(), dueBy: Map<String, Long> = emptyMap(), reopened: Set<String> = emptySet()): List<Reminder> {
+        if (given.size > MAX_REMINDERS) leftOut += "${given.size - MAX_REMINDERS} more reminders than the app takes at once"
+        var room = Reminders.MAX_PENDING - felix.reminders.count { Reminders.pending(it) && it.id !in cancelled }
+        val seen = HashSet<String>()
+        return given.take(MAX_REMINDERS).mapNotNull { g ->
+            fun no(why: String) = null.also { leftOut += "a reminder ($why)" }
+            val words = g.text.trim().take(Reminders.MAX_TEXT)
+            val id = g.id.trim()
+            val was = id.takeIf { it.isNotEmpty() }?.let { felix.reminders.firstOrNull { r -> r.id == it } }
+            if (id.isNotEmpty() && (was == null || !Reminders.unsent(was))) return@mapNotNull no("one to move that isn't listed, or has come already")
+            if (id.isNotEmpty() && !seen.add(id)) return@mapNotNull no("“${words.ifEmpty { was?.text.orEmpty() }.take(60)}” given twice")
+            if (was == null && words.isEmpty()) return@mapNotNull no("one with no words")
+            val taskId = g.taskId.trim().takeIf { it.isNotEmpty() }
+            val task = taskId?.let(byId::get)
+            if (taskId != null && task == null) return@mapNotNull no("“${words.take(60)}” on a task that isn't listed")
+            val due = when (val kind = g.`when`.trim()) {
+                ChatPrompts.WHEN_AT -> {
+                    val time = g.time.trim().takeIf { it.isNotEmpty() }
+                    if (time == null) {
+                        // A move with no time keeps its time; a new one needs one.
+                        was?.due ?: return@mapNotNull no("“${words.take(60)}” with no time")
+                    } else {
+                        val day = g.date.trim().ifEmpty { Instant.ofEpochMilli(now).atZone(zone).toLocalDate().toString() }
+                        val at = at(day, time, LocalTime.MIDNIGHT, zone) ?: return@mapNotNull no("“${words.take(60)}” at a time that doesn't read")
+                        if (at < now - GONE_BY_MS) return@mapNotNull no("“${words.take(60)}” at ${Instant.ofEpochMilli(at).atZone(zone).format(CLOCK)}, which has gone by")
+                        if (at > now + YEAR_MS) return@mapNotNull no("“${words.take(60)}” more than a year ahead")
+                        Due(DueKind.At, at)
+                    }
+                }
+                ChatPrompts.WHEN_SLOT, ChatPrompts.WHEN_BEFORE -> {
+                    // A move that names no task keeps the one it had.
+                    val on = task ?: was?.taskId?.let(byId::get)
+                        ?: return@mapNotNull no("“${words.take(60)}” at a task's ${if (kind == ChatPrompts.WHEN_SLOT) "slot" else "deadline"}, with no listed task")
+                    if (!on.isOpen && on.id !in reopened) return@mapNotNull no("“${words.take(60)}” on “${on.title.take(60)}”, which is finished")
+                    if (kind == ChatPrompts.WHEN_SLOT) {
+                        // An event, or one off the plan as you said, never has a slot of work for it to come at.
+                        if (Reminders.offPlan(on)) return@mapNotNull no("“${words.take(60)}” at a slot of “${on.title.take(60)}”, which never has one: it's ${if (on.kind == Kind.Event) "an event" else "off the plan"}")
+                        // From the day it's asked for, or now.
+                        val from = g.date.trim().takeIf { it.isNotEmpty() }?.let { at(it, null, LocalTime.MIDNIGHT, zone) ?: return@mapNotNull no("“${words.take(60)}” from a day that doesn't read") }
+                        if (from != null && from > now + YEAR_MS) return@mapNotNull no("“${words.take(60)}” more than a year ahead")
+                        Due(DueKind.SlotStart, maxOf(from ?: now, now))
+                    } else {
+                        val deadline = dueBy[on.id] ?: on.deadlineAt(now) ?: return@mapNotNull no("“${words.take(60)}” before “${on.title.take(60)}” is due, which has no due date")
+                        val before = g.minutesBefore.takeIf { it in 0..Reminders.MAX_BEFORE_MIN } ?: return@mapNotNull no("“${words.take(60)}” before a task's due by more than a week, or by no time")
+                        // Its moment from the deadline in force now: one gone by is refused, as an At's is.
+                        val at = deadline - before * 60_000L
+                        if (at < now - GONE_BY_MS) return@mapNotNull no("“${words.take(60)}” ${before} min before “${on.title.take(60)}” is due, which has gone by")
+                        Due(DueKind.BeforeDue, minutesBefore = before)
+                    }
+                }
+                else -> return@mapNotNull no("“${words.take(60)}” when the app doesn't know (${kind.take(20)})")
+            }
+            // An At keeps a task only as what it's about; a slot's or a deadline's is the task it waits on.
+            val dueTask = taskId ?: was?.taskId
+            if (was != null) {
+                was.copy(text = words.ifEmpty { was.text }, due = due, taskId = dueTask).undrafted()
+            } else {
+                if (room <= 0) return@mapNotNull no("“${words.take(60)}”: ${Reminders.MAX_PENDING} are still to come already")
+                room--
+                Reminder(UUID.randomUUID().toString(), words, now, By.Felix, dueTask, due)
+            }
+        }
+    }
+
+    /**
+     * [given] as notes the app keeps, at most [MAX_NOTES]: each with its words, on a listed task (open or
+     * finished), no more on one than [Notes.PER_TASK] with [felix]'s; or standing (Q31: A), for every task
+     * of a subject, a class, a source the app reads or with a word in its title, never on a task too, no more
+     * than [Notes.MAX_STANDING], those the same answer deletes ([deleted]) not counted; what can't be is said in [leftOut].
+     */
+    private fun notes(given: List<GivenNote>, byId: Map<String, TaskItem>, felix: FelixStore, now: Long, leftOut: MutableList<String>, deleted: Set<String> = emptySet()): List<Note> {
+        if (given.size > MAX_NOTES) leftOut += "${given.size - MAX_NOTES} more notes than the app takes at once"
+        val added = HashMap<String, Int>()
+        var standing = Notes.live(felix.notes).count { it.scope != null && it.id !in deleted }
+        return given.take(MAX_NOTES).mapNotNull { g ->
+            fun no(why: String) = null.also { leftOut += "a note ($why)" }
+            val words = g.text.trim().take(Notes.MAX_TEXT)
+            if (words.isEmpty()) return@mapNotNull no("one with no words")
+            fun given(text: String) = text.trim().takeIf { it.isNotEmpty() }
+            val source = given(g.source)?.let { name ->
+                Source.entries.firstOrNull { it.name.equals(name.replace(" ", ""), ignoreCase = true) || it.label.equals(name, ignoreCase = true) }
+                    ?: return@mapNotNull no("“${words.take(60)}” for a source the app doesn't read (${name.take(20)})")
+            }
+            if (listOf(g.subject, g.className, g.titleContains).any { it.trim().length > Notes.MAX_SCOPE }) return@mapNotNull no("“${words.take(60)}”, for tasks named in more than ${Notes.MAX_SCOPE} characters")
+            val scope = NoteScope(given(g.subject), given(g.className), source, given(g.titleContains)).takeUnless { it.isEmpty }
+            if (scope != null) {
+                if (given(g.taskId) != null) return@mapNotNull no("“${words.take(60)}” on a task and for every task of a kind, both")
+                if (standing >= Notes.MAX_STANDING) return@mapNotNull no("“${words.take(60)}”: ${Notes.MAX_STANDING} notes for every task of a kind are kept already")
+                standing++
+                return@mapNotNull Note(UUID.randomUUID().toString(), words, now, By.Felix, scope = scope)
+            }
+            val task = byId[g.taskId.trim()] ?: return@mapNotNull no("“${words.take(60)}” on a task that isn't listed")
+            val count = Notes.on(task.id, felix.notes).count { it.id !in deleted } + (added[task.id] ?: 0)
+            if (count >= Notes.PER_TASK) return@mapNotNull no("“${words.take(60)}”: “${task.title.take(60)}” has ${Notes.PER_TASK} already")
+            added[task.id] = (added[task.id] ?: 0) + 1
+            Note(UUID.randomUUID().toString(), words, now, By.Felix, taskId = task.id)
+        }
+    }
+
+    /** The deadlines [changes] set (DueBy), by task id: what a reminder before one goes by, made before their lay comes. */
+    fun deadlines(changes: List<Change>): Map<String, Long> =
+        changes.filter { it.type == ChangeType.DueBy && it.time != null }.mapNotNull { c -> c.taskId?.let { it to c.time!! } }.toMap()
+
+    /** A reminder's time may be this far behind now (his reading of a minute), and no more. */
+    private const val GONE_BY_MS = 60_000L
+    private const val YEAR_MS = 366 * DAY_MS
+    private val CLOCK = DateTimeFormatter.ofPattern("HH:mm", Locale.UK)
+
+    /** [a] as an action the app can take, checked against the tasks there are ([byId]), the [settings] and [felix]'s reminders and notes; null, and why in [leftOut], if it can't be. */
+    private fun action(a: GivenAction, byId: Map<String, TaskItem>, settings: Settings?, felix: FelixStore, leftOut: MutableList<String>): ChatAction? {
         fun act(t: ChatAction.Type, id: String, step: Int? = null) = ChatAction(t, id, step)
         fun no(why: String) = null.also { leftOut += why }
+        // A reminder cancelled, still to come; a note deleted, still kept (Stage 8a): by id, their task's taken from them.
+        if (a.type == "cancelReminder") {
+            val r = felix.reminders.firstOrNull { it.id == a.value.trim() }?.takeIf(Reminders::pending) ?: return no("a reminder to cancel that isn't one still to come")
+            return ChatAction(ChatAction.Type.CancelReminder, r.taskId.orEmpty(), value = r.id)
+        }
+        if (a.type == "deleteNote") {
+            val n = Notes.live(felix.notes).firstOrNull { it.id == a.value.trim() } ?: return no("a note to delete that isn't kept")
+            return ChatAction(ChatAction.Type.DeleteNote, n.taskId.orEmpty(), value = n.id)
+        }
         if (a.type == "setting") {
             val field = FelixSettings.field(a.setting) ?: return no("a setting the app doesn't let him change (${a.setting.trim().take(40)})")
             if (settings != null && FelixSettings.set(settings, field.name, a.value) == null) return no("“${field.label}” set to “${a.value.trim().take(40)}”, which it can't be")

@@ -59,7 +59,7 @@ class Stores(
     val instructions = store("instructions.json", InstructionState.serializer(), ::InstructionState, migrations = listOf(TasksMigration.INSTRUCTIONS), onWrite = InstructionState::withStepIds)
 
     /** Your chat with Felix, the live window of it: every message of his and yours, what became of his cards, and his state. */
-    val chat = store("chat.json", ChatState.serializer(), ::ChatState, migrations = listOf(ChatMigration.CHAT, TasksMigration.CHAT))
+    val chat = store("chat.json", ChatState.serializer(), ::ChatState, migrations = listOf(ChatMigration.CHAT, TasksMigration.CHAT, FelixStore.CHAT))
 
     /**
      * The chat's messages past its window, oldest first, a month a file: each read only when it's wanted
@@ -89,10 +89,13 @@ class Stores(
     /** What Felix remembers (AI-21): facts, and standing instructions. */
     val memory = store("memory.json", MemoryState.serializer(), ::MemoryState)
 
+    /** What Felix keeps at your asking (Stage 8a): notes on tasks, standing notes, and reminders with their drafts. */
+    val felix = store("felix.json", FelixStore.serializer(), ::FelixStore)
+
     /** The versions of its events the app has written to calendars, so a copy of one is known; what it wrote where; your answers about events. */
     val calendar = store("calendar.json", CalendarState.serializer(), ::CalendarState, migrations = listOf(RuntimeSplit.CALENDAR))
 
-    private val json = listOf(tasks, settings, runtime, session, protection, model, anki, learning, log, instructions, chat, school, memory, calendar)
+    private val json = listOf(tasks, settings, runtime, session, protection, model, anki, learning, log, instructions, chat, school, memory, felix, calendar)
 
     /**
      * A store, what a backup keeps of it ([backup]; none, and [why] says why), and the resets that
@@ -122,6 +125,7 @@ class Stores(
         Kept("chat-archive.json", backup = "the chat's earlier messages, while the backup has room for them, the oldest left out first", resets = setOf(Reset.Chat)),
         Kept("school.json", backup = "all of it"),
         Kept("memory.json", backup = "all of it", resets = setOf(Reset.Memories)),
+        Kept("felix.json", backup = "all of it", resets = setOf(Reset.Chat)),
         Kept("calendar.json", backup = "your answers about events (what this phone wrote to its calendars means nothing to another's)"),
     )
 

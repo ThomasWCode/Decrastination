@@ -19,7 +19,7 @@ data class ChatState(
     /** His state between looks (LR-03): his next check, what he wrote ahead, what waits to be asked, the check-in's answers so far. */
     val felix: FelixState = FelixState(),
     /** The shape this is in ([com.thomaswcode.decrastination.data.Migration]): raised with each change of it. */
-    val version: Int = 3,
+    val version: Int = 4,
 ) {
     /**
      * Your newest message still waiting for his answer: a message of his written since, unasked, doesn't
@@ -68,6 +68,8 @@ data class ChatMessage(
     val asks: List<AssessLater> = emptyList(),
     /** His, in the app's words: the button it carries under it, "review" (the week's) or "summary:<week>" (to send). */
     val opens: String? = null,
+    /** His Reminder message's reminder (Stage 8a): what its *Done* and snoozes act on. */
+    val reminderId: String? = null,
     /** Claude's: what it would do, each on a card. */
     val proposals: List<Proposal> = emptyList(),
     /**
@@ -110,7 +112,7 @@ data class WebSource(val title: String, val url: String)
 data class ChatArchive(
     val messages: List<ChatMessage> = emptyList(),
     /** The shape this is in ([com.thomaswcode.decrastination.data.Migration]): raised with each change of it. */
-    val version: Int = 2,
+    val version: Int = 3,
 )
 
 /** The conversation read as a thread. Pure. */
@@ -173,18 +175,20 @@ data class Proposal(
  * Something the chat does for you beyond a change (AI-14): a step of a task ticked, or a task shown;
  * since 16 Oct (your call: he changes everything) a step unticked, a task of yours done, open again
  * or deleted, and a setting about the work set, [setting] to [value]
- * ([FelixSettings]; [taskId] empty).
+ * ([FelixSettings]; [taskId] empty); since 4.1.0 a reminder set, moved or cancelled, and a note
+ * added or deleted, the reminder's or the note's id its [value] ([taskId] its task's, or empty).
  */
 @Serializable
 data class ChatAction(val type: Type, val taskId: String, val stepIndex: Int? = null, val setting: String? = null, val value: String? = null) {
-    enum class Type { TickStep, Open, UntickStep, Done, Reopen, Delete, Setting }
+    enum class Type { TickStep, Open, UntickStep, Done, Reopen, Delete, Setting, SetReminder, MoveReminder, CancelReminder, AddNote, DeleteNote }
 }
 
 /**
  * What one of the chat's actions did (16 Oct), said under its answer as [line], with what its Undo
  * needs: the [action]; the task as it was before it ([was]: deleted, or finished before it was
  * opened again), and the cards that had added a deleted one ([cards], "message|card"); a setting's
- * value before and after ([before], [after]). [undone] once Undo has taken it back. With no [action],
+ * value before and after ([before], [after]); a reminder before it was moved ([reminder]). [undone]
+ * once Undo has taken it back. With no [action],
  * a line saying what came of the answer, with nothing to undo; a [problem] where something wasn't
  * made or looked up.
  */
@@ -198,6 +202,8 @@ data class Act(
     val after: String? = null,
     val undone: Boolean = false,
     val problem: Boolean = false,
+    /** A reminder as it was before a move ([ChatAction.Type.MoveReminder]): the due and words its Undo puts back. */
+    val reminder: Reminder? = null,
 ) {
     companion object {
         /** How a [problem]'s line starts where a card of the answer couldn't be made, and where a search he asked for wasn't looked up: each said apart in the message's label ([ChatSummary.line]). */
@@ -268,17 +274,23 @@ enum class ProposalState { Proposed, Applied, Discarded }
 object ChatActs {
 
     /**
-     * Whether [act] can still be taken back, with [tasks], [settings] and the chat's [messages] as
-     * they are: a step ticked still done (one of yours, or one done by its tick, it finished, too); one unticked still to do;
+     * Whether [act] can still be taken back, with [tasks], [settings], the chat's [messages] and Felix's
+     * [notes] and [reminders] as they are, [messageId] the message holding it (where known: an act can read
+     * the same as an earlier one), at [now] (where given, a reminder brought back is one that would still come, its
+     * task gone by its source's last read, [readAt]): a step ticked still done (one of yours, or one done by its tick, it finished, too); one unticked still to do;
      * a task done still done; one opened again still as that left it ([asReopened]); one deleted
      * still gone, and none of the cards that had added it made again since (Redo makes it anew); a
-     * setting still as it was set.
+     * setting still as it was set; a reminder set or moved still unsent, not snoozed nor cancelled, and
+     * not moved again since; one cancelled still cancelled, with room for it among those still to come; a
+     * note added still there; one deleted still deleted, and kept, with room for it on its task.
      */
-    fun canUndo(act: Act, tasks: List<TaskItem>, settings: Settings, messages: List<ChatMessage>): Boolean {
+    fun canUndo(act: Act, tasks: List<TaskItem>, settings: Settings, messages: List<ChatMessage>, notes: List<Note> = emptyList(), reminders: List<Reminder> = emptyList(), messageId: String? = null, now: Long? = null, readAt: (Source) -> Long? = { null }): Boolean {
         if (act.undone) return false
         val a = act.action ?: return false
         val task = tasks.firstOrNull { it.id == a.taskId }
         val step = a.stepIndex?.let { task?.subSteps?.getOrNull(it) }
+        val reminder = reminders.firstOrNull { it.id == a.value }
+        val note = notes.firstOrNull { it.id == a.value }
         return when (a.type) {
             ChatAction.Type.Open -> false
             ChatAction.Type.TickStep -> task != null && step?.done == true && (task.isOpen || task.source == Source.Own || task.tickDone)
@@ -287,6 +299,42 @@ object ChatActs {
             ChatAction.Type.Reopen -> task != null && act.was != null && asReopened(task, act.was)
             ChatAction.Type.Delete -> act.was != null && task == null && !redone(act.cards, messages)
             ChatAction.Type.Setting -> act.before != null && FelixSettings.field(a.setting.orEmpty())?.get(settings) == act.after
+            ChatAction.Type.SetReminder -> reminder != null && Reminders.unsent(reminder) && !movedSince(act, messages, messageId)
+            ChatAction.Type.MoveReminder -> reminder != null && act.reminder != null && Reminders.unsent(reminder) && !movedSince(act, messages, messageId) &&
+                comes(reminder.copy(text = act.reminder.text, due = act.reminder.due, taskId = act.reminder.taskId), tasks, now, readAt)
+            // Brought back only where there's room for it: not past the reminders still to come, nor a task's notes, kept.
+            ChatAction.Type.CancelReminder -> reminder?.cancelledAt != null && reminders.count(Reminders::pending) < Reminders.MAX_PENDING && comes(reminder.copy(cancelledAt = null), tasks, now, readAt)
+            ChatAction.Type.AddNote -> note != null && note.deletedAt == null
+            ChatAction.Type.DeleteNote -> note?.deletedAt != null && Notes.hasRoom(note, notes)
+        }
+    }
+
+    /** Whether [r], brought back, would still come at [now]: not let go at once, its task finished, gone or with no deadline ([Reminders.letGo]). */
+    private fun comes(r: Reminder, tasks: List<TaskItem>, now: Long?, readAt: (Source) -> Long?): Boolean = now == null || Reminders.letGo(listOf(r), tasks.associateBy { it.id }, now, readAt).isEmpty()
+
+    /**
+     * Whether a message after the one holding [act] in [messages] ([messageId], else the first holding one
+     * like it) moves its reminder again, by an act not undone: taking [act] back then would put back a time or
+     * words since changed.
+     */
+    private fun movedSince(act: Act, messages: List<ChatMessage>, messageId: String? = null): Boolean {
+        val id = act.action?.value ?: return false
+        val at = messageId?.let { m -> messages.indexOfFirst { it.id == m } } ?: messages.indexOfFirst { act in it.acts }
+        if (at < 0) return false
+        return messages.drop(at + 1).any { m -> m.acts.any { it.action?.type == ChatAction.Type.MoveReminder && it.action.value == id && !it.undone } }
+    }
+
+    /**
+     * The ids that an act in [messages] not undone can still bring back: a deleted note's, a cancelled
+     * reminder's, and a deleted task's (its act keeps the task). What they name is kept while they can
+     * ([Notes.prune], [Reminders.prune]).
+     */
+    fun held(messages: List<ChatMessage>): Set<String> = messages.flatMap { it.acts }.filter { !it.undone }.mapNotNullTo(HashSet()) { act ->
+        val a = act.action ?: return@mapNotNullTo null
+        when (a.type) {
+            ChatAction.Type.DeleteNote, ChatAction.Type.CancelReminder -> a.value
+            ChatAction.Type.Delete -> a.taskId.takeIf { act.was != null }
+            else -> null
         }
     }
 

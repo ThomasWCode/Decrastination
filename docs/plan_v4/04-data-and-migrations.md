@@ -79,7 +79,7 @@ A task finished more than 14 days ago (C-Q3; `Merge.KEEP_FINISHED_MS` is the sam
 
 ### `felix.json` (v1), Stage 8a
 
-Notes (on a task, or standing, for every task a scope matches) and reminders, versioned from the start; in the backup (format 8) and in Reset → "The chat and Felix's history". Not on `TaskItem`: a merge rewrites tasks and must not be able to drop them; keyed by task id, which is stable across syncs and reopenings, or by a scope the matcher reads at each use.
+Notes (on a task, or standing, for every task a scope matches) and reminders, versioned from the start; in the backup (format 8) and in Reset → "The chat and Felix's history". Not on `TaskItem`: a merge rewrites tasks and must not be able to drop them; keyed by task id, which is stable across syncs and reopenings, or by a scope the matcher reads at each use. The chat's shape gained their acts' types, a moved reminder's old time and words on its act (`Act.reminder`) and a reminder's message's reminder (`ChatMessage.reminderId`): `chat.json` version 4 and the archive's months version 3, read as they are (their fields have defaults), so an older build sets the newer file aside whole rather than reading part of it.
 
 ### Memory (v2), Stage 10a
 
@@ -165,8 +165,8 @@ data class Reminder(
     val sentAt: Long? = null, val snoozedTo: Long? = null, val doneAt: Long? = null,
     /** Cancelled from the chat: kept, never delivered, until its act's Undo window closes; Undo clears it. */
     val cancelledAt: Long? = null,
-    /** His words for it, written ahead. */
-    val draft: FelixAnswer? = null, val draftedAt: Long? = null,
+    /** His words for it, written ahead, when, and for which moment (4.1.0: one whose slot or deadline moved is written for again). */
+    val draft: FelixAnswer? = null, val draftedAt: Long? = null, val draftFor: Long? = null,
 )
 @Serializable data class Due(val kind: DueKind, val at: Long? = null, val minutesBefore: Int? = null)
 @Serializable enum class DueKind { At, SlotStart, BeforeDue }

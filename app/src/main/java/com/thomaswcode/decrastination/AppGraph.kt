@@ -12,7 +12,10 @@ import com.thomaswcode.decrastination.calendar.CalendarWriter
 import com.thomaswcode.decrastination.calendar.SlotCalendar
 import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.InstructionStatus
+import com.thomaswcode.decrastination.core.Notes
 import com.thomaswcode.decrastination.core.OwnTask
+import com.thomaswcode.decrastination.core.Plan
+import com.thomaswcode.decrastination.core.Reminders
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.WallClock
@@ -32,6 +35,7 @@ import com.thomaswcode.decrastination.enrich.RuleEnricher
 import com.thomaswcode.decrastination.felix.AndroidFelixPorts
 import com.thomaswcode.decrastination.felix.Conversation
 import com.thomaswcode.decrastination.felix.FelixNotifications
+import com.thomaswcode.decrastination.felix.FelixRules
 import com.thomaswcode.decrastination.felix.Looks
 import com.thomaswcode.decrastination.felix.Outbox
 import com.thomaswcode.decrastination.learn.Assessment
@@ -189,7 +193,16 @@ class AppGraph private constructor(context: Context) {
         calendarChanges = sync.calendarState,
         sweep = { slots.sweep() },
         hooks = listOf(
+            // The blocker's plan kept for the minute let go: this one may come of what that isn't kept by (your pace, the
+            // session, the school calendar, your instructions), so his looks and a reminder's alarm don't go by the last.
+            { _ -> focus.forgetPlan() },
             { made -> SlotAlarms.arm(app, made, clock.now()) },
+            // Your reminders (8a): any this plan lets go (its task closed) or brings due said and sent, then their alarm
+            // set by it, as a slot's or a deadline's moment moves with it.
+            { made ->
+                runCatching { looks.sweepReminders(plan = made) }.onFailure { Log.w(TAG, "Sending the reminders due failed", it) }
+                armReminder(made)
+            },
             // The calendar once plans have been quiet a while ([CalendarWriter.planned]).
             { made -> calendarWriter.planned(made) },
             { _ -> WidgetUpdater.update(app) },
@@ -197,6 +210,7 @@ class AppGraph private constructor(context: Context) {
         profile = { conversation.profile(it) },
         draftAhead = { made, now -> looks.draftAhead(made, now) },
         onFailure = { Log.w(TAG, "Replanning failed", it) },
+        notes = { task -> Notes.forTask(task, stores.felix.value.notes, settings.value.classMap).map { it.text } },
     )
 
     /** The blocker's state and decisions (block/Focus.kt). */
@@ -238,7 +252,7 @@ class AppGraph private constructor(context: Context) {
 
     /** The voice of the app's messages (LR-03). */
     val looks: Looks = Looks(
-        tasks, settings, stores.model, log, chat, clock, scope, gateway, focus, planning, felixPorts, outbox,
+        tasks, settings, stores.model, log, chat, stores.felix, clock, scope, gateway, focus, planning, felixPorts, outbox,
         calendarTime = { sync.calendarTime },
         profile = { conversation.profile(it) },
         remember = { conversation.remember(it) },
@@ -251,7 +265,7 @@ class AppGraph private constructor(context: Context) {
      * remembers, the replies from his notification, the week's check-in, and what the app says in his name.
      */
     val conversation: Conversation = Conversation(
-        tasks, settings, runtime, stores.learning, log, stores.instructions, chat, school, memory, clock, scope, gateway, notifier, focus, planning, felixPorts, outbox,
+        tasks, settings, runtime, stores.learning, log, stores.instructions, chat, school, memory, stores.felix, clock, scope, gateway, notifier, focus, planning, felixPorts, outbox,
         owners = object : Conversation.Owners {
             override suspend fun saveOwnTask(sourceId: String, task: OwnTask): Boolean = ownTasks.saveOwnTask(sourceId, task)
             override suspend fun finishOwnTask(taskId: String) { ownTasks.finishOwnTask(taskId) }
@@ -268,6 +282,7 @@ class AppGraph private constructor(context: Context) {
         },
         calendarTime = { sync.calendarTime },
         answered = { record, words -> looks.answered(record, words) },
+        draftReminders = { now -> looks.draftReminders(now) },
     )
 
     /**
@@ -397,7 +412,13 @@ class AppGraph private constructor(context: Context) {
         scope.launch {
             runCatching { slots.sweep() }.onFailure { Log.w(TAG, "Looking at missed slots failed", it) }
             planning.watcher.start()
+            // Your reminders gone by while the app wasn't running (the phone off): sent now, marked late (8a).
+            runCatching { looks.sweepReminders() }.onFailure { Log.w(TAG, "Sending the reminders gone by failed", it) }
         }
+        // Your reminders' alarm set again at every change to them (8a), as each plan sets it too.
+        scope.launch { stores.felix.state.drop(1).collect { runCatching { armReminder() }.onFailure { e -> Log.w(TAG, "Setting the reminders' alarm failed", e) } } }
+        // A note added or deleted (8a): the plan made again, so the first steps of its task's pieces are written with it ([Ahead]).
+        scope.launch { stores.felix.state.map { it.notes }.distinctUntilChanged().drop(1).collect { planning.watcher.poke() } }
         // The files older shapes came from, a week after their migration, at a start that's got this far.
         scope.launch(Dispatchers.IO) { runCatching { stores.letGoOfOldShapes() }.onFailure { Log.w(TAG, "Letting go of old shapes failed", it) } }
         // The notifications Felix's messages have taken the place of, one still showing or held from
@@ -413,6 +434,14 @@ class AppGraph private constructor(context: Context) {
             }
         }
     }
+
+    /**
+     * Your reminders' alarm (8a) at the next moment by [plan] that one comes, or that one not yet written for has
+     * his window to write it in begin ([Reminders.nextWake]), so he writes for it with the phone asleep; none with
+     * none to come. Not before [after], where a sweep failed ([SlotAlarms.REMINDER_RETRY_MS]).
+     */
+    fun armReminder(plan: Plan = planning.plan(), after: Long? = null) =
+        SlotAlarms.armReminder(app, Reminders.nextWake(stores.felix.value.reminders, plan, tasks.value.tasks.associateBy { it.id }, clock.now(), FelixRules.AHEAD_MS, after))
 
     /**
      * The completions syncs saved: free time and the log, then "How was it?" for finished homework

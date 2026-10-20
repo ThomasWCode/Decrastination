@@ -49,7 +49,7 @@ import java.time.Instant
 
 /**
  * The debug page (AR-03, debug builds, the menu's): the model's recent calls, a task's prompt as it
- * would be sent, the chat's context, Felix's state and last messages, the stores' sizes and ages,
+ * would be sent, the chat's context, Felix's state and last messages, his notes and reminders, the stores' sizes and ages,
  * each source's last read and the watchdog's findings, each block with Copy; and the commands that
  * take nothing, as the PC sends them.
  */
@@ -115,6 +115,12 @@ private fun DebugPage(graph: AppGraph, activity: Activity) {
                         "${Instant.ofEpochMilli(m.at).atZone(zone).toLocalDateTime().withNano(0)} ${m.kind}: ${m.text}" + (ChatHistory.replyOf(m, chat.messages)?.let { " → ${it.text}" } ?: "")
                     }.ifEmpty { "none" },
                 )
+            }
+            item(key = "notes") {
+                // His notes and reminders (8a), read as they change.
+                val kept by graph.stores.felix.state.collectAsStateWithLifecycle()
+                val lines = remember(round, kept, state) { graph.conversation.notesAndReminders(now) }
+                Block(activity, "Felix's notes and reminders", lines.joinToString("\n").ifEmpty { "none" })
             }
             item(key = "stores") {
                 val files = activity.filesDir.listFiles().orEmpty().filter { it.isFile }.sortedBy { it.name }

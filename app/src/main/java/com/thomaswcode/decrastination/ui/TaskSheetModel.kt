@@ -1,7 +1,10 @@
 package com.thomaswcode.decrastination.ui
 
+import com.thomaswcode.decrastination.core.By
 import com.thomaswcode.decrastination.core.Chunk
 import com.thomaswcode.decrastination.core.Instruction
+import com.thomaswcode.decrastination.core.Note
+import com.thomaswcode.decrastination.core.Notes
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Planner
 import com.thomaswcode.decrastination.core.TaskItem
@@ -50,6 +53,27 @@ object TaskSheetModel {
         val piece = p.chunk.shown ?: if (p.chunk.parts > 1) "part ${p.chunk.part} of ${p.chunk.parts}" else null
         return listOfNotNull(day + time, piece).joinToString(", ") + ": " + p.why.replaceFirstChar(Char::lowercase)
     }
+
+    /** A note's words, at most, as the sheet's box takes them (8a). */
+    const val MAX_NOTE = Notes.MAX_TEXT
+
+    /**
+     * One of a task's notes as its sheet lists it (8a): its words, who wrote it and when, and the tasks a standing one is for,
+     * [every] for that one ("every Physics task"), as its delete takes it from all of them, so asks first.
+     */
+    data class Noted(val id: String, val line: String, val every: String? = null)
+
+    /**
+     * [task]'s notes (8a), its own then the standing ones it matches ([Notes.forTask]), each a line: "Felix,
+     * today 17:00: use the second source"; "Note for every Chemistry task: on sheets (yours, Mon)". [felix] his name.
+     */
+    fun notes(task: TaskItem, notes: List<Note>, classMap: Map<String, String>, felix: String, now: Long, zone: ZoneId): List<Noted> =
+        Notes.forTask(task, notes, classMap).map { n ->
+            val who = if (n.by == By.Felix) felix else "You"
+            val at = Format.at(n.at, now, zone)
+            val every = n.scope?.let(Notes::scopeLine)
+            Noted(n.id, every?.let { "Note for $it: ${n.text} (${if (n.by == By.Felix) felix else "yours"}, $at)" } ?: "$who, $at: ${n.text}", every)
+        }
 
     /** The words of the instructions in force on [taskId], about it or changing it: the newest first. */
     fun instructions(applied: List<Instruction>, taskId: String): List<String> =

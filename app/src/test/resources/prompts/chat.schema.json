@@ -108,7 +108,9 @@
                             "AtTime",
                             "Steps",
                             "SameAs",
-                            "Rename"
+                            "Rename",
+                            "Remind",
+                            "Note"
                         ]
                     },
                     "taskId": {
@@ -270,7 +272,9 @@
                             "reopen",
                             "delete",
                             "open",
-                            "setting"
+                            "setting",
+                            "cancelReminder",
+                            "deleteNote"
                         ]
                     },
                     "taskId": {
