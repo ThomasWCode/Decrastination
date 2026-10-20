@@ -130,7 +130,7 @@ object ChatPrompts {
      * short ([BRIEF_TEXT]); the week's numbers ([ASK_STATS], G6); the calendar past the fortnight
      * ([ASK_CALENDAR], G7). Asked for in the answer, and answered again with them ([turns]).
      */
-    private const val READ = "7. Ask for more before answering (details), where your answer needs what the context doesn't give: a task's id, up to three, for its whole text (to quote it or answer from it: each task's line says how long its text is and what comes with it, and the texts listed are cut short); stats, for the week's numbers (this week so far and last week: time worked, slots kept and missed, work finished and deadlines met, by subject), for a message about how a week went; calendar, for the four weeks after the fortnight, or calendar:YYYY-MM for a month (calendar:2026-12), for anything after the fortnight's events listed. Then reply only that you're looking, and change nothing: you'll be asked again with what they bring, to answer and act on. Never a text for the task a message is about, which comes whole; most messages need none, and details is then an empty list."
+    private const val READ = "7. Ask for more before answering (details), where your answer needs what the context doesn't give: a task's id, up to three, for its whole text (to quote it or answer from it: each task's line says how long its text is and what comes with it; the texts listed are cut short, a long one to its reading's summary, so where what they ask about, an amount, a name, an order or a date, isn't in what you're shown, ask for the text rather than say it isn't there); stats, for the week's numbers (this week so far and last week: time worked, slots kept and missed, work finished and deadlines met, by subject), for a message about how a week went; calendar, for the four weeks after the fortnight, or calendar:YYYY-MM for a month (calendar:2026-12), for anything after the fortnight's events listed. Then reply only that you're looking, and change nothing: you'll be asked again with what they bring, to answer and act on. Never a text for the task a message is about, which comes whole; most messages need none, and details is then an empty list."
 
     /**
      * A reminder (Stage 8a, Q9: B): its words theirs, at a time, at their next slot on a task, or a while before a
@@ -650,11 +650,14 @@ object ChatPrompts {
     /** A lesson's day and start, as the lessons' line says them. */
     private val LESSON_DAY = DateTimeFormatter.ofPattern("EEE d MMM HH:mm", Locale.UK)
 
-    /** Each open task's own text as the context gives it, at most (D-93; 600 till 8c, its line now saying what the text holds). */
-    const val BRIEF_TEXT = 250
+    /**
+     * Each open task's own text as the context gives it, at most (D-93). Its cut to 250 (8c) didn't hold in the
+     * chat's eval by its rule (a round more on one of its cases), so it stays at 600, beside each line's room.
+     */
+    const val BRIEF_TEXT = 600
 
     /** All of their texts in the context, at most. */
-    private const val MAX_TEXTS = 5_000
+    private const val MAX_TEXTS = 12_000
 
     /** What a task's text holds, on its line (8c): at most this much a line, and all the lines' together. */
     private const val HOLDS_LINE = 160
