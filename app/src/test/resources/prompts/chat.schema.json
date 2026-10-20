@@ -270,7 +270,9 @@
                             "reopen",
                             "delete",
                             "open",
-                            "setting"
+                            "setting",
+                            "cancelReminder",
+                            "deleteNote"
                         ]
                     },
                     "taskId": {
@@ -304,6 +306,71 @@
             "items": {
                 "type": "string"
             }
+        },
+        "reminders": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    },
+                    "text": {
+                        "type": "string"
+                    },
+                    "date": {
+                        "type": "string",
+                        "description": "YYYY-MM-DD, or empty"
+                    },
+                    "time": {
+                        "type": "string",
+                        "description": "HH:MM, 24-hour, or empty"
+                    },
+                    "taskId": {
+                        "type": "string"
+                    },
+                    "when": {
+                        "type": "string",
+                        "enum": [
+                            "at",
+                            "slotStart",
+                            "beforeDue"
+                        ]
+                    },
+                    "minutesBefore": {
+                        "type": "integer"
+                    }
+                },
+                "required": [
+                    "id",
+                    "text",
+                    "date",
+                    "time",
+                    "taskId",
+                    "when",
+                    "minutesBefore"
+                ],
+                "additionalProperties": false
+            }
+        },
+        "notes": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "taskId": {
+                        "type": "string"
+                    },
+                    "text": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "taskId",
+                    "text"
+                ],
+                "additionalProperties": false
+            }
         }
     },
     "required": [
@@ -314,7 +381,9 @@
         "suggestedReplies",
         "actions",
         "research",
-        "details"
+        "details",
+        "reminders",
+        "notes"
     ],
     "additionalProperties": false
 }
