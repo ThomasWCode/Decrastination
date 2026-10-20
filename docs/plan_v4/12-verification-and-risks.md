@@ -54,7 +54,7 @@ Then the stage's own checks ([03](03-stages.md)), through the debug commands whe
 ## Reviews
 
 - **Moves, and restructurings that change no behaviour** (Stages 1, 2, 4, 6, 9, 12): one Codex round, the PR saying what moved and that nothing changed, so its findings are about the move.
-- **PRs that change data or behaviour** (3, 5, 7, 8, 10, 11): up to three rounds, stopping at a round with at most one P2 (D-83), and one `@claude review` as well, answered point by point and closed with "Resolved" ([development.md](../development.md); C-Q2, C-Q12).
+- **PRs that change data or behaviour** (3, 5, 7, 8, 10, 11): at least three rounds, more while a round still finds real bugs (D-83), and a `@claude review` as well, answered point by point and closed with "Resolved" ([development.md](../development.md); C-Q2, C-Q12).
 - Before merging: CI green; any changed schema compiled by the API; the final build installed and checked on the phone; the docs changed in the same PR ([11](11-conventions-and-docs.md) §The docs).
 
 ## Risks
