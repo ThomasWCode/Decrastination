@@ -30,6 +30,7 @@ import com.thomaswcode.decrastination.core.Note
 import com.thomaswcode.decrastination.core.Notes
 import com.thomaswcode.decrastination.core.OwnTask
 import com.thomaswcode.decrastination.core.OwnTaskRules
+import com.thomaswcode.decrastination.core.Proposal
 import com.thomaswcode.decrastination.core.ProposalState
 import com.thomaswcode.decrastination.core.Reminder
 import com.thomaswcode.decrastination.core.Reminders
@@ -567,30 +568,40 @@ class Conversation(
         }
     }
 
-    /** How [now] differs from [was], as a read of [source] tells it, in words; null where nothing he'd say changed. */
-    private fun changed(was: TaskItem, now: TaskItem, source: Source): String? = when {
-        was.isOpen && !now.isOpen -> when (source) {
-            Source.Teams -> "is handed in"
-            Source.Gmail -> "is unstarred, so it's done"
-            Source.Anki -> "is studied"
-            else -> "is done"
+    /**
+     * How [now] differs from [was] as a read of [source] tells it, in words, by the source's own values: its finish
+     * (not one done by its tick, which is yours), its deadline and its name as it gives them, not what your
+     * instructions or a reading laid over them, so a change made here meanwhile isn't said as the source's. Null
+     * where nothing he'd say changed.
+     */
+    private fun changed(was: TaskItem, now: TaskItem, source: Source): String? {
+        fun due(t: TaskItem) = t.sourceValues.let { v -> if (v != null) v.dueAt else t.dueAt }
+        fun name(t: TaskItem) = t.sourceValues?.title ?: t.title
+        val theirs = !now.tickDone
+        return when {
+            theirs && was.isOpen && !now.isOpen -> when (source) {
+                Source.Teams -> "is handed in"
+                Source.Gmail -> "is unstarred, so it's done"
+                Source.Anki -> "is studied"
+                else -> "is done"
+            }
+            theirs && !was.isOpen && now.isOpen -> "is open again"
+            due(was) != due(now) -> due(now)?.let { "is due ${Instant.ofEpochMilli(it).atZone(clock.zone()).format(WHEN)} now" } ?: "has no due date now"
+            name(was) != name(now) || was.detail != now.detail -> "has changed"
+            else -> null
         }
-        !was.isOpen && now.isOpen -> "is open again"
-        was.dueAt != now.dueAt -> now.dueAt?.let { "is due ${Instant.ofEpochMilli(it).atZone(clock.zone()).format(WHEN)} now" } ?: "has no due date now"
-        was.title != now.title || was.detail != now.detail -> "has changed"
-        else -> null
     }
 
     /** Today's kept pieces by key, each with its newest record's time (G1): a keep's Undo takes back only the record it made, while it's that one. */
     fun keptAt(now: Long = clock.now()): Map<String, Long> {
-        val today = focus.today(now).toString()
-        return log.value.slots.filter { it.date == today && it.outcome.kept }.groupBy { it.key }.mapValues { (_, records) -> records.maxOf { it.at } }
+        val today = focus.today(now)
+        return log.value.slots.filter { it.outcome.kept && focus.today(it.at) == today }.groupBy { it.key }.mapValues { (_, records) -> records.maxOf { it.at } }
     }
 
-    /** Today's slots kept (G1), newest last: what unkeepPiece takes back, and what a keep's Undo needs to find. */
+    /** The pieces kept today (G1), whatever day their slot was for (one done ahead of it too), newest last: what unkeepPiece takes back. */
     fun keptToday(now: Long = clock.now()): List<SlotRecord> {
-        val today = focus.today(now).toString()
-        return log.value.slots.filter { it.date == today && it.outcome.kept }.distinctBy { it.key }
+        val today = focus.today(now)
+        return log.value.slots.filter { it.outcome.kept && focus.today(it.at) == today }.distinctBy { it.key }
     }
 
     /**
@@ -723,11 +734,6 @@ class Conversation(
             }
             reading = reading.copy(research = null, details = emptyList())
             gathered = null
-            // Opened where it lives only while the chat's on screen (G3): from his notification's reply, a retry in the
-            // background or with the chat left, Android may block the start, and one long after would surprise you;
-            // a card then, its sheet's Open opening it there.
-            val unopened = if (chatInFront) emptyList() else reading.actions.filter { it.type == ChatAction.Type.Open && it.value == ChatAnswers.OPEN_SOURCE }
-            if (unopened.isNotEmpty()) reading = reading.copy(actions = reading.actions.map { if (it in unopened) it.copy(value = null) else it })
             val reply = ChatMessage(
                 id = UUID.randomUUID().toString(),
                 from = Speaker.Felix,
@@ -744,7 +750,7 @@ class Conversation(
                 acts = listOfNotNull(
                     notLooked?.let { Act(Act.NOT_LOOKED_UP + "$it.", problem = true) },
                     read.takeIf { it.isNotEmpty() }?.let { r -> Act("Read in full: " + r.joinToString("; ") { "“${it.title}”" } + ".") },
-                ) + unopened.mapNotNull { a -> state.tasks.firstOrNull { it.id == a.taskId }?.let { t -> Act("On its card, not opened in ${t.source.label}: the chat wasn't on screen.") } },
+                ),
             )
             var kept = false
             // What he was sent of the chat ([ChatPrompts.history]): yours before it that waited with it and went
@@ -773,7 +779,7 @@ class Conversation(
             if (edits.isNotEmpty()) chat.update { s -> s.copy(messages = s.messages.map { if (it.id == reply.id) it.copy(memoryEdits = edits) else it }) }
             // Its actions (AI-14; 16 Oct, everything he does), said under it with their Undo: before its
             // changes, as its steps are the ones it was shown.
-            val acts = if (kept) act(reading.actions, shownAt) + keep(reading.reminders, reading.notes) else emptyList()
+            val acts = if (kept) act(reading.actions, shownAt, reply.id) + keep(reading.reminders, reading.notes) else emptyList()
             if (acts.isNotEmpty()) chat.update { s -> s.copy(messages = s.messages.map { if (it.id == reply.id) it.copy(acts = acts + it.acts) else it }) }
             // A reminder set or moved into his window is written for at once, not at the next plan or look (8a).
             if (acts.any { it.action?.type == ChatAction.Type.SetReminder || it.action?.type == ChatAction.Type.MoveReminder }) scope.launch { draftReminders(clock.now()) }
@@ -808,15 +814,23 @@ class Conversation(
      * ticked (its piece kept where the plan has one, today or another day, earning as a tick does,
      * else ticked as on its sheet) or to do again; a task of yours done, open again or deleted; a
      * setting set. None for one that couldn't be. A piece kept as of the plan he was shown, made at
-     * [shownAt] (G1): one kept from Day meanwhile isn't kept twice.
+     * [shownAt] (G1): one kept from Day meanwhile isn't kept twice. A task to open where it lives with
+     * the chat not on screen comes on a card on his message ([replyId]) instead (G3).
      */
-    private suspend fun act(actions: List<ChatAction>, shownAt: Long): List<Act> {
+    private suspend fun act(actions: List<ChatAction>, shownAt: Long, replyId: String): List<Act> {
         fun said(line: String, a: ChatAction) = Act(line, a)
         return actions.mapNotNull { a ->
             val task = tasks.value.tasks.firstOrNull { it.id == a.taskId }
             when (a.type) {
                 // Shown on its card; or opened where it lives at once (G3), as its sheet's Open does, which notes it seen worked on.
                 ChatAction.Type.Open -> task?.takeIf { a.value == ChatAnswers.OPEN_SOURCE }?.let { t ->
+                    // Only while the chat's on screen, looked at as it opens: from his notification's reply, a retry in the
+                    // background or with the chat left, Android may block the start, and one long after would surprise
+                    // you; on a card then, its sheet's Open opening it there.
+                    if (!chatInFront) {
+                        chat.update { s -> s.copy(messages = s.messages.map { m -> if (m.id == replyId) m.copy(proposals = m.proposals + Proposal(UUID.randomUUID().toString(), open = t.id)) else m }) }
+                        return@let Act("On its card, not opened in ${t.source.label}: the chat wasn't on screen.")
+                    }
                     val (opened, say) = ports.openSource(t)
                     if (opened) Act("Opened in ${t.source.label}: ${t.title}" + say?.let { ". $it" }.orEmpty())
                     else Act("Couldn't open “${t.title}” in ${t.source.label}" + say?.let { ": $it" }.orEmpty(), problem = true)

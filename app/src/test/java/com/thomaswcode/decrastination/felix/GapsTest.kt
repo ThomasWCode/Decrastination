@@ -9,6 +9,7 @@ import com.thomaswcode.decrastination.core.MessageKind
 import com.thomaswcode.decrastination.core.OwnTask
 import com.thomaswcode.decrastination.core.OwnTaskRules
 import com.thomaswcode.decrastination.core.Source
+import com.thomaswcode.decrastination.core.SourceValues
 import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.core.TaskItem
@@ -122,6 +123,19 @@ class GapsTest {
         assertEquals(listOf(key), conversation.keptToday().map { it.key })
     }
 
+    @Test
+    fun `a piece kept ahead of its day is among today's kept, with its Undo`() = runBlocking {
+        val later = sheet.copy(id = "teams:later", sourceId = "later", notBefore = Fixtures.at("2026-10-21T00:00"), dueAt = Fixtures.at("2026-10-23T09:00"))
+        stores.tasks.update { it.copy(tasks = listOf(later)) }
+        val key = felix.planning.plan().ordered.first { it.taskId == later.id }.key
+        assertTrue(felix.planning.plan().todaySlots.none { it.chunk?.key == key }, "planned after today")
+        val kept = asked("I did the worksheet early", answer("Kept.", listOf(action("keepPiece", later.id, key))))
+        assertEquals(listOf(key), conversation.keptToday().map { it.key })
+        assertTrue(canUndo(kept, 0))
+        assertNull(conversation.undoAct(kept.id, 0))
+        assertTrue(conversation.keptToday().isEmpty())
+    }
+
     /** His sync action (G2): [source] read, about [taskId]. */
     private fun sync(source: String, taskId: String = "") = """{"type":"sync","taskId":"$taskId","stepIndex":-1,"setting":"$source","value":""}"""
 
@@ -142,6 +156,22 @@ class GapsTest {
         val note = stores.chat.value.messages.single { it.kind == MessageKind.Note }
         assertEquals("Teams says “Forces worksheet” is handed in.", note.text)
         assertTrue(note.byApp && note.about.taskId == sheet.id)
+    }
+
+    @Test
+    fun `a change made here while the read was asked for isn't said as the source's, only what the source says`() = runBlocking {
+        val given = sheet.copy(sourceValues = SourceValues(Kind.Homework, sheet.dueAt, null, sheet.title))
+        stores.tasks.update { it.copy(tasks = listOf(given)) }
+        asked("check Teams", answer("Reading Teams.", listOf(sync("Teams", given.id))))
+        // A due date of yours laid over it meanwhile, and a name of yours: the source's own unchanged, nothing said.
+        stores.tasks.update { s -> s.copy(tasks = s.tasks.map { it.copy(dueAt = Fixtures.at("2026-10-22T09:00"), title = "My worksheet") }) }
+        conversation.afterSync()
+        assertTrue(stores.chat.value.messages.none { it.kind == MessageKind.Note })
+        // Teams' own deadline moved: said.
+        stores.tasks.update { s -> s.copy(tasks = s.tasks.map { it.copy(sourceValues = it.sourceValues!!.copy(dueAt = Fixtures.at("2026-10-23T09:00"))) }) }
+        conversation.afterSync()
+        val note = stores.chat.value.messages.single { it.kind == MessageKind.Note }
+        assertTrue(note.text.startsWith("Teams says “My worksheet” is due"), note.text)
     }
 
     @Test
