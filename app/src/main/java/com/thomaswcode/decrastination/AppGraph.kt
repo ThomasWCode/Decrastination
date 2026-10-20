@@ -12,6 +12,7 @@ import com.thomaswcode.decrastination.calendar.CalendarWriter
 import com.thomaswcode.decrastination.calendar.SlotCalendar
 import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.InstructionStatus
+import com.thomaswcode.decrastination.core.Notes
 import com.thomaswcode.decrastination.core.OwnTask
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Reminders
@@ -201,6 +202,7 @@ class AppGraph private constructor(context: Context) {
         profile = { conversation.profile(it) },
         draftAhead = { made, now -> looks.draftAhead(made, now) },
         onFailure = { Log.w(TAG, "Replanning failed", it) },
+        notes = { task -> Notes.forTask(task, stores.felix.value.notes, settings.value.classMap).map { it.text } },
     )
 
     /** The blocker's state and decisions (block/Focus.kt). */

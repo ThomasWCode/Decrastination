@@ -25,6 +25,7 @@ import com.thomaswcode.decrastination.core.MemoryEdit
 import com.thomaswcode.decrastination.core.MemoryState
 import com.thomaswcode.decrastination.core.MessageKind
 import com.thomaswcode.decrastination.core.Note
+import com.thomaswcode.decrastination.core.Notes
 import com.thomaswcode.decrastination.core.OwnTask
 import com.thomaswcode.decrastination.core.OwnTaskRules
 import com.thomaswcode.decrastination.core.ProposalState
@@ -924,6 +925,27 @@ class Conversation(
     private suspend fun restoreTask(task: TaskItem) {
         tasks.update { state -> if (state.tasks.any { it.id == task.id }) state else state.copy(tasks = Duplicates.linksPresent(state.tasks + task)) }
         owners.layTaskOverrides()
+    }
+
+    /**
+     * Your note [text] on [taskId] from its sheet (8a, Q14: A), kept as yours; or why it can't be: no words,
+     * a task not there, or [com.thomaswcode.decrastination.core.Notes.PER_TASK] on it already.
+     */
+    suspend fun addNote(taskId: String, text: String): String? {
+        val words = text.trim().take(Notes.MAX_TEXT)
+        if (words.isEmpty()) return "A note needs some words"
+        if (tasks.value.tasks.none { it.id == taskId }) return "That task isn't there now"
+        var full = false
+        felix.update { s ->
+            full = Notes.on(taskId, s.notes).size >= Notes.PER_TASK
+            if (full) s else s.copy(notes = s.notes + Note(UUID.randomUUID().toString(), words, clock.now(), By.You, taskId = taskId))
+        }
+        return if (full) "It has ${Notes.PER_TASK} notes already: delete one first" else null
+    }
+
+    /** Note [id] deleted from a sheet (8a): marked, shown nowhere, and let go at the next prune, as no act holds it. */
+    suspend fun deleteNote(id: String) {
+        felix.update { s -> s.copy(notes = s.notes.map { if (it.id == id && it.deletedAt == null) it.copy(deletedAt = clock.now()) else it }) }
     }
 
     /** [given] kept in what's remembered (AI-21), and what each thing did ([com.thomaswcode.decrastination.core.MemoryEdit.line] says it). */

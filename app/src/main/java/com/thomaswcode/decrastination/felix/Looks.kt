@@ -7,6 +7,7 @@ import com.thomaswcode.decrastination.block.Focus
 import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.core.ChatState
+import com.thomaswcode.decrastination.core.DueKind
 import com.thomaswcode.decrastination.core.FelixDraft
 import com.thomaswcode.decrastination.core.FelixRetry
 import com.thomaswcode.decrastination.core.Given
@@ -189,7 +190,7 @@ class Looks(
         val caller = gateway.client(ModelEffort.Job.Felix)?.let { FelixCaller(it) } ?: return@withLock false
         val settings = this.settings.value
         val profile = this.profile(now)
-        val user = FelixPrompts.describe(FelixPrompts.Reason.Morning, plan, null, null, today(now), chat.value.messages, null, settings, now, clock.zone())
+        val user = FelixPrompts.describe(FelixPrompts.Reason.Morning, plan, null, null, today(now), chat.value.messages, null, settings, now, clock.zone(), reminders = remindersToday(plan, now))
         // Asked in the app's scope, not the briefing's: past [MORNING_MS] the briefing goes without
         // it, and the call, paid for, comes back and is counted all the same.
         val call = scope.async {
@@ -355,8 +356,8 @@ class Looks(
         at: Long,
         interactive: Boolean,
         task: TaskItem? = trigger.taskId?.let { id -> this.tasks.value.tasks.firstOrNull { it.id == id } },
-        reminder: String? = null,
-        notes: List<String> = emptyList(),
+        reminder: String? = slotReminder(trigger),
+        notes: List<String> = task?.let(::notesOf).orEmpty(),
     ): Called<FelixCaller.Result> {
         val settings = this.settings.value
         val profile = this.profile(at)
@@ -365,6 +366,32 @@ class Looks(
         val called = gateway.call(interactive = interactive, record = ModelCalls.OnRecord(ModelEffort.Job.Felix, trigger.reason.name) { r: FelixCaller.Result -> r.usage to ModelCalls.outcome(r.refused, r.answer == null) }, cost = { r: FelixCaller.Result -> r.costUsd to r.refused }) { caller.say(FelixPrompts.system(settings, profile.year), profile.text, user) }
         if (called is Called.Failed) Log.w(AppGraph.TAG, "Felix's message failed", called.error)
         return called
+    }
+
+    /** [task]'s notes, its own and the standing ones it matches (8a), as he's told them. */
+    private fun notesOf(task: TaskItem): List<String> = Notes.forTask(task, felix.value.notes, settings.value.classMap).map { it.text }
+
+    /**
+     * Your reminder at [trigger]'s slot's start (8a), for his SlotStart: sent at it, or still to come with it
+     * its next, so he doesn't say it twice.
+     */
+    private fun slotReminder(trigger: FelixRules.Trigger): String? {
+        val slot = trigger.slot?.takeIf { trigger.reason == FelixPrompts.Reason.SlotStart } ?: return null
+        val taskId = slot.chunk?.taskId ?: return null
+        return felix.value.reminders.firstOrNull { r ->
+            r.taskId == taskId && r.due.kind == DueKind.SlotStart && r.cancelledAt == null &&
+                (r.sentAt?.let { it >= slot.start && it < slot.end } == true || (Reminders.unsent(r) && (r.due.at ?: r.at) <= slot.start))
+        }?.text
+    }
+
+    /** Your reminders that come today (8a), as his morning's told them: "16:00 dentist". */
+    private fun remindersToday(plan: Plan, now: Long): List<String> {
+        val zone = clock.zone()
+        val today = Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
+        val tasks = this.tasks.value.tasks.associateBy { it.id }
+        return felix.value.reminders.filter(Reminders::pending).mapNotNull { r -> Reminders.moment(r, plan, tasks, now)?.let { r to it } }
+            .filter { (_, at) -> Instant.ofEpochMilli(at).atZone(zone).toLocalDate() == today }.sortedBy { it.second }
+            .map { (r, at) -> "${Instant.ofEpochMilli(at).atZone(zone).format(CLOCK)} ${r.text}" }
     }
 
     /**

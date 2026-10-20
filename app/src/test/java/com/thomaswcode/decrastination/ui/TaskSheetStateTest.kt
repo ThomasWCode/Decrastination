@@ -39,6 +39,24 @@ class TaskSheetStateTest {
     private fun task(id: String) = h.stores.tasks.value.tasks.single { it.id == id }
 
     @Test
+    fun `your note goes to the notes' owner, its box shut once kept, what's wrong said, and one deleted`() = runBlocking {
+        val asked = mutableListOf<Pair<String, String>>()
+        val deleted = mutableListOf<String>()
+        val noting = TaskSheetState(h.instructions, h.ownTasks, addNote = { id, text -> asked += id to text; "It has 10 notes already: delete one first".takeIf { text == "eleventh" } }, deleteNote = { deleted += it })
+        val sheet = OwnTaskRules.create(OwnTask(title = "Essay"), "e", Fixtures.at("2026-10-12T18:00"))
+        noting.noting = true
+        noting.note(sheet, "eleventh")
+        assertEquals("It has 10 notes already: delete one first", noting.message)
+        assertTrue(noting.noting)
+        noting.note(sheet, "use the second source")
+        assertNull(noting.message)
+        assertFalse(noting.noting)
+        assertEquals(listOf(sheet.id to "eleventh", sheet.id to "use the second source"), asked)
+        noting.unnote("n1")
+        assertEquals(listOf("n1"), deleted)
+    }
+
+    @Test
     fun `a change to one of your own is made on it, and one the form wouldn't take says why`() = runBlocking {
         h.ownTasks.saveOwnTask("mine", OwnTask(title = "Revise", dueAt = Fixtures.at("2026-10-23T18:00")))
         sheet.make(task("own:mine"), Change(ChangeType.DueBy, taskId = "own:mine", time = Fixtures.at("2026-10-24T18:00")), "")

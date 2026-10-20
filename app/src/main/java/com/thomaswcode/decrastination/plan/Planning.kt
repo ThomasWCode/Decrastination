@@ -68,6 +68,8 @@ class Planning(
     /** Felix's next message written ahead ([com.thomaswcode.decrastination.felix.Looks.draftAhead]). */
     draftAhead: suspend (Plan, Long) -> Unit,
     onFailure: (Throwable) -> Unit,
+    /** The notes kept with a task (8a), which its pieces' first steps are written with. */
+    notes: (TaskItem) -> List<String> = { emptyList() },
 ) {
     /**
      * [state]'s tasks as the plan takes them: each as its instructions say, whatever the task file (a stop
@@ -127,7 +129,7 @@ class Planning(
         Days.workedOn(log.value, Instant.ofEpochMilli(now).atZone(zone).toLocalDate().toString()).values.sum()
 
     /** The pieces' first steps and Felix's next message, written after each plan (AC-10, AI-15). */
-    private val ahead: Ahead = Ahead(tasks, settings, model, gateway, profile, draftAhead) { watcher.poke() }
+    private val ahead: Ahead = Ahead(tasks, settings, model, gateway, profile, draftAhead, notes) { watcher.poke() }
 
     /**
      * The plan made again as what it depends on changes (PL-13): today's slot starts kept, then the
