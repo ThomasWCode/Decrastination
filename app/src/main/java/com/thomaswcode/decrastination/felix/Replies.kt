@@ -28,6 +28,9 @@ object Replies {
         /** One of a calendar question's three answers, as it's kept ([answer]): for every event named [key], with no call. */
         data class Event(val key: String, val answer: String) : Route
 
+        /** One of a reminder's replies (Stage 8a): *Done* ([snoozeMin] null), or a snooze of [snoozeMin]: on reminder [id], with no call. */
+        data class Reminder(val id: String, val snoozeMin: Int?) : Route
+
         /** A turn of the chat: his answer a call, told what it answers. */
         data object Chat : Route
     }
@@ -71,6 +74,9 @@ object Replies {
         }.mapTo(HashSet()) { it.id }
     }
 
+    /** A reminder's replies ([FelixWords.REMINDER_REPLIES]) and the snooze each is, in minutes: none for *Done*. */
+    private val REMINDER_REPLIES: Map<String, Int?> = mapOf(FelixWords.REMINDER_DONE to null, FelixWords.REMINDER_SNOOZE to 15, FelixWords.REMINDER_SNOOZE_HOUR to 60)
+
     /** The chat's newest message as it's shown: yours, or his with words (one with none says nothing). */
     fun newest(messages: List<ChatMessage>): ChatMessage? = messages.lastOrNull { it.from == Speaker.You || it.text.isNotBlank() }
 
@@ -91,10 +97,16 @@ object Replies {
     /**
      * Where [words], your reply to [message], go: a question of his still waiting ([waiting]) takes its
      * answer with no call (a check-in's, any words; a reading's, any words; how work went or a calendar
-     * event's, one of its three, whatever their case); anything else, and any other words, is a turn of
-     * the chat, the message it answers told to him.
+     * event's, one of its three, whatever their case); a reminder of yours not yet answered, *Done* or a
+     * snooze (8a); anything else, and any other words, is a turn of the chat, the message it answers told
+     * to him.
      */
     fun route(message: ChatMessage?, words: String, checkInUnderWay: Boolean): Route {
+        // A reminder's reply (8a): *Done* or a snooze, whatever their case, while it's unanswered.
+        if (message != null && message.from == Speaker.Felix && message.kind == MessageKind.Reminder && message.answeredAt == null) {
+            val id = message.reminderId ?: return Route.Chat
+            return REMINDER_REPLIES.entries.firstOrNull { it.key.equals(words.trim(), ignoreCase = true) }?.let { Route.Reminder(id, it.value) } ?: Route.Chat
+        }
         if (message == null || !waiting(message, checkInUnderWay)) return Route.Chat
         val said = words.trim()
         return when (message.kind) {

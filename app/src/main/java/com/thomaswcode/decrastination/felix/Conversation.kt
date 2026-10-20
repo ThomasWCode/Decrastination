@@ -439,7 +439,8 @@ class Conversation(
      * [words], your reply to [message], answered with no call where it's the answer to a question of his
      * ([Replies.route]): a check-in's question, its next asked ([checkInReply]); a reading's question, or
      * how work went with one of its three ([answered]); a calendar event's question, one of its three
-     * kept ([Owners.answerEvent]); each kept under it. False for a turn of the chat.
+     * kept ([Owners.answerEvent]); a reminder's Done or snooze ([replyToReminder]); each kept under it.
+     * False for a turn of the chat.
      */
     private suspend fun routed(message: ChatMessage, words: String): Boolean {
         val now = clock.now()
@@ -453,11 +454,36 @@ class Conversation(
             Replies.Route.Question, is Replies.Route.Completions -> if (!answered(message, words)) return false
             // One of a calendar question's three answers (Q7), for every event of its name.
             is Replies.Route.Event -> owners.answerEvent(route.key, route.answer)
+            // A reminder's Done or snooze (8a): on it; gone (pruned), a turn of the chat.
+            is Replies.Route.Reminder -> if (!replyToReminder(route, now)) return false
             Replies.Route.Chat -> return false
         }
         keepReply(message, words, now)
         outbox.delivered()
         return true
+    }
+
+    /**
+     * Your reply to one of your reminders (8a): *Done* marks it done; a snooze has it come again then,
+     * its words for before let go, written again near the time (its alarm set again by the store's
+     * change). One done or cancelled since stays so. False where it's gone.
+     */
+    private suspend fun replyToReminder(route: Replies.Route.Reminder, now: Long): Boolean {
+        var found = false
+        felix.update { s ->
+            s.copy(
+                reminders = s.reminders.map { r ->
+                    if (r.id != route.id) return@map r
+                    found = true
+                    when {
+                        r.doneAt != null || r.cancelledAt != null -> r
+                        route.snoozeMin == null -> r.copy(doneAt = now, draft = null, draftedAt = null)
+                        else -> Reminders.snoozed(r, now, route.snoozeMin)
+                    }
+                },
+            )
+        }
+        return found
     }
 
     /**
