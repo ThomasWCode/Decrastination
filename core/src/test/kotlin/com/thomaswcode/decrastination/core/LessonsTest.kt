@@ -71,6 +71,17 @@ class LessonsTest {
     }
 
     @Test
+    fun `a Teams code mapped to a Power Planner class's own name is that class, with nothing mapped back`() {
+        val classMap = mapOf("12X/Ph1" to "Phys")
+        val groups = Lessons.groups(next(), classMap)
+        val phys = groups.single { it.subject == "Phys" }
+        assertEquals(listOf("Phys", "12X/Ph1"), phys.names)
+        assertEquals(Fixtures.at("2026-10-22T12:20"), Lessons.nextOf("12X/Ph1", groups, classMap)?.start)
+        // Chem, which nothing's mapped to, stays its own.
+        assertEquals(listOf("Chem"), groups.single { it.subject == null }.names)
+    }
+
+    @Test
     fun `a timetable read over a week ago, or at no known time, is stale`() {
         assertTrue(!Lessons.stale(now - 60_000L, now) && !Lessons.stale(now - Lessons.STALE_MS, now))
         assertTrue(Lessons.stale(now - Lessons.STALE_MS - 1, now) && Lessons.stale(null, now))
