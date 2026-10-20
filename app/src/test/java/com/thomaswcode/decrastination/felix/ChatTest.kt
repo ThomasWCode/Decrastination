@@ -175,17 +175,51 @@ class ChatTest {
     )
 
     @Test
-    fun `the context ends with each open task's own text, cut short, with what comes with it`() {
+    fun `the context ends with each open task's own text, cut short, what comes with it on its line`() {
         val counts = bridge.copy(id = "anki:quota", source = Source.Anki, sourceId = "quota", title = "Anki: 20 new", detail = "20 cards", derived = true)
         val text = ChatPrompts.context(listOf(bridge, sheet, letter, counts), emptyList(), emptyList(), now, LONDON)
         val section = text.substringAfter("The tasks' own text")
-        assertTrue("- teams:sheet | Teams; links: https://example.org/forces\n    Answer questions 1 to 6.\n    Show your working." in section, section)
-        assertTrue("- gmail:letter | Gmail, from Ms Example; attachments: form.pdf (107 KB)\n    Please return the form." in section, section)
+        assertTrue("- teams:sheet\n    Answer questions 1 to 6.\n    Show your working." in section, section)
+        assertTrue("- gmail:letter\n    Please return the form." in section, section)
         // Cut, its start and its end are kept: an email's newest reply is at its end.
         assertTrue("[… ${letter.detail.length - ChatPrompts.BRIEF_TEXT} characters left out …]" in section, section)
         assertTrue("x Update: it's now due Monday." in section, section)
         // Nothing of its own (the bridge), or Anki's counts: not listed.
         assertFalse("teams:bridge" in section || "anki:quota" in section, section)
+        // Who it's from, what's attached and linked, and how long its text is: on each task's line (8c).
+        val list = text.substringBefore("The tasks' own text")
+        assertTrue("| links: https://example.org/forces; text 43 characters\n" in list, list)
+        assertTrue("| from Ms Example; attachments: form.pdf (107 KB); text 1,053 characters\n" in list, list)
+        assertTrue("teams:bridge |" in list && "| no text\n" in list, list)
+        // The app's own count, with no text of its own to ask for.
+        assertTrue(list.lines().single { it.startsWith("- anki:quota |") }.endsWith(" | -"), list)
+    }
+
+    @Test
+    fun `what each task's text holds has a room of its own, so every task stays listed and the text block is 250 characters a task`() {
+        // Eighty tasks, each with a long name of a file and a long text: every one listed, each line's part within
+        // 160 characters, the length always said, and the lot within 6 000, the later ones their length alone.
+        val file = "a-very-long-name-for-an-attached-worksheet-".repeat(4) + ".pdf"
+        val tasks = (1..InstructionPrompts.MAX_TASKS).map { i ->
+            letter.copy(
+                id = "gmail:l$i", sourceId = "l$i", title = "Letter $i", dueAt = now + i * 3_600_000L, detail = "w".repeat(1_200),
+                extra = mapOf(GmailThreads.EXTRA_FROM_NAME to "Ms Example", GmailThreads.EXTRA_ATTACHMENTS to GmailThreads.attachmentsExtra(listOf(Mime.Attachment(file, "application/pdf", 50_000)))),
+            )
+        }
+        val text = ChatPrompts.context(tasks, emptyList(), emptyList(), now, LONDON)
+        val lines = text.substringBefore("The tasks' own text").lines().filter { it.startsWith("- gmail:l") }
+        assertEquals(InstructionPrompts.MAX_TASKS, lines.size)
+        val holds = lines.map { it.substringAfterLast(" | ") }
+        assertTrue(holds.all { it.length <= 160 && it.endsWith("text 1,200 characters") }, holds.first())
+        assertTrue(holds.sumOf { it.length } <= 6_000 + holds.size * "text 1,200 characters".length, "${holds.sumOf { it.length }}")
+        assertTrue(holds.first().startsWith("from Ms Example; attachments: a-very-long"), holds.first())
+        assertEquals("text 1,200 characters", holds.last())
+        // The text block: each text at most 250 characters (its start and end, with the cut said), 5 000 in all.
+        val section = text.substringAfter("The tasks' own text")
+        val entries = section.split("\n- gmail:").drop(1)
+        assertTrue(entries.all { it.length <= ChatPrompts.BRIEF_TEXT + 200 }, entries.first())
+        assertTrue(section.length <= 5_000 + 600, "${section.length}")
+        assertTrue("left out for room" in section, section.takeLast(200))
     }
 
     @Test
