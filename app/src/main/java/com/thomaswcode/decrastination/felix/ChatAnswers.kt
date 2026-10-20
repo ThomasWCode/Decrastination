@@ -115,12 +115,13 @@ object ChatAnswers {
         val actions: List<GivenAction> = emptyList(),
         val research: String = "",
         val details: List<String> = emptyList(),
-        val reminders: List<GivenReminder> = emptyList(),
-        val notes: List<GivenNote> = emptyList(),
     )
 
-    /** A reminder as the schema has it (Stage 8a): plain fields, empty or -1 for none. */
-    @Serializable
+    /**
+     * A reminder as his answer gives it (Stage 8a): from a change of type Remind (Q13: B), its words its
+     * title, when it comes its eventKey, a listed reminder's id to move its afterTaskId, a BeforeDue's
+     * minutes its minutes ([fromChange]).
+     */
     private data class GivenReminder(
         val id: String = "",
         val text: String = "",
@@ -131,9 +132,20 @@ object ChatAnswers {
         val minutesBefore: Int = -1,
     )
 
-    /** A note as the schema has it (Stage 8a): on a task, or for every task its scope matches (Q31: A). */
-    @Serializable
+    /** A note as his answer gives it (Stage 8a): from a change of type Note, its words its title; on a task, or for every task its scope matches (Q31: A), read from its eventKey ([fromChange]). */
     private data class GivenNote(val taskId: String = "", val text: String = "", val subject: String = "", val className: String = "", val source: String = "", val titleContains: String = "")
+
+    /** [c], a Remind change, as a reminder. */
+    private fun reminderOf(c: InstructionAnswers.Given) = GivenReminder(
+        id = c.afterTaskId.orEmpty(), text = c.title, date = c.date.orEmpty(), time = c.time.orEmpty(), taskId = c.taskId.orEmpty(),
+        `when` = c.eventKey?.trim()?.ifEmpty { null } ?: ChatPrompts.WHEN_AT, minutesBefore = c.minutes ?: -1,
+    )
+
+    /** [c], a Note change, as a note: its eventKey's scope as kind:value parts joined by ; (subject:, class:, source:, title:). */
+    private fun noteOf(c: InstructionAnswers.Given): GivenNote {
+        val parts = c.eventKey.orEmpty().split(';').mapNotNull { part -> part.split(':', limit = 2).takeIf { it.size == 2 }?.let { (k, v) -> k.trim().lowercase() to v.trim() } }.toMap()
+        return GivenNote(c.taskId.orEmpty(), c.title, parts["subject"].orEmpty(), parts["class"].orEmpty(), parts["source"].orEmpty(), parts["title"].orEmpty())
+    }
 
     /** The most reminders, and the most notes, one answer gives: a few at most is what's meant. */
     private const val MAX_REMINDERS = 10
@@ -194,7 +206,9 @@ object ChatAnswers {
         if (answer.newTasks.size > MAX_TASKS) leftOut += "${answer.newTasks.size - MAX_TASKS} more tasks than the app takes at once"
         val byId = tasks.associateBy { it.id }
         val titles = events.associate { EventJudge.key(it) to it.title } + listOfNotNull(about.eventKey?.let { it to (about.eventTitle ?: it) })
-        var changes = answer.changes.take(MAX_CHANGES).map(InstructionAnswers.Given::normalised).mapNotNull { g ->
+        // His reminders and notes come as changes of their own types (8a, Q13: B): taken out first, made their own way.
+        val (kept, given) = answer.changes.take(MAX_CHANGES).map(InstructionAnswers.Given::normalised).partition { it.type == ChatPrompts.REMIND_TYPE || it.type == ChatPrompts.NOTE_TYPE }
+        var changes = given.mapNotNull { g ->
             InstructionAnswers.change(g, byId, titles, now, zone).also { if (it == null) leftOut += "a change (${InstructionAnswers.problem(g, byId, titles)})" }
         }
         if (answer.changes.size > MAX_CHANGES) leftOut += "${answer.changes.size - MAX_CHANGES} more changes than the app takes at once"
@@ -216,8 +230,8 @@ object ChatAnswers {
         // Tasks to read in full (D-93): listed and open, not the one the message is about (it came whole).
         val details = answer.details.map(String::trim).filter { id -> id != about.taskId && byId[id]?.let { it.isOpen && !it.hidden } == true }.distinct().take(ChatPrompts.MAX_READ)
         // Reminders and notes (Stage 8a): each as the app can keep it, the rest said.
-        val reminders = reminders(answer.reminders, byId, felix, now, zone, leftOut)
-        val notes = notes(answer.notes, byId, felix, now, leftOut)
+        val reminders = reminders(kept.filter { it.type == ChatPrompts.REMIND_TYPE }.map(::reminderOf), byId, felix, now, zone, leftOut)
+        val notes = notes(kept.filter { it.type == ChatPrompts.NOTE_TYPE }.map(::noteOf), byId, felix, now, leftOut)
         return Reading(reply.take(ChatPrompts.MAX_TEXT), made, changes, leftOut, answer.memories.take(MAX_MEMORIES), replies, actions, answer.research.trim().take(ResearchPrompts.MAX_QUESTION).takeIf { it.isNotEmpty() }, details, reminders, notes)
     }
 

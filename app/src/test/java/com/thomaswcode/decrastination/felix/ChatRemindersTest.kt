@@ -40,13 +40,16 @@ class ChatRemindersTest {
     private val done = task("teams:done", "Practical write-up", status = Status.Done)
     private val tasks = listOf(sheet, essay, done)
 
+    /** A Remind change (Q13: B), as his answer gives one: its words the title, when it comes the eventKey, a listed one's id afterTaskId. */
     private fun reminder(id: String = "", text: String = "call gran", date: String = "", time: String = "", taskId: String = "", whenIs: String = "at", minutesBefore: Int = -1) =
-        """{"id":"$id","text":"$text","date":"$date","time":"$time","taskId":"$taskId","when":"$whenIs","minutesBefore":$minutesBefore}"""
+        """{"type":"Remind","taskId":"$taskId","afterTaskId":"$id","eventKey":"$whenIs","eventTime":"","minutes":$minutesBefore,"date":"$date","endDate":"","weekday":"","time":"$time","endTime":"","title":"$text","steps":[],"paced":false}"""
 
-    private fun note(taskId: String, text: String = "use the second source") = """{"taskId":"$taskId","text":"$text"}"""
+    /** A Note change, its words the title, a standing one's scope its eventKey. */
+    private fun note(taskId: String, text: String = "use the second source", scope: String = "") =
+        """{"type":"Note","taskId":"$taskId","afterTaskId":"","eventKey":"$scope","eventTime":"","minutes":-1,"date":"","endDate":"","weekday":"","time":"","endTime":"","title":"$text","steps":[],"paced":false}"""
 
     private fun answer(reminders: List<String> = emptyList(), notes: List<String> = emptyList(), actions: String = "[]") =
-        """{"reply":"Done.","newTasks":[],"changes":[],"memories":[],"suggestedReplies":[],"actions":$actions,"research":"","details":[],"reminders":[${reminders.joinToString(",")}],"notes":[${notes.joinToString(",")}]}"""
+        """{"reply":"Done.","newTasks":[],"changes":[${(reminders + notes).joinToString(",")}],"memories":[],"suggestedReplies":[],"actions":$actions,"research":"","details":[]}"""
 
     private fun parse(json: String, felix: FelixStore = FelixStore()) = ChatAnswers.parse(json, tasks, emptyList(), About(), now, LONDON, felix = felix)!!
 
@@ -133,7 +136,7 @@ class ChatRemindersTest {
     }
 
     private fun standing(text: String, subject: String = "", className: String = "", source: String = "", titleContains: String = "", taskId: String = "") =
-        """{"taskId":"$taskId","text":"$text","subject":"$subject","className":"$className","source":"$source","titleContains":"$titleContains"}"""
+        note(taskId, text, listOfNotNull("subject:$subject".takeIf { subject.isNotEmpty() }, "class:$className".takeIf { className.isNotEmpty() }, "source:$source".takeIf { source.isNotEmpty() }, "title:$titleContains".takeIf { titleContains.isNotEmpty() }).joinToString(";"))
 
     @Test
     fun `a standing note is for every task of a subject, a class, a source or a word in its title, never a task too, and the source one the app reads`() {
