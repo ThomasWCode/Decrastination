@@ -148,7 +148,9 @@ class SettingsActivity : ComponentActivity() {
                             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                             minLines = 3,
                         )
-                        // Each class code the sources give, and the subject it is: blank leaves it the code.
+                        // Each class code the sources give, and the subject it is, or the Power Planner class it is (its lessons
+                        // then go with it, Lessons.groups): blank leaves it the code.
+                        Note("Each class: its subject, or the Power Planner class it is, so its lessons go with it.")
                         for (code in screen.classCodes(graph.tasks.value.tasks, graph.tasks.value.timetable)) {
                             OutlinedTextField(
                                 value = draft.classMap[code].orEmpty(),

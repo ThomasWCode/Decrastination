@@ -65,11 +65,14 @@ object Lessons {
 
     /**
      * [next]'s classes by subject: a Power Planner class and a Teams code to which [classMap] gives the same subject
-     * are one, its names all of theirs and its lessons the soonest [PER_CLASS] of its classes'; a class with no subject
-     * is its own, tied to no code. By their first lesson.
+     * are one, its names all of theirs and its lessons the soonest [PER_CLASS] of its classes'; so is a Teams code
+     * mapped to a Power Planner class's own name, that class given nothing (you said which it is); a class with no
+     * subject is its own, tied to no code. By their first lesson.
      */
     fun groups(next: Map<String, List<LessonAt>>, classMap: Map<String, String>): List<Group> {
+        // A class the map gives nothing, but a code is mapped to by its name, has its name as its subject: the code's.
         fun subjectOf(name: String) = classMap.entries.firstOrNull { it.key.trim().equals(name.trim(), ignoreCase = true) }?.value?.trim()?.takeIf { it.isNotEmpty() }
+            ?: name.trim().takeIf { n -> n.isNotEmpty() && classMap.values.any { it.trim().equals(n, ignoreCase = true) } }
         val (mapped, unmapped) = next.keys.partition { subjectOf(it) != null }
         val bySubject = mapped.groupBy { subjectOf(it)!!.lowercase() }.map { (_, names) ->
             val subject = subjectOf(names.first())!!
