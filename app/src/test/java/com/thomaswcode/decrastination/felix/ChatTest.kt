@@ -308,6 +308,10 @@ class ChatTest {
         // Another span after it: brought too, two at most.
         assertEquals(listOf("", "2027-01"), ChatRounds.next(reading.copy(calendar = "2027-01"), searched = false, searches = true, read = emptyList(), calendar = listOf(""))!!.calendar)
         assertNull(ChatRounds.next(reading.copy(calendar = "2027-02"), searched = false, searches = true, read = emptyList(), calendar = listOf("", "2027-01")))
+        // A third span, as a fourth text, is still asked for, though no round brings it: said under his answer.
+        assertTrue(ChatRounds.asking(reading.copy(calendar = "2027-02"), searched = false, searches = true, read = emptyList(), stats = false, calendar = listOf("", "2027-01")))
+        assertTrue(ChatRounds.asking(reading.copy(details = listOf("d")), searched = false, searches = true, read = listOf("a", "b", "c"), stats = false, calendar = emptyList()))
+        assertFalse(ChatRounds.asking(reading.copy(calendar = "2027-01", details = listOf("a")), searched = true, searches = true, read = listOf("a"), stats = false, calendar = listOf("2027-01")))
         // With a text to read and what came before kept: one round for all of it.
         assertEquals(
             ChatRounds.Next(null, listOf("teams:s1"), stats = true, calendar = listOf("")),

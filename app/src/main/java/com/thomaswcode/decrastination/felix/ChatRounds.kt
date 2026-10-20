@@ -32,6 +32,14 @@ object ChatRounds {
     /** The calendar's spans a message can be brought: a month, then another, or the four weeks and a month. */
     const val MAX_SPANS = 2
 
+    /**
+     * Whether [reading] still asks for something it hasn't been brought, past what [next] brings: a search not
+     * made nor tried while searches are on, a task's text not read (a fourth among them), the week's numbers, a span
+     * of the calendar (a third among them). Said under his answer, so his "looking" isn't passed off as one.
+     */
+    fun asking(reading: ChatAnswers.Reading, searched: Boolean, searches: Boolean, read: List<String>, stats: Boolean, calendar: List<String>): Boolean =
+        (reading.research != null && !searched && searches) || reading.details.any { it !in read } || (reading.stats && !stats) || (reading.calendar != null && reading.calendar !in calendar)
+
     /** The most rounds a message takes after his first answer: a search and the texts, or each after the other. */
     const val MAX_ROUNDS = 2
 }
