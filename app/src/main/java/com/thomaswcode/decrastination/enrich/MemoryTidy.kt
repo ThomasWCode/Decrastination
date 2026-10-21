@@ -11,13 +11,14 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 /**
- * The weekly tidy of what's remembered (AI-21, Q-51): once the facts are past [DUE_SHARE] of their
- * room, the review sends them to the model, which rewrites them into fewer, current lines; the
+ * The weekly tidy of what's remembered (AI-21, Q-51): once the facts with neither an until nor a task
+ * ([tidied]) are past [DUE_SHARE] of the room the rest leave them ([due]), the review sends those to the
+ * model, which rewrites them into fewer, current lines, the rest kept as they are; the
  * before and after are kept with the week's review. Standing instructions are never tidied. Pure:
  * [MemoryTidier] makes the call.
  */
 object MemoryTidy {
-    /** Due past this share of the facts' room ([Memories.FACT_BUDGET_CHARS]). */
+    /** Due past this share of the room the rest leave the facts it may rewrite ([Memories.FACT_BUDGET_CHARS], [due]). */
     const val DUE_SHARE = 0.7
 
     /**
