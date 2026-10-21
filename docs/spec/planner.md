@@ -64,7 +64,7 @@ A task's pieces are its steps still to do, or, with no steps, boxes of its remai
 
 - **Boxes** are at most `Settings.boxMin`, your setting (D-33; 30 by default).
 - Boxes are even: 100 minutes at 60 is 50 and 50, not 60 and 40. A task in one box is one piece; several are "part 2 of 3".
-- Where your instructions limit days, a box is no longer than the most any day the task can go on holds (`Planner.roomiest`). Steps aren't shortened: one longer than every such day is placed as work that fits nowhere is ([Backwards, and behind](#backwards-and-behind)).
+- Where your instructions limit days, a box is no longer than the most any day the task can go on holds (`Planner.roomiest`). Steps aren't shortened: one longer than every such day is left out where the task goes in order (limited per day, undated, or its first day one you've limited, as it is when your limits make every day short), and otherwise goes on its first day, behind ([Backwards, and behind](#backwards-and-behind)).
 - **Where** (PL-15, `Chunk.where`): a step's own place (home, or anywhere), as Claude read it or as the step was given; else your own task's as you set it, Teams homework at home, the rest anywhere.
 
 ## Sittings
