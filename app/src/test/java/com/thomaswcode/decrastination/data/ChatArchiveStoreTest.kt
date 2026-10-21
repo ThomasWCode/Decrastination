@@ -6,6 +6,10 @@ import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.core.Speaker
 import java.io.File
 import java.nio.file.Files
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
+import kotlin.concurrent.thread
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -137,6 +141,37 @@ class ChatArchiveStoreTest {
         assertEquals(listOf(far), ChatArchiveStore(dir).recent(1))
         store.clear()
         assertTrue(files().isEmpty())
+    }
+
+    @Test
+    fun `a clear waits for a month's first read, so the month it writes again in this shape doesn't come back`() {
+        // August in an older shape: its first read keeps it as .v4 and writes it again in this one (JsonStore).
+        File(dir, "chat-archive-2026-08.json").writeText(JsonStore.json.encodeToString(ChatArchive.serializer(), ChatArchive(august, version = 4)))
+        // The month's clock is asked between its old shape kept and the new one written: the read held there, once.
+        val inside = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val asked = AtomicInteger()
+        val store = ChatArchiveStore(dir) {
+            if (asked.getAndIncrement() == 0) {
+                inside.countDown()
+                release.await(5, TimeUnit.SECONDS)
+            }
+            Fixtures.at("2026-10-21T20:00")
+        }
+        val read = thread { store.find("a1") }
+        assertTrue(inside.await(5, TimeUnit.SECONDS))
+        val clear = thread { runBlocking { store.clear() } }
+        // Long enough for a clear that doesn't wait to be done before the read writes August again.
+        clear.join(500)
+        release.countDown()
+        read.join(5_000)
+        clear.join(5_000)
+        assertTrue(dir.list()!!.none { it.startsWith("chat-archive") }, "left after the clear: ${dir.list()!!.toList()}")
+        assertFalse(ChatArchiveStore(dir).holdsAny)
+        // Nor kept by the store that read it: a message moved into August now is all it holds.
+        val later = his("a3", "2026-08-15T10:00")
+        runBlocking { store.add(listOf(later)) }
+        assertEquals(listOf(later), ChatArchiveStore(dir).value.messages)
     }
 
     @Test
