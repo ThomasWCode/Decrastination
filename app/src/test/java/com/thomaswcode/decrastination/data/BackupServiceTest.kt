@@ -151,16 +151,19 @@ class BackupServiceTest {
     }
 
     @Test
-    fun `a reset takes the copies kept of what it clears, the chat's and Felix's with the chat, memory's with what's remembered`() = runTest {
-        val phone = Phone(full = true)
-        fun copy(name: String) = File(phone.dir, name).apply { writeText("{}") }
-        val chat = listOf(copy("chat.json.v5"), copy("chat.json.unreadable-20261021-010000"), copy("felix.json.v2"))
-        val memory = listOf(copy("memory.json.v2"), copy("memory.json.unreadable-20261021-010000"))
-        phone.service.reset(Reset.Chat)
-        assertTrue(chat.none { it.exists() })
-        assertTrue(memory.all { it.exists() })
-        phone.service.reset(Reset.Memories)
-        assertTrue(memory.none { it.exists() })
+    fun `each reset takes the copies kept of every store it clears, and of no other`() = runTest {
+        for (area in Reset.entries) {
+            val phone = Phone(full = true)
+            // Each JSON store's copies: an older shape's, and one of a file that couldn't be read.
+            val copies = phone.stores.all.map { it.file }.filter { it.endsWith(".json") }.associateWith { name ->
+                listOf("$name.v1", "$name.unreadable-20261021-010000").map { File(phone.dir, it).apply { writeText("{}") } }
+            }
+            phone.service.reset(area)
+            val said = phone.stores.all.filter { kept -> kept.resets.any { area == it || area == Reset.Everything } }.map { it.file }.toSet()
+            for ((name, files) in copies) {
+                if (name in said) assertTrue(files.none { it.exists() }, "$area: $name") else assertTrue(files.all { it.exists() }, "$area: $name")
+            }
+        }
     }
 
     @Test
