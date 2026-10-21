@@ -44,7 +44,8 @@ internal fun GmailFinishLine(graph: AppGraph, task: TaskItem) {
 
 /** What finishing an email by your word said, for the sheet's line. */
 internal fun finishSaid(finish: GmailFinishes.Finish): String? = when (finish) {
-    GmailFinishes.Finish.Going, GmailFinishes.Finish.Pending, GmailFinishes.Finish.Awaiting -> null
+    GmailFinishes.Finish.Going, GmailFinishes.Finish.Awaiting -> null
+    GmailFinishes.Finish.Pending -> "It's being finished in Gmail already"
     GmailFinishes.Finish.Off -> "Finishing emails in Gmail is off (Settings → Sources)"
     GmailFinishes.Finish.No -> "It isn't open to finish"
 }

@@ -304,8 +304,8 @@ object ChatActs {
             ChatAction.Type.Open -> false
             ChatAction.Type.TickStep -> task != null && step?.done == true && (task.isOpen || task.source == Source.Own || task.tickDone) && tickedBy(act, task.id, a.stepIndex!!, step, kept)
             ChatAction.Type.UntickStep -> task?.isOpen == true && step?.done == false
-            // A starred email's finish (Stage 11) while it stands in the journal ([finishing]: not taken back since).
-            ChatAction.Type.Done -> if (task?.source == Source.Gmail) task.id in finishing else task?.isOpen == false && (task.source == Source.Own || task.tickDone)
+            // A starred email's finish (Stage 11) while it, the act's own ([Act.after]), stands in the journal ([finishing], by id).
+            ChatAction.Type.Done -> if (task?.source == Source.Gmail) act.after != null && act.after in finishing else task?.isOpen == false && (task.source == Source.Own || task.tickDone)
             ChatAction.Type.Reopen -> task != null && act.was != null && asReopened(task, act.was)
             ChatAction.Type.Delete -> act.was != null && task == null && !redone(act.cards, messages)
             ChatAction.Type.Setting -> act.before != null && FelixSettings.field(a.setting.orEmpty())?.get(settings) == act.after

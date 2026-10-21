@@ -274,7 +274,9 @@ class FelixHarness(
         /** The finishes taken back. */
         val gmailUnfinished = mutableListOf<String>()
 
-        override suspend fun unfinishGmail(taskId: String): Boolean = taskId in gmailFinished && gmailUnfinished.add(taskId)
+        override suspend fun unfinishGmail(taskId: String, writeId: String?): Boolean = taskId in gmailFinished && writeId == "w-$taskId" && gmailUnfinished.add(taskId)
+
+        override fun gmailWriteOf(taskId: String): String? = "w-$taskId".takeIf { taskId in gmailFinished }
 
         /** Your answer to his question, kept to be read, as `Instructions.addInstruction` keeps one. */
         suspend fun instruction(text: String, about: About, answer: Boolean): String {

@@ -145,12 +145,13 @@ object Backups {
     }
 
     /**
-     * This phone's writes to Gmail with [backup]'s receipts it hasn't, by id (4.3.0): a pending one of the backup's
-     * isn't there to bring (a backup keeps none), and this phone's own stand as they are.
+     * This phone's writes to Gmail with [backup]'s receipts it hasn't, by id (4.3.0), in the order they were made, so a
+     * backup's older one never comes after this phone's newer for its task: a pending one of the backup's isn't there
+     * to bring (a backup keeps none), and this phone's own stand as they are.
      */
     fun mergedWrites(writes: List<GmailWrite>, backup: List<GmailWrite>): List<GmailWrite> {
         val here = writes.mapTo(HashSet()) { it.id }
-        return writes + GmailWrites.receipts(backup).filter { it.id !in here }
+        return (writes + GmailWrites.receipts(backup).filter { it.id !in here }).sortedBy { it.at }
     }
 
     /**

@@ -38,10 +38,10 @@ class GmailWritesTest {
     fun `a second finish of a task with one pending writes nothing more, and one after it's made does`() {
         val one = GmailWrites.finish(emptyList(), finish(), confirmed = true)!!
         assertNull(GmailWrites.finish(one, finish("w2"), confirmed = true))
-        val made = GmailWrites.with(one, "w1") { it.copy(flagged = listOf(101L), inbox = listOf(101L, 102L), unstarred = true, archived = true, doneAt = now + 2 * min) }
+        val made = GmailWrites.with(one, "w1") { it.copy(flagged = listOf("101"), inbox = listOf("101", "102"), unstarred = true, archived = true, doneAt = now + 2 * min) }
         assertEquals(GmailWrites.State.Made, GmailWrites.state(made, "gmail:1"))
-        // Starred again since (the task open again), finished again: written again.
-        assertEquals(2, GmailWrites.finish(made, finish("w2", at = now + 3 * min), confirmed = true)!!.size)
+        // Starred again since (a Gmail read after it shows the task open again), finished again: written again.
+        assertEquals(2, GmailWrites.finish(made, finish("w2", at = now + 3 * min), confirmed = true, readAt = now + 3 * min)!!.size)
     }
 
     @Test
@@ -52,7 +52,7 @@ class GmailWritesTest {
         val awaiting = GmailWrites.finish(emptyList(), finish(), confirmed = false)!!
         assertEquals(emptyList(), GmailWrites.undo(awaiting, "gmail:1", now, "u1"))
         // Read, and partly made: an Undo to go at once, after it's done.
-        val read = GmailWrites.with(one, "w1") { it.copy(flagged = listOf(101L), inbox = listOf(101L, 102L), unstarred = true) }
+        val read = GmailWrites.with(one, "w1") { it.copy(flagged = listOf("101"), inbox = listOf("101", "102"), unstarred = true) }
         val undone = GmailWrites.undo(read, "gmail:1", now + 2 * min, "u1")!!
         val undo = undone.last()
         assertEquals("w1" to now + 2 * min, undo.reverseOf to undo.notBefore)
@@ -61,10 +61,10 @@ class GmailWritesTest {
         // The finish given up with its star taken off: the Undo goes next, putting back the star alone.
         val gaveUp = GmailWrites.with(undone, "w1") { it.copy(doneAt = now + 3 * min, gaveUp = true) }
         assertEquals("u1", GmailWrites.next(gaveUp, now + 3 * min)?.id)
-        assertEquals(listOf(101L) to emptyList<Long>(), GmailWrites.toRestore(gaveUp, undo))
+        assertEquals(listOf("101") to emptyList<String>(), GmailWrites.toRestore(gaveUp, undo))
         // Made whole: both put back.
         val made = GmailWrites.with(undone, "w1") { it.copy(archived = true, doneAt = now + 3 * min) }
-        assertEquals(listOf(101L) to listOf(101L, 102L), GmailWrites.toRestore(made, undo))
+        assertEquals(listOf("101") to listOf("101", "102"), GmailWrites.toRestore(made, undo))
         // Taken back already: nothing more to take back.
         assertNull(GmailWrites.undo(undone, "gmail:1", now + 4 * min, "u2"))
         assertNull(GmailWrites.undo(emptyList(), "gmail:1", now, "u1"))
@@ -72,7 +72,7 @@ class GmailWritesTest {
 
     @Test
     fun `a try that fails is tried again, the fifth given up with what succeeded said`() {
-        var writes = GmailWrites.with(GmailWrites.finish(emptyList(), finish(), confirmed = true)!!, "w1") { it.copy(flagged = listOf(101L), inbox = listOf(101L), unstarred = true) }
+        var writes = GmailWrites.with(GmailWrites.finish(emptyList(), finish(), confirmed = true)!!, "w1") { it.copy(flagged = listOf("101"), inbox = listOf("101"), unstarred = true) }
         repeat(GmailWrites.MAX_TRIES - 1) { writes = GmailWrites.failed(writes, "w1", "no connection", now + it * min) }
         assertEquals(GmailWrites.State.Going, GmailWrites.state(writes, "gmail:1"))
         writes = GmailWrites.failed(writes, "w1", "no connection", now + 10 * min)
@@ -85,6 +85,45 @@ class GmailWritesTest {
         // Kept till it's sorted, however old; then gone.
         assertEquals(writes, GmailWrites.prune(writes, now + 2 * GmailWrites.RECEIPT_MS))
         assertTrue(GmailWrites.sorted(writes, "gmail:1").isEmpty())
+    }
+
+    @Test
+    fun `a finish made stands till a Gmail read after it shows the email starred again`() {
+        val made = finish().copy(notBefore = now, flagged = listOf("101"), inbox = listOf("101"), unstarred = true, archived = true, doneAt = now + 2 * min)
+        assertNull(GmailWrites.finish(listOf(made), finish("w2", at = now + 3 * min), confirmed = true, readAt = null))
+        assertNull(GmailWrites.finish(listOf(made), finish("w2", at = now + 3 * min), confirmed = true, readAt = now + 2 * min))
+        assertEquals(2, GmailWrites.finish(listOf(made), finish("w2", at = now + 9 * min), confirmed = true, readAt = now + 5 * min)!!.size)
+        // One given up changed what it changed and stands no more.
+        assertEquals(2, GmailWrites.finish(listOf(made.copy(gaveUp = true)), finish("w2"), confirmed = true)!!.size)
+    }
+
+    @Test
+    fun `an Undo takes back only its own finish, and a keep taken back never one by your word`() {
+        val made = finish().copy(notBefore = now, flagged = listOf("101"), inbox = listOf("101"), unstarred = true, archived = true, doneAt = now)
+        assertNull(GmailWrites.undo(listOf(made), "gmail:1", now + min, "u1", writeId = "w0"))
+        assertEquals(2, GmailWrites.undo(listOf(made), "gmail:1", now + min, "u1", writeId = "w1")!!.size)
+        assertNull(GmailWrites.undo(listOf(made.copy(explicit = true)), "gmail:1", now + min, "u1", byWork = true))
+        assertEquals(2, GmailWrites.undo(listOf(made), "gmail:1", now + min, "u1", byWork = true)!!.size)
+        assertEquals(setOf("w1"), GmailWrites.standing(listOf(made)))
+    }
+
+    @Test
+    fun `an Undo given up is said as given up, with what it put back and what not`() {
+        val made = finish().copy(notBefore = now, flagged = listOf("101"), inbox = listOf("101"), unstarred = true, archived = true, doneAt = now)
+        val undo = made.copy(id = "u1", reverseOf = "w1", flagged = null, inbox = null, unstarred = true, archived = false, tries = 5, lastError = "no connection", doneAt = now + min, gaveUp = true)
+        assertEquals(GmailWrites.State.GaveUp, GmailWrites.state(listOf(made, undo), "gmail:1"))
+        assertEquals("Starred “Trip consent form” again in Gmail but couldn't put it back in the inbox (no connection): it's still archived.", GmailWrites.failure(undo))
+        assertEquals("Couldn't star “Trip consent form” again in Gmail (no connection): star it there if you want it starred.", GmailWrites.failure(undo.copy(unstarred = false, archived = true)))
+        assertEquals("Couldn't star “Trip consent form” again or put it back in the inbox in Gmail (no connection): it's as the finish left it.", GmailWrites.failure(undo.copy(unstarred = false)))
+        // Sorted, the finish stands again, to be taken back once more.
+        assertEquals(GmailWrites.State.Made, GmailWrites.state(GmailWrites.sorted(listOf(made, undo), "gmail:1"), "gmail:1"))
+    }
+
+    @Test
+    fun `a receipt an Undo still to make needs is kept past its month`() {
+        val made = finish().copy(notBefore = now, flagged = listOf("101"), inbox = listOf("101"), unstarred = true, archived = true, doneAt = now)
+        val undo = made.copy(id = "u1", reverseOf = "w1", at = now + GmailWrites.RECEIPT_MS - min, notBefore = now + GmailWrites.RECEIPT_MS - min, flagged = null, inbox = null, doneAt = null)
+        assertEquals(listOf(made, undo), GmailWrites.prune(listOf(made, undo), now + GmailWrites.RECEIPT_MS + min))
     }
 
     @Test

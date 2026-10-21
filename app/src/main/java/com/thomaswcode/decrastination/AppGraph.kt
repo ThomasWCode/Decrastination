@@ -226,6 +226,7 @@ class AppGraph private constructor(context: Context) {
         multiplier = { stores.learning.value.calibration.multiplierFor(it) },
         clock = clock,
         ports = AndroidGmailPorts(app, notifier, clock) { sources -> sync.syncNow(sources) },
+        readAt = { tasks.value.status(Source.Gmail).lastSuccessAt },
     )
 
     /** The blocker's state and decisions (block/Focus.kt). */
@@ -234,7 +235,7 @@ class AppGraph private constructor(context: Context) {
         onOwnTaskDone = { ownTasks.finishOwnTask(it) },
         // An email's work all done by a keep or a tick is finished in Gmail; taken back, so is its finish.
         onWorked = { gmailFinishes.finish(it, explicit = false) },
-        onUnworked = { gmailFinishes.unfinish(it) },
+        onUnworked = { gmailFinishes.unfinish(it, byWork = true) },
         // A school day by the school calendar (BL-02): a day off blocks from the weekend's time.
         schoolDay = { com.thomaswcode.decrastination.core.SchoolDays.kindOf(it, school.value) == com.thomaswcode.decrastination.core.DayKind.Weekday },
     ) { state, s, now -> planning.plan(state, s, now) }
@@ -298,7 +299,8 @@ class AppGraph private constructor(context: Context) {
             }
             override suspend fun recordCheckIn(checkIn: CheckIn, now: Long): Boolean = learning.recordCheckIn(checkIn, now)
             override suspend fun finishGmail(taskId: String): GmailFinishes.Finish = gmailFinishes.finish(taskId, explicit = true)
-            override suspend fun unfinishGmail(taskId: String): Boolean = gmailFinishes.unfinish(taskId)
+            override suspend fun unfinishGmail(taskId: String, writeId: String?): Boolean = gmailFinishes.unfinish(taskId, writeId)
+            override fun gmailWriteOf(taskId: String): String? = gmailFinishes.latestFinish(taskId)
         },
         calendarTime = { sync.calendarTime },
         answered = { record, words -> looks.answered(record, words) },
@@ -448,6 +450,8 @@ class AppGraph private constructor(context: Context) {
         scope.launch { school.state.drop(1).collect { runCatching { Daily.schedule(app) }.onFailure { e -> Log.w(TAG, "Setting the daily alarms failed", e) } } }
         // The files older shapes came from, a week after their migration, at a start that's got this far.
         scope.launch(Dispatchers.IO) { runCatching { stores.letGoOfOldShapes() }.onFailure { Log.w(TAG, "Letting go of old shapes failed", it) } }
+        // A write to Gmail journaled and due, its worker set again: a stop may have come between them (Stage 11).
+        scope.launch { runCatching { gmailFinishes.rearm() }.onFailure { Log.w(TAG, "Setting Gmail's writes going again failed", it) } }
         // The notifications Felix's messages have taken the place of, one still showing or held from
         // before let go; then his own, made from the chat as it is.
         scope.launch {

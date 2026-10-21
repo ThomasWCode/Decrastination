@@ -496,6 +496,21 @@ class FocusTest {
     }
 
     @Test
+    fun `a keep carried through at start-up says its task's work moved on too, for an email's finish`() = runTest {
+        val worked = mutableListOf<String>()
+        val hooked = Focus(tasks, settings, session, learning, protection, log, clock, onWorked = { worked += it }) { state, s, now -> Planner.plan(input(state, s, now)) }
+        val (first) = laid(task("t", due = "2026-10-12T23:59", steps = listOf(SubStep("Q1", 15), SubStep("Q2", 15)), effort = 30))
+        clock.time = first.end
+        val record = SlotRecord(
+            date = "2026-10-12", key = first.chunk!!.key, taskId = "teams:t", kind = Kind.Homework, label = first.chunk!!.label, plannedMin = 15,
+            start = first.start, end = first.end, window = first.window, outcome = SlotOutcome.Kept, workedMin = 15, earned = true, at = clock.time,
+        )
+        session.update { it.copy(keeping = listOf(Keeping(record, 0, "Q1", workedBefore = 0, earningMin = 5.0))) }
+        hooked.finishKeeps()
+        assertEquals(listOf("teams:t"), worked)
+    }
+
+    @Test
     fun `keeping a piece leaves its task's next piece in its slot`() = runTest {
         val (first, second) = laid(task("t", due = "2026-10-12T23:59", steps = steps(), effort = 60))
         clock.time = first.end

@@ -444,7 +444,12 @@ class Focus(
     /** Carries through the slots a stop left part-way kept ([RuntimeState.keeping]): at start-up, before the photo checks. */
     suspend fun finishKeeps() {
         val now = clock.now()
-        for (k in session.value.keeping) keeping.withLock { finish(k, now, recovering = true) }?.ownDone?.let { onOwnTaskDone(it) }
+        for (k in session.value.keeping) {
+            val kept = keeping.withLock { finish(k, now, recovering = true) } ?: continue
+            kept.ownDone?.let { onOwnTaskDone(it) }
+            // Its task's work moved on, as a keep made at once says it: an email's last piece finishes it in Gmail.
+            onWorked(kept.taskId)
+        }
     }
 
     /**

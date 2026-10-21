@@ -157,8 +157,11 @@ class Conversation(
         /** A starred email of [taskId] finished by his `done` (Stage 11): unstarred and archived in Gmail, after the grace. */
         suspend fun finishGmail(taskId: String): GmailFinishes.Finish = GmailFinishes.Finish.Off
 
-        /** [taskId]'s finish taken back: Gmail left as it was, or put back. Whether there was one. */
-        suspend fun unfinishGmail(taskId: String): Boolean = false
+        /** [taskId]'s finish taken back, only [writeId] where it's given: Gmail left as it was, or put back. Whether there was one. */
+        suspend fun unfinishGmail(taskId: String, writeId: String?): Boolean = false
+
+        /** [taskId]'s finish that stands, by its id: the one his act made, for its Undo. */
+        fun gmailWriteOf(taskId: String): String? = null
     }
 
     /**
@@ -945,8 +948,9 @@ class Conversation(
                     // A starred email (Stage 11): finished in Gmail, which closes it at the read after the write (D-10).
                     if (task.source == Source.Gmail) {
                         return@mapNotNull when (owners.finishGmail(task.id)) {
-                            GmailFinishes.Finish.Going, GmailFinishes.Finish.Pending -> Act("Finished: “${task.title}” (unstarring and archiving it in Gmail)", a)
-                            GmailFinishes.Finish.Awaiting -> Act("Finished here: “${task.title}”; Gmail waits for your OK in the app", a)
+                            // The finish its own, by id, so its Undo takes back that one and not a newer.
+                            GmailFinishes.Finish.Going, GmailFinishes.Finish.Pending -> Act("Finished: “${task.title}” (unstarring and archiving it in Gmail)", a, after = owners.gmailWriteOf(task.id))
+                            GmailFinishes.Finish.Awaiting -> Act("Finished here: “${task.title}”; Gmail waits for your OK in the app", a, after = owners.gmailWriteOf(task.id))
                             GmailFinishes.Finish.Off, GmailFinishes.Finish.No -> Act(Act.NOT_MADE + "“${task.title}” is done when Gmail says so.", problem = true)
                         }
                     }
@@ -1135,7 +1139,7 @@ class Conversation(
             // The step that finished one of yours: open again with it to do.
             ChatAction.Type.TickStep -> step?.done == true && ChatActs.tickedBy(act, task!!.id, a.stepIndex!!, step, keptAt()) && focus.untickBlock(task.id, a.stepIndex!!, step.title, reopen = true)
             ChatAction.Type.UntickStep -> step?.done == false && task!!.isOpen && tick(task, a.stepIndex!!, step.title) != null
-            ChatAction.Type.Done -> if (task?.source == Source.Gmail) owners.unfinishGmail(task.id) else task?.isOpen == false && (task.source == Source.Own || task.tickDone) && run { owners.reopenOwnTask(task.id); open(task.id) == true }
+            ChatAction.Type.Done -> if (task?.source == Source.Gmail) owners.unfinishGmail(task.id, act.after) else task?.isOpen == false && (task.source == Source.Own || task.tickDone) && run { owners.reopenOwnTask(task.id); open(task.id) == true }
             ChatAction.Type.Reopen -> task?.isOpen == true && act.was.let { was -> was != null && refinish(was) }
             // Not once a card that had added it is made again: that's the task anew.
             ChatAction.Type.Delete -> act.was.let { was ->

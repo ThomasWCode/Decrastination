@@ -402,6 +402,8 @@ class ConversationTest {
         felix.settle()
         val answer = his().last()
         assertEquals("Finished: “Trip consent form” (unstarring and archiving it in Gmail)", answer.acts.single().line)
+        // Its own finish's id kept, for its Undo to take back that one.
+        assertEquals("w-gmail:t1", answer.acts.single().after)
         assertEquals(listOf("gmail:t1"), felix.owners.gmailFinished)
         // Still open here: Gmail's read closes it once the write is made.
         assertTrue(stores.tasks.value.tasks.single { it.id == "gmail:t1" }.isOpen)

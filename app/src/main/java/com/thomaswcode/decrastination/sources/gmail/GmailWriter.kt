@@ -24,7 +24,7 @@ interface GmailWriter {
         /** The UIDs of conversation [threadId]'s messages, as they are now (X-GM-THRID), whatever renumbered them. */
         fun thread(threadId: String): List<Long>
 
-        /** [uids]' messages as they are: each one's message id (X-GM-MSGID), and whether it's starred and in the inbox. */
+        /** [uids]' messages as they are: each one's message id (X-GM-MSGID, its digits: an unsigned 64-bit number), and whether it's starred and in the inbox. */
         fun messages(uids: List<Long>): List<Message>
 
         /** [change] made to [uids]: those refused, each alone (a message gone since). */
@@ -32,7 +32,7 @@ interface GmailWriter {
     }
 
     /** A message of a conversation, as a write reads it first. */
-    data class Message(val uid: Long, val id: Long, val starred: Boolean, val inbox: Boolean)
+    data class Message(val uid: Long, val id: String, val starred: Boolean, val inbox: Boolean)
 
     /** What a write does to a message: a finish's two, and an Undo's. */
     enum class Change { Unstar, Archive, Star, Inbox }
@@ -80,7 +80,7 @@ class ImapGmailWriter(private val secrets: SecretStore) : GmailWriter {
 
         override fun messages(uids: List<Long>): List<GmailWriter.Message> = imap.uidFetch(uids, "X-GM-MSGID FLAGS X-GM-LABELS").mapNotNull { attributes ->
             val uid = attributes["UID"]?.string?.toLongOrNull() ?: return@mapNotNull null
-            val id = attributes["X-GM-MSGID"]?.string?.toLongOrNull() ?: return@mapNotNull null
+            val id = attributes["X-GM-MSGID"]?.string?.takeIf { it.toULongOrNull() != null } ?: return@mapNotNull null
             val flags = attributes["FLAGS"]?.list.orEmpty().mapNotNull { it.string }
             val labels = attributes["X-GM-LABELS"]?.list.orEmpty().mapNotNull { it.string }
             GmailWriter.Message(uid, id, starred = flags.any { it.equals("\\Flagged", ignoreCase = true) }, inbox = labels.any { it.equals("\\Inbox", ignoreCase = true) })
