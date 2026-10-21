@@ -141,9 +141,9 @@ class FelixHarness(
         server.enqueue(MockResponse().setHeader("Content-Type", "application/json").setBody(body.toString()).setHeadersDelay(delayMs, TimeUnit.MILLISECONDS))
     }
 
-    /** The chat's answer [reply], with the tasks and changes it offers (the schema's JSON for them), and nothing else. */
-    fun chatAnswer(reply: String, newTasks: String = "[]", changes: String = "[]"): String =
-        """{"reply":"$reply","newTasks":$newTasks,"changes":$changes,"memories":[],"suggestedReplies":[],"actions":[],"research":"","details":[]}"""
+    /** The chat's answer [reply], with the tasks and changes it offers (the schema's JSON for them), what it names [answered], and nothing else. */
+    fun chatAnswer(reply: String, newTasks: String = "[]", changes: String = "[]", answered: String = "[]"): String =
+        """{"reply":"$reply","newTasks":$newTasks,"changes":$changes,"memories":[],"suggestedReplies":[],"actions":[],"research":"","details":[],"answered":$answered}"""
 
     /** What the service started in the background (an answer asked for as a message is kept), finished. */
     fun settle() = runBlocking {

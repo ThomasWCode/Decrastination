@@ -152,6 +152,10 @@ class RepliesTest {
     fun `how work went takes its three whatever their case, anything else is the chat's`() {
         val asked = his(MessageKind.Completions, asks = listOf(AssessLater("t1", "A task", 5)))
         assertEquals(Replies.Route.Completions(Calibrator.HARDER), Replies.route(asked, "Harder", checkInUnderWay = false))
+        // His chips' words (Q16: A) and the app's, whatever their case.
+        assertEquals(Replies.Route.Completions(Calibrator.AS_EXPECTED), Replies.route(asked, "about right", checkInUnderWay = false))
+        assertEquals(Replies.Route.Completions(Calibrator.AS_EXPECTED), Replies.route(asked, "As expected", checkInUnderWay = false))
+        assertEquals(Replies.Route.Completions(Calibrator.EASIER), Replies.route(asked, " EASIER ", checkInUnderWay = false))
         assertEquals(Replies.Route.Completions(Calibrator.AS_EXPECTED), Replies.route(asked, " as expected ", checkInUnderWay = false))
         assertEquals(Replies.Route.Completions(Calibrator.EASIER), Replies.route(asked, "EASIER", checkInUnderWay = false))
         assertEquals(Replies.Route.Chat, Replies.route(asked, "fine, but long", checkInUnderWay = false))

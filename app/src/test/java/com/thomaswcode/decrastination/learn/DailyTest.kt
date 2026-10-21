@@ -104,9 +104,9 @@ class DailyTest {
         val now = Fixtures.at("2026-10-09T07:00")
         val task = TaskItem(id = "teams:a", source = Source.Teams, sourceId = "a", title = "Moments Prep", dueAt = Fixtures.at("2026-10-09T21:00"), kind = Kind.Homework, sourceEffortMin = 40, firstSeenAt = now, lastSeenAt = now)
         val (title, lines) = Briefing.summary(Planner.plan(Planner.Input(listOf(task), now, LONDON, settings)))
-        assertEquals("Today: 1 thing, 40 min", title)
+        assertEquals("today: 1 thing, 40 min", title)
         assertEquals(listOf("Moments Prep (due today) · 40 min"), lines)
-        assertEquals("Nothing planned today", Briefing.summary(Planner.plan(Planner.Input(emptyList(), now, LONDON, settings))).first)
+        assertEquals("nothing planned today", Briefing.summary(Planner.plan(Planner.Input(emptyList(), now, LONDON, settings))).first)
     }
 
     @Test
