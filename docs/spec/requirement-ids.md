@@ -103,7 +103,7 @@ Grouped by prefix and sorted; where a later decision changed an item, its line g
 
 - G1: Felix keeps a piece done that has no step to tick, as Day's *Done* does, and takes one back (`keepPiece`, `unkeepPiece`; D-101).
 - G2: Felix asks a source to read now, saying so (`sync`; D-101).
-- G3: Felix opens a task where it lives: its sheet here, or its source's own page or app (`open`'s `where`).
+- G3: Felix opens a task where it lives: its sheet here, or its source's own page or app (`open` with value `app` or `source`).
 - G5: Felix is told whether blocking applies, the pieces it waits on, and the free time left (after the plan's "Now:").
 - G6: Felix asks for the week's numbers where a message needs them, rather than being sent them every time (`details` with `stats`: this week so far and last, `Stats.weekLines`; D-102).
 - G7: Felix asks for the calendar past the fortnight (`details` with `calendar`: the four weeks after it, or a month; `ChatPrompts.calendarBlock`; D-102).
