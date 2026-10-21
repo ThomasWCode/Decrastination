@@ -48,7 +48,8 @@ object CheckInFlow {
     fun answered(draft: CheckInDraft, text: String): CheckInDraft? {
         val words = text.trim()
         return when (draft.step) {
-            0 -> Regex("""[1-5]""").matchEntire(words)?.value?.toInt()?.let { draft.copy(step = 1, feel = it) }
+            // "4", "4/5", "4 out of 5": the number's what's kept.
+            0 -> FEEL.matchEntire(words.lowercase())?.groupValues?.get(1)?.toInt()?.let { draft.copy(step = 1, feel = it) }
             1 -> draft.copy(step = 2, avoided = words)
             2 -> draft.copy(step = 3, inTheWay = words)
             3 -> draft.copy(step = 4, change = words)
@@ -56,6 +57,9 @@ object CheckInFlow {
             else -> null
         }
     }
+
+    /** The first question's answer: a number from 1 to 5, alone or out of 5 ("4", "4/5", "4 out of 5"). */
+    private val FEEL = Regex("""([1-5])\s*(?:/\s*5|out of 5)?""")
 
     /** Whether all five have their answers. */
     fun done(draft: CheckInDraft): Boolean = draft.step >= FelixWords.CHECK_IN.size

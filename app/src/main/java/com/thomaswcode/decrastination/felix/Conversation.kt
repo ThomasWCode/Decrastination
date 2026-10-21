@@ -290,6 +290,13 @@ class Conversation(
      */
     suspend fun markAnswered(ids: Collection<String>): Marked = withContext(NonCancellable) {
         val now = clock.now()
+        val marked = mark(ids, now)
+        outbox.delivered()
+        Marked(marked, now)
+    }
+
+    /** His messages of [ids] still waiting marked answered at [now], but a check-in's question under way: those marked. */
+    private suspend fun mark(ids: Collection<String>, now: Long): Set<String> {
         val wanted = ids.toSet()
         val marked = HashSet<String>()
         chat.update { s ->
@@ -300,8 +307,7 @@ class Conversation(
                 },
             )
         }
-        outbox.delivered()
-        Marked(marked, now)
+        return marked
     }
 
     /** [marked]'s Undo: those still answered as they were marked wait for your answer again. */
@@ -372,7 +378,7 @@ class Conversation(
     /** How [ask]'s work went, as his message in the app's words: the three answers its replies, each kept on it ([Looks.answered]). */
     private fun howItWent(ask: AssessLater) = ChatMessage(
         UUID.randomUUID().toString(), Speaker.Felix, FelixWords.howItWent(ask.title), clock.now(), About(taskId = ask.taskId, taskTitle = ask.title),
-        kind = MessageKind.Completions, byApp = true, asks = listOf(ask), suggestedReplies = Assessment.ANSWERS.map { it.first },
+        kind = MessageKind.Completions, byApp = true, asks = listOf(ask), suggestedReplies = FelixWords.HOW_IT_WENT_REPLIES,
     )
 
     /** Every question about how [taskId]'s work went let go (a test's task forgotten, the debug `forget-task`): not kept, nor in his notification. */
@@ -529,7 +535,8 @@ class Conversation(
      * calendar and the changes in use; and beside them the plan as the Day and Work tabs show it then, the
      * slot under way included ([ChatPrompts.plan]). All of one [state], calendar [time],
      * [applied] instructions and [kept] notes and reminders, so the list and the plan agree, and with
-     * the answer's checks where the caller passes it the same ones.
+     * the answer's checks where the caller passes it the same ones; his messages still waiting from the chat's
+     * [messages] as sent with it (up to the message answered), so one he wrote after it isn't taken as answered.
      */
     fun chatContext(
         now: Long = clock.now(),
@@ -537,6 +544,7 @@ class Conversation(
         time: EventJudge.Time = calendarTime(),
         applied: List<Instruction> = instructions.value.applied,
         kept: FelixStore = felix.value,
+        messages: List<ChatMessage> = chat.value.messages,
     ): ChatPrompts.Context {
         val plan = planning.plan(state, now = now, applied = applied, time = time)
         // His notes and reminders (8a), each reminder with when it comes by this plan.
@@ -546,13 +554,26 @@ class Conversation(
         val keepable = (plan.todaySlots.mapNotNull { it.chunk } + plan.ordered.filter { it.stepIndex == null }.distinctBy { it.taskId }).associate { it.key to it.taskId }
         val keptToday = keptToday(now)
         val lessons = lessons(state, now)
+        val waiting = waiting(now, messages)
         return ChatPrompts.Context(
-            known = ChatPrompts.context(state.tasks, time.events, applied, now, clock.zone(), settings.value.classMap, runtime.value.notSame, settings.value, learning.value.calibration, kept.notes, kept.reminders, moments, lessons),
+            known = ChatPrompts.context(state.tasks, time.events, applied, now, clock.zone(), settings.value.classMap, runtime.value.notSame, settings.value, learning.value.calibration, kept.notes, kept.reminders, moments, lessons, waiting),
             plan = ChatPrompts.plan(plan, clock.zone(), keptToday.map { it.key to it.label }, focus.blockingLine(plan, now)),
             keepable = keepable,
             kept = keptToday.associate { it.key to it.taskId },
             lessons = lessons,
+            waiting = waiting.mapTo(HashSet()) { it.id },
         )
+    }
+
+    /**
+     * His nudges of [messages] still waiting for your answer at [now] (D-99): the newest [ChatPrompts.MAX_WAITING], oldest
+     * first, which the chat's answer may name as answered by your words (10b). Not a question whose answer the app keeps
+     * (a reading's, how work went, a calendar event's, the check-in's), nor a reminder (its *Done*): marked so, its answer
+     * would be lost, so each waits for its reply as before ([ANSWERS_KEPT]).
+     */
+    private fun waiting(now: Long, messages: List<ChatMessage>): List<ChatMessage> {
+        val ids = Replies.awaitingIds(messages, chat.value.felix.checkInDraft != null, now, clock.zone())
+        return messages.filter { it.id in ids && it.kind !in ANSWERS_KEPT }.takeLast(ChatPrompts.MAX_WAITING)
     }
 
     /**
@@ -672,7 +693,7 @@ class Conversation(
                     val quoted = sent.mapNotNull { m -> m.replyTo?.takeIf { r -> sent.none { it.id == r } }?.let { outbox.find(it) } }
                     val brought = listOfNotNull(ChatPrompts.statsBlock(Stats.weekLines(log.value, settings.value.classMap, at, clock.zone())).takeIf { stats }) +
                         calendar.map { ChatPrompts.calendarBlock(time.events, it, at, clock.zone(), time.read) }
-                    ChatReader(chatClient, clock.zone(), profile = profile(at), settings = settings.value).answer(sent, state.tasks, time.events, chatContext(at, state, time, instructions.value.applied, noted), at, found, read, quoted, noted, brought, last, notLooked)
+                    ChatReader(chatClient, clock.zone(), profile = profile(at), settings = settings.value).answer(sent, state.tasks, time.events, chatContext(at, state, time, instructions.value.applied, noted, sent), at, found, read, quoted, noted, brought, last, notLooked)
                 } finally {
                     sentAt.value = null
                 }
@@ -846,6 +867,15 @@ class Conversation(
                     .filter { p -> p.instant && p.state != ProposalState.Applied && p.note != null }.map { Act(Act.NOT_MADE + "${it.note!!.replaceFirstChar(Char::lowercase)}.", problem = true) }
                 val lines = refused + moved.map { Act(it) }
                 if (lines.isNotEmpty()) chat.update { s -> s.copy(messages = s.messages.map { if (it.id == reply.id) it.copy(acts = it.acts + lines) else it }) }
+                // His messages still waiting that your words answered, at his word (10b, D-99): marked as *Mark answered* marks them,
+                // and said under his answer, so one that stops waiting doesn't just vanish.
+                if (reading.answered.isNotEmpty()) {
+                    val marked = mark(reading.answered, reply.at)
+                    if (marked.isNotEmpty()) chat.update { s ->
+                        val taken = s.messages.filter { it.id in marked }.map { Act("Taken as answered: “${it.text.trim().take(TAKEN_TEXT)}”") }
+                        s.copy(messages = s.messages.map { if (it.id == reply.id) it.copy(acts = it.acts + taken) else it })
+                    }
+                }
                 // His answer, in the chat whole: the window moved, and it's his notification while the chat isn't on screen.
                 outbox.delivered(alertFor = reply.id)
             }
@@ -1474,5 +1504,11 @@ class Conversation(
 
         /** A due date, as his note says it. */
         private val WHEN = DateTimeFormatter.ofPattern("EEE d MMM HH:mm", Locale.UK)
+
+        /** How much of a message of his marked answered by his word its line under his answer quotes (10b). */
+        private const val TAKEN_TEXT = 60
+
+        /** His messages whose answer the app keeps, by a reply to them alone: never marked answered by his word (10b). */
+        private val ANSWERS_KEPT = setOf(MessageKind.Question, MessageKind.Completions, MessageKind.EventQuestion, MessageKind.CheckIn, MessageKind.Reminder)
     }
 }

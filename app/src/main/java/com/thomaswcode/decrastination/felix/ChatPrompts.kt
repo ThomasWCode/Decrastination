@@ -94,6 +94,12 @@ object ChatPrompts {
     /** A message a reply quotes, cut to this ([turns]): its point, not all of it. */
     private const val MAX_QUOTE = 300
 
+    /** The most of his messages still waiting for their answer listed in the context (10b), the newest: a day's few, with room to spare. */
+    const val MAX_WAITING = 10
+
+    /** How much of each one's words the list gives. */
+    private const val MAX_WAITING_TEXT = 160
+
     private val WHEN = DateTimeFormatter.ofPattern("EEE d MMM yyyy HH:mm", Locale.UK)
     private val TODAY = DateTimeFormatter.ofPattern("EEEE d MMMM yyyy, HH:mm", Locale.UK)
     private val DAY = DateTimeFormatter.ofPattern("EEEE d MMMM yyyy", Locale.UK)
@@ -160,7 +166,17 @@ object ChatPrompts {
         4. Remember (memories): a fact about the student worth keeping for later (a preference, a pattern, something about their week: "football is on Tuesdays"), with a short topic, so a newer fact on the same topic replaces it; or, kind "rule", a standing instruction about how you should behave ("don't message before 8", "be blunter"). To forget one, give its topic (a rule's own words) and an empty text. One that only matters for a while gets until, when it stops mattering, a date (YYYY-MM-DD, through that day) or a date and time (YYYY-MM-DDTHH:MM): "I've got a cold this week" until Sunday's date; "don't message me tonight" a rule until 07:00 tomorrow; "for a bit" a week; "until the exam" the exam task's date where there's one, else ask. A fact that only matters while a task's open gets that task's taskId ("for the trip, I'm sharing a room" with the trip's). Most have neither, both then empty. Busy times, limits and days off are changes, not memories; most messages need none.
         5. Act (actions): tickStep when the student says a step is done, untickStep when one ticked isn't (taskId, and stepIndex from the list's steps); done when they've finished a task of their own (from Yours), or one whose tick finishes it; reopen for one of theirs finished by mistake (from the finished list); delete for a task of their own they no longer want (another source's they can only say isn't a task: NotATask); open to show them a task: value "app" for its page here, or "source" to open it where it lives (Teams, Power Planner, Gmail, AnkiDroid) when they ask for that; setting to change one of the settings listed with their values (taskId empty, setting its name, value as the list writes it: a number, a time as HH:MM, hours as HH:MM-HH:MM); cancelReminder to cancel a reminder set (taskId empty, value its id from the reminders' list); deleteNote to delete a note (taskId empty, value its id from the task's notes); keepPiece when they say a piece is done that has no step to tick (a task in boxes, or a slot of today's), as Day's Done keeps it (taskId, value its key from the plan); unkeepPiece when one kept today isn't (taskId, value its key from Kept today); sync when they say a source has news the app hasn't read ("I've handed it in, check Teams", "I've just starred it"): setting the source (Teams, Power Planner, Gmail or Anki), taskId the task it's about or empty; the source is read now, and you're told if the task changes, so say only that it's reading. stepIndex is -1 but for steps, setting empty but for settings and sync, and value empty but for settings, open, cancelReminder, deleteNote, keepPiece and unkeepPiece. A task from Teams, Power Planner, Gmail or Anki is done when its source says so (handed in, completed in Power Planner, unstarred, studied), so it can't be marked done. Most messages need none.
 """ + (if (settings.felixSearches) RESEARCH else NO_RESEARCH).prependIndent("        ") + "\n" + READ.prependIndent("        ") + "\n" + REMIND.prependIndent("        ") + "\n" + NOTE.prependIndent("        ") + "\n" + """
-        Reply in one to three short sentences of plain UK English (asked what's on, a short list instead, a line a task). Everything you give is made as soon as you give it (a new task or event, a change, days off, a step ticked, a setting, a reminder, a note), so say what you've done ("Moved it to 19:30", "Added it, due Tuesday"), never what you'd do: the student has an Undo for each. To undo something yourself, give what puts it back. When a reply from them is likely, offer up to three short ones in their words (suggestedReplies). If what you need is missing or unclear (which task they mean, or when), ask one short question and change nothing. Don't add a task that's already listed: change it instead. When their message is about a given task, event or day, it's about that unless they clearly name another. When it starts with a message it replies to, quoted, it's answering that one. Do only what they asked for, and leave every field you don't use empty: an empty string, -1 for a number.
+        Reply in one to three short sentences (asked what's on, a short list instead, a line a task). Everything you give is made as soon as you give it (a new task or event, a change, days off, a step ticked, a setting, a reminder, a note), so say what you've done ("moved it to 19:30", "added it, due tue 27 oct"), never what you'd do: the student has an Undo for each. To undo something yourself, give what puts it back. When a reply from them is likely, offer up to three short ones in their words (suggestedReplies). If what you need is missing or unclear (which task they mean, or when), ask one short question and change nothing. Don't add a task that's already listed: change it instead. When their message is about a given task, event or day, it's about that unless they clearly name another. When it starts with a message it replies to, quoted, it's answering that one; when it answers one of your messages listed as still waiting for their answer, give that one's id in answered, so it no longer waits (most answer none, and answered is then an empty list). Do only what they asked for, and leave every field you don't use empty: an empty string, -1 for a number.
+
+        ${FelixPrompts.REGISTER}
+
+        ${FelixPrompts.JUST_TALK}
+
+        Examples (made up, to show the voice and the form of an answer):
+        - Today Wednesday 21 October 2026, 17:40. They: "chem worksheet due friday, prob 40 mins". You: "alr added it: chem worksheet, due fri 23 oct, 40 min.", with one new task (Chem worksheet, Homework, Chemistry, dueDate 2026-10-23, no time, 40 minutes) and nothing else.
+        - A physics and a chemistry worksheet are both on tonight, and the message is about neither. They: "move it to tomorrow". You: "which one, the physics or the chem?", with replies "the physics", "the chem" and "both", and nothing else.
+        - The English essay is listed at 2 h. They: "the essay's taking ages, it's more like 4 hours not 2". You: "yeah it's a long one. made it 4 h in all.", with a Minutes change on the essay, 240, paced false, and nothing else.
+        - The chem worksheet is the one chemistry task open. They: "god my chemistry teacher is so annoying with the homework". You: "ngl that's a lot from one class. it's just the worksheet left this week.", with replies "fair" and "anyway, what's next?", and nothing else: no change, nothing remembered, no action.
     """
         ).trimIndent()
 
@@ -245,6 +261,8 @@ object ChatPrompts {
         "research" to STRING,
         // The tasks whose whole text to read (D-93), none for nothing.
         "details" to mapOf("type" to "array", "items" to STRING),
+        // His messages still waiting that their words answer (10b, D-99), by id, none for none: plain strings, so no union is added.
+        "answered" to mapOf("type" to "array", "items" to STRING),
     )
 
     /**
@@ -374,7 +392,7 @@ object ChatPrompts {
      * and what its answer is checked against that isn't in words: the pieces it lists to keep ([keepable]) and those
      * kept today ([kept]), each key with its task's id (G1); the next lessons a due date at one is set from ([lessons], G8).
      */
-    data class Context(val known: String, val plan: String, val keepable: Map<String, String> = emptyMap(), val kept: Map<String, String> = emptyMap(), val lessons: Lessons.Timetabled? = null) {
+    data class Context(val known: String, val plan: String, val keepable: Map<String, String> = emptyMap(), val kept: Map<String, String> = emptyMap(), val lessons: Lessons.Timetabled? = null, val waiting: Set<String> = emptySet()) {
         /** All of it, as it's sent when there's room. */
         val whole: String get() = if (plan.isEmpty()) known else known + PLAN_GAP + plan
     }
@@ -475,6 +493,7 @@ object ChatPrompts {
         reminders: List<Reminder> = emptyList(),
         moments: Map<String, Long> = emptyMap(),
         lessons: Lessons.Timetabled? = null,
+        waiting: List<ChatMessage> = emptyList(),
     ): String = buildString {
         fun at(time: Long) = Instant.ofEpochMilli(time).atZone(zone).format(WHEN)
         // A task's minutes, and where a pace is learned for its kind and class, what the plan makes of them:
@@ -495,6 +514,16 @@ object ChatPrompts {
         val byId = tasks.associateBy { it.id }
         appendLine("Today: ${Instant.ofEpochMilli(now).atZone(zone).format(TODAY)} (${zone.id})")
         appendLine()
+        // His nudges still waiting for their answer (D-99), by id, so he can name those their words answer (10b): first, at
+        // most ten short lines, so a context too long for its room (a long list of reminders) never loses them. None, no list.
+        if (waiting.isNotEmpty()) {
+            appendLine("Your messages still waiting for their answer (id | when | what it's about | your words):")
+            waiting.forEach { m ->
+                val about = m.about.taskId?.let(byId::get)?.title ?: m.about.taskTitle ?: m.about.eventTitle ?: "-"
+                appendLine("- ${m.id} | ${at(m.at)} | ${about.take(MAX_TITLE)} | ${m.text.trim().replace('\n', ' ').take(MAX_WAITING_TEXT)}")
+            }
+            appendLine()
+        }
         // The reminders still to come (8a), by id, to move or cancel; so one isn't set twice. First, so a context too
         // long for its room never loses them ([turns]): the lists after them can run long.
         appendLine("Reminders set, still to come (id | when | their words | its task):")

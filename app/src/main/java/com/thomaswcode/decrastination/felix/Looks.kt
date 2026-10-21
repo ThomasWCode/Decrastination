@@ -271,7 +271,7 @@ class Looks(
         val next = now + (answer?.nextCheckMin ?: settings.felixDefaultCheckMin).coerceAtLeast(FelixAnswers.MIN_CHECK_MIN) * 60_000L
         // Asking how the completions went, the replies are the three answers (LR-05).
         val replies = when (trigger.reason) {
-            FelixPrompts.Reason.Completions -> Assessment.ANSWERS.map { it.first }
+            FelixPrompts.Reason.Completions -> FelixWords.HOW_IT_WENT_REPLIES
             // A question's answer is in your words (AI-10).
             FelixPrompts.Reason.Question -> emptyList()
             else -> answer?.replies.orEmpty()
@@ -351,7 +351,7 @@ class Looks(
             return true
         }
         if (message.kind != MessageKind.Completions || message.asks.isEmpty()) return false
-        val answer = Assessment.ANSWERS.firstOrNull { it.first.equals(text.trim(), ignoreCase = true) }?.second ?: return false
+        val answer = Assessment.ANSWERS.firstOrNull { it.first.equals(FelixWords.chip(text), ignoreCase = true) }?.second ?: return false
         message.asks.forEach { assess(it.taskId, it.doneAt ?: 0L, answer) }
         return true
     }

@@ -270,7 +270,8 @@ class ConversationTest {
         conversation.askKept()
         val question = his().single()
         assertEquals(MessageKind.Completions to listOf(ask), question.kind to question.asks)
-        assertEquals(listOf("Harder", "As expected", "Easier"), question.suggestedReplies)
+        // In his register; either form taken (the words the app keeps, or his).
+        assertEquals(listOf("harder", "about right", "easier"), question.suggestedReplies)
         assertTrue(stores.chat.value.felix.assessLater.isEmpty())
         assertTrue(conversation.ask("Harder", replyTo = question.id))
         assertEquals(listOf(Triple("teams:sheet", ask.doneAt!!, "harder")), felix.assessed)
@@ -332,6 +333,63 @@ class ConversationTest {
         assertTrue(conversation.ask("can it wait till seven?", replyTo = "n1"))
         felix.settle()
         assertEquals(sheet.id, stores.chat.value.messages.last { it.from == Speaker.You }.about.taskId)
+    }
+
+    @Test
+    fun `his answer names what of his still waiting your words answered, and only those the context listed are marked`() = runBlocking {
+        stores.tasks.update { it.copy(tasks = it.tasks + sheet) }
+        felix.outbox.send(ChatMessage("n1", Speaker.Felix, "Starting the worksheet now?", now - 60_000L, About(taskId = sheet.id, taskTitle = sheet.title), kind = MessageKind.SlotStart, suggestedReplies = listOf("Starting", "Later")))
+        felix.outbox.send(ChatMessage("c1", Speaker.Felix, "All done for today.", now - 30_000L))
+        felix.answers(felix.chatAnswer("Good, keep going.", answered = """["n1","c1","nobody's"]"""))
+        // Typed, not a reply to it: it waits till his answer says your words answered it.
+        assertTrue(conversation.ask("started it, on question 2"))
+        felix.settle()
+        val sent = felix.server.takeRequest().body.readUtf8()
+        assertTrue("Your messages still waiting for their answer (id" in sent && "- n1 | " in sent)
+        // His answer to you isn't one that waits: not listed, and not marked by naming it.
+        assertFalse("- c1 | " in sent)
+        assertEquals(now, his().single { it.id == "n1" }.answeredAt)
+        assertNull(his().single { it.id == "c1" }.answeredAt)
+        // Said under his answer, quietly: no Undo, nothing wrong.
+        val line = his().last().acts.single()
+        assertEquals("Taken as answered: “Starting the worksheet now?”" to null, line.line to line.action)
+        assertFalse(line.problem)
+        assertFalse("n1" in Replies.awaitingIds(stores.chat.value.messages, checkInUnderWay = false, now = now, zone = felix.clock.zone()))
+    }
+
+    @Test
+    fun `a message of his written after yours, while its answer waits, isn't one your words can answer`() = runBlocking {
+        stores.tasks.update { it.copy(tasks = it.tasks + sheet) }
+        // Your words first; his nudge after them, before the call that answers them is made.
+        stores.chat.update { it.copy(messages = it.messages + ChatMessage("y1", Speaker.You, "started it", now - 120_000L)) }
+        felix.outbox.send(ChatMessage("n1", Speaker.Felix, "Starting the worksheet now?", now - 60_000L, About(taskId = sheet.id, taskTitle = sheet.title), kind = MessageKind.SlotStart, suggestedReplies = listOf("Starting", "Later")))
+        felix.answers(felix.chatAnswer("Good.", answered = """["n1"]"""))
+        conversation.answerChat()
+        felix.settle()
+        assertFalse("- n1 | " in felix.server.takeRequest().body.readUtf8())
+        assertNull(his().single { it.id == "n1" }.answeredAt)
+    }
+
+    @Test
+    fun `a question of his whose answer the app keeps isn't his to mark answered, so its answer isn't lost`() = runBlocking {
+        stores.tasks.update { it.copy(tasks = it.tasks + sheet) }
+        val ask = AssessLater(sheet.id, sheet.title, now - 3_600_000L)
+        felix.outbox.send(ChatMessage("q1", Speaker.Felix, "How was the worksheet?", now - 60_000L, kind = MessageKind.Completions, asks = listOf(ask), suggestedReplies = listOf("Harder", "As expected", "Easier")))
+        felix.answers(felix.chatAnswer("Noted.", answered = """["q1"]"""))
+        assertTrue(conversation.ask("the worksheet was harder than I thought"))
+        felix.settle()
+        assertFalse("- q1 | " in felix.server.takeRequest().body.readUtf8())
+        // Still waiting for its reply, which records how it went.
+        assertNull(his().single { it.id == "q1" }.answeredAt)
+    }
+
+    @Test
+    fun `with nothing of his waiting, the context lists none, and an id his answer names is let go`() = runBlocking {
+        felix.answers(felix.chatAnswer("Fine.", answered = """["n9"]"""))
+        assertTrue(conversation.ask("what's due tomorrow?"))
+        felix.settle()
+        assertFalse("Your messages still waiting for their answer (id" in felix.server.takeRequest().body.readUtf8())
+        assertTrue(stores.chat.value.messages.all { it.answeredAt == null || it.from == Speaker.You })
     }
 
     @Test

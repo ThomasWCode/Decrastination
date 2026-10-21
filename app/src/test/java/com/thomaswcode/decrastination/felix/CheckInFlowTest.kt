@@ -25,14 +25,16 @@ class CheckInFlowTest {
     @Test
     fun `five questions, each reply its answer, the first a number, then the week's check-in`() {
         var draft = CheckInDraft("2026-10-05")
-        assertEquals("How was the week, 1 to 5?", CheckInFlow.question(draft))
+        assertEquals("ok so, 1 to 5, how was the week?", CheckInFlow.question(draft))
         assertEquals(listOf("1", "2", "3", "4", "5"), CheckInFlow.replies(draft, ActivityLog(), LONDON))
         assertNull(CheckInFlow.answered(draft, "pretty good"))
         // The number alone: not a digit found in other words.
         for (reply in listOf("10", "15", "I wanted 5 but got 2", "0", "6")) assertNull(CheckInFlow.answered(draft, reply), reply)
         assertEquals(3, CheckInFlow.answered(draft, " 3 ")!!.feel)
+        // Out of five, as a mate would say it (Q16: A): the number's what's kept.
+        assertEquals(listOf(4, 4, 2), listOf("4/5", "4 out of 5", "2 / 5").map { CheckInFlow.answered(draft, it)!!.feel })
         draft = CheckInFlow.answered(draft, "4")!!
-        assertEquals("What did you avoid, and why?", CheckInFlow.question(draft))
+        assertEquals("what did you put off, and why?", CheckInFlow.question(draft))
         for (answer in listOf("The essay, it felt huge", "Football", "Start earlier", "Before tea")) draft = CheckInFlow.answered(draft, answer)!!
         assertTrue(CheckInFlow.done(draft))
         assertEquals(CheckIn("2026-10-05", 10, 4, "The essay, it felt huge", "Football", "Start earlier", "Before tea"), CheckInFlow.checkIn(draft, 10))
