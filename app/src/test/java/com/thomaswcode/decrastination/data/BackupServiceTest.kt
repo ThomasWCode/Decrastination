@@ -11,6 +11,8 @@ import com.thomaswcode.decrastination.core.MemoryState
 import com.thomaswcode.decrastination.core.Fact
 import com.thomaswcode.decrastination.core.ChatState
 import com.thomaswcode.decrastination.core.FixedClock
+import com.thomaswcode.decrastination.core.Instruction
+import com.thomaswcode.decrastination.core.InstructionStatus
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.MessageKind
 import com.thomaswcode.decrastination.core.Settings
@@ -138,6 +140,29 @@ class BackupServiceTest {
         settle()
         assertEquals(Backups.mergeLog(ActivityLog(), log, clock.time), phone.stores.log.value)
         assertEquals(calibration, phone.stores.learning.value.calibration)
+    }
+
+    @Test
+    fun `a reset of your changes keeps every instruction in its copy, in use or not, and its copy brings each back as it was`() = runTest {
+        val phone = Phone(full = true)
+        val reading = Instruction("being-read", "skip the essay on Friday", at = clock.time, state = InstructionStatus.Reading)
+        val unclear = Instruction("left-unclear", "the usual", at = clock.time, state = InstructionStatus.Unclear, note = "It can't be told which task")
+        phone.stores.replace(phone.stores.instructions) { it.copy(instructions = it.instructions + reading + unclear) }
+        val before = phone.stores.instructions.value.instructions
+        assertTrue(before.any { it.state == InstructionStatus.Applied })
+        phone.service.reset(Reset.Instructions)
+        assertTrue(phone.stores.instructions.value.instructions.isEmpty())
+        val copy = phone.folder.files.keys.single { it.startsWith("reset-") }
+        val said = phone.service.importBackup(phone.folder.files.getValue(copy))
+        settle()
+        assertEquals(before.map { it.id }.toSet(), phone.stores.instructions.value.instructions.map { it.id }.toSet())
+        assertEquals(reading, phone.stores.instructions.value.instructions.single { it.id == "being-read" })
+        assertEquals(unclear, phone.stores.instructions.value.instructions.single { it.id == "left-unclear" })
+        // Those of the fixtures' too: every one not in use, said.
+        val notInUse = before.count { it.state != InstructionStatus.Applied }
+        assertTrue(notInUse > 2 && "$notInUse not in use back as they were" in said, said)
+        // The nightly backup keeps those in use alone, as before.
+        assertTrue(Backups.decode(phone.service.exportBackup(), phone.stores.shapes)!!.instructions.all { it.state == InstructionStatus.Applied })
     }
 
     @Test
