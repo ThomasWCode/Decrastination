@@ -41,7 +41,8 @@ interface GmailWriter {
 /**
  * [GmailWriter] over IMAP with the app password: a connection of its own, as a sync's read has, All Mail
  * opened for writing, [ImapWriter] storing the changes (D-7 as amended). A cancelled write closes its socket,
- * so a blocking read ends.
+ * so a blocking read ends. Its LOGOUT and its socket's close are quiet: a connection dropped after the commands
+ * doesn't fail a write that's made.
  */
 class ImapGmailWriter(private val secrets: SecretStore) : GmailWriter {
     override suspend fun <T> open(block: suspend (GmailWriter.Session) -> T): T = withContext(Dispatchers.IO) {
@@ -57,20 +58,20 @@ class ImapGmailWriter(private val secrets: SecretStore) : GmailWriter {
             }
         }
         try {
-            socket.use {
-                // Each command by its name and UIDs (the login's without its address), at info level: a write is worth seeing.
-                val imap = ImapClient(socket.inputStream, socket.outputStream) { Log.i(AppGraph.TAG, "IMAP $it") }
-                imap.greeting()
-                imap.login(address, password)
-                val writer = ImapWriter(imap)
-                writer.select(StarredConversations.allMail(imap.list()))
-                try {
-                    block(session(imap, writer))
-                } finally {
-                    imap.logout()
-                }
+            // Each command by its name and UIDs (the login's without its address), at info level: a write is worth seeing.
+            val imap = ImapClient(socket.inputStream, socket.outputStream) { Log.i(AppGraph.TAG, "IMAP $it") }
+            imap.greeting()
+            imap.login(address, password)
+            val writer = ImapWriter(imap)
+            writer.select(StarredConversations.allMail(imap.list()))
+            try {
+                block(session(imap, writer))
+            } finally {
+                // Its own failure kept to itself (ImapClient.logout).
+                imap.logout()
             }
         } finally {
+            // The socket closed by the closer, whatever came of the rest, and quietly.
             closer.cancel()
         }
     }

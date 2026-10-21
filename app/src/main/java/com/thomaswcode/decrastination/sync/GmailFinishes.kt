@@ -121,10 +121,13 @@ class GmailFinishes(
      */
     suspend fun unfinish(taskId: String, writeId: String? = null, byWork: Boolean = false): Boolean {
         val now = clock.now()
-        var changed = false
-        writes.update { store -> GmailWrites.undo(store.writes, taskId, now, newId(), writeId, byWork)?.let { changed = true; store.copy(writes = it) } ?: store }
-        if (changed) GmailWrites.wake(value)?.let(ports::schedule)
-        return changed
+        var taken: GmailWrite? = null
+        writes.update { store -> GmailWrites.undo(store.writes, taskId, now, newId(), writeId, byWork)?.let { taken = GmailWrites.latest(store.writes, taskId); store.copy(writes = it) } ?: store }
+        val finish = taken ?: return false
+        // One given up, taken back: its failure's said no more.
+        if (finish.gaveUp) ports.sorted(finish)
+        GmailWrites.wake(value)?.let(ports::schedule)
+        return true
     }
 
     /**

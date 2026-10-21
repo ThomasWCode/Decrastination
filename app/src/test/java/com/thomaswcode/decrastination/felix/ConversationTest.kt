@@ -414,6 +414,19 @@ class ConversationTest {
     }
 
     @Test
+    fun `his done on an email being finished already says so, with nothing of its own to undo`() = runBlocking {
+        val email = sheet.copy(id = "gmail:t1", source = Source.Gmail, sourceId = "t1", title = "Trip consent form", kind = Kind.Admin)
+        stores.tasks.update { it.copy(tasks = it.tasks + email) }
+        felix.owners.gmailFinish = GmailFinishes.Finish.Pending
+        felix.answers(felix.chatAnswer("Finished it.", actions = """[{"type":"done","taskId":"gmail:t1","stepIndex":-1,"setting":"","value":""}]"""))
+        assertTrue(conversation.ask("I'm done with the trip email"))
+        felix.settle()
+        val act = his().last().acts.single()
+        assertEquals("Being finished in Gmail already: “Trip consent form”", act.line)
+        assertNull(act.action)
+    }
+
+    @Test
     fun `his done on an email can still be taken back with its task gone, as after a backup's restored`() = runBlocking {
         val email = sheet.copy(id = "gmail:t1", source = Source.Gmail, sourceId = "t1", title = "Trip consent form", kind = Kind.Admin)
         stores.tasks.update { it.copy(tasks = it.tasks + email) }

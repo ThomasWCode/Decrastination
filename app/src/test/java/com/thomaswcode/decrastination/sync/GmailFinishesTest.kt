@@ -293,6 +293,24 @@ class GmailFinishesTest {
     }
 
     @Test
+    fun `a finish given up and taken back is said no more, and its Undo puts back the star it took`() = runBlocking {
+        val gmail = FakeGmail()
+        finishes.finish(email.id, explicit = true)
+        clock.time += GmailWrites.GRACE_MS
+        gmail.failing = Change.Archive
+        repeat(GmailWrites.MAX_TRIES) { finishes.write(gmail); clock.time += GmailWrites.backoff(it + 1) }
+        assertEquals(GmailWrites.State.GaveUp, GmailWrites.state(finishes.value, email.id))
+        assertEquals(1, GmailWrites.givenUp(finishes.value).size)
+        assertTrue(finishes.unfinish(email.id))
+        assertEquals(listOf("t1"), sorted)
+        assertTrue(GmailWrites.givenUp(finishes.value).isEmpty())
+        gmail.failing = null
+        gmail.stored.clear()
+        assertFalse(finishes.write(gmail))
+        assertEquals(listOf(listOf(11L) to Change.Star), gmail.stored)
+    }
+
+    @Test
     fun `settled, a finish's receipt goes once a read that began after it finds the email starred again`() = runBlocking {
         finishes.finish(email.id, explicit = true)
         clock.time += GmailWrites.GRACE_MS

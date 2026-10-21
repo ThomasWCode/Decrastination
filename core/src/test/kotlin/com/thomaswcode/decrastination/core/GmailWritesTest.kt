@@ -132,6 +132,8 @@ class GmailWritesTest {
         val pending = finish("w2", "gmail:2").copy(notBefore = now + GmailWrites.GRACE_MS)
         val writes = listOf(made, pending)
         assertEquals(listOf(made), GmailWrites.receipts(writes))
+        // One given up is this phone's to sort: not kept in a backup.
+        assertEquals(listOf(made), GmailWrites.receipts(writes + finish("w3", "gmail:3").copy(notBefore = now, tries = 5, doneAt = now, gaveUp = true)))
         assertEquals(writes, GmailWrites.prune(writes, now + GmailWrites.RECEIPT_MS - 1))
         assertEquals(listOf(pending), GmailWrites.prune(writes, now + GmailWrites.RECEIPT_MS))
     }
@@ -184,6 +186,18 @@ class GmailWritesTest {
         assertEquals(undoing, GmailWrites.settle(undoing, { true }, now + 2 * min, now + 2 * min))
         // Old: gone, whatever the read.
         assertTrue(GmailWrites.settle(writes, { false }, null, now + GmailWrites.RECEIPT_MS).isEmpty())
+    }
+
+    @Test
+    fun `the worker's wake is each email's first write to go, not one waiting behind it`() {
+        val read = GmailWrites.with(GmailWrites.finish(emptyList(), finish(), confirmed = true)!!, "w1") { it.copy(flagged = listOf("101"), inbox = listOf("101")) }
+        val undone = GmailWrites.undo(GmailWrites.failed(read, "w1", "no connection", now + min), "gmail:1", now + 2 * min, "u1")!!
+        assertEquals(now + 31 * min, GmailWrites.wake(undone))
+        assertNull(GmailWrites.next(undone, now + 2 * min))
+        // A failure taken back by an Undo is said no more: the Undo's its task's newest.
+        val gaveUp = GmailWrites.with(read, "w1") { it.copy(unstarred = true, tries = 5, doneAt = now + min, gaveUp = true) }
+        assertEquals(listOf("w1"), GmailWrites.givenUp(gaveUp).map { it.id })
+        assertTrue(GmailWrites.givenUp(GmailWrites.undo(gaveUp, "gmail:1", now + 2 * min, "u1")!!).isEmpty())
     }
 
     @Test
