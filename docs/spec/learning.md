@@ -122,10 +122,10 @@ It writes a note of at most five lines, opening on how last week's change went, 
 - `marginDays`, 0 to 3; `softMinPerDay`, 30 to 120; `workMinPerFreeMin`, 2 to 5;
 - a school day's start and end (`weekdayHoursStart`, `weekdayHoursEnd`), each within an hour of where it is.
 
-It never changes `boxMin` (a piece's length is yours: your decision), what's blocked, quiet hours, protection, or any hours but a school day's; the free-time rate is the only blocking setting in its reach.
+It never changes `boxMin` (a piece's length is yours, D-33), what's blocked, quiet hours, protection, or any hours but a school day's; the free-time rate is the only blocking setting in its reach.
 Its changes apply at once, armed or not (`Protection.applyReviewChanges`, IMP-P2-015), in place of any waiting change of yours to the same setting; each is kept with its value before it (`WeeklyReview.changes`, `settingsBefore`).
 
-After it, what Felix remembers is tidied once it's past 70 % of its room (AI-21, [felix.md](felix.md)); the week's totals are kept (`Stats.rollup`, PL-10); Felix's message in the chat gives the review's first line, with *Open the review* (`Conversation.reviewed`), on his notification; then the week's summary for home is written (NF-02), with a message of his offering to send it (`Conversation.summaryReady`).
+After it, what's run out of what Felix remembers is let go of, and the facts with neither an until nor a task are tidied once they're past 70 % of the room the rest leave them (AI-21, `MemoryTidy.due`, [felix.md](felix.md)); the week's totals are kept (`Stats.rollup`, PL-10); Felix's message in the chat gives the review's first line, with *Open the review* (`Conversation.reviewed`), on his notification; then the week's summary for home is written (NF-02), with a message of his offering to send it (`Conversation.summaryReady`).
 The Reviews page (LR-01) lists each review with its note, each change with *Undo* while it's still what the review left (a change of yours, so once armed one that loosens blocking waits).
 
 ## Stats
@@ -138,11 +138,13 @@ The Reviews page (LR-01) lists each review with its note, each change with *Undo
 - what's been learned, in words, each class's figure with *Forget* (`Stats.calibrationRows`), and each deck's seconds a card (`AnkiProgress.lines`);
 - *Export the record as CSV* (PL-11, `learn/Export.kt`): completions, slots, days, blocks, Felix's messages (the archive's with the chat's) and the calibration, zipped to share.
 
+`Stats.weekLines` gives this week so far and last in figures, by subject, as Felix is told them when he asks (G6, [felix.md](felix.md)).
+
 ## The daily jobs
 
 `learn/Daily.kt` keeps three alarms, each set again once it has run: one that ran today stands for today, and one that failed is tried again 10 minutes later, up to three times (`Daily.failed`).
-- **The morning briefing** (`learn/Briefing.kt`): 07:00 on a school day by the school calendar, 08:30 on any other, a weekday off included (`briefingWeekdayMin`, `briefingWeekendMin`; D-74); set again when the school calendar changes. A change that moves today's time to one already gone by, its briefing not yet run (a day off taken out after 07:00 and before its 08:30, or the time set earlier in Settings), leaves today without one: the next is tomorrow's.
-  It posts what the night held back, reads the calendar, finishes yesterday's day record and makes today's, offers the morning's Teams sync for 90 minutes, then sends Felix's message or the day's list; after it, Felix's notes and reminders no longer wanted are let go (`Conversation.pruneFelix`).
+- **The morning briefing** (`learn/Briefing.kt`): 07:00 on a school day by the school calendar, 08:30 on any other, a weekday off included (`briefingWeekdayMin`, `briefingWeekendMin`; D-74); set again when the school calendar changes. A change that moves today's time to one already gone by, its briefing not yet run (a day off taken out after 07:15 and before its 08:30, or the time set earlier in Settings), leaves today without one: the next is tomorrow's; one gone by within the last quarter of an hour runs at once (`Daily.from`).
+  What's run out of what Felix remembers is let go of first (`Conversation.forgetExpired`, D-103); then it posts what the night held back, reads the calendar, finishes yesterday's day record and makes today's, offers the morning's Teams sync for 90 minutes, then sends Felix's message or the day's list; after it, Felix's notes and reminders no longer wanted are let go (`Conversation.pruneFelix`).
 - **The check-in**, on Sundays at `checkInMin`, above.
 - **The weekly review**, 90 minutes after it, above.
 

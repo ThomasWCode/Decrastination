@@ -62,9 +62,9 @@ With every step done, an email or a task of your own has nothing left; any other
 
 A task's pieces are its steps still to do, or, with no steps, boxes of its remaining time.
 
-- **Boxes** are at most `Settings.boxMin`: your setting, 60 on your phone, so nothing is cut that isn't over an hour (30 by default). The weekly review never changes it.
+- **Boxes** are at most `Settings.boxMin`, your setting (D-33; 30 by default).
 - Boxes are even: 100 minutes at 60 is 50 and 50, not 60 and 40. A task in one box is one piece; several are "part 2 of 3".
-- Where your instructions limit days, a box is no longer than the most any day the task can go on holds (`Planner.roomiest`). Steps aren't shortened: one longer than every such day goes unplanned.
+- Where your instructions limit days, a box is no longer than the most any day the task can go on holds (`Planner.roomiest`). Steps aren't shortened: one longer than every such day is placed as work that fits nowhere is ([Backwards, and behind](#backwards-and-behind)).
 - **Where** (PL-15, `Chunk.where`): a step's own place (home, or anywhere), as Claude read it or as the step was given; else your own task's as you set it, Teams homework at home, the rest anywhere.
 
 ## Sittings
@@ -155,7 +155,7 @@ Runs stay in order: none starts before the one before it, each is planned to be 
 Told to Felix or as an instruction, or made by moving a piece on Day or in the calendar, they're changes on the task (`mine.onDay`, `mine.atTime`):
 - **A day** (`OnDay`): all of the task on that day, placed before everything else; that day is its last usable day whatever the margin, and a deadline only where the task's own is that day.
 - **A time** (`AtTime`): its next piece a run of its own from that time, which the slotter keeps to the minute; the rest follow it.
-- Not kept: one whose day has gone, one before the task can start, and, while the task's real deadline is still to come, a day after its day or a time at or after it. Those last two are refused as they're given ("It's due before then", `InstructionRules.latePin`; on Day, `Planner.pinProblem`).
+- Not kept: one whose day has gone, one before the task can start, and, while the task's real deadline is still to come, a day after its day or a time at or after it. Those last two are refused as they're given ("It's due before then", `InstructionRules.latePin`); on Day, all of them are (`Planner.pinProblem`).
 - Work already overdue takes any day or time from now (D-30): all of it on the day you gave, or its next piece at your time and the rest after it, none of it before. It's still overdue there, and says so.
 - A time past a plan's date makes the date moot: the work is undated from that time. A later day for all of it drops a time on another day, and keeps one on that day.
 
