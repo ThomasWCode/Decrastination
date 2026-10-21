@@ -215,7 +215,7 @@ object Backups {
             val said = (versions[file] as? JsonPrimitive)?.intOrNull
             // A store the backup carries (PARTS) that's newer than this build's isn't read, wherever its parts
             // are: one of its parts renamed or moved there would otherwise be passed over, and the backup
-            // restored without it. One it doesn't carry (the calendar's record) has nothing in it to lose.
+            // restored without it. One it doesn't carry (`runtime.json`, say) has nothing in it to lose.
             if (said != null && said > shape.version && PARTS.values.any { it.first == file }) return null
             val parts = PARTS.filterValues { it.first == file }.keys.filter { it in backup }
             if (parts.isEmpty()) continue
