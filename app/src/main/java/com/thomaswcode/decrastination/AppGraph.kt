@@ -333,6 +333,7 @@ class AppGraph private constructor(context: Context) {
         log, stores.learning, settings, memory, chat, stores.instructions, clock, gateway, focus, protection,
         resets = { backups.resets.get() },
         profile = { now, remembered -> conversation.profile(now, remembered) },
+        forgetExpired = { now -> conversation.forgetExpired(now) },
         reviewed = { line -> conversation.reviewed(line) },
         summaryReady = { week -> conversation.summaryReady(week) },
     )

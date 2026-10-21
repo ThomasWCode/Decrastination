@@ -1,5 +1,6 @@
 package com.thomaswcode.decrastination.enrich
 
+import com.thomaswcode.decrastination.core.Memories
 import com.thomaswcode.decrastination.core.MemoryState
 import com.thomaswcode.decrastination.core.PowerPlannerItems
 import com.thomaswcode.decrastination.core.SchoolCalendar
@@ -81,13 +82,15 @@ object Profile {
         // facts newest first, the oldest past their room left out.
         memory.rules.take(com.thomaswcode.decrastination.core.Memories.RULE_MAX).takeIf { it.isNotEmpty() }?.let { rules ->
             lines += "How Felix should behave:"
-            rules.forEach { lines += "- ${it.text}" }
+            rules.forEach { lines += "- ${it.text}" + (Memories.held(it.until, null, { null }, zone)?.let { held -> " ($held)" } ?: "") }
         }
         var room = com.thomaswcode.decrastination.core.Memories.FACT_BUDGET_CHARS
         val facts = memory.facts.sortedByDescending { it.at }.takeWhile { f -> (room - (f.topic.length + f.text.length)).also { room = it } >= 0 }
         if (facts.isNotEmpty()) {
             lines += "Remembered:"
-            facts.forEach { lines += "- ${it.topic}: ${it.text}" }
+            // One that's passing says so (10a): till when, or with which task.
+            val titles = tasks.associate { it.id to it.title }
+            facts.forEach { f -> lines += "- ${f.topic}: ${f.text}" + (Memories.held(f.until, f.taskId, titles::get, zone)?.let { " ($it)" } ?: "") }
         }
         // The whole within what the cap's dearest call counts on: the oldest facts go first.
         var size = lines.sumOf { it.length + 1 }

@@ -6,6 +6,7 @@ import com.thomaswcode.decrastination.block.Focus
 import com.thomaswcode.decrastination.core.Fact
 import com.thomaswcode.decrastination.core.FixedClock
 import com.thomaswcode.decrastination.core.Kind
+import com.thomaswcode.decrastination.core.Memories
 import com.thomaswcode.decrastination.core.Planner
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
@@ -15,6 +16,7 @@ import com.thomaswcode.decrastination.data.SecretCipher
 import com.thomaswcode.decrastination.data.Stores
 import com.thomaswcode.decrastination.data.WeeklyReview
 import com.thomaswcode.decrastination.enrich.KeyProblem
+import com.thomaswcode.decrastination.enrich.MemoryTidy
 import com.thomaswcode.decrastination.enrich.ModelGateway
 import com.thomaswcode.decrastination.enrich.Pricing
 import com.thomaswcode.decrastination.enrich.Profile
@@ -73,6 +75,8 @@ class LearningTest {
         stores.log, stores.learning, stores.settings, stores.memory, stores.chat, stores.instructions, clock, gateway, focus, protection,
         resets = { 0 },
         profile = { _, _ -> Profile.Block.NONE },
+        // By the tasks alone: what the chat's acts hold and the sources' reads are Conversation's.
+        forgetExpired = { now -> stores.memory.update { Memories.expired(it, stores.tasks.value.tasks.associateBy { t -> t.id }, now) } },
         reviewed = { told += it },
         summaryReady = { offered += it },
     )
@@ -127,6 +131,24 @@ class LearningTest {
         assertEquals(before, stores.memory.value.facts)
         assertEquals("What's remembered has changed since: left as it is.", learning.undoTidy(tidied))
         assertEquals("That review tidied nothing.", learning.undoTidy(review))
+    }
+
+    @Test
+    fun `the tidy lets go of what's run out first, and isn't asked for while what it may rewrite has room`() = runBlocking {
+        key = "test-key"
+        stores.settings.update { it.copy(aiEnabled = true, aiKeyActive = true) }
+        val day = 24 * 3_600_000L
+        // A long fact past its until, beside plain ones past their share of the room only while it's there.
+        val gone = Fact("cold", "x".repeat(3_996), clock.now() - 2 * day, until = clock.now() - day)
+        val plain = (1..6).map { Fact("topic $it", "x".repeat(300), clock.now() - (7 - it) * day) }
+        assertTrue(MemoryTidy.due(plain + gone))
+        assertFalse(MemoryTidy.due(plain))
+        stores.memory.update { it.copy(facts = plain + gone) }
+        // An answer waits, so a call made would tidy.
+        answers("""{"facts":[{"topic":"all","text":"short"}]}""")
+        assertNull(learning.tidyMemory(clock.now()))
+        assertEquals(plain, stores.memory.value.facts)
+        assertEquals(0, server.requestCount)
     }
 
     @Test
