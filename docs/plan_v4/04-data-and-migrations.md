@@ -75,15 +75,15 @@ The fields in the table above, each to its file, in one migration at start; `run
 
 ### Finished tasks trimmed, Stage 7
 
-A task finished more than 14 days ago (C-Q3; `Merge.KEEP_FINISHED_MS` is the same fortnight) keeps what the rest of the app reads of it, a task of your own too (`pruneOwn`, which deletes a finished own task after that fortnight today, stops doing so and trims it like any other; only an explicit delete removes an own task's record): its identity, title, class, kind, dates and status, its estimates and minutes worked, its steps' titles, minutes and ticks, your values and its source's values. It drops its text (`detail`), its reading, its answers, its photo and its source's bulky extras (an email's text, messages and ids). On 17 Oct's numbers that was about 450 of the 585 KB. If a source lists it again (a hand-in undone, an email starred again), the sync brings its text back and it's read again, a paid call, as for a task seen for the first time. That's the one behaviour this changes, and only for work finished a fortnight before. A note (8a) or a task-bound fact (10a) on a trimmed task still shows on its record.
+A task finished more than 14 days ago (C-Q3; `Merge.KEEP_FINISHED_MS` is the same fortnight) keeps what the rest of the app reads of it, a task of your own too (`pruneOwn`, which deletes a finished own task after that fortnight today, stops doing so and trims it like any other; only an explicit delete removes an own task's record): its identity, title, class, kind, dates and status, its estimates and minutes worked, its steps' titles, minutes and ticks, your values and its source's values. It drops its text (`detail`), its reading, its answers, its photo and its source's bulky extras (an email's text, messages and ids). On 17 Oct's numbers that was about 450 of the 585 KB. If a source lists it again (a hand-in undone, an email starred again), the sync brings its text back and it's read again, a paid call, as for a task seen for the first time. That's the one behaviour this changes, and only for work finished a fortnight before. A note (8a) on a trimmed task still shows on its record; a task-bound fact (10a) goes as its task is trimmed, its fortnight counted from the record.
 
 ### `felix.json` (v1), Stage 8a
 
-Notes (on a task, or standing, for every task a scope matches) and reminders, versioned from the start; in the backup (format 8) and in Reset → "The chat and Felix's history". Not on `TaskItem`: a merge rewrites tasks and must not be able to drop them; keyed by task id, which is stable across syncs and reopenings, or by a scope the matcher reads at each use. The chat's shape gained their acts' types, a moved reminder's old time and words on its act (`Act.reminder`) and a reminder's message's reminder (`ChatMessage.reminderId`): `chat.json` version 4 and the archive's months version 3, read as they are (their fields have defaults), so an older build sets the newer file aside whole rather than reading part of it. 8b's acts on a piece kept or taken back raised them again, to 5 and 4, in the same way.
+Notes (on a task, or standing, for every task a scope matches) and reminders, versioned from the start; in the backup (format 8) and in Reset → "The chat and Felix's history". Not on `TaskItem`: a merge rewrites tasks and must not be able to drop them; keyed by task id, which is stable across syncs and reopenings, or by a scope the matcher reads at each use. The chat's shape gained their acts' types, a moved reminder's old time and words on its act (`Act.reminder`) and a reminder's message's reminder (`ChatMessage.reminderId`): `chat.json` version 4 and the archive's months version 3, read as they are (their fields have defaults), so an older build sets the newer file aside whole rather than reading part of it. 8b's acts on a piece kept or taken back raised them again, to 5 and 4, in the same way; 10a's memory edits, to 6 and 5.
 
 ### Memory (v2), Stage 10a
 
-`Fact.until`, `Fact.taskId`, `Rule.until`, each with a default: a file from before reads as it is, its version raised on the next write.
+`Fact.until`, `Fact.taskId`, `Rule.until`, each with a default: a file from before reads as it is; its version is raised as it loads all the same, and so are `chat.json`'s (6) and the archive's months' (5), for the answers' memory edits, and `log.json`'s (3), for the reviews' tidies (`MemoryMigration`), so an older build sets a newer file aside.
 
 ### `gmail-writes.json` (v1), Stage 11
 
@@ -100,7 +100,7 @@ data class ChatState(
     val readAt: Long = 0,
     /** His state between looks (from RuntimeState.felix, assessLater and checkInDraft). */
     val felix: FelixState = FelixState(),
-    val version: Int = 5,   // 2 from 5a, 3 from 7, 4 from 8a, 5 from 8b
+    val version: Int = 6,   // 2 from 5a, 3 from 7, 4 from 8a, 5 from 8b, 6 from 10a
 )
 
 @Serializable
@@ -134,7 +134,7 @@ data class ChatMessage(
 
 /** The messages before the live window: oldest first, never sent to the model, shown on scrolling back. */
 @Serializable
-data class ChatArchive(val messages: List<ChatMessage> = emptyList(), val version: Int = 4)   // 2 from 7, 3 from 8a, 4 from 8b
+data class ChatArchive(val messages: List<ChatMessage> = emptyList(), val version: Int = 5)   // 2 from 7, 3 from 8a, 4 from 8b, 5 from 10a
 
 // core/Mine.kt (7): every value of yours carries who set it.
 @Serializable
