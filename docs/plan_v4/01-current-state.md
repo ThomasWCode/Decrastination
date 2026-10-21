@@ -38,15 +38,15 @@ The app's process: about 127 MB resident, which is fine.
 
 ## Baselines for the done-when list (Stage 0)
 
-Measured on 18 Oct 2026 at 4b0aff7 (3.2.0's code, the plan merged), for Stage 12 to compare with and better:
+Measured on 18 Oct 2026 at 4b0aff7 (3.2.0's code, the plan merged), for Stage 12 to compare with and better; and again by Stage 12 on 21 Oct, on 4.3.2's branch, the same way:
 
-| | |
-|---|---|
-| Tests | 874 on `main` (3 skipped: the paid eval, the schema compile and, from Stage 0, the rehearsal, each run only when asked); 884 with Stage 0's ten |
-| Test time | 13 s for every unit test (`testDebugUnitTest --rerun`), on the warm daemon |
-| Build time | 90 s for a full debug build (`assembleDebug --rerun-tasks`), on the warm daemon |
-| `AppGraph.kt` | 2,628 lines, 117 functions |
-| The stores on the phone | `tasks.json` 589,798 bytes; `runtime.json` 94,904; `chat.json` 29,541; `log.json` 25,791; `instructions.json` 13,324; `calendar.json` 3,499; `settings.json` 1,779; `memory.json` 1,170; `school.json` 79 |
+| | Stage 0 (3.2.0) | Stage 12 (4.3.2) |
+|---|---|---|
+| Tests | 874 on `main` (3 skipped: the paid eval, the schema compile and, from Stage 0, the rehearsal, each run only when asked); 884 with Stage 0's ten | 1,297: the app's 1,201 and `:core`'s 96 (4 skipped, each run only when asked) |
+| Test time | 13 s for every unit test (`testDebugUnitTest --rerun`), on the warm daemon | 71 s, `:core`'s first: slower, as the services' flows are tested on temporary stores with a stand-in for Claude's API (`FelixHarness`) since Stage 4 |
+| Build time | 90 s for a full debug build (`assembleDebug --rerun-tasks`), on the warm daemon | 109 s, two modules |
+| `AppGraph.kt` | 2,628 lines, 117 functions | 537 lines, 5 functions: the stores and services made, and the flows that join them |
+| The stores on the phone | `tasks.json` 589,798 bytes; `runtime.json` 94,904; `chat.json` 29,541; `log.json` 25,791; `instructions.json` 13,324; `calendar.json` 3,499; `settings.json` 1,779; `memory.json` 1,170; `school.json` 79 | `tasks.json` 598,584 (530 KB of it finished tasks, none a fortnight old yet: the first is trimmed on 23 Oct); `runtime.json` 493, split from it `session.json` 7,202, `model.json` 26,705, `anki.json` 56,442, `protection.json` 297, `learning.json` 350; `chat.json` 173,193 (every message of his since 4.0.0); `log.json` 33,484; `instructions.json` 20,464; `calendar.json` 10,601; `settings.json` 2,376; `memory.json` 1,938; `felix.json` 420; `gmail-writes.json` 25; `school.json` 79 |
 
 The rehearsal of the phone's data that day (`scripts/rehearse.sh`, counts only): 178 tasks (24 open), 151 steps, 12 tasks with values of yours, 4 pins, 12 instructions in use, 25 chat messages, 31 of Felix's records in the log; every store read whole and wrote back the same.
 

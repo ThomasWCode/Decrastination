@@ -28,11 +28,11 @@ The same app, organised so that each concern has one home, owns its data, and ca
 ## The rules
 
 1. **`core` stays pure**: no Android, no stores, no services. It's that way now; Stage 6f makes it a module of its own so the compiler holds it.
-2. **One writer a store.** Each store belongs to one service, which alone calls `update` on it. Others read its `StateFlow`, or call the service. The one exception is `Stores` itself, which replaces whole stores for a restore or a reset (`Stores.replace`, called by the backup service and nothing else); the architecture test names it.
+2. **One writer a store.** Each store belongs to one service, which alone calls `update` on it. Others read its `StateFlow`, or call the service. The one exception is `Stores` itself, which replaces whole stores for a restore or a reset (`Stores.replace`, called by the backup service and nothing else); the architecture test names it. Where several services each write their own part of one store (the tasks', the chat's, the log's, the half-minute state's), the architecture test names each with what it writes, so no other can start to (Stage 12, 4.3.2; D-107).
 3. **Services are built like `Focus`**: stores, the clock and small interfaces for Android's effects (notifications, the calendar provider, work, alarms, content resolvers) in the constructor. `AppGraph` passes the real ones; tests pass fakes and stores on temporary files.
 4. **Screens call services.** A composable may read flows and call a service's function; it never calls `update` on a store. The largest screens (the chat, Settings, the task sheet) get a state holder, a plain class tested without Compose, as each is worked on (the chat's in Stage 5b).
 5. **No cycles.** A service may call another's functions (the Conversation acts on instructions, your own tasks and the focus); none calls back into one that called it. Where two need each other, the later one takes a callback, as `Focus` takes `onOwnTaskDone`.
-6. **A small architecture test** checks the rules that can be checked by reading the code, gaining a rule as each becomes true: only the notifier posts (Stage 1); only the gateway builds a Claude client (2); `core` imports nothing of Android or the services (6f, by the module); nothing outside a store's owner calls its `update` (complete at 12).
+6. **A small architecture test** checks the rules that can be checked by reading the code, gaining a rule as each becomes true: only the notifier posts (Stage 1); only the gateway builds a Claude client (2); `core` imports nothing of Android or the services (6f, by the module); nothing but a store's named writers calls its `update`, and no screen calls one (12).
 
 ## `AppGraph`, after
 
