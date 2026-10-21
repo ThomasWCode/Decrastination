@@ -165,9 +165,13 @@ object GmailWrites {
         it.copy(tries = tries, lastError = error.take(MAX_ERROR), notBefore = if (gaveUp) it.notBefore else now + backoff(tries), doneAt = if (gaveUp) now else null, gaveUp = gaveUp)
     }
 
-    /** The wait after a write's [tries]th failed try: half an hour, doubled each time, to five hours at most. */
-    fun backoff(tries: Int): Long = minOf(BACKOFF_MS shl (tries - 1).coerceIn(0, 4), MAX_BACKOFF_MS)
+    /**
+     * The wait after a write's [tries]th failed try: two minutes the first time, as the first failure is most often a
+     * connection lost while the phone comes back online; then half an hour, doubled each time, to five hours at most.
+     */
+    fun backoff(tries: Int): Long = if (tries <= 1) FIRST_BACKOFF_MS else minOf(BACKOFF_MS shl (tries - 2).coerceIn(0, 4), MAX_BACKOFF_MS)
 
+    const val FIRST_BACKOFF_MS = 2L * 60_000
     const val BACKOFF_MS = 30L * 60_000
     const val MAX_BACKOFF_MS = 5L * 3_600_000
 

@@ -144,19 +144,19 @@ class GmailWritesTest {
     fun `a failed try waits its backoff in the journal, and each task's writes go in the order they were journaled`() {
         var writes = GmailWrites.finish(emptyList(), finish(), confirmed = true)!!
         writes = GmailWrites.failed(writes, "w1", "no connection", now + 2 * min)
-        assertEquals(now + 32 * min, writes.single().notBefore)
-        assertNull(GmailWrites.next(writes, now + 31 * min))
-        assertEquals("w1", GmailWrites.next(writes, now + 32 * min)?.id)
-        writes = GmailWrites.failed(writes, "w1", "no connection", now + 40 * min)
-        assertEquals(now + 100 * min, writes.single().notBefore)
-        // Half an hour, doubled each time, to five hours.
-        assertEquals(listOf(30L, 60L, 120L, 240L, 300L, 300L).map { it * min }, listOf(1, 2, 3, 4, 5, 9).map(GmailWrites::backoff))
+        assertEquals(now + 4 * min, writes.single().notBefore)
+        assertNull(GmailWrites.next(writes, now + 3 * min))
+        assertEquals("w1", GmailWrites.next(writes, now + 4 * min)?.id)
+        writes = GmailWrites.failed(writes, "w1", "no connection", now + 10 * min)
+        assertEquals(now + 40 * min, writes.single().notBefore)
+        // Two minutes the first time; then half an hour, doubled each time, to five hours.
+        assertEquals(listOf(2L, 30L, 60L, 120L, 240L, 300L).map { it * min }, listOf(1, 2, 3, 4, 5, 9).map(GmailWrites::backoff))
         // A finish after an Undo that failed waits for it, so the two go in the order you asked.
         val made = finish().copy(notBefore = now, flagged = listOf("101"), inbox = listOf("101"), unstarred = true, archived = true, doneAt = now)
         val undo = GmailWrites.failed(GmailWrites.undo(listOf(made), "gmail:1", now + min, "u1")!!, "u1", "no connection", now + min)
-        val again = GmailWrites.finish(undo, finish("w3", at = now + 2 * min), confirmed = true)!!
-        assertNull(GmailWrites.next(again, now + 2 * min + GmailWrites.GRACE_MS))
-        assertEquals("u1", GmailWrites.next(again, now + 31 * min)?.id)
+        val again = GmailWrites.finish(undo, finish("w3", at = now + min), confirmed = true)!!
+        assertNull(GmailWrites.next(again, now + min + GmailWrites.GRACE_MS))
+        assertEquals("u1", GmailWrites.next(again, now + 3 * min)?.id)
     }
 
     @Test
@@ -217,7 +217,7 @@ class GmailWritesTest {
         val read = GmailWrites.with(GmailWrites.finish(emptyList(), finish(), confirmed = true)!!, "w1") { it.copy(flagged = listOf("101"), inbox = listOf("101")) }
         // Taken back as it was being made (due), then its try failed: the Undo waits behind its wait.
         val undone = GmailWrites.failed(GmailWrites.undo(read, "gmail:1", now + 2 * min, "u1")!!, "w1", "no connection", now + 2 * min)
-        assertEquals(now + 32 * min, GmailWrites.wake(undone))
+        assertEquals(now + 4 * min, GmailWrites.wake(undone))
         assertNull(GmailWrites.next(undone, now + 3 * min))
         // A failure taken back by an Undo is said no more: the Undo's its task's newest.
         val gaveUp = GmailWrites.with(read, "w1") { it.copy(unstarred = true, tries = 5, doneAt = now + min, gaveUp = true) }
