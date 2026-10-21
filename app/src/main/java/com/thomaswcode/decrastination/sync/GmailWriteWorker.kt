@@ -24,6 +24,7 @@ import com.thomaswcode.decrastination.notify.Notify
 import com.thomaswcode.decrastination.sources.gmail.ImapGmailWriter
 import com.thomaswcode.decrastination.ui.MainActivity
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.CancellationException
 
 /**
  * The writes to Gmail a finished email makes ([GmailFinishes.write]), as WorkManager work (it outlives the
@@ -34,10 +35,15 @@ import java.util.concurrent.TimeUnit
 class GmailWriteWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
         val graph = AppGraph.get(applicationContext)
-        return runCatching { graph.gmailFinishes.write(ImapGmailWriter(graph.stores.secrets)) }
-            .onFailure { Log.w(AppGraph.TAG, "Gmail's writes failed", it) }
-            .getOrDefault(true)
-            .let { again -> if (again) Result.retry() else Result.success() }
+        val again = try {
+            graph.gmailFinishes.write(ImapGmailWriter(graph.stores.secrets))
+        } catch (stopped: CancellationException) {
+            throw stopped
+        } catch (e: Exception) {
+            Log.w(AppGraph.TAG, "Gmail's writes failed", e)
+            true
+        }
+        return if (again) Result.retry() else Result.success()
     }
 
     companion object {

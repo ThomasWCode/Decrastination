@@ -19,6 +19,7 @@ import java.nio.file.Files
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -183,6 +184,16 @@ class GmailFinishesTest {
         assertFalse(finishes.write(gmail))
         assertEquals(listOf(listOf(11L, 12L) to Change.Archive), gmail.stored)
         assertTrue(finishes.value.single().archived)
+        // Stopped mid-write (the worker cancelled): not a try that failed.
+        tasks["gmail:t3"] = email.copy(id = "gmail:t3", sourceId = "t3", title = "Club email")
+        finishes.finish("gmail:t3", explicit = true)
+        clock.time += GmailWrites.GRACE_MS
+        val stopping = object : GmailWriter {
+            override suspend fun <T> open(block: suspend (GmailWriter.Session) -> T): T = throw kotlinx.coroutines.CancellationException("stopped")
+        }
+        assertFailsWith<kotlinx.coroutines.CancellationException> { finishes.write(stopping) }
+        assertEquals(0, finishes.value.single { it.taskId == "gmail:t3" }.tries)
+        assertFalse(finishes.write(gmail))
         // Another email, offline each time: given up at the fifth, said, and its receipt kept till it's sorted.
         tasks["gmail:t2"] = email.copy(id = "gmail:t2", sourceId = "t2", title = "Club email")
         finishes.finish("gmail:t2", explicit = true)
