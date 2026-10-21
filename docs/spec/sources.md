@@ -37,7 +37,7 @@ Freshness:
 - A Teams sync takes over the screen, so the widget syncs only when asked. Decrastination asks (`Sync.requestTeamsSync`) when you tap **Refresh Teams** on a piece, **Sync Teams** on Work's trouble card or the widget's ↻, and when you ask Felix to check Teams with the chat on screen (D-11).
 - It also asks on its own (Q21, `block/TeamsAutoSync.kt`): at the first unlock after 16:45 (`teamsFirstUnlockMin`), every three hours (`teamsSyncEveryMin`), and at an unlock soon after the morning briefing.
 - Automatic syncs come only while the phone is unlocked and in use, never in quiet hours, and not within 30 minutes of a Teams sync; one put off (*Delay 5 min*, or offered again) comes once its delay is up.
-- On weekdays the first-unlock and three-hourly ones wait for the school-day blocking time (`weekdayBlockFromMin`); the morning's comes at an unlock within an hour and a half of the briefing.
+- On a school day, by the school calendar, the first-unlock and three-hourly ones wait for the school-day blocking time (`weekdayBlockFromMin`); a weekday off is a weekend day, as blocking's is (D-105, `Focus.schoolDayAt`); the morning's comes at an unlock within an hour and a half of the briefing.
 - Each is announced by a banner counting down 10 s, with **Cancel** and **Delay 5 min** (`block/CountdownBanner.kt`).
 - One the widget didn't start is offered again 15 minutes later, twice at most; then the next comes at its usual time.
 - The widget announces each change to its list. Once the changes have stopped for 5 s, Teams and Anki are read (`Sync.teamsChanged`). An announcement to an app in the background can come late, so it's a prompt to read, not a clock.
