@@ -55,6 +55,7 @@ import com.thomaswcode.decrastination.sources.anki.AnkiProvider
 import com.thomaswcode.decrastination.sources.gmail.GmailThreads
 import com.thomaswcode.decrastination.sync.SyncWorker
 import com.thomaswcode.decrastination.ui.OpenTaskActivity
+import com.thomaswcode.decrastination.core.GmailWrites
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -628,6 +629,10 @@ class CommandActivity : Activity() {
             Log.i(TAG, "  [${task.status}] ${task.source.label} ${task.kind.label} ${task.effortMin}m due ${task.dueAt} | ${task.title}")
         }
         Log.i(TAG, "Secrets set: ${graph.secrets.present.value.joinToString()}")
+        // The writes to Gmail journaled (Stage 11): each by its task's id, never its title.
+        for (w in graph.gmailFinishes.value) {
+            Log.i(TAG, "Gmail write ${w.id}: ${w.taskId} ${GmailWrites.state(graph.gmailFinishes.value, w.taskId)}${if (w.reverseOf != null) " (an Undo)" else ""}, not before ${w.notBefore}, unstarred ${w.unstarred}, archived ${w.archived}, tries ${w.tries} ${w.lastError.orEmpty()}, done ${w.doneAt}${if (w.gaveUp) ", given up" else ""}")
+        }
     }
 
     companion object {
