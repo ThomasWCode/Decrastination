@@ -151,6 +151,19 @@ class BackupServiceTest {
     }
 
     @Test
+    fun `a reset takes the copies kept of what it clears, the chat's and Felix's with the chat, memory's with what's remembered`() = runTest {
+        val phone = Phone(full = true)
+        fun copy(name: String) = File(phone.dir, name).apply { writeText("{}") }
+        val chat = listOf(copy("chat.json.v5"), copy("chat.json.unreadable-20261021-010000"), copy("felix.json.v2"))
+        val memory = listOf(copy("memory.json.v2"), copy("memory.json.unreadable-20261021-010000"))
+        phone.service.reset(Reset.Chat)
+        assertTrue(chat.none { it.exists() })
+        assertTrue(memory.all { it.exists() })
+        phone.service.reset(Reset.Memories)
+        assertTrue(memory.none { it.exists() })
+    }
+
+    @Test
     fun `a reset of the chat takes the copies its archive's months were kept as, with the months`() = runTest {
         val phone = Phone(full = true)
         phone.stores.replace(phone.stores.chatArchive, ChatArchive(listOf(ChatMessage("a1", Speaker.You, "hello", Fixtures.at("2026-08-03T10:00"), answeredAt = 1))))
