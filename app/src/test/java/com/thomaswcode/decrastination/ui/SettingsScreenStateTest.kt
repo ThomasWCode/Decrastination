@@ -14,6 +14,7 @@ import com.thomaswcode.decrastination.core.Timetable
 import com.thomaswcode.decrastination.core.Uptime
 import com.thomaswcode.decrastination.data.ChatMigration
 import com.thomaswcode.decrastination.data.JsonStore
+import com.thomaswcode.decrastination.data.SettingsMigration
 import com.thomaswcode.decrastination.data.ProtectionState
 import com.thomaswcode.decrastination.data.RuntimeSplit
 import com.thomaswcode.decrastination.data.RuntimeState
@@ -43,7 +44,7 @@ import kotlinx.coroutines.runBlocking
 class SettingsScreenStateTest {
     private val dir: File = Files.createTempDirectory("settings-screen").toFile()
     private val clock = FixedClock(Fixtures.at("2026-10-19T16:00"), LONDON, up = Uptime(boot = 1, elapsedMs = 1_000_000))
-    private val settings = JsonStore(File(dir, "settings.json"), Settings.serializer(), ::Settings)
+    private val settings = JsonStore(File(dir, "settings.json"), Settings.serializer(), ::Settings, migrations = listOf(SettingsMigration.SETTINGS))
     private val runtime = JsonStore(File(dir, "runtime.json"), RuntimeState.serializer(), ::RuntimeState, migrations = listOf(ChatMigration.RUNTIME, RuntimeSplit.RUNTIME))
     private val protectionState = JsonStore(File(dir, "protection.json"), ProtectionState.serializer(), ::ProtectionState)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)

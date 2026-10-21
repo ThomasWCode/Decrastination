@@ -16,10 +16,8 @@ data class GmailWrite(
     val taskId: String,
     /** The task's title when it was journaled: what a failure's notification names. */
     val title: String,
-    /** Gmail's conversation (X-GM-THRID), and its messages' UIDs in All Mail under [uidValidity], as last read: a receipt carries its own, as a finished task's are trimmed. */
+    /** Gmail's conversation (X-GM-THRID): its messages are listed afresh at each write, whatever renumbered them, a message come since among them. */
     val threadId: String,
-    val uids: List<Long>,
-    val uidValidity: Long?,
     val at: Long,
     /** When it may go: null while the very first finish waits for your OK ([GmailWrites.confirm]). */
     val notBefore: Long? = null,

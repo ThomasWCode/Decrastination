@@ -22,8 +22,8 @@ class StoresTest {
     @Test
     fun `a store saves and loads its state`() = runTest {
         val file = File(dir, "settings.json")
-        JsonStore(file, Settings.serializer(), ::Settings).update { it.copy(ankiTextbook = 2) }
-        assertEquals(2, JsonStore(file, Settings.serializer(), ::Settings).value.ankiTextbook)
+        JsonStore(file, Settings.serializer(), ::Settings, migrations = listOf(SettingsMigration.SETTINGS)).update { it.copy(ankiTextbook = 2) }
+        assertEquals(2, JsonStore(file, Settings.serializer(), ::Settings, migrations = listOf(SettingsMigration.SETTINGS)).value.ankiTextbook)
         assertFalse(File(dir, "settings.json.tmp").exists())
     }
 
@@ -59,14 +59,14 @@ class StoresTest {
         // An app update that can no longer read one field (here, a list that isn't one) loses only it:
         // protection stays armed, the textbook stays 3.
         val file = File(dir, "settings.json").apply { writeText("""{"armed": true, "ankiTextbook": 3, "blockedApps": "not a list"}""") }
-        val store = JsonStore(file, Settings.serializer(), ::Settings, clock = { AT })
+        val store = JsonStore(file, Settings.serializer(), ::Settings, migrations = listOf(SettingsMigration.SETTINGS), clock = { AT })
         assertTrue(store.value.armed)
         assertEquals(3, store.value.ankiTextbook)
         assertEquals(Settings().blockedApps, store.value.blockedApps)
         assertTrue(store.problem!!.kept)
         // Kept, and written back once on record: still armed at the next start, and nothing more to say.
         store.keepRecovered()
-        val again = JsonStore(file, Settings.serializer(), ::Settings, clock = { AT + 1000 })
+        val again = JsonStore(file, Settings.serializer(), ::Settings, migrations = listOf(SettingsMigration.SETTINGS), clock = { AT + 1000 })
         assertTrue(again.value.armed)
         assertNull(again.problem)
     }
@@ -74,10 +74,10 @@ class StoresTest {
     @Test
     fun `a file that can't be read at all starts from what's safer, where that's given`() {
         val file = File(dir, "settings.json").apply { writeText("garbage") }
-        val store = JsonStore(file, Settings.serializer(), ::Settings, unreadable = { Settings(armed = true) }, clock = { AT })
+        val store = JsonStore(file, Settings.serializer(), ::Settings, migrations = listOf(SettingsMigration.SETTINGS), unreadable = { Settings(armed = true) }, clock = { AT })
         assertTrue(store.value.armed)
         // A file that's simply not there yet is the default, as ever.
-        assertFalse(JsonStore(File(dir, "new.json"), Settings.serializer(), ::Settings, unreadable = { Settings(armed = true) }).value.armed)
+        assertFalse(JsonStore(File(dir, "new.json"), Settings.serializer(), ::Settings, migrations = listOf(SettingsMigration.SETTINGS), unreadable = { Settings(armed = true) }).value.armed)
     }
 
     @Test
@@ -105,7 +105,7 @@ class StoresTest {
     @Test
     fun `unknown keys from another version are ignored`() {
         val file = File(dir, "settings.json").apply { writeText("""{"ankiTextbook": 3, "fromTheFuture": true}""") }
-        assertEquals(3, JsonStore(file, Settings.serializer(), ::Settings).value.ankiTextbook)
+        assertEquals(3, JsonStore(file, Settings.serializer(), ::Settings, migrations = listOf(SettingsMigration.SETTINGS)).value.ankiTextbook)
     }
 
     @Test
@@ -151,7 +151,7 @@ class StoresTest {
         assertEquals(stores.all.size, stores.all.map { it.file }.toSet().size)
         // Every JSON store's shape is known to a backup, at the version its state says, each with a migration from every one before.
         assertEquals(made - "secrets.bin", stores.shapes.keys)
-        assertEquals(mapOf("calendar.json" to 2, "chat.json" to 6, "chat-archive.json" to 5, "instructions.json" to 2, "log.json" to 3, "memory.json" to 2, "runtime.json" to 3, "tasks.json" to 2), stores.shapes.filterValues { it.version > 1 }.mapValues { it.value.version })
+        assertEquals(mapOf("calendar.json" to 2, "chat.json" to 6, "chat-archive.json" to 5, "instructions.json" to 2, "log.json" to 3, "memory.json" to 2, "runtime.json" to 3, "settings.json" to 2, "tasks.json" to 2), stores.shapes.filterValues { it.version > 1 }.mapValues { it.value.version })
         assertTrue(stores.shapes.values.all { Migration.complete(it.version, it.migrations) })
         // And each is said in words when it can't be read, not by its file's name.
         for (file in made) assertTrue(!JsonStore.Unreadable(file, null, kept = false, at = 0).says.startsWith(file), file)
@@ -261,7 +261,7 @@ class StoresTest {
     fun `a file that can't be read at all, rather than decoded, isn't written over`() {
         // A directory where the file should be: reading it fails, as an I/O error would.
         val file = File(dir, "runtime.json").apply { mkdirs() }
-        val store = JsonStore(file, Settings.serializer(), ::Settings, clock = { AT })
+        val store = JsonStore(file, Settings.serializer(), ::Settings, migrations = listOf(SettingsMigration.SETTINGS), clock = { AT })
         assertEquals(Settings(), store.value)
         assertTrue(file.isDirectory)
     }
