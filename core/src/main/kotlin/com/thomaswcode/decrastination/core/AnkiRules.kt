@@ -230,7 +230,8 @@ object AnkiRules {
         // Listed today and not done yet: it stays listed, and is done once nothing's due; but not where new cards
         // of its own were listed today ([EXTRA_NEW_LISTED]) and a later read gave them to homework or put them off:
         // done, its completion would count their minutes (a derived task's peak) as studied.
-        val newBefore = open[QUOTA_PREFIX + day]?.get(EXTRA_NEW_LISTED) == "true"
+        // One an older build listed has no mark: taken as having had new cards, as it may have.
+        val newBefore = open[QUOTA_PREFIX + day]?.let { it[EXTRA_NEW_LISTED] != "false" } == true
         val listed = QUOTA_PREFIX + day in open && !newBefore
         if (!listed && today.deckId == null && reviews == 0) return null to today
         // Its deck is homework's for now, or homework's vocabulary has the day, and nothing is due:
@@ -268,7 +269,7 @@ object AnkiRules {
                 today.deckId?.let { put(EXTRA_DECK_ID, it.toString()) }
                 today.deckName?.let { put(EXTRA_DECK_NAME, it) }
                 // Kept through the day's reads: a read replaces the task's extra with this one.
-                if (newLeft > 0 || newBefore) put(EXTRA_NEW_LISTED, "true")
+                put(EXTRA_NEW_LISTED, (newLeft > 0 || newBefore).toString())
             },
         )
         return fetched to today
@@ -385,7 +386,7 @@ object AnkiRules {
     const val EXTRA_DECK_ID = "deckId"
     const val EXTRA_DECK_NAME = "deckName"
 
-    /** On today's quota: new cards of its own were listed at a read today. */
+    /** On today's quota: whether new cards of its own were listed at a read today ("true" or "false"). */
     const val EXTRA_NEW_LISTED = "newListed"
     const val EXTRA_FOR = "for"
 
