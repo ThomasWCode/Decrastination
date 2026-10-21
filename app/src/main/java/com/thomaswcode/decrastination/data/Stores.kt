@@ -35,7 +35,7 @@ class Stores(
 
     // A file that can't be read at all starts armed while the device admin is on, as only arming
     // turns it on: a bad file never disarms protection (IMP-P1-003).
-    val settings = store("settings.json", Settings.serializer(), ::Settings, unreadable = { Settings(armed = armedIfUnreadable()) })
+    val settings = store("settings.json", Settings.serializer(), ::Settings, unreadable = { Settings(armed = armedIfUnreadable()) }, migrations = listOf(SettingsMigration.SETTINGS))
     val secrets = SecretStore(File(dir, "secrets.bin"), cipher, clock)
     val runtime = store("runtime.json", RuntimeState.serializer(), ::RuntimeState, migrations = listOf(ChatMigration.RUNTIME, RuntimeSplit.RUNTIME))
 
@@ -95,7 +95,10 @@ class Stores(
     /** The versions of its events the app has written to calendars, so a copy of one is known; what it wrote where; your answers about events. */
     val calendar = store("calendar.json", CalendarState.serializer(), ::CalendarState, migrations = listOf(RuntimeSplit.CALENDAR))
 
-    private val json = listOf(tasks, settings, runtime, session, protection, model, anki, learning, log, instructions, chat, school, memory, felix, calendar)
+    /** The writes to Gmail a finished email makes (4.3.0), journaled before they're made, and their receipts while their Undo stands. */
+    val gmailWrites = store("gmail-writes.json", GmailWriteStore.serializer(), ::GmailWriteStore)
+
+    private val json = listOf(tasks, settings, runtime, session, protection, model, anki, learning, log, instructions, chat, school, memory, felix, calendar, gmailWrites)
 
     /**
      * A store, what a backup keeps of it ([backup]; none, and [why] says why), and the resets that
@@ -129,6 +132,7 @@ class Stores(
         Kept("memory.json", backup = "all of it", resets = setOf(Reset.Memories)),
         Kept("felix.json", backup = "all of it", resets = setOf(Reset.Chat)),
         Kept("calendar.json", backup = "your answers about events (what this phone wrote to its calendars means nothing to another's)"),
+        Kept("gmail-writes.json", backup = "the receipts of writes made to Gmail, while their Undo can stand (a write still to make is this phone's)"),
     )
 
     /**

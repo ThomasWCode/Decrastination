@@ -9,6 +9,7 @@ import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.data.JsonStore
+import com.thomaswcode.decrastination.data.SettingsMigration
 import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.data.TasksMigration
 import com.thomaswcode.decrastination.sources.ReadContext
@@ -29,7 +30,7 @@ import kotlin.test.assertTrue
 class SyncerTest {
     private val dir: File = Files.createTempDirectory("sync").toFile()
     private val tasks = JsonStore(File(dir, "tasks.json"), TaskState.serializer(), ::TaskState, migrations = listOf(TasksMigration.TASKS))
-    private val settings = JsonStore(File(dir, "settings.json"), Settings.serializer(), ::Settings)
+    private val settings = JsonStore(File(dir, "settings.json"), Settings.serializer(), ::Settings, migrations = listOf(SettingsMigration.SETTINGS))
     private val clock = FixedClock.at("2026-10-08T17:00:00+01:00")
 
     private class FakeSource(override val source: Source, var answer: suspend (ReadContext) -> SourceRead) : TaskSource {
@@ -63,6 +64,20 @@ class SyncerTest {
         assertEquals("No network", tasks.value.status(Source.Gmail).error)
         assertEquals(clock.time, tasks.value.status(Source.Gmail).lastSuccessAt)
         assertNull(tasks.value.status(Source.Teams).error)
+    }
+
+    @Test
+    fun `a read that worked is known by when it began, so a change made while it ran isn't taken as seen`() = runTest {
+        val began = clock.time
+        val gmail = FakeSource(Source.Gmail) { clock.time += 5_000; items("m") }
+        val syncer = syncer(listOf(gmail))
+        syncer.sync()
+        assertEquals(began + 5_000, tasks.value.status(Source.Gmail).lastSuccessAt)
+        assertEquals(began, tasks.value.status(Source.Gmail).lastSuccessStartedAt)
+        // A read failed since: when the one that worked began isn't kept.
+        gmail.answer = { throw java.io.IOException("No network") }
+        syncer.sync()
+        assertNull(tasks.value.status(Source.Gmail).lastSuccessStartedAt)
     }
 
     @Test

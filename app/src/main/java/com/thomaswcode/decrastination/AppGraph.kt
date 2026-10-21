@@ -58,6 +58,8 @@ import com.thomaswcode.decrastination.sources.powerplanner.PowerPlannerApi
 import com.thomaswcode.decrastination.sources.powerplanner.PowerPlannerSource
 import com.thomaswcode.decrastination.sources.teams.TeamsSource
 import com.thomaswcode.decrastination.sync.AndroidSyncPorts
+import com.thomaswcode.decrastination.sync.AndroidGmailPorts
+import com.thomaswcode.decrastination.sync.GmailFinishes
 import com.thomaswcode.decrastination.sync.Sync
 import com.thomaswcode.decrastination.sync.SyncWorker
 import com.thomaswcode.decrastination.sync.Syncer
@@ -213,10 +215,27 @@ class AppGraph private constructor(context: Context) {
         notes = { task -> Notes.forTask(task, stores.felix.value.notes, settings.value.classMap).map { it.text } },
     )
 
+    /**
+     * A starred email finished here (Stage 11, D-7 as amended): its write to Gmail journaled, made by its worker
+     * after the grace, taken back; the tasks as the plan takes them, and the Gmail read after a write asked of Sync.
+     */
+    val gmailFinishes = GmailFinishes(
+        stores.gmailWrites,
+        settings = { settings.value },
+        task = { id -> planning.asPlanned().firstOrNull { it.id == id } },
+        multiplier = { stores.learning.value.calibration.multiplierFor(it) },
+        clock = clock,
+        ports = AndroidGmailPorts(app, notifier, clock) { sources -> sync.syncNow(sources) },
+        readAt = { tasks.value.status(Source.Gmail).lastSuccessStartedAt },
+    )
+
     /** The blocker's state and decisions (block/Focus.kt). */
     val focus = Focus(
         tasks, settings, stores.session, stores.learning, stores.protection, log, clock,
         onOwnTaskDone = { ownTasks.finishOwnTask(it) },
+        // An email's work all done by a keep or a tick is finished in Gmail; taken back, so is its finish, once its work isn't all done.
+        onWorked = { runCatching { gmailFinishes.finish(it, explicit = false) }.onFailure { e -> Log.w(TAG, "Finishing an email in Gmail failed", e) } },
+        onUnworked = { runCatching { gmailFinishes.unworked(it) }.onFailure { e -> Log.w(TAG, "Taking back an email's finish failed", e) } },
         // A school day by the school calendar (BL-02): a day off blocks from the weekend's time.
         schoolDay = { com.thomaswcode.decrastination.core.SchoolDays.kindOf(it, school.value) == com.thomaswcode.decrastination.core.DayKind.Weekday },
     ) { state, s, now -> planning.plan(state, s, now) }
@@ -279,6 +298,9 @@ class AppGraph private constructor(context: Context) {
                 calendarWriter.answer(key, answer)
             }
             override suspend fun recordCheckIn(checkIn: CheckIn, now: Long): Boolean = learning.recordCheckIn(checkIn, now)
+            override suspend fun finishGmail(taskId: String): GmailFinishes.Finish = gmailFinishes.finish(taskId, explicit = true)
+            override suspend fun unfinishGmail(taskId: String, writeId: String?): Boolean = gmailFinishes.unfinish(taskId, writeId)
+            override fun gmailWriteOf(taskId: String): String? = gmailFinishes.latestFinish(taskId)
         },
         calendarTime = { sync.calendarTime },
         answered = { record, words -> looks.answered(record, words) },
@@ -362,6 +384,8 @@ class AppGraph private constructor(context: Context) {
         syncer.addAfterEverySync { instructions.layTaskOverrides() }
         // Your own tasks long done trimmed to their record, as a source's are.
         syncer.addAfterEverySync { ownTasks.pruneOwn() }
+        // Gmail's journal settled after each read: receipts let go once old, or once the read finds their email starred again.
+        syncer.addAfterEverySync { gmailFinishes.settle() }
         // A question of yours still waiting (Claude was off, resting, or the app stopped): tried again.
         syncer.addAfterEverySync { if (chat.value.unanswered != null) conversation.answerChat() }
         // One of your own whose steps are all done is finished ([OwnTasks.start]).
@@ -428,6 +452,11 @@ class AppGraph private constructor(context: Context) {
         scope.launch { school.state.drop(1).collect { runCatching { Daily.schedule(app) }.onFailure { e -> Log.w(TAG, "Setting the daily alarms failed", e) } } }
         // The files older shapes came from, a week after their migration, at a start that's got this far.
         scope.launch(Dispatchers.IO) { runCatching { stores.letGoOfOldShapes() }.onFailure { Log.w(TAG, "Letting go of old shapes failed", it) } }
+        // Gmail's journal settled (receipts let go once old, or once their email's starred again), and a write due
+        // set going again: a stop may have come between a finish's journal and its worker (Stage 11).
+        scope.launch { runCatching { gmailFinishes.settle(); gmailFinishes.rearm() }.onFailure { Log.w(TAG, "Setting Gmail's writes going again failed", it) } }
+        // Finishing emails switched off, now or at any change: a finish not yet started dropped, the first's OK with it.
+        scope.launch { settings.state.map { it.gmailFinishes }.distinctUntilChanged().collect { on -> if (!on) runCatching { gmailFinishes.switchedOff() }.onFailure { e -> Log.w(TAG, "Dropping Gmail's writes failed", e) } } }
         // The notifications Felix's messages have taken the place of, one still showing or held from
         // before let go; then his own, made from the chat as it is.
         scope.launch {

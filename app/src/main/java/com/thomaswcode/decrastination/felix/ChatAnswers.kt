@@ -453,10 +453,12 @@ object ChatAnswers {
             "open" -> if (a.value.trim() == OPEN_SOURCE && !own) ChatAction(ChatAction.Type.Open, task.id, value = OPEN_SOURCE) else act(ChatAction.Type.Open, task.id)
             "tickStep" -> if (task.isOpen && step?.done == false) act(ChatAction.Type.TickStep, task.id, a.stepIndex) else no("a step to tick that isn't one of $name's still to do")
             "untickStep" -> if (task.isOpen && step?.done == true) act(ChatAction.Type.UntickStep, task.id, a.stepIndex) else no("a step to untick that isn't one of $name's done")
-            // Done by you: your own, or one done by its tick (NF-06); another is done when its source says.
+            // Done by you: your own, or one done by its tick (NF-06), or a starred email, unstarred and archived in Gmail
+            // (Stage 11, with the switch on); another is done when its source says.
             "done" -> when {
                 !task.isOpen -> no("$name, finished already")
                 own || task.tickDone -> act(ChatAction.Type.Done, task.id)
+                task.source == Source.Gmail && settings?.gmailFinishes == true -> act(ChatAction.Type.Done, task.id)
                 else -> no("$name is done when ${task.source.label} says so")
             }
             "reopen" -> if ((own || task.tickDone) && task.status == Status.Done) act(ChatAction.Type.Reopen, task.id) else no("$name to open again, which isn't one of their own finished")
