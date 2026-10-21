@@ -100,12 +100,12 @@ class GmailFinishes(
             GmailWrites.finish(store.writes, GmailWrite(newId(), task.id, task.title, task.sourceId, now, explicit = explicit), confirmed, readAt())
                 ?.let { journal ->
                     made = true
-                    gone = store.writes.filter { w -> w.gaveUp && journal.none { it.id == w.id } }
+                    gone = store.writes.filter { w -> w.gaveUp && journal.none { it.id == w.id && it.gaveUp } }
                     store.copy(writes = GmailWrites.prune(journal, now))
                 } ?: store
         }
         if (!made) return Finish.Pending
-        // One given up that this takes the place of: its notification taken away, as It's sorted does.
+        // One given up that this goes on from, or takes the place of: its notification taken away, as It's sorted does.
         gone.forEach(ports::sorted)
         if (!confirmed) return Finish.Awaiting
         // The worker set for the first write due, this one's grace or one before it.
