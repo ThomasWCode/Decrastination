@@ -9,6 +9,7 @@ import com.thomaswcode.decrastination.core.Enrichment
 import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.Fetched
 import com.thomaswcode.decrastination.core.Kind
+import com.thomaswcode.decrastination.core.Merge
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.SourceValues
 import com.thomaswcode.decrastination.core.Status
@@ -179,6 +180,27 @@ class AnkiRulesTest {
         val (task, day) = quota(decks, previous = AnkiDay("2026-10-07", 11, "Textbook 1::1.1"), at = "2026-10-08T07:00")
         assertEquals(12L, day.deckId)
         assertEquals("quota:2026-10-08", task!!.sourceId)
+    }
+
+    @Test
+    fun `a quota listed today and studied to nothing due is done, not gone, which the merge would take as missed`() {
+        // The reviews alone today (homework's vocabulary due by tomorrow), then studied to nothing due.
+        val (listed, day) = AnkiRules.quota(decks, 1, null, NOW, LONDON, 21 * 60 + 30, reviewsOnly = true) { it.new }
+        val studied = decks.map { it.copy(review = 0, learn = 0) }
+        val later = NOW + 3_600_000L
+        val (after, _) = AnkiRules.quota(studied, 1, day, later, LONDON, 21 * 60 + 30, open = setOf(listed!!.sourceId)) { it.new }
+        assertTrue(after!!.done)
+        val first = Merge.apply(emptyList(), Source.Anki, listOf(listed), NOW)
+        val merged = Merge.apply(first.tasks, Source.Anki, listOf(after), later)
+        assertEquals(Status.Done, merged.tasks.single().status)
+        assertTrue(merged.missed.isEmpty())
+        // Never listed today: no quota, as before, rather than one done without its new cards.
+        assertNull(AnkiRules.quota(studied, 1, day, later, LONDON, 21 * 60 + 30) { it.new }.first)
+        // No section deck with new cards at all: its reviews listed, then studied, done the same way.
+        val noNew = decks.map { it.copy(new = 0) }
+        val (reviews, noNewDay) = AnkiRules.quota(noNew, 1, null, NOW, LONDON, 21 * 60 + 30) { it.new }
+        val (studiedNoNew, _) = AnkiRules.quota(noNew.map { it.copy(review = 0, learn = 0) }, 1, noNewDay, later, LONDON, 21 * 60 + 30, open = setOf(reviews!!.sourceId)) { it.new }
+        assertTrue(studiedNoNew!!.done)
     }
 
     @Test

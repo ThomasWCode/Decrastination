@@ -199,7 +199,8 @@ object AnkiRules {
     /**
      * Today's quota: fixes the day's deck on the day's first read ([AnkiDay]), then measures what
      * is left against it. Null when there's nothing to do and nothing was, such as a day with no
-     * reviews and no new cards anywhere.
+     * reviews and no new cards anywhere; once listed today and still [open], it's done when nothing's
+     * due, not gone, which the merge would take as missed.
      */
     fun quota(
         decks: List<Deck>,
@@ -214,6 +215,8 @@ object AnkiRules {
         reviewsOnly: Boolean = false,
         /** Seconds a card per deck, as learned (DX-11). */
         rates: Map<Long, Double> = emptyMap(),
+        /** The Anki tasks still open, by their source ids: today's quota among them, it was listed today. */
+        open: Set<String> = emptySet(),
         unseen: (Deck) -> Int,
     ): Pair<Fetched?, AnkiDay> {
         val day = ankiDay(now, zone)
@@ -224,11 +227,14 @@ object AnkiRules {
         val reviews = dueReviews(decks)
         // A deck chosen this morning that homework has named since is counted there, not twice.
         val newLeft = if (today.reviewsOnly) 0 else today.deckId?.takeIf { it !in homework }?.let { id -> decks.firstOrNull { it.id == id }?.new } ?: 0
-        if (today.deckId == null && reviews == 0) return null to today
+        // Listed today and not done yet: it stays listed, and is done once nothing's due.
+        val listed = QUOTA_PREFIX + day in open
+        if (!listed && today.deckId == null && reviews == 0) return null to today
         // Its deck is homework's for now, or homework's vocabulary has the day, and nothing is due:
         // no quota today, rather than one done. A quota marked done would stay done if the homework
         // went before its cards were studied, and would earn time for new cards never studied.
-        if (today.deckId != null && (today.deckId in homework || today.reviewsOnly) && reviews == 0) return null to today
+        // One listed today, its reviews now studied, is done: its new cards weren't its own.
+        if (!listed && today.deckId != null && (today.deckId in homework || today.reviewsOnly) && reviews == 0) return null to today
         val shortName = today.deckName?.substringAfterLast(Deck.SEPARATOR)
         val parts = buildList {
             if (reviews > 0) add("$reviews review${if (reviews == 1) "" else "s"}")
