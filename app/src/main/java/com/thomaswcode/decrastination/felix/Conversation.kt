@@ -64,6 +64,7 @@ import com.thomaswcode.decrastination.learn.Stats
 import com.thomaswcode.decrastination.notify.Channels
 import com.thomaswcode.decrastination.notify.Notices
 import com.thomaswcode.decrastination.plan.Planning
+import com.thomaswcode.decrastination.sync.GmailFinishes
 import java.time.Instant
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -152,6 +153,15 @@ class Conversation(
 
         /** The week's [checkIn] on record, once a week ([com.thomaswcode.decrastination.learn.Learning.recordCheckIn]): whether it was kept. */
         suspend fun recordCheckIn(checkIn: CheckIn, now: Long): Boolean
+
+        /** A starred email of [taskId] finished by his `done` (Stage 11): unstarred and archived in Gmail, after the grace. */
+        suspend fun finishGmail(taskId: String): GmailFinishes.Finish = GmailFinishes.Finish.Off
+
+        /** [taskId]'s finish taken back, only [writeId] where it's given: Gmail left as it was, or put back. Whether there was one. */
+        suspend fun unfinishGmail(taskId: String, writeId: String?): Boolean = false
+
+        /** [taskId]'s finish that stands, by its id: the one his act made, for its Undo. */
+        fun gmailWriteOf(taskId: String): String? = null
     }
 
     /**
@@ -935,6 +945,17 @@ class Conversation(
                 }
                 ChatAction.Type.Done -> {
                     if (task?.isOpen != true) return@mapNotNull null
+                    // A starred email (Stage 11): finished in Gmail, which closes it at the read after the write (D-10).
+                    if (task.source == Source.Gmail) {
+                        return@mapNotNull when (owners.finishGmail(task.id)) {
+                            // The finish its own, by id, so its Undo takes back that one and not a newer.
+                            GmailFinishes.Finish.Going -> Act("Finished: “${task.title}” (unstarring and archiving it in Gmail)", a, after = owners.gmailWriteOf(task.id))
+                            // One standing already, made before this answer: said, with nothing of this one's to undo.
+                            GmailFinishes.Finish.Pending -> Act("Being finished in Gmail already: “${task.title}”")
+                            GmailFinishes.Finish.Awaiting -> Act("Waiting for your OK in the app to finish it in Gmail: “${task.title}”", a, after = owners.gmailWriteOf(task.id))
+                            GmailFinishes.Finish.Off, GmailFinishes.Finish.No -> Act(Act.NOT_MADE + "“${task.title}” is done when Gmail says so.", problem = true)
+                        }
+                    }
                     owners.finishOwnTask(task.id)
                     said("Done: ${task.title}", a).takeIf { tasks.value.tasks.firstOrNull { it.id == task.id }?.isOpen == false }
                 }
@@ -1120,7 +1141,8 @@ class Conversation(
             // The step that finished one of yours: open again with it to do.
             ChatAction.Type.TickStep -> step?.done == true && ChatActs.tickedBy(act, task!!.id, a.stepIndex!!, step, keptAt()) && focus.untickBlock(task.id, a.stepIndex!!, step.title, reopen = true)
             ChatAction.Type.UntickStep -> step?.done == false && task!!.isOpen && tick(task, a.stepIndex!!, step.title) != null
-            ChatAction.Type.Done -> task?.isOpen == false && (task.source == Source.Own || task.tickDone) && run { owners.reopenOwnTask(task.id); open(task.id) == true }
+            // A starred email's, its task here or not (a backup restored: no read brings back an email unstarred).
+            ChatAction.Type.Done -> if (task?.source == Source.Gmail || task == null && act.after != null) owners.unfinishGmail(a.taskId, act.after) else task?.isOpen == false && (task.source == Source.Own || task.tickDone) && run { owners.reopenOwnTask(task.id); open(task.id) == true }
             ChatAction.Type.Reopen -> task?.isOpen == true && act.was.let { was -> was != null && refinish(was) }
             // Not once a card that had added it is made again: that's the task anew.
             ChatAction.Type.Delete -> act.was.let { was ->

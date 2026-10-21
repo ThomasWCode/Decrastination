@@ -92,11 +92,7 @@ object StarredConversations {
      * rather than list less than there is: a conversation missing would be taken as unstarred.
      */
     fun list(imap: ImapClient, known: List<TaskItem>): Listed {
-        val boxes = imap.list()
-        val allMail = boxes.firstOrNull { "\\all" in it.attributes }?.name
-            ?: boxes.firstOrNull { it.name.endsWith("/All Mail", ignoreCase = true) }?.name
-            ?: throw SourceUnavailable("Gmail has no All Mail folder")
-        val box = imap.examine(allMail)
+        val box = imap.examine(allMail(imap.list()))
         val knownUids = GmailThreads.knownUids(known, box.uidValidity)
         val envelopes = HashMap<Long, MailMessage>()
         fun describe(uids: List<Long>) {
@@ -126,10 +122,16 @@ object StarredConversations {
         val conversations = byThread.map { (thread, ids) -> unchanged[thread] ?: GmailThreads.conversation(ids.map(envelopes::getValue), box.uidValidity) }
         return Listed(conversations, envelopes, stored)
     }
+
+    /** All Mail among [boxes], by its special use (`\all`) whatever the account's language, else by its English name. */
+    fun allMail(boxes: List<Mailbox>): String = boxes.firstOrNull { "\\all" in it.attributes }?.name
+        ?: boxes.firstOrNull { it.name.endsWith("/All Mail", ignoreCase = true) }?.name
+        ?: throw SourceUnavailable("Gmail has no All Mail folder")
 }
 
 /**
- * Gmail over IMAP with an app password (docs/spec/sources.md), read-only: see [ImapClient].
+ * Gmail over IMAP with an app password (docs/spec/sources.md), read-only: see [ImapClient]; the one
+ * write, a finished email unstarred and archived, is [ImapGmailWriter]'s, never a sync's.
  * A read examines All Mail, finds the starred messages in it, and lists every message of their
  * conversations, so a reply of yours or an earlier message nobody starred is read too (DX-03). A
  * conversation with nothing new in it is built from what's stored, without fetching its envelopes
@@ -146,7 +148,7 @@ class GmailSource(private val secrets: SecretStore) : TaskSource {
         val password = secrets[Secret.GmailAppPassword]
         if (address.isNullOrBlank() || password.isNullOrBlank()) throw SourceUnavailable("No Gmail address and app password saved")
         val started = System.nanoTime()
-        val socket = connect()
+        val socket = GmailConnection.open()
         // A read the sync has given up on mustn't hold the connection open: closing the socket,
         // from another thread, ends whichever blocking read is under way.
         val closer = launch {
@@ -187,7 +189,7 @@ class GmailSource(private val secrets: SecretStore) : TaskSource {
                     for (uid in reading.map { it.uid }) {
                         val now = System.nanoTime()
                         if (now > lastBy) break@conversations
-                        socket.soTimeout = ((lastBy - now) / 1_000_000).toInt().coerceIn(1, TIMEOUT_MS)
+                        socket.soTimeout = ((lastBy - now) / 1_000_000).toInt().coerceIn(1, GmailConnection.TIMEOUT_MS)
                         val (text, attached, invite) = try {
                             textAndAttachments(imap, envelopes.getValue(uid), quotesCut = uid != oldest.uid, context.zone)
                         } catch (e: SocketTimeoutException) {
@@ -258,34 +260,7 @@ class GmailSource(private val secrets: SecretStore) : TaskSource {
         return if ((part.size ?: 0) > MAX_PART_BYTES && (read?.text?.length ?: 0) < GmailThreads.MAX_BODY_CHARS) (text + "\n\n" + CUT).trim() else text
     }
 
-    /**
-     * TLS to Gmail, with the host name checked against its certificate. Closed on any failure before
-     * it's handed over, the TLS layer and the socket under it (BUG-P2-021): the caller's `use` only
-     * begins once it is.
-     */
-    private fun connect(): SSLSocket {
-        val plain = Socket()
-        var socket: SSLSocket? = null
-        try {
-            plain.connect(InetSocketAddress(HOST, PORT), TIMEOUT_MS)
-            socket = (SSLSocketFactory.getDefault() as SSLSocketFactory).createSocket(plain, HOST, PORT, true) as SSLSocket
-            socket.soTimeout = TIMEOUT_MS
-            socket.sslParameters = socket.sslParameters.apply { endpointIdentificationAlgorithm = "HTTPS" }
-            socket.startHandshake()
-            if (!HttpsURLConnection.getDefaultHostnameVerifier().verify(HOST, socket.session)) throw IOException("Gmail's certificate doesn't match $HOST")
-            return socket
-        } catch (e: Throwable) {
-            runCatching { socket?.close() }
-            runCatching { plain.close() }
-            throw e
-        }
-    }
-
     private companion object {
-        const val HOST = "imap.gmail.com"
-        const val PORT = 993
-        const val TIMEOUT_MS = 30_000
-
         /** Messages whose texts a read fetches at most: a conversation counts all of its. */
         const val MAX_BODIES = 60
 
@@ -309,5 +284,35 @@ class GmailSource(private val secrets: SecretStore) : TaskSource {
 
         /** How long logging out is waited for: the snapshot is read, so it's only good manners. */
         const val LOGOUT_MS = 3_000
+    }
+}
+
+/** The connection to Gmail's IMAP server: a sync's read and a finished email's write each open their own. */
+internal object GmailConnection {
+    const val HOST = "imap.gmail.com"
+    const val PORT = 993
+    const val TIMEOUT_MS = 30_000
+
+    /**
+     * TLS to Gmail, with the host name checked against its certificate. Closed on any failure before
+     * it's handed over, the TLS layer and the socket under it (BUG-P2-021): the caller's `use` only
+     * begins once it is.
+     */
+    fun open(): SSLSocket {
+        val plain = Socket()
+        var socket: SSLSocket? = null
+        try {
+            plain.connect(InetSocketAddress(HOST, PORT), TIMEOUT_MS)
+            socket = (SSLSocketFactory.getDefault() as SSLSocketFactory).createSocket(plain, HOST, PORT, true) as SSLSocket
+            socket.soTimeout = TIMEOUT_MS
+            socket.sslParameters = socket.sslParameters.apply { endpointIdentificationAlgorithm = "HTTPS" }
+            socket.startHandshake()
+            if (!HttpsURLConnection.getDefaultHostnameVerifier().verify(HOST, socket.session)) throw IOException("Gmail's certificate doesn't match $HOST")
+            return socket
+        } catch (e: Throwable) {
+            runCatching { socket?.close() }
+            runCatching { plain.close() }
+            throw e
+        }
     }
 }

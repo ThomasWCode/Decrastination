@@ -293,7 +293,7 @@ object ChatActs {
      * record's time), one kept no more still not, its task open, the record it took back today's (from
      * [dayStart] on: past midnight its key names another day's piece).
      */
-    fun canUndo(act: Act, tasks: List<TaskItem>, settings: Settings, messages: List<ChatMessage>, notes: List<Note> = emptyList(), reminders: List<Reminder> = emptyList(), kept: Map<String, Long> = emptyMap(), messageId: String? = null, now: Long? = null, dayStart: Long? = null, readAt: (Source) -> Long? = { null }): Boolean {
+    fun canUndo(act: Act, tasks: List<TaskItem>, settings: Settings, messages: List<ChatMessage>, notes: List<Note> = emptyList(), reminders: List<Reminder> = emptyList(), kept: Map<String, Long> = emptyMap(), messageId: String? = null, now: Long? = null, dayStart: Long? = null, finishing: Set<String> = emptySet(), readAt: (Source) -> Long? = { null }): Boolean {
         if (act.undone) return false
         val a = act.action ?: return false
         val task = tasks.firstOrNull { it.id == a.taskId }
@@ -304,7 +304,9 @@ object ChatActs {
             ChatAction.Type.Open -> false
             ChatAction.Type.TickStep -> task != null && step?.done == true && (task.isOpen || task.source == Source.Own || task.tickDone) && tickedBy(act, task.id, a.stepIndex!!, step, kept)
             ChatAction.Type.UntickStep -> task?.isOpen == true && step?.done == false
-            ChatAction.Type.Done -> task?.isOpen == false && (task.source == Source.Own || task.tickDone)
+            // A starred email's finish (Stage 11) while it, the act's own ([Act.after]), stands in the journal ([finishing], by id),
+            // its task here or not (a backup restored brings back the receipt, but no read brings back an email unstarred).
+            ChatAction.Type.Done -> if (task?.source == Source.Gmail || task == null) act.after != null && act.after in finishing else task?.isOpen == false && (task.source == Source.Own || task.tickDone)
             ChatAction.Type.Reopen -> task != null && act.was != null && asReopened(task, act.was)
             ChatAction.Type.Delete -> act.was != null && task == null && !redone(act.cards, messages)
             ChatAction.Type.Setting -> act.before != null && FelixSettings.field(a.setting.orEmpty())?.get(settings) == act.after

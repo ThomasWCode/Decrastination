@@ -33,7 +33,7 @@ It runs only while Felix may search (`felixSearches`), and only when a message n
 
 **The sources** ([sources.md](sources.md)):
 - Power Planner's web API, with your login (`sources/powerplanner/PowerPlannerApi.kt`);
-- Gmail over IMAP with an app password, read-only (`EXAMINE` and `BODY.PEEK`, `sources/gmail/Imap.kt`): nothing in the mailbox changes;
+- Gmail over IMAP with an app password, read with `EXAMINE` and `BODY.PEEK` (`sources/gmail/Imap.kt`), so a read changes nothing in the mailbox; its one write, an email finished here unstarred and archived (D-106, `ImapWriter`), changes those two and nothing else, logged by command, never a subject or an address;
 - Teams (through the Teams widget app's provider), AnkiDroid and the calendar are read on the phone.
 
 **The calendar written** (NF-07): the plan's slots go into the calendar you pick, each with its piece's name, its source, why it's on its day and its first action. A Google calendar syncs them to your Google account.

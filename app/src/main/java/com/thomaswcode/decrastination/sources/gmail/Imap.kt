@@ -203,16 +203,20 @@ data class Mailbox(val name: String, val attributes: Set<String>)
 data class Examined(val exists: Int, val uidValidity: Long?)
 
 /**
- * Just enough IMAP4rev1 to read a mailbox, plus Gmail's `X-GM-` extensions. Read-only by
- * construction: it opens mailboxes with EXAMINE and fetches bodies with BODY.PEEK, so nothing is
- * marked as read or changed, and it has no command that writes, moves or sends anything. Each
- * command sent is passed to [log], the login's address and password left out.
+ * Just enough IMAP4rev1 to read a mailbox, plus Gmail's `X-GM-` extensions. Its own commands only
+ * read: it opens mailboxes with EXAMINE and fetches bodies with BODY.PEEK, so nothing is marked as
+ * read or changed, and it has no command that writes, moves or sends anything. The two writes a
+ * finished email needs are [ImapWriter]'s, sent over this connection ([send]); a sync never makes
+ * one. Each command sent is passed to [log], the login's address and password left out.
  */
 class ImapClient(input: InputStream, private val output: OutputStream, private val log: (String) -> Unit = {}) : Closeable {
     private val reader = ImapReader(input)
     private var counter = 0
 
-    class CommandFailed(command: String, line: ImapLine) : IOException("$command: ${line.status} ${line.text.orEmpty()}")
+    class CommandFailed(command: String, line: ImapLine) : IOException("$command: ${line.status} ${line.text.orEmpty()}") {
+        /** What the server said of it: NO (refused), BAD (not understood), BYE (going). */
+        val status: String? = line.status
+    }
 
     /** The server's greeting: `* OK …`. */
     fun greeting() {
@@ -234,8 +238,10 @@ class ImapClient(input: InputStream, private val output: OutputStream, private v
             }
 
     /** Opens [mailbox] read-only. */
-    fun examine(mailbox: String): Examined {
-        val lines = run("EXAMINE ${quote(mailbox)}", "EXAMINE")
+    fun examine(mailbox: String): Examined = opened(run("EXAMINE ${quote(mailbox)}", "EXAMINE"))
+
+    /** What opening a mailbox said of it ([lines]: EXAMINE's here, SELECT's for [ImapWriter]): how many it holds, its UIDVALIDITY. */
+    internal fun opened(lines: List<ImapLine>): Examined {
         val exists = lines.firstOrNull { it.values.getOrNull(1)?.string.equals("EXISTS", ignoreCase = true) }
             ?.values?.firstOrNull()?.string?.toIntOrNull() ?: 0
         // "* OK [UIDVALIDITY 11] UIDs valid.": a status line, its code kept in its text.
@@ -266,6 +272,9 @@ class ImapClient(input: InputStream, private val output: OutputStream, private v
     override fun close() {
         runCatching { output.close() }
     }
+
+    /** [command], one of [ImapWriter]'s, sent as this class's own are, with this connection's tags: its untagged responses. */
+    internal fun send(command: String, name: String): List<ImapLine> = run(command, name)
 
     /** Sends one command and collects its untagged responses until its tagged completion. [shown]: what [log] is told it was. */
     private fun run(command: String, name: String, shown: String = command): List<ImapLine> {

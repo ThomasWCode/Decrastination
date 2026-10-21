@@ -27,6 +27,7 @@ import com.thomaswcode.decrastination.data.ActivityLog
 import com.thomaswcode.decrastination.data.ChatMigration
 import com.thomaswcode.decrastination.data.MemoryMigration
 import com.thomaswcode.decrastination.data.JsonStore
+import com.thomaswcode.decrastination.data.SettingsMigration
 import com.thomaswcode.decrastination.data.Keeping
 import com.thomaswcode.decrastination.data.PhotoDone
 import com.thomaswcode.decrastination.data.SlotRecord
@@ -55,7 +56,7 @@ class FocusTest {
     private val dir: File = Files.createTempDirectory("focus").toFile()
     private val clock = FixedClock(Fixtures.at("2026-10-10T12:00"), LONDON)
     private val tasks = JsonStore(File(dir, "tasks.json"), TaskState.serializer(), ::TaskState, migrations = listOf(TasksMigration.TASKS))
-    private val settings = JsonStore(File(dir, "settings.json"), Settings.serializer(), ::Settings)
+    private val settings = JsonStore(File(dir, "settings.json"), Settings.serializer(), ::Settings, migrations = listOf(SettingsMigration.SETTINGS))
     private val protection = JsonStore(File(dir, "protection.json"), ProtectionState.serializer(), ::ProtectionState)
     private val session = JsonStore(File(dir, "session.json"), SessionState.serializer(), ::SessionState)
     private val learning = JsonStore(File(dir, "learning.json"), LearningState.serializer(), ::LearningState)
@@ -470,6 +471,43 @@ class FocusTest {
         assertFalse(key in session.value.slots.previous)
         assertFalse(slotted.keepSlot(key))
         assertEquals(1, log.value.slots.size)
+    }
+
+    @Test
+    fun `a keep or a tick says its task's work moved on, and taking either back says so too, for an email's finish`() = runTest {
+        val worked = mutableListOf<String>()
+        val unworked = mutableListOf<String>()
+        val hooked = Focus(tasks, settings, session, learning, protection, log, clock, onWorked = { worked += it }, onUnworked = { unworked += it }) { state, s, now -> Planner.plan(input(state, s, now)) }
+        val first = laid(task("t", due = "2026-10-12T23:59", steps = steps(), effort = 60)).first()
+        clock.time = first.end
+        assertTrue(hooked.keepSlot(first.chunk!!.key))
+        assertEquals(listOf("teams:t"), worked)
+        assertTrue(hooked.unkeepSlot(first.chunk!!.key, first.start))
+        assertEquals(listOf("teams:t"), unworked)
+        // A step of an email ticked by hand, and to do again.
+        tasks.update { it.copy(tasks = it.tasks + task("e").copy(id = "gmail:e", source = Source.Gmail, subSteps = listOf(SubStep("Reply", 10)))) }
+        assertTrue(hooked.tickBlock("gmail:e", 0, "Reply"))
+        assertEquals(listOf("teams:t", "gmail:e"), worked)
+        assertTrue(hooked.untickBlock("gmail:e", 0, "Reply"))
+        assertEquals(listOf("teams:t", "gmail:e"), unworked)
+        // Nothing kept, nothing said.
+        assertFalse(hooked.keepSlot("teams:nothing#0"))
+        assertEquals(2, worked.size)
+    }
+
+    @Test
+    fun `a keep carried through at start-up says its task's work moved on too, for an email's finish`() = runTest {
+        val worked = mutableListOf<String>()
+        val hooked = Focus(tasks, settings, session, learning, protection, log, clock, onWorked = { worked += it }) { state, s, now -> Planner.plan(input(state, s, now)) }
+        val (first) = laid(task("t", due = "2026-10-12T23:59", steps = listOf(SubStep("Q1", 15), SubStep("Q2", 15)), effort = 30))
+        clock.time = first.end
+        val record = SlotRecord(
+            date = "2026-10-12", key = first.chunk!!.key, taskId = "teams:t", kind = Kind.Homework, label = first.chunk!!.label, plannedMin = 15,
+            start = first.start, end = first.end, window = first.window, outcome = SlotOutcome.Kept, workedMin = 15, earned = true, at = clock.time,
+        )
+        session.update { it.copy(keeping = listOf(Keeping(record, 0, "Q1", workedBefore = 0, earningMin = 5.0))) }
+        hooked.finishKeeps()
+        assertEquals(listOf("teams:t"), worked)
     }
 
     @Test

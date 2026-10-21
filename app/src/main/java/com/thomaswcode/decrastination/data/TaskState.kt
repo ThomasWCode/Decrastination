@@ -57,4 +57,11 @@ data class SourceStatus(
     val dataAsOf: Long? = null,
     /** A line about the source's own state, such as the Teams widget's sync failing. */
     val note: String? = null,
-)
+) {
+    /**
+     * When the last read that worked began, all it saw being from then or after (a success's [lastAttemptAt]):
+     * what changed in the source after that read began isn't taken as seen by it, as Gmail's finishes need. Null
+     * where the last read failed (when the one that worked began isn't kept) or none has worked.
+     */
+    val lastSuccessStartedAt: Long? get() = if (error == null && lastSuccessAt != null) lastAttemptAt else null
+}

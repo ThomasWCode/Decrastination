@@ -27,6 +27,9 @@ object Channels {
     /** Everything Felix says (AI-24, LR-03): his one notification, made from the chat. */
     const val FELIX = "felix"
 
+    /** Your sources (Q27: A): a write to Gmail that couldn't be made; outside the day's ceiling. */
+    const val SOURCES = "sources"
+
     fun create(context: Context) {
         val manager = context.getSystemService(NotificationManager::class.java) ?: return
         // The four that were one start as you'd set it (silenced, say): Android keeps a channel's
@@ -84,6 +87,9 @@ object Channels {
                 },
                 NotificationChannel(MODEL, "Claude", NotificationManager.IMPORTANCE_DEFAULT).apply {
                     description = "When Claude's plan for a task is dropped, or its API key stops working"
+                },
+                NotificationChannel(SOURCES, "Your sources", NotificationManager.IMPORTANCE_DEFAULT).apply {
+                    description = "When an email finished here couldn't be unstarred or archived in Gmail"
                 },
                 // Silent, while it's spent (IMP-P2-011); and once, loud enough to see, a minute before it runs out.
                 NotificationChannel(FREE_TIME, "Free time", NotificationManager.IMPORTANCE_LOW).apply {

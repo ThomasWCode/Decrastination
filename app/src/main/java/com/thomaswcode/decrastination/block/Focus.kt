@@ -58,6 +58,10 @@ class Focus(
     private val clock: WallClock,
     /** One of your own whose work a kept slot finished (LR-09): finished, as Done does. */
     private val onOwnTaskDone: suspend (String) -> Unit = {},
+    /** A task's work moved on by a slot kept or a step ticked by hand: an email's all done is finished in Gmail (Stage 11). */
+    private val onWorked: suspend (String) -> Unit = {},
+    /** A keep or a tick of a task's taken back: an email's finish with it (Stage 11). */
+    private val onUnworked: suspend (String) -> Unit = {},
     /** Whether [LocalDate] is a school day (BL-02): by the school calendar; without one, Monday to Friday. */
     private val schoolDay: (LocalDate) -> Boolean = { it.dayOfWeek.value <= 5 },
     private val planOf: (TaskState, Settings, Long) -> Plan,
@@ -309,14 +313,15 @@ class Focus(
         val kept = keeping.withLock { keep(key, extraMin, photo, verified, seenAt, now) } ?: return false
         // One of your own it finished: finished as Done does, once its record is in.
         kept.ownDone?.let { onOwnTaskDone(it) }
+        onWorked(kept.taskId)
         return true
     }
 
     /** Held while a slot's outcome is recorded: two ticks at once keep a slot once, and a tick and its slot's end don't cross. */
     private val keeping = Mutex()
 
-    /** What keeping a slot leaves to do: one of your own it finished, or one done by its tick (NF-06). */
-    private class Kept(val ownDone: String?)
+    /** What keeping a slot leaves to do: its task's work moved on ([taskId]), and one of your own it finished, or one done by its tick (NF-06). */
+    private class Kept(val taskId: String, val ownDone: String?)
 
     private suspend fun keep(key: String, extraMin: Int, photo: Boolean, verified: Boolean, seenAt: Long?, now: Long, photoDone: PhotoDone? = null): Kept? {
         val plan = plan(now)
@@ -433,13 +438,18 @@ class Focus(
         // One of your own finished by it: its last step (seen to as its steps are), or its minutes all
         // worked; so too one done by its tick (NF-06).
         val task = tasks.value.tasks.firstOrNull { it.id == record.taskId }.takeUnless { k.earnOnly }
-        return Kept(task?.takeIf { (it.source == Source.Own || it.tickDone) && it.isOpen && it.subSteps.isEmpty() && Planner.remaining(it, learning.value.calibration.multiplierFor(it)) <= 0 }?.id)
+        return Kept(record.taskId, task?.takeIf { (it.source == Source.Own || it.tickDone) && it.isOpen && it.subSteps.isEmpty() && Planner.remaining(it, learning.value.calibration.multiplierFor(it)) <= 0 }?.id)
     }
 
     /** Carries through the slots a stop left part-way kept ([RuntimeState.keeping]): at start-up, before the photo checks. */
     suspend fun finishKeeps() {
         val now = clock.now()
-        for (k in session.value.keeping) keeping.withLock { finish(k, now, recovering = true) }?.ownDone?.let { onOwnTaskDone(it) }
+        for (k in session.value.keeping) {
+            val kept = keeping.withLock { finish(k, now, recovering = true) } ?: continue
+            kept.ownDone?.let { onOwnTaskDone(it) }
+            // Its task's work moved on, as a keep made at once says it: an email's last piece finishes it in Gmail.
+            onWorked(kept.taskId)
+        }
     }
 
     /**
@@ -461,11 +471,18 @@ class Focus(
      * and with none to take back; with [reopen], one of your own, or one done by its tick (NF-06), that it
      * finished is open again, in the same write, as a tick's Undo opens one ([untickBlock]).
      */
-    suspend fun unkeepSlot(key: String, since: Long, now: Long = clock.now(), reopen: Boolean = false): Boolean = keeping.withLock {
-        val record = log.value.slots.lastOrNull { it.key == key && it.outcome.kept && it.at >= since } ?: return@withLock false
+    suspend fun unkeepSlot(key: String, since: Long, now: Long = clock.now(), reopen: Boolean = false): Boolean {
+        val taken = keeping.withLock { unkeep(key, since, now, reopen) } ?: return false
+        onUnworked(taken)
+        return true
+    }
+
+    /** [unkeepSlot]'s work, under the keeping lock: the task whose slot it took back, or null where none. */
+    private suspend fun unkeep(key: String, since: Long, now: Long, reopen: Boolean): String? {
+        val record = log.value.slots.lastOrNull { it.key == key && it.outcome.kept && it.at >= since } ?: return null
         val task = tasks.value.tasks.firstOrNull { it.id == record.taskId }
         val opens = reopen && task != null && !task.isOpen && (task.source == Source.Own || task.tickDone) && task.status == Status.Done
-        if (task?.isOpen != true && !opens) return@withLock false
+        if (task?.isOpen != true && !opens) return null
         // A step's key is its task and its place ("id#2"); a sitting before its step's last has how
         // many come after it too ("id#2#1"), and a box its part after a -1 ("id#-1#1"): only a step's
         // tick is taken back, the others' minutes alone.
@@ -495,7 +512,7 @@ class Focus(
                 },
             )
         }
-        true
+        return record.taskId
     }
 
     /**
@@ -579,6 +596,7 @@ class Focus(
                 },
             )
         }
+        if (ticked) onWorked(taskId)
         return ticked
     }
 
@@ -621,6 +639,7 @@ class Focus(
                 },
             )
         }
+        if (unticked) onUnworked(taskId)
         return unticked
     }
 
