@@ -37,7 +37,7 @@ import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.launch
 
 /**
- * The plan (docs/plan_v4), moved out of `AppGraph`: made from the stores as they are
+ * The plan (docs/plan_v4): made from the stores as they are
  * ([plan]; cheap, dozens of tasks), made again as what it depends on changes ([watcher]), today's
  * slot starts kept for the next ([keepSlots]), and the work done ahead after each ([Ahead]). Built
  * like [com.thomaswcode.decrastination.block.Focus]: its stores, the clock and small callbacks in

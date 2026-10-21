@@ -49,7 +49,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 /**
- * Your instructions (docs/plan_v4), moved out of `AppGraph`: written and read by Claude
+ * Your instructions (docs/plan_v4): written and read by Claude
  * ([addInstruction], [readInstructions]), or made yourself as quick changes ([addOwnChange],
  * [laterToday], [takeBackQuick]); applied at once once read, or refused saying why ([applyInstruction]);
  * deleted or taken back ([deleteInstruction]); and laid over everything they change ([layInstructions],

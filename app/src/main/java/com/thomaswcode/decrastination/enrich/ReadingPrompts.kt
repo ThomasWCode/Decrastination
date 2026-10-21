@@ -27,7 +27,7 @@ object ReadingPrompts {
      * The prompts' version (AC-06): raised with every change to a system prompt, a schema, an
      * example or the profile's shape, so a reading the model made by older ones is made again.
      * 1: everything before review v2's phase 8 (what the readings stored then carry); 2: phases 1
-     * to 7's changes (PROGRESS.md listed them); 3: every starred email a task (3.0.1); 4: fewer,
+     * to 7's changes; 3: every starred email a task (3.0.1); 4: fewer,
      * longer steps (3.1.1, D-20: a task in parts only where it is, its few minutes'
      * admin in the step it belongs to); 5: a piece of work whole, never split by what's in it, the
      * app cutting one over an hour into sittings (3.1.2); 6: whole up to a task's most,
