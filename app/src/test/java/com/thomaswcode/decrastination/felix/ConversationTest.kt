@@ -5,6 +5,7 @@ import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.AssessLater
 import com.thomaswcode.decrastination.core.Change
 import com.thomaswcode.decrastination.core.ChangeType
+import com.thomaswcode.decrastination.core.ChatActs
 import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.core.ChatState
 import com.thomaswcode.decrastination.core.Fact
@@ -410,6 +411,23 @@ class ConversationTest {
         assertNull(conversation.undoAct(answer.id, 0))
         assertEquals(listOf("gmail:t1"), felix.owners.gmailUnfinished)
         assertTrue(his().last().acts.single().undone)
+    }
+
+    @Test
+    fun `his done on an email can still be taken back with its task gone, as after a backup's restored`() = runBlocking {
+        val email = sheet.copy(id = "gmail:t1", source = Source.Gmail, sourceId = "t1", title = "Trip consent form", kind = Kind.Admin)
+        stores.tasks.update { it.copy(tasks = it.tasks + email) }
+        felix.answers(felix.chatAnswer("Finished it.", actions = """[{"type":"done","taskId":"gmail:t1","stepIndex":-1,"setting":"","value":""}]"""))
+        assertTrue(conversation.ask("I'm done with the trip email"))
+        felix.settle()
+        val answer = his().last()
+        // Restored: the chat and the journal's receipt back, but no task of the email, unstarred in Gmail.
+        stores.tasks.update { it.copy(tasks = it.tasks.filterNot { t -> t.id == "gmail:t1" }) }
+        val act = answer.acts.single()
+        assertTrue(ChatActs.canUndo(act, stores.tasks.value.tasks, stores.settings.value, stores.chat.value.messages, finishing = setOf("w-gmail:t1")))
+        assertFalse(ChatActs.canUndo(act, stores.tasks.value.tasks, stores.settings.value, stores.chat.value.messages))
+        assertNull(conversation.undoAct(answer.id, 0))
+        assertEquals(listOf("gmail:t1"), felix.owners.gmailUnfinished)
     }
 
     @Test

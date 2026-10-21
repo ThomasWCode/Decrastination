@@ -72,7 +72,8 @@ object GmailWrites {
      * [writes] with [write], a finish, journaled: to go after the grace from its [GmailWrite.at] where a finish was
      * OK'd before ([confirmed]), else waiting for your OK. Null where [write]'s task has a finish standing: pending, or
      * made with no Gmail read since ([readAt], the source's last) to show it starred again, so a second finish
-     * doesn't read the conversation as the first left it and take the place of its receipt.
+     * doesn't read the conversation as the first left it and take the place of its receipt. The task's writes given
+     * up are let go as this takes their place, their failure said no more, but for one a pending Undo still needs.
      */
     fun finish(writes: List<GmailWrite>, write: GmailWrite, confirmed: Boolean, readAt: Long? = null): List<GmailWrite>? {
         val last = latest(writes, write.taskId)
@@ -80,7 +81,8 @@ object GmailWrites {
             if (pending(last)) return null
             if (!last.gaveUp && (readAt == null || readAt <= last.doneAt!!)) return null
         }
-        return writes + write.copy(notBefore = if (confirmed) write.at + GRACE_MS else null, reverseOf = null)
+        val needed = needed(writes)
+        return writes.filterNot { it.taskId == write.taskId && it.gaveUp && it.id !in needed } + write.copy(notBefore = if (confirmed) write.at + GRACE_MS else null, reverseOf = null)
     }
 
     /**
@@ -99,11 +101,13 @@ object GmailWrites {
     }
 
     /**
-     * The oldest write due at [now]: pending, past its notBefore; an Undo only once the finish it takes back is done
-     * (made or given up), so what it puts back is known.
+     * The oldest write due at [now]: pending, past its notBefore (its grace, or a failed try's wait); each task's in the
+     * order they were journaled, so an Undo goes only once the finish it takes back is done (made or given up), what it
+     * puts back known, and a finish after an Undo only once that's made.
      */
     fun next(writes: List<GmailWrite>, now: Long): GmailWrite? = writes.firstOrNull { w ->
-        pending(w) && w.notBefore != null && w.notBefore <= now && (w.reverseOf == null || writes.none { it.id == w.reverseOf && pending(it) })
+        pending(w) && w.notBefore != null && w.notBefore <= now && writes.first { pending(it) && it.taskId == w.taskId }.id == w.id &&
+            (w.reverseOf == null || writes.none { it.id == w.reverseOf && pending(it) })
     }
 
     /** When the next write may go, for the worker's wait: null with none to go (none pending, or only finishes waiting for your OK). */
@@ -115,6 +119,13 @@ object GmailWrites {
     /** *Not this time*, or *Turn this off*: every finish waiting for your OK dropped, its task left open. */
     fun refuse(writes: List<GmailWrite>): List<GmailWrite> = writes.filterNot(::awaiting)
 
+    /**
+     * Finishing switched off (Settings → Sources → Gmail): every finish not yet started (waiting for your OK, in its
+     * grace or for a connection, its conversation unread) dropped, its task left as it was; one started goes on, so
+     * Gmail isn't left half done, and an Undo goes as it would.
+     */
+    fun switchedOff(writes: List<GmailWrite>): List<GmailWrite> = writes.filterNot { pending(it) && it.reverseOf == null && it.flagged == null }
+
     /** What an Undo [write] puts back, from the finish it takes back ([writes]): the starred messages where that unstarred them, and the inbox's where that archived them; none where it changed neither. */
     fun toRestore(writes: List<GmailWrite>, write: GmailWrite): Pair<List<String>, List<String>> {
         val finish = writes.firstOrNull { it.id == write.reverseOf } ?: return emptyList<String>() to emptyList()
@@ -124,11 +135,21 @@ object GmailWrites {
     /** [id] changed by [change]. */
     fun with(writes: List<GmailWrite>, id: String, change: (GmailWrite) -> GmailWrite): List<GmailWrite> = writes.map { if (it.id == id) change(it) else it }
 
-    /** [id]'s try failed at [now] with [error]: tried again later, or given up at the [MAX_TRIES]th, what succeeded kept. */
+    /**
+     * [id]'s try failed at [now] with [error]: tried again once its wait's over ([backoff], kept as its notBefore, so the
+     * worker set going for another write doesn't cut it short), or given up at the [MAX_TRIES]th, what succeeded kept.
+     */
     fun failed(writes: List<GmailWrite>, id: String, error: String, now: Long): List<GmailWrite> = with(writes, id) {
         val tries = it.tries + 1
-        it.copy(tries = tries, lastError = error.take(MAX_ERROR), doneAt = if (tries >= MAX_TRIES) now else null, gaveUp = tries >= MAX_TRIES)
+        val gaveUp = tries >= MAX_TRIES
+        it.copy(tries = tries, lastError = error.take(MAX_ERROR), notBefore = if (gaveUp) it.notBefore else now + backoff(tries), doneAt = if (gaveUp) now else null, gaveUp = gaveUp)
     }
+
+    /** The wait after a write's [tries]th failed try: half an hour, doubled each time, to five hours at most. */
+    fun backoff(tries: Int): Long = minOf(BACKOFF_MS shl (tries - 1).coerceIn(0, 4), MAX_BACKOFF_MS)
+
+    const val BACKOFF_MS = 30L * 60_000
+    const val MAX_BACKOFF_MS = 5L * 3_600_000
 
     /** What an error's kept to. */
     const val MAX_ERROR = 200
@@ -138,8 +159,24 @@ object GmailWrites {
      * ([sorted]), and one an Undo still to make takes back kept for it, as it says what to put back.
      */
     fun prune(writes: List<GmailWrite>, now: Long): List<GmailWrite> {
-        val needed = writes.filter { it.reverseOf != null && pending(it) }.mapNotNullTo(HashSet()) { it.reverseOf }
+        val needed = needed(writes)
         return writes.filterNot { w -> w.doneAt != null && !w.gaveUp && w.id !in needed && now - w.doneAt >= RECEIPT_MS }
+    }
+
+    /** The finishes a pending Undo takes back: each kept for it, as it says what to put back. */
+    private fun needed(writes: List<GmailWrite>): Set<String> = writes.filter { it.reverseOf != null && pending(it) }.mapNotNullTo(HashSet()) { it.reverseOf }
+
+    /**
+     * [writes] settled at [now], at a start and after every read: receipts let go once old ([prune]); and a task's, all
+     * made before a Gmail read that began at [readAt] found it open ([open]: starred again, a new round), let go, as
+     * that round's over and their Undo would put back the last one's. One given up stays till it's sorted; a task with
+     * a write still to make is left as it is.
+     */
+    fun settle(writes: List<GmailWrite>, open: (String) -> Boolean, readAt: Long?, now: Long): List<GmailWrite> {
+        val pruned = prune(writes, now)
+        if (readAt == null) return pruned
+        val over = pruned.groupBy { it.taskId }.filter { (taskId, its) -> its.none(::pending) && its.all { it.doneAt!! < readAt } && open(taskId) }.keys
+        return pruned.filterNot { it.taskId in over && !it.gaveUp }
     }
 
     /** *It's sorted*: [taskId]'s given-up writes let go. */

@@ -16,6 +16,9 @@ object GmailFinish {
      * Gmail task, not hidden, with every step ticked, or, with none, nothing left of its minutes at the pace
      * learned ([multiplier]) as the plan rounds them ([Planner.remaining]), so its last box kept is the end of it.
      */
-    fun due(task: TaskItem, multiplier: Double): Boolean =
-        finishable(task) && !task.hidden && if (task.subSteps.isNotEmpty()) task.subSteps.all { it.done } else Planner.remaining(task, multiplier).roundToInt() <= 0
+    fun due(task: TaskItem, multiplier: Double): Boolean = finishable(task) && !task.hidden && workDone(task, multiplier)
+
+    /** Whether [task]'s work is all done, open or not: every step ticked, or, with none, nothing left of its minutes at the pace learned. */
+    fun workDone(task: TaskItem, multiplier: Double): Boolean =
+        if (task.subSteps.isNotEmpty()) task.subSteps.all { it.done } else Planner.remaining(task, multiplier).roundToInt() <= 0
 }
