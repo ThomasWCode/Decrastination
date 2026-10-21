@@ -188,19 +188,19 @@ The design is [05](05-the-chat.md); the stores' change is [04](04-data-and-migra
 
 ### 8c. Less sent, more asked for (4.1.4)
 
-**Needs** 6e (`Learning`'s `Stats` for G6), 8b (the context's last new lines in, so what moves is measured once). **Does**: [15](15-sent-or-asked-for.md): the week's numbers (G6) and the calendar further out (G7) become things he asks for; each task's line says what its text holds, and the text sent is cut from 600 to 250 characters if the chat's eval before and after holds (it didn't: 4.1.4 keeps 600, Q35); the settings stay always, as a change needs their names (your call, 19 Oct). The text asked for instead of sent waits for real use (§After). Before 10b, so its eval runs on the shape that stays. One PR, staged:
+**Needs** 6e (`Learning`'s `Stats` for G6), 8b (the context's last new lines in, so what moves is measured once). **Does**: [15](15-sent-or-asked-for.md): the week's numbers (G6) and the calendar further out (G7) become things he asks for; each task's line says what its text holds, and the text sent is cut from 600 to 250 characters if the chat's eval before and after holds (it didn't: 4.1.4 keeps 600, D-102); the settings stay always, as a change needs their names (your call, 19 Oct). The text asked for instead of sent waits for real use (§After). Before 10b, so its eval runs on the shape that stays. One PR, staged:
 
 1. **The eval's baseline.** `EvalRunTest` asks the chat's private set (`private/eval-chat`, made here if it isn't yet; never committed) through the Conversation as the app asks it (`-PrunEval=chat`), rounds included, and reports each case's scores, rounds, tokens, cost and seconds; the set gains cases for each thing that changes or is new. Run on the code as it is, twice for the cases the cut rests on: the baseline's figures in the PR.
 2. **The requests**: `ChatAnswers.parse` keeps `details`' kinds, `stats` and `calendar` (with its month), apart from the tasks' ids (today it keeps only listed, open tasks' ids and takes three, so the kinds would be dropped): `Reading` carries them, each once, the tasks still three at most; `ChatRounds.next` reads both; tested first, with three ids and both kinds in one answer. `MAX_ROUNDS` stays two; each kind's block after your words, under its own heading; what he asks for past what one message brings (two rounds, three texts, two spans of the calendar) said under his answer ("Not brought: …", `ChatRounds.asking`). The schema doesn't change.
 3. **The prompt**: item 7 lists what he can ask for and when, and (from step 6) that the texts are cut short, a long one to its summary, so where what's asked isn't in what he's shown he asks for the text; `chat.txt` rewritten, its diff in the PR.
 4. **G6 and G7**: `stats` brings `Stats.weekLines` (this week so far and last week) in 20 lines; `calendar` the four weeks after the fortnight, or a month it names (`calendar:yyyy-MM`), up to 60 events with their keys, saying what it left out.
-5. **What each task's text holds, and the text cut**: each task's line gains `TaskText.holds`: the sender, attachments and links and its text's length, in a room of its own (160 characters a line, 6,000 in all, by the deadline in force; past it, the length alone), so no task is crowded out of the list; the text block's 600 characters a task cut to 250 (5,000 in all) if the eval holds (it didn't: 600 kept, Q35); the task the message is about still whole; `details` reads as now.
+5. **What each task's text holds, and the text cut**: each task's line gains `TaskText.holds`: the sender, attachments and links and its text's length, in a room of its own (160 characters a line, 6,000 in all, by the deadline in force; past it, the length alone), so no task is crowded out of the list; the text block's 600 characters a task cut to 250 (5,000 in all) if the eval holds (it didn't: 600 kept, D-102); the task the message is about still whole; `details` reads as now.
 6. **The eval again**, twice for the cut's cases: the cut stands only where they score at least the baseline's in both runs, at no more rounds; otherwise the text goes back to 600 characters in this PR, said with the figures.
-7. **The docs**: `felix-inputs.md` (the context, the rounds, the examples regenerated); `felix.md` §What he can do; `decisions.md`: D-93 amended (the line saying what each text holds; the text's 250 characters only had the cut stood, Q35), the rule of what's sent always and what's asked for, G6 and G7 taken.
+7. **The docs**: `felix-inputs.md` (the context, the rounds, the examples regenerated); `felix.md` §What he can do; `decisions.md`: D-93 amended (the line saying what each text holds; the text's 250 characters only had the cut stood: it didn't, D-102), the rule of what's sent always and what's asked for, G6 and G7 taken.
 
 **Tests** and **phone check**: [15](15-sent-or-asked-for.md). **Leaves**: the chat's eval runner 10b uses.
 
-## Stage 10: memory and the voice (4.2.0, 4.2.1)
+## Stage 10: memory and the voice (4.2.0, 4.2.2)
 
 ### 10a. Memory that expires (4.2.0)
 
@@ -217,7 +217,7 @@ The design is [05](05-the-chat.md); the stores' change is [04](04-data-and-migra
 
 **Tests** and **phone check**: [08](08-memory-that-expires.md).
 
-### 10b. His voice (4.2.1)
+### 10b. His voice (4.2.2)
 
 **Needs** 5 (`FelixWords`, `byApp` marked in the history, the fold), 6e (the summary's writer in Learning), 9. **Does**: [09](09-his-voice.md). One PR, staged:
 
@@ -271,10 +271,10 @@ The conversation digest, 4.4.0 ([13](13-summaries.md), Q28): planned on its own 
 | 9 | 1 | ½ |
 | 7 | 1 | 2½ |
 | 8 | 3 | 6 |
-| 4.1.2 (the phone session's fixes), 4.1.3 (the docs review's fixes) | 2 | ½ |
+| 4.1.2 (the phone session's fixes), 4.1.3 (the docs review's fixes), 4.2.1 (the second docs review's) | 3 | ¾ |
 | 10 | 2 | 1½ |
 | 11 | 1 | 1½ |
 | 12 | 1 | ½ |
-| | 31 (30 releases) | about 25 |
+| | 32 (31 releases) | about 25 |
 
 Evenings and weekends, as every release ([12](12-verification-and-risks.md) §Risks: the phone's away on school days).
