@@ -12,6 +12,7 @@ import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.SchoolDays
 import com.thomaswcode.decrastination.core.Slot
 import com.thomaswcode.decrastination.core.SlotKind
+import com.thomaswcode.decrastination.core.Slotter
 import com.thomaswcode.decrastination.core.WindowKind
 import com.thomaswcode.decrastination.felix.FelixWorker
 import kotlinx.coroutines.CoroutineScope
@@ -40,7 +41,7 @@ object SlotAlarms {
     const val EXTRA_WINDOW = "window"
 
     /** How long after its slot's end a piece can still be ticked before the slot's missed. */
-    const val GRACE_MS = com.thomaswcode.decrastination.core.Slotter.GRACE_MS
+    const val GRACE_MS = Slotter.GRACE_MS
 
     /** Alarms at [plan]'s [next] start and end. */
     fun arm(context: Context, plan: Plan, now: Long) {

@@ -1,13 +1,20 @@
 package com.thomaswcode.decrastination.ui
 
+import android.app.Activity
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -16,12 +23,16 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -33,19 +44,30 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.thomaswcode.decrastination.AppGraph
+import com.thomaswcode.decrastination.R
 import com.thomaswcode.decrastination.core.SettingsLimits
 import com.thomaswcode.decrastination.core.Window
+import com.thomaswcode.decrastination.data.BackupFolder
+import com.thomaswcode.decrastination.data.CallRecord
+import com.thomaswcode.decrastination.data.Crashes
 import com.thomaswcode.decrastination.data.Reset
 import com.thomaswcode.decrastination.enrich.AiUsage
 import com.thomaswcode.decrastination.enrich.ModelEffort
+import com.thomaswcode.decrastination.learn.AnkiProgress
 import com.thomaswcode.decrastination.learn.Daily
+import com.thomaswcode.decrastination.learn.Summary
 import com.thomaswcode.decrastination.protect.ProtectionPanel
 import com.thomaswcode.decrastination.protect.SettingsChanges
+import java.time.Instant
+import java.time.ZoneId
 import java.util.Locale
 import java.util.Optional
 import kotlinx.coroutines.Dispatchers
@@ -87,7 +109,7 @@ class SettingsActivity : ComponentActivity() {
         val scope = rememberCoroutineScope()
         // Back comes to the list, your edits kept till they're saved.
         var section by screen::section
-        androidx.activity.compose.BackHandler(enabled = section != null) { section = null }
+        BackHandler(enabled = section != null) { section = null }
         LaunchedEffect(Unit) { apps = withContext(Dispatchers.IO) { launchableApps() } }
         // A change made elsewhere meanwhile shows at once, your edits laid over it ([SettingsScreenState.shown]).
         LaunchedEffect(asked) { screen.shown(asked) }
@@ -95,7 +117,7 @@ class SettingsActivity : ComponentActivity() {
         // What a field does, under it, as the draft has it (UI-13).
         val schoolCalendar by graph.school.state.collectAsStateWithLifecycle()
         val tasksState by graph.tasks.state.collectAsStateWithLifecycle()
-        val today = java.time.Instant.ofEpochMilli(graph.clock.now()).atZone(graph.clock.zone()).toLocalDate()
+        val today = Instant.ofEpochMilli(graph.clock.now()).atZone(graph.clock.zone()).toLocalDate()
         val effect: @Composable (String) -> Unit = { field -> SettingsEffects.line(field, draft, tasksState.timetable, schoolCalendar, today)?.let { Note(it) } }
 
         Scaffold(
@@ -116,7 +138,7 @@ class SettingsActivity : ComponentActivity() {
             },
         ) { padding ->
             // Room under the last row for Felix's button.
-            LazyColumn(Modifier.padding(padding).fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = FELIX_ROOM)) {
+            LazyColumn(Modifier.padding(padding).fillMaxSize(), contentPadding = PaddingValues(bottom = FELIX_ROOM)) {
                 when (section) {
                     // Its pages (UI-18), and what's waiting its hours, whichever page it's on.
                     null -> {
@@ -288,7 +310,7 @@ class SettingsActivity : ComponentActivity() {
                         item {
                             TimeField("Daily cards due by", draft.ankiDeadlineMin, "ankiDeadlineMin", form) { draft = draft.copy(ankiDeadlineMin = it) }
                             // What a card takes in each deck, as learned from time in AnkiDroid (DX-11).
-                            com.thomaswcode.decrastination.learn.AnkiProgress.lines(learning.calibration, graph.tasks.value.tasks).forEach {
+                            AnkiProgress.lines(learning.calibration, graph.tasks.value.tasks).forEach {
                                 Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp))
                             }
                         }
@@ -306,8 +328,8 @@ class SettingsActivity : ComponentActivity() {
                         OptionalTextField("Weekly summary goes to (an email address, or none)", draft.summaryEmail, SUMMARY_EMAIL_MAX, "summaryEmail", form) { draft = draft.copy(summaryEmail = it) }
                         val latest = graph.log.value.reviews.filter { it.summary != null }.maxByOrNull { it.at }
                         if (latest?.summary != null && latest.week != null) {
-                            val context = androidx.compose.ui.platform.LocalContext.current
-                            androidx.compose.material3.TextButton(onClick = { runCatching { context.startActivity(com.thomaswcode.decrastination.learn.Summary.email(draft.summaryEmail, latest.week, latest.summary)) } }) { Text("Send this week's summary") }
+                            val context = LocalContext.current
+                            TextButton(onClick = { runCatching { context.startActivity(Summary.email(draft.summaryEmail, latest.week, latest.summary)) } }) { Text("Send this week's summary") }
                         } else {
                             Note("The summary is written after each Sunday's review, while Claude is on.")
                         }
@@ -443,7 +465,7 @@ private fun OptionalNumberField(label: String, value: Int?, range: IntRange, key
 /** A value shown as it is, picked in a dialog ([onPick]): tapping the field or its button opens it (UI-01). */
 @Composable
 private fun PickedField(label: String, shown: String, modifier: Modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), onPick: () -> Unit) {
-    val source = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    val source = remember { MutableInteractionSource() }
     val pressed by source.collectIsPressedAsState()
     LaunchedEffect(pressed) { if (pressed) onPick() }
     OutlinedTextField(
@@ -452,7 +474,7 @@ private fun PickedField(label: String, shown: String, modifier: Modifier = Modif
         readOnly = true,
         label = { Text(label) },
         singleLine = true,
-        trailingIcon = { androidx.compose.material3.IconButton(onClick = onPick) { androidx.compose.material3.Icon(androidx.compose.ui.res.painterResource(com.thomaswcode.decrastination.R.drawable.ic_expand_more), contentDescription = "Pick $label") } },
+        trailingIcon = { IconButton(onClick = onPick) { Icon(painterResource(R.drawable.ic_expand_more), contentDescription = "Pick $label") } },
         interactionSource = source,
         modifier = modifier,
     )
@@ -475,9 +497,9 @@ private fun TimeField(label: String, minuteOfDay: Int, key: String, @Suppress("U
 private fun WindowField(label: String, window: Window, key: String, @Suppress("UNUSED_PARAMETER") form: Form, overnight: Boolean = false, onChange: (Window) -> Unit) {
     var picking by rememberSaveable(key) { mutableStateOf<Boolean?>(null) }
     var problem by rememberSaveable(key) { mutableStateOf<String?>(null) }
-    androidx.compose.foundation.layout.Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
         Text(label, style = MaterialTheme.typography.bodyMedium)
-        Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             PickedField("From", SettingsChanges.clock(window.startMin), Modifier.weight(1f)) { picking = true }
             PickedField("To", SettingsChanges.clock(window.endMin), Modifier.weight(1f)) { picking = false }
         }
@@ -512,8 +534,8 @@ internal fun parseTime(text: String): Int? {
 
 /** The model's recent calls (AC-07), newest first: a line each, a tap opening all it used, with Copy. */
 @Composable
-private fun RecentCalls(calls: List<com.thomaswcode.decrastination.data.CallRecord>, zone: java.time.ZoneId) {
-    val context = androidx.compose.ui.platform.LocalContext.current
+private fun RecentCalls(calls: List<CallRecord>, zone: ZoneId) {
+    val context = LocalContext.current
     var open by remember { mutableStateOf<Long?>(null) }
     Column {
         Section("Recent calls")
@@ -522,16 +544,16 @@ private fun RecentCalls(calls: List<com.thomaswcode.decrastination.data.CallReco
             val opened = open == call.at
             Column(Modifier.fillMaxWidth().clickable { open = if (opened) null else call.at }.padding(vertical = 4.dp)) {
                 Text(
-                    listOfNotNull(java.time.Instant.ofEpochMilli(call.at).atZone(zone).toLocalTime().withSecond(0).withNano(0).toString(), call.job, call.title, call.outcome).joinToString(" · ") + " · $%.3f".format(Locale.UK, call.costUsd),
+                    listOfNotNull(Instant.ofEpochMilli(call.at).atZone(zone).toLocalTime().withSecond(0).withNano(0).toString(), call.job, call.title, call.outcome).joinToString(" · ") + " · $%.3f".format(Locale.UK, call.costUsd),
                     style = MaterialTheme.typography.bodySmall,
                     maxLines = 1,
-                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    overflow = TextOverflow.Ellipsis,
                 )
                 if (opened) {
                     val details = call.details(zone)
                     Text(details, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    androidx.compose.material3.TextButton(onClick = {
-                        context.getSystemService(android.content.ClipboardManager::class.java)?.setPrimaryClip(android.content.ClipData.newPlainText("A Claude call", details))
+                    TextButton(onClick = {
+                        context.getSystemService(ClipboardManager::class.java)?.setPrimaryClip(ClipData.newPlainText("A Claude call", details))
                     }) { Text("Copy") }
                 }
             }
@@ -541,8 +563,8 @@ private fun RecentCalls(calls: List<com.thomaswcode.decrastination.data.CallReco
 
 /** The app's last crash (AR-06), as it was written down, with Copy; or that there's been none. */
 @Composable
-private fun LastCrash(activity: android.app.Activity) {
-    val crash = remember { com.thomaswcode.decrastination.data.Crashes.last(activity.filesDir) }
+private fun LastCrash(activity: Activity) {
+    val crash = remember { Crashes.last(activity.filesDir) }
     var open by remember { mutableStateOf(false) }
     Column {
         Section("Last crash")
@@ -555,8 +577,8 @@ private fun LastCrash(activity: android.app.Activity) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.fillMaxWidth().clickable { open = !open },
             )
-            androidx.compose.material3.TextButton(onClick = {
-                activity.getSystemService(android.content.ClipboardManager::class.java)?.setPrimaryClip(android.content.ClipData.newPlainText("The last crash", crash))
+            TextButton(onClick = {
+                activity.getSystemService(ClipboardManager::class.java)?.setPrimaryClip(ClipData.newPlainText("The last crash", crash))
             }) { Text("Copy") }
         }
     }
@@ -580,14 +602,14 @@ private fun ResetPage(graph: AppGraph) {
                     Text(r.title, style = MaterialTheme.typography.bodyLarge)
                     Text(r.takes.replaceFirstChar(Char::uppercase), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                androidx.compose.material3.TextButton(onClick = { asking = r }) { Text("Reset") }
+                TextButton(onClick = { asking = r }) { Text("Reset") }
             }
         }
         said?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.secondary, modifier = Modifier.padding(horizontal = 16.dp)) }
     }
     asking?.let { r ->
         val changes = if (r == Reset.Instructions || r == Reset.Everything) graph.instructions.value.applied.map { it.text.take(80) } else emptyList()
-        androidx.compose.material3.AlertDialog(
+        AlertDialog(
             onDismissRequest = { asking = null },
             title = { Text("Reset ${r.title.replaceFirstChar(Char::lowercase)}?") },
             text = {
@@ -597,12 +619,12 @@ private fun ResetPage(graph: AppGraph) {
                 )
             },
             confirmButton = {
-                androidx.compose.material3.TextButton(onClick = {
+                TextButton(onClick = {
                     asking = null
                     scope.launch { said = graph.backups.reset(r) }
                 }) { Text("Reset") }
             },
-            dismissButton = { androidx.compose.material3.TextButton(onClick = { asking = null }) { Text("Keep it") } },
+            dismissButton = { TextButton(onClick = { asking = null }) { Text("Keep it") } },
         )
     }
 }
@@ -620,7 +642,7 @@ private fun NightlyBackup(graph: AppGraph, last: Long?, now: Long) {
     val leftOut by produceState(0) { value = withContext(Dispatchers.IO) { runCatching { graph.backups.encoded().second }.getOrDefault(0) } }
     Column {
         Section("Nightly backup")
-        if (!com.thomaswcode.decrastination.data.BackupFolder.available) {
+        if (!BackupFolder.available) {
             Note("The nightly backup needs Android 10 or later.")
         } else {
             Note("Every night, all the app keeps goes to Documents/Decrastination on the phone, the last two weeks of them kept. Import opens one through the file picker. A copy off the phone is yours to make: a sync app mirroring the folder, or Export.")
@@ -633,7 +655,7 @@ private fun NightlyBackup(graph: AppGraph, last: Long?, now: Long) {
             copies.forEach { name ->
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(name, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-                    androidx.compose.material3.TextButton(onClick = { scope.launch { said = graph.backups.restoreResetCopy(name) } }) { Text("Restore") }
+                    TextButton(onClick = { scope.launch { said = graph.backups.restoreResetCopy(name) } }) { Text("Restore") }
                 }
             }
             said?.let { Note(it) }

@@ -12,6 +12,8 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.serialization.descriptors.elementNames
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonPrimitive
 
@@ -193,7 +195,7 @@ class SettingsChangesTest {
 
     @Test
     fun `the uptime count waits a while, but restarts at once after a gap it can't measure`() {
-        val change = PendingChange("1", "workMinPerFreeMin", kotlinx.serialization.json.JsonPrimitive(2), "x", now, now + 24 * 3_600_000L)
+        val change = PendingChange("1", "workMinPerFreeMin", JsonPrimitive(2), "x", now, now + 24 * 3_600_000L)
         // A minute on, nothing due: it can wait.
         assertNull(SettingsChanges.counting(listOf(change), Uptime(2, 0), Uptime(2, 60_000L), force = false))
         // Five minutes on: counted.
@@ -242,8 +244,8 @@ class SettingsChangesTest {
     fun `a change left waiting on a setting that no longer waits applies at the next count`() {
         val armed = Settings(armed = true)
         // Asked for under 1.8.0, when a box length waited a day.
-        val old = PendingChange("1", "boxMin", kotlinx.serialization.json.JsonPrimitive(60), "Box length: 45 → 60", now, now + 24 * 3_600_000L)
-        val loose = PendingChange("2", "blockedApps", kotlinx.serialization.json.JsonArray(emptyList()), "x", now, now + 24 * 3_600_000L)
+        val old = PendingChange("1", "boxMin", JsonPrimitive(60), "Box length: 45 → 60", now, now + 24 * 3_600_000L)
+        val loose = PendingChange("2", "blockedApps", JsonArray(emptyList()), "x", now, now + 24 * 3_600_000L)
         // Due at once, however little time has passed.
         assertNotNull(SettingsChanges.counting(listOf(old), Uptime(2, 0), Uptime(2, 1_000L), force = false, settings = armed))
         assertNull(SettingsChanges.counting(listOf(loose), Uptime(2, 0), Uptime(2, 1_000L), force = false, settings = armed))
@@ -261,7 +263,7 @@ class SettingsChangesTest {
         // A wait counts the clock's rise, at most what passed; a fall counts nothing.
         assertEquals(40 * 60_000L, Uptime(unknown, 50 * 60_000L).atLeastSince(Uptime(unknown, 10 * 60_000L)))
         assertNull(Uptime(unknown, 5 * 60_000L).atLeastSince(Uptime(unknown, 10 * 60_000L)))
-        val change = PendingChange("1", "armed", kotlinx.serialization.json.JsonPrimitive(false), "Protection: off", now, now, waitMs = 60 * 60_000L)
+        val change = PendingChange("1", "armed", JsonPrimitive(false), "Protection: off", now, now, waitMs = 60 * 60_000L)
         assertEquals(40 * 60_000L, SettingsChanges.counting(listOf(change), Uptime(unknown, 10 * 60_000L), Uptime(unknown, 50 * 60_000L), force = true))
     }
 

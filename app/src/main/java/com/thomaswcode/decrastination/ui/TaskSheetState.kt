@@ -13,6 +13,7 @@ import com.thomaswcode.decrastination.core.OwnTaskRules
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.tasks.Instructions
+import com.thomaswcode.decrastination.tasks.OwnTasks
 import java.time.LocalDate
 import java.time.ZoneId
 import java.util.UUID
@@ -27,7 +28,7 @@ import java.util.UUID
  */
 class TaskSheetState(
     private val instructions: Instructions,
-    private val ownTasks: com.thomaswcode.decrastination.tasks.OwnTasks,
+    private val ownTasks: OwnTasks,
     /** Your note on a task kept, or why it can't be ([com.thomaswcode.decrastination.felix.Conversation.addNote], 8a). */
     private val addNote: suspend (taskId: String, text: String) -> String? = { _, _ -> null },
     /** A note deleted ([com.thomaswcode.decrastination.felix.Conversation.deleteNote]). */
@@ -112,7 +113,7 @@ class TaskSheetState(
         /** The sheet's state through its being made again, [instructions], [ownTasks] and the notes' owner's [addNote] and [deleteNote] given to it again. */
         fun saver(
             instructions: Instructions,
-            ownTasks: com.thomaswcode.decrastination.tasks.OwnTasks,
+            ownTasks: OwnTasks,
             addNote: suspend (String, String) -> String? = { _, _ -> null },
             deleteNote: suspend (String) -> Unit = {},
         ): Saver<TaskSheetState, Any> = listSaver(

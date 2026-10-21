@@ -2,6 +2,7 @@ package com.thomaswcode.decrastination.block
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
+import android.app.KeyguardManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -195,7 +196,7 @@ class FocusService : AccessibilityService() {
         // Connected (or restarted) while the phone is already unlocked and in use: the unlock it
         // missed counts, so the first-unlock Teams sync can still be offered.
         val power = getSystemService(PowerManager::class.java)
-        val keyguard = getSystemService(android.app.KeyguardManager::class.java)
+        val keyguard = getSystemService(KeyguardManager::class.java)
         if (power?.isInteractive == true && keyguard?.isKeyguardLocked != true) unlockedAt = SystemClock.elapsedRealtime()
         _connected.value = true
         Log.i(TAG, "Focus service connected")
@@ -764,7 +765,7 @@ class FocusService : AccessibilityService() {
     /** The phone on, unlocked, and not in a call: a moment the Teams sync may take the screen. */
     private fun inUse(): Boolean {
         val power = getSystemService(PowerManager::class.java)
-        val keyguard = getSystemService(android.app.KeyguardManager::class.java)
+        val keyguard = getSystemService(KeyguardManager::class.java)
         if (power?.isInteractive != true || keyguard?.isKeyguardLocked == true) return false
         return getSystemService(AudioManager::class.java)?.mode == AudioManager.MODE_NORMAL
     }

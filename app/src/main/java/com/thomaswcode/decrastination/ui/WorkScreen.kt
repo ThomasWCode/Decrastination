@@ -1,6 +1,9 @@
 package com.thomaswcode.decrastination.ui
 
 import android.app.Activity
+import android.content.Intent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,14 +16,19 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -30,16 +38,25 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.R
+import com.thomaswcode.decrastination.core.About
+import com.thomaswcode.decrastination.core.Change
+import com.thomaswcode.decrastination.core.ChangeType
+import com.thomaswcode.decrastination.core.Duplicates
 import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.longFinished
 import com.thomaswcode.decrastination.data.SourceStatus
+import com.thomaswcode.decrastination.protect.ProtectionActivity
 import com.thomaswcode.decrastination.sources.gmail.GmailThreads
+import java.io.File
+import java.time.ZoneId
+import java.util.UUID
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -80,16 +97,16 @@ fun WorkScreen(graph: AppGraph, activity: Activity, opening: String? = null, onO
     }
     val byId = state.tasks.associateBy { it.id }
     // What the plan leaves out, as the plan has it now.
-    val plan = androidx.compose.runtime.remember(state, settings, now, instructions, calendar) { graph.planning.plan(state, settings, now) }
+    val plan = remember(state, settings, now, instructions, calendar) { graph.planning.plan(state, settings, now) }
     val trouble = trouble(state, runtime, protection, now)
-    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val scope = rememberCoroutineScope()
     var said by rememberSaveable { mutableStateOf<String?>(null) }
     // A photo of homework read into tasks (NF-01): the app's, so a turn of the phone or leaving Work loses nothing.
     val photoReading by graph.photos.photoReading.collectAsStateWithLifecycle()
     val reading = photoReading?.busy == true
     LaunchedEffect(photoReading) { photoReading?.let { p -> said = if (p.busy) "Reading the photo…" else p.why } }
-    val homework = androidx.compose.runtime.remember { java.io.File(activity.cacheDir, "photos/homework.jpg").also { it.parentFile?.mkdirs() } }
-    val camera = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.TakePicture()) { taken ->
+    val homework = remember { File(activity.cacheDir, "photos/homework.jpg").also { it.parentFile?.mkdirs() } }
+    val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { taken ->
         if (taken) graph.photos.readPhotoOf(homework) else homework.delete()
     }
     // The screen's camera, for a photo of the work from a task's sheet (UI-09); what it said, about which task.
@@ -110,14 +127,14 @@ fun WorkScreen(graph: AppGraph, activity: Activity, opening: String? = null, onO
             item(key = "hint") { Hint(graph, "work", "Work is what: every task, by when it's due or by subject. Day is when: today's slots, on the first tab.") }
             // Claude's key stopped working while it's on, and what else makes the plan less than all there is (IMP-P1-007).
             model.aiUsage.keyProblem?.takeIf { settings.aiEnabled && settings.aiKeyActive }?.let { problem ->
-                item(key = "key") { KeyProblemCard(problem) { activity.startActivity(android.content.Intent(activity, SetupActivity::class.java)) } }
+                item(key = "key") { KeyProblemCard(problem) { activity.startActivity(Intent(activity, SetupActivity::class.java)) } }
             }
             if (trouble.isNotEmpty()) {
                 item(key = "trouble") {
                     TroubleCard(
                         trouble,
-                        onSetup = { activity.startActivity(android.content.Intent(activity, SetupActivity::class.java)) },
-                        onProtection = { activity.startActivity(android.content.Intent(activity, com.thomaswcode.decrastination.protect.ProtectionActivity::class.java)) },
+                        onSetup = { activity.startActivity(Intent(activity, SetupActivity::class.java)) },
+                        onProtection = { activity.startActivity(Intent(activity, ProtectionActivity::class.java)) },
                         onTeams = { scope.launch { said = graph.sync.requestTeamsSync() ?: "The Teams widget is syncing Teams" } },
                     )
                 }
@@ -127,13 +144,13 @@ fun WorkScreen(graph: AppGraph, activity: Activity, opening: String? = null, onO
             item(key = "ways") {
                 Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        androidx.compose.material3.FilterChip(selected = !bySubject, onClick = { bySubject = false }, label = { Text("By due date") })
-                        androidx.compose.material3.FilterChip(selected = bySubject, onClick = { bySubject = true }, label = { Text("By subject") })
+                        FilterChip(selected = !bySubject, onClick = { bySubject = false }, label = { Text("By due date") })
+                        FilterChip(selected = bySubject, onClick = { bySubject = true }, label = { Text("By subject") })
                     }
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        androidx.compose.material3.FilterChip(selected = only == null, onClick = { only = null }, label = { Text("All") })
+                        FilterChip(selected = only == null, onClick = { only = null }, label = { Text("All") })
                         (Source.SYNCED + Source.Own).forEach { source ->
-                            androidx.compose.material3.FilterChip(selected = only == source.name, onClick = { only = if (only == source.name) null else source.name }, label = { Text(source.label) })
+                            FilterChip(selected = only == source.name, onClick = { only = if (only == source.name) null else source.name }, label = { Text(source.label) })
                         }
                     }
                 }
@@ -151,7 +168,7 @@ fun WorkScreen(graph: AppGraph, activity: Activity, opening: String? = null, onO
             }
             val groups = if (bySubject) Groups.bySubject(open, settings.classMap, now) else Groups.byDue(open, now, zone).map { (g, t) -> g.title to t }
             // Work that looks the same from two sources (DX-15): said on each.
-            val pairs = com.thomaswcode.decrastination.core.Duplicates.candidates(state.tasks, settings.classMap, runtime.notSame)
+            val pairs = Duplicates.candidates(state.tasks, settings.classMap, runtime.notSame)
             val alike = pairs.flatMap { (a, b) -> listOf(a.id to b, b.id to a) }.groupBy({ it.first }, { it.second })
             for ((title, tasks) in groups) {
                 val key = "group-$title"
@@ -214,7 +231,7 @@ fun WorkScreen(graph: AppGraph, activity: Activity, opening: String? = null, onO
             FelixFab(activity)
             // Or photograph it (NF-01), once Claude is on to read it.
             if (settings.aiEnabled && settings.aiKeyActive) {
-                androidx.compose.material3.SmallFloatingActionButton(onClick = { if (!reading) camera.launch(androidx.core.content.FileProvider.getUriForFile(activity, "${activity.packageName}.photos", homework)) }) {
+                SmallFloatingActionButton(onClick = { if (!reading) camera.launch(FileProvider.getUriForFile(activity, "${activity.packageName}.photos", homework)) }) {
                     Icon(painterResource(R.drawable.ic_camera), contentDescription = "Photograph homework")
                 }
             }
@@ -253,7 +270,7 @@ private fun SourceTile(source: Source, status: SourceStatus, open: Int, now: Lon
 
 /** A task as a tile: its name and minutes, when it's due, its source and kind, and what's out of the ordinary as tags. */
 @Composable
-private fun TaskTile(task: TaskItem, index: Int, count: Int, now: Long, zone: java.time.ZoneId, byId: Map<String, TaskItem>, onClick: () -> Unit) {
+private fun TaskTile(task: TaskItem, index: Int, count: Int, now: Long, zone: ZoneId, byId: Map<String, TaskItem>, onClick: () -> Unit) {
     // The deadline in force (a plan's gone by gives way to the real one behind it): only a real one gone by is late (PL-14).
     val due = task.deadlineAt(now) ?: task.dueAt
     val hard = task.hardAt(now)
@@ -318,17 +335,17 @@ private fun TaskTile(task: TaskItem, index: Int, count: Int, now: Long, zone: ja
 private fun SameLine(graph: AppGraph, task: TaskItem, other: TaskItem) {
     Row(Modifier.fillMaxWidth().padding(start = 28.dp, end = 16.dp), verticalAlignment = Alignment.CenterVertically) {
         Text("Looks like the same work as “${other.title}” from ${other.source.label}. Same?", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
-        androidx.compose.material3.TextButton(onClick = {
+        TextButton(onClick = {
             graph.scope.launch {
                 graph.instructions.addOwnChange(
-                    java.util.UUID.randomUUID().toString(), "Same as “${other.title}”",
-                    com.thomaswcode.decrastination.core.About(taskId = task.id, taskTitle = task.title),
-                    com.thomaswcode.decrastination.core.Change(com.thomaswcode.decrastination.core.ChangeType.SameAs, taskId = task.id, afterTaskId = other.id),
+                    UUID.randomUUID().toString(), "Same as “${other.title}”",
+                    About(taskId = task.id, taskTitle = task.title),
+                    Change(ChangeType.SameAs, taskId = task.id, afterTaskId = other.id),
                 )
             }
         }) { Text("Same") }
-        androidx.compose.material3.TextButton(onClick = {
-            graph.scope.launch { graph.runtime.update { it.copy(notSame = (it.notSame + com.thomaswcode.decrastination.core.Duplicates.key(task.id, other.id)).distinct().takeLast(MAX_NOT_SAME)) } }
+        TextButton(onClick = {
+            graph.scope.launch { graph.runtime.update { it.copy(notSame = (it.notSame + Duplicates.key(task.id, other.id)).distinct().takeLast(MAX_NOT_SAME)) } }
         }) { Text("Different") }
     }
 }

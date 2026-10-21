@@ -3,8 +3,10 @@ package com.thomaswcode.decrastination.data
 import com.thomaswcode.decrastination.core.Fact
 import com.thomaswcode.decrastination.core.MemoryState
 import com.thomaswcode.decrastination.core.Settings
+import com.thomaswcode.decrastination.enrich.AiUsage
 import java.io.File
 import java.nio.file.Files
+import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -49,7 +51,7 @@ class MigrationTest {
         assertEquals(2, Migration.versionOf(written))
         val kept = File(dir, "toy.json.v1")
         assertEquals("""{"name":"Worksheet","count":3}""", kept.readText())
-        assertTrue(kotlin.math.abs(kept.lastModified() - now) < 2_000, "dated now")
+        assertTrue(abs(kept.lastModified() - now) < 2_000, "dated now")
     }
 
     @Test
@@ -160,7 +162,7 @@ class MigrationTest {
             "memory.json" to Shape(3, listOf(Migration(1) { it }, Migration(2) { json -> JsonObject(json + ("facts" to JsonArray(json.getValue("facts").let { it as JsonArray }.map { f -> JsonObject(f.jsonObject + ("topic" to JsonPrimitive(f.jsonObject.getValue("topic").jsonPrimitive.content.uppercase()))) }))) })),
             "model.json" to Shape(2, listOf(Migration(1) { json -> JsonObject(json + ("aiUsage" to JsonObject(json.getValue("aiUsage").jsonObject + ("spentUsd" to JsonPrimitive(json.getValue("aiUsage").jsonObject.getValue("spentUsd").jsonPrimitive.content.toDouble() * 2))))) })),
         )
-        val backup = Backup(exportedAt = now, settings = Settings(), log = ActivityLog(), memory = MemoryState(listOf(Fact("bus", "Takes the bus", 1))), aiUsage = com.thomaswcode.decrastination.enrich.AiUsage(month = "2027-01", spentUsd = 1.5))
+        val backup = Backup(exportedAt = now, settings = Settings(), log = ActivityLog(), memory = MemoryState(listOf(Fact("bus", "Takes the bus", 1))), aiUsage = AiUsage(month = "2027-01", spentUsd = 1.5))
         val read = assertNotNull(Backups.decode(Backups.encode(backup), shapes))
         assertEquals("BUS", read.memory.facts.single().topic)
         assertEquals(3.0, read.aiUsage.spentUsd, 1e-9)

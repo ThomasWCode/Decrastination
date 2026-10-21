@@ -3,7 +3,10 @@ package com.thomaswcode.decrastination.sources.gmail
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
 import com.thomaswcode.decrastination.core.Invite
+import com.thomaswcode.decrastination.ui.Format
 import java.io.ByteArrayInputStream
+import java.time.Instant
+import java.time.ZoneId
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -318,10 +321,10 @@ class MimeTest {
         assertTrue(day.allDay(LONDON))
         // Its own days, kept: in New York later it's still Monday 26th, all day, and goes to the calendar so.
         val kept = Invite.read(day.stored)!!
-        val newYork = java.time.ZoneId.of("America/New_York")
+        val newYork = ZoneId.of("America/New_York")
         assertTrue(kept.allDay(newYork))
-        assertEquals(java.time.Instant.parse("2026-10-26T00:00:00Z").toEpochMilli() to java.time.Instant.parse("2026-10-27T00:00:00Z").toEpochMilli(), kept.calendarTimes(newYork))
-        assertEquals("Mon 26 Oct, all day", com.thomaswcode.decrastination.ui.Format.invite(kept, newYork))
+        assertEquals(Instant.parse("2026-10-26T00:00:00Z").toEpochMilli() to Instant.parse("2026-10-27T00:00:00Z").toEpochMilli(), kept.calendarTimes(newYork))
+        assertEquals("Mon 26 Oct, all day", Format.invite(kept, newYork))
         assertEquals(true, Mime.invite("BEGIN:VCALENDAR\nMETHOD:CANCEL\nBEGIN:VEVENT\nDTSTART:20261016T170000Z\nEND:VEVENT\nEND:VCALENDAR", LONDON)?.cancelled)
         assertNull(Mime.invite("BEGIN:VCALENDAR\nBEGIN:VEVENT\nSUMMARY:No time\nEND:VEVENT\nEND:VCALENDAR", LONDON))
         // Kept with its task, a bar in its name made a slash.
@@ -350,7 +353,7 @@ class MimeTest {
     @Test
     fun `an all-day invite goes to the calendar at UTC midnights`() {
         val day = Invite("Sports day", Fixtures.at("2026-10-16T00:00"), Fixtures.at("2026-10-17T00:00"))
-        assertEquals(java.time.Instant.parse("2026-10-16T00:00:00Z").toEpochMilli() to java.time.Instant.parse("2026-10-17T00:00:00Z").toEpochMilli(), day.calendarTimes(LONDON))
+        assertEquals(Instant.parse("2026-10-16T00:00:00Z").toEpochMilli() to Instant.parse("2026-10-17T00:00:00Z").toEpochMilli(), day.calendarTimes(LONDON))
         val timed = Invite("Call", Fixtures.at("2026-10-16T18:00"), Fixtures.at("2026-10-16T19:00"))
         assertEquals(timed.start to timed.end, timed.calendarTimes(LONDON))
     }

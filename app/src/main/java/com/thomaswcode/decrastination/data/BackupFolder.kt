@@ -1,6 +1,7 @@
 package com.thomaswcode.decrastination.data
 
 import android.content.ContentResolver
+import android.content.ContentUris
 import android.content.ContentValues
 import android.net.Uri
 import android.os.Build
@@ -64,7 +65,7 @@ object BackupFolder {
     fun list(resolver: ContentResolver): List<Pair<String, Uri>> = runCatching {
         val projection = arrayOf(MediaStore.MediaColumns._ID, MediaStore.MediaColumns.DISPLAY_NAME)
         resolver.query(collection(), projection, "${MediaStore.MediaColumns.RELATIVE_PATH} = ?", arrayOf(PATH), "${MediaStore.MediaColumns.DATE_ADDED} ASC")?.use { c ->
-            buildList { while (c.moveToNext()) add(c.getString(1) to android.content.ContentUris.withAppendedId(collection(), c.getLong(0))) }
+            buildList { while (c.moveToNext()) add(c.getString(1) to ContentUris.withAppendedId(collection(), c.getLong(0))) }
         }.orEmpty()
     }.getOrDefault(emptyList())
 

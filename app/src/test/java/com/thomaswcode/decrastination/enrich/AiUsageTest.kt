@@ -9,8 +9,10 @@ import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Status
+import com.thomaswcode.decrastination.core.SubStep
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.yours
+import java.io.IOException
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -112,7 +114,7 @@ class AiUsageTest {
         assertEquals(KeyProblem.NoCredit, KeyProblem.of(402, "billing_error", null))
         assertNull(KeyProblem.of(400, "invalid_request_error", "max_tokens: too large"))
         assertNull(KeyProblem.of(529, "overloaded_error", "Overloaded"))
-        assertNull(KeyProblem.of(java.io.IOException("no network")))
+        assertNull(KeyProblem.of(IOException("no network")))
     }
 
     @Test
@@ -127,7 +129,7 @@ class AiUsageTest {
 
     @Test
     fun `work over an hour is cut into even sittings by time, never by what's in it`() {
-        val step = com.thomaswcode.decrastination.core.SubStep("Write the essay", 100)
+        val step = SubStep("Write the essay", 100)
         assertEquals(listOf("Write the essay" to 50, "Continue and finish: Write the essay" to 50), ReadingAnswers.fitParts(step).map { it.title to it.minutes })
         assertEquals(
             listOf("Write the essay" to 50, "Continue: Write the essay" to 50, "Continue and finish: Write the essay" to 50),

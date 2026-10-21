@@ -1,5 +1,6 @@
 package com.thomaswcode.decrastination.felix
 
+import com.anthropic.core.jsonMapper
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
 import com.thomaswcode.decrastination.core.About
@@ -876,7 +877,7 @@ class ChatTest {
         val turn = ChatPrompts.turns(messages, "", emptyMap(), LONDON, found = looked).single().second
         assertTrue("What a web search found for “Essay prize rules and dates”" in turn && "Entries close 23 October 2026; 2,000 words." in turn && "From: Essay prize; Rules" in turn, turn)
         // The tool as the live call of the 16th sent it: the basic search, three at most, from the UK.
-        val tool = com.anthropic.core.jsonMapper().writeValueAsString(searchTool(LONDON))
+        val tool = jsonMapper().writeValueAsString(searchTool(LONDON))
         for (part in listOf("\"type\":\"web_search_20250305\"", "\"name\":\"web_search\"", "\"max_uses\":3", "\"country\":\"GB\"", "\"timezone\":\"Europe/London\"", "\"type\":\"approximate\"")) {
             assertTrue(part in tool, tool)
         }

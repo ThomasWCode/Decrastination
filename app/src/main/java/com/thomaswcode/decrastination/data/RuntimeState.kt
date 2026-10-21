@@ -1,11 +1,15 @@
 package com.thomaswcode.decrastination.data
 
 import com.thomaswcode.decrastination.block.TeamsAutoSync
+import com.thomaswcode.decrastination.core.Fact
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.WindowKind
 import com.thomaswcode.decrastination.learn.CheckIn
 import com.thomaswcode.decrastination.learn.DayRecord
+import com.thomaswcode.decrastination.learn.ReviewInput
+import java.time.Instant
+import java.time.ZoneOffset
 import kotlinx.serialization.Serializable
 
 /**
@@ -79,7 +83,7 @@ data class ActivityLog(
 ) {
     fun trimmed(now: Long): ActivityLog {
         val since = now - KEEP_DAYS * 24 * 3_600_000L
-        val sinceDay = java.time.Instant.ofEpochMilli(since).atZone(java.time.ZoneOffset.UTC).toLocalDate().toString()
+        val sinceDay = Instant.ofEpochMilli(since).atZone(ZoneOffset.UTC).toLocalDate().toString()
         return ActivityLog(
             slots = slots.filter { it.at >= since },
             completions = completions.filter { it.doneAt >= since },
@@ -183,7 +187,7 @@ data class WeeklyReview(
     /** What's remembered before and after the week's tidy, when there was one (AI-21): for the Reviews page to show, and undo. */
     val memoryTidy: MemoryTidyRecord? = null,
     /** The changes it made to the settings (AI-18, LR-01), and each one's value before: next week's review reads them, and the Reviews page undoes them. */
-    val changes: List<com.thomaswcode.decrastination.learn.ReviewInput.Change> = emptyList(),
+    val changes: List<ReviewInput.Change> = emptyList(),
     val settingsBefore: Map<String, Int> = emptyMap(),
     /** The week's summary for home (NF-02), in the student's words: null till it's written. */
     val summary: String? = null,
@@ -209,7 +213,7 @@ data class WeekRollup(
 
 /** The facts remembered before a weekly tidy, and after it (AI-21). */
 @Serializable
-data class MemoryTidyRecord(val before: List<com.thomaswcode.decrastination.core.Fact>, val after: List<com.thomaswcode.decrastination.core.Fact>)
+data class MemoryTidyRecord(val before: List<Fact>, val after: List<Fact>)
 
 @Serializable
 data class BlockRecord(val at: Long, val target: String, val reason: String)

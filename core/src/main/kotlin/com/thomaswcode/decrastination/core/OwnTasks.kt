@@ -1,6 +1,7 @@
 package com.thomaswcode.decrastination.core
 
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.Transient
 
 /**
  * A task of your own as you give it (2.0.0, Q28), with the form or by asking Claude: what a source
@@ -21,7 +22,7 @@ data class OwnTask(
     /** Where it can be done (PL-15): "anywhere", a free period at school included, or "home". The form asks in phase 6. */
     val where: String = "anywhere",
     /** From the form (UI-15): its steps matched to those they were by their place alone, never by a name. */
-    @kotlinx.serialization.Transient val fromForm: Boolean = false,
+    @Transient val fromForm: Boolean = false,
 )
 
 /**
@@ -38,7 +39,7 @@ data class OwnStep(
     val where: String? = null,
     /** Its id, made when it's first stored (an instruction's, [InstructionState.withStepIds]) and kept: the task step it's laid as keeps it ([asSubStep]). */
     val id: String = "",
-    @kotlinx.serialization.Transient val wasIndex: Int? = null,
+    @Transient val wasIndex: Int? = null,
 )
 
 /** [this] with each step that has no id, or one a step before it has, given a new one ([newStepId]). */

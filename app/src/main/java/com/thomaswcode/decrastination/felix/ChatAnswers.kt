@@ -64,10 +64,10 @@ object ChatAnswers {
             val bucket = buckets.firstOrNull { it.date == day } ?: return@mapNotNull null
             val slots = bucket.slots
                 .filter { it.kind == SlotKind.Work && it.chunk?.taskId == c.taskId }
-            val laid = slots.firstOrNull { it.pinned } ?: slots.minByOrNull { kotlin.math.abs(it.start - asked) }
+            val laid = slots.firstOrNull { it.pinned } ?: slots.minByOrNull { abs(it.start - asked) }
             when {
                 laid == null -> "${at(asked).format(hm)} had no free time, nor any after it that day."
-                kotlin.math.abs(laid.start - asked) <= 60_000L -> null
+                abs(laid.start - asked) <= 60_000L -> null
                 else -> "${at(asked).format(hm)} had no free time: it's at ${at(laid.start).format(hm)}."
             }
         }.distinct()

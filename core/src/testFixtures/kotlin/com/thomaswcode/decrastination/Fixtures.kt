@@ -1,6 +1,7 @@
 package com.thomaswcode.decrastination
 
 import java.io.File
+import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.ZonedDateTime
 
@@ -15,5 +16,5 @@ object Fixtures {
     fun text(name: String): String = file(name).readText()
 
     /** Epoch millis of a London local time, "2026-10-07T22:00". */
-    fun at(local: String): Long = ZonedDateTime.of(java.time.LocalDateTime.parse(local), LONDON).toInstant().toEpochMilli()
+    fun at(local: String): Long = ZonedDateTime.of(LocalDateTime.parse(local), LONDON).toInstant().toEpochMilli()
 }

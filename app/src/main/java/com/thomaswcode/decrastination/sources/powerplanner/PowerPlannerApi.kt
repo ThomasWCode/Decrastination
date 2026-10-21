@@ -13,6 +13,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonObject
 import java.io.IOException
+import kotlinx.serialization.json.JsonObjectBuilder
 
 /**
  * Power Planner's web API, as its open-source web app uses it (docs/spec/sources.md): every
@@ -69,7 +70,7 @@ class PowerPlannerApi(private val http: Http) {
         return Timetable(response.weekOneStartsOn, response.classes.orEmpty())
     }
 
-    private fun withLogin(login: Login, more: kotlinx.serialization.json.JsonObjectBuilder.() -> Unit = {}): JsonObject = buildJsonObject {
+    private fun withLogin(login: Login, more: JsonObjectBuilder.() -> Unit = {}): JsonObject = buildJsonObject {
         putJsonObject("Login") {
             put("AccountId", login.accountId)
             put("Username", login.username)

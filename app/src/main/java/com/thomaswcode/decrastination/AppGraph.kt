@@ -4,18 +4,21 @@ import android.annotation.SuppressLint
 import android.app.admin.DevicePolicyManager
 import android.content.Context
 import android.util.Log
+import com.thomaswcode.decrastination.block.AnkiWatch
 import com.thomaswcode.decrastination.block.Focus
 import com.thomaswcode.decrastination.block.Photos
 import com.thomaswcode.decrastination.block.SlotAlarms
 import com.thomaswcode.decrastination.block.Slots
 import com.thomaswcode.decrastination.calendar.CalendarWriter
 import com.thomaswcode.decrastination.calendar.SlotCalendar
+import com.thomaswcode.decrastination.core.DayKind
 import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.InstructionStatus
 import com.thomaswcode.decrastination.core.Notes
 import com.thomaswcode.decrastination.core.OwnTask
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Reminders
+import com.thomaswcode.decrastination.core.SchoolDays
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.WallClock
@@ -237,7 +240,7 @@ class AppGraph private constructor(context: Context) {
         onWorked = { runCatching { gmailFinishes.finish(it, explicit = false) }.onFailure { e -> Log.w(TAG, "Finishing an email in Gmail failed", e) } },
         onUnworked = { runCatching { gmailFinishes.unworked(it) }.onFailure { e -> Log.w(TAG, "Taking back an email's finish failed", e) } },
         // A school day by the school calendar (BL-02): a day off blocks from the weekend's time.
-        schoolDay = { com.thomaswcode.decrastination.core.SchoolDays.kindOf(it, school.value) == com.thomaswcode.decrastination.core.DayKind.Weekday },
+        schoolDay = { SchoolDays.kindOf(it, school.value) == DayKind.Weekday },
     ) { state, s, now -> planning.plan(state, s, now) }
 
     /**
@@ -261,7 +264,7 @@ class AppGraph private constructor(context: Context) {
     val slots = Slots(this)
 
     /** Time in AnkiDroid as work (NF-03, DX-11). */
-    val anki = com.thomaswcode.decrastination.block.AnkiWatch(this)
+    val anki = AnkiWatch(this)
 
     /** What Felix's service asks of Android: his notification, and the work and alarms that outlive what asked. */
     private val felixPorts = AndroidFelixPorts(app)

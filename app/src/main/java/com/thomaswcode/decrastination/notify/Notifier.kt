@@ -12,6 +12,7 @@ import com.thomaswcode.decrastination.block.BlockPolicy
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.WallClock
 import com.thomaswcode.decrastination.data.HeldNotification
+import com.thomaswcode.decrastination.data.HeldTap
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.RuntimeState
 import java.time.Instant
@@ -75,7 +76,7 @@ class Notifier(
     }
 
     /** What a notification is, as holding it back needs: its [channel], and what it says and does. */
-    data class Read(val channel: String, val title: String, val text: String, val taps: List<com.thomaswcode.decrastination.data.HeldTap>)
+    data class Read(val channel: String, val title: String, val text: String, val taps: List<HeldTap>)
 
     /** Whether the app may post at all. */
     fun allowed(): Boolean = tray.allowed()

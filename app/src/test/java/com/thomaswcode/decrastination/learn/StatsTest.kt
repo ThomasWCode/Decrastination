@@ -13,7 +13,10 @@ import com.thomaswcode.decrastination.data.ProtectionRecord
 import com.thomaswcode.decrastination.data.SlotOutcome
 import com.thomaswcode.decrastination.data.SlotRecord
 import com.thomaswcode.decrastination.core.WindowKind
+import com.thomaswcode.decrastination.data.WeekRollup
+import java.time.DayOfWeek
 import java.time.LocalDate
+import java.time.ZoneId
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -127,7 +130,7 @@ class StatsTest {
     fun `a slot counts on the day it was laid, as recorded, whatever the zone now`() {
         // Laid on the 9th at 23:30 in London, read where it's the 10th already: the 9th's.
         val late = slot("2026-10-09T23:30", SlotOutcome.Kept)
-        val tokyo = java.time.ZoneId.of("Asia/Tokyo")
+        val tokyo = ZoneId.of("Asia/Tokyo")
         val summary = Stats.summary(ActivityLog(slots = listOf(late)), Fixtures.at("2026-10-09T23:59"), tokyo)
         assertEquals(30, summary.days.single { it.date == LocalDate.parse("2026-10-09") }.slotMin)
         assertEquals(0, summary.days.single { it.date == LocalDate.parse("2026-10-10") }.slotMin)
@@ -155,8 +158,8 @@ class StatsTest {
         val kept = (0 until 12).map { i -> slot("2026-10-0${5 + i % 5}T1${7 + i % 2}:00", SlotOutcome.Kept) }
         val log = ActivityLog(slots = kept + slot("2026-10-08T22:00", SlotOutcome.Kept) + slot("2026-10-08T17:00", SlotOutcome.Missed))
         val heat = Stats.heat(log, now, LONDON)
-        assertEquals(1, heat[java.time.DayOfWeek.THURSDAY to 22]?.first)
-        assertEquals(1, heat[java.time.DayOfWeek.THURSDAY to 17]?.second)
+        assertEquals(1, heat[DayOfWeek.THURSDAY to 22]?.first)
+        assertEquals(1, heat[DayOfWeek.THURSDAY to 17]?.second)
         val hours = Stats.suggestedWeekdayHours(heat)!!
         assertEquals(17 * 60, hours.startMin)
         assertEquals(19 * 60, hours.endMin)
@@ -172,7 +175,7 @@ class StatsTest {
             blocks = listOf(BlockRecord(Fixtures.at("2026-10-06T17:10"), "com.example", "x")),
         )
         val week = Stats.rollup(log, LocalDate.parse("2026-10-05"), LONDON)
-        assertEquals(com.thomaswcode.decrastination.data.WeekRollup("2026-10-05", 30, 1, 1, 1, 1, 0, 1, 1), week)
+        assertEquals(WeekRollup("2026-10-05", 30, 1, 1, 1, 1, 0, 1, 1), week)
         // A rollup from five months back: in a 26-week period's totals, not a 2-week one's.
         val old = week.copy(week = "2026-05-04", minutes = 100, finished = 3)
         val withOld = log.copy(weeks = listOf(old))
@@ -210,17 +213,17 @@ class StatsTest {
 
     @Test
     fun `the record as CSV, cells with commas, quotes and line breaks quoted`() {
-        assertEquals("plain", com.thomaswcode.decrastination.learn.Export.cell("plain"))
-        assertEquals("\"a, b\"", com.thomaswcode.decrastination.learn.Export.cell("a, b"))
-        assertEquals("\"say \"\"hi\"\"\"", com.thomaswcode.decrastination.learn.Export.cell("say \"hi\""))
-        assertEquals("\"two\nlines\"", com.thomaswcode.decrastination.learn.Export.cell("two\nlines"))
+        assertEquals("plain", Export.cell("plain"))
+        assertEquals("\"a, b\"", Export.cell("a, b"))
+        assertEquals("\"say \"\"hi\"\"\"", Export.cell("say \"hi\""))
+        assertEquals("\"two\nlines\"", Export.cell("two\nlines"))
         // What a spreadsheet would take for a formula, shown as text; numbers as they are.
-        assertEquals("'=HYPERLINK(\"x\")".let { "\"" + it.replace("\"", "\"\"") + "\"" }, com.thomaswcode.decrastination.learn.Export.cell("=HYPERLINK(\"x\")"))
-        assertEquals("'+44 7700", com.thomaswcode.decrastination.learn.Export.cell("+44 7700"))
-        assertEquals("'@SUM(A1)", com.thomaswcode.decrastination.learn.Export.cell("@SUM(A1)"))
-        assertEquals("-5", com.thomaswcode.decrastination.learn.Export.cell("-5"))
-        assertEquals("0.75", com.thomaswcode.decrastination.learn.Export.cell("0.75"))
-        val files = com.thomaswcode.decrastination.learn.Export.csv(ActivityLog(completions = listOf(completion("a", "2026-10-06T18:00", null))), Calibration(), LONDON)
+        assertEquals("'=HYPERLINK(\"x\")".let { "\"" + it.replace("\"", "\"\"") + "\"" }, Export.cell("=HYPERLINK(\"x\")"))
+        assertEquals("'+44 7700", Export.cell("+44 7700"))
+        assertEquals("'@SUM(A1)", Export.cell("@SUM(A1)"))
+        assertEquals("-5", Export.cell("-5"))
+        assertEquals("0.75", Export.cell("0.75"))
+        val files = Export.csv(ActivityLog(completions = listOf(completion("a", "2026-10-06T18:00", null))), Calibration(), LONDON)
         assertEquals(listOf("completions.csv", "slots.csv", "days.csv", "blocks.csv", "felix.csv", "calibration.csv"), files.keys.toList())
         assertEquals("task,title,source,kind,class,estimate_min,worked_min,due,hard_deadline,first_seen,done,assessment,note,by_hand,photo,your_estimate", files.getValue("completions.csv").lineSequence().first())
         assertEquals("a,a,Teams,Homework,,40,0,,true,2026-10-01T09:00,2026-10-06T18:00,,,false,false,false", files.getValue("completions.csv").lines()[1])

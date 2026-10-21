@@ -15,9 +15,11 @@ import com.thomaswcode.decrastination.core.SlotState
 import com.thomaswcode.decrastination.core.SlotKind
 import com.thomaswcode.decrastination.core.Slot
 import com.thomaswcode.decrastination.core.DayWindow
+import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.FixedClock
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.MissedSlot
+import com.thomaswcode.decrastination.core.OwnStep
 import com.thomaswcode.decrastination.core.Planner
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Status
@@ -105,7 +107,7 @@ class FocusTest {
         // 17 Oct: 40 minutes of the app's, Felix's steps and total of 60 at a pace of 1.5; and two hours of your own reckoning.
         val base = task("paced", effort = 40, steps = listOf(SubStep("Past paper", 60)))
         val paced = base.copy( status = Status.Done, doneAt = clock.time,
-        ).yours(steps = listOf(com.thomaswcode.decrastination.core.OwnStep("Past paper", 60)), minutes = 60, pacedFrom = 40, pacedHash = com.thomaswcode.decrastination.core.Enrichments.inputHash(base))
+        ).yours(steps = listOf(OwnStep("Past paper", 60)), minutes = 60, pacedFrom = 40, pacedHash = Enrichments.inputHash(base))
         val yours = task("yours", effort = 40).copy( status = Status.Done, doneAt = clock.time).yours(minutes = 120)
         // #50's review: estimated anew at 80 since, its content the same (read again for newer prompts):
         // still measured against the 40 Felix worked from. Its content changed: as a total of yours.
@@ -124,7 +126,7 @@ class FocusTest {
         // #49's review: 40 minutes of the app's at a pace of 1.5 is an hour; your steps and minutes say 80.
         learning.update { it.copy(calibration = Calibration(multipliers = mapOf(Calibration.key(Kind.Homework, null) to 1.5))) }
         val steps = listOf(SubStep("Past paper", 80))
-        val given = task("hw", effort = 40, steps = steps).copy( status = Status.Done, doneAt = clock.time).yours(steps = listOf(com.thomaswcode.decrastination.core.OwnStep("Past paper", 80)), minutes = 80)
+        val given = task("hw", effort = 40, steps = steps).copy( status = Status.Done, doneAt = clock.time).yours(steps = listOf(OwnStep("Past paper", 80)), minutes = 80)
         focus.onCompleted(listOf(given))
         // The less of the two, each in its own scale: the app's hour, a third of it.
         assertEquals(20 * 60_000L, focus.creditLeftMs())

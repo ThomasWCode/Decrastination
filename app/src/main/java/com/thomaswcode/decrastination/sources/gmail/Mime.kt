@@ -8,10 +8,12 @@ import java.time.DayOfWeek
 import java.time.Duration
 import java.time.LocalDate
 import java.time.LocalDateTime
+import java.time.Period
 import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
+import java.time.temporal.TemporalAdjusters
 import java.util.Base64
 import java.util.Locale
 
@@ -180,7 +182,7 @@ object Mime {
         val start = time(first, zone, zones) ?: return null
         val end = props["DTEND"]?.let { time(it, zone, zones) }?.takeIf { it.isAfter(start) }
             // A duration of days or weeks (no time in it) is that many days on the calendar, whatever the clocks do.
-            ?: props["DURATION"]?.let { d -> runCatching { d.value.trim().let { v -> if ('T' in v) start.plus(Duration.parse(v)) else start.plus(java.time.Period.parse(v)) } }.getOrNull() }?.takeIf { it.isAfter(start) }
+            ?: props["DURATION"]?.let { d -> runCatching { d.value.trim().let { v -> if ('T' in v) start.plus(Duration.parse(v)) else start.plus(Period.parse(v)) } }.getOrNull() }?.takeIf { it.isAfter(start) }
             ?: if (dateOnly(first)) start.plusDays(1) else start.plusHours(1)
         return Invite(
             summary = props["SUMMARY"]?.value?.let(::unescaped).orEmpty(),
@@ -280,7 +282,7 @@ object Mime {
             fun lastStart(local: LocalDateTime): LocalDateTime? {
                 if (month == null || ordinal == null || day == null) return start.takeIf { it <= local }
                 return listOf(local.year, local.year - 1).asSequence()
-                    .map { y -> LocalDate.of(y, month, 1).with(java.time.temporal.TemporalAdjusters.dayOfWeekInMonth(ordinal, day)).atTime(start.toLocalTime()) }
+                    .map { y -> LocalDate.of(y, month, 1).with(TemporalAdjusters.dayOfWeekInMonth(ordinal, day)).atTime(start.toLocalTime()) }
                     .firstOrNull { it <= local && it >= start }
             }
         }
