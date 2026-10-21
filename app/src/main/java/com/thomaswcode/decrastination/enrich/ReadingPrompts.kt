@@ -31,7 +31,7 @@ object ReadingPrompts {
      * admin in the step it belongs to); 5: a piece of work whole, never split by what's in it, the
      * app cutting one over an hour into sittings (3.1.2, the same day); 6: whole up to a task's most,
      * the schema saying so (3.1.2's review, before it was installed); 7: a long text's summary, for
-     * Felix (3.2.0, D-93).
+     * Felix (3.2.0, D-93); 8: the profile saying how long a passing fact or rule holds (4.2.0, D-103).
      */
     const val VERSION = 8
 
