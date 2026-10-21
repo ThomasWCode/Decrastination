@@ -440,10 +440,11 @@ object Backups {
         value == "free" || value == "busy" || value.removePrefix("load:").takeIf { it != value }?.toIntOrNull()?.let { it in 0..DAY_MIN } == true
 
     /**
-     * The instructions to add from a backup's ([backed], those in use), beside those [here], each as
+     * The instructions to add from a backup's ([backed]), beside those [here]: those in use each as
      * applying it here would go, in the order they were applied: one already here isn't added; one
      * that would have tasks wait for each other in a circle comes back unclear, saying so. The rest,
-     * due dates as well, armed or not (D-46), are in use at once.
+     * due dates as well, armed or not (D-46), are in use at once. Those not in use (a reset's copy
+     * holds them) come back as they were, after them: one being read is read when Claude can be asked.
      */
     fun restoredInstructions(backed: List<Instruction>, here: List<Instruction>): List<Instruction> {
         val added = mutableListOf<Instruction>()
@@ -455,6 +456,9 @@ object Backups {
             } else {
                 instruction
             }
+        }
+        for (instruction in backed.filter { it.state != InstructionStatus.Applied }) {
+            if ((here + added).none { it.id == instruction.id }) added += instruction
         }
         return added
     }
