@@ -124,6 +124,7 @@ import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.R
 import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.ChatActs
+import com.thomaswcode.decrastination.core.GmailWrites
 import com.thomaswcode.decrastination.core.ChatArchive
 import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.core.ChatSummary
@@ -571,6 +572,7 @@ private val EXAMPLES = listOf(
     "I'm out on Saturday evening from 7",
     "Remind me at 7 to call gran",
     "Note on the essay: use the second source",
+    "I'm done with the trip email",
 )
 
 /**
@@ -1155,6 +1157,8 @@ private fun Acts(graph: AppGraph, message: ChatMessage, live: Boolean) {
     val settings by graph.settings.state.collectAsStateWithLifecycle()
     val chat by graph.chat.state.collectAsStateWithLifecycle()
     val felix by graph.stores.felix.state.collectAsStateWithLifecycle()
+    // A starred email's finish while it stands (Stage 11): its Done's Undo takes it back.
+    val gmail by graph.gmailFinishes.state.collectAsStateWithLifecycle()
     // Today's kept pieces (G1), as the log changes, and the day.
     val log by graph.log.state.collectAsStateWithLifecycle()
     val today by produceState(graph.focus.today()) {
@@ -1181,7 +1185,7 @@ private fun Acts(graph: AppGraph, message: ChatMessage, live: Boolean) {
             )
             when {
                 act.undone -> Text("Undone", style = MaterialTheme.typography.labelMedium, color = quiet, modifier = Modifier.padding(horizontal = 12.dp))
-                live && ChatActs.canUndo(act, tasks.tasks, settings, chat.messages, felix.notes, felix.reminders, kept, messageId = message.id, now = graph.clock.now(), dayStart = dayStart, readAt = { s -> tasks.status(s).lastSuccessAt }) -> TextButton(onClick = { scope.launch { said = graph.conversation.undoAct(message.id, i) } }) { Text("Undo") }
+                live && ChatActs.canUndo(act, tasks.tasks, settings, chat.messages, felix.notes, felix.reminders, kept, messageId = message.id, now = graph.clock.now(), dayStart = dayStart, finishing = GmailWrites.standing(gmail.writes), readAt = { s -> tasks.status(s).lastSuccessAt }) -> TextButton(onClick = { scope.launch { said = graph.conversation.undoAct(message.id, i) } }) { Text("Undo") }
             }
         }
     }
