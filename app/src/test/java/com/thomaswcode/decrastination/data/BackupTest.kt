@@ -306,7 +306,7 @@ class BackupTest {
 
     @Test
     fun `format 9 keeps the receipts of writes to Gmail, restored by id beside this phone's, never a write still to make`() {
-        val made = GmailWrite("w1", "gmail:t1", "Trip form", "t1", 3, notBefore = 4, flagged = listOf(101L), inbox = listOf(101L), unstarred = true, archived = true, doneAt = 5)
+        val made = GmailWrite("w1", "gmail:t1", "Trip form", "t1", 3, notBefore = 4, flagged = listOf("101"), inbox = listOf("101"), unstarred = true, archived = true, doneAt = 5)
         val pending = GmailWrite("w2", "gmail:t2", "Club email", "t2", 6, notBefore = 7)
         val backup = Backup(exportedAt = 1, settings = Settings(), log = ActivityLog(), gmailWrites = listOf(made))
         val back = Backups.decode(Backups.encode(backup), emptyMap())!!
@@ -317,7 +317,10 @@ class BackupTest {
         // This phone's own stand; the backup's receipts it hasn't come back, never a pending one.
         val here = listOf(made.copy(title = "here"), pending)
         assertEquals(here, Backups.mergedWrites(here, listOf(made, pending.copy(id = "w3"))))
-        assertEquals(listOf(pending, made), Backups.mergedWrites(listOf(pending), listOf(made)))
+        // In the order they were made: a backup's older receipt never comes after this phone's newer for its task.
+        assertEquals(listOf(made, pending), Backups.mergedWrites(listOf(pending), listOf(made)))
+        val newer = made.copy(id = "w9", at = 50, notBefore = 51, doneAt = 52)
+        assertEquals("w9", Backups.mergedWrites(listOf(newer), listOf(made)).last { it.taskId == "gmail:t1" }.id)
     }
 
     @Test

@@ -53,14 +53,14 @@ class GmailWriteWorker(context: Context, params: WorkerParameters) : CoroutineWo
         /** The first wait after a failed try; doubled each time, as WorkManager does, to its cap of five hours. */
         private const val BACKOFF_MIN = 30L
 
-        /** Set to run at [at], measured from [now], once there's a connection. */
-        fun schedule(context: Context, at: Long, now: Long) {
+        /** Set to run at [at], measured from [now], once there's a connection: in place of the one set before, or, by [policy] KEEP, only where none is set or running. */
+        fun schedule(context: Context, at: Long, now: Long, policy: ExistingWorkPolicy = ExistingWorkPolicy.REPLACE) {
             val request = OneTimeWorkRequestBuilder<GmailWriteWorker>()
                 .setInitialDelay((at - now).coerceAtLeast(0), TimeUnit.MILLISECONDS)
                 .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
                 .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, BACKOFF_MIN, TimeUnit.MINUTES)
                 .build()
-            WorkManager.getInstance(context).enqueueUniqueWork(NAME, ExistingWorkPolicy.REPLACE, request)
+            WorkManager.getInstance(context).enqueueUniqueWork(NAME, policy, request)
         }
     }
 }
@@ -73,6 +73,8 @@ class AndroidGmailPorts(
     private val syncNow: (Set<Source>) -> Unit,
 ) : GmailFinishes.Ports {
     override fun schedule(at: Long) = GmailWriteWorker.schedule(context, at, clock.now())
+
+    override fun ensureScheduled(at: Long) = GmailWriteWorker.schedule(context, at, clock.now(), ExistingWorkPolicy.KEEP)
 
     override fun syncGmail() = syncNow(setOf(Source.Gmail))
 

@@ -23,12 +23,15 @@ data class GmailWrite(
     val notBefore: Long? = null,
     /** On an Undo: the finish it takes back. */
     val reverseOf: String? = null,
+    /** A finish by your word (Felix's done, the sheet's Finish), not by its work: a keep or a tick taken back doesn't take it back. */
+    val explicit: Boolean = false,
     /**
      * Which of its messages were starred, and which in the inbox, before a finish changed anything, as Gmail's
-     * message ids (X-GM-MSGID: a UIDVALIDITY change renumbers UIDs, not these): what an Undo puts back.
+     * message ids (X-GM-MSGID, an unsigned 64-bit number kept as its digits: a UIDVALIDITY change renumbers UIDs,
+     * not these): what an Undo puts back.
      */
-    val flagged: List<Long>? = null,
-    val inbox: List<Long>? = null,
+    val flagged: List<String>? = null,
+    val inbox: List<String>? = null,
     /** Each command's own success (a finish's star taken off and inbox left; an Undo's put back), so a retry goes on from the one that failed, and a failure says what state the mailbox is in. */
     val unstarred: Boolean = false,
     val archived: Boolean = false,
@@ -59,20 +62,24 @@ object GmailWrites {
     /** A finish waiting for your OK: the very first. */
     fun awaiting(write: GmailWrite): Boolean = pending(write) && write.notBefore == null
 
-    /** The tasks whose finish stands (their newest write a finish, not taken back): what an Undo can take back. */
-    fun standing(writes: List<GmailWrite>): Set<String> = writes.map { it.taskId }.toSet().filterTo(HashSet()) { latest(writes, it)?.reverseOf == null }
+    /** The finishes that stand, by their ids (each task's newest write, a finish, not taken back): what an act's Undo can take back. */
+    fun standing(writes: List<GmailWrite>): Set<String> = writes.map { it.taskId }.toSet().mapNotNullTo(HashSet()) { latest(writes, it)?.takeIf { w -> w.reverseOf == null }?.id }
 
     /** [taskId]'s newest write. */
     fun latest(writes: List<GmailWrite>, taskId: String): GmailWrite? = writes.lastOrNull { it.taskId == taskId }
 
     /**
      * [writes] with [write], a finish, journaled: to go after the grace from its [GmailWrite.at] where a finish was
-     * OK'd before ([confirmed]), else waiting for your OK. Null where [write]'s task has a finish pending already, so a
-     * second tick doesn't write twice.
+     * OK'd before ([confirmed]), else waiting for your OK. Null where [write]'s task has a finish standing: pending, or
+     * made with no Gmail read since ([readAt], the source's last) to show it starred again, so a second finish
+     * doesn't read the conversation as the first left it and take the place of its receipt.
      */
-    fun finish(writes: List<GmailWrite>, write: GmailWrite, confirmed: Boolean): List<GmailWrite>? {
+    fun finish(writes: List<GmailWrite>, write: GmailWrite, confirmed: Boolean, readAt: Long? = null): List<GmailWrite>? {
         val last = latest(writes, write.taskId)
-        if (last != null && last.reverseOf == null && pending(last)) return null
+        if (last != null && last.reverseOf == null) {
+            if (pending(last)) return null
+            if (!last.gaveUp && (readAt == null || readAt <= last.doneAt!!)) return null
+        }
         return writes + write.copy(notBefore = if (confirmed) write.at + GRACE_MS else null, reverseOf = null)
     }
 
@@ -82,8 +89,11 @@ object GmailWrites {
      * touched (the worker, finding it gone, stops before any change); one that has, an Undo journaled after it ([id]) to
      * go at once, which puts back what it took. Null where there's nothing to take back.
      */
-    fun undo(writes: List<GmailWrite>, taskId: String, now: Long, id: String): List<GmailWrite>? {
+    fun undo(writes: List<GmailWrite>, taskId: String, now: Long, id: String, writeId: String? = null, byWork: Boolean = false): List<GmailWrite>? {
         val last = latest(writes, taskId)?.takeIf { it.reverseOf == null } ?: return null
+        // Only the finish asked for ([writeId]: an act's own), and never one by your word for a keep or a tick taken back ([byWork]).
+        if (writeId != null && last.id != writeId) return null
+        if (byWork && last.explicit) return null
         if (last.flagged == null) return writes - last
         return writes + last.copy(id = id, at = now, notBefore = now, reverseOf = last.id, flagged = null, inbox = null, unstarred = false, archived = false, tries = 0, lastError = null, doneAt = null, gaveUp = false)
     }
@@ -106,8 +116,8 @@ object GmailWrites {
     fun refuse(writes: List<GmailWrite>): List<GmailWrite> = writes.filterNot(::awaiting)
 
     /** What an Undo [write] puts back, from the finish it takes back ([writes]): the starred messages where that unstarred them, and the inbox's where that archived them; none where it changed neither. */
-    fun toRestore(writes: List<GmailWrite>, write: GmailWrite): Pair<List<Long>, List<Long>> {
-        val finish = writes.firstOrNull { it.id == write.reverseOf } ?: return emptyList<Long>() to emptyList()
+    fun toRestore(writes: List<GmailWrite>, write: GmailWrite): Pair<List<String>, List<String>> {
+        val finish = writes.firstOrNull { it.id == write.reverseOf } ?: return emptyList<String>() to emptyList()
         return (if (finish.unstarred) finish.flagged.orEmpty() else emptyList()) to (if (finish.archived) finish.inbox.orEmpty() else emptyList())
     }
 
@@ -123,8 +133,14 @@ object GmailWrites {
     /** What an error's kept to. */
     const val MAX_ERROR = 200
 
-    /** Receipts let go once [RECEIPT_MS] old at [now], as their Undo can't stand; one given up kept till it's sorted ([sorted]). */
-    fun prune(writes: List<GmailWrite>, now: Long): List<GmailWrite> = writes.filterNot { w -> w.doneAt != null && !w.gaveUp && now - w.doneAt >= RECEIPT_MS }
+    /**
+     * Receipts let go once [RECEIPT_MS] old at [now], as their Undo can't stand; one given up kept till it's sorted
+     * ([sorted]), and one an Undo still to make takes back kept for it, as it says what to put back.
+     */
+    fun prune(writes: List<GmailWrite>, now: Long): List<GmailWrite> {
+        val needed = writes.filter { it.reverseOf != null && pending(it) }.mapNotNullTo(HashSet()) { it.reverseOf }
+        return writes.filterNot { w -> w.doneAt != null && !w.gaveUp && w.id !in needed && now - w.doneAt >= RECEIPT_MS }
+    }
 
     /** *It's sorted*: [taskId]'s given-up writes let go. */
     fun sorted(writes: List<GmailWrite>, taskId: String): List<GmailWrite> = writes.filterNot { it.taskId == taskId && it.gaveUp }
@@ -159,10 +175,11 @@ object GmailWrites {
     fun state(writes: List<GmailWrite>, taskId: String): State {
         val last = latest(writes, taskId) ?: return State.None
         return when {
+            // An Undo given up as much as a finish: said, with It's sorted.
+            last.gaveUp -> State.GaveUp
             last.reverseOf != null -> State.TakenBack
             awaiting(last) -> State.Awaiting
             pending(last) -> State.Going
-            last.gaveUp -> State.GaveUp
             else -> State.Made
         }
     }
@@ -172,7 +189,9 @@ object GmailWrites {
         val title = "“${write.title}”"
         val why = write.lastError?.let { " ($it)" }.orEmpty()
         return when {
-            write.reverseOf != null -> "Couldn't star $title again in Gmail$why: star it there if you want it back."
+            write.reverseOf != null && write.unstarred && !write.archived -> "Starred $title again in Gmail but couldn't put it back in the inbox$why: it's still archived."
+            write.reverseOf != null && !write.unstarred && write.archived -> "Couldn't star $title again in Gmail$why: star it there if you want it starred."
+            write.reverseOf != null -> "Couldn't star $title again or put it back in the inbox in Gmail$why: it's as the finish left it."
             write.unstarred && !write.archived -> "Unstarred $title in Gmail but couldn't archive it$why: it's still in the inbox."
             !write.unstarred && write.archived -> "Archived $title in Gmail but couldn't unstar it$why: it's still starred."
             else -> "Couldn't unstar $title in Gmail$why: it's still starred."

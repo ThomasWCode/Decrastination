@@ -44,21 +44,24 @@ class GmailFinishesTest {
 
     /** What Android was asked: the worker's runs, Gmail reads, notifications said and taken away. */
     private val scheduled = mutableListOf<Long>()
+    private val ensured = mutableListOf<Long>()
     private var synced = 0
     private val said = mutableListOf<String>()
     private val sorted = mutableListOf<String>()
     private val ports = object : GmailFinishes.Ports {
         override fun schedule(at: Long) { scheduled += at }
+        override fun ensureScheduled(at: Long) { ensured += at }
         override fun syncGmail() { synced++ }
         override fun gaveUp(write: GmailWrite, words: String) { said += words }
         override fun sorted(write: GmailWrite) { sorted += write.threadId }
     }
     private var ids = 0
-    private val finishes = GmailFinishes(writes, { settings }, { tasks[it] }, { 1.0 }, clock, ports) { "w${++ids}" }
+    private var gmailRead: Long? = null
+    private val finishes = GmailFinishes(writes, { settings }, { tasks[it] }, { 1.0 }, clock, ports, readAt = { gmailRead }) { "w${++ids}" }
 
     /** Gmail, faked: the conversation's two messages (the first starred, both in the inbox), what was stored, and failures to make. */
     private inner class FakeGmail : GmailWriter {
-        val messages = mutableListOf(GmailWriter.Message(11, 101, starred = true, inbox = true), GmailWriter.Message(12, 102, starred = false, inbox = true))
+        val messages = mutableListOf(GmailWriter.Message(11, "101", starred = true, inbox = true), GmailWriter.Message(12, "102", starred = false, inbox = true))
         val stored = mutableListOf<Pair<List<Long>, Change>>()
         var failing: Change? = null
         var offline = false
@@ -102,9 +105,31 @@ class GmailFinishesTest {
         assertFalse(finishes.write(gmail))
         assertEquals(listOf(listOf(11L) to Change.Unstar, listOf(11L, 12L) to Change.Archive), gmail.stored)
         val receipt = finishes.value.single()
-        assertEquals(listOf(101L) to listOf(101L, 102L), receipt.flagged to receipt.inbox)
+        assertEquals(listOf("101") to listOf("101", "102"), receipt.flagged to receipt.inbox)
         assertTrue(receipt.unstarred && receipt.archived && receipt.doneAt == clock.time)
         assertEquals(1, synced)
+        // Still open, as its read hasn't come: a second finish writes nothing, till a read shows it starred again.
+        assertEquals(GmailFinishes.Finish.Pending, finishes.finish(email.id, explicit = true))
+        gmailRead = clock.time + 1
+        clock.time += 2
+        assertEquals(GmailFinishes.Finish.Going, finishes.finish(email.id, explicit = true))
+    }
+
+    @Test
+    fun `a write journaled when a stop came before its worker was set is set going at the next start, one set or running left be`() = runBlocking {
+        writes.update { it.copy(writes = listOf(GmailWrite("w9", email.id, email.title, "t1", clock.time, notBefore = clock.time + GmailWrites.GRACE_MS))) }
+        finishes.rearm()
+        assertEquals(listOf(clock.time + GmailWrites.GRACE_MS), ensured)
+        assertTrue(scheduled.isEmpty())
+    }
+
+    @Test
+    fun `his act's Undo takes back its own finish, and a keep taken back leaves one by your word`() = runBlocking {
+        finishes.finish(email.id, explicit = true)
+        val id = finishes.latestFinish(email.id)
+        assertFalse(finishes.unfinish(email.id, byWork = true))
+        assertFalse(finishes.unfinish(email.id, writeId = "another"))
+        assertTrue(finishes.unfinish(email.id, writeId = id))
     }
 
     @Test

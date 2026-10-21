@@ -36,12 +36,17 @@ class GmailFinishes(
     private val multiplier: (TaskItem) -> Double,
     private val clock: WallClock,
     private val ports: Ports,
+    /** When Gmail was last read whole: a finish made, then read with its task open, was starred again. */
+    private val readAt: () -> Long? = { null },
     private val newId: () -> String = { UUID.randomUUID().toString() },
 ) {
     /** What Android does for it. */
     interface Ports {
         /** The writes' worker set to run at [at], or once there's a connection after it, in place of any set before. */
         fun schedule(at: Long)
+
+        /** As [schedule], but only where no worker is set or running. */
+        fun ensureScheduled(at: Long)
 
         /** A Gmail-only read asked for now, so a finished email's task closes as its source says. */
         fun syncGmail()
@@ -91,7 +96,7 @@ class GmailFinishes(
         val now = clock.now()
         var made = false
         writes.update { store ->
-            GmailWrites.finish(store.writes, GmailWrite(newId(), task.id, task.title, task.sourceId, now), confirmed)
+            GmailWrites.finish(store.writes, GmailWrite(newId(), task.id, task.title, task.sourceId, now, explicit = explicit), confirmed, readAt())
                 ?.let { made = true; store.copy(writes = GmailWrites.prune(it, now)) } ?: store
         }
         if (!made) return Finish.Pending
@@ -102,16 +107,29 @@ class GmailFinishes(
     }
 
     /**
-     * [taskId]'s finish taken back (an Undo, a keep or a tick taken back): dropped where it hasn't read the
-     * conversation, so Gmail's never touched; after that, a write that puts back what it took, set going at once.
-     * Whether there was one to take back.
+     * [taskId]'s finish taken back: dropped where it hasn't read the conversation, so Gmail's never touched; after
+     * that, a write that puts back what it took, set going at once. Only [writeId] where it's given (an act's own
+     * finish, not a newer one); and, [byWork] (a keep or a tick taken back), never one by your word. Whether there
+     * was one to take back.
      */
-    suspend fun unfinish(taskId: String): Boolean {
+    suspend fun unfinish(taskId: String, writeId: String? = null, byWork: Boolean = false): Boolean {
         val now = clock.now()
         var changed = false
-        writes.update { store -> GmailWrites.undo(store.writes, taskId, now, newId())?.let { changed = true; store.copy(writes = it) } ?: store }
+        writes.update { store -> GmailWrites.undo(store.writes, taskId, now, newId(), writeId, byWork)?.let { changed = true; store.copy(writes = it) } ?: store }
         if (changed) GmailWrites.wake(value)?.let(ports::schedule)
         return changed
+    }
+
+    /** [taskId]'s finish that stands, by its id: what an act of his made, for its Undo to take back that one. */
+    fun latestFinish(taskId: String): String? = GmailWrites.latest(value, taskId)?.takeIf { it.reverseOf == null }?.id
+
+    /**
+     * The worker set again for what's journaled and due: at a start, as a stop may have come between a finish's
+     * journal and its worker. One set or running already is left as it is: WorkManager may have started the app to
+     * run it, and a failed try's wait isn't cut short.
+     */
+    fun rearm() {
+        GmailWrites.wake(value)?.let(ports::ensureScheduled)
     }
 
     /** *Carry on* (Q18's sheet): every finish waiting for your OK goes after the grace from now. Kept in the hints by the screen. */
