@@ -51,6 +51,8 @@ class GoldenPromptsTest {
             put("$name.schema.json", pretty(json(schema)))
         }
         prompt("chat", ChatPrompts.system(SETTINGS, YEAR), ChatPrompts.SCHEMA)
+        // With finishing emails in Gmail switched off (Stage 11): an email's done is then its source's, as Teams' is.
+        put("chat-gmail-off.txt", ChatPrompts.system(SETTINGS.copy(gmailFinishes = false), YEAR))
         prompt("instruction", InstructionPrompts.system(YEAR), InstructionPrompts.SCHEMA)
         prompt("photo-check", PhotoChecker.system(YEAR), PhotoChecker.SCHEMA)
         prompt("review", ReviewInput.system(YEAR), ReviewInput.schema())
