@@ -93,6 +93,9 @@ import kotlinx.serialization.json.JsonPrimitive
  *   holds your tasks' text, to pull into `private/` and delete.
  * - `chat-ask --es text "<words>"`: a message to *Ask Claude*, as sent on the phone (a paid call),
  *   logging Claude's reply; `chat-clear` empties the chat, as its menu's *Clear the chat* does.
+ * - `gmail-finishes --ez on false` (or `true`): finishing emails in Gmail switched off or on, as
+ *   Settings → Sources → Gmail's switch is; `setting --es name <name> --es value <value>` changes one
+ *   of the settings Felix may change.
  * - `ai-check --es base http://127.0.0.1:8089`: one model call per job through the real client
  *   to a stand-in server (`scripts/claude_stub.py`, `adb reverse` to the PC), with a dummy key, logging what it reads back.
  *   Nothing reaches Anthropic and nothing is stored: it checks the client works on the phone.
@@ -311,6 +314,13 @@ class CommandActivity : Activity() {
                 var said: String? = null
                 graph.protection.changeSettings { s -> FelixSettings.set(s, name, value)?.also { said = it.second }?.first ?: s }
                 Log.i(TAG, "setting: " + (said ?: "$name not set to $value"))
+            }
+            // Finishing emails in Gmail (Stage 11) on or off, --ez on true|false, as Settings → Sources → Gmail's switch
+            // sets it: not one of Felix's settings, so not `setting`'s.
+            "gmail-finishes" -> {
+                val on = intent.getBooleanExtra("on", true)
+                graph.protection.changeSettings { it.copy(gmailFinishes = on) }
+                Log.i(TAG, "gmail-finishes: ${if (graph.settings.value.gmailFinishes) "on" else "off"}")
             }
             "briefing" -> Briefing.run(this).also { Log.i(TAG, "Briefing posted") }
             "check-in" -> graph.conversation.remindCheckIn().also { Log.i(TAG, "Check-in reminder posted") }
