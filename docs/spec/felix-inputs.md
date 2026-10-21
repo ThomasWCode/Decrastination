@@ -639,7 +639,7 @@ It names Summary and Reply among its reasons, but no message of his is asked for
 - **The morning's list**, where he has no words for the morning; **the week's review's note**, with *Open the review*.
 - **A calendar event's question** (Q7): the app's own text, its answers (*All of it*, *A few hours*, *None*) kept for every event of its name, with no call.
 - **How work went, with Claude off** (LR-05): a message for each completion, its answers kept as below.
-- **The week's summary**: written in a call of its own, in your voice (D-66); "the summary is ready" is the app's own text, with *Send it*.
+- **The week's summary**: written in a call of its own, about you in the third person (D-66); "the summary is ready" is the app's own text, with *Send it*.
 - **Your answer to his Question**: read by the instructions reader, as an instruction on that task, and the task read again (AI-10); not by him.
 - **An answer to Completions** (*Harder*, *As expected*, *Easier*): kept on each of those completions (LR-05), with no call.
 - **A reminder he has no words for** (4.1.0): yours as you set it ("reminder: …"), marked late where it is; its *Done*, *Snooze 15 min* and *Snooze 1 h* kept on it, with no call.
