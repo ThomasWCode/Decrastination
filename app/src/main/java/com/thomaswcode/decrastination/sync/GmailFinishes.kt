@@ -16,6 +16,7 @@ import java.net.ConnectException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
 import java.util.UUID
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.StateFlow
 
 /**
@@ -95,7 +96,8 @@ class GmailFinishes(
         }
         if (!made) return Finish.Pending
         if (!confirmed) return Finish.Awaiting
-        ports.schedule(now + GmailWrites.GRACE_MS)
+        // The worker set for the first write due, this one's grace or one before it.
+        GmailWrites.wake(value)?.let(ports::schedule)
         return Finish.Going
     }
 
@@ -140,7 +142,15 @@ class GmailFinishes(
     suspend fun write(writer: GmailWriter): Boolean {
         while (true) {
             val next = GmailWrites.next(value, clock.now()) ?: break
-            val failed = runCatching { make(next, writer) }.exceptionOrNull() ?: continue
+            // A worker stopped (a newer time set, the connection gone) isn't a try that failed: what it made is kept, the rest goes next time.
+            val failed = try {
+                make(next, writer)
+                continue
+            } catch (stopped: CancellationException) {
+                throw stopped
+            } catch (e: Exception) {
+                e
+            }
             writes.update { it.copy(writes = GmailWrites.failed(it.writes, next.id, words(failed), clock.now())) }
             val after = value.firstOrNull { it.id == next.id }
             if (after?.gaveUp == true) {
