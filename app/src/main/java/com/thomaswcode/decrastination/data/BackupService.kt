@@ -260,16 +260,23 @@ class BackupService(
         // To the second: two resets the same day each keep their copy.
         val stamp = Instant.ofEpochMilli(now).atZone(clock.zone()).format(DateTimeFormatter.ofPattern("yyyy-MM-dd-HHmmss", Locale.UK))
         val name = "reset-$stamp.json"
-        // The chat's archive read whole for it: off the main thread a reset's asked from. Every instruction in
-        // it, in use or not, so none a reset of them takes is lost.
-        val whole = withContext(Dispatchers.IO) { backupOf(every = true) }
-        val (text, leftOut) = Backups.fitted(whole, backupCap)
-        // Over the cap even without the chat's earlier messages, it couldn't be read back: nothing's reset.
-        if (text.toByteArray(Charsets.UTF_8).size > backupCap) return@withContext "Nothing was reset: a copy of it would be too big to restore."
-        // Nor where Import would refuse it (a part it can't read, something the app never writes): checked as Import checks.
-        val decoded = Backups.decode(text, stores.shapes)
-        val unrestorable = if (decoded == null) "it couldn't be read back" else Backups.problem(decoded)
-        if (unrestorable != null) return@withContext "Nothing was reset: a copy of it couldn't be restored ($unrestorable)."
+        // Made, fitted and checked off the main thread a reset's asked from: the chat's archive read whole for it, and the
+        // copy (up to 8 MB) encoded, then decoded as Import reads it. Every instruction in it, in use or not, so none a
+        // reset of them takes is lost.
+        val (whole, fitted, refused) = withContext(Dispatchers.IO) {
+            val whole = backupOf(every = true)
+            val fitted = Backups.fitted(whole, backupCap)
+            val refused = when {
+                // Over the cap even without the chat's earlier messages, it couldn't be read back: nothing's reset.
+                fitted.first.toByteArray(Charsets.UTF_8).size > backupCap -> "Nothing was reset: a copy of it would be too big to restore."
+                // Nor where Import would refuse it (a part it can't read, something the app never writes): checked as Import checks.
+                else -> Backups.decode(fitted.first, stores.shapes).let { decoded -> if (decoded == null) "it couldn't be read back" else Backups.problem(decoded) }
+                    ?.let { "Nothing was reset: a copy of it couldn't be restored ($it)." }
+            }
+            Triple(whole, fitted, refused)
+        }
+        refused?.let { return@withContext it }
+        val (text, leftOut) = fitted
         val all = what == Reset.Everything
         // Nothing goes till its copy is somewhere it can be restored from.
         val saved = keep(name, text) ?: return@withContext "Nothing was reset: a copy of it couldn't be saved first."
