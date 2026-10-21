@@ -1,0 +1,199 @@
+package com.thomaswcode.decrastination.sync
+
+import com.thomaswcode.decrastination.Fixtures
+import com.thomaswcode.decrastination.core.FixedClock
+import com.thomaswcode.decrastination.core.GmailWrite
+import com.thomaswcode.decrastination.core.GmailWrites
+import com.thomaswcode.decrastination.core.Kind
+import com.thomaswcode.decrastination.core.Settings
+import com.thomaswcode.decrastination.core.Source
+import com.thomaswcode.decrastination.core.TaskItem
+import com.thomaswcode.decrastination.data.GmailWriteStore
+import com.thomaswcode.decrastination.data.JsonStore
+import com.thomaswcode.decrastination.sources.gmail.GmailWriter
+import com.thomaswcode.decrastination.sources.gmail.GmailWriter.Change
+import java.io.File
+import java.io.IOException
+import java.net.UnknownHostException
+import java.nio.file.Files
+import kotlin.test.AfterTest
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
+import kotlinx.coroutines.runBlocking
+
+/**
+ * A finished email's writes to Gmail through [GmailFinishes] (docs/plan_v4/10-emails-done.md §Tests): journaled on a
+ * temporary store, made through a fake Gmail, the grace, the first finish's OK, Undo before and after, tries and giving up.
+ */
+class GmailFinishesTest {
+    private val dir: File = Files.createTempDirectory("gmail-writes").toFile()
+    private val clock = FixedClock(Fixtures.at("2026-10-21T17:00"))
+    private val writes = JsonStore(File(dir, "gmail-writes.json"), GmailWriteStore.serializer(), ::GmailWriteStore)
+    private var settings = Settings(hintsSeen = listOf(GmailWrites.OK_HINT))
+
+    /** An email whose one box is kept: its work all done. */
+    private val email = TaskItem(
+        id = "gmail:t1", source = Source.Gmail, sourceId = "t1", title = "Trip consent form", dueAt = null, kind = Kind.Admin,
+        sourceEffortMin = 10, firstSeenAt = clock.time, lastSeenAt = clock.time, workedMin = 10,
+    )
+    private val tasks = mutableMapOf(email.id to email)
+
+    /** What Android was asked: the worker's runs, Gmail reads, notifications said and taken away. */
+    private val scheduled = mutableListOf<Long>()
+    private var synced = 0
+    private val said = mutableListOf<String>()
+    private val sorted = mutableListOf<String>()
+    private val ports = object : GmailFinishes.Ports {
+        override fun schedule(at: Long) { scheduled += at }
+        override fun syncGmail() { synced++ }
+        override fun gaveUp(write: GmailWrite, words: String) { said += words }
+        override fun sorted(write: GmailWrite) { sorted += write.threadId }
+    }
+    private var ids = 0
+    private val finishes = GmailFinishes(writes, { settings }, { tasks[it] }, { 1.0 }, clock, ports) { "w${++ids}" }
+
+    /** Gmail, faked: the conversation's two messages (the first starred, both in the inbox), what was stored, and failures to make. */
+    private inner class FakeGmail : GmailWriter {
+        val messages = mutableListOf(GmailWriter.Message(11, 101, starred = true, inbox = true), GmailWriter.Message(12, 102, starred = false, inbox = true))
+        val stored = mutableListOf<Pair<List<Long>, Change>>()
+        var failing: Change? = null
+        var offline = false
+
+        override suspend fun <T> open(block: suspend (GmailWriter.Session) -> T): T {
+            if (offline) throw UnknownHostException("imap.gmail.com")
+            return block(object : GmailWriter.Session {
+                override fun thread(threadId: String): List<Long> = messages.map { it.uid }
+                override fun messages(uids: List<Long>): List<GmailWriter.Message> = messages.filter { it.uid in uids }
+                override fun store(uids: List<Long>, change: Change): List<Long> {
+                    if (change == failing) throw IOException("connection reset")
+                    stored += uids to change
+                    messages.replaceAll { m ->
+                        if (m.uid !in uids) m else when (change) {
+                            Change.Unstar -> m.copy(starred = false)
+                            Change.Star -> m.copy(starred = true)
+                            Change.Archive -> m.copy(inbox = false)
+                            Change.Inbox -> m.copy(inbox = true)
+                        }
+                    }
+                    return emptyList()
+                }
+            })
+        }
+    }
+
+    @AfterTest
+    fun clean() {
+        dir.deleteRecursively()
+    }
+
+    @Test
+    fun `a finish waits out its grace, then unstars what was starred and archives the conversation, and asks Gmail to read`() = runBlocking {
+        val gmail = FakeGmail()
+        assertEquals(GmailFinishes.Finish.Going, finishes.finish(email.id, explicit = false))
+        assertEquals(listOf(clock.time + GmailWrites.GRACE_MS), scheduled)
+        // In its grace: nothing written, the worker set again for its end.
+        assertFalse(finishes.write(gmail))
+        assertTrue(gmail.stored.isEmpty())
+        clock.time += GmailWrites.GRACE_MS
+        assertFalse(finishes.write(gmail))
+        assertEquals(listOf(listOf(11L) to Change.Unstar, listOf(11L, 12L) to Change.Archive), gmail.stored)
+        val receipt = finishes.value.single()
+        assertEquals(listOf(101L) to listOf(101L, 102L), receipt.flagged to receipt.inbox)
+        assertTrue(receipt.unstarred && receipt.archived && receipt.doneAt == clock.time)
+        assertEquals(1, synced)
+    }
+
+    @Test
+    fun `the switch off writes nothing, and work left is finished by your word only`() = runBlocking {
+        settings = settings.copy(gmailFinishes = false)
+        assertEquals(GmailFinishes.Finish.Off, finishes.finish(email.id, explicit = true))
+        settings = settings.copy(gmailFinishes = true)
+        tasks[email.id] = email.copy(workedMin = 0)
+        assertEquals(GmailFinishes.Finish.No, finishes.finish(email.id, explicit = false))
+        assertEquals(GmailFinishes.Finish.Going, finishes.finish(email.id, explicit = true))
+        assertEquals(GmailFinishes.Finish.Pending, finishes.finish(email.id, explicit = true))
+        // Not an email: nothing.
+        tasks["teams:a"] = email.copy(id = "teams:a", source = Source.Teams)
+        assertEquals(GmailFinishes.Finish.No, finishes.finish("teams:a", explicit = true))
+        assertEquals(1, finishes.value.size)
+    }
+
+    @Test
+    fun `the very first finish waits for your OK, Carry on sends it, Not this time drops it`() = runBlocking {
+        settings = Settings()
+        assertEquals(GmailFinishes.Finish.Awaiting, finishes.finish(email.id, explicit = true))
+        assertTrue(scheduled.isEmpty())
+        clock.time += 10 * GmailWrites.GRACE_MS
+        assertFalse(finishes.write(FakeGmail()))
+        assertNull(finishes.value.single().notBefore)
+        finishes.refuse()
+        assertTrue(finishes.value.isEmpty())
+        // Asked again at the next finish; carried on, it goes after the grace from then.
+        assertEquals(GmailFinishes.Finish.Awaiting, finishes.finish(email.id, explicit = true))
+        finishes.confirm()
+        assertEquals(clock.time + GmailWrites.GRACE_MS, finishes.value.single().notBefore)
+        assertEquals(listOf(clock.time + GmailWrites.GRACE_MS), scheduled)
+    }
+
+    @Test
+    fun `taken back within its grace, Gmail is never touched`() = runBlocking {
+        val gmail = FakeGmail()
+        finishes.finish(email.id, explicit = false)
+        assertTrue(finishes.unfinish(email.id))
+        clock.time += GmailWrites.GRACE_MS
+        assertFalse(finishes.write(gmail))
+        assertTrue(gmail.stored.isEmpty() && finishes.value.isEmpty() && synced == 0)
+        assertFalse(finishes.unfinish(email.id))
+    }
+
+    @Test
+    fun `taken back after its write, only what it took is put back`() = runBlocking {
+        val gmail = FakeGmail()
+        finishes.finish(email.id, explicit = false)
+        clock.time += GmailWrites.GRACE_MS
+        finishes.write(gmail)
+        gmail.stored.clear()
+        assertTrue(finishes.unfinish(email.id))
+        assertEquals(clock.time, scheduled.last())
+        assertFalse(finishes.write(gmail))
+        // The one that was starred starred again; both back in the inbox; the other never starred.
+        assertEquals(listOf(listOf(11L) to Change.Star, listOf(11L, 12L) to Change.Inbox), gmail.stored)
+        assertEquals(listOf(true, false), gmail.messages.map { it.starred })
+        assertEquals(GmailWrites.State.TakenBack, GmailWrites.state(finishes.value, email.id))
+        assertEquals(2, synced)
+        // Taken back already: nothing more.
+        assertFalse(finishes.unfinish(email.id))
+    }
+
+    @Test
+    fun `a try failing between its two commands goes on at the second, and five failures give it up, saying what succeeded`() = runBlocking {
+        val gmail = FakeGmail()
+        finishes.finish(email.id, explicit = false)
+        clock.time += GmailWrites.GRACE_MS
+        gmail.failing = Change.Archive
+        assertTrue(finishes.write(gmail))
+        val tried = finishes.value.single()
+        assertTrue(tried.unstarred && !tried.archived && tried.tries == 1 && tried.doneAt == null)
+        // Again: the star isn't taken off twice.
+        gmail.failing = null
+        gmail.stored.clear()
+        assertFalse(finishes.write(gmail))
+        assertEquals(listOf(listOf(11L, 12L) to Change.Archive), gmail.stored)
+        assertTrue(finishes.value.single().archived)
+        // Another email, offline each time: given up at the fifth, said, and its receipt kept till it's sorted.
+        tasks["gmail:t2"] = email.copy(id = "gmail:t2", sourceId = "t2", title = "Club email")
+        finishes.finish("gmail:t2", explicit = true)
+        clock.time += GmailWrites.GRACE_MS
+        gmail.offline = true
+        repeat(GmailWrites.MAX_TRIES - 1) { assertTrue(finishes.write(gmail)) }
+        assertFalse(finishes.write(gmail))
+        assertEquals(listOf("Couldn't unstar “Club email” in Gmail (no connection): it's still starred."), said)
+        assertEquals(GmailWrites.State.GaveUp, GmailWrites.state(finishes.value, "gmail:t2"))
+        finishes.sorted("gmail:t2")
+        assertEquals(listOf("t2"), sorted)
+        assertEquals(GmailWrites.State.None, GmailWrites.state(finishes.value, "gmail:t2"))
+    }
+}

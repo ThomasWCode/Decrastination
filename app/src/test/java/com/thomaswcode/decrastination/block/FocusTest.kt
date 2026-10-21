@@ -474,6 +474,28 @@ class FocusTest {
     }
 
     @Test
+    fun `a keep or a tick says its task's work moved on, and taking either back says so too, for an email's finish`() = runTest {
+        val worked = mutableListOf<String>()
+        val unworked = mutableListOf<String>()
+        val hooked = Focus(tasks, settings, session, learning, protection, log, clock, onWorked = { worked += it }, onUnworked = { unworked += it }) { state, s, now -> Planner.plan(input(state, s, now)) }
+        val first = laid(task("t", due = "2026-10-12T23:59", steps = steps(), effort = 60)).first()
+        clock.time = first.end
+        assertTrue(hooked.keepSlot(first.chunk!!.key))
+        assertEquals(listOf("teams:t"), worked)
+        assertTrue(hooked.unkeepSlot(first.chunk!!.key, first.start))
+        assertEquals(listOf("teams:t"), unworked)
+        // A step of an email ticked by hand, and to do again.
+        tasks.update { it.copy(tasks = it.tasks + task("e").copy(id = "gmail:e", source = Source.Gmail, subSteps = listOf(SubStep("Reply", 10)))) }
+        assertTrue(hooked.tickBlock("gmail:e", 0, "Reply"))
+        assertEquals(listOf("teams:t", "gmail:e"), worked)
+        assertTrue(hooked.untickBlock("gmail:e", 0, "Reply"))
+        assertEquals(listOf("teams:t", "gmail:e"), unworked)
+        // Nothing kept, nothing said.
+        assertFalse(hooked.keepSlot("teams:nothing#0"))
+        assertEquals(2, worked.size)
+    }
+
+    @Test
     fun `keeping a piece leaves its task's next piece in its slot`() = runTest {
         val (first, second) = laid(task("t", due = "2026-10-12T23:59", steps = steps(), effort = 60))
         clock.time = first.end
