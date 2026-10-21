@@ -100,9 +100,10 @@ class Stores(
     /**
      * A store, what a backup keeps of it ([backup]; none, and [why] says why), and the resets that
      * change it themselves ([resets]; what they set going, such as your changes laid on the tasks
-     * again, aside).
+     * again, aside), of which those that clear it whole take its copies too ([clears], Q42): one that
+     * changes only part of it leaves them, as they hold the rest.
      */
-    class Kept(val file: String, val backup: String?, val why: String? = null, val resets: Set<Reset> = emptySet()) {
+    class Kept(val file: String, val backup: String?, val why: String? = null, val resets: Set<Reset> = emptySet(), val clears: Set<Reset> = resets) {
         init {
             require((backup == null) != (why == null)) { "$file: what a backup keeps of it, or why none" }
         }
@@ -111,7 +112,8 @@ class Stores(
     /** Every store, the secrets among them, as [Kept] says. */
     val all: List<Kept> = listOf(
         Kept("tasks.json", backup = "your own tasks, which no source gives back"),
-        Kept("settings.json", backup = "the settings as asked for, a change still waiting among them", resets = setOf(Reset.Memories)),
+        // A memory reset clears only what they say about you: their copies hold the rest, an unreadable one perhaps its only record.
+        Kept("settings.json", backup = "the settings as asked for, a change still waiting among them", resets = setOf(Reset.Memories), clears = emptySet()),
         Kept("secrets.bin", backup = null, why = "passwords and keys stay on this phone (D-78)"),
         Kept("runtime.json", backup = null, why = "the notifications held, the daily runs and the files found unreadable are this phone's"),
         Kept("session.json", backup = "today's slots"),
@@ -128,6 +130,15 @@ class Stores(
         Kept("felix.json", backup = "all of it", resets = setOf(Reset.Chat)),
         Kept("calendar.json", backup = "your answers about events (what this phone wrote to its calendars means nothing to another's)"),
     )
+
+    /**
+     * The copies kept of each store [what] clears whole let go ([all]'s [Kept.clears]; [Reset.Everything], every store a
+     * reset clears whole), so what's reset isn't kept in one (Q42). The chat's archive takes its own as it's cleared ([ChatArchiveStore.clear]).
+     */
+    suspend fun letGoOfCopies(what: Reset) {
+        val files = all.filter { kept -> kept.clears.any { what == it || what == Reset.Everything } }.mapTo(HashSet()) { it.file }
+        json.filter { it.name in files }.forEach { it.letGoOfCopies() }
+    }
 
     /** Each JSON store's shape now, by file: what a backup's parts from it are brought to ([Backups.decode]). */
     val shapes: Map<String, Shape> get() = json.associate { it.name to Shape(it.version, it.migrations) } + (chatArchive.name to Shape(chatArchive.version, ChatArchiveStore.MIGRATIONS))
@@ -158,12 +169,14 @@ class Stores(
     suspend fun replace(store: ChatArchiveStore, transform: (ChatArchive) -> ChatArchive): ChatArchive = store.update(transform)
 
     /**
-     * The files older shapes came from (`<name>.v<n>`, [JsonStore]) let go once a week old: called at a
-     * start that's gone well, so each is kept at least a week from its migration, and past a start.
+     * The files older shapes came from (`<name>.v<n>`, [JsonStore]) let go once a week old, the chat
+     * archive's among them ([ChatArchiveStore.isOldShape]): called at a start that's gone well, so
+     * each is kept at least a week from its migration, and past a start.
      */
     fun letGoOfOldShapes(now: Long = clock()) {
         val names = json.map { it.name }.toSet()
-        dir.listFiles { f -> f.isFile && f.name.substringBeforeLast(".v") in names && f.name.substringAfterLast(".v").toIntOrNull() != null }.orEmpty()
+        fun oldShape(name: String) = name.substringBeforeLast(".v") in names && name.substringAfterLast(".v").toIntOrNull() != null || ChatArchiveStore.isOldShape(name)
+        dir.listFiles { f -> f.isFile && oldShape(f.name) }.orEmpty()
             .filter { now - it.lastModified() >= OLD_SHAPE_KEPT_MS }
             .forEach { it.delete() }
     }
