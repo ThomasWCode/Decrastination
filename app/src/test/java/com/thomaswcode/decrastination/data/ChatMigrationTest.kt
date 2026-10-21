@@ -112,7 +112,7 @@ class ChatMigrationTest {
         assertEquals(4, felix.checkInDraft?.step)
         // The log and the runtime in their new shapes, without them.
         val log = json(File(dir, "log.json"))
-        assertEquals(2, Migration.versionOf(log))
+        assertEquals(3, Migration.versionOf(log))
         assertFalse("felix" in log)
         val written = json(File(dir, "runtime.json"))
         assertTrue(listOf("felix", "assessLater", "checkInDraft").none { it in written })

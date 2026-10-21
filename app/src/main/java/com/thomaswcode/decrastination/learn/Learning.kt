@@ -55,6 +55,8 @@ class Learning(
     private val resets: () -> Int,
     /** Who the student is at a time, with what's remembered, as each call sends it (AI-05). */
     private val profile: (now: Long, remembered: MemoryState) -> Profile.Block,
+    /** What's run out of what's remembered let go of ([com.thomaswcode.decrastination.felix.Conversation.forgetExpired]). */
+    private val forgetExpired: suspend (now: Long) -> Unit,
     /** The review's first line in the chat, in Felix's name ([com.thomaswcode.decrastination.felix.Conversation.reviewed]). */
     private val reviewed: suspend (String) -> Unit,
     /** His offer to send the week's summary ([com.thomaswcode.decrastination.felix.Conversation.summaryReady]). */
@@ -155,13 +157,19 @@ class Learning(
      * answer that isn't a tidy, or the facts changed while it was out.
      */
     suspend fun tidyMemory(now: Long, force: Boolean = false): MemoryTidyRecord? {
+        // What's run out let go of first (10a): it'd count to the tidy's being due, and its going while the call's
+        // out would throw the tidy away ([MemoryTidy.applied]).
+        forgetExpired(now)
         val before = memory.value.facts
         if (before.isEmpty() || !(force || MemoryTidy.due(before))) return null
+        // Only those with neither an until nor a task are tidied (10a); the rest kept as they are.
+        val plain = before.filter(MemoryTidy::tidied)
+        if (plain.isEmpty()) return null
         // The profile without the facts, which it's given to tidy.
         val tidier = gateway.client(ModelEffort.Job.Tidy)?.let { MemoryTidier(it, profile = profile(clock.now(), memory.value.copy(facts = emptyList()))) } ?: return null
-        val called = gateway.call(interactive = false, record = ModelCalls.OnRecord(ModelEffort.Job.Tidy, "what's remembered") { r: MemoryTidier.Result -> r.usage to ModelCalls.outcome(r.refused, r.answer == null) }, cost = { r: MemoryTidier.Result -> r.costUsd to r.refused }) { at -> tidier.tidy(before, at, clock.zone()) }
+        val called = gateway.call(interactive = false, record = ModelCalls.OnRecord(ModelEffort.Job.Tidy, "what's remembered") { r: MemoryTidier.Result -> r.usage to ModelCalls.outcome(r.refused, r.answer == null) }, cost = { r: MemoryTidier.Result -> r.costUsd to r.refused }) { at -> tidier.tidy(plain, at, clock.zone()) }
         val answer = (called as? Called.Answered)?.value?.answer ?: return null
-        val after = MemoryTidy.after(answer, before, now) ?: return null
+        val after = MemoryTidy.after(answer, plain, now)?.let { MemoryTidy.withExpiring(before, it) } ?: return null
         var applied = false
         memory.update { state -> MemoryTidy.applied(state, before, after)?.also { applied = true } ?: state }
         return if (applied) MemoryTidyRecord(before, after) else null

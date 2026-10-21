@@ -53,13 +53,13 @@ class Stores(
 
     /** What the app has learned about how long things take you: the calibration. */
     val learning = store("learning.json", LearningState.serializer(), ::LearningState)
-    val log = store("log.json", ActivityLog.serializer(), ::ActivityLog, migrations = listOf(ChatMigration.LOG))
+    val log = store("log.json", ActivityLog.serializer(), ::ActivityLog, migrations = listOf(ChatMigration.LOG, MemoryMigration.LOG))
 
     /** Your instructions about tasks, events and days, and what Claude read them as. */
     val instructions = store("instructions.json", InstructionState.serializer(), ::InstructionState, migrations = listOf(TasksMigration.INSTRUCTIONS), onWrite = InstructionState::withStepIds)
 
     /** Your chat with Felix, the live window of it: every message of his and yours, what became of his cards, and his state. */
-    val chat = store("chat.json", ChatState.serializer(), ::ChatState, migrations = listOf(ChatMigration.CHAT, TasksMigration.CHAT, FelixStore.CHAT, FelixStore.CHAT_PIECES))
+    val chat = store("chat.json", ChatState.serializer(), ::ChatState, migrations = listOf(ChatMigration.CHAT, TasksMigration.CHAT, FelixStore.CHAT, FelixStore.CHAT_PIECES, MemoryMigration.CHAT))
 
     /**
      * The chat's messages past its window, oldest first, a month a file: each read only when it's wanted
@@ -86,8 +86,8 @@ class Stores(
     /** Days with no school and half-days (PL-16), told to the chat or added in Settings. */
     val school = store("school.json", SchoolCalendar.serializer(), ::SchoolCalendar)
 
-    /** What Felix remembers (AI-21): facts, and standing instructions. */
-    val memory = store("memory.json", MemoryState.serializer(), ::MemoryState)
+    /** What Felix remembers (AI-21): facts, and standing instructions, each able to expire (10a). */
+    val memory = store("memory.json", MemoryState.serializer(), ::MemoryState, migrations = listOf(MemoryMigration.MEMORY))
 
     /** What Felix keeps at your asking (Stage 8a): notes on tasks, standing notes, and reminders with their drafts. */
     val felix = store("felix.json", FelixStore.serializer(), ::FelixStore)

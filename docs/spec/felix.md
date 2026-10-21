@@ -171,13 +171,14 @@ A reply, from his notification (`felix/FelixReplyReceiver.kt`), one of his chips
 
 `core/Memory.kt` keeps `memory.json`: facts about you, each under a short topic that a newer fact replaces, and standing instructions on how he behaves (AI-21).
 - The chat and his messages give at most five a time; an empty text forgets one. Busy times, limits and days off are changes, not memories.
+- **For a while** (4.2.0, D-103): a fact or a rule can hold till a date (`until`: a date, through that day, or a date and time: "a cold this week", "not tonight" till 07:00), and a fact go with a task (`taskId`: "for the trip, I'm sharing a room"). An until gone by is refused, saying so; one more than a year ahead is cut to a year; a task not listed is said, and the fact kept without it. What's run out is forgotten silently (`Memories.expired`): past its until; a fortnight after its task finished; its task gone, once its delete can't be undone and its source has been read since. It's dropped before every profile is made, so he's never told a stale line, and let go from `memory.json` there and each morning before the briefing (`Conversation.forgetExpired`).
 - Facts have 6 000 characters of room, the oldest going first; standing instructions at most 20, one more refused with a line saying so.
-- Each is said under his answer ("Remembered: …", "Forgot: …", "Felix will: …"), with its *Undo* while what it did is unchanged (`Memories.undo`), bringing back what it replaced or pushed out.
-- Settings → Felix and the chat's menu list them all, each with its delete, and take a standing instruction in your own words (`ui/MemorySection.kt`).
-- All of it goes in every call's profile: every standing instruction, and the facts newest first.
+- Each is said under his answer ("Remembered: …", "Forgot: …", "Felix will: …", with how long it holds: ", until Sun 25 Oct", ", with “Trip consent form”"), with its *Undo* while what it did is unchanged (`Memories.undo`, the fact or rule compared whole, its until and task too), bringing back what it replaced or pushed out.
+- Settings → Felix and the chat's menu list them all, each with how long it holds and its delete, and take a standing instruction in your own words (`ui/MemorySection.kt`).
+- All of it goes in every call's profile: every standing instruction, and the facts newest first, a passing one saying so ("- cold: feeling rough (until Sun 25 Oct)").
 
 **The tidy** (`enrich/MemoryTidy.kt`, its call `enrich/MemoryTidier.kt`): past 70 % of the room, Sunday's review sends the facts to Claude in a call of its own, which gives back at most two thirds as many lines.
-They're kept only if they make room and the facts are unchanged meanwhile (`MemoryTidy.after`, `applied`). The facts ahead of the tidy and after it go with the week's review, whose page can undo it. Standing instructions are never tidied.
+They're kept only if they make room and the facts are unchanged meanwhile (`MemoryTidy.after`, `applied`). The facts ahead of the tidy and after it go with the week's review, whose page can undo it. Standing instructions are never tidied, nor a fact with an until or a task (`MemoryTidy.tidied`: they go by themselves, and a merge would lose when); they leave the rest less room, so it's due once the facts it may rewrite are past 70 % of the room the others leave (`MemoryTidy.due`), what's run out let go of first.
 
 ## The instructions screen
 

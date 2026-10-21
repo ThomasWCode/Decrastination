@@ -4,6 +4,9 @@ import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.core.Calibration
 import com.thomaswcode.decrastination.core.ChatArchive
 import com.thomaswcode.decrastination.core.ChatMessage
+import com.thomaswcode.decrastination.core.Rule
+import com.thomaswcode.decrastination.core.MemoryState
+import com.thomaswcode.decrastination.core.Fact
 import com.thomaswcode.decrastination.core.ChatState
 import com.thomaswcode.decrastination.core.FixedClock
 import com.thomaswcode.decrastination.core.MessageKind
@@ -113,7 +116,7 @@ class BackupServiceTest {
         val full = Phone(full = true)
         val backup = Backups.decode(full.service.exportBackup(), full.stores.shapes)!!
         assertEquals(full.stores.shapes.mapValues { it.value.version }, backup.versions)
-        assertEquals(setOf("calendar.json", "chat.json", "chat-archive.json", "instructions.json", "log.json", "runtime.json", "tasks.json"), backup.versions.filterValues { it > 1 }.keys)
+        assertEquals(setOf("calendar.json", "chat.json", "chat-archive.json", "instructions.json", "log.json", "memory.json", "runtime.json", "tasks.json"), backup.versions.filterValues { it > 1 }.keys)
     }
 
     @Test
@@ -178,6 +181,34 @@ class BackupServiceTest {
         assertEquals(listOf("n1", "h1", "n2"), chat.messages.map { it.id })
         // Read up to just before this phone's own unread: n1 read, as it was there; h1 and n2 not.
         assertEquals(219L, chat.readAt)
+    }
+
+    @Test
+    fun `what's remembered is merged once what's run out on either side is let go of, so a stale one here doesn't win`() = runTest {
+        val hour = 3_600_000L
+        val from = Phone(full = false)
+        from.stores.replace(from.stores.memory, MemoryState(facts = listOf(Fact("cold", "better now", clock.time - hour)), rules = listOf(Rule("be blunter", clock.time - hour))))
+        val to = Phone(full = false)
+        to.stores.replace(to.stores.memory, MemoryState(facts = listOf(Fact("cold", "feeling rough", clock.time - 2 * hour, until = clock.time - 1)), rules = listOf(Rule("Be blunter", clock.time - 2 * hour, until = clock.time - 1))))
+        to.service.importBackup(from.service.exportBackup())
+        settle()
+        assertEquals(listOf("better now"), to.stores.memory.value.facts.map { it.text })
+        assertEquals(listOf(Rule("be blunter", clock.time - hour)), to.stores.memory.value.rules)
+    }
+
+    @Test
+    fun `a fact whose task the backup's chat can still bring back is kept, into an empty phone`() = runTest {
+        val hour = 3_600_000L
+        val from = Phone(full = false)
+        val gone = com.thomaswcode.decrastination.core.TaskItem(id = "own:gone", source = com.thomaswcode.decrastination.core.Source.Own, sourceId = "gone", title = "A task since deleted", kind = com.thomaswcode.decrastination.core.Kind.Admin, firstSeenAt = clock.time - hour, lastSeenAt = clock.time - hour)
+        // Its delete's act in the chat, not undone: its Undo brings the task back.
+        val act = com.thomaswcode.decrastination.core.Act("Deleted “A task since deleted”.", action = com.thomaswcode.decrastination.core.ChatAction(com.thomaswcode.decrastination.core.ChatAction.Type.Delete, gone.id), was = gone)
+        from.stores.replace(from.stores.chat, ChatState(listOf(ChatMessage("f1", Speaker.Felix, "Deleted it.", clock.time - hour, acts = listOf(act)))))
+        from.stores.replace(from.stores.memory, MemoryState(facts = listOf(Fact("deadline", "the essay can be late", clock.time - hour, taskId = gone.id))))
+        val to = Phone(full = false)
+        to.service.importBackup(from.service.exportBackup())
+        settle()
+        assertEquals(listOf("deadline"), to.stores.memory.value.facts.map { it.topic })
     }
 
     @Test

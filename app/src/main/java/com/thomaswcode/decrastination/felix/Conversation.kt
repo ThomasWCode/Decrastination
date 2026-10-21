@@ -162,10 +162,24 @@ class Conversation(
         val s = settings.value
         val state = tasks.value
         val zone = clock.zone()
+        // What's run out isn't told (10a): the profile never carries a stale line, and what's kept lets it go too.
+        val live = expired(remembered, now)
+        if (live !== remembered && remembered === memory.value) scope.launch { forgetExpired(now) }
         return Profile.Block(
             Profile.yearGroup(now, zone, s.yearGroupStart),
-            Profile.block(s, state.tasks, state.timetable, school.value, remembered, now, zone),
+            Profile.block(s, state.tasks, state.timetable, school.value, live, now, zone),
         )
+    }
+
+    /** [remembered] without what's run out at [now] (10a, [Memories.expired]): by the tasks, what the chat's acts can still bring back, and the sources' reads. */
+    private fun expired(remembered: MemoryState, now: Long): MemoryState {
+        val state = tasks.value
+        return Memories.expired(remembered, state.tasks.associateBy { it.id }, now, ChatActs.held(chat.value.messages)) { source -> state.status(source).lastSuccessAt }
+    }
+
+    /** What's run out of what's remembered let go of (10a), silently, as a person forgets: as the profile's read, and each morning. Written only where something has. */
+    suspend fun forgetExpired(now: Long = clock.now()) {
+        memory.update { expired(it, now) }
     }
 
     /** Said on a message whose answer you let go (AC-08). */
@@ -1225,11 +1239,17 @@ class Conversation(
         felix.update { s -> s.copy(notes = s.notes.map { if (it.id == id && it.deletedAt == null) it.copy(deletedAt = clock.now()) else it }) }
     }
 
-    /** [given] kept in what's remembered (AI-21), and what each thing did ([com.thomaswcode.decrastination.core.MemoryEdit.line] says it). */
+    /**
+     * [given] kept in what's remembered (AI-21), and what each thing did ([com.thomaswcode.decrastination.core.MemoryEdit.line]
+     * says it): each until read where you are, and a fact's task one of the open tasks he's shown (10a).
+     */
     suspend fun remember(given: List<Given>): List<MemoryEdit> {
         if (given.isEmpty()) return emptyList()
         var edits = emptyList<MemoryEdit>()
-        memory.update { state -> Memories.edit(state, given, clock.now()).also { edits = it.second }.first }
+        val listed = tasks.value.tasks.filter { it.isOpen && !it.hidden }.associate { it.id to it.title }
+        // What's run out let go of first, so it can't take a rule's place or push out a fact that lasts.
+        val now = clock.now()
+        memory.update { state -> Memories.edit(expired(state, now), given, now, clock.zone(), listed).also { edits = it.second }.first }
         return edits
     }
 

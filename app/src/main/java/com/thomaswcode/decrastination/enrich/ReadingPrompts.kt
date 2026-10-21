@@ -33,7 +33,7 @@ object ReadingPrompts {
      * the schema saying so (3.1.2's review, before it was installed); 7: a long text's summary, for
      * Felix (3.2.0, D-93).
      */
-    const val VERSION = 7
+    const val VERSION = 8
 
     /**
      * Text past this is left out (and the model told). Room for a long email's own calendar of

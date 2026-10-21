@@ -85,7 +85,7 @@ class StoresTest {
         val file = File(dir, "log.json")
         for (i in 0 until 5) {
             file.writeText("bad $i")
-            JsonStore(file, ActivityLog.serializer(), ::ActivityLog, clock = { AT + i * 1000L }, migrations = listOf(ChatMigration.LOG))
+            JsonStore(file, ActivityLog.serializer(), ::ActivityLog, clock = { AT + i * 1000L }, migrations = listOf(ChatMigration.LOG, MemoryMigration.LOG))
         }
         val copies = dir.listFiles { f -> f.name.startsWith("log.json.unreadable-") }.orEmpty().map { it.name }.sorted()
         assertEquals(JsonStore.COPIES_KEPT, copies.size)
@@ -97,7 +97,7 @@ class StoresTest {
         val file = File(dir, "log.json").apply { writeText("bad now") }
         // Three from a clock that was ahead: by name, each newer than this one.
         listOf("20270101-000000", "20270102-000000", "20270103-000000").forEach { File(dir, "log.json.unreadable-$it").writeText("bad then") }
-        val store = JsonStore(file, ActivityLog.serializer(), ::ActivityLog, clock = { AT }, migrations = listOf(ChatMigration.LOG))
+        val store = JsonStore(file, ActivityLog.serializer(), ::ActivityLog, clock = { AT }, migrations = listOf(ChatMigration.LOG, MemoryMigration.LOG))
         assertEquals("bad now", File(dir, store.problem!!.copy!!).readText())
         assertEquals(JsonStore.COPIES_KEPT, dir.listFiles { f -> f.name.startsWith("log.json.unreadable-") }!!.size)
     }
@@ -128,7 +128,7 @@ class StoresTest {
                    "blocks": [{"at": 3, "target": "com.google.android.youtube", "reason": "Session"}]}""",
             )
         }
-        val history = JsonStore(log, ActivityLog.serializer(), ::ActivityLog, migrations = listOf(ChatMigration.LOG))
+        val history = JsonStore(log, ActivityLog.serializer(), ::ActivityLog, migrations = listOf(ChatMigration.LOG, MemoryMigration.LOG))
         assertNull(history.problem)
         assertEquals(listOf("Session"), history.value.blocks.map { it.reason })
     }
@@ -151,7 +151,7 @@ class StoresTest {
         assertEquals(stores.all.size, stores.all.map { it.file }.toSet().size)
         // Every JSON store's shape is known to a backup, at the version its state says, each with a migration from every one before.
         assertEquals(made - "secrets.bin", stores.shapes.keys)
-        assertEquals(mapOf("calendar.json" to 2, "chat.json" to 5, "chat-archive.json" to 4, "instructions.json" to 2, "log.json" to 2, "runtime.json" to 3, "tasks.json" to 2), stores.shapes.filterValues { it.version > 1 }.mapValues { it.value.version })
+        assertEquals(mapOf("calendar.json" to 2, "chat.json" to 6, "chat-archive.json" to 5, "instructions.json" to 2, "log.json" to 3, "memory.json" to 2, "runtime.json" to 3, "tasks.json" to 2), stores.shapes.filterValues { it.version > 1 }.mapValues { it.value.version })
         assertTrue(stores.shapes.values.all { Migration.complete(it.version, it.migrations) })
         // And each is said in words when it can't be read, not by its file's name.
         for (file in made) assertTrue(!JsonStore.Unreadable(file, null, kept = false, at = 0).says.startsWith(file), file)

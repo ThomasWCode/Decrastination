@@ -174,6 +174,8 @@ class DailyReceiver : BroadcastReceiver() {
                 graph.runtime.update { it.copy(dailyRanAt = it.dailyRanAt + (action to graph.clock.now())) }
                 when (action) {
                     Daily.ACTION_BRIEFING -> {
+                        // What's remembered that's run out let go of first (10a), so what Settings lists is what he's told.
+                        runCatching { graph.conversation.forgetExpired() }.onFailure { Log.w(AppGraph.TAG, "Forgetting what's run out failed", it) }
                         Briefing.run(context)
                         // Felix's notes and reminders kept as long as they're wanted (8a), each morning: not the briefing's
                         // failure, so not one that runs it again.
