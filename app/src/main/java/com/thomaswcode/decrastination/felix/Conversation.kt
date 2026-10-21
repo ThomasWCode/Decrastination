@@ -290,6 +290,13 @@ class Conversation(
      */
     suspend fun markAnswered(ids: Collection<String>): Marked = withContext(NonCancellable) {
         val now = clock.now()
+        val marked = mark(ids, now)
+        outbox.delivered()
+        Marked(marked, now)
+    }
+
+    /** His messages of [ids] still waiting marked answered at [now], but a check-in's question under way: those marked. */
+    private suspend fun mark(ids: Collection<String>, now: Long): Set<String> {
         val wanted = ids.toSet()
         val marked = HashSet<String>()
         chat.update { s ->
@@ -300,8 +307,7 @@ class Conversation(
                 },
             )
         }
-        outbox.delivered()
-        Marked(marked, now)
+        return marked
     }
 
     /** [marked]'s Undo: those still answered as they were marked wait for your answer again. */
@@ -546,13 +552,27 @@ class Conversation(
         val keepable = (plan.todaySlots.mapNotNull { it.chunk } + plan.ordered.filter { it.stepIndex == null }.distinctBy { it.taskId }).associate { it.key to it.taskId }
         val keptToday = keptToday(now)
         val lessons = lessons(state, now)
+        val waiting = waiting(now)
         return ChatPrompts.Context(
-            known = ChatPrompts.context(state.tasks, time.events, applied, now, clock.zone(), settings.value.classMap, runtime.value.notSame, settings.value, learning.value.calibration, kept.notes, kept.reminders, moments, lessons),
+            known = ChatPrompts.context(state.tasks, time.events, applied, now, clock.zone(), settings.value.classMap, runtime.value.notSame, settings.value, learning.value.calibration, kept.notes, kept.reminders, moments, lessons, waiting),
             plan = ChatPrompts.plan(plan, clock.zone(), keptToday.map { it.key to it.label }, focus.blockingLine(plan, now)),
             keepable = keepable,
             kept = keptToday.associate { it.key to it.taskId },
             lessons = lessons,
+            waiting = waiting.mapTo(HashSet()) { it.id },
         )
+    }
+
+    /**
+     * His messages still waiting for your answer at [now] (D-99) that can be marked answered, as the chat's
+     * *Mark answered* can (a check-in's question under way can't): the newest [ChatPrompts.MAX_WAITING], oldest
+     * first, which the chat's answer may name as answered by your words (10b).
+     */
+    private fun waiting(now: Long): List<ChatMessage> {
+        val s = chat.value
+        val underWay = s.felix.checkInDraft != null
+        val ids = Replies.awaitingIds(s.messages, underWay, now, clock.zone())
+        return s.messages.filter { it.id in ids && !(underWay && it.kind == MessageKind.CheckIn) }.takeLast(ChatPrompts.MAX_WAITING)
     }
 
     /**
@@ -846,6 +866,8 @@ class Conversation(
                     .filter { p -> p.instant && p.state != ProposalState.Applied && p.note != null }.map { Act(Act.NOT_MADE + "${it.note!!.replaceFirstChar(Char::lowercase)}.", problem = true) }
                 val lines = refused + moved.map { Act(it) }
                 if (lines.isNotEmpty()) chat.update { s -> s.copy(messages = s.messages.map { if (it.id == reply.id) it.copy(acts = it.acts + lines) else it }) }
+                // His messages still waiting that your words answered, at his word (10b, D-99): marked as *Mark answered* marks them.
+                if (reading.answered.isNotEmpty()) mark(reading.answered, reply.at)
                 // His answer, in the chat whole: the window moved, and it's his notification while the chat isn't on screen.
                 outbox.delivered(alertFor = reply.id)
             }

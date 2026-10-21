@@ -94,6 +94,8 @@ object ChatAnswers {
         val stats: Boolean = false,
         /** The calendar it asks for first (G7, 8c), as [ChatPrompts.calendarAsk] reads it: empty for the four weeks after the fortnight, else a month (yyyy-MM). */
         val calendar: String? = null,
+        /** His messages still waiting that the words answered (10b, D-99): those the context listed ([ChatPrompts.Context.waiting]). */
+        val answered: List<String> = emptyList(),
     )
 
     /**
@@ -120,6 +122,7 @@ object ChatAnswers {
         val actions: List<GivenAction> = emptyList(),
         val research: String = "",
         val details: List<String> = emptyList(),
+        val answered: List<String> = emptyList(),
     )
 
     /**
@@ -254,7 +257,10 @@ object ChatAnswers {
         // Those the answer deletes make room too.
         val deleted = actions.filter { it.type == ChatAction.Type.DeleteNote }.mapNotNull { it.value }.toSet()
         val notes = notes(kept.filter { it.type == ChatPrompts.NOTE_TYPE }.map(::noteOf), byId, felix, now, leftOut, deleted)
-        return Reading(reply.take(ChatPrompts.MAX_TEXT), made, changes, leftOut, answer.memories.take(MAX_MEMORIES), replies, actions, answer.research.trim().take(ResearchPrompts.MAX_QUESTION).takeIf { it.isNotEmpty() }, details, reminders, notes, stats, calendar)
+        // His messages the words answered (10b): only those the context listed as waiting, each once; any other id dropped.
+        val waiting = context?.waiting.orEmpty()
+        val answered = answer.answered.map(String::trim).filter { it in waiting }.distinct()
+        return Reading(reply.take(ChatPrompts.MAX_TEXT), made, changes, leftOut, answer.memories.take(MAX_MEMORIES), replies, actions, answer.research.trim().take(ResearchPrompts.MAX_QUESTION).takeIf { it.isNotEmpty() }, details, reminders, notes, stats, calendar, answered)
     }
 
     /**

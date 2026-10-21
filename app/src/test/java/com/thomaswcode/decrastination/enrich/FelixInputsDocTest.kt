@@ -170,8 +170,10 @@ class FelixInputsDocTest {
         val moments = reminders.mapNotNull { r -> Reminders.moment(r, planned, byId, now)?.let { r.id to it } }.toMap()
         // Each class's next lessons (G8), the timetable read this morning: "the worksheet's due next lesson" has the worksheet's class and its lessons.
         val lessons = Lessons.Timetabled(Lessons.groups(Lessons.next(timetable, now, LONDON, school), settings.classMap), Fixtures.at("2026-10-13T07:00"), stale = false)
+        // His nudge of 17:00 still waiting for your answer (D-99): listed by id, so an answer can name it answered (10b).
+        val waiting = ChatMessage("m4", Speaker.Felix, "Starting the worksheet? First: read question 1 and underline what it asks.", Fixtures.at("2026-10-13T17:00"), About(taskId = worksheet.id, taskTitle = worksheet.title), kind = MessageKind.SlotStart, suggestedReplies = listOf("Starting now", "Give me ten minutes"))
         val context = ChatPrompts.Context(
-            known = ChatPrompts.context(tasks, events, applied, now, LONDON, settings.classMap, emptyList(), settings, calibration, notes, reminders, moments, lessons),
+            known = ChatPrompts.context(tasks, events, applied, now, LONDON, settings.classMap, emptyList(), settings, calibration, notes, reminders, moments, lessons, listOf(waiting)),
             // With whether blocking applies, and the free time (G5), as Focus says it then.
             plan = ChatPrompts.plan(planned, LONDON, blocking = Focus.blockingLine(BlockPolicy.Verdict.Block(BlockPolicy.Reason.TodayUndone), planned.todayBucket?.chunks.orEmpty(), 0, 16 * 60 + 45, null)),
         )

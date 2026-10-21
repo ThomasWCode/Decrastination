@@ -323,6 +323,12 @@
             "items": {
                 "type": "string"
             }
+        },
+        "answered": {
+            "type": "array",
+            "items": {
+                "type": "string"
+            }
         }
     },
     "required": [
@@ -333,7 +339,8 @@
         "suggestedReplies",
         "actions",
         "research",
-        "details"
+        "details",
+        "answered"
     ],
     "additionalProperties": false
 }
