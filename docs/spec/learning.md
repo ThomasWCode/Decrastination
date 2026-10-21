@@ -1,7 +1,7 @@
 # Learning
 
 What the app learns from how the work goes: your pace for each kind and class of work, a safety margin for each kind, how much of each kind of day gets used, and AnkiDroid's seconds a card.
-Every figure is bounded, shown in Stats, and worked out afresh from the record, so the same record always teaches the same values.
+Every figure is bounded; the pace, the margins and the yields are shown in Stats and worked out afresh from the record, so the same record always teaches the same values.
 `learn/Learning.kt` does what's done with the record: the week's review, a figure forgotten, a review's change or tidy put back, the week's summary, and the check-in and a completion's answer kept (the chat's and the form's go through it). It's built like `Focus`, its pure parts `Review`'s, `Calibrator`'s, `Stats`' and `Summary`'s; `LearningTest` drives it on temporary stores.
 
 ## The record
@@ -83,7 +83,7 @@ A day's record has the kind it was planned as (`SchoolDays.kindOf`, D-27): a wee
 While AnkiDroid is in front, the decks' counts are read as it comes and goes (`block/AnkiWatch.kt`, `learn/AnkiProgress.kt`). A stretch's cards are its counts fallen, and its minutes go to the deck tasks it studied.
 - A deck's seconds a card are the median of its last 10 stretches with 5 or more of its cards, between 1 and 600 seconds (`AnkiProgress.secondsPerCard`).
 - They're updated at the end of each visit; the weekly review keeps them as they stand.
-- The quota's and the deck tasks' minutes go by them ([planner.md](planner.md)); Stats lists each deck with the stretches it rests on.
+- The quota's and the deck tasks' minutes go by them ([planner.md](planner.md)); Settings → Sources → Anki lists each deck with the stretches it rests on.
 
 ## The capacity check
 
@@ -135,7 +135,7 @@ The Reviews page (LR-01) lists each review with its note, each change with *Undo
 - by subject (PL-08, `Stats.bySubject`): minutes and pieces in kept slots, deadlines met, and timed work against its estimates;
 - the last eight weeks' slots by weekday and hour (PL-09, `Stats.heat`), with *Set weekday hours from this* (`Stats.suggestedWeekdayHours`, the outlying tenth at each end left out), asked before it's set;
 - each reviewed week's totals (PL-10), read for what's older than the record's 120 days;
-- what's been learned, in words, each class's figure with *Forget* (`Stats.calibrationRows`), and each deck's seconds a card (`AnkiProgress.lines`);
+- what's been learned, in words, each class's figure with *Forget* (`Stats.calibrationRows`);
 - *Export the record as CSV* (PL-11, `learn/Export.kt`): completions, slots, days, blocks, Felix's messages (the archive's with the chat's) and the calibration, zipped to share.
 
 `Stats.weekLines` gives this week so far and last in figures, by subject, as Felix is told them when he asks (G6, [felix.md](felix.md)).

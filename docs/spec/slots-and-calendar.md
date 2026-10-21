@@ -6,7 +6,7 @@ Also how your calendar's events become busy time for the planner (`sync/Sync.kt`
 ## When the plan is made
 
 `PlanWatcher` makes the plan again whenever the tasks, the settings, your instructions, the calendar's busy time, the school calendar, today's slot starts or the calibration change, once they've been quiet 2 seconds (PL-13), and when Felix's notes change, so a piece's first steps are written with them.
-After each plan: today's slots are saved (`Planning.keepSlots`), the slot alarms are set (`SlotAlarms.arm`), your reminders it brings due or lets go are sent and their alarm set (`Looks.sweepReminders`, `SlotAlarms.armReminder`), the widget is drawn again, the pieces' first steps and Felix's next message are written ahead (`plan/Ahead.kt`), and the calendar is written once plans have been quiet 5 seconds. A slot's start or end alarm whose work fails is logged, not a crash, and his look is queued all the same (`SlotReceiver`, 4.1.2).
+After each plan: today's slots are saved (`Planning.keepSlots`), the slot alarms are set (`SlotAlarms.arm`), your reminders it brings due or lets go are sent and their alarm set (`Looks.sweepReminders`, `SlotAlarms.armReminder`), the widget is drawn again, the pieces' first steps and Felix's next message are written ahead (`plan/Ahead.kt`), and the calendar is written once plans have been quiet 5 seconds. A slot's start or end alarm whose work fails is logged, not a crash, and his look is queued all the same (`SlotReceiver`).
 
 ## The slotter (PL-12)
 
@@ -34,7 +34,7 @@ When the day's work needs their time (with its breaks, as they'd be laid), the m
 ## Pins (PL-04)
 
 A piece at a time you gave is laid at that time, to the minute, where it's free and the piece may be done then (a window for its kind of work, over by its deadline, its task open); one under way stays.
-Otherwise it goes at the next free start at or after its time, so a pin moved never takes another piece's time. Once its time and grace have gone by with the piece undone, it's laid as any piece is.
+Otherwise it goes at the next free start at or after its time, after the pins laid at theirs, so it never takes another pin's time. It's laid before today's kept starts: a piece the last plan had there is laid afresh. Once its time and grace have gone by with the piece undone, it's laid as any piece is.
 
 ## Kept starts (PL-13)
 
@@ -46,7 +46,7 @@ A piece's key is its task and its step's place (`Chunk.key`: sittings counted fr
 A slot just over stays where it is for `Slotter.GRACE_MS` (10 minutes), its piece still to tick.
 - `SlotAlarms.arm` sets an alarm at the next slot's start, which makes the plan again, and one at the next slot's end plus its grace (`Slots.onEnd`).
 - At the end, a piece still planned is missed: recorded once (`Focus.missSlot`, `SlotOutcome.Missed`), and its start no longer kept (`SlotState.missed`), so the plan moves it to the next free time and says so (`Why.Refitted`).
-- Whether that took it to another day is noted (`MissedSlot.spilled`, by `SlotState.reconciled`): its task still in the plan and the piece in none of today's slots. A slot missed today that went to tomorrow keeps today blocked till the day's hours end (BL-11, [blocking-and-protection.md](blocking-and-protection.md)); one whose task the plan no longer holds (finished since, or deleted) went to no day, and isn't kept as having gone once it finishes.
+- Whether that took it to another day is noted (`MissedSlot.spilled`, by `SlotState.reconciled`): its task still in the plan and the piece in none of today's slots. A slot missed today whose piece is left with no slot today (gone to a later day, or out of the plan's room) keeps today blocked till the day's hours end (BL-11, [blocking-and-protection.md](blocking-and-protection.md)); one whose task the plan no longer holds (finished since, or deleted) went to no day, and isn't kept as having gone once it finishes.
 - A slot whose alarm couldn't ring (the phone off) is found at the next plan (`Slots.sweep`).
 - A time, a day or a start you then give the task is a move on purpose: the slots of today's it moves are recorded moved (`InstructionRules.movedSlots`: a time, its next piece's; another day, all of today's; a start, those before it; `Focus.moveSlot`, `SlotOutcome.Moved`), and its missed slots forgotten (`SlotState.moved`).
 
@@ -56,7 +56,7 @@ A slot just over stays where it is for `Slotter.GRACE_MS` (10 minutes), its piec
 
 ## Keeping a slot (LR-09)
 
-`Focus.keepSlot(key)` keeps a piece: from Day's tick, the widget's ✓, Felix, a photo check, or AnkiDroid's cards counted as you leave it.
+`Focus.keepSlot(key)` keeps a piece: from Day's tick, the widget's ✓, Felix, or AnkiDroid's cards counted as you leave it. A photo check keeps one through `Focus.photoChecked`, by the same keep.
 - A step's piece ticks its step and adds its minutes to the task's worked minutes; a box, or a sitting before its step's last, adds its minutes only (`Chunk.ticks`). Minutes you say it took past its own are added too.
 - A step's last sitting ticks the step, its worked minutes including the step's other sittings still in the plan (kept out of order).
 - The slot's `SlotRecord` says how it went: `Kept`, or `KeptLate` once its grace is over or after a miss. A slot missed today and kept later is recorded as that slot, at its own time, and the miss gives way.
