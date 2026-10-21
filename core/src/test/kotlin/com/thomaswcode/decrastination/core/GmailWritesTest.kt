@@ -200,11 +200,25 @@ class GmailWritesTest {
     }
 
     @Test
+    fun `an Undo of a finish waiting a retry stops it as it is, and puts back only what it made`() {
+        val read = GmailWrites.with(GmailWrites.finish(emptyList(), finish(), confirmed = true)!!, "w1") { it.copy(flagged = listOf("101"), inbox = listOf("101", "102"), unstarred = true) }
+        val waiting = GmailWrites.failed(read, "w1", "no connection", now + min)
+        val undone = GmailWrites.undo(waiting, "gmail:1", now + 2 * min, "u1")!!
+        val stopped = undone.first { it.id == "w1" }
+        assertTrue(stopped.doneAt == now + 2 * min && stopped.unstarred && !stopped.archived)
+        assertEquals("u1", GmailWrites.next(undone, now + 2 * min)?.id)
+        assertEquals(listOf("101") to emptyList<String>(), GmailWrites.toRestore(undone, undone.last()))
+        // One due now (being made) isn't stopped: its Undo waits behind it.
+        assertTrue(GmailWrites.pending(GmailWrites.undo(waiting, "gmail:1", now + 31 * min, "u1")!!.first { it.id == "w1" }))
+    }
+
+    @Test
     fun `the worker's wake is each email's first write to go, not one waiting behind it`() {
         val read = GmailWrites.with(GmailWrites.finish(emptyList(), finish(), confirmed = true)!!, "w1") { it.copy(flagged = listOf("101"), inbox = listOf("101")) }
-        val undone = GmailWrites.undo(GmailWrites.failed(read, "w1", "no connection", now + min), "gmail:1", now + 2 * min, "u1")!!
-        assertEquals(now + 31 * min, GmailWrites.wake(undone))
-        assertNull(GmailWrites.next(undone, now + 2 * min))
+        // Taken back as it was being made (due), then its try failed: the Undo waits behind its wait.
+        val undone = GmailWrites.failed(GmailWrites.undo(read, "gmail:1", now + 2 * min, "u1")!!, "w1", "no connection", now + 2 * min)
+        assertEquals(now + 32 * min, GmailWrites.wake(undone))
+        assertNull(GmailWrites.next(undone, now + 3 * min))
         // A failure taken back by an Undo is said no more: the Undo's its task's newest.
         val gaveUp = GmailWrites.with(read, "w1") { it.copy(unstarred = true, tries = 5, doneAt = now + min, gaveUp = true) }
         assertEquals(listOf("w1"), GmailWrites.givenUp(gaveUp).map { it.id })
