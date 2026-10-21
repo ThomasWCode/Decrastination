@@ -349,5 +349,3 @@ private fun SameLine(graph: AppGraph, task: TaskItem, other: TaskItem) {
         }) { Text("Different") }
     }
 }
-
-/** The most pairs said to be different kept: far more than there are. */
