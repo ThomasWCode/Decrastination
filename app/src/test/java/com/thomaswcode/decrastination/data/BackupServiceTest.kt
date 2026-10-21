@@ -3,6 +3,8 @@ package com.thomaswcode.decrastination.data
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.core.Act
 import com.thomaswcode.decrastination.core.Calibration
+import com.thomaswcode.decrastination.core.Change
+import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.ChatAction
 import com.thomaswcode.decrastination.core.ChatArchive
 import com.thomaswcode.decrastination.core.ChatMessage
@@ -170,6 +172,19 @@ class BackupServiceTest {
         val phone = Phone(full = true, cap = 2_000)
         val before = phone.states()
         assertEquals("Nothing was reset: a copy of it would be too big to restore.", phone.service.reset(Reset.Instructions))
+        assertEquals(before, phone.states())
+        assertTrue(phone.folder.files.isEmpty())
+    }
+
+    @Test
+    fun `a reset whose copy Import would refuse takes nothing`() = runTest {
+        val phone = Phone(full = true)
+        // Read and waiting, its due date further ahead than a backup's instructions are let hold.
+        val far = Instruction("far-off", "the trip's form", at = clock.time, state = InstructionStatus.Understood, changes = listOf(Change(ChangeType.DueBy, taskId = "own:far", time = clock.time + 500 * 86_400_000L)))
+        phone.stores.replace(phone.stores.instructions) { it.copy(instructions = it.instructions + far) }
+        val before = phone.states()
+        val said = phone.service.reset(Reset.Instructions)
+        assertTrue(said.startsWith("Nothing was reset: a copy of it couldn't be restored ("), said)
         assertEquals(before, phone.states())
         assertTrue(phone.folder.files.isEmpty())
     }

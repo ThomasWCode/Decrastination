@@ -208,6 +208,10 @@ class AnkiRulesTest {
         val (putOff, offDay) = AnkiRules.quota(decks, 1, newDay, NOW + 60_000L, LONDON, 21 * 60 + 30, reviewsOnly = true, open = mapOf(withNew.sourceId to withNew.extra)) { it.new }
         assertEquals("true", putOff!!.extra[AnkiRules.EXTRA_NEW_LISTED])
         assertNull(AnkiRules.quota(studied, 1, offDay, later, LONDON, 21 * 60 + 30, open = mapOf(putOff.sourceId to putOff.extra)) { it.new }.first)
+        // A quota an older build listed carries no mark: taken as having had new cards, so not done early.
+        assertEquals("false", listed.extra[AnkiRules.EXTRA_NEW_LISTED])
+        val older = listed.extra - AnkiRules.EXTRA_NEW_LISTED
+        assertNull(AnkiRules.quota(studied, 1, day, later, LONDON, 21 * 60 + 30, open = mapOf(listed.sourceId to older)) { it.new }.first)
     }
 
     @Test

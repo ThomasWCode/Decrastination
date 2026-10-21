@@ -266,6 +266,10 @@ class BackupService(
         val (text, leftOut) = Backups.fitted(whole, backupCap)
         // Over the cap even without the chat's earlier messages, it couldn't be read back: nothing's reset.
         if (text.toByteArray(Charsets.UTF_8).size > backupCap) return@withContext "Nothing was reset: a copy of it would be too big to restore."
+        // Nor where Import would refuse it (a part it can't read, something the app never writes): checked as Import checks.
+        val decoded = Backups.decode(text, stores.shapes)
+        val unrestorable = if (decoded == null) "it couldn't be read back" else Backups.problem(decoded)
+        if (unrestorable != null) return@withContext "Nothing was reset: a copy of it couldn't be restored ($unrestorable)."
         val all = what == Reset.Everything
         // Nothing goes till its copy is somewhere it can be restored from.
         val saved = keep(name, text) ?: return@withContext "Nothing was reset: a copy of it couldn't be saved first."
