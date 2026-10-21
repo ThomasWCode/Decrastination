@@ -130,7 +130,7 @@ Numbered in `docs/decisions.md` by the PRs that apply them (the next free number
 - Finishing a starred email's work in the app unstars and archives it in Gmail (amending D-7, D-10 and D-54), behind a switch; a write that can't be made is the app's own notification, not his (11).
 - What he's sent always and what he asks for: small and needed by most messages always, the rest asked for and named in his prompt; the tasks' own text kept at 600 characters: cut to 250 (amending D-93) only where the chat's eval shows no loss, which in 4.1.4 it didn't (one case took a round more), so 600 stays (D-102); asked for instead only if real use shows it can be, after the plan; the week's numbers and the calendar further out taken as things he asks for (G6, G7: your call, 19 Oct, in place of Q17's "not now"); each class's next lessons in his context, a Power Planner class tied to its Teams code by the subject you give both (G8) (8b, 8c).
 - A finished task's text is kept a fortnight, its record for good (7). Every store has a version and a migration (3: D-94).
-- One `@claude review` on every PR that gets up to three Codex rounds, answered point by point and closed with "Resolved" (already in [development.md](../development.md), C-Q2).
+- One `@claude review` on every PR that gets Codex rounds (a move's one round aside), after its last, answered point by point and closed with "Resolved" (in [development.md](../development.md), C-Q2; the rounds stop at the first with at most one P2 and no P1, D-83 as amended 21 Oct).
 
 ## Done when
 
