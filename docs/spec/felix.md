@@ -8,7 +8,8 @@ The chat is his one visible voice (D-95): every word in his name is a message th
 
 ## Who he is
 
-- His name and the line that says who he is are settings (`felixName`, `felixLine`), changed in Settings → Felix or by him; every prompt of his names him with them (AI-22).
+- His name and the line that says who he is are settings (`felixName`, `felixLine`, by default "your mate who's on your case about the work"), changed in Settings → Felix or by him; every prompt of his names him with them (AI-22).
+- How he writes (D-57): like a sixth-former texting a mate, set by his two prompts' one register paragraph (`FelixPrompts.REGISTER`) and pinned by each prompt's made-up examples (AI-07): lower case, contractions, the odd "alr" or "tbh", short and light on commas; exact where it matters; no emojis. A message that's just talk gets a reply and nothing else (`FelixPrompts.JUST_TALK`). The app's own lines in his name (`FelixWords`) are in the same register, and his chips too, the app taking either their words or its own.
 - Settings → Felix also has how far into a slot he asks (`felixGraceMin`, 10 minutes), when he checks again if he doesn't say (`felixDefaultCheckMin`, 20), and whether he may search the web (`felixSearches`, on).
 - A message of his is `Speaker.Felix` (from 4.0.1), stored as "Claude", as it was before; the screens show his name.
 - His button is on every screen: Day, Work, Stats, Settings, a task's sheet (*Ask Felix about it*), and the block screen, about the next piece's task (UI-16). It wears the count of his messages unread (`Conversation.unread`): those since you last left the chat, but a question you've answered, or a message you've replied to, from his notification (`Outbox.repliedTo`; only that one: what the notification left out stays unread, 4.1.2).
