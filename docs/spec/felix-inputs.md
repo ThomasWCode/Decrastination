@@ -95,8 +95,8 @@ Before those words comes what they're about, in full (D-93): the task's whole te
 
 What the app knows when you send (`ChatPrompts.context`):
 - **Today**: the date, the time and the time zone.
-- **The reminders still to come** (4.1.0), first, so a context too long for its room never loses them: each by its id, with when it comes as the plan has it now, your words and its task; "(none)" with none, so "what have I asked you to remind me of?" has its answer.
-- **His messages still waiting for your answer** (4.2.2, D-99), where there are any: the newest ten, each by its id, with when he sent it, what it's about and his words (cut at 160 characters), so his answer can name in `answered` those your words answer without replying to them, which are marked answered as *Mark answered* marks them.
+- **His nudges still waiting for your answer** (4.2.2, D-99), where there are any, first, so a long context never loses them: the newest ten, each by its id, with when he sent it, what it's about and his words (cut at 160 characters), so his answer can name in `answered` those your words answer without replying to them, which are marked answered as *Mark answered* marks them. Not his questions whose answers the app keeps, nor a reminder: each waits for its reply.
+- **The reminders still to come** (4.1.0), next, so a context too long for its room never loses them: each by its id, with when it comes as the plan has it now, your words and its task; "(none)" with none, so "what have I asked you to remind me of?" has its answer.
 - **Open tasks**, up to 80, by the deadline in force: each with its id, title, source, its class and the subject the class map gives it (4.1.1), kind, due date (marked "(a plan)" where the app or Claude set it), its minutes and what the plan makes of them at your pace, the minutes worked, when it can start, and what its text holds (4.1.4: its length, an email's sender, its attachments' names, its links); under it, its steps, numbered for a tick, then its own notes (4.1.0), each by its id and whose it is, and the ids of the standing ones it matches, all of them in a room of 6,000 characters (the rest are on their sheets).
 - **Standing notes** (4.1.0, Q31: A), each once: its id, whose it is, the tasks it's for and its words.
 - **Notes on finished tasks** (4.1.0), the newest first, in what's left of the notes' room: each by its id, whose it is, its task and its words, so he can say or delete them.
@@ -151,12 +151,12 @@ The worksheet's due Thursday morning and the vectors on Friday. I've put the vec
 ```text
 Today: Tuesday 13 October 2026, 17:20 (Europe/London)
 
+Your messages still waiting for their answer (id | when | what it's about | your words):
+- m4 | Tue 13 Oct 2026 17:00 | Rates of reaction worksheet | Starting the worksheet? First: read question 1 and underline what it asks.
+
 Reminders set, still to come (id | when | their words | its task):
 - r2 | at the start of “Rates of reaction worksheet”'s next slot, Tue 13 Oct 17:20 | Ask about question 7 | teams:t1
 - r1 | Wed 14 Oct 08:00 | Bring the signed consent form | gmail:m1
-
-Your messages still waiting for their answer (id | when | what it's about | your words):
-- m4 | Tue 13 Oct 2026 17:00 | Rates of reaction worksheet | Starting the worksheet? First: read question 1 and underline what it asks.
 
 Open tasks (id | title | from | its class, and its subject | kind | due, a real deadline unless marked a plan, which is never overdue and moves on once it passes | minutes in all, with what the plan makes of them at their pace where it's learned | minutes worked so far | can't start before | what its text holds: who an email's from, what's attached and linked, how long its text is):
 - teams:t1 | Rates of reaction worksheet | Teams | 12X/Ch1, Chemistry | Homework | Thu 15 Oct 2026 08:30 | 45, planned as 59 at their pace | 0 | - | links: https://example.org/rates-sheet; text 140 characters

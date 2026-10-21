@@ -504,6 +504,16 @@ object ChatPrompts {
         val byId = tasks.associateBy { it.id }
         appendLine("Today: ${Instant.ofEpochMilli(now).atZone(zone).format(TODAY)} (${zone.id})")
         appendLine()
+        // His nudges still waiting for their answer (D-99), by id, so he can name those their words answer (10b): first, at
+        // most ten short lines, so a context too long for its room (a long list of reminders) never loses them. None, no list.
+        if (waiting.isNotEmpty()) {
+            appendLine("Your messages still waiting for their answer (id | when | what it's about | your words):")
+            waiting.forEach { m ->
+                val about = m.about.taskId?.let(byId::get)?.title ?: m.about.taskTitle ?: m.about.eventTitle ?: "-"
+                appendLine("- ${m.id} | ${at(m.at)} | ${about.take(MAX_TITLE)} | ${m.text.trim().replace('\n', ' ').take(MAX_WAITING_TEXT)}")
+            }
+            appendLine()
+        }
         // The reminders still to come (8a), by id, to move or cancel; so one isn't set twice. First, so a context too
         // long for its room never loses them ([turns]): the lists after them can run long.
         appendLine("Reminders set, still to come (id | when | their words | its task):")
@@ -514,16 +524,6 @@ object ChatPrompts {
             appendLine("- ${r.id} | ${Reminders.whenLine(r, moments[r.id], title, zone)} | ${r.text.take(Reminders.MAX_TEXT)} | ${r.taskId ?: "-"}")
         }
         appendLine()
-        // His messages still waiting for their answer (D-99), by id, so he can name those their words answer (10b); after
-        // the reminders, as few and short, so a context too long for its room never loses them. None, no list.
-        if (waiting.isNotEmpty()) {
-            appendLine("Your messages still waiting for their answer (id | when | what it's about | your words):")
-            waiting.forEach { m ->
-                val about = m.about.taskId?.let(byId::get)?.title ?: m.about.taskTitle ?: m.about.eventTitle ?: "-"
-                appendLine("- ${m.id} | ${at(m.at)} | ${about.take(MAX_TITLE)} | ${m.text.trim().replace('\n', ' ').take(MAX_WAITING_TEXT)}")
-            }
-            appendLine()
-        }
         appendLine("Open tasks (id | title | from | its class, and its subject | kind | due, a real deadline unless marked a plan, which is never overdue and moves on once it passes | minutes in all, with what the plan makes of them at their pace where it's learned | minutes worked so far | can't start before | what its text holds: who an email's from, what's attached and linked, how long its text is):")
         // By the date shown (the deadline in force, PL-14), so a plan's date gone by doesn't crowd nearer ones out of the list.
         val open = tasks.filter { it.isOpen && !it.hidden }.sortedBy { it.deadlineAt(now) ?: it.dueAt ?: Long.MAX_VALUE }
