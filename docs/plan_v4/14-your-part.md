@@ -42,7 +42,7 @@ Stage by stage, what each PR needs from your phone and from you, for what and fo
 | — | 4.2.1 | **needed**: install and the script; the archive's months' copies listed (`run-as … ls files`), each to go at the first start a week after it was made | no |
 | 10b | 4.2.2 | **needed**: install; four `chat-ask`s and a `felix-say` (paid); the next morning's briefing; `review` for the summary | **needed**, twice, at your own pace: before the PR, read the register paragraph and the examples (taste: 10 min, by message, no phone); after the install, read a day of his messages and say what's off |
 | 11 | 4.3.0 | **needed**, online: install; `sync --es sources gmail`; `state`; a minute's wait for the write; logcat's IMAP lines | **needed**, 20 min with Gmail open: star a note-to-self email in Gmail; tick its piece on Day; Undo within the grace (again, with a second email); aeroplane mode on and off; look in Gmail (unstarred, out of the inbox); the first-time sheet; the switch off in Settings and a tick that leaves Gmail alone |
-| — | 4.3.1 | **needed**: install and the script; two `chat-ask`s (paid) with Gmail's finish switch off | no |
+| — | 4.3.1 | **needed**: install and the script; two `chat-ask`s (paid) with Gmail's finish switch off (`gmail-finishes --ez on false`, then `true` again) | no |
 | 12 | 4.3.2 | **needed**: install and the script; the baselines | **helpful**: the done-when list read together, by message |
 
 ## In sum
