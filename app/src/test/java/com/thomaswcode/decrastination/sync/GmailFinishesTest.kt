@@ -293,6 +293,28 @@ class GmailFinishesTest {
     }
 
     @Test
+    fun `a finish again after one given up partway goes on from it, so its Undo still puts back the star it took`() = runBlocking {
+        val gmail = FakeGmail()
+        finishes.finish(email.id, explicit = true)
+        clock.time += GmailWrites.GRACE_MS
+        gmail.failing = Change.Archive
+        repeat(GmailWrites.MAX_TRIES) { finishes.write(gmail); clock.time += GmailWrites.backoff(it + 1) }
+        // Finished again: only the archive's left to make.
+        gmail.failing = null
+        gmail.stored.clear()
+        assertEquals(GmailFinishes.Finish.Going, finishes.finish(email.id, explicit = true))
+        assertEquals(listOf("t1"), sorted)
+        clock.time += GmailWrites.GRACE_MS
+        assertFalse(finishes.write(gmail))
+        assertEquals(listOf(listOf(11L, 12L) to Change.Archive), gmail.stored)
+        // Its Undo puts back the star the first try took, and the inbox.
+        gmail.stored.clear()
+        assertTrue(finishes.unfinish(email.id))
+        assertFalse(finishes.write(gmail))
+        assertEquals(listOf(listOf(11L) to Change.Star, listOf(11L, 12L) to Change.Inbox), gmail.stored)
+    }
+
+    @Test
     fun `a finish given up and taken back is said no more, and its Undo puts back the star it took`() = runBlocking {
         val gmail = FakeGmail()
         finishes.finish(email.id, explicit = true)

@@ -952,7 +952,7 @@ class Conversation(
                             GmailFinishes.Finish.Going -> Act("Finished: “${task.title}” (unstarring and archiving it in Gmail)", a, after = owners.gmailWriteOf(task.id))
                             // One standing already, made before this answer: said, with nothing of this one's to undo.
                             GmailFinishes.Finish.Pending -> Act("Being finished in Gmail already: “${task.title}”")
-                            GmailFinishes.Finish.Awaiting -> Act("Finished here: “${task.title}”; Gmail waits for your OK in the app", a, after = owners.gmailWriteOf(task.id))
+                            GmailFinishes.Finish.Awaiting -> Act("Waiting for your OK in the app to finish it in Gmail: “${task.title}”", a, after = owners.gmailWriteOf(task.id))
                             GmailFinishes.Finish.Off, GmailFinishes.Finish.No -> Act(Act.NOT_MADE + "“${task.title}” is done when Gmail says so.", problem = true)
                         }
                     }

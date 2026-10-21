@@ -451,7 +451,7 @@ class ConversationTest {
         felix.answers(felix.chatAnswer("Finished it.", actions = """[{"type":"done","taskId":"gmail:t1","stepIndex":-1,"setting":"","value":""}]"""))
         assertTrue(conversation.ask("I'm done with the trip email"))
         felix.settle()
-        assertEquals("Finished here: “Trip consent form”; Gmail waits for your OK in the app", his().last().acts.single().line)
+        assertEquals("Waiting for your OK in the app to finish it in Gmail: “Trip consent form”", his().last().acts.single().line)
         stores.settings.update { it.copy(gmailFinishes = false) }
         felix.answers(felix.chatAnswer("Finished it.", actions = """[{"type":"done","taskId":"gmail:t1","stepIndex":-1,"setting":"","value":""}]"""))
         assertTrue(conversation.ask("done with it"))

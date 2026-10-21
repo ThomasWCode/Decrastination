@@ -234,8 +234,8 @@ class AppGraph private constructor(context: Context) {
         tasks, settings, stores.session, stores.learning, stores.protection, log, clock,
         onOwnTaskDone = { ownTasks.finishOwnTask(it) },
         // An email's work all done by a keep or a tick is finished in Gmail; taken back, so is its finish, once its work isn't all done.
-        onWorked = { gmailFinishes.finish(it, explicit = false) },
-        onUnworked = { gmailFinishes.unworked(it) },
+        onWorked = { runCatching { gmailFinishes.finish(it, explicit = false) }.onFailure { e -> Log.w(TAG, "Finishing an email in Gmail failed", e) } },
+        onUnworked = { runCatching { gmailFinishes.unworked(it) }.onFailure { e -> Log.w(TAG, "Taking back an email's finish failed", e) } },
         // A school day by the school calendar (BL-02): a day off blocks from the weekend's time.
         schoolDay = { com.thomaswcode.decrastination.core.SchoolDays.kindOf(it, school.value) == com.thomaswcode.decrastination.core.DayKind.Weekday },
     ) { state, s, now -> planning.plan(state, s, now) }

@@ -72,8 +72,12 @@ object GmailWrites {
      * [writes] with [write], a finish, journaled: to go after the grace from its [GmailWrite.at] where a finish was
      * OK'd before ([confirmed]), else waiting for your OK. Null where [write]'s task has a finish standing: pending, or
      * made with no Gmail read since ([readAt], the source's last) to show it starred again, so a second finish
-     * doesn't read the conversation as the first left it and take the place of its receipt. The task's writes given
-     * up are let go as this takes their place, their failure said no more, but for one a pending Undo still needs.
+     * doesn't read the conversation as the first left it and take the place of its receipt.
+     *
+     * After a write given up, it goes on from that one's finish, whose lists say what Gmail was before it changed
+     * anything, so its Undo can still put all of that back: a finish given up goes on where it stopped (its commands
+     * made kept); one an Undo given up was taking back goes again, both commands, from its own lists. The writes given
+     * up are let go as it does, their failure said no more, but for one a pending Undo still needs.
      */
     fun finish(writes: List<GmailWrite>, write: GmailWrite, confirmed: Boolean, readAt: Long? = null): List<GmailWrite>? {
         val last = latest(writes, write.taskId)
@@ -81,8 +85,18 @@ object GmailWrites {
             if (pending(last)) return null
             if (!last.gaveUp && (readAt == null || readAt <= last.doneAt!!)) return null
         }
+        val notBefore = if (confirmed) write.at + GRACE_MS else null
+        val from = when {
+            last?.gaveUp != true -> null
+            last.reverseOf == null -> last
+            else -> writes.firstOrNull { it.id == last.reverseOf }?.copy(unstarred = false, archived = false)
+        }
         val needed = needed(writes)
-        return writes.filterNot { it.taskId == write.taskId && it.gaveUp && it.id !in needed } + write.copy(notBefore = if (confirmed) write.at + GRACE_MS else null, reverseOf = null)
+        val kept = writes.filterNot { it.taskId == write.taskId && it.gaveUp && it.id !in needed || it.id == from?.id }
+        return kept + (
+            from?.copy(at = write.at, notBefore = notBefore, explicit = from.explicit || write.explicit, tries = 0, lastError = null, doneAt = null, gaveUp = false)
+                ?: write.copy(notBefore = notBefore, reverseOf = null)
+            )
     }
 
     /**
