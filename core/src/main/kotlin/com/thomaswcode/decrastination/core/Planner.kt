@@ -5,6 +5,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
+import java.time.temporal.ChronoUnit
 import kotlin.math.ceil
 import kotlin.math.roundToInt
 
@@ -329,7 +330,7 @@ object Planner {
         // have its own day (a deck of 300 unseen cards is 15 days of 20).
         val stepDays = items.maxOfOrNull { item ->
             val perDay = item.task.stepsPerDay ?: return@maxOfOrNull 0L
-            val start = item.notBefore?.takeIf { it > input.now }?.let { java.time.temporal.ChronoUnit.DAYS.between(today, date(it, zone)) } ?: 0L
+            val start = item.notBefore?.takeIf { it > input.now }?.let { ChronoUnit.DAYS.between(today, date(it, zone)) } ?: 0L
             start + (item.chunks.size + perDay - 1) / perDay
         } ?: 0L
         val horizon = minOf(maxOf(lastDeadline, today.plusDays(MIN_HORIZON_DAYS), today.plusDays(stepDays)), today.plusDays(MAX_HORIZON_DAYS))

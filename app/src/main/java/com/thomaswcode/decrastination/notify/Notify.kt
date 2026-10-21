@@ -6,9 +6,12 @@ import android.content.Context
 import android.content.Intent
 import androidx.core.app.NotificationCompat
 import androidx.core.app.RemoteInput
+import com.thomaswcode.decrastination.R
 import com.thomaswcode.decrastination.data.HeldNotification
 import com.thomaswcode.decrastination.data.HeldReply
 import com.thomaswcode.decrastination.data.HeldTap
+import com.thomaswcode.decrastination.ui.Colours
+import com.thomaswcode.decrastination.ui.MainActivity
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 
@@ -51,7 +54,7 @@ object Notify {
         // Mutable, as the reply's words are put in it.
         val pending = PendingIntent.getBroadcast(context, requestCode, intent, PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val input = RemoteInput.Builder(reply.key).setLabel(reply.label).setChoices(reply.choices.toTypedArray()).build()
-        return NotificationCompat.Action.Builder(com.thomaswcode.decrastination.R.drawable.ic_send, label, pending).addRemoteInput(input).setAllowGeneratedReplies(false).build()
+        return NotificationCompat.Action.Builder(R.drawable.ic_send, label, pending).addRemoteInput(input).setAllowGeneratedReplies(false).build()
     }
 
     private fun taps(json: String?): List<HeldTap> = json?.let { runCatching { Json.decodeFromString(TAPS, it) }.getOrNull() }.orEmpty()
@@ -79,18 +82,18 @@ object Notify {
 
     /** A notification on [channel] in the app's look: its icon, and the app's blue ([com.thomaswcode.decrastination.ui.Colours.BLUE_ARGB]). */
     fun builder(context: Context, channel: String): NotificationCompat.Builder =
-        NotificationCompat.Builder(context, channel).setSmallIcon(com.thomaswcode.decrastination.R.drawable.ic_focus).setColor(com.thomaswcode.decrastination.ui.Colours.BLUE_ARGB)
+        NotificationCompat.Builder(context, channel).setSmallIcon(R.drawable.ic_focus).setColor(Colours.BLUE_ARGB)
 
     /** [held], held back (LR-07), made again as it was: its tap and buttons with it, or with none kept, opening the app. */
     fun rebuild(context: Context, held: HeldNotification): Notification {
         val app = PendingIntent.getActivity(
             context,
             0,
-            Intent(context, com.thomaswcode.decrastination.ui.MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
             FLAGS,
         )
         val made = builder(context, held.channel)
-            .setSmallIcon(com.thomaswcode.decrastination.R.drawable.ic_focus)
+            .setSmallIcon(R.drawable.ic_focus)
             .setContentTitle(held.title)
             .setContentText(held.text)
             .setStyle(NotificationCompat.BigTextStyle().bigText(held.text))

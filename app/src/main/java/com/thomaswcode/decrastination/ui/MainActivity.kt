@@ -37,6 +37,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.work.WorkManager
 import com.thomaswcode.decrastination.AppGraph
+import com.thomaswcode.decrastination.BuildConfig
 import com.thomaswcode.decrastination.R
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.sync.SyncWorker
@@ -184,7 +185,7 @@ class MainActivity : ComponentActivity() {
             "Reviews" to ReviewsActivity::class.java,
             "Settings" to SettingsActivity::class.java,
             // The debug page (AR-03), on a debug build.
-            ("Debug" to DebugActivity::class.java).takeIf { com.thomaswcode.decrastination.BuildConfig.DEBUG },
+            ("Debug" to DebugActivity::class.java).takeIf { BuildConfig.DEBUG },
         )
     }
 }

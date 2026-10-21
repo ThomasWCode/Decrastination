@@ -4,15 +4,24 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
+import android.speech.RecognizerIntent
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.StartOffset
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -114,6 +123,9 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.SuggestionChip
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -138,6 +150,7 @@ import com.thomaswcode.decrastination.core.OwnTask
 import com.thomaswcode.decrastination.core.OwnTaskRules
 import com.thomaswcode.decrastination.core.Proposal
 import com.thomaswcode.decrastination.core.ProposalState
+import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.felix.ChatPrompts
@@ -427,7 +440,7 @@ class AskActivity : ComponentActivity() {
                     if (last != null && last.suggestedReplies.isNotEmpty()) {
                         FlowRow(Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             last.suggestedReplies.forEach { reply ->
-                                androidx.compose.material3.SuggestionChip(onClick = {
+                                SuggestionChip(onClick = {
                                     // Answered by it: the box replies to nothing, till his next question's offered.
                                     if (screen.replyingTo?.id == last.id) screen.sent()
                                     graph.scope.launch { graph.conversation.ask(reply, replyTo = last.id) }
@@ -499,7 +512,7 @@ class AskActivity : ComponentActivity() {
             }
         }
         if (remembering) {
-            androidx.compose.material3.ModalBottomSheet(onDismissRequest = { remembering = false }) {
+            ModalBottomSheet(onDismissRequest = { remembering = false }) {
                 Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
                     Text("What ${settings.felixName} remembers", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(horizontal = 16.dp))
                     MemorySection(graph)
@@ -890,7 +903,7 @@ private fun Typing(graph: AppGraph) {
     LaunchedEffect(since) {
         while (since != null) {
             clock = graph.clock.now()
-            kotlinx.coroutines.delay(1_000)
+            delay(1_000)
         }
     }
     val long = since?.let { (clock - it) / 1_000 >= CANCEL_AFTER_S } == true
@@ -906,17 +919,17 @@ private fun Typing(graph: AppGraph) {
 /** Three dots, each rising and brightening in turn, [DOT_STEP_MS] after the one before: a wave every [DOT_CYCLE_MS]. */
 @Composable
 private fun Dots(modifier: Modifier) {
-    val wave = androidx.compose.animation.core.rememberInfiniteTransition(label = "typing")
+    val wave = rememberInfiniteTransition(label = "typing")
     val colour = MaterialTheme.colorScheme.onSurfaceVariant
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {
         repeat(3) { i ->
             val up by wave.animateFloat(
                 initialValue = 0f,
                 targetValue = 1f,
-                animationSpec = androidx.compose.animation.core.infiniteRepeatable(
-                    animation = androidx.compose.animation.core.tween(DOT_CYCLE_MS / 2, easing = androidx.compose.animation.core.FastOutSlowInEasing),
-                    repeatMode = androidx.compose.animation.core.RepeatMode.Reverse,
-                    initialStartOffset = androidx.compose.animation.core.StartOffset(i * DOT_STEP_MS),
+                animationSpec = infiniteRepeatable(
+                    animation = tween(DOT_CYCLE_MS / 2, easing = FastOutSlowInEasing),
+                    repeatMode = RepeatMode.Reverse,
+                    initialStartOffset = StartOffset(i * DOT_STEP_MS),
                 ),
                 label = "dot $i",
             )
@@ -926,7 +939,7 @@ private fun Dots(modifier: Modifier) {
                         translationY = -up * 3.dp.toPx()
                         alpha = 0.35f + 0.65f * up
                     }
-                    .background(colour, androidx.compose.foundation.shape.CircleShape),
+                    .background(colour, CircleShape),
             )
         }
     }
@@ -1082,7 +1095,7 @@ private const val LABEL_SLIDE_MS = 250
 @Composable
 private fun Opens(message: ChatMessage) {
     val opens = message.opens ?: return
-    val context = androidx.compose.ui.platform.LocalContext.current
+    val context = LocalContext.current
     val week = opens.removePrefix(Conversation.OPENS_SUMMARY).takeIf { opens.startsWith(Conversation.OPENS_SUMMARY) }
     OutlinedButton(onClick = {
         context.startActivity(Intent(context, ReviewsActivity::class.java).apply { week?.let { putExtra(ReviewsActivity.EXTRA_SEND, it) } })
@@ -1093,20 +1106,20 @@ private fun Opens(message: ChatMessage) {
 @Composable
 private fun Searched(message: ChatMessage) {
     if (message.searched.isEmpty() && message.sources.isEmpty()) return
-    val context = androidx.compose.ui.platform.LocalContext.current
+    val context = LocalContext.current
     Column(Modifier.padding(horizontal = 4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
         if (message.searched.isNotEmpty()) {
             Text("Searched the web for " + message.searched.joinToString(", ") { "“$it”" }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         message.sources.forEach { source ->
             Text(
-                source.title.ifBlank { android.net.Uri.parse(source.url).host ?: source.url },
-                style = MaterialTheme.typography.bodySmall.copy(textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline),
+                source.title.ifBlank { Uri.parse(source.url).host ?: source.url },
+                style = MaterialTheme.typography.bodySmall.copy(textDecoration = TextDecoration.Underline),
                 color = MaterialTheme.colorScheme.primary,
                 maxLines = 1,
-                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.clickable {
-                    runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(source.url))) }
+                    runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(source.url))) }
                 },
             )
         }
@@ -1130,7 +1143,7 @@ private fun Remembered(graph: AppGraph, message: ChatMessage, live: Boolean) {
                 edit.line,
                 style = MaterialTheme.typography.bodySmall,
                 color = quiet,
-                textDecoration = if (edit.undone) androidx.compose.ui.text.style.TextDecoration.LineThrough else null,
+                textDecoration = if (edit.undone) TextDecoration.LineThrough else null,
                 modifier = Modifier.weight(1f),
             )
             when {
@@ -1182,7 +1195,7 @@ private fun Acts(graph: AppGraph, message: ChatMessage, live: Boolean) {
                 act.line,
                 style = MaterialTheme.typography.bodySmall,
                 color = quiet,
-                textDecoration = if (act.undone) androidx.compose.ui.text.style.TextDecoration.LineThrough else null,
+                textDecoration = if (act.undone) TextDecoration.LineThrough else null,
                 modifier = Modifier.weight(1f),
             )
             when {
@@ -1212,23 +1225,23 @@ private fun ProposalCard(graph: AppGraph, messageId: String, proposal: Proposal,
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             // A task shown (AI-14): its name, and Open, to its sheet.
             proposal.open?.let { id ->
-                val context = androidx.compose.ui.platform.LocalContext.current
+                val context = LocalContext.current
                 Text("Task", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
                 Text(tasks[id]?.title ?: "A task no longer listed", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 if (id in tasks) {
                     Button(onClick = {
                         context.startActivity(
-                            android.content.Intent(context, MainActivity::class.java)
+                            Intent(context, MainActivity::class.java)
                                 .putExtra(MainActivity.EXTRA_TAB, MainActivity.TAB_TASKS)
                                 .putExtra(MainActivity.EXTRA_TASK, id)
-                                .addFlags(android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP or android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP),
+                                .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP),
                         )
                     }) { Text("Open") }
                 }
                 return@Column
             }
             // Added, the task as it is now (changed since with Change, or on its page); else as he gave it.
-            val task = proposal.made?.takeIf { applied }?.let { tasks[it] }?.takeIf { it.source == com.thomaswcode.decrastination.core.Source.Own }?.let(OwnTaskRules::draftOf) ?: proposal.task
+            val task = proposal.made?.takeIf { applied }?.let { tasks[it] }?.takeIf { it.source == Source.Own }?.let(OwnTaskRules::draftOf) ?: proposal.task
             if (task != null) {
                 Text(if (task.kind == Kind.Event) "New event of yours" else "New task of yours", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
                 Text(task.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
@@ -1324,15 +1337,15 @@ private fun InputBar(
     onSend: () -> Unit,
 ) {
     // Your words by voice (UI-07): put in the box after what's there, not sent, so they're read first.
-    val context = androidx.compose.ui.platform.LocalContext.current
+    val context = LocalContext.current
     val speech = remember {
-        Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
-            .putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            .putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE, "en-GB")
+        Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+            .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            .putExtra(RecognizerIntent.EXTRA_LANGUAGE, "en-GB")
     }
     val canSpeak = remember { speech.resolveActivity(context.packageManager) != null }
-    val listen = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()) { result ->
-        result.data?.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()?.trim()?.takeIf { it.isNotEmpty() }?.let { heard ->
+    val listen = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()?.trim()?.takeIf { it.isNotEmpty() }?.let { heard ->
             onDraft((if (draft.isBlank()) heard else "${draft.trimEnd()} $heard").take(ChatPrompts.MAX_TEXT))
         }
     }

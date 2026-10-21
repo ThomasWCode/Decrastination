@@ -8,6 +8,7 @@ import com.thomaswcode.decrastination.core.Sittings
 import com.thomaswcode.decrastination.core.SubStep
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.Where
+import com.thomaswcode.decrastination.core.carryMarks
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.Serializable
 import kotlin.math.abs
@@ -126,7 +127,7 @@ object ReadingAnswers {
      * after its first would lose the mark (#48's review).
      */
     internal fun sittings(steps: List<SubStep>, before: List<SubStep>): List<SubStep> =
-        com.thomaswcode.decrastination.core.carryMarks(steps, before).zip(steps).flatMap { (marked, step) -> if (marked.done) listOf(step) else fitParts(step) }
+        carryMarks(steps, before).zip(steps).flatMap { (marked, step) -> if (marked.done) listOf(step) else fitParts(step) }
 
     /** A test's day: work must be done before school that morning. */
     private val SCHOOL_STARTS: LocalTime = LocalTime.of(8, 30)

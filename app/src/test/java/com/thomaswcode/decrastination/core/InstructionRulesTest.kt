@@ -138,7 +138,7 @@ class InstructionRulesTest {
         val deck = TaskItem(
             id = "anki:deck:1", source = Source.Anki, sourceId = "deck:1", title = "Learn Anki deck 1.2", kind = Kind.Homework,
             dueAt = Fixtures.at("2026-10-13T09:00"), sourceEffortMin = 20, derived = true, firstSeenAt = now, lastSeenAt = now,
-            extra = mapOf(com.thomaswcode.decrastination.core.AnkiRules.EXTRA_FOR to homework.id),
+            extra = mapOf(AnkiRules.EXTRA_FOR to homework.id),
         )
         // Not a task: its deck goes with it.
         val hidden = plan(listOf(homework.withMine(mineOf(notATask = true)), deck)).ordered.map { it.taskId }
@@ -185,7 +185,7 @@ class InstructionRulesTest {
         val deck = TaskItem(
             id = "anki:deck:1", source = Source.Anki, sourceId = "deck:1", title = "Learn Anki deck 1.2", kind = Kind.Homework,
             dueAt = Fixtures.at("2026-10-20T09:00"), sourceEffortMin = 20, derived = true, firstSeenAt = now, lastSeenAt = now,
-            extra = mapOf(com.thomaswcode.decrastination.core.AnkiRules.EXTRA_FOR to homework.id),
+            extra = mapOf(AnkiRules.EXTRA_FOR to homework.id),
         )
         val chunk = plan(listOf(homework, deck)).ordered.first { it.taskId == deck.id }
         assertEquals(Fixtures.at("2026-10-12T09:00"), chunk.dueAt)
@@ -468,10 +468,10 @@ class InstructionRulesTest {
             .with(HalfDay("2026-10-23", 780))
         assertEquals(listOf(NoSchool("2026-10-26", "2026-11-01", "Half term"), NoSchool("2026-12-21", "2027-01-01", "Christmas")), calendar.noSchool)
         assertEquals(listOf(HalfDay("2026-10-23", 780)), calendar.halfDays)
-        assertFalse(calendar.isSchoolDay(java.time.LocalDate.parse("2026-10-27")))
-        assertTrue(calendar.isSchoolDay(java.time.LocalDate.parse("2026-11-02")))
-        assertFalse(calendar.isSchoolDay(java.time.LocalDate.parse("2026-10-24")))
-        assertEquals(780, calendar.halfDay(java.time.LocalDate.parse("2026-10-23"))?.endsAtMin)
+        assertFalse(calendar.isSchoolDay(LocalDate.parse("2026-10-27")))
+        assertTrue(calendar.isSchoolDay(LocalDate.parse("2026-11-02")))
+        assertFalse(calendar.isSchoolDay(LocalDate.parse("2026-10-24")))
+        assertEquals(780, calendar.halfDay(LocalDate.parse("2026-10-23"))?.endsAtMin)
         // A stretch that joins two others makes them one.
         val joined = SchoolCalendar().with(NoSchool("2026-10-01", "2026-10-02")).with(NoSchool("2026-10-05", "2026-10-06")).with(NoSchool("2026-10-03", "2026-10-04"))
         assertEquals(listOf(NoSchool("2026-10-01", "2026-10-06")), joined.noSchool)
@@ -548,7 +548,7 @@ class InstructionRulesTest {
 
     @Test
     fun `a time moves only its task's next piece's slot, a day elsewhere all of today's, a start those before it`() {
-        val today = java.time.LocalDate.parse("2026-10-12")
+        val today = LocalDate.parse("2026-10-12")
         fun chunk(step: Int) = Chunk(
             taskId = "teams:t", source = Source.Teams, kind = Kind.Homework, title = "t", step = "s$step", minutes = 30, dueAt = Fixtures.at("2026-10-20T09:00"),
             deadline = Fixtures.at("2026-10-20T09:00"), soft = false, overdue = false, dueToday = false, behind = false, part = step + 1, parts = 3, taskMinutes = 90, why = Why.Spread, stepIndex = step,
@@ -566,15 +566,15 @@ class InstructionRulesTest {
     fun `steps for a task of your own are read, said and made on it, its ticks kept by name`() {
         val own = OwnTaskRules.create(OwnTask(title = "Essay", steps = listOf(OwnStep("Plan", 20), OwnStep("Write", 40))), "e", Fixtures.at("2026-10-12T17:00"))
         val ticked = own.copy(subSteps = own.subSteps.map { if (it.title == "Plan") it.copy(done = true) else it })
-        val given = com.thomaswcode.decrastination.enrich.InstructionAnswers.Given(
+        val given = InstructionAnswers.Given(
             "Steps", taskId = own.id,
             steps = listOf(
-                com.thomaswcode.decrastination.enrich.InstructionAnswers.GivenStep("Plan", 20),
-                com.thomaswcode.decrastination.enrich.InstructionAnswers.GivenStep("Draft", 30, dueDate = "2026-10-14"),
-                com.thomaswcode.decrastination.enrich.InstructionAnswers.GivenStep("Polish", 10, where = "home"),
+                InstructionAnswers.GivenStep("Plan", 20),
+                InstructionAnswers.GivenStep("Draft", 30, dueDate = "2026-10-14"),
+                InstructionAnswers.GivenStep("Polish", 10, where = "home"),
             ),
         )
-        val change = com.thomaswcode.decrastination.enrich.InstructionAnswers.change(given, mapOf(own.id to ticked), emptyMap(), Fixtures.at("2026-10-12T17:00"), Fixtures.LONDON)!!
+        val change = InstructionAnswers.change(given, mapOf(own.id to ticked), emptyMap(), Fixtures.at("2026-10-12T17:00"), Fixtures.LONDON)!!
         assertEquals(listOf("Plan", "Draft", "Polish"), change.steps!!.map { it.title })
         assertEquals("“Essay” in steps: Plan (20 min), Draft (30 min), Polish (10 min)", InstructionRules.describe(change, mapOf(own.id to ticked), Fixtures.LONDON))
         val draft = OwnTaskRules.draftWith(ticked, change)!!
@@ -583,22 +583,22 @@ class InstructionRulesTest {
         assertEquals(60, made.subSteps.sumOf { it.minutes })
         // A source's task's too (16 Oct), but not one made from Anki's cards.
         val teams = ticked.copy(id = "teams:x", source = Source.Teams)
-        assertTrue(com.thomaswcode.decrastination.enrich.InstructionAnswers.change(given.copy(taskId = teams.id), mapOf(teams.id to teams), emptyMap(), Fixtures.at("2026-10-12T17:00"), Fixtures.LONDON) != null)
+        assertTrue(InstructionAnswers.change(given.copy(taskId = teams.id), mapOf(teams.id to teams), emptyMap(), Fixtures.at("2026-10-12T17:00"), Fixtures.LONDON) != null)
         val deck = ticked.copy(id = "anki:deck", source = Source.Anki, derived = true)
-        assertNull(com.thomaswcode.decrastination.enrich.InstructionAnswers.change(given.copy(taskId = deck.id), mapOf(deck.id to deck), emptyMap(), Fixtures.at("2026-10-12T17:00"), Fixtures.LONDON))
-        assertEquals("an Anki task's steps and name come from its cards", com.thomaswcode.decrastination.enrich.InstructionAnswers.problem(given.copy(taskId = deck.id), mapOf(deck.id to deck), emptyMap()))
+        assertNull(InstructionAnswers.change(given.copy(taskId = deck.id), mapOf(deck.id to deck), emptyMap(), Fixtures.at("2026-10-12T17:00"), Fixtures.LONDON))
+        assertEquals("an Anki task's steps and name come from its cards", InstructionAnswers.problem(given.copy(taskId = deck.id), mapOf(deck.id to deck), emptyMap()))
         // Its steps come to its 60 minutes; to 70 only with a Minutes change saying so.
         val longer = change.copy(steps = change.steps!!.map { if (it.title == "Polish") it.copy(minutes = 20) else it })
         val tasks = mapOf(own.id to ticked)
-        assertNull(com.thomaswcode.decrastination.enrich.InstructionAnswers.stepsProblem(listOf(change), tasks))
-        assertEquals("the steps for “Essay” add up to 70 minutes, not its 60, and nothing says its total changes", com.thomaswcode.decrastination.enrich.InstructionAnswers.stepsProblem(listOf(longer), tasks))
-        assertNull(com.thomaswcode.decrastination.enrich.InstructionAnswers.stepsProblem(listOf(longer, Change(ChangeType.Minutes, taskId = own.id, minutes = 70)), tasks))
+        assertNull(InstructionAnswers.stepsProblem(listOf(change), tasks))
+        assertEquals("the steps for “Essay” add up to 70 minutes, not its 60, and nothing says its total changes", InstructionAnswers.stepsProblem(listOf(longer), tasks))
+        assertNull(InstructionAnswers.stepsProblem(listOf(longer, Change(ChangeType.Minutes, taskId = own.id, minutes = 70)), tasks))
         // A step's date years ahead, or after the task's own: not taken.
         val dated = ticked.copy(dueAt = Fixtures.at("2026-10-15T17:00"))
         fun withDue(due: String) = given.copy(steps = given.steps.map { if (it.title == "Draft") it.copy(dueDate = due) else it })
-        assertNull(com.thomaswcode.decrastination.enrich.InstructionAnswers.change(withDue("2029-01-01"), mapOf(own.id to dated), emptyMap(), Fixtures.at("2026-10-12T17:00"), Fixtures.LONDON))
-        assertNull(com.thomaswcode.decrastination.enrich.InstructionAnswers.change(withDue("2026-10-16"), mapOf(own.id to dated), emptyMap(), Fixtures.at("2026-10-12T17:00"), Fixtures.LONDON))
-        assertTrue(com.thomaswcode.decrastination.enrich.InstructionAnswers.change(withDue("2026-10-15"), mapOf(own.id to dated), emptyMap(), Fixtures.at("2026-10-12T17:00"), Fixtures.LONDON) != null)
+        assertNull(InstructionAnswers.change(withDue("2029-01-01"), mapOf(own.id to dated), emptyMap(), Fixtures.at("2026-10-12T17:00"), Fixtures.LONDON))
+        assertNull(InstructionAnswers.change(withDue("2026-10-16"), mapOf(own.id to dated), emptyMap(), Fixtures.at("2026-10-12T17:00"), Fixtures.LONDON))
+        assertTrue(InstructionAnswers.change(withDue("2026-10-15"), mapOf(own.id to dated), emptyMap(), Fixtures.at("2026-10-12T17:00"), Fixtures.LONDON) != null)
     }
 
     @Test
@@ -643,10 +643,10 @@ class InstructionRulesTest {
         val old = task("Essay", null).copy(sourceValues = SourceValues(Kind.Homework, null, null))
         assertEquals("Essay", old.withMine(mineOf(title = "Big essay")).withMine(Mine.NONE).title)
         // Read from Claude: a name it gives; none, or for a task not listed, isn't taken.
-        val given = com.thomaswcode.decrastination.enrich.InstructionAnswers.Given("Rename", taskId = vectors.id, title = " Vectors practice ")
-        assertEquals(rename, com.thomaswcode.decrastination.enrich.InstructionAnswers.change(given, mapOf(vectors.id to vectors), emptyMap(), at, LONDON))
-        assertNull(com.thomaswcode.decrastination.enrich.InstructionAnswers.change(given.copy(title = " "), mapOf(vectors.id to vectors), emptyMap(), at, LONDON))
-        assertEquals("the new name is missing", com.thomaswcode.decrastination.enrich.InstructionAnswers.problem(given.copy(title = ""), mapOf(vectors.id to vectors), emptyMap()))
+        val given = InstructionAnswers.Given("Rename", taskId = vectors.id, title = " Vectors practice ")
+        assertEquals(rename, InstructionAnswers.change(given, mapOf(vectors.id to vectors), emptyMap(), at, LONDON))
+        assertNull(InstructionAnswers.change(given.copy(title = " "), mapOf(vectors.id to vectors), emptyMap(), at, LONDON))
+        assertEquals("the new name is missing", InstructionAnswers.problem(given.copy(title = ""), mapOf(vectors.id to vectors), emptyMap()))
     }
 
     @Test

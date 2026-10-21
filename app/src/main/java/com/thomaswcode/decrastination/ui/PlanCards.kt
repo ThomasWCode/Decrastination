@@ -51,6 +51,7 @@ import com.thomaswcode.decrastination.data.ProtectionState
 import com.thomaswcode.decrastination.data.RuntimeState
 import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.enrich.KeyProblem
+import com.thomaswcode.decrastination.enrich.MicroPlans
 import com.thomaswcode.decrastination.widget.WidgetModel
 import java.time.Instant
 import java.time.LocalDate
@@ -195,7 +196,7 @@ internal fun PieceSheet(
             // Why it's on this day (PL-07).
             Text(chunk.whyLine(Instant.ofEpochMilli(now).atZone(zone).toLocalDate(), zone), style = MaterialTheme.typography.bodyMedium)
             // Its first steps in full (AI-15).
-            graph.stores.model.value.microPlans[chunk.key]?.let(com.thomaswcode.decrastination.enrich.MicroPlans::lines)?.forEach { Text(it, style = MaterialTheme.typography.bodyMedium) }
+            graph.stores.model.value.microPlans[chunk.key]?.let(MicroPlans::lines)?.forEach { Text(it, style = MaterialTheme.typography.bodyMedium) }
             PieceActions(graph, activity, chunk, now, photo, say)
             // Its due date, minutes or start: on the task's own sheet (2.0.0).
             TextButton(onClick = onChange) { Text("Change its due date, minutes…") }

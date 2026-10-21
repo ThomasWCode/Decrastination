@@ -6,6 +6,7 @@ import com.thomaswcode.decrastination.sources.powerplanner.ClassesResponse
 import com.thomaswcode.decrastination.sources.powerplanner.AgendaResponse
 import com.thomaswcode.decrastination.sources.powerplanner.SemesterResponse
 import com.thomaswcode.decrastination.sources.teams.TeamsRows
+import java.time.Instant
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
@@ -13,6 +14,9 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
 import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit
+import java.util.Locale
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -112,7 +116,7 @@ class PlannerTest {
         assertEquals("Due today", tonight.next!!.whyLine(wednesday, LONDON))
         val pg = tonight.todayBucket!!.chunks.first { it.title == "Pg 60&61" }
         assertEquals(Why.Overdue, pg.why)
-        assertEquals("Overdue since " + Planner.date(pg.deadline, LONDON).format(java.time.format.DateTimeFormatter.ofPattern("EEE d MMM", java.util.Locale.UK)), pg.whyLine(wednesday, LONDON))
+        assertEquals("Overdue since " + Planner.date(pg.deadline, LONDON).format(DateTimeFormatter.ofPattern("EEE d MMM", Locale.UK)), pg.whyLine(wednesday, LONDON))
     }
 
     @Test
@@ -744,7 +748,7 @@ class PlannerTest {
         val tasks = listOf(task("a", Fixtures.at("2026-10-14T23:59"), effort = 30), task("b", Fixtures.at("2026-10-14T23:59"), effort = 30))
         val plan = Planner.plan(windowed(tasks, "2026-10-13T16:50"))
         val slots = plan.todayBucket!!.slots
-        fun hm(time: Long) = java.time.Instant.ofEpochMilli(time).atZone(LONDON).toLocalTime().toString()
+        fun hm(time: Long) = Instant.ofEpochMilli(time).atZone(LONDON).toLocalTime().toString()
         assertEquals(listOf("16:50–17:20", "17:25–17:55"), slots.map { hm(it.start) + "–" + hm(it.end) })
         assertEquals(slots[0].chunk, plan.next)
         assertEquals(slots[1].chunk, plan.then)
@@ -763,7 +767,7 @@ class PlannerTest {
         // Tuesday 16:30, one half hour due Thursday night: tonight at 16:45, as nothing else is planned.
         val tasks = listOf(task("hw", Fixtures.at("2026-10-15T23:59"), effort = 30))
         val first = Planner.plan(windowed(tasks, "2026-10-13T16:30")).todaySlots
-        fun hm(time: Long) = java.time.Instant.ofEpochMilli(time).atZone(LONDON).toLocalTime().toString()
+        fun hm(time: Long) = Instant.ofEpochMilli(time).atZone(LONDON).toLocalTime().toString()
         assertEquals(listOf("16:45"), first.map { hm(it.start) })
         // 16:50, its start kept: under way, it stays where it was, not moved to tomorrow.
         val starts = first.associate { it.chunk!!.key to it.start }
@@ -827,7 +831,7 @@ class PlannerTest {
         // Tuesday 16:50: three half hours due tomorrow night, at 16:50, 17:25 and 18:00.
         val tasks = listOf("a", "b", "c").map { task(it, Fixtures.at("2026-10-14T23:59"), effort = 30) }
         val first = Planner.plan(windowed(tasks, "2026-10-13T16:50")).todaySlots
-        fun hm(time: Long) = java.time.Instant.ofEpochMilli(time).atZone(LONDON).toLocalTime().toString()
+        fun hm(time: Long) = Instant.ofEpochMilli(time).atZone(LONDON).toLocalTime().toString()
         assertEquals(listOf("16:50", "17:25", "18:00"), first.map { hm(it.start) })
         // 17:30: a's slot went by undone, so its start isn't kept (PL-13); b's under way and c's stay.
         val starts = first.associate { it.chunk!!.key to it.start }
@@ -1310,7 +1314,7 @@ class PlannerTest {
         val plan = spread(listOf(task("t", Fixtures.at("2026-11-02T23:59"), effort = 60)), "2026-10-12T08:00")
         val days = plan.dayOf("t")
         assertEquals(2, days.size)
-        assertTrue(java.time.temporal.ChronoUnit.DAYS.between(days[0], days[1]) in 1..7, "$days")
+        assertTrue(ChronoUnit.DAYS.between(days[0], days[1]) in 1..7, "$days")
         assertEquals(listOf(Why.Spread, Why.MinimumTouch), plan.ordered.map { it.why })
         assertEquals("Kept within a week of its last piece", plan.ordered.last().whyLine(LocalDate.parse("2026-10-12"), LONDON))
     }

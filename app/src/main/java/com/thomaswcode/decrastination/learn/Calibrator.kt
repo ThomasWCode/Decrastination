@@ -7,7 +7,12 @@ import com.thomaswcode.decrastination.data.ActivityLog
 import com.thomaswcode.decrastination.data.SlotOutcome
 import com.thomaswcode.decrastination.data.SlotRecord
 import com.thomaswcode.decrastination.data.CompletionRecord
+import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneId
+import java.util.Locale
+import kotlin.math.abs
+import kotlin.math.round
 import kotlin.random.Random
 
 /**
@@ -58,14 +63,14 @@ object Calibrator {
             calibration.learnFrom?.let { r.doneAt < it } == true || calibration.forgotten[Calibration.key(r.kind, r.className)]?.let { r.doneAt < it } == true
         }
 
-    fun learn(whole: ActivityLog, previous: Calibration, today: LocalDate, zone: java.time.ZoneId = java.time.ZoneId.systemDefault(), defaultMargin: Int = MIN_MARGIN): Learned {
+    fun learn(whole: ActivityLog, previous: Calibration, today: LocalDate, zone: ZoneId = ZoneId.systemDefault(), defaultMargin: Int = MIN_MARGIN): Learned {
         // What came before a reset of the calibration (LR-08) teaches nothing: its days and slots as well.
         val from = previous.learnFrom
         val log = if (from == null) {
             whole
         } else {
             // Its days from the one after it: the reset's own is part before, part after.
-            val after = java.time.Instant.ofEpochMilli(from).atZone(zone).toLocalDate().toString()
+            val after = Instant.ofEpochMilli(from).atZone(zone).toLocalDate().toString()
             whole.copy(slots = whole.slots.filter { it.at >= from }, days = whole.days.filter { it.date > after })
         }
         val completions = remembered(log.completions, previous)
@@ -229,14 +234,14 @@ object Calibrator {
         for (kind in DayKind.entries) {
             val before = previous.yieldFor(kind)
             val after = next.yieldFor(kind)
-            if (kotlin.math.abs(after - before) >= 0.05) add("${kind.label} hold about ${percent(after)} % of their free time now (was ${percent(before)} %)")
+            if (abs(after - before) >= 0.05) add("${kind.label} hold about ${percent(after)} % of their free time now (was ${percent(before)} %)")
         }
         // Every key either has, so one whose last completion aged out of the log is said to be back
         // to what it falls back on (the kind's, or the estimate itself).
         for (key in (previous.multipliers.keys + next.multipliers.keys).toSortedSet()) {
             val before = previous.multipliers[key] ?: fallback(previous, key)
             val after = next.multipliers[key] ?: fallback(next, key)
-            if (kotlin.math.abs(after - before) >= 0.05) add("${label(key)} takes ×%.2f its estimate (was ×%.2f)".format(java.util.Locale.UK, after, before))
+            if (abs(after - before) >= 0.05) add("${label(key)} takes ×%.2f its estimate (was ×%.2f)".format(Locale.UK, after, before))
         }
         for (kind in Kind.entries) {
             val before = previous.marginDays[kind] ?: defaultMargin
@@ -258,5 +263,5 @@ object Calibrator {
 
     private fun days(n: Int) = if (n == 1) "a day" else "$n days"
 
-    private fun percent(share: Double) = kotlin.math.round(share * 100).toInt()
+    private fun percent(share: Double) = round(share * 100).toInt()
 }

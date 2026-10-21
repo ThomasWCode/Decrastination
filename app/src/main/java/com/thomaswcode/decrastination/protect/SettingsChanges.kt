@@ -310,8 +310,8 @@ object SettingsChanges {
         val after = encode(new)[field]
         return when (field) {
             "blockedApps", "blockedSites", "checkedBrowsers", "blockedBrowsers" -> {
-                val was = (before as? kotlinx.serialization.json.JsonArray)?.map { it.toString().trim('"') }.orEmpty()
-                val now = (after as? kotlinx.serialization.json.JsonArray)?.map { it.toString().trim('"') }.orEmpty()
+                val was = (before as? JsonArray)?.map { it.toString().trim('"') }.orEmpty()
+                val now = (after as? JsonArray)?.map { it.toString().trim('"') }.orEmpty()
                 listOfNotNull(
                     (was - now.toSet()).takeIf { it.isNotEmpty() }?.let { "remove ${it.joinToString()}" },
                     (now - was.toSet()).takeIf { it.isNotEmpty() }?.let { "add ${it.joinToString()}" },

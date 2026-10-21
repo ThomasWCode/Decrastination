@@ -1,5 +1,6 @@
 package com.thomaswcode.decrastination.protect
 
+import java.io.ByteArrayOutputStream
 import kotlinx.serialization.Serializable
 import java.net.URLEncoder
 import java.nio.ByteBuffer
@@ -63,7 +64,7 @@ object Totp {
 
     fun fromBase32(text: String): ByteArray {
         val clean = text.uppercase().filter { it in ALPHABET }
-        val out = java.io.ByteArrayOutputStream()
+        val out = ByteArrayOutputStream()
         var buffer = 0
         var bits = 0
         for (c in clean) {

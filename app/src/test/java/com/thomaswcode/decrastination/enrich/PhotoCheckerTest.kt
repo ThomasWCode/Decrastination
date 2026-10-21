@@ -1,7 +1,11 @@
 package com.thomaswcode.decrastination.enrich
 
+import com.anthropic.models.messages.OutputConfig
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
+import com.thomaswcode.decrastination.core.Enrichments
+import java.net.SocketTimeoutException
+import java.net.UnknownHostException
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -9,6 +13,7 @@ import kotlin.test.assertTrue
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonArray
@@ -27,7 +32,7 @@ class PhotoCheckerTest {
                 mapOf(
                     "id" to JsonPrimitive("msg"), "type" to JsonPrimitive("message"), "role" to JsonPrimitive("assistant"), "model" to JsonPrimitive("claude-opus-5-5"),
                     "content" to JsonArray(listOf(JsonObject(mapOf("type" to JsonPrimitive("text"), "text" to JsonPrimitive(text))))),
-                    "stop_reason" to JsonPrimitive("end_turn"), "stop_sequence" to kotlinx.serialization.json.JsonNull,
+                    "stop_reason" to JsonPrimitive("end_turn"), "stop_sequence" to JsonNull,
                     "usage" to JsonObject(mapOf("input_tokens" to JsonPrimitive(1_600), "output_tokens" to JsonPrimitive(100))),
                 ),
             )
@@ -52,10 +57,10 @@ class PhotoCheckerTest {
 
     @Test
     fun `the readings the plan is made from think hard, the answers someone waits for less`() {
-        val high = ModelEffort.Job.entries.filter { ModelEffort.of(it) == com.anthropic.models.messages.OutputConfig.Effort.HIGH }
+        val high = ModelEffort.Job.entries.filter { ModelEffort.of(it) == OutputConfig.Effort.HIGH }
         assertEquals(listOf("Email", "Assignment", "Effort", "Instruction", "Review", "PhotoToTask", "PhotoContext"), high.map { it.name })
-        assertEquals(com.anthropic.models.messages.OutputConfig.Effort.MEDIUM, ModelEffort.of(ModelEffort.Job.Chat))
-        assertEquals(com.anthropic.models.messages.OutputConfig.Effort.HIGH, ModelEffort.of(com.thomaswcode.decrastination.core.Enrichments.Job.Assignment))
+        assertEquals(OutputConfig.Effort.MEDIUM, ModelEffort.of(ModelEffort.Job.Chat))
+        assertEquals(OutputConfig.Effort.HIGH, ModelEffort.of(Enrichments.Job.Assignment))
     }
 
     @Test
@@ -67,8 +72,8 @@ class PhotoCheckerTest {
         assertEquals(Failure.BadRequest, Failures.classify(400, key = false))
         assertEquals(Failure.Key, Failures.classify(401, key = false))
         assertEquals(Failure.Key, Failures.classify(400, key = true))
-        assertEquals(Failure.Network, Failures.classify(RuntimeException(java.net.UnknownHostException("api.anthropic.com"))))
-        assertEquals(Failure.Timeout, Failures.classify(java.net.SocketTimeoutException("read timed out")))
+        assertEquals(Failure.Network, Failures.classify(RuntimeException(UnknownHostException("api.anthropic.com"))))
+        assertEquals(Failure.Timeout, Failures.classify(SocketTimeoutException("read timed out")))
         assertEquals(Failure.Unknown, Failures.classify(IllegalStateException("odd")))
     }
 

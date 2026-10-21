@@ -10,6 +10,8 @@ import com.anthropic.models.messages.MessageCreateParams
 import com.anthropic.models.messages.OutputConfig
 import com.anthropic.models.messages.StopReason
 import com.anthropic.models.messages.TextBlockParam
+import com.thomaswcode.decrastination.core.Chunk
+import com.thomaswcode.decrastination.core.TaskItem
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
@@ -89,7 +91,7 @@ class PhotoChecker(private val client: AnthropicClient, val model: String = Clau
          * [piece] and its [task], as the check reads them (AI-16): the piece and its minutes, the
          * task's title and subject, its steps done already, and its instructions.
          */
-        fun context(piece: com.thomaswcode.decrastination.core.Chunk, task: com.thomaswcode.decrastination.core.TaskItem?): String = buildString {
+        fun context(piece: Chunk, task: TaskItem?): String = buildString {
             appendLine("The piece of work: ${piece.label}, ${piece.minutes} min")
             if (task != null) {
                 appendLine("Task: ${task.title}")

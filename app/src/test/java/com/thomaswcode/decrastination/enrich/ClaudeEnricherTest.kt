@@ -13,6 +13,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonArray
@@ -38,7 +39,7 @@ class ClaudeEnricherTest {
                 "model" to JsonPrimitive(model),
                 "content" to content,
                 "stop_reason" to JsonPrimitive(stop),
-                "stop_sequence" to kotlinx.serialization.json.JsonNull,
+                "stop_sequence" to JsonNull,
                 "usage" to JsonObject(mapOf("input_tokens" to JsonPrimitive(1_200), "output_tokens" to JsonPrimitive(300))),
             ),
         )

@@ -7,6 +7,7 @@ import android.app.admin.DeviceAdminReceiver
 import android.app.admin.DevicePolicyManager
 import android.content.BroadcastReceiver
 import android.content.ComponentName
+import android.content.ContentResolver
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -80,7 +81,7 @@ object Watchdog {
      * refuses hidden keys to apps (`accessibility_qs_targets` threw on the phone, 9 Oct, and took
      * the service down).
      */
-    private fun read(resolver: android.content.ContentResolver, key: String): Result<String?> =
+    private fun read(resolver: ContentResolver, key: String): Result<String?> =
         runCatching { Settings.Secure.getString(resolver, key) }
 
     fun report(context: Context): ProtectionCheck.Report {

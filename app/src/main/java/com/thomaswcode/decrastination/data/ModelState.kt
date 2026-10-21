@@ -2,6 +2,9 @@ package com.thomaswcode.decrastination.data
 
 import com.thomaswcode.decrastination.enrich.AiUsage
 import com.thomaswcode.decrastination.enrich.MicroPlan
+import java.time.Instant
+import java.time.ZoneId
+import java.util.Locale
 import kotlinx.serialization.Serializable
 
 /** What calling Claude keeps (the gateway's; the micro-plans its callers write ahead): the month's cost, the last calls, what was refused or warned of. Kept in `model.json`. */
@@ -45,15 +48,15 @@ data class CallRecord(
     val costUsd: Double = 0.0,
 ) {
     /** All of it as the record's row shows it opened, to copy. */
-    fun details(zone: java.time.ZoneId): String = buildString {
-        append(java.time.Instant.ofEpochMilli(at).atZone(zone).toLocalDateTime().withNano(0).toString().replace('T', ' '))
+    fun details(zone: ZoneId): String = buildString {
+        append(Instant.ofEpochMilli(at).atZone(zone).toLocalDateTime().withNano(0).toString().replace('T', ' '))
         append(" · ").append(job)
         title?.let { append(" · “").append(it).append('”') }
         append('\n').append("Effort ").append(effort).append(" · ").append(inTokens).append(" in")
         if (cacheRead > 0) append(" (").append(cacheRead).append(" from the cache)")
-        append(", ").append(outTokens).append(" out · ").append("%.1f s".format(java.util.Locale.UK, latencyMs / 1000.0))
+        append(", ").append(outTokens).append(" out · ").append("%.1f s".format(Locale.UK, latencyMs / 1000.0))
         stop?.let { append(" · ").append(it) }
-        append('\n').append(outcome).append(" · ").append("$%.4f".format(java.util.Locale.UK, costUsd))
+        append('\n').append(outcome).append(" · ").append("$%.4f".format(Locale.UK, costUsd))
     }
 
     companion object {

@@ -21,7 +21,7 @@ class QuestionTest {
         val task = email()
         assertEquals(Enrichments.inputHash(task), Enrichments.inputHash(task.copy(answers = emptyList())))
         val answered = task.copy(answers = listOf("Next Friday, the 23rd"))
-        kotlin.test.assertNotEquals(Enrichments.inputHash(task), Enrichments.inputHash(answered))
+        assertNotEquals(Enrichments.inputHash(task), Enrichments.inputHash(answered))
         assertTrue("The student says: Next Friday, the 23rd" in ReadingPrompts.describe(answered, Enrichments.Job.Email, NOW, LONDON))
     }
 }

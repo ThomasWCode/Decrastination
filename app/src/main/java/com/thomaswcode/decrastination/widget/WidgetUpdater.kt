@@ -12,6 +12,7 @@ import androidx.glance.appwidget.updateAll
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Settings
+import com.thomaswcode.decrastination.core.SlotKind
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.learn.CalendarTime
 import com.thomaswcode.decrastination.learn.Daily
@@ -72,7 +73,7 @@ object WidgetUpdater {
         val end = plan.today.atStartOfDay().plusMinutes(hours.endMin.toLong()).atZone(zone).toInstant().toEpochMilli()
         val working = if (now in start until end) now + WORKING_REDRAW_MS else Long.MAX_VALUE
         val boundary = listOf(start, end).filter { it > now }.minOrNull() ?: Long.MAX_VALUE
-        val slot = plan.todaySlots.filter { it.kind == com.thomaswcode.decrastination.core.SlotKind.Work }.flatMap { listOf(it.start, it.end) }.filter { it > now }.minOrNull() ?: Long.MAX_VALUE
+        val slot = plan.todaySlots.filter { it.kind == SlotKind.Work }.flatMap { listOf(it.start, it.end) }.filter { it > now }.minOrNull() ?: Long.MAX_VALUE
         return maxOf(minOf(midnight, deadline, startable, stale, working, boundary, slot), now + 60_000L)
     }
 

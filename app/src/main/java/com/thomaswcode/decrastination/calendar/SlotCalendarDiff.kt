@@ -1,6 +1,10 @@
 package com.thomaswcode.decrastination.calendar
 
 import com.thomaswcode.decrastination.core.Plan
+import com.thomaswcode.decrastination.core.Source
+import com.thomaswcode.decrastination.enrich.MicroPlan
+import java.nio.ByteBuffer
+import java.security.MessageDigest
 import java.time.ZoneId
 
 /**
@@ -35,12 +39,12 @@ object SlotCalendarDiff {
      * yours could be worded so.
      */
     fun looksWritten(description: String): Boolean =
-        description == OUTSIDE || com.thomaswcode.decrastination.core.Source.entries.any { description.startsWith(it.label + ". ") }
+        description == OUTSIDE || Source.entries.any { description.startsWith(it.label + ". ") }
 
     /** One version of an event as the app writes it to [calendarId], as a fingerprint of its title and times. */
     fun version(calendarId: Long, title: String, start: Long, end: Long): Long {
-        val digest = java.security.MessageDigest.getInstance("SHA-256").digest("$calendarId\n$title\n$start\n$end".toByteArray(Charsets.UTF_8))
-        return java.nio.ByteBuffer.wrap(digest, 0, 8).long
+        val digest = MessageDigest.getInstance("SHA-256").digest("$calendarId\n$title\n$start\n$end".toByteArray(Charsets.UTF_8))
+        return ByteBuffer.wrap(digest, 0, 8).long
     }
 
     /**
@@ -118,7 +122,7 @@ object SlotCalendarDiff {
         starts + taken.mapNotNull { move -> before[move.desired.uri]?.let { move.desired.uri to it } }
 
     /** [plan]'s slots, work and outside, from today for [DAYS] days, as events. */
-    fun desired(plan: Plan, zone: ZoneId, micro: Map<String, com.thomaswcode.decrastination.enrich.MicroPlan> = emptyMap()): List<Desired> = (0 until DAYS).flatMap { offset ->
+    fun desired(plan: Plan, zone: ZoneId, micro: Map<String, MicroPlan> = emptyMap()): List<Desired> = (0 until DAYS).flatMap { offset ->
         val date = plan.today.plusDays(offset)
         plan.bucket(date)?.slots.orEmpty().map { slot ->
             val chunk = slot.chunk
