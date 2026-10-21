@@ -129,7 +129,8 @@ class AnkiSource(private val context: Context) : TaskSource {
         val homework = AnkiRules.homeworkDecks(decks, textbook, context.known, count, context.now, context.zone, context.ankiSecondsPerCard)
         val homeworkDecks = homework.filter { !it.done }.mapNotNull { it.extra[AnkiRules.EXTRA_DECK_ID]?.toLongOrNull() }.toSet()
         val reviewsOnly = AnkiRules.homeworkDueSoon(homework, context.now, context.zone)
-        val (quota, day) = AnkiRules.quota(decks, textbook, context.ankiDay, context.now, context.zone, context.settings.ankiDeadlineMin, homeworkDecks, reviewsOnly, context.ankiSecondsPerCard, count)
+        val open = context.known.filter { it.source == Source.Anki && it.isOpen }.mapTo(HashSet()) { it.sourceId }
+        val (quota, day) = AnkiRules.quota(decks, textbook, context.ankiDay, context.now, context.zone, context.settings.ankiDeadlineMin, homeworkDecks, reviewsOnly, context.ankiSecondsPerCard, open, count)
         SourceRead(items = listOfNotNull(quota) + homework, ankiDay = day, deckTopics = AnkiRules.topics(decks, textbook))
     }
 }
