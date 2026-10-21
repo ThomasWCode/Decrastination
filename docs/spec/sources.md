@@ -10,7 +10,7 @@ Four places are read (Teams, Power Planner, AnkiDroid, Gmail); your own tasks ar
 | Teams | the Teams Assignments widget's provider | an assignment not handed in | it leaves the widget's list |
 | Power Planner | its web API | an agenda item | 100 % complete, or gone from the agenda |
 | AnkiDroid | its content provider | today's quota, or a deck homework names | Anki's counts say so |
-| Gmail | IMAP, read-only | a conversation with a starred message | no message in it is starred |
+| Gmail | IMAP, read, and one write: a finished email unstarred and archived (D-106) | a conversation with a starred message | no message in it is starred |
 | Yours | made in the app | what you give it | you say so, or every step is done |
 
 - Each source is a `TaskSource` (`sources/TaskSource.kt`). A read returns everything the source has now, or throws: a failure must never look like an empty list, as the merge takes a task missing from a read as done.
@@ -92,7 +92,7 @@ Anki is read again at once when AnkiDroid leaves the screen (NF-03, `block/AnkiW
 
 Your starred emails, over IMAP with a Google app password (`sources/gmail/`): `imap.gmail.com:993`, TLS, the host checked against its certificate. The address and app password are in the encrypted secrets file.
 
-- **Read-only.** `ImapClient` (`Imap.kt`) sends only `LOGIN`, `LIST`, `EXAMINE`, `UID SEARCH`, `UID FETCH` (bodies with `BODY.PEEK`) and `LOGOUT`: nothing is marked read, moved or sent. Each command is logged at debug level, the login left out.
+- **Read, but for one write.** `ImapClient` (`Imap.kt`) sends only `LOGIN`, `LIST`, `EXAMINE`, `UID SEARCH`, `UID FETCH` (bodies with `BODY.PEEK`) and `LOGOUT`: a read marks nothing read, moves or sends nothing. Each command is logged at debug level, the login left out. The one write, an email finished here, is `ImapWriter`'s (below).
 - **Starred only** (DX-03, `StarredConversations.list`). All Mail is found by its special use (`\All`, else a name ending `/All Mail`), examined, and searched for `FLAGGED`, Gmail's star.
 - Then every message of those conversations is listed (`X-GM-THRID`, forty a search): starred or not, yours included, drafts aside.
 - **One task per conversation**, keyed by its thread id, named by its newest message's subject. It's with the sender of the newest message that isn't yours; it's a note to self only when every message is yours (Gmail's `\Sent` label).
@@ -113,6 +113,15 @@ Texts (`GmailSource.text`, `Mime.readable`, `GmailThreads.conversationText`):
 - The newest message's invite stands, and there's none once one cancels it. A recurring event gives its first time.
 - A text made by older text rules (`GmailThreads.TEXT_RULES`, 2) is read again once. A conversation whose text isn't read yet, or not as far as reads now go, isn't read by Claude (`GmailThreads.textRead`).
 - **Limits a read** (BUG-P2-019): texts for at most 60 messages, newest conversations first, each whole or not at all; fetched for up to 45 s once listed, never past 70 s into the read, one conversation even then up to 82 s, so a read stays within the sync's 90 s. The rest wait for the next read.
+
+**Emails finished here** (D-106, `sync/GmailFinishes.kt`):
+- Finishing an email's work here unstars and archives its conversation in Gmail: its last piece kept (Day, the widget, the block screen, Felix's tick or keep) or its last step ticked on the sheet, when all its work is done (`GmailFinish.due`: every step ticked, or none and its minutes worked at the pace learned); or by your word, whatever's left: Felix's `done`, or the sheet's *Finish: unstar and archive*.
+- Journaled first (`gmail-writes.json`, [storage-and-backups.md](storage-and-backups.md)), it goes a minute later (`GmailWrites.GRACE_MS`): an Undo within that minute (the keep's, the tick's, his act's, the sheet's) drops it, and Gmail's never touched. The very first finish waits for your OK instead, asked by the next of Day or the chat to open: *Carry on* (kept in the hints: every finish after it goes with the minute alone), *Not this time* (asked again next time), *Turn this off*.
+- The write (`GmailWriteWorker`, WorkManager with a connection, tried again with its backoff): its own connection, `LOGIN`, `SELECT` All Mail (writable), the conversation's messages listed afresh by `X-GM-THRID`, which were starred and which in the inbox kept by Gmail's message ids before anything changes, then `UID STORE -FLAGS.SILENT (\Flagged)` on the starred and `-X-GM-LABELS.SILENT (\Inbox)` on the inbox's (`ImapWriter`), each one's success kept as it comes, so a retry goes on at the one that failed; a message gone since is stored around. Nothing is deleted, moved or marked read. Each command is logged at info level by its name and UIDs, never a subject or an address.
+- Done, it asks for a Gmail read, which finds no star and closes the task as one unstarred by hand (earning as any finished task does). Nothing is marked done here first.
+- An Undo after it puts back what it took: the star on the messages that had it, the inbox on those that were in it. Once the read has closed the task, starring it again reopens it as an email starred again does.
+- A write that fails five times is given up: the app's own notification on *Your sources* (`NoticeId.GmailWrite`, a conversation each) says what did and didn't happen and opens the task's sheet, which says it too, with *It's sorted*; Setup's mark shows meanwhile.
+- Settings → Sources → Gmail's switch (`gmailFinishes`, on) turns it off: a finish then writes nothing, and Felix's `done` on an email is refused as before.
 
 The rules' triage (`EmailRules.triage`) is what a conversation is until Claude reads it, or with Claude off. Every starred email is something to do, Admin (AI-02):
 - a note to self: 10 minutes, "Deal with your note";

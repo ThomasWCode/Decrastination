@@ -40,7 +40,7 @@ enum class NoticeId(val id: Int, val codes: IntRange = IntRange.EMPTY) {
     /** The calendar's questions, one an event (tagged), retired: Felix's messages. */
     CalendarQuestion(4400, 4400..4403),
 
-    /** A Gmail write that couldn't be made, one a conversation (tagged): its tap. Named ahead of Stage 11. */
+    /** A write to Gmail given up, one a conversation (tagged by its thread, D-106): its tap opens the task's sheet. */
     GmailWrite(4500, 4500..4509),
 
     /** Claude's plan for a task dropped (tagged), and its key not working: each one's tap. */
