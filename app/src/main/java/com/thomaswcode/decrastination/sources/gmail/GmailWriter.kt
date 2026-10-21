@@ -77,7 +77,8 @@ class ImapGmailWriter(private val secrets: SecretStore) : GmailWriter {
     }
 
     private fun session(imap: ImapClient, writer: ImapWriter) = object : GmailWriter.Session {
-        override fun thread(threadId: String): List<Long> = imap.uidSearch("X-GM-THRID $threadId")
+        // Its id decimal, as the read's are ([GmailThreads.anyThread]): nothing else goes into the command.
+        override fun thread(threadId: String): List<Long> = imap.uidSearch(GmailThreads.anyThread(listOf(threadId)))
 
         override fun messages(uids: List<Long>): List<GmailWriter.Message> = imap.uidFetch(uids, "X-GM-MSGID FLAGS X-GM-LABELS").mapNotNull { attributes ->
             val uid = attributes["UID"]?.string?.toLongOrNull() ?: return@mapNotNull null
