@@ -277,8 +277,6 @@ class BackupService(
         if (what == Reset.Calibration) stores.replace(stores.learning) { it.copy(calibration = Calibration(learnFrom = now)) }
         if (all || what == Reset.Memories) {
             stores.replace(stores.memory, MemoryState())
-            // Its copies with it (Q42): what's cleared isn't kept in one.
-            stores.memory.letGoOfCopies()
             changeSettings { it.copy(profileLines = emptyList()) }
         }
         if (all || what == Reset.Chat) {
@@ -287,9 +285,6 @@ class BackupService(
             stores.replace(stores.chatArchive, ChatArchive())
             // His notes and reminders (Q12: A), which the chat set.
             stores.replace(stores.felix, FelixStore())
-            // The window's and his copies with them, as the archive's go with its months (Q42).
-            stores.chat.letGoOfCopies()
-            stores.felix.letGoOfCopies()
             // His notification too, a check-in's question among them: nothing's left to answer it.
             cancelFelix()
         }
@@ -297,6 +292,8 @@ class BackupService(
             stores.replace(stores.instructions, InstructionState())
             layInstructions()
         }
+        // The copies kept of every store it cleared with them (Q42): what's reset isn't kept in one.
+        stores.letGoOfCopies(what)
         "${what.title}: reset. A copy of everything from before is in ${saved.where}${if (saved.own) ", which Settings → Backup can restore" else ""}.$archived"
     }
 

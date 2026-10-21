@@ -133,6 +133,15 @@ class Stores(
         Kept("gmail-writes.json", backup = "the receipts of writes made to Gmail, while their Undo can stand (a write still to make is this phone's)"),
     )
 
+    /**
+     * The copies kept of each store [what] clears let go ([all]'s resets; [Reset.Everything], every store a reset
+     * clears), so what's reset isn't kept in one (Q42). The chat's archive takes its own as it's cleared ([ChatArchiveStore.clear]).
+     */
+    suspend fun letGoOfCopies(what: Reset) {
+        val files = all.filter { kept -> kept.resets.any { what == it || what == Reset.Everything } }.mapTo(HashSet()) { it.file }
+        json.filter { it.name in files }.forEach { it.letGoOfCopies() }
+    }
+
     /** Each JSON store's shape now, by file: what a backup's parts from it are brought to ([Backups.decode]). */
     val shapes: Map<String, Shape> get() = json.associate { it.name to Shape(it.version, it.migrations) } + (chatArchive.name to Shape(chatArchive.version, ChatArchiveStore.MIGRATIONS))
 
