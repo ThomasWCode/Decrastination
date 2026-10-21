@@ -152,8 +152,9 @@ class Learning(
     }
 
     /**
-     * What's remembered, tidied by the model once its facts are past [MemoryTidy.DUE_SHARE] of their
-     * room (AI-21), or when [force]d (a PC's `memory-tidy`): its own call, after the review's. The
+     * What's remembered, what's run out let go of first and the facts with neither an until nor a task
+     * tidied by the model once they're past [MemoryTidy.DUE_SHARE] of the room the rest leave them
+     * ([MemoryTidy.due], AI-21), or when [force]d (a PC's `memory-tidy`): its own call, after the review's. The
      * before and after, or null: not due, the model held or failed (recorded as any call is), an
      * answer that isn't a tidy, or the facts changed while it was out.
      */
