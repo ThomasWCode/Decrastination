@@ -47,7 +47,7 @@ Stage by stage, what each PR needs from your phone and from you, for what and fo
 ## In sum
 
 - **The phone** is needed for 31 of the 32 PRs, for the install and its check: a plugged-in, unlocked phone on the desk for an evening does several PRs if their reviews are done by then. Two stages want it free of use for an hour (6b, on a weekend) or online for a minute's write (11).
-- **You** are needed for nine moments, about an hour and a half at the phone in all: 5a, 5b, 5c (ten, ten and five minutes; done, in one evening with the three PRs stacked), 4.0.10 (five minutes, 19 Oct), 8a (fifteen minutes spread over an evening), 8b (five minutes: your classes' subjects), 11 (twenty minutes with Gmail), and 10b twice by message (a read before, a read after): with Stage 5's, 4.0.10's, 8a's and 8b's done, 11's and 10b's are left. Four more are helpful but not needed (3, 6b, 7, 12): five minutes each, or slower guarded taps.
+- **You** are needed for nine moments, about an hour and a half at the phone in all: 5a, 5b, 5c (ten, ten and five minutes; done, in one evening with the three PRs stacked), 4.0.10 (five minutes, 19 Oct), 8a (fifteen minutes spread over an evening), 8b (five minutes: your classes' subjects), 11 (twenty minutes with Gmail), and 10b twice by message (a read before, a read after): with Stage 5's, 4.0.10's, 8a's, 8b's, 11's and 10b's read before done (11's on 21 Oct, an hour with its two finds), 10b's read after is left. Four more are helpful but not needed (3, 6b, 7, 12): five minutes each, or slower guarded taps.
 - **No decision waits on you** during the work: every question a stage needs is answered, and the four things that could go wrong mid-PR have their fallback chosen.
 
 ## Still to check
@@ -57,8 +57,9 @@ Everything else in Stage 5 was checked on the phone with you on 18 Oct, or by th
 1. With more of his messages unread than a screen holds, open the chat (his button, not his notification): it opens at the *New messages* line, not at its foot.
 2. Once the chat has messages past its window (a fortnight old and past the newest 200, days away), scroll back past them: the older rows show under *Earlier messages* with no Undo or buttons of their own, read a month at a time (4.0.4).
 3. The week's check-in answered on a Sunday (in the chat or on its form): kept once in the log, and the week's review asked for, now through `Learning` (6e). 6e's check couldn't answer one from the PC on 19 Oct, as that week had its check-in already.
-4. 8a's SlotStart reminder at its slot's start, in his words, with its chips; then 10a's reply "leave me alone tonight" to a `felix-say` from the PC once the day's last slot is over (a rule till 07:00, `felix-check` silent, gone after), looked at the next day.
-5. A slot missed today, then its task finished: blocking as the day's other slots have it (4.1.3; not seen live, as blocking applies only within the day's hours).
+4. 10a's rule from "leave me alone tonight": `memory` after 07:00 the next morning shows it gone. Checked on 21 Oct: 8a's reminder came at its time in his words, and its *Done* chip, tapped in the chat (the same entrance as the notification's), marked it done with no call; the reply to a `felix-say` made a rule till 07:00, `felix-check` wrote nothing, and his next look's message was empty.
+5. 10b's: the next morning's briefing in his register; then you read a day of his messages and say what's off (his nudges ran to three sentences where his prompt asks for two).
+6. A slot missed today, then its task finished: blocking as the day's other slots have it (4.1.3; not seen live, as blocking applies only within the day's hours).
 
 ## When the phone is away
 
@@ -72,8 +73,8 @@ So it went for Stage 6: `main`'s 4.0.4 went on first, then Stage 6's five PRs (#
 2. **Stage 5** (the chat; done, in one evening with you): three short sessions with you, or one evening for all three.
 3. **Stages 6, 9 and 7** (eight PRs, the services, the names and the data release; done): three or four phone evenings; a five-minute look after 7.
 4. **Stage 8** (reminders, the gaps and what he's sent; done): one evening with you for 8a's fifteen minutes, a glance the next day for the SlotStart reminder; 8b your classes' subjects first, five minutes; 8c only the phone.
-5. **Stage 10**: 10a done, needing only the phone, its reply's check left (§Still to check); the voice's text read by you before 10b starts (no phone), a session after it lands.
-6. **Stage 11**: one evening with Gmail open, twenty minutes.
+5. **Stage 10** (done; 10b's session with 4.2.1 and 11's on 21 Oct): 10a needed only the phone; the voice's text was read by you before 10b started. Left: 10b's briefing and your read of a day of his messages, and 10a's rule gone the next morning (§Still to check).
+6. **Stage 11** (done, 21 Oct): an evening with Gmail open, about an hour with its two finds (a star's kind that Gmail's website still draws, and a lost connection's first retry).
 7. **Stage 12**: the phone, and the done-when list read together.
 
 On any evening the phone is connected and you're not using it, I can run a stage's install and its scripted checks, wait for your taps where they're needed, and carry on with the next PR's code meanwhile.
