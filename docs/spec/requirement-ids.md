@@ -35,7 +35,7 @@ Grouped by prefix and sorted; where a later decision changed an item, its line g
 - AI-18: The weekly review sees last week's review and what it changed, the day records, where in the day the work went (moves included) and the week by subject; its changes are kept with their old values, for the next review to read and the Reviews page to undo.
 - AI-19: A Steps change replaces any task's steps but an Anki deck's (which are its cards): made on a task of the student's own, laid over a source's task, ticks kept by name; a split that doesn't add up to the task's minutes needs a new total with it.
 - AI-20: Each schema field's description states what it's for and its limit, from the same values the checks use.
-- AI-21: Felix remembers, on his own, facts (one per topic, the newer replacing the older) and up to 20 standing instructions on how he should behave, from the chat and from replies; each is shown as a "Remembered:" line with its Undo; the facts are kept within a budget of about 1,500 tokens, the oldest going first, and tidied weekly (Q-51).
+- AI-21: Felix remembers, on his own, facts (one per topic, the newer replacing the older) and up to 20 standing instructions on how he should behave, from the chat and from replies, each for as long as it's true: till a date or, a fact, with its task, then forgotten silently (D-103); each is shown as a "Remembered:" line with its Undo, saying how long it holds; the facts are kept within a budget of about 1,500 tokens, the oldest going first, and tidied weekly (Q-51).
 - AI-22: Every message the app sends about the work is Felix's, a strict friend whose name and one-line description can be changed in Settings: his own written by Claude, the app's fixed lines in his name with no call (`byApp`, D-95); each answer is a short message, up to three quick replies, when he'll check again, and what to remember.
 - AI-23: A photo of the work can be added to a task Claude reads (`Enrichments.jobFor`): the task is read again with it, the photo kept with the task (one each) and let go when the task goes, and the reading says it came from the photo.
 - AI-24: A reply to Felix's notification is a reply in the one chat, as one in the chat is (D-98): to a question of his, answered with no call; else a turn of the chat, his answer his next message, in his notification while the chat isn't on screen; what he does is made at once, with its Undo.
@@ -98,6 +98,16 @@ Grouped by prefix and sorted; where a later decision changed an item, its line g
 - DX-13: The calendars read for busy time are chosen in Settings; the one written to is never read.
 - DX-14: The calendar is read as far ahead as the plan reaches; questions about events keep to the week ahead, and an unanswered long event beyond it counts as a few hours of each of its days meanwhile.
 - DX-15: Open tasks from two sources that look like the same work (same subject, due within a day, titles sharing most words) are offered as a pair; linked (a SameAs change), one is hidden and kept as the other's, and a pair said to differ isn't asked about again.
+
+## G: what Felix can do in the chat
+
+- G1: Felix keeps a piece done that has no step to tick, as Day's *Done* does, and takes one back (`keepPiece`, `unkeepPiece`; D-101).
+- G2: Felix asks a source to read now, saying so (`sync`; D-101).
+- G3: Felix opens a task where it lives: its sheet here, or its source's own page or app (`open`'s `where`).
+- G5: Felix is told whether blocking applies, the pieces it waits on, and the free time left (after the plan's "Now:").
+- G6: Felix asks for the week's numbers where a message needs them, rather than being sent them every time (`details` with `stats`: this week so far and last, `Stats.weekLines`; D-102).
+- G7: Felix asks for the calendar past the fortnight (`details` with `calendar`: the four weeks after it, or a month; `ChatPrompts.calendarBlock`; D-102).
+- G8: Felix is told each class's next three lessons, from Power Planner's timetable, looked for as far as the plan reaches (D-101).
 
 ## IMP: improvements from the first repository review
 
@@ -163,7 +173,7 @@ These come from the questions answered for v1 and 2.0.0; Q31 here is not Q-31 be
 - Q7: The phone's calendar counts as busy time, judged event by event; an event the rules can't judge is asked about, taking all its time until it's answered, and the answer holds for every event of that name; the app writes only to the one calendar picked for its slots (NF-07).
 - Q8: What's blocked: video and social apps; in browsers whose address bar is read, the same services' sites; the browsers listed as blocked outright, while blocking applies; calls, messages, school and study apps, maps, banking, authenticators and health apps never.
 - Q12: Claude may split any task (an email, a planner item, an assignment) into blocks of work, each with its own dates where it has them and each planned in its own window.
-- Q13: The morning briefing comes at set times, earlier on school days than at weekends (Settings).
+- Q13: The morning briefing comes at set times (Settings), earlier on a school day, by the school calendar, than on any other day, a weekday off included (D-74).
 - Q16: Written work can be shown done by a photo check, made by Claude when it's on.
 - Q17: The override is a one-time code from an authenticator app (TOTP) on the override holder's phone, scanned at arming (which can be skipped, leaving only the wait); a code applies one waiting change at once; nothing is ever emailed, and a protection-off alert stays on the phone.
 - Q18: A current-textbook setting says which textbook's deck a section number means; Claude may override it where an assignment names the book or a topic only one has, and the daily quota walks the current textbook first.
@@ -181,7 +191,7 @@ These come from the questions answered for v1 and 2.0.0; Q31 here is not Q-31 be
 - Q-31: Felix stays quiet when nothing is scheduled, and when he names no next check he checks again after a default (20 minutes).
 - Q-32: Spreading keeps a task's pieces at most a week apart over its window (the minimum touch).
 - Q-44: The chat is Felix too, not only the notifications.
-- Q-51: What Felix remembers has no hard cap but a budget, and a weekly tidy (once the facts pass 70 % of their room) rewrites them into fewer, current lines, shown with Undo; pruning is never the student's job.
+- Q-51: What Felix remembers has no hard cap but a budget, and a weekly tidy (once the facts with neither an until nor a task pass 70 % of the room the others leave them) rewrites those into fewer, current lines, shown with Undo, the others kept as they are; pruning is never the student's job.
 - Q-52: A deadline later the same day is usable in the school windows before it (without windows, an afternoon or evening deadline's day), and the calibrated margins still apply.
 
 ## UI: the screens and the widget

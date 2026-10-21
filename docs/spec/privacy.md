@@ -9,7 +9,7 @@ The app has no server of its own: it runs on the phone, talks only to Claude and
 Every call sends its job's instructions and, but for the web search, your profile (AI-05, AI-06, `enrich/Profile.kt`):
 - your year group, and your subjects (Settings' map of your class codes to subjects, or the codes as they are);
 - the school day's times (lessons, study periods, break, lunch), your working hours, the next days off with their names, and the Anki textbook;
-- the lines you wrote about yourself, Felix's standing instructions, and what he remembers.
+- the lines you wrote about yourself, Felix's standing instructions, and what he remembers, one held for a while saying how long (its date, or its task's title).
 
 Each call's text is cut to 40 000 characters, the profile to 16 000. What else each job sends:
 
@@ -21,12 +21,12 @@ Each call's text is cut to 40 000 characters, the profile to 16 000. What else e
 | A photo of homework (NF-01) | The photo, and today's date |
 | A photo check | Up to three photos of the work; the piece, its task's title, subject, steps done and instructions (1 500 characters) |
 | A piece's first steps (AI-15) | The task's title and subject, the piece and its minutes, attachments by name, the notes kept with the task, its instructions (1 500 characters) |
-| The chat | The conversation's last 12 messages and his last two nudges with your replies; your reminders still to come, their words and when; the open tasks with their steps, their classes and subjects, and the notes on them, yours and his (standing ones, and those on finished tasks, too); the fortnight's calendar events (titles and times), each class's next lessons from Power Planner's timetable, your changes, your own tasks finished lately, Felix's settings, your pace, the plan's next 14 days with whether blocking applies, your free time and the pieces kept today; each open task's own text (instructions, an email's conversation, notes: 600 characters each), with its attachments' names, links and an email's sender; the whole text (8 000) of the task a message is about, and of up to three he asks to read; an event's place and description, for a message about it |
+| The chat | The conversation's last 12 messages and his last two nudges with your replies; your reminders still to come, their words and when; the open tasks with their steps, their classes and subjects, and the notes on them, yours and his (standing ones, and those on finished tasks, too); the fortnight's calendar events (titles and times), each class's next lessons from Power Planner's timetable, your changes, your own tasks finished lately, Felix's settings, your pace, the plan's next 14 days with whether blocking applies, your free time and the pieces kept today; each open task's own text (instructions, an email's conversation, notes: 600 characters each), with its attachments' names, links, an email's sender and the whole text's length; the whole text (8 000) of the task a message is about, and of up to three he asks to read; where he asks, the week's numbers (this week so far and last: time worked, slots kept and missed, work finished and deadlines met, by subject) and the calendar past the fortnight (the four weeks after it, or a month: titles and times); an event's place and description, for a message about it |
 | Felix's messages | The reason and the time, the piece and today's slots, the free time, work its source confirmed, his last six messages of his own and your replies, a reading's question; the piece's task's own text (1 500 characters), with its attachments' names and links, and the notes kept with it; a reminder's words (the one coming, the one that came at the slot's start, or in the morning today's) |
 | An instruction | Your words; what they're about (a task's title, sender, class, due date, minutes and details); the open tasks and the fortnight's events |
 | The weekly review | The week's record: finished work (titles, kinds, classes, estimates, minutes), slots by hour and day, blocks, days, Felix's counts, your check-in answers, the planning settings, what's learned |
 | The week's summary (NF-02) | The week's numbers, finished and missed work, the review's note, Felix's counts, the changes you asked for |
-| The memory tidy | The facts Felix remembers, with the day of each, beside a profile without them |
+| The memory tidy | The facts Felix remembers with neither an until nor a task, with the day of each, beside a profile without the facts |
 
 **The web search** (`enrich/WebResearcher.kt`): what to look up, your message's words and today's date go to Claude, with no profile. Claude's web search tool then searches the web (at most three searches, located in the UK) and reads the pages it finds.
 It runs only while Felix may search (`felixSearches`), and only when a message needs facts neither you nor the app have given ([felix.md](felix.md)).
@@ -49,7 +49,7 @@ Nothing else: no analytics, no crash reports (crashes are written down on the ph
 | Tasks, their text and readings | `tasks.json` | A finished task while its source still lists it, then a fortnight; one its source stops listing is finished then; your own till you delete it. A fortnight after it's finished, its text, reading, answers, photo and attachments' list go, its record kept (C-Q3) |
 | The activity log | `log.json` | 120 days; each week's totals two years |
 | The chat | `chat.json`, `chat-archive-<yyyy-MM>.json` | Every message, Felix's among them, till you clear it: the newest 200 or 14 days' in `chat.json`, the rest in the archive, a file a month |
-| What Felix remembers | `memory.json` | Facts within 6 000 characters, the oldest out first; up to 20 standing instructions; till you delete them |
+| What Felix remembers | `memory.json` | Facts within 6 000 characters, the oldest out first; up to 20 standing instructions; till you delete them, or, one held for a while, till it runs out: its date gone by, a fortnight after its task finished, or its task gone for good (D-103) |
 | Felix's notes and your reminders | `felix.json` | A note till it, or the task of yours it's on, is deleted (kept while that Undo stands), or, on a source's task, till that source stops listing it and has been read since (the morning's prune); a reminder a month after it's sent, done or let go, a cancelled one while its Undo stands |
 | Your changes | `instructions.json` | Till you take them back |
 | Claude's calls | `model.json` | The last 100: job, what it's about, tokens, time, outcome, cost |
