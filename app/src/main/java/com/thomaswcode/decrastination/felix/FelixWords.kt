@@ -2,7 +2,7 @@ package com.thomaswcode.decrastination.felix
 
 /**
  * The lines the app says in Felix's name with no call made (docs/plan_v4/05-the-chat.md §1: a message
- * of his `byApp`), in one place, in his register (docs/plan_v4/09-his-voice.md, Q16: A), so the app's
+ * of his `byApp`), in one place, in his register (docs/plan_v4/09-his-voice.md, D-57), so the app's
  * words in his bubble don't jar against his own. Pure.
  */
 object FelixWords {
@@ -33,7 +33,7 @@ object FelixWords {
     /** The morning's list when he has no words for it (LR-04): the day's [title], then its [lines]. */
     fun morningList(title: String, lines: List<String>): String = (listOf(title) + lines).joinToString("\n")
 
-    /** A reminder of yours, [words] as you set them, where he has no words of his own for it (Stage 8a): never nothing. */
+    /** A reminder of yours, [words] as you set them, where he has no words of his own for it: never nothing. */
     fun reminder(words: String): String = "reminder: $words"
 
     /** After a reminder that comes late (the phone off through it), the [time] it was for. */
@@ -48,7 +48,7 @@ object FelixWords {
     /** His line under an answer that asked [source] to read (G2): no Undo, as a read takes nothing back. */
     fun reading(source: String): String = "Asked $source to read"
 
-    /** Teams's, with the chat on screen (Q33: B): its widget asked to sync it, as a tap on its refresh asks it. */
+    /** Teams's, with the chat on screen (D-11): its widget asked to sync it, as a tap on its refresh asks it. */
     const val TEAMS_SYNCING = "Asked Teams to read, the Teams widget syncing it now"
 
     /** Teams's where its widget's sync wasn't started, [why]: what the widget has. */
@@ -57,7 +57,7 @@ object FelixWords {
     /** [source]'s read of [title], as it changed (G2): "Teams says “Forces worksheet” is handed in." */
     fun read(source: String, title: String, what: String): String = "$source says “$title” $what."
 
-    /** A reminder's replies (Q11: A): it's done, or it comes again in 15 minutes or an hour, each with no call; taken whatever their case. */
+    /** A reminder's replies (D-100): it's done, or it comes again in 15 minutes or an hour, each with no call; taken whatever their case. */
     const val REMINDER_DONE = "done"
     const val REMINDER_SNOOZE = "snooze 15 min"
     const val REMINDER_SNOOZE_HOUR = "snooze 1 h"

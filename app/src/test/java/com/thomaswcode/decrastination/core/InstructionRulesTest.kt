@@ -73,7 +73,7 @@ class InstructionRulesTest {
         fun synced(estimate: Int, detail: String = "") =
             Merge.apply(listOf(laid), Source.Teams, listOf(Fetched("essay", "essay", Kind.Homework, detail = detail, dueAt = Fixtures.at("2026-10-12T09:00"), sourceEffortMin = estimate)), now).tasks.single()
         assertTrue(synced(60).pacedTeaches)
-        // Estimated anew, its content the same (#50's review: as a re-read for newer prompts is): still the pace.
+        // Estimated anew, its content the same (as a re-read for newer prompts is): still the pace.
         assertEquals(Triple(90, true, true), synced(120).let { Triple(it.effortMin, it.pacedMinutes, it.pacedTeaches) })
         // Its content changed (new instructions): still Felix's total, but the work may have changed, so not the pace.
         assertEquals(Triple(90, true, false), synced(60, detail = "Also questions 9 to 12.").let { Triple(it.effortMin, it.pacedMinutes, it.pacedTeaches) })
@@ -581,7 +581,7 @@ class InstructionRulesTest {
         val made = OwnTaskRules.edited(ticked, draft)
         assertEquals(listOf("Plan" to true, "Draft" to false, "Polish" to false), made.subSteps.map { it.title to it.done })
         assertEquals(60, made.subSteps.sumOf { it.minutes })
-        // A source's task's too (16 Oct), but not one made from Anki's cards.
+        // A source's task's too, but not one made from Anki's cards.
         val teams = ticked.copy(id = "teams:x", source = Source.Teams)
         assertTrue(InstructionAnswers.change(given.copy(taskId = teams.id), mapOf(teams.id to teams), emptyMap(), Fixtures.at("2026-10-12T17:00"), Fixtures.LONDON) != null)
         val deck = ticked.copy(id = "anki:deck", source = Source.Anki, derived = true)

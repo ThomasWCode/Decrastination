@@ -11,7 +11,7 @@ import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 
 /**
- * Tasks' second shape, and the instructions' (docs/plan_v4/04-data-and-migrations.md §Tasks v2, Stage 7):
+ * Tasks' second shape, and the instructions' (docs/plan_v4/04-data-and-migrations.md §Tasks v2):
  * your values in one value on the task, `mine`, each with who set it, in place of the twelve `user…`
  * fields; every step with an id and where it came from. Your values move as they were, set by you; who
  * set an instruction from before can't always be told (the chat is capped and clearable), so each is

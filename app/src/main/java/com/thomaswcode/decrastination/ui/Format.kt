@@ -63,7 +63,7 @@ object Format {
     /** A minute of the day as "16:45". */
     fun clock(minute: Int): String = "%02d:%02d".format(Locale.UK, minute / 60, minute % 60)
 
-    /** A moment's time of day, as under a chat message (5b): "16:45". */
+    /** A moment's time of day, as under a chat message: "16:45". */
     fun time(time: Long, zone: ZoneId): String = Instant.ofEpochMilli(time).atZone(zone).format(TIME)
 
     /** "45 min", "1 h 30 min". */

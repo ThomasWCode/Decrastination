@@ -4,12 +4,11 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 /**
- * Asking Claude (2.0.0, Q29), Felix since review v2 (AI-24): one chat for everything you'd say about
+ * Asking Claude (Q29), Felix (AI-24): one chat for everything you'd say about
  * your work. You write; he answers, asks when something's missing, and puts what he does on cards
- * ([Proposal]): everything is made at once, its card's Undo taking it back (your call, 16 Oct; a new
- * task or days off waited for the card's Add or Apply before). Every word in his name is a message
- * here first, what he writes unasked among them (docs/plan_v4/05-the-chat.md): this is the live
- * window of the conversation, kept in `chat.json`, and what's past it is in [ChatArchive].
+ * ([Proposal]): everything is made at once, its card's Undo taking it back (D-60). Every word in his
+ * name is a message here first, what he writes unasked among them (docs/plan_v4/05-the-chat.md): this
+ * is the live window of the conversation, kept in `chat.json`, and what's past it is in [ChatArchive].
  */
 @Serializable
 data class ChatState(
@@ -41,7 +40,7 @@ enum class Speaker {
  * Why a message was written (docs/plan_v4/05-the-chat.md §1): [Chat] for yours and his answers to you;
  * else why he wrote unasked: his looks at a slot (`SlotStart`, `SlotEnd`, `SlotKept`), the day done,
  * the morning, a reading's question, how the day's completions went, the week's check-in, review and
- * summary, a calendar event's question; a reminder and a note of the app's (Stages 8a and 8b).
+ * summary, a calendar event's question; a reminder and a note of the app's.
  */
 @Serializable
 enum class MessageKind { Chat, Morning, SlotStart, SlotEnd, SlotKept, DayDone, Question, Completions, CheckIn, Review, Summary, EventQuestion, Reminder, Note }
@@ -68,7 +67,7 @@ data class ChatMessage(
     val asks: List<AssessLater> = emptyList(),
     /** His, in the app's words: the button it carries under it, "review" (the week's) or "summary:<week>" (to send). */
     val opens: String? = null,
-    /** His Reminder message's reminder (Stage 8a): what its *Done* and snoozes act on. */
+    /** His Reminder message's reminder: what its *Done* and snoozes act on. */
     val reminderId: String? = null,
     /** Claude's: what it would do, each on a card. */
     val proposals: List<Proposal> = emptyList(),
@@ -95,7 +94,7 @@ data class ChatMessage(
     val acts: List<Act> = emptyList(),
     /** Claude's: up to three short replies you might send next, in your words (AI-24, UI-06). */
     val suggestedReplies: List<String> = emptyList(),
-    /** Claude's: what he searched the web for to answer it (16 Oct), and the pages the searches found, the first few. */
+    /** Claude's: what he searched the web for to answer it, and the pages the searches found, the first few. */
     val searched: List<String> = emptyList(),
     val sources: List<WebSource> = emptyList(),
 )
@@ -173,11 +172,10 @@ data class Proposal(
 
 /**
  * Something the chat does for you beyond a change (AI-14): a step of a task ticked, or a task shown;
- * since 16 Oct (your call: he changes everything) a step unticked, a task of yours done, open again
- * or deleted, and a setting about the work set, [setting] to [value]
- * ([FelixSettings]; [taskId] empty); since 4.1.0 a reminder set, moved or cancelled, and a note
- * added or deleted, the reminder's or the note's id its [value] ([taskId] its task's, or empty); since
- * 4.1.1 a piece kept as Day's Done keeps it, or kept no more, its key its [value] (G1); and a source
+ * a step unticked, a task of yours done, open again or deleted, and a setting about the work set (D-61),
+ * [setting] to [value] ([FelixSettings]; [taskId] empty); a reminder set, moved or cancelled, and a note
+ * added or deleted, the reminder's or the note's id its [value] ([taskId] its task's, or empty); a piece
+ * kept as Day's Done keeps it, or kept no more, its key its [value] (G1); and a source
  * asked to read, its name its [setting], the task asked about its [taskId] (G2: said, with no Undo).
  */
 @Serializable
@@ -186,7 +184,7 @@ data class ChatAction(val type: Type, val taskId: String, val stepIndex: Int? = 
 }
 
 /**
- * What one of the chat's actions did (16 Oct), said under its answer as [line], with what its Undo
+ * What one of the chat's actions did, said under its answer as [line], with what its Undo
  * needs: the [action]; the task as it was before it ([was]: deleted, or finished before it was
  * opened again), and the cards that had added a deleted one ([cards], "message|card"); a setting's
  * value before and after ([before], [after]); a piece's kept record's time ([after], G1: the one a keep made, or the one an unkeep took back), and what one taken back was kept with ([before]: its extra minutes, its photo, its source's word, and its piece's minutes as the plan laid it again, its own and its step's other sittings'); a reminder before it was moved ([reminder]). [undone]
@@ -212,7 +210,7 @@ data class Act(
         const val NOT_MADE = "Not made: "
         const val NOT_LOOKED_UP = "Not looked up: "
 
-        /** How a [problem]'s line starts where he asked for more after the last round a message has (8c). */
+        /** How a [problem]'s line starts where he asked for more after the last round a message has. */
         const val NOT_BROUGHT = "Not brought: "
     }
 }
@@ -238,7 +236,7 @@ object ChatSummary {
      */
     fun problems(message: ChatMessage): Int = message.acts.count { it.problem } + failedBefore(message) + if (message.note != null) 1 else 0
 
-    /** Cards from before everything was made as it came (16 Oct) whose making failed: their note says why, with no line of their own. */
+    /** Cards from before everything was made as it came whose making failed: their note says why, with no line of their own. */
     private fun failedBefore(message: ChatMessage): Int =
         message.proposals.count { !it.instant && it.open == null && it.note != null && it.state != ProposalState.Applied }
 
@@ -276,7 +274,7 @@ object ChatSummary {
 @Serializable
 enum class ProposalState { Proposed, Applied, Discarded }
 
-/** Whether the chat's actions can still be taken back (16 Oct), as their Undo shows and makes them. Pure. */
+/** Whether the chat's actions can still be taken back, as their Undo shows and makes them. Pure. */
 object ChatActs {
 
     /**
@@ -304,7 +302,7 @@ object ChatActs {
             ChatAction.Type.Open -> false
             ChatAction.Type.TickStep -> task != null && step?.done == true && (task.isOpen || task.source == Source.Own || task.tickDone) && tickedBy(act, task.id, a.stepIndex!!, step, kept)
             ChatAction.Type.UntickStep -> task?.isOpen == true && step?.done == false
-            // A starred email's finish (Stage 11) while it, the act's own ([Act.after]), stands in the journal ([finishing], by id),
+            // A starred email's finish while it, the act's own ([Act.after]), stands in the journal ([finishing], by id),
             // its task here or not (a backup restored brings back the receipt, but no read brings back an email unstarred).
             ChatAction.Type.Done -> if (task?.source == Source.Gmail || task == null) act.after != null && act.after in finishing else task?.isOpen == false && (task.source == Source.Own || task.tickDone)
             ChatAction.Type.Reopen -> task != null && act.was != null && asReopened(task, act.was)

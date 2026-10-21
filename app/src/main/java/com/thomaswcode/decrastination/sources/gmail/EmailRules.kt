@@ -17,14 +17,14 @@ import java.util.Locale
  * - One that asks you to do something ("please complete", "return the form by…", "action
  *   required"): something to do, whoever sent it and whatever else it says, 15 minutes, due by the
  *   date it names after "by", if any. A registration or a form from a no-reply address is still
- *   work, so it isn't hidden as an event or a notification (the review's BUG-P1-003).
+ *   work, so it isn't hidden as an event or a notification (BUG-P1-003).
  * - Notifications and newsletters (no-reply senders, LinkedIn, an unsubscribe link): read it and
  *   decide, 5 minutes. Starred, nothing is only to read (AI-02).
  * - A ticket, booking or open day with a date ahead: an event. It appears the day before, and
  *   wants unstarring by the day after.
  * - Anything else: read it and decide, 15 minutes.
  *
- * The enrichment (Phase 4) does this better when it's on; these are the floor.
+ * The enrichment does this better when it's on; these are the floor.
  */
 object EmailRules {
 
@@ -93,7 +93,7 @@ object EmailRules {
         if (EVENT_WORDS.containsMatchIn(text)) {
             futureDates(text, today).firstOrNull()?.let { day ->
                 // Calendar days, not 24-hour steps: the clocks change in October and March.
-                // Starred, a task (16 Oct): what it needs of you before the day.
+                // Starred, a task: what it needs of you before the day.
                 return Triage(
                     kind = Kind.Admin,
                     effortMin = READ_AND_DECIDE_MIN,

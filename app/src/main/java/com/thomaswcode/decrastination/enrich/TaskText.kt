@@ -32,7 +32,7 @@ object TaskText {
     private fun cut(s: String): String = if (s.length <= MAX_ITEM) s else s.take(MAX_ITEM - 1) + "…"
 
     /**
-     * What its text holds, as its line in the chat's list says it (8c): who an email's from, what's attached and
+     * What its text holds, as its line in the chat's list says it: who an email's from, what's attached and
      * linked, and how long its text is ("text 1,850 characters", or "no text"), within [max] characters; what's
      * attached and linked cut first, the length always there.
      */

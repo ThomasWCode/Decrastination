@@ -4,7 +4,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
 
 /**
- * A task of your own as you give it (2.0.0, Q28), with the form or by asking Claude: what a source
+ * A task of your own as you give it (Q28), with the form or by asking Claude: what a source
  * would say of a task. [startFrom]: it can't be started before then, though it's due as ever, and
  * is planned from then on. [steps]: its parts, each with its minutes (and its own dates, where it
  * has them); with steps, its minutes are theirs together.
@@ -19,7 +19,7 @@ data class OwnTask(
     val startFrom: Long? = null,
     val minutes: Int = Kind.Homework.defaultEffortMin,
     val steps: List<OwnStep> = emptyList(),
-    /** Where it can be done (PL-15): "anywhere", a free period at school included, or "home". The form asks in phase 6. */
+    /** Where it can be done (PL-15): "anywhere", a free period at school included, or "home". */
     val where: String = "anywhere",
     /** From the form (UI-15): its steps matched to those they were by their place alone, never by a name. */
     @Transient val fromForm: Boolean = false,
@@ -51,10 +51,10 @@ fun List<OwnStep>.withIds(): List<OwnStep> {
 }
 
 /**
- * Your own tasks (2.0.0, Q28). You're their source: what you give is kept as a source's values are
+ * Your own tasks (Q28). You're their source: what you give is kept as a source's values are
  * ([TaskItem.sourceValues]), so an instruction laid over one can be taken back, and only you change
  * it. Nothing reads them, so no sync touches them; one is done when you say so, which earns no free
- * time (your call, 12 Oct): its kept slots earn theirs. Pure.
+ * time (D-54): its kept slots earn theirs. Pure.
  */
 object OwnTaskRules {
     const val MAX_TITLE = 200

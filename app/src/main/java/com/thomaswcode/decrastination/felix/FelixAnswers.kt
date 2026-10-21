@@ -7,7 +7,7 @@ import kotlinx.serialization.json.Json
 object FelixAnswers {
     const val MAX_MESSAGE = 240
 
-    /** The morning's: it's the whole briefing, with no list of the day under it (LR-04, your call, 16 Oct). */
+    /** The morning's: it's the whole briefing, with no list of the day under it (LR-04, D-65). */
     const val MAX_MORNING = 480
     const val MAX_REPLIES = 3
     const val MAX_REPLY = 40
@@ -35,7 +35,7 @@ object FelixAnswers {
 
     /**
      * His message no longer than [max]: over it, ended at its last whole sentence that leaves at
-     * least half the room used, so it never stops mid-sentence (16 Oct: the morning's did); else cut
+     * least half the room used, so it never stops mid-sentence (the morning's did); else cut
      * at a word, with an ellipsis.
      */
     internal fun message(text: String, max: Int): String {

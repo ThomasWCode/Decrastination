@@ -43,7 +43,7 @@ import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 
 /**
- * Felix's service on temporary stores (docs/plan_v4, Stage 4), for the flows' tests: the real stores,
+ * Felix's service on temporary stores (docs/plan_v4), for the flows' tests: the real stores,
  * gateway, focus, plan and outbox, and his calls through the real readers, answered by a stand-in for
  * Claude's API ([server]). Android is a list of what it was asked ([ports]); the other owners
  * ([owners]: your own tasks, your instructions and the calendar's answers) do, simply, what AppGraph's
@@ -96,7 +96,7 @@ class FelixHarness(
         requestTeamsSync = { teamsSyncs++; teamsRefusal },
     )
 
-    /** How often the Teams widget was asked to sync (Q33: B), and why it didn't start, as the test says. */
+    /** How often the Teams widget was asked to sync (D-11), and why it didn't start, as the test says. */
     var teamsSyncs = 0
     var teamsRefusal: String? = null
 
@@ -265,7 +265,7 @@ class FelixHarness(
             return added
         }
 
-        /** The starred emails finished by his done (Stage 11), each coming to [gmailFinish]. */
+        /** The starred emails finished by his done, each coming to [gmailFinish]. */
         val gmailFinished = mutableListOf<String>()
         var gmailFinish = GmailFinishes.Finish.Going
 

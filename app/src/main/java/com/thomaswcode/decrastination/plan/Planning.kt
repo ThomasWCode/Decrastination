@@ -37,7 +37,7 @@ import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.launch
 
 /**
- * The plan (docs/plan_v4, Stage 4), moved out of `AppGraph`: made from the stores as they are
+ * The plan (docs/plan_v4), moved out of `AppGraph`: made from the stores as they are
  * ([plan]; cheap, dozens of tasks), made again as what it depends on changes ([watcher]), today's
  * slot starts kept for the next ([keepSlots]), and the work done ahead after each ([Ahead]). Built
  * like [com.thomaswcode.decrastination.block.Focus]: its stores, the clock and small callbacks in
@@ -68,7 +68,7 @@ class Planning(
     /** Felix's next message written ahead ([com.thomaswcode.decrastination.felix.Looks.draftAhead]). */
     draftAhead: suspend (Plan, Long) -> Unit,
     onFailure: (Throwable) -> Unit,
-    /** The notes kept with a task (8a), which its pieces' first steps are written with. */
+    /** The notes kept with a task, which its pieces' first steps are written with. */
     notes: (TaskItem) -> List<String> = { emptyList() },
 ) {
     /**

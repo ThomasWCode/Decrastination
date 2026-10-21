@@ -25,11 +25,11 @@ data class Settings(
     val felixGraceMin: Int = 10,
     /** When he checks again if he doesn't say (Q-31), in minutes. */
     val felixDefaultCheckMin: Int = 20,
-    /** Whether he may search the web from the chat when a message needs it (your call, 16 Oct): a search costs about 5¢. */
+    /** Whether he may search the web from the chat when a message needs it (D-62): a search costs about 5¢. */
     val felixSearches: Boolean = true,
     /** The screens' first-run hints you've put away (UI-17), by name. */
     val hintsSeen: List<String> = emptyList(),
-    /** When the daily Anki quota is due (21:30, decided 8 Oct). */
+    /** When the daily Anki quota is due (21:30, D-9). */
     val ankiDeadlineMin: Int = 21 * 60 + 30,
 
     /** When you can work on a school day (Q6): 16:45 to 22:00, the commute already inside. */
@@ -44,7 +44,7 @@ data class Settings(
     val lunchWindows: List<Window> = listOf(Window(13 * 60 + 15, 13 * 60 + 40), Window(13 * 60 + 55, 14 * 60 + 35)),
     /** A school window with less free than this left isn't used. */
     val minSchoolSlotMin: Int = 15,
-    /** How long a piece of work is cut into, when it has no steps of its own (docs/spec/planner.md): 30 since PL-12. */
+    /** How long a piece of work is cut into, when it has no steps of its own (docs/spec/planner.md): 30 (PL-12). */
     val boxMin: Int = 30,
     /** The break after each piece's slot (PL-12), and the longer one once this much work has gone without one. */
     val slotBreakMin: Int = 5,
@@ -75,7 +75,7 @@ data class Settings(
      */
     val softMinPerDay: Int = 60,
 
-    /** Apps covered by the block screen while blocking applies (Q8, decided 8 Oct). */
+    /** Apps covered by the block screen while blocking applies (Q8). */
     val blockedApps: List<String> = Blocklist.APPS,
     /** Sites covered in the browsers whose address bar is read: a host, or a host and path. */
     val blockedSites: List<String> = Blocklist.SITES,
@@ -93,7 +93,7 @@ data class Settings(
     val workMinPerFreeMin: Int = 3,
 
     /**
-     * Finishing a starred email's work here unstars and archives it in Gmail (D-7 as amended, Q18: A): on by
+     * Finishing a starred email's work here unstars and archives it in Gmail (D-7 as amended, D-106): on by
      * default, the very first finish waiting for your OK. Not one of Felix's settings: it writes to your mailbox.
      */
     val gmailFinishes: Boolean = true,
@@ -118,7 +118,7 @@ data class Settings(
      * default, as the account is prepaid with no card: its calls stop when its credit runs out, and
      * that's alerted ([com.thomaswcode.decrastination.enrich.KeyProblem.NoCredit]). An install from
      * before 1.2.0 had a cap of £200 (`aiMonthlyCapGbp`, no longer read); dropping it with the
-     * upgrade was the owner's decision (9 Oct), made by installing it, so it isn't a change through
+     * upgrade was the owner's decision (D-91), made by installing it, so it isn't a change through
      * Settings that waits.
      */
     val aiMonthlyCapUsd: Int? = null,

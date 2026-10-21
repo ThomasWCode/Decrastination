@@ -28,8 +28,8 @@ object ReviewInput {
     data class Answer(val note: List<String>, val changes: List<Change> = emptyList())
 
     /**
-     * What the model may change, and between what. Nothing about blocking or protection; nor, since
-     * 17 Oct, a piece's length, which is yours: work's cut only past it (an hour, your call).
+     * What the model may change, and between what. Nothing about blocking or protection; nor a
+     * piece's length, which is yours: work's cut only past it (an hour, D-33).
      */
     val BOUNDS: Map<String, IntRange> = mapOf(
         "marginDays" to 0..3,

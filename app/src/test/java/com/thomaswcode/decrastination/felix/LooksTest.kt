@@ -17,7 +17,7 @@ import kotlin.test.assertTrue
 import kotlinx.coroutines.runBlocking
 
 /**
- * His looks (LR-03) on temporary stores (docs/plan_v4, Stages 4 and 5a), his message read by the real
+ * His looks (LR-03) on temporary stores (docs/plan_v4), his message read by the real
  * caller from a stand-in for Claude's API ([FelixHarness]): written into the chat, his one notification
  * made from it, his next look set.
  */

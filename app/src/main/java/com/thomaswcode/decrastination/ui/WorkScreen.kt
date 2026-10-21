@@ -155,7 +155,7 @@ fun WorkScreen(graph: AppGraph, activity: Activity, opening: String? = null, onO
                     }
                 }
             }
-            // Emails that are just emails aren't tasks (your call, 9 Oct); those you said aren't are below.
+            // Emails that are just emails aren't tasks; those you said aren't are below.
             val open = state.tasks.filter { it.isOpen && !it.hidden && (only == null || it.source.name == only) }
             if (open.isEmpty()) {
                 item(key = "none") {

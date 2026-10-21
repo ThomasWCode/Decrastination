@@ -85,7 +85,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 /**
- * Felix's conversation (docs/plan_v4, Stage 4), moved out of `AppGraph`: who the student is, as every
+ * Felix's conversation: who the student is, as every
  * call sends it ([profile]); the chat, your messages and his answers, their cards and acts made at
  * once with their Undo ([ask], [answerChat], [applyProposal], [undoAct]); what he remembers
  * ([remember]); a reply to one of his messages, from the chat, his chips or his notification, routed
@@ -107,7 +107,7 @@ class Conversation(
     private val chat: JsonStore<ChatState>,
     private val school: JsonStore<SchoolCalendar>,
     private val memory: JsonStore<MemoryState>,
-    /** What he keeps at your asking (Stage 8a): notes on tasks, and reminders. */
+    /** What he keeps at your asking: notes on tasks, and reminders. */
     private val felix: JsonStore<FelixStore>,
     private val clock: WallClock,
     private val scope: CoroutineScope,
@@ -131,14 +131,14 @@ class Conversation(
      */
     private val requestSync: (Set<Source>) -> Unit = {},
     /**
-     * The Teams widget asked to sync Teams itself, as a tap on its refresh asks it (Q33: B,
+     * The Teams widget asked to sync Teams itself, as a tap on its refresh asks it (D-11,
      * [com.thomaswcode.decrastination.sync.Sync.requestTeamsSync]): why it didn't start, or null where it did.
      */
     private val requestTeamsSync: suspend () -> String? = { null },
 ) {
     /**
-     * What the chat changes through those who own it (`AppGraph`'s functions, till Stage 6 makes
-     * services of them): your own tasks, your instructions, and the settings.
+     * What the chat changes through those who own it: your own tasks,
+     * your instructions, and the settings.
      */
     interface Owners {
         suspend fun saveOwnTask(sourceId: String, task: OwnTask): Boolean
@@ -156,7 +156,7 @@ class Conversation(
         /** The week's [checkIn] on record, once a week ([com.thomaswcode.decrastination.learn.Learning.recordCheckIn]): whether it was kept. */
         suspend fun recordCheckIn(checkIn: CheckIn, now: Long): Boolean
 
-        /** A starred email of [taskId] finished by his `done` (Stage 11): unstarred and archived in Gmail, after the grace. */
+        /** A starred email of [taskId] finished by his `done`: unstarred and archived in Gmail, after the grace. */
         suspend fun finishGmail(taskId: String): GmailFinishes.Finish = GmailFinishes.Finish.Off
 
         /** [taskId]'s finish taken back, only [writeId] where it's given: Gmail left as it was, or put back. Whether there was one. */
@@ -174,7 +174,7 @@ class Conversation(
         val s = settings.value
         val state = tasks.value
         val zone = clock.zone()
-        // What's run out isn't told (10a): the profile never carries a stale line, and what's kept lets it go too.
+        // What's run out isn't told: the profile never carries a stale line, and what's kept lets it go too.
         val live = expired(remembered, now)
         if (live !== remembered && remembered === memory.value) scope.launch { forgetExpired(now) }
         return Profile.Block(
@@ -183,13 +183,13 @@ class Conversation(
         )
     }
 
-    /** [remembered] without what's run out at [now] (10a, [Memories.expired]): by the tasks, what the chat's acts can still bring back, and the sources' reads. */
+    /** [remembered] without what's run out at [now] ([Memories.expired]): by the tasks, what the chat's acts can still bring back, and the sources' reads. */
     private fun expired(remembered: MemoryState, now: Long): MemoryState {
         val state = tasks.value
         return Memories.expired(remembered, state.tasks.associateBy { it.id }, now, ChatActs.held(chat.value.messages)) { source -> state.status(source).lastSuccessAt }
     }
 
-    /** What's run out of what's remembered let go of (10a), silently, as a person forgets: as the profile's read, and each morning. Written only where something has. */
+    /** What's run out of what's remembered let go of, silently, as a person forgets: as the profile's read, and each morning. Written only where something has. */
     suspend fun forgetExpired(now: Long = clock.now()) {
         memory.update { expired(it, now) }
     }
@@ -427,7 +427,7 @@ class Conversation(
 
     /**
      * What a message's answer has been given beyond its context, by the message's [id], kept till
-     * he's answered with it: what a web search [found] (16 Oct), or why one made found nothing
+     * he's answered with it: what a web search [found], or why one made found nothing
      * ([notLooked]), and the tasks [read] in full (D-93). An answer with them that failed is asked
      * again with them, never searching or asking for them again, as each is paid for; a search held
      * back (Claude off or resting, the cap) isn't kept, so it can be made later.
@@ -450,7 +450,7 @@ class Conversation(
     }
 
     /**
-     * Your [text] to Felix about [about] (2.0.0, Q29), answering the message [replyTo] if it does: one
+     * Your [text] to Felix about [about] (Q29), answering the message [replyTo] if it does: one
      * entrance for replies (D-98), from the chat, his chips or his notification. A reply to a question of
      * his that's an answer is kept under it with no call ([routed]); anything else is a turn of the
      * chat, kept as message [id] (about what it replies to, where it's about nothing else, unless not
@@ -507,7 +507,7 @@ class Conversation(
             Replies.Route.Question, is Replies.Route.Completions -> if (!answered(message, words)) return false
             // One of a calendar question's three answers (Q7), for every event of its name.
             is Replies.Route.Event -> owners.answerEvent(route.key, route.answer)
-            // A reminder's Done or snooze (8a): on it; gone (pruned), a turn of the chat.
+            // A reminder's Done or snooze: on it; gone (pruned), a turn of the chat.
             is Replies.Route.Reminder -> if (!replyToReminder(route, now)) return false
             Replies.Route.Chat -> return false
         }
@@ -517,7 +517,7 @@ class Conversation(
     }
 
     /**
-     * Your reply to one of your reminders (8a): *Done* marks it done; a snooze has it come again then,
+     * Your reply to one of your reminders: *Done* marks it done; a snooze has it come again then,
      * its words for before let go, written again near the time (its alarm set again by the store's
      * change). One done or cancelled since stays so, as does one moved while its message went, which
      * never came. False where it's gone.
@@ -559,7 +559,7 @@ class Conversation(
         messages: List<ChatMessage> = chat.value.messages,
     ): ChatPrompts.Context {
         val plan = planning.plan(state, now = now, applied = applied, time = time)
-        // His notes and reminders (8a), each reminder with when it comes by this plan.
+        // His notes and reminders, each reminder with when it comes by this plan.
         val byId = state.tasks.associateBy { it.id }
         val moments = kept.reminders.mapNotNull { r -> Reminders.moment(r, plan, byId, now)?.let { r.id to it } }.toMap()
         // The pieces he may keep (G1): today's slots', and each task with no steps' next; and those kept today, to take back.
@@ -579,7 +579,7 @@ class Conversation(
 
     /**
      * His nudges of [messages] still waiting for your answer at [now] (D-99): the newest [ChatPrompts.MAX_WAITING], oldest
-     * first, which the chat's answer may name as answered by your words (10b). Not a question whose answer the app keeps
+     * first, which the chat's answer may name as answered by your words. Not a question whose answer the app keeps
      * (a reading's, how work went, a calendar event's, the check-in's), nor a reminder (its *Done*): marked so, its answer
      * would be lost, so each waits for its reply as before ([ANSWERS_KEPT]).
      */
@@ -690,9 +690,9 @@ class Conversation(
             fun upTo(messages: List<ChatMessage>) = messages.take(messages.indexOfFirst { it.id == waiting.id } + 1)
             // When the plan he was last shown was made: a piece he keeps is kept as of it (G1).
             var shownAt = clock.now()
-            // His answer, with what a web search he asked for found ([found], 16 Oct), the tasks whose whole
+            // His answer, with what a web search he asked for found ([found]), the tasks whose whole
             // text he asked to [read] (D-93), and the week's numbers and the calendar further out where he asked
-            // for them ([stats], [calendar]: 8c), as of the moment it's asked, why a search he asked for couldn't be made ([notLooked]),
+            // for them ([stats], [calendar]), as of the moment it's asked, why a search he asked for couldn't be made ([notLooked]),
             // so he doesn't ask for it again; at the [last] round a message has, told so.
             suspend fun ask(found: Found?, read: List<TaskItem> = emptyList(), stats: Boolean = false, calendar: List<String> = emptyList(), last: Boolean = false, notLooked: String? = null) = gateway.call(interactive = true, record = ModelCalls.OnRecord(ModelEffort.Job.Chat, waiting.text) { r: ChatReader.Result -> r.usage to ModelCalls.outcome(r.refused, r.reading == null) }, cost = { r: ChatReader.Result -> r.costUsd to r.refused }) { at ->
                 // Being asked now: whatever it said before (a failed call) is gone.
@@ -739,7 +739,7 @@ class Conversation(
                 stuck = true
                 return@call if (result.refused) "Claude declined to answer that: Try again, or put it another way" else "Claude's answer couldn't be read: Try again"
             }
-            // What he asked to look up on the web (16 Oct), in a call of its own, and the tasks whose
+            // What he asked to look up on the web, in a call of its own, and the tasks whose
             // whole text he asked to read (D-93): he's asked again with them, and that's his answer.
             // A search the texts showed a need for, or texts the search did, take one more round
             // ([ChatRounds]); never more, as each is paid for. Not found, his answer stands, saying
@@ -783,7 +783,7 @@ class Conversation(
                 val more = tasksOf(next.read)
                 val reads = more.size > read.size
                 if (reads) read = more
-                // The week's numbers and the calendar further out (8c), each span the first time he asks for it.
+                // The week's numbers and the calendar further out, each span the first time he asks for it.
                 val brings = next.stats != stats || next.calendar != calendar
                 stats = next.stats
                 calendar = next.calendar
@@ -814,7 +814,7 @@ class Conversation(
                 from = Speaker.Felix,
                 text = reading.reply,
                 at = clock.now(),
-                // Everything on a card made as it comes (your call, 16 Oct), each with its Undo.
+                // Everything on a card made as it comes (D-60), each with its Undo.
                 proposals = ChatAnswers.cards(reading, tasks.value.tasks.associateBy { it.id }, clock.zone()),
                 suggestedReplies = reading.suggestedReplies,
                 searched = found?.let { it.searched.ifEmpty { listOf(it.question) } }.orEmpty(),
@@ -825,7 +825,7 @@ class Conversation(
                 acts = listOfNotNull(
                     notLooked?.let { Act(Act.NOT_LOOKED_UP + "$it.", problem = true) },
                     read.takeIf { it.isNotEmpty() }?.let { r -> Act("Read in full: " + r.joinToString("; ") { "“${it.title}”" } + ".") },
-                    // What else he read to answer (8c), said under it as the texts are.
+                    // What else he read to answer, said under it as the texts are.
                     Act("Read: the week's numbers.").takeIf { stats },
                     *calendar.map { Act("Read: the calendar for " + ChatPrompts.calendarWhat(it, shownAt, clock.zone()) + ".") }.toTypedArray(),
                     Act(Act.NOT_BROUGHT + "he asked for more than one message brings (two rounds, three texts, two spans of the calendar): ask again to go on.", problem = true).takeIf { unserved },
@@ -856,7 +856,7 @@ class Conversation(
             // What it remembered (AI-21), with an answer kept only, and said under it with its Undo.
             val edits = if (kept) remember(reading.memories) else emptyList()
             if (edits.isNotEmpty()) chat.update { s -> s.copy(messages = s.messages.map { if (it.id == reply.id) it.copy(memoryEdits = edits) else it }) }
-            // Its actions (AI-14; 16 Oct, everything he does), said under it with their Undo: before its
+            // Its actions (AI-14; D-60), said under it with their Undo: before its
             // changes, as its steps are the ones it was shown.
             val acts = if (kept) act(reading.actions, shownAt, reply.id) else emptyList()
             if (acts.isNotEmpty()) chat.update { s -> s.copy(messages = s.messages.map { if (it.id == reply.id) it.copy(acts = acts + it.acts) else it }) }
@@ -864,7 +864,7 @@ class Conversation(
             if (kept) {
                 val instant = reply.proposals.filter { it.instant }
                 instant.forEach { applyProposal(reply.id, it.id) }
-                // Its reminders and notes (8a), after its changes, so one before a deadline it sets has it.
+                // Its reminders and notes, after its changes, so one before a deadline it sets has it.
                 // By the deadlines of its cards that were made: one refused (a due date before a start of yours) sets none.
                 val made = chat.value.messages.firstOrNull { it.id == reply.id }?.proposals.orEmpty().filter { it.instant && it.state == ProposalState.Applied }
                 val noted = keep(reading.reminders, reading.notes, ChatAnswers.deadlines(made.flatMap { it.changes }))
@@ -874,12 +874,12 @@ class Conversation(
                 // A time the plan couldn't keep (PL-04): where the piece went, said under the answer,
                 // which names the time asked for.
                 val moved = ChatAnswers.movedPins(instant.flatMap { it.changes }, planning.plan().buckets, clock.zone())
-                // One that couldn't be made after all, said under the answer that says it was (16 Oct).
+                // One that couldn't be made after all, said under the answer that says it was.
                 val refused = chat.value.messages.firstOrNull { it.id == reply.id }?.proposals.orEmpty()
                     .filter { p -> p.instant && p.state != ProposalState.Applied && p.note != null }.map { Act(Act.NOT_MADE + "${it.note!!.replaceFirstChar(Char::lowercase)}.", problem = true) }
                 val lines = refused + moved.map { Act(it) }
                 if (lines.isNotEmpty()) chat.update { s -> s.copy(messages = s.messages.map { if (it.id == reply.id) it.copy(acts = it.acts + lines) else it }) }
-                // His messages still waiting that your words answered, at his word (10b, D-99): marked as *Mark answered* marks them,
+                // His messages still waiting that your words answered, at his word (D-99): marked as *Mark answered* marks them,
                 // and said under his answer, so one that stops waiting doesn't just vanish.
                 if (reading.answered.isNotEmpty()) {
                     val marked = mark(reading.answered, reply.at)
@@ -902,7 +902,7 @@ class Conversation(
     }
 
     /**
-     * The chat's actions (AI-14; your call, 16 Oct: everything he does), made at once, as it alters
+     * The chat's actions (AI-14; D-60), made at once, as it alters
      * what exists (AI-24), each said under the answer with what its Undo needs ([undoAct]): a step
      * ticked (its piece kept where the plan has one, today or another day, earning as a tick does,
      * else ticked as on its sheet) or to do again; a task of yours done, open again or deleted; a
@@ -947,7 +947,7 @@ class Conversation(
                 }
                 ChatAction.Type.Done -> {
                     if (task?.isOpen != true) return@mapNotNull null
-                    // A starred email (Stage 11): finished in Gmail, which closes it at the read after the write (D-10).
+                    // A starred email: finished in Gmail, which closes it at the read after the write (D-10).
                     if (task.source == Source.Gmail) {
                         return@mapNotNull when (owners.finishGmail(task.id)) {
                             // The finish its own, by id, so its Undo takes back that one and not a newer.
@@ -986,7 +986,7 @@ class Conversation(
                     if (made != null) ports.scheduleReminders()
                     made
                 }
-                // A reminder cancelled, a note deleted (8a): marked, kept whole for the Undo, never removed here.
+                // A reminder cancelled, a note deleted: marked, kept whole for the Undo, never removed here.
                 // One come, or gone, while he answered: not made, and said so under his reply.
                 ChatAction.Type.CancelReminder -> {
                     var was: Reminder? = null
@@ -1006,7 +1006,7 @@ class Conversation(
                     val source = Source.entries.firstOrNull { it.name == a.setting } ?: return@mapNotNull null
                     task?.let { watching[it.id] = Watch(source, it, clock.now() + WATCH_MS) }
                     requestSync(setOf(source))
-                    // Teams (Q33: B): with the chat on screen, its widget's own sync too, as a tap on its refresh asks it, which
+                    // Teams: with the chat on screen, its widget's own sync too, as a tap on its refresh asks it, which
                     // has the screen for a minute (D-11); else what the widget has, and the line says why.
                     Act(
                         when {
@@ -1047,8 +1047,8 @@ class Conversation(
     }
 
     /**
-     * [reminders] set, or moved and reworded in place where one has a listed reminder's id, and [notes] kept
-     * (8a): made at once, each said under his answer with its Undo ([undoAct]), when it'll come said as the
+     * [reminders] set, or moved and reworded in place where one has a listed reminder's id, and [notes] kept:
+     * made at once, each said under his answer with its Undo ([undoAct]), when it'll come said as the
      * plan has it now. A move of one sent since he was asked isn't made. One before a deadline the answer
      * sets goes by that one ([deadlines], by task id), its lay onto the task coming after.
      */
@@ -1128,7 +1128,7 @@ class Conversation(
      * do again (one of yours it finished open again with it), or one unticked ticked again as the
      * chat ticks one; a task done open again, or one opened back as it was, finished; one deleted
      * back as it was, with the cards that added it; a setting back to its value before; a reminder or a
-     * note set, moved, cancelled or deleted taken back (8a). Not once it's changed since (ticked, finished
+     * note set, moved, cancelled or deleted taken back. Not once it's changed since (ticked, finished
      * or deleted another way, set again, a reminder come or snoozed): why, then.
      */
     suspend fun undoAct(messageId: String, index: Int): String? {
@@ -1180,7 +1180,7 @@ class Conversation(
                 val laid = w.getOrNull(3)?.toIntOrNull()?.let { own -> own to (w.getOrNull(4)?.toIntOrNull() ?: 0) }
                 laid != null && focus.pieceMinutes(a.value.orEmpty()) == laid && focus.keepSlot(a.value.orEmpty(), extraMin = w.getOrNull(0)?.toIntOrNull() ?: 0, photo = photo, verified = !photo && w.getOrNull(2) == "true")
             }
-            // A reminder or a note (8a), while it's as the act left it: a reminder set goes, one moved has its time and
+            // A reminder or a note, while it's as the act left it: a reminder set goes, one moved has its time and
             // words back, one cancelled comes again; a note added goes, one deleted is back.
             ChatAction.Type.SetReminder, ChatAction.Type.MoveReminder, ChatAction.Type.CancelReminder, ChatAction.Type.AddNote, ChatAction.Type.DeleteNote -> {
                 var back = false
@@ -1240,7 +1240,7 @@ class Conversation(
     }
 
     /**
-     * Your note [text] on [taskId] from its sheet (8a, Q14: A), kept as yours; or why it can't be: no words,
+     * Your note [text] on [taskId] from its sheet (D-100), kept as yours; or why it can't be: no words,
      * a task not there, or [com.thomaswcode.decrastination.core.Notes.PER_TASK] on it already.
      */
     suspend fun addNote(taskId: String, text: String): String? {
@@ -1256,7 +1256,7 @@ class Conversation(
     }
 
     /**
-     * His notes and reminders kept as long as they're wanted (8a, the morning's prune): a reminder sent or
+     * His notes and reminders kept as long as they're wanted (the morning's prune): a reminder sent or
      * done a month ago goes, a cancelled one and a deleted note once their act's Undo is gone with its
      * message from the chat's window, and a note on a task gone from the list once its delete can't be
      * undone ([Notes.prune], [Reminders.prune]).
@@ -1267,7 +1267,7 @@ class Conversation(
         felix.update { s -> s.copy(notes = Notes.prune(s.notes, ids, messages) { source -> tasks.value.status(source).lastSuccessAt }, reminders = Reminders.prune(s.reminders, now, messages)) }
     }
 
-    /** His notes and reminders as the debug page and the `felix` command show them (8a): a line each, a reminder's with when it comes now. */
+    /** His notes and reminders as the debug page and the `felix` command show them: a line each, a reminder's with when it comes now. */
     fun notesAndReminders(now: Long = clock.now()): List<String> {
         val kept = felix.value
         val plan = planning.plan(now = now)
@@ -1288,14 +1288,14 @@ class Conversation(
         return reminders + notes
     }
 
-    /** Note [id] deleted from a sheet (8a): marked, shown nowhere, and let go at the next prune, as no act holds it. */
+    /** Note [id] deleted from a sheet: marked, shown nowhere, and let go at the next prune, as no act holds it. */
     suspend fun deleteNote(id: String) {
         felix.update { s -> s.copy(notes = s.notes.map { if (it.id == id && it.deletedAt == null) it.copy(deletedAt = clock.now()) else it }) }
     }
 
     /**
      * [given] kept in what's remembered (AI-21), and what each thing did ([com.thomaswcode.decrastination.core.MemoryEdit.line]
-     * says it): each until read where you are, and a fact's task one of the open tasks he's shown (10a).
+     * says it): each until read where you are, and a fact's task one of the open tasks he's shown.
      */
     suspend fun remember(given: List<Given>): List<MemoryEdit> {
         if (given.isEmpty()) return emptyList()
@@ -1308,8 +1308,8 @@ class Conversation(
     }
 
     /**
-     * What the [index]th of message [messageId]'s remembering did, taken back (its Undo, your call,
-     * 16 Oct): the fact gone and the one it replaced back, or what it forgot back. An answer from
+     * What the [index]th of message [messageId]'s remembering did, taken back (its Undo, D-64):
+     * the fact gone and the one it replaced back, or what it forgot back. An answer from
      * before what each did was kept has its lines read against what's remembered now
      * ([com.thomaswcode.decrastination.core.Memories.editOf]). Null once it is; why not, if it can't be.
      */
@@ -1384,7 +1384,7 @@ class Conversation(
     suspend fun clearChat() = outbox.clear()
 
     /**
-     * Card [proposalId] of Claude's message [messageId] made, at once, armed or not (2.0.0): a task
+     * Card [proposalId] of Claude's message [messageId] made, at once, armed or not: a task
      * of your own added (as [edited] if you changed it first), or its changes applied as an
      * instruction in the words that asked for them, so they're listed with the rest and taken back
      * there too. Says what went wrong on the card, if anything did.
@@ -1539,10 +1539,10 @@ class Conversation(
         /** A due date, as his note says it. */
         private val WHEN = DateTimeFormatter.ofPattern("EEE d MMM HH:mm", Locale.UK)
 
-        /** How much of a message of his marked answered by his word its line under his answer quotes (10b). */
+        /** How much of a message of his marked answered by his word its line under his answer quotes. */
         private const val TAKEN_TEXT = 60
 
-        /** His messages whose answer the app keeps, by a reply to them alone: never marked answered by his word (10b). */
+        /** His messages whose answer the app keeps, by a reply to them alone: never marked answered by his word. */
         private val ANSWERS_KEPT = setOf(MessageKind.Question, MessageKind.Completions, MessageKind.EventQuestion, MessageKind.CheckIn, MessageKind.Reminder)
     }
 }

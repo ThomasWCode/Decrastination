@@ -41,7 +41,7 @@ import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.runBlocking
 
 /**
- * What the app reads, through the Sync service on temporary stores (docs/plan_v4, Stage 6d): a sync
+ * What the app reads, through the Sync service on temporary stores (docs/plan_v4): a sync
  * with one source failing, the Teams widget asked and its answers said, the calendar read as busy
  * time with what the rules can't judge asked about once, and what's read again from the start; what
  * Android does is a list ([Ports]). The syncer's own rules are `SyncerTest`'s.

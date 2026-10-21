@@ -10,7 +10,7 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.longOrNull
 
 /**
- * The chat's second shape (docs/plan_v4/04-data-and-migrations.md §The chat (v2), Stage 5a): every
+ * The chat's second shape (docs/plan_v4/04-data-and-migrations.md §The chat (v2)): every
  * message of Felix's in the chat, with why he wrote it, and his state between looks beside them. His
  * records move in from the log and his state from the runtime, merged by id so nothing's doubled; what
  * a message kept its own way before (why he wrote it, the lines under it) is in the fields the chat

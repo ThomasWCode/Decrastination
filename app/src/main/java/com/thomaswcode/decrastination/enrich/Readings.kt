@@ -19,7 +19,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * The tasks' readings (docs/spec/readings.md; docs/plan_v4, Stage 6d), moved out of `AppGraph`: what's
+ * The tasks' readings (docs/spec/readings.md; docs/plan_v4), moved out of `AppGraph`: what's
  * new or changed read, by Claude while it can be asked and by the rules otherwise ([enrichNow]); one
  * read again on asking ([readAgain]); and the dropped plans' warnings kept in step with the tasks
  * ([start]). Built like [com.thomaswcode.decrastination.block.Focus]: its stores, the clock, the

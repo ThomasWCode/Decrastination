@@ -34,7 +34,7 @@ import kotlinx.coroutines.test.runTest
 
 /**
  * Backups and resets through the backup service (AR-07, LR-08), on phones whose stores are in temporary
- * folders: a full one, every store as Stage 0's fixtures have it, and an empty one; a folder that keeps
+ * folders: a full one, every store as the fixtures have it, and an empty one; a folder that keeps
  * a map; and what isn't the backup's own counted.
  */
 class BackupServiceTest {

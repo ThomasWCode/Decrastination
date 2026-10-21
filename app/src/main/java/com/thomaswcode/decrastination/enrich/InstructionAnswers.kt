@@ -107,7 +107,7 @@ object InstructionAnswers {
             ChangeType.StartFrom -> task?.let { id -> at(g.date, g.time, LocalTime.MIDNIGHT, zone)?.takeIf { plausible(it, now) }?.let { Change(type, taskId = id, time = it) } }
             ChangeType.DueBy -> task?.let { id -> at(g.date, g.time, LocalTime.of(23, 59), zone)?.takeIf { plausible(it, now) }?.let { Change(type, taskId = id, time = it) } }
             // At least a minute for each of its steps, as yours are shared out over them.
-            // A paced total keeps the app's estimate it came from, and the task's content, as they are now (#50's review).
+            // A paced total keeps the app's estimate it came from, and the task's content, as they are now.
             ChangeType.Minutes -> task?.let { id ->
                 val t = tasks.getValue(id)
                 g.minutes?.takeIf { it in OwnTaskRules.minutesFor(t) }?.let {
@@ -154,9 +154,9 @@ object InstructionAnswers {
             }
             // The same work as another listed task (DX-15), which is kept.
             ChangeType.SameAs -> task?.let { id -> g.afterTaskId?.takeIf { it in tasks && it != id }?.let { Change(type, taskId = id, afterTaskId = it) } }
-            // A task's name in the app (16 Oct): not one derived from Anki's counts, whose name is their count.
+            // A task's name in the app: not one derived from Anki's counts, whose name is their count.
             ChangeType.Rename -> task?.takeIf { !tasks.getValue(it).derived }?.let { id -> g.title.trim().takeIf { it.isNotEmpty() }?.let { Change(type, taskId = id, title = it.take(OwnTaskRules.MAX_TITLE)) } }
-            // Any task's steps (16 Oct; your own's only before) but Anki's, which are its cards, each with
+            // Any task's steps but Anki's, which are its cards, each with
             // its minutes and its dates readable (AI-19).
             ChangeType.Steps -> task?.takeIf { !tasks.getValue(it).derived && tasks.getValue(it).source != Source.Anki }?.let { id ->
                 // A step's dates: readable, in range, its start not after its end, and neither after the task's day.

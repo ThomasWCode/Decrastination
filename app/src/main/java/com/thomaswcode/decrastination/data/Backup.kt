@@ -153,7 +153,7 @@ object Backups {
     }
 
     /**
-     * This phone's writes to Gmail with [backup]'s receipts it hasn't, by id (4.3.0), in the order they were made, so a
+     * This phone's writes to Gmail with [backup]'s receipts it hasn't, by id, in the order they were made, so a
      * backup's older one never comes after this phone's newer for its task: a pending one of the backup's isn't there
      * to bring (a backup keeps none), and this phone's own stand as they are.
      */
@@ -372,7 +372,7 @@ object Backups {
                 ChangeType.SameAs -> named(change.taskId) && named(change.afterTaskId) && change.afterTaskId != change.taskId
                 // A task's steps (AI-19): some, each named, with its minutes.
                 ChangeType.Steps -> named(change.taskId) && change.steps.orEmpty().let { steps -> steps.size in 1..OwnTaskRules.MAX_STEPS && steps.all { it.title.isNotBlank() && it.minutes in OwnTaskRules.MINUTES } }
-                // A task's name (16 Oct): one, within a name's length.
+                // A task's name: one, within a name's length.
                 ChangeType.Rename -> named(change.taskId) && change.title?.let { it.isNotBlank() && it.length <= OwnTaskRules.MAX_TITLE } == true
             }
         }
@@ -381,7 +381,7 @@ object Backups {
     private fun isDate(text: String?): Boolean = text != null && runCatching { LocalDate.parse(text) }.isSuccess
 
     /**
-     * Whether [felix] is what the app keeps (4.1.0): each note and reminder under an id of its own, with
+     * Whether [felix] is what the app keeps: each note and reminder under an id of its own, with
      * words within their length, and a task's id, where one's given, not blank; a note on a task or standing,
      * never both nor neither, a standing one's scope named within [Notes.MAX_SCOPE]; a reminder due as
      * its kind needs (a time, its task's slot from a time, minutes before its task's deadline). Not how
@@ -443,7 +443,7 @@ object Backups {
      * The instructions to add from a backup's ([backed], those in use), beside those [here], each as
      * applying it here would go, in the order they were applied: one already here isn't added; one
      * that would have tasks wait for each other in a circle comes back unclear, saying so. The rest,
-     * due dates as well, armed or not (12 Oct), are in use at once.
+     * due dates as well, armed or not (D-46), are in use at once.
      */
     fun restoredInstructions(backed: List<Instruction>, here: List<Instruction>): List<Instruction> {
         val added = mutableListOf<Instruction>()

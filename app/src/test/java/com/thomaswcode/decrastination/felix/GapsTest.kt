@@ -25,7 +25,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 
 /**
- * The gaps closed in the chat (docs/plan_v4/06-what-felix-can-do.md §3, Stage 8b), through the Conversation on
+ * The gaps closed in the chat (docs/plan_v4/06-what-felix-can-do.md §3), through the Conversation on
  * temporary stores, his answers from a stand-in for Claude's API ([FelixHarness]): a piece kept as Day's Done
  * keeps it, and taken back (G1).
  */
@@ -295,7 +295,7 @@ class GapsTest {
         stores.tasks.update { it.copy(tasks = listOf(sheet)) }
         val his = asked("I've handed it in, check Teams", answer("Reading Teams.", listOf(sync("Teams", sheet.id))))
         assertEquals(listOf(setOf(Source.Teams)), felix.synced)
-        // The chat not on screen: what the widget has, its sync not started (Q33: B), and said.
+        // The chat not on screen: what the widget has, its sync not started (D-11), and said.
         assertEquals("Asked Teams to read what the Teams widget has: the chat wasn't on screen to start its sync", his.acts.single().line)
         assertEquals(0, felix.teamsSyncs)
         assertNull(his.acts.single().action)

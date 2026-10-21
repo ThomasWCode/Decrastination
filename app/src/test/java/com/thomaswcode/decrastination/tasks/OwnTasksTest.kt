@@ -22,7 +22,7 @@ import kotlin.test.assertTrue
 import kotlinx.coroutines.runBlocking
 
 /**
- * Your own tasks' service on temporary stores (docs/plan_v4, Stage 6c): one kept, changed in place,
+ * Your own tasks' service on temporary stores (docs/plan_v4): one kept, changed in place,
  * finished, opened again and deleted; finished by its steps; let go a fortnight after it's done; and
  * kept with what your instructions lay on it. The rules themselves are core's `OwnTasksTest`'s.
  */

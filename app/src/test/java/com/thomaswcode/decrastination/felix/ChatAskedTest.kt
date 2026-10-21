@@ -27,7 +27,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/** What he asks for before answering beside the tasks' texts (8c): the week's numbers (G6) and the calendar further out (G7). */
+/** What he asks for before answering beside the tasks' texts: the week's numbers (G6) and the calendar further out (G7). */
 class ChatAskedTest {
     // A Tuesday evening: this week began yesterday.
     private val now = Fixtures.at("2026-10-20T19:00")

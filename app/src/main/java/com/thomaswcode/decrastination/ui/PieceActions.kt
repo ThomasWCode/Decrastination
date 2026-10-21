@@ -205,7 +205,7 @@ fun PieceActions(graph: AppGraph, activity: Activity, piece: Chunk, now: Long, p
         }) { Text("Open") }
         FilledTonalButton(onClick = { scope.launch { say(keepPiece(graph, piece, now)) } }) { Text("Done") }
         if (piece.source == Source.Own) {
-            // Yours: nothing to ask, so all of it done is your say (2.0.0), earning no free time.
+            // Yours: nothing to ask, so all of it done is your say, earning no free time.
             OutlinedButton(onClick = {
                 scope.launch {
                     graph.ownTasks.finishOwnTask(piece.taskId)

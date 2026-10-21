@@ -70,7 +70,7 @@ object Briefing {
         }
         graph.runtime.update { it.copy(teamsAuto = it.teamsAuto.copy(morningUntil = now + MORNING_OFFER_MS)) }
         val (title, lines) = summary(plan)
-        // Felix's sentence or two on the day in place of the list (LR-04, 16 Oct); without it, the list
+        // Felix's sentence or two on the day in place of the list (LR-04); without it, the list
         // in his name, in the app's words: every morning is in the chat.
         val his = runCatching { graph.looks.morning(now) }.onFailure { Log.w(AppGraph.TAG, "Felix's morning message failed", it) }.getOrDefault(false)
         // Either way his notification's made again with it, and with what waited overnight for the

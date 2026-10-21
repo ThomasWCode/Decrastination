@@ -33,7 +33,7 @@ import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.serialization.KSerializer
 
 /**
- * A fixed state planned, as text, against `fixtures/snapshots/plan.txt` (docs/plan_v4, Stage 0): tasks
+ * A fixed state planned, as text, against `fixtures/snapshots/plan.txt` (docs/plan_v4): tasks
  * from every source, steps of each kind (the source's, a reading's, the rules', yours, Felix's, your
  * own task's), instructions in use with a pin, a school calendar, busy time and a learned pace, made
  * into a plan as the app makes one. Any move that changes a plan shows here, to the piece and the

@@ -5,8 +5,8 @@ import com.thomaswcode.decrastination.core.Reminder
 import kotlinx.serialization.Serializable
 
 /**
- * What Felix keeps at your asking (docs/plan_v4/07-notes-and-reminders.md, Stage 8a): notes on tasks,
- * and standing ones (Q31: A), and reminders with their drafts. Kept in `felix.json`, the Conversation's;
+ * What Felix keeps at your asking (docs/plan_v4/07-notes-and-reminders.md): notes on tasks,
+ * and standing ones (D-100), and reminders with their drafts. Kept in `felix.json`, the Conversation's;
  * not on the tasks, which a merge rewrites, but by task id, which syncs and reopenings keep, and which
  * outlives a finished task's trimmed text on its record.
  */

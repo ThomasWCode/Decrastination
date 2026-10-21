@@ -5,7 +5,7 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.ui.graphics.Color
 
 /**
- * The app's colours: dark blue (your call, 16 Oct, in place of UI-12's pink from the logo), on paper
+ * The app's colours: dark blue (in place of UI-12's pink from the logo), on paper
  * by day and on near-black by night, the app, the widget and the notifications alike, in place of
  * the wallpaper's. The launcher icon keeps the logo's pink. The error reds stay Material's, as
  * overdue's standard red.

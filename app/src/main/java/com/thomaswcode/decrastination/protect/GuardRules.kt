@@ -58,7 +58,7 @@ object GuardRules {
                     return Verdict.Back("this app's device admin page")
                 }
                 // The date and time: set forward, it would hurry what protection times (a parent's
-                // hour, a session's end). On the phone (9 Oct) the page shows the guard its title
+                // hour, a session's end). On the phone the page shows the guard its title
                 // and "Use 24-hour format", not its automatic switches; its entry in General
                 // management has neither of those beside it.
                 if (trimmed.any { it == "Date and time" } && trimmed.any { it == "Use 24-hour format" || it == "Automatic date and time" }) {

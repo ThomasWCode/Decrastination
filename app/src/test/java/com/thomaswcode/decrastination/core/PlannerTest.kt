@@ -243,7 +243,7 @@ class PlannerTest {
         fun dayOf(step: String) = plan.buckets.first { b -> b.chunks.any { it.step == step } }.date
         // Saturday holds both now (840 minutes): the draft first in the day, as it's first in order.
         assertTrue(dayOf("Draft") <= dayOf("Final"), "draft ${dayOf("Draft")}, final ${dayOf("Final")}")
-        // Each in four sittings of 50 (3.1.2), numbered on across the runs.
+        // Each in four sittings of 50, numbered on across the runs.
         assertEquals((1..8).toList(), plan.chunksOf("teams:e").map { it.part })
         assertEquals(setOf(8), plan.chunksOf("teams:e").map { it.parts }.toSet())
     }
@@ -552,7 +552,7 @@ class PlannerTest {
     @Test
     fun `an undated chunk bigger than the allowance still finds a day`() {
         // Half an hour of undated work a day, and a piece of 45 minutes (a step of the app's over an
-        // hour is in sittings since 3.1.2, so none is bigger than the hour it allows by default).
+        // hour is in sittings, so none is bigger than the hour it allows by default).
         val big = task("big", null, effort = 45, kind = Kind.Admin, steps = listOf(SubStep("all of it", 45)))
         val plan = Planner.plan(Planner.Input(listOf(big), Fixtures.at("2026-10-08T17:00"), LONDON, settings.copy(softMinPerDay = 30)))
         assertEquals(1, plan.ordered.size)
@@ -672,7 +672,7 @@ class PlannerTest {
     @Test
     fun `work whose last usable day comes first is placed first`() {
         // The essay is due later but has a three-day margin, so its last usable day (Wednesday)
-        // comes before the other's (Friday): it claims its days first, its sittings (3.1.2) over its
+        // comes before the other's (Friday): it claims its days first, its sittings over its
         // two evenings, and the form's fit after it.
         val margins = Calibration(marginDays = mapOf(Kind.Admin to 0, Kind.Homework to 3))
         val admin = task("form", Fixtures.at("2026-10-16T23:00"), kind = Kind.Admin, steps = listOf(SubStep("a", 310), SubStep("b", 310), SubStep("c", 310)))
@@ -1065,7 +1065,7 @@ class PlannerTest {
 
     @Test
     fun `a step over an hour as planned is in sittings, only its last ticking it`() {
-        // An hour's step at a 1.5 calibration is 90 minutes as planned (#48's review): two sittings of
+        // An hour's step at a 1.5 calibration is 90 minutes as planned: two sittings of
         // 45, the first the step, the last "Continue and finish", each with its step's own title to tick by.
         val input = Planner.Input(
             listOf(task("t", Fixtures.at("2026-10-20T09:00"), effort = 60, steps = listOf(SubStep("Write the essay", 60)))),
@@ -1111,7 +1111,7 @@ class PlannerTest {
 
     @Test
     fun `steps you gave are planned as you gave them, however long`() {
-        // Your call (17 Oct): a task of your own's hour and a half, and two hours given a Teams task as
+        // D-34: a task of your own's hour and a half, and two hours given a Teams task as
         // one step (by you, or Felix): each one piece, never cut back into sittings.
         val own = task("mine", Fixtures.at("2026-10-20T09:00"), effort = 90, steps = listOf(SubStep("Revise chapter 3", 90))).copy(id = "own:mine", source = Source.Own, sourceId = "mine")
         val given = task("t", Fixtures.at("2026-10-20T09:00"), effort = 60, steps = listOf(SubStep("Write the essay", 120))).yours(steps = listOf(OwnStep("Write the essay", 120)))
@@ -1123,7 +1123,7 @@ class PlannerTest {
 
     @Test
     fun `steps you or Felix gave are planned at their own minutes, not stretched by the learned pace`() {
-        // Your call (17 Oct): the pace is for the app's own estimates. At 1.5, Claude's hour is 90
+        // D-35: the pace is for the app's own estimates. At 1.5, Claude's hour is 90
         // minutes; two hours you or Felix gave a Teams task stay two hours.
         val pace = Calibration(multipliers = mapOf(Calibration.key(Kind.Homework, null) to 1.5))
         val claude = task("c", Fixtures.at("2026-10-20T09:00"), effort = 60, steps = listOf(SubStep("Read", 60)))
@@ -1136,7 +1136,7 @@ class PlannerTest {
 
     @Test
     fun `a step read before sittings is planned in them, and a done one stays done`() {
-        // Read by older prompts (#48's review): half an hour done, three hours still to do in one step.
+        // Read by older prompts: half an hour done, three hours still to do in one step.
         val steps = listOf(SubStep("Read the sources", 30, done = true), SubStep("Write the essay", 180))
         val pieces = plan(listOf(task("t", Fixtures.at("2026-10-20T09:00"), effort = 210, steps = steps)), "2026-10-08T17:00").chunksOf("teams:t")
         assertEquals(listOf("Write the essay" to 60, "Continue: Write the essay" to 60, "Continue and finish: Write the essay" to 60), pieces.map { it.shown to it.minutes })

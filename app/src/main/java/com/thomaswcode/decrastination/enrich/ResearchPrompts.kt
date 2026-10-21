@@ -8,11 +8,11 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 /**
- * Felix's web search (your call, 16 Oct): when the chat's answer asks to look something up
+ * Felix's web search (D-62): when the chat's answer asks to look something up
  * ([ChatAnswers.Reading.research]), a call of its own with Claude's web search tool finds it, in
  * words, and he's asked again with what it found ([ChatPrompts.turns]). Not in the chat's own call:
  * the tool beside the chat's answer schema makes a grammar the API refuses as too large (a live
- * call, 16 Oct). Pure: the wording, and the pages kept.
+ * call). Pure: the wording, and the pages kept.
  */
 object ResearchPrompts {
 

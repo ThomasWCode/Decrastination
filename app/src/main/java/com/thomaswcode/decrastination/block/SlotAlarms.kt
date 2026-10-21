@@ -30,7 +30,7 @@ object SlotAlarms {
     const val ACTION_SLOT_END = "com.thomaswcode.decrastination.SLOT_END"
     /** Felix's next look (LR-03). */
     const val ACTION_FELIX_CHECK = "com.thomaswcode.decrastination.FELIX_CHECK"
-    /** Your reminders' next moment (Stage 8a). */
+    /** Your reminders' next moment. */
     const val ACTION_REMINDER = "com.thomaswcode.decrastination.REMINDER"
 
     /** How long after a failed sweep the reminders' alarm rings again: its moment's gone by, so it would ring at once, and a failure that lasts mustn't wake the phone over and over. */
@@ -67,7 +67,7 @@ object SlotAlarms {
     }
 
     /**
-     * Your reminders' next wake ([com.thomaswcode.decrastination.core.Reminders.nextWake], Stage 8a) at [at], or
+     * Your reminders' next wake ([com.thomaswcode.decrastination.core.Reminders.nextWake]) at [at], or
      * none: one's moment, or the start of his window to write for one; set again with every plan, as a SlotStart's
      * or a BeforeDue's moment moves with it, with every change to them, and at each of its own.
      */
@@ -121,7 +121,7 @@ object SlotAlarms {
  * is missed: kept on record, and no longer held to its time, so the next plan moves it.
  */
 class Slots(private val graph: AppGraph) {
-    /** [key]'s slot has begun (phase 5 has more to do here). */
+    /** [key]'s slot has begun. */
     fun onStart(key: String) {
         Log.i(AppGraph.TAG, "Slot begun: $key")
         graph.planning.watcher.poke()
@@ -189,7 +189,7 @@ class SlotReceiver : BroadcastReceiver() {
                         runCatching { graph.slots.onEnd(key!!, if (window != null && start >= 0 && end >= start) Focus.Laid(start, end, window) else null) }
                             .onFailure { Log.w(AppGraph.TAG, "A slot's end failed", it) }
                     }
-                    // Your reminder's moment (8a): sent now, with no call, so the receiver's time is enough; or the start of
+                    // Your reminder's moment: sent now, with no call, so the receiver's time is enough; or the start of
                     // his window to write one, which the look after this writes. Either way the alarm's set for the next.
                     SlotAlarms.ACTION_REMINDER -> {
                         // A failure sending them is logged, so the alarm's still set again, a while on, and the look queued.

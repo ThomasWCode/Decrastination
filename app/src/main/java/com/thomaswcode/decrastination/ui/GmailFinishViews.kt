@@ -19,7 +19,7 @@ import com.thomaswcode.decrastination.sync.GmailFinishes
 import kotlinx.coroutines.launch
 
 /**
- * What a starred email's finish here is (Stage 11), under its sheet's Do: waiting for your OK, going (with
+ * What a starred email's finish here is, under its sheet's Do: waiting for your OK, going (with
  * Undo), made (with Undo while its receipt stands), given up (what did and didn't happen, and *It's sorted*),
  * or taken back. Nothing for one never finished here.
  */
@@ -51,7 +51,7 @@ internal fun finishSaid(finish: GmailFinishes.Finish): String? = when (finish) {
 }
 
 /**
- * The very first finish of an email asks before Gmail is touched (Q18's sheet), on the next screen of the app to
+ * The very first finish of an email asks before Gmail is touched (D-106), on the next screen of the app to
  * open: *Carry on* sends it, and every finish after it goes with the grace alone; *Not this time* drops it and asks
  * again next time; *Turn this off* drops it and turns finishing off. Nothing while none waits.
  */

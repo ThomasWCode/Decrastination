@@ -205,7 +205,7 @@ class AppGraph private constructor(context: Context) {
             // session, the school calendar, your instructions), so his looks and a reminder's alarm don't go by the last.
             { _ -> focus.forgetPlan() },
             { made -> SlotAlarms.arm(app, made, clock.now()) },
-            // Your reminders (8a): any this plan lets go (its task closed) or brings due said and sent, then their alarm
+            // Your reminders: any this plan lets go (its task closed) or brings due said and sent, then their alarm
             // set by it, as a slot's or a deadline's moment moves with it.
             { made ->
                 runCatching { looks.sweepReminders(plan = made) }.onFailure { Log.w(TAG, "Sending the reminders due failed", it) }
@@ -222,7 +222,7 @@ class AppGraph private constructor(context: Context) {
     )
 
     /**
-     * A starred email finished here (Stage 11, D-7 as amended): its write to Gmail journaled, made by its worker
+     * A starred email finished here (D-7 as amended): its write to Gmail journaled, made by its worker
      * after the grace, taken back; the tasks as the plan takes them, and the Gmail read after a write asked of Sync.
      */
     val gmailFinishes = GmailFinishes(
@@ -447,19 +447,19 @@ class AppGraph private constructor(context: Context) {
         scope.launch {
             runCatching { slots.sweep() }.onFailure { Log.w(TAG, "Looking at missed slots failed", it) }
             planning.watcher.start()
-            // Your reminders gone by while the app wasn't running (the phone off): sent now, marked late (8a).
+            // Your reminders gone by while the app wasn't running (the phone off): sent now, marked late.
             runCatching { looks.sweepReminders() }.onFailure { Log.w(TAG, "Sending the reminders gone by failed", it) }
         }
-        // Your reminders' alarm set again at every change to them (8a), as each plan sets it too.
+        // Your reminders' alarm set again at every change to them, as each plan sets it too.
         scope.launch { stores.felix.state.drop(1).collect { runCatching { armReminder() }.onFailure { e -> Log.w(TAG, "Setting the reminders' alarm failed", e) } } }
-        // A note added or deleted (8a): the plan made again, so the first steps of its task's pieces are written with it ([Ahead]).
+        // A note added or deleted: the plan made again, so the first steps of its task's pieces are written with it ([Ahead]).
         scope.launch { stores.felix.state.map { it.notes }.distinctUntilChanged().drop(1).collect { planning.watcher.poke() } }
         // A day off added or taken away: the briefing's next time with it, as a day off has the weekends' (D-74).
         scope.launch { school.state.drop(1).collect { runCatching { Daily.schedule(app) }.onFailure { e -> Log.w(TAG, "Setting the daily alarms failed", e) } } }
         // The files older shapes came from, a week after their migration, at a start that's got this far.
         scope.launch(Dispatchers.IO) { runCatching { stores.letGoOfOldShapes() }.onFailure { Log.w(TAG, "Letting go of old shapes failed", it) } }
         // Gmail's journal settled (receipts let go once old, or once their email's starred again), and a write due
-        // set going again: a stop may have come between a finish's journal and its worker (Stage 11).
+        // set going again: a stop may have come between a finish's journal and its worker.
         scope.launch { runCatching { gmailFinishes.settle(); gmailFinishes.rearm() }.onFailure { Log.w(TAG, "Setting Gmail's writes going again failed", it) } }
         // Finishing emails switched off, now or at any change: a finish not yet started dropped, the first's OK with it.
         scope.launch { settings.state.map { it.gmailFinishes }.distinctUntilChanged().collect { on -> if (!on) runCatching { gmailFinishes.switchedOff() }.onFailure { e -> Log.w(TAG, "Dropping Gmail's writes failed", e) } } }
@@ -478,7 +478,7 @@ class AppGraph private constructor(context: Context) {
     }
 
     /**
-     * Your reminders' alarm (8a) at the next moment by [plan] that one comes, or that one not yet written for has
+     * Your reminders' alarm at the next moment by [plan] that one comes, or that one not yet written for has
      * his window to write it in begin ([Reminders.nextWake]), so he writes for it with the phone asleep; none with
      * none to come. Not before [after], where a sweep failed ([SlotAlarms.REMINDER_RETRY_MS]).
      */

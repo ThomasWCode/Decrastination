@@ -102,7 +102,7 @@ class EvalRunTest {
      * is scored by the case's labels, each a check: `reads`, what its rounds brought (a task's id, `stats`,
      * `calendar` or `calendar:yyyy-MM`, said under his answer); `says`, groups of words of which the reply holds one
      * each; `makes`, the change types made (a new task as `task:<kind>`), a group meaning one of them; `noRound`,
-     * answered in one call; or `nothing`, just talk, which his answer makes nothing of (10b). A case marked `twice` (the text cut's, 8c) is asked twice; `EVAL_CASES` (ids, by commas)
+     * answered in one call; or `nothing`, just talk, which his answer makes nothing of. A case marked `twice` (the text cut's) is asked twice; `EVAL_CASES` (ids, by commas)
      * asks only those. Each case's score, rounds, tokens, cost and seconds printed and written to `runs/<n>.json`;
      * the run stops before a case once what's left of `EVAL_BUDGET_USD` (3 dollars unless set) is under twice the
      * dearest case so far, half a dollar at least: a soft budget, which a run can pass by a case's cost (a case is about
@@ -184,7 +184,7 @@ class EvalRunTest {
                             val any = (t as? JsonArray)?.map { it.jsonPrimitive.content } ?: listOf(t.jsonPrimitive.content)
                             checks += "makes ${any.joinToString("|")}" to any.any { it in made }
                         }
-                        // A message that's just talk (10b): a reply and nothing else, no change, nothing remembered, no action.
+                        // A message that's just talk: a reply and nothing else, no change, nothing remembered, no action.
                         if (case["nothing"]?.jsonPrimitive?.booleanOrNull == true) checks += "nothing but a reply" to (made.isEmpty() && acts.isEmpty() && reply?.memoryEdits.isNullOrEmpty())
                         val chatCalls = calls.count { it.job == ModelEffort.Job.Chat.name }
                         if (case["noRound"]?.jsonPrimitive?.booleanOrNull == true) checks += "no round" to (chatCalls == 1)

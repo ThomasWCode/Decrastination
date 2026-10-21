@@ -30,7 +30,7 @@ import kotlinx.serialization.json.contentOrNull
 import org.junit.Assume.assumeTrue
 
 /**
- * The rehearsal of a release's migrations on the phone's own data (docs/plan_v4, Stages 0 and 3), before
+ * The rehearsal of a release's migrations on the phone's own data (docs/plan_v4), before
  * it's installed: every store in a phone backup, unpacked by `scripts/rehearse.sh` into the git-ignored
  * `private/rehearsal/<name>/` (its `files/`, and the nightly backup beside them where there is one),
  * read as each file is, then as the app will read it, through [Stores] with the migrations there are,

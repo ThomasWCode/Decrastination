@@ -13,26 +13,26 @@ import kotlinx.serialization.Serializable
 data class MemoryState(
     val facts: List<Fact> = emptyList(),
     val rules: List<Rule> = emptyList(),
-    /** The shape this is in ([com.thomaswcode.decrastination.data.Migration]): raised with each change of it (2: a fact's and a rule's until, a fact's task, 10a). */
+    /** The shape this is in ([com.thomaswcode.decrastination.data.Migration]): raised with each change of it (2: a fact's and a rule's until, a fact's task). */
     val version: Int = 2,
 )
 
 /**
  * A fact worth keeping ("football is on Tuesdays"), under a short [topic] that a newer fact replaces; held
  * till [until] where it has one ("a cold this week"), or while its task [taskId] matters ("for the trip, I'm
- * sharing a room"), then forgotten ([Memories.expired], 10a).
+ * sharing a room"), then forgotten ([Memories.expired]).
  */
 @Serializable
 data class Fact(val topic: String, val text: String, val at: Long, val until: Long? = null, val taskId: String? = null)
 
-/** A standing instruction on how Felix behaves ("don't message before 8", "be blunter"), held till [until] where it has one ("not tonight", 10a). */
+/** A standing instruction on how Felix behaves ("don't message before 8", "be blunter"), held till [until] where it has one ("not tonight"). */
 @Serializable
 data class Rule(val text: String, val at: Long, val until: Long? = null)
 
 /**
  * What an answer asks to remember (AI-21): a fact under [topic], or ([kind] "rule") a standing
  * instruction in [text]. An empty [text] forgets: the fact of that topic, or the instruction whose
- * words [topic] gives. [until] (10a) how long it holds, a date (YYYY-MM-DD, through that day) or a date
+ * words [topic] gives. [until] how long it holds, a date (YYYY-MM-DD, through that day) or a date
  * and time (YYYY-MM-DDTHH:MM), empty for as long as it's true; [taskId] a fact's task, empty for none.
  * Plain strings, as the schema's list items' fields are kept.
  */
@@ -46,7 +46,7 @@ data class Given(val topic: String = "", val text: String = "", val kind: String
 
 /**
  * One thing remembering did (AI-21), kept on the answer that did it so its Undo there takes it back
- * (your call, 16 Oct): a fact kept ([factAfter]) with the one of its topic it replaced
+ * (D-64): a fact kept ([factAfter]) with the one of its topic it replaced
  * ([factBefore]), or one forgotten ([factBefore] alone); a standing instruction added
  * ([ruleAfter]) or dropped ([ruleBefore]). With none of them, a line only ("Too many…"), with
  * nothing to undo. [evicted]: the oldest facts the room for its fact pushed out, back with its
@@ -68,14 +68,14 @@ object Memories {
     /** The facts' room: about 1 500 tokens, the profile's share of them. */
     const val FACT_BUDGET_CHARS = 6_000
 
-    /** The furthest an until reaches (10a): one further out is cut to it. */
+    /** The furthest an until reaches: one further out is cut to it. */
     const val MAX_UNTIL_MS = 365 * 24 * 3_600_000L
 
-    /** How long a fact with a task is kept once its task has finished: the fortnight a finished task keeps its text (Stage 7). */
+    /** How long a fact with a task is kept once its task has finished: the fortnight a finished task keeps its text. */
     const val TASK_KEEP_MS = 14 * 24 * 3_600_000L
 
     /**
-     * [given]'s until, at [now] in [zone] (10a): a date holds through that day, so till the next one's start; a
+     * [given]'s until, at [now] in [zone]: a date holds through that day, so till the next one's start; a
      * date and time, till then. Null for none, or for one that doesn't read.
      */
     fun untilOf(given: String, zone: ZoneId): Long? {
@@ -97,7 +97,7 @@ object Memories {
     private val DAY_TIME = DateTimeFormatter.ofPattern("EEE d MMM HH:mm", Locale.UK)
 
     /**
-     * How long a fact or a rule holds, in words (10a): "until Sun 25 Oct", "with “Trip form”", both, or null for as long
+     * How long a fact or a rule holds, in words: "until Sun 25 Oct", "with “Trip form”", both, or null for as long
      * as it's true; its task by [title] where it's still listed, else as one since deleted (held while its delete can be undone).
      */
     fun held(until: Long?, taskId: String?, title: (String) -> String?, zone: ZoneId): String? =
@@ -110,7 +110,7 @@ object Memories {
     private fun shelved(words: String, after: String): String = if (after.isEmpty()) words else words.removeSuffix(".") + after
 
     /**
-     * [state] without what's run out at [now] (10a): a fact or a rule past its until; a fact with a task a
+     * [state] without what's run out at [now]: a fact or a rule past its until; a fact with a task a
      * fortnight after its task finished ([TASK_KEEP_MS]: a finished task keeps its record past it, so it's there
      * to read), or, its task gone from [tasks], once that task's delete can't be undone ([held], what the chat's
      * acts still hold, as their Undo brings the task back), and, for a source's task, once that source has been
@@ -143,7 +143,7 @@ object Memories {
      * Tuesdays", "Forgot: football", "Felix will: be blunter", "Felix won't any more: …". A fact
      * replaces the one of its topic (trimmed, any case); a rule is added unless it's there already (with
      * another until, its until is the new one's); facts past [FACT_BUDGET_CHARS] lose their oldest; a rule
-     * past [RULE_MAX] isn't added, and says so. Each until (10a) read in [zone] ([untilOf]): one gone by is
+     * past [RULE_MAX] isn't added, and says so. Each until read in [zone] ([untilOf]): one gone by is
      * refused, saying so; one more than a year ahead cut to a year; a fact's task one of [listed] (ids, their
      * titles), else it's kept with none, and said.
      */
@@ -158,7 +158,7 @@ object Memories {
         for (g in given) {
             val topic = g.topic.trim().take(MAX_TOPIC)
             val text = g.text.trim().take(MAX_TEXT)
-            // How long it holds (10a): gone by refused, past a year cut to one.
+            // How long it holds: gone by refused, past a year cut to one.
             val until = untilOf(g.until, zone)?.coerceAtMost(now + MAX_UNTIL_MS)
             if (until != null && until <= now && text.isNotEmpty()) {
                 edits += MemoryEdit("Not remembered: " + shelved(if (g.kind == Given.RULE) text else "$topic: $text", ", as ${untilLine(until, zone)} has gone by"))
@@ -254,7 +254,7 @@ object Memories {
     }
 
     /**
-     * What [line] did, for an answer from before edits were kept (16 Oct): the fact or the standing
+     * What [line] did, for an answer from before edits were kept: the fact or the standing
      * instruction it names, while it's still as the line says, so its Undo forgets it (what it
      * replaced wasn't kept). Null for any other line.
      */

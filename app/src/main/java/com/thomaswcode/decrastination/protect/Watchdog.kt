@@ -45,13 +45,13 @@ import kotlinx.coroutines.sync.withLock
  * accessibility shortcut, and, once armed, that the device admin is active. Anything wrong shows
  * as a notification and on the widget, and is logged. Once armed, and with WRITE_SECURE_SETTINGS
  * (granted over adb, Q19), it switches the service back on and takes it off the shortcuts
- * itself. v1 sends no email (Q17): the alert stays on the phone.
+ * itself. It sends no email (Q17): the alert stays on the phone.
  *
  * Runs from the focus service every five minutes, as a job every 15, at boot, and the moment the
  * service is switched off.
  *
  * A service that's switched on but not running has crashed, and Android won't bind it again until
- * it's switched off and on (seen on the phone, 9 Oct). The watchdog does that after a minute's
+ * it's switched off and on (seen on the phone). The watchdog does that after a minute's
  * grace, armed or not, at most once in ten minutes; except that a restart that leaves it stopped
  * within a minute is tried once more at once. After a crash Android keeps the crashed connection
  * bound, hands the restarted service to it as well, and that connection then resets it: the
@@ -78,7 +78,7 @@ object Watchdog {
 
     /**
      * A secure setting (null when unset), or a failure if this app may not read it: Android 12+
-     * refuses hidden keys to apps (`accessibility_qs_targets` threw on the phone, 9 Oct, and took
+     * refuses hidden keys to apps (`accessibility_qs_targets` threw on the phone and took
      * the service down).
      */
     private fun read(resolver: ContentResolver, key: String): Result<String?> =

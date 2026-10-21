@@ -28,10 +28,10 @@ object ReadingPrompts {
      * example or the profile's shape, so a reading the model made by older ones is made again.
      * 1: everything before review v2's phase 8 (what the readings stored then carry); 2: phases 1
      * to 7's changes (PROGRESS.md listed them); 3: every starred email a task (3.0.1); 4: fewer,
-     * longer steps (3.1.1, your call, 17 Oct: a task in parts only where it is, its few minutes'
+     * longer steps (3.1.1, D-20: a task in parts only where it is, its few minutes'
      * admin in the step it belongs to); 5: a piece of work whole, never split by what's in it, the
-     * app cutting one over an hour into sittings (3.1.2, the same day); 6: whole up to a task's most,
-     * the schema saying so (3.1.2's review, before it was installed); 7: a long text's summary, for
+     * app cutting one over an hour into sittings (3.1.2); 6: whole up to a task's most,
+     * the schema saying so (3.1.2, before it was installed); 7: a long text's summary, for
      * Felix (3.2.0, D-93); 8: the profile saying how long a passing fact or rule holds (4.2.0, D-103).
      */
     const val VERSION = 8
@@ -203,7 +203,7 @@ object ReadingPrompts {
     /**
      * The item, as the model reads it; with [previous], its steps as planned before (AI-08), so a
      * step whose work hasn't changed keeps its title, and with it its tick; one done said to be, to
-     * be kept as it is (#47's review), as fewer, longer steps would otherwise take its work in.
+     * be kept as it is, as fewer, longer steps would otherwise take its work in.
      */
     fun describe(task: TaskItem, job: Enrichments.Job, now: Long, zone: ZoneId, previous: List<SubStep> = emptyList(), decks: Map<String, String> = emptyMap()): String = buildString {
         fun at(time: Long) = Instant.ofEpochMilli(time).atZone(zone)
