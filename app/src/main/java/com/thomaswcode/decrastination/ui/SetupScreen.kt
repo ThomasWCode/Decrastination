@@ -147,7 +147,7 @@ fun SetupScreen(graph: AppGraph, activity: Activity, parts: Set<SetupPart> = Set
                     SetupItem(
                         title = "Found unreadable " + Format.at(found.at, graph.clock.now(), graph.clock.zone()),
                         done = false,
-                        detail = found.says,
+                        detail = found.says(graph.stores::holds),
                         action = "Got it" to { scope.launch { graph.forgetUnreadable(found) } },
                     )
                 }
