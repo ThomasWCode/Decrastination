@@ -99,9 +99,10 @@ Every PR is a release ([development.md](../development.md)): cleanup-only releas
 | — | Found in the 21 Oct docs review: the copies of the chat archive's months that a version raise keeps, let go of after a week as the other stores' are and taken by a clear or a chat reset (D-94); Teams' automatic syncs by the school calendar, a weekday off as a weekend day (D-105) | 4.2.1, done (#101) | fix | 10a | ¼ |
 | 10b | His voice; just talk; the summary email in the third person | 4.2.2, done (#102) | feature | 5, 6e, 9 | ½ |
 | 11 | Emails done | 4.3.0, done (#103) | feature, data | 1, 3, 6d, 7 | 1½ |
-| 12 | The sweep: imports, comments, the architecture test complete, baselines compared | 4.3.1 | cleanup | all | ½ |
+| — | Found in 4.2.1's reviews and 11's phone check: a month of the chat archive read for the first time just as a clear runs could come back; Setup's list of the files that couldn't be read could name a copy a clear has since deleted; Felix, asked to mark an email done with the Gmail switch off, says he can't finish it in Gmail and offers *not a task*, rather than calling that done (your calls, 21 Oct) | 4.3.1 | fix | 11 | ¼ |
+| 12 | The sweep: imports, comments, the architecture test complete, baselines compared | 4.3.2 | cleanup | all | ½ |
 
-About twenty-five days in 32 PRs (31 releases), 3.3.4 to 3.3.6, 4.0.3, 4.0.4, 4.0.10, 4.1.2, 4.1.3 and 4.2.1 among them, evenings and weekends. After it, the conversation digest as 4.4.0 ([13](13-summaries.md)). You've said you won't use the app until the whole of it is in (Q21): each release is still built and checked on the phone, but nothing between releases has to serve a day's use.
+About twenty-five days in 33 PRs (32 releases), 3.3.4 to 3.3.6, 4.0.3, 4.0.4, 4.0.10, 4.1.2, 4.1.3, 4.2.1 and 4.3.1 among them, evenings and weekends. After it, the conversation digest as 4.4.0 ([13](13-summaries.md)). You've said you won't use the app until the whole of it is in (Q21): each release is still built and checked on the phone, but nothing between releases has to serve a day's use.
 
 ## What changes substantially
 
