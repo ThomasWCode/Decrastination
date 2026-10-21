@@ -663,7 +663,7 @@ It names Summary and Reply among its reasons, but no message of his is asked for
 - **How work went, with Claude off** (LR-05): a message for each completion, its answers kept as below.
 - **The week's summary**: written in a call of its own, about you in the third person (D-66); "the summary is ready" is the app's own text, with *Send it*.
 - **Your answer to his Question**: read by the instructions reader, as an instruction on that task, and the task read again (AI-10); not by him.
-- **An answer to Completions** (*Harder*, *As expected*, *Easier*): kept on each of those completions (LR-05), with no call.
-- **A reminder he has no words for** (4.1.0): yours as you set it ("reminder: …"), marked late where it is; its *Done*, *Snooze 15 min* and *Snooze 1 h* kept on it, with no call.
+- **An answer to Completions** (*harder*, *about right*, *easier*, or the app's *Harder*, *As expected*, *Easier*): kept on each of those completions (LR-05), with no call.
+- **A reminder he has no words for** (4.1.0): yours as you set it ("reminder: …"), marked late where it is; its *done*, *snooze 15 min* and *snooze 1 h* kept on it, with no call.
 - **A reminder let go, or back** (4.1.0), and **what a read he asked for changed** (4.1.1: "Teams says “…” is handed in."): notes in the app's words.
 - **Any other reply**, from his notification, his chips or the chat: answered in the chat, as above; his answer is his next message, and in his notification while the chat isn't on screen.

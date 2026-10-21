@@ -378,7 +378,7 @@ class Conversation(
     /** How [ask]'s work went, as his message in the app's words: the three answers its replies, each kept on it ([Looks.answered]). */
     private fun howItWent(ask: AssessLater) = ChatMessage(
         UUID.randomUUID().toString(), Speaker.Felix, FelixWords.howItWent(ask.title), clock.now(), About(taskId = ask.taskId, taskTitle = ask.title),
-        kind = MessageKind.Completions, byApp = true, asks = listOf(ask), suggestedReplies = Assessment.ANSWERS.map { it.first },
+        kind = MessageKind.Completions, byApp = true, asks = listOf(ask), suggestedReplies = FelixWords.HOW_IT_WENT_REPLIES,
     )
 
     /** Every question about how [taskId]'s work went let go (a test's task forgotten, the debug `forget-task`): not kept, nor in his notification. */

@@ -113,7 +113,7 @@ object Replies {
         return when (message.kind) {
             MessageKind.CheckIn -> Route.CheckIn
             MessageKind.Question -> Route.Question
-            MessageKind.Completions -> Assessment.ANSWERS.firstOrNull { it.first.equals(said, ignoreCase = true) }?.let { Route.Completions(it.second) } ?: Route.Chat
+            MessageKind.Completions -> Assessment.ANSWERS.firstOrNull { it.first.equals(FelixWords.chip(said), ignoreCase = true) }?.let { Route.Completions(it.second) } ?: Route.Chat
             MessageKind.EventQuestion -> message.about.eventKey?.let { key ->
                 CalendarTime.ANSWERS.firstOrNull { it.first.equals(said, ignoreCase = true) }?.let { Route.Event(key, it.second) }
             } ?: Route.Chat

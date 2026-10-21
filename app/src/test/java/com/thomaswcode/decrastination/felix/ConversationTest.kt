@@ -270,7 +270,8 @@ class ConversationTest {
         conversation.askKept()
         val question = his().single()
         assertEquals(MessageKind.Completions to listOf(ask), question.kind to question.asks)
-        assertEquals(listOf("Harder", "As expected", "Easier"), question.suggestedReplies)
+        // In his register; either form taken (the words the app keeps, or his).
+        assertEquals(listOf("harder", "about right", "easier"), question.suggestedReplies)
         assertTrue(stores.chat.value.felix.assessLater.isEmpty())
         assertTrue(conversation.ask("Harder", replyTo = question.id))
         assertEquals(listOf(Triple("teams:sheet", ask.doneAt!!, "harder")), felix.assessed)

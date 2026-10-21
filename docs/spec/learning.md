@@ -54,7 +54,7 @@ A completion is timed (`Calibrator.isTimed`) when it has an estimate and kept-sl
 
 ## How was it?
 
-After homework or revision is confirmed done, the app asks how it went: *harder*, *as expected* or *easier* (`learn/Assessment.kt`).
+After homework or revision is confirmed done, the app asks how it went: *harder*, *about right* (kept as *as expected*) or *easier* (`learn/Assessment.kt`, `FelixWords.chip`).
 - With Claude on, Felix asks instead, in the evening, about work no slot kept that day saw, his replies the three answers (LR-05, [felix.md](felix.md)); with Claude off, a message of his in the app's words asks about each, its chips the three answers.
 - *Harder* raises the completion's figures 5 % where it's timed and 10 % where it isn't; *easier* lowers them as much; *as expected* changes nothing. All within 0.5 and 3.0.
 - The answer goes on the completion's record, and the weekly review reads it.
