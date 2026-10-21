@@ -171,6 +171,16 @@ object GmailWrites {
     /** What an error's kept to. */
     const val MAX_ERROR = 200
 
+    /** Whether [id] is one of Gmail's own ids as a read gives them (X-GM-THRID, X-GM-MSGID): decimal digits, an unsigned 64-bit number. */
+    fun gmailId(id: String): Boolean = id.isNotEmpty() && id.all { it in '0'..'9' } && id.toULongOrNull() != null
+
+    /**
+     * Whether [write] is as the journal keeps it, which a restore checks of a backup's: its conversation and messages by
+     * Gmail's own ids (a conversation's goes into an IMAP command), its tries within their bound.
+     */
+    fun wellFormed(write: GmailWrite): Boolean =
+        gmailId(write.threadId) && write.flagged.orEmpty().all(::gmailId) && write.inbox.orEmpty().all(::gmailId) && write.tries in 0..MAX_TRIES
+
     /**
      * Receipts let go once [RECEIPT_MS] old at [now], as their Undo can't stand; one given up kept till it's sorted
      * ([sorted]), and one an Undo still to make takes back kept for it, as it says what to put back.

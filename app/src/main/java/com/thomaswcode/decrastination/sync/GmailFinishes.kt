@@ -214,7 +214,11 @@ class GmailFinishes(
             }
             writes.update { it.copy(writes = GmailWrites.failed(it.writes, next.id, words(failed), clock.now())) }
             val after = value.firstOrNull { it.id == next.id }
-            if (after?.gaveUp == true) ports.gaveUp(after, GmailWrites.failure(after)) else again = true
+            when {
+                after?.gaveUp != true -> again = true
+                // An Undo of it queued puts back what it took, or is said itself if it can't: nothing to say of this one.
+                value.none { it.reverseOf == after.id && GmailWrites.pending(it) } -> ports.gaveUp(after, GmailWrites.failure(after))
+            }
         }
         GmailWrites.wake(value)?.let(ports::schedule)
         return again

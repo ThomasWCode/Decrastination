@@ -3,6 +3,7 @@ package com.thomaswcode.decrastination.core
 import com.thomaswcode.decrastination.Fixtures
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -208,6 +209,17 @@ class GmailWritesTest {
         val gaveUp = GmailWrites.with(read, "w1") { it.copy(unstarred = true, tries = 5, doneAt = now + min, gaveUp = true) }
         assertEquals(listOf("w1"), GmailWrites.givenUp(gaveUp).map { it.id })
         assertTrue(GmailWrites.givenUp(GmailWrites.undo(gaveUp, "gmail:1", now + 2 * min, "u1")!!).isEmpty())
+    }
+
+    @Test
+    fun `a write is well formed by Gmail's own ids, so a crafted backup's can't go into an IMAP command`() {
+        val made = finish().copy(notBefore = now, flagged = listOf("101"), inbox = listOf("18446744073709551615"), unstarred = true, archived = true, doneAt = now)
+        assertTrue(GmailWrites.wellFormed(made))
+        assertFalse(GmailWrites.wellFormed(made.copy(threadId = "1\r\nA9 EXPUNGE")))
+        assertFalse(GmailWrites.wellFormed(made.copy(threadId = "")))
+        assertFalse(GmailWrites.wellFormed(made.copy(inbox = listOf("18446744073709551616"))))
+        assertFalse(GmailWrites.wellFormed(made.copy(flagged = listOf("+101"))))
+        assertFalse(GmailWrites.wellFormed(made.copy(tries = GmailWrites.MAX_TRIES + 1)))
     }
 
     @Test

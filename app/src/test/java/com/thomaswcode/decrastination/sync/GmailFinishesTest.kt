@@ -315,6 +315,21 @@ class GmailFinishesTest {
     }
 
     @Test
+    fun `a finish given up with an Undo of it queued isn't said, as the Undo puts back what it took`() = runBlocking {
+        val gmail = FakeGmail()
+        finishes.finish(email.id, explicit = true)
+        clock.time += GmailWrites.GRACE_MS
+        gmail.failing = Change.Archive
+        repeat(GmailWrites.MAX_TRIES - 1) { finishes.write(gmail); clock.time += GmailWrites.backoff(it + 1) }
+        // Taken back while it waits: the Undo's queued behind it, and goes once it's given up.
+        assertTrue(finishes.unfinish(email.id))
+        assertFalse(finishes.write(gmail))
+        assertTrue(said.isEmpty())
+        assertEquals(GmailWrites.State.TakenBack, GmailWrites.state(finishes.value, email.id))
+        assertEquals(listOf(11L) to Change.Star, gmail.stored.last())
+    }
+
+    @Test
     fun `a finish given up and taken back is said no more, and its Undo puts back the star it took`() = runBlocking {
         val gmail = FakeGmail()
         finishes.finish(email.id, explicit = true)

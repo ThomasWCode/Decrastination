@@ -275,6 +275,7 @@ object Backups {
             if (backup.ownTasks.any { !wellFormed(it) } || backup.ownTasks.map { it.id }.toSet().size != backup.ownTasks.size) add("a task of your own")
             if (!wellFormed(backup.school)) add("the school calendar")
             if (!wellFormed(backup.felixStore)) add("Felix's notes and reminders")
+            if (backup.gmailWrites.any { !GmailWrites.wellFormed(it) }) add("a write to Gmail")
         }
         return bad.takeIf { it.isNotEmpty() }?.let { "it holds what this app never writes (${it.joinToString(", ")})" }
     }
