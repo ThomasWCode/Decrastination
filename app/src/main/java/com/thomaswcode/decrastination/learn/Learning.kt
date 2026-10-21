@@ -67,7 +67,8 @@ class Learning(
      * Sunday evening, after the check-in (or without it), the calibration is learned afresh from the
      * log, the capacity checked, and, once Claude is on, the week goes to the model for a note and
      * bounded changes, which apply at once, armed or not. Until then the note is the rules': what
-     * changed, in words. Then what's remembered is tidied, once it's past 70 % of its room (AI-21).
+     * changed, in words. Then what's run out of what's remembered is let go of, and the facts with neither an
+     * until nor a task are tidied once they're past 70 % of the room the rest leave them (AI-21, [MemoryTidy.due]).
      */
     suspend fun review(ifDue: Boolean) {
         val now = clock.now()
@@ -151,8 +152,9 @@ class Learning(
     }
 
     /**
-     * What's remembered, tidied by the model once its facts are past [MemoryTidy.DUE_SHARE] of their
-     * room (AI-21), or when [force]d (a PC's `memory-tidy`): its own call, after the review's. The
+     * What's remembered, what's run out let go of first and the facts with neither an until nor a task
+     * tidied by the model once they're past [MemoryTidy.DUE_SHARE] of the room the rest leave them
+     * ([MemoryTidy.due], AI-21), or when [force]d (a PC's `memory-tidy`): its own call, after the review's. The
      * before and after, or null: not due, the model held or failed (recorded as any call is), an
      * answer that isn't a tidy, or the facts changed while it was out.
      */

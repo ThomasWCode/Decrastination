@@ -52,7 +52,7 @@ The week's summary for your dad isn't his voice, and shouldn't sound like him or
 ## Checking it
 
 - **The goldens** change on purpose (`-PupdateGolden=true`); `ReadingPrompts.VERSION` stays (no reading's prompt or profile changes here).
-- **The private evals** (`private/eval-chat`, `private/eval-felix`, never committed) are run again (`EvalRunTest -PrunEval=true`, about $2): the parse rate, the changes made against the labels, the dates read right, the vents answered with nothing else. The voice must not cost a change or a date; if it does, the register's "still exact" lines are tightened and run again.
+- **The private evals** (`private/eval-chat`, `private/eval-felix`, never committed) are run again (`EvalRunTest -PrunEval=chat` for the chat's, about $2; his own messages' set has no runner yet): the parse rate, the changes made against the labels, the dates read right, the vents answered with nothing else. The voice must not cost a change or a date; if it does, the register's "still exact" lines are tightened and run again.
 - **A read of the examples by you** before the goldens are written: the register is a matter of taste, and the examples are what pin it.
 
 ## Risks

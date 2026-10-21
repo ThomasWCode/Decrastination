@@ -159,7 +159,7 @@ Each reading is one Messages API call through the Anthropic Java SDK (`ClaudeEnr
 - the answer held to the job's schema (`output_config.format`), and the server-side fallback on (`fallbacks: "default"` and its beta header), so a request the model's safety classifiers decline runs on a model the API picks;
 - the item cut to 40 000 characters (`Pricing.MAX_INPUT_CHARS`), a 3-minute timeout and two retries.
 - A refusal, or an answer cut off at the token limit, is no answer. A fallback's answer is recorded and priced as the model that gave it (BUG-P3-001).
-- The profile: the year group, your subjects (by Settings' class map), the week's lessons and study periods, working hours, days off coming, the textbook, your lines about yourself, how you've asked Felix to behave and what he remembers; its own part at most 2 000 characters, the whole 16 000.
+- The profile: the year group, your subjects (by Settings' class map), the week's lessons and study periods, working hours, days off coming, the textbook, your lines about yourself, how you've asked Felix to behave and what he remembers (one held for a while saying till when, or with which task: "(until Sun 25 Oct)"; what's run out left out, D-103); its own part at most 2 000 characters, the whole 16 000.
 
 ## Web research
 
@@ -179,7 +179,7 @@ A piece's first action, under two minutes and concrete, the next two, and what d
 ## Cost, the cap and rest after failures
 
 `enrich/AiUsage.kt`, `enrich/Failures.kt`, `enrich/ModelHold.kt`, and `enrich/ModelGateway.kt`, which every call goes through (`ModelGateway.call`).
-- **Cost** per call from its tokens at list price (`Pricing`): Opus 5.5 at $4 in, $20 out, $0.20 cache reads, and $8 a million written to the cache kept an hour (every system prompt, AC-01) or $5 to the five minutes' (a web search's results); an older Opus's $5, $25, $0.50, $10 and $6.25; $0.01 a web search. The writes go by the answer's own breakdown, any it doesn't give at the hour's rate. Counted per calendar month, in US dollars.
+- **Cost** per call from its tokens at list price (`Pricing`): Opus 5.5 at $4 in, $20 out, $0.20 cache reads, and $8 a million written to the cache kept an hour (every system prompt but the web search's, AC-01) or $5 to the five minutes' (a web search's results); an older Opus's $5, $25, $0.50, $10 and $6.25; $0.01 a web search. The writes go by the answer's own breakdown, any it doesn't give at the hour's rate. Counted per calendar month, in US dollars.
 - **No cap** unless you set one (`aiMonthlyCapUsd`). With one, a call goes only if the month's spend, plus every call in flight and this one at their dearest ($1.35, `Pricing.WORST_CALL_USD`: the instructions counted as written to the hour's cache), stays within it (AC-05).
 - A call is counted once it comes back, whatever stopped waiting for it: once sent, it's paid for.
 - **Rest after a failure** (AC-04, `Failures.restMs`): busy (429, 529) 5, 15, then 60 minutes as failures come in a row; the server or a timeout 15, then 60; no network none; a request the API won't take none; the key 60; anything else 15.

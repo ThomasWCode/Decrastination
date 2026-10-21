@@ -33,8 +33,8 @@ Who you are, the second system block of the chat and of his own messages (AI-05,
 - your working hours, and the next three spells of no school;
 - your German textbook;
 - what you've written in Settings → About you;
-- your standing instructions to him (up to 20), under "How Felix should behave";
-- what he remembers, the newest first, within its 6,000 characters.
+- your standing instructions to him (up to 20), under "How Felix should behave", one held for a while saying till when;
+- what he remembers, the newest first, within its 6,000 characters, one held for a while saying how long ("(until Sun 25 Oct)", "(with “Trip consent form”)"), what's run out left out (4.2.0, D-103).
 
 The part before the standing instructions is at most 2,000 characters, cut from the end (your own lines first), and the whole at most 16,000. For example:
 
@@ -72,9 +72,9 @@ One answer at a time: a message sent while he answers another of yours lets that
    2. the plan, as the Day and Work tabs show it ([the plan](#the-plan));
    3. what your message is about, in full ([below](#where-you-asked-from)): a task's whole text, or an event's place and description;
    4. your words, after a line saying what they're about;
-   5. after a web search, [what it found](#a-web-search); after he asked to read a task in full, [its whole text](#reading-a-task-in-full).
+   5. after a web search, [what it found](#a-web-search); after he asked to read a task in full, [its whole text](#reading-a-task-in-full-and-what-else-he-asks-for), and the week's numbers or the calendar he asked for.
 
-Within the 40,000 characters: your newest words whole; the earlier turns, newest first, in up to a quarter of what's left, the oldest dropped; the context and the plan in the rest, where both can't be whole the plan keeping at least a third (its near days first).
+Within the 40,000 characters: your newest words whole; the earlier turns, newest first, in up to a quarter of what's left, the oldest dropped; the context and the plan in the rest, where both can't be whole the plan keeping at least a third (its near days first). What a round brings beside the texts (the week's numbers, the calendar past the fortnight) has a room of its own, 12,000 characters at most, a block past its share cut at a whole line.
 
 ### Where you asked from
 
@@ -96,7 +96,7 @@ Before those words comes what they're about, in full (D-93): the task's whole te
 What the app knows when you send (`ChatPrompts.context`):
 - **Today**: the date, the time and the time zone.
 - **The reminders still to come** (4.1.0), first, so a context too long for its room never loses them: each by its id, with when it comes as the plan has it now, your words and its task; "(none)" with none, so "what have I asked you to remind me of?" has its answer.
-- **Open tasks**, up to 80, by the deadline in force: each with its id, title, source, its class and the subject the class map gives it (4.1.1), kind, due date (marked "(a plan)" where the app or Claude set it), its minutes and what the plan makes of them at your pace, the minutes worked, and when it can start; under it, its steps, numbered for a tick, then its own notes (4.1.0), each by its id and whose it is, and the ids of the standing ones it matches, all of them in a room of 6,000 characters (the rest are on their sheets).
+- **Open tasks**, up to 80, by the deadline in force: each with its id, title, source, its class and the subject the class map gives it (4.1.1), kind, due date (marked "(a plan)" where the app or Claude set it), its minutes and what the plan makes of them at your pace, the minutes worked, when it can start, and what its text holds (4.1.4: its length, an email's sender, its attachments' names, its links); under it, its steps, numbered for a tick, then its own notes (4.1.0), each by its id and whose it is, and the ids of the standing ones it matches, all of them in a room of 6,000 characters (the rest are on their sheets).
 - **Standing notes** (4.1.0, Q31: A), each once: its id, whose it is, the tasks it's for and its words.
 - **Notes on finished tasks** (4.1.0), the newest first, in what's left of the notes' room: each by its id, whose it is, its task and its words, so he can say or delete them.
 - **Your pace**: each multiplier learned (by kind, and by class where it has its own), with the timed pieces it's from; or that none is learned yet.
@@ -283,7 +283,7 @@ Can that be at seven instead?
 
 ### Reading a task in full, and what else he asks for
 
-Where he needs more of a task's text than the context gives, his answer names it in `details` (three at most, listed and open, never the one the message is about, which came whole) and says only that he's reading it. Beside the tasks' ids (4.1.4, G6 and G7), `details` takes `stats`, for the week's numbers (this week so far and last week, each with its subjects, in 20 lines: `Stats.weekLines`), and `calendar`, for the four weeks after the fortnight, or `calendar:YYYY-MM` for a month: up to 60 events with their keys, as the fortnight's are listed, saying how many more there are and from when, and where the calendar's read begins and ends (`ChatPrompts.calendarBlock`). Each comes once, after your words under its own heading, and is said under his answer ("Read: the week's numbers.", "Read: the calendar for December 2026."); an unknown word asks for nothing. He's then asked again, as before, with their whole texts after your words (each an even share of 16,000 characters, 8,000 at most), and that answer is his, with "Read in full: …" under it. Asked for a web search as well, he's asked once with both. Where the texts show a need for a search, or a search for a text, he's asked once more, never more (`ChatRounds`), and never for the same search or text twice. What he read is kept till he's answered with it, so a failed answer is asked again with it, not for it. Asked again with the trip's form:
+Where he needs more of a task's text than the context gives, his answer names it in `details` (three at most, listed and open, never the one the message is about, which came whole) and says only that he's reading it. Beside the tasks' ids (4.1.4, G6 and G7), `details` takes `stats`, for the week's numbers (this week so far and last week, each with its subjects, in 20 lines: `Stats.weekLines`), and `calendar`, for the four weeks after the fortnight, or `calendar:YYYY-MM` for a month: up to 60 events with their keys, as the fortnight's are listed, saying how many more there are and from when, and where the calendar's read begins and ends (`ChatPrompts.calendarBlock`). Each comes once, after your words under its own heading, and is said under his answer ("Read: the week's numbers.", "Read: the calendar for December 2026."); an unknown word asks for nothing. He's then asked again, as before, with their whole texts after your words (each an even share of 16,000 characters, 8,000 at most), and that answer is his, with "Read in full: …" under it. Asked for a web search as well, he's asked once with both. Where the texts show a need for a search, or a search for a text, he's asked once more, never more (`ChatRounds`), and never for the same search or text twice. Two spans of the calendar a message at most; the last round is told it's the last, and what he still asks for after it is said under his answer ("Not brought: …"); a search that couldn't be made is told to the next round. What he read is kept till he's answered with it, so a failed answer is asked again with it, not for it. Asked again with the trip's form:
 
 <!-- generated: chat turn with read -->
 ```text
@@ -316,7 +316,7 @@ The whole text of the tasks you asked to read (answer and act on it, and leave d
 | `reply` | one to three short sentences, or a short list | |
 | `newTasks` | tasks of your own to add: title, kind, subject, due date and time, start date, minutes, notes, steps | 10 |
 | `changes` | of the instructions' types (`NotATask` to `Rename`), each with its fields, and `paced` on a Minutes total worked out at your pace (D-69); and the chat's own two (4.1.0, Q13: B): `Remind`, a reminder set or one listed moved (words in `title`, when in `eventKey`, a listed one's id in `afterTaskId`), and `Note`, on a task or, its scope in `eventKey`, standing; and `lesson` on a DueBy (4.1.1, G8): the class whose next lesson it's due at, its date and time the app's to set | 40, reminders and notes 10 each |
-| `memories` | a fact or a standing instruction, by topic | 5 |
+| `memories` | a fact or a standing instruction, by topic; `until`, how long it holds, and a fact's `taskId`, each empty for none (4.2.0) | 5 |
 | `suggestedReplies` | replies you might give, in your words | 3, of 40 characters each |
 | `actions` | tick or untick a step, finish, reopen or delete one of your own, open a task (on a card, or where it lives: value `source`), set a setting, cancel a reminder, delete a note; and (4.1.1) keep a piece or take it back (`keepPiece`, `unkeepPiece`, by its key), and ask a source to read (`sync`, the source in `setting`) | 10 |
 | `research` | what to look up on the web, or empty | |
@@ -618,7 +618,7 @@ Recent, oldest first:
 | `message` | his message; empty, he'd rather not write now | 240 characters (the morning's 480), cut at its last whole sentence |
 | `replies` | replies he'd accept, in your words | 3, of 40 characters each; for Completions, the three answers instead; for a Question, none, as your answer is in your words |
 | `nextCheckMin` | when to look again | 5 minutes to a day; with none, `felixDefaultCheckMin` (20) |
-| `memories` | facts or standing instructions to keep | 5 |
+| `memories` | facts or standing instructions to keep, with `until` and a fact's `taskId` as the chat's (4.2.0) | 5 |
 
 ### His prompt
 

@@ -1,6 +1,6 @@
 # What Felix can do, and what he should
 
-Your question: to what extent can he act as someone you're texting would, with the control he has? Can you tell him to remind you of something at a time, or to put a notification up at the start of a task in a few days? This document answers it from the code as it is, names what's missing, and says which of the gaps this plan closes and how. The aim you gave: it should seem that he can manage it all, and that nothing but the chat needs touching to change things. The gaps are built in Stages 8b (4.1.1, done) and 8c ([03](03-stages.md)); the rest of this plan's features in the stages their documents name.
+Your question: to what extent can he act as someone you're texting would, with the control he has? Can you tell him to remind you of something at a time, or to put a notification up at the start of a task in a few days? This document answers it from the code as it is, names what's missing, and says which of the gaps this plan closes and how. The aim you gave: it should seem that he can manage it all, and that nothing but the chat needs touching to change things. The gaps are built in Stages 8b (4.1.1) and 8c (4.1.4), both done ([03](03-stages.md)); the rest of this plan's features in the stages their documents name.
 
 ## 1. What he can do today
 
@@ -10,9 +10,9 @@ From the chat (`ChatPrompts.system`, `ChatAnswers.parse`, `Conversation.answerCh
 - **Change tasks and days** (`changes`, the instructions' 15 types): not a task; can't start before; waits for another; due by; minutes (paced or yours); how much of your time an event takes; a day's limit; a busy stretch; days off; a half-day; all of it on a day; its next piece at a time; the same as another; its steps; its name.
 - **Act** (`actions`): tick or untick a step; finish, reopen or delete one of your own; show a task; set one of the 22 settings about the work and about him (`FelixSettings`); since 4.1.1, keep a piece of a task with no steps done or take it back, open a task where it lives, and have a source read now.
 - **Remind and note** (4.1.0, [07](07-notes-and-reminders.md)): a reminder at a time, at a task's next slot's start or before it's due, moved or cancelled; a note on a task, or a standing one for every task it matches, and a note deleted.
-- **Remember**: facts by topic, standing instructions, forget either.
+- **Remember**: facts by topic, standing instructions, forget either; since 4.2.0, one for a while: till a date, or a fact with its task.
 - **Answer** from what he's given: the open tasks with steps, minutes and their pace; the fortnight's events; the changes in use; your own finished lately; each task's text (D-93), the one you asked about in full; the plan's next 14 days with why each piece is where it is; today's slots as past, now or ahead; since 4.1.0, the reminders to come and the notes; since 4.1.1, each task's class, each class's next lessons, today's kept pieces, and whether blocking applies and the free time.
-- **Look things up** on the web (three searches, a call of its own) and **read a task in full** before answering.
+- **Look things up** on the web (three searches, a call of its own) and **read a task in full** before answering, and, since 4.1.4, ask for the week's numbers or the calendar past the fortnight.
 - **Offer replies** (three chips).
 
 On his own (`FelixRules`): a slot started with nothing done, a slot missed or ticked without its photo, a kept slot now and then, the day done, the morning, a reading's question, the evening's completions; the Sunday check-in in fixed words. Since 4.1.0, your reminders, in his words written for their moment where he could (`Looks`); since 4.1.1, a note when a read he asked for changes the task.
@@ -39,11 +39,11 @@ Each row: what you'd text; what happens today; what this plan makes of it, and w
 | You'd say | Today | After |
 |---|---|---|
 | "I'm away Thursday to Sunday" | ✓ a NoSchool or BusyTime change | ✓ |
-| "I've got a cold this week" | a fact, kept till the weekly tidy drops it | a fact until Sunday ([08](08-memory-that-expires.md)) |
-| "Don't message me tonight" | a standing instruction, for ever | a rule until the morning |
-| "While the trip's on, I'm not doing German" | a fact or a change, for ever | a fact tied to the trip's task, gone with it |
+| "I've got a cold this week" | ✓ (4.2.0) | a fact until Sunday ([08](08-memory-that-expires.md)) |
+| "Don't message me tonight" | ✓ (4.2.0) | a rule until the morning |
+| "While the trip's on, I'm not doing German" | ✓ (4.2.0) | a fact tied to the trip's task, gone with it |
 | "Forget that" | ✓ | ✓ |
-| "What do you know about me?" | ✓ (the profile) | ✓, with untils shown |
+| "What do you know about me?" | ✓ (the profile; untils shown since 4.2.0) | ✓, with untils shown |
 
 ### The work
 
@@ -64,8 +64,8 @@ Each row: what you'd text; what happens today; what this plan makes of it, and w
 |---|---|---|
 | "What's due this week / what's on Tuesday / why isn't X planned / what does the email say / who's it from" | ✓ | ✓ |
 | "How much free time have I got?" / "Why am I blocked?" | ✓ (4.1.1) | one line in the context: free time now, whether blocking applies and why (`Focus.rewardLine`'s facts) (G5) |
-| "How did this week go?" | ✗: no stats in his context | the week's numbers, asked for: he asks as he asks to read a task, and answers after the round (G6, 8c) |
-| "What's on next month?" | the fortnight's events only | the events to the plan's reach, asked for (G7, 8c) |
+| "How did this week go?" | ✓ (4.1.4) | the week's numbers, asked for: he asks as he asks to read a task, and answers after the round (G6, 8c) |
+| "What's on next month?" | ✓ (4.1.4) | the events to the plan's reach, asked for (G7, 8c) |
 | "It's due next lesson" / "When's my next chemistry?" | ✓ (4.1.1) | each class's next lessons in his context, a Power Planner class tied to its Teams code by the subject you give both (G8, 8b; [15](15-sent-or-asked-for.md)) |
 | "When will I be done tonight?" | ✓ (today's slots) | ✓ |
 | "You said Thursday for the essay, didn't you?" (from last week) | ✗: the last 12 messages | not now: the conversation digest, 4.4.0 ([13](13-summaries.md)) |
@@ -82,13 +82,13 @@ Each row: what you'd text; what happens today; what this plan makes of it, and w
 
 ## 3. Closing the gaps
 
-Each is small, and most are one new action in the chat's schema plus a line of context. Taken (Q17): G1, G2 as the stop, G3 and G5; G6 and G7, left then, and G8, taken on 19 Oct (your call), with what he's sent always and what he asks for weighed again ([15](15-sent-or-asked-for.md)). G1 to G5 and G8 were built in Stage 8b (4.1.1), after 8a (4.1.0) settled the schema's shape; G6 and G7 come in 8c, as things he asks for.
+Each is small, and most are one new action in the chat's schema plus a line of context. Taken (Q17): G1, G2 as the stop, G3 and G5; G6 and G7, left then, and G8, taken on 19 Oct (your call), with what he's sent always and what he asks for weighed again ([15](15-sent-or-asked-for.md)). G1 to G5 and G8 were built in Stage 8b (4.1.1), after 8a (4.1.0) settled the schema's shape; G6 and G7 came in 8c (4.1.4), as things he asks for.
 
 - **G1. Keep and unkeep a piece.** `keepPiece` (taskId, and the piece's key as the plan lists it) → `Focus.keepSlot`; `unkeepPiece` → `Focus.unkeepSlot`. The context's plan already names each piece; the task list gains each open task's next piece key where it has no steps, and a line "Kept today: …" with the keys of today's kept pieces, which the plan no longer shows once kept, so an unkeep is checked against today's kept records, not the plan. Undo as a tick's.
 - **G2. Check a source.** `sync` (source) → a `requestSync(sources)` callback the Conversation takes in its constructor, wired in `AppGraph` to the Sync service's `syncNow` (Stage 6d), as `Focus` takes its callbacks: Sync already calls the Conversation (the calendar's questions), so the Conversation mustn't call Sync back; his reply says it's reading, and a `Syncer` listener in the Conversation posts a `Note` message when the read changes the task he was asked about ("teams says the worksheet's handed in"). The stop, not the round: a second call would be dearer and the note says what the round would.
 - **G3. Open where it lives.** `open` gains `where`: "app" (the sheet, as now) or "source" (`TaskOpener.open`, which already tells him it was opened).
 - **G5. Free time and blocking in his context.** A line after the plan's "Now:": "Blocking: on until today's work's done (2 pieces, 1 h); free time 12 min" from `Focus`'s state, which `ChatPrompts.plan` is given.
-- **G6. The week's numbers** (8c). When your message is about the week he asks for them as he asks to read a task (`details` with `stats`), and the round brings `Learning`'s period summary from `Stats` (kept minutes, completions, deadlines met, slots kept and missed, by subject, this week and last) in 20 lines. Asked for, not two lines always: most messages aren't about the week ([15](15-sent-or-asked-for.md) §Sending less, and asking).
+- **G6. The week's numbers** (8c). When your message is about the week he asks for them as he asks to read a task (`details` with `stats`), and the round brings the week's lines from the log, by `Stats.weekLines` (kept minutes, completions, deadlines met, slots kept and missed, by subject, this week and last) in 20 lines. Asked for, not two lines always: most messages aren't about the week ([15](15-sent-or-asked-for.md) §Sending less, and asking).
 - **G7. The calendar further out** (8c). `details` with `calendar`, or `calendar:yyyy-MM` for the month a message names: that month's events, up to 60, with their keys (with no month, the four weeks after the fortnight), saying what it left out.
 - **G8. The next lessons** (8b). Each class's next three lessons, looked for as far as the plan's reach so a holiday doesn't hide them, in his context after the calendar's events, and each task's line with its class, by `lessonsOn`'s rule for an unknown week, none on a day of no school or from a half day's end; a Power Planner class and a Teams code with the same subject in Settings → About you's classes are one class, the subjects yours to give once. "Next lesson" is then a `DueBy` naming the class, which the app sets to that lesson's start, so the date isn't his reading of a table; where the timetable's over a week old, the line says when it was read and a lesson's date is refused until you give one ([15](15-sent-or-asked-for.md) §G8).
 
