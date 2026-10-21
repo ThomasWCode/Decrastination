@@ -101,8 +101,9 @@ Every PR is a release ([development.md](../development.md)): cleanup-only releas
 | 11 | Emails done | 4.3.0, done (#103) | feature, data | 1, 3, 6d, 7 | 1½ |
 | — | Found in 4.2.1's reviews and 11's phone check: a month of the chat archive read for the first time just as a clear runs could come back; Setup's list of the files that couldn't be read could name a copy a clear has since deleted; Felix, asked to mark an email done with the Gmail switch off, says he can't finish it in Gmail and offers *not a task*, rather than calling that done (your calls, 21 Oct) | 4.3.1, done (#105) | fix | 11 | ¼ |
 | 12 | The sweep: imports, comments, the architecture test complete, baselines compared | 4.3.2 (#106) | cleanup | all | ½ |
+| — | Found in Stage 12's read of the spec: a reset of your changes kept only those in use in its copy, so one being read or left unclear was lost; a quota with no new cards of its own, studied to nothing due, was taken as missed; the block screen said a missed slot went to tomorrow, where it has no time left today (your calls, 21 Oct) | 4.3.3 | fix | 12 | ¼ |
 
-About twenty-five days in 33 PRs (32 releases), 3.3.4 to 3.3.6, 4.0.3, 4.0.4, 4.0.10, 4.1.2, 4.1.3, 4.2.1 and 4.3.1 among them, evenings and weekends. After it, the conversation digest as 4.4.0 ([13](13-summaries.md)). You've said you won't use the app until the whole of it is in (Q21): each release is still built and checked on the phone, but nothing between releases has to serve a day's use.
+About twenty-five days in 34 PRs (33 releases), 3.3.4 to 3.3.6, 4.0.3, 4.0.4, 4.0.10, 4.1.2, 4.1.3, 4.2.1, 4.3.1 and 4.3.3 among them, evenings and weekends. After it, the conversation digest as 4.4.0 ([13](13-summaries.md)). You've said you won't use the app until the whole of it is in (Q21): each release is still built and checked on the phone, but nothing between releases has to serve a day's use.
 
 ## What changes substantially
 
