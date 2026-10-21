@@ -175,6 +175,18 @@ class StoresTest {
         for (file in made) assertTrue(!JsonStore.Unreadable(file, null, kept = false, at = 0).says.startsWith(file), file)
     }
 
+    @Test
+    fun `a file found unreadable is said with its copy only while the copy's there, which a reset takes`() = runTest {
+        File(dir, "memory.json").writeText("{not json")
+        val stores = Stores(dir, Reverse)
+        val found = stores.problems.single()
+        assertTrue("kept as ${found.copy}" in found.says(stores::holds))
+        stores.letGoOfCopies(Reset.Memories)
+        assertFalse(stores.holds(found.copy!!))
+        assertEquals(found.copy(copy = null).says, found.says(stores::holds))
+        assertFalse("kept as" in found.says(stores::holds))
+    }
+
     private object Reverse : SecretCipher {
         override fun encrypt(plain: ByteArray) = plain.reversedArray()
         override fun decrypt(sealed: ByteArray) = sealed.reversedArray()
