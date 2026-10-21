@@ -48,7 +48,7 @@ From a PC, `force-block` makes blocking hours apply for up to two hours whatever
 - "Not now", what's blocked and the reason's headline, and the reward line (BL-04, below);
 - the next piece (`Plan.next`) with its due date and minutes, and its actions (`ui/PieceActions.kt`): **Open**, **Done** (keeps its slot), **Check it's done** (asks its source; **All of it done** for one of your own);
 - **Refresh Teams** for a Teams task, and **Photo check** for written homework while Claude is on;
-- the free time left; **Why am I blocked?** (today's pieces, or the missed slot that went to tomorrow); **Go to the home screen**; and Felix's button, about the next piece's task (UI-16).
+- the free time left; **Why am I blocked?** (today's pieces, or the missed slot with no time left today: "A slot you missed has no time left today, so tonight stays blocked."); **Go to the home screen**; and Felix's button, about the next piece's task (UI-16).
 
 There's no way through it. Back goes to the home screen. It closes itself once nothing is blocked, or once its own app or site has left the blocklist.
 

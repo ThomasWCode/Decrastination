@@ -53,7 +53,7 @@ Grouped by prefix and sorted; where a later decision changed an item, its line g
 
 ## BL: blocking and free time
 
-- BL-01: While today's work isn't done (pieces still to do today, or a slot missed today that went to tomorrow), blocking is strict; tomorrow's work doesn't gate it.
+- BL-01: While today's work isn't done (pieces still to do today, or a slot missed today with no time left today), blocking is strict; tomorrow's work doesn't gate it.
 - BL-02: Blocking starts at the weekday block-from time on school days and at its own weekend time on weekends and days off school (PL-16); before then, and in sleep hours, nothing is blocked.
 - BL-04: Where blocking meets the student (the block screen, the Day's now card, the widget) and in what Felix's chat is told (G5), one computed line says what finishing today earns: the pieces left, their minutes and the free time, naming those that need a photo and those whose source must say they're done. Felix's day-done message gives the free time earned, in his own words.
 - BL-07: A day with nothing planned and nothing overdue starts, once, with a free-time allowance (a setting), unless a slot of today's was kept, missed or moved.
