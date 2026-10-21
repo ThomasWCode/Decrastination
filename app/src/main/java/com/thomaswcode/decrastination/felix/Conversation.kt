@@ -535,7 +535,8 @@ class Conversation(
      * calendar and the changes in use; and beside them the plan as the Day and Work tabs show it then, the
      * slot under way included ([ChatPrompts.plan]). All of one [state], calendar [time],
      * [applied] instructions and [kept] notes and reminders, so the list and the plan agree, and with
-     * the answer's checks where the caller passes it the same ones.
+     * the answer's checks where the caller passes it the same ones; his messages still waiting from the chat's
+     * [messages] as sent with it (up to the message answered), so one he wrote after it isn't taken as answered.
      */
     fun chatContext(
         now: Long = clock.now(),
@@ -543,6 +544,7 @@ class Conversation(
         time: EventJudge.Time = calendarTime(),
         applied: List<Instruction> = instructions.value.applied,
         kept: FelixStore = felix.value,
+        messages: List<ChatMessage> = chat.value.messages,
     ): ChatPrompts.Context {
         val plan = planning.plan(state, now = now, applied = applied, time = time)
         // His notes and reminders (8a), each reminder with when it comes by this plan.
@@ -552,7 +554,7 @@ class Conversation(
         val keepable = (plan.todaySlots.mapNotNull { it.chunk } + plan.ordered.filter { it.stepIndex == null }.distinctBy { it.taskId }).associate { it.key to it.taskId }
         val keptToday = keptToday(now)
         val lessons = lessons(state, now)
-        val waiting = waiting(now)
+        val waiting = waiting(now, messages)
         return ChatPrompts.Context(
             known = ChatPrompts.context(state.tasks, time.events, applied, now, clock.zone(), settings.value.classMap, runtime.value.notSame, settings.value, learning.value.calibration, kept.notes, kept.reminders, moments, lessons, waiting),
             plan = ChatPrompts.plan(plan, clock.zone(), keptToday.map { it.key to it.label }, focus.blockingLine(plan, now)),
@@ -564,15 +566,14 @@ class Conversation(
     }
 
     /**
-     * His messages still waiting for your answer at [now] (D-99) that can be marked answered, as the chat's
-     * *Mark answered* can (a check-in's question under way can't): the newest [ChatPrompts.MAX_WAITING], oldest
+     * His messages of [messages] still waiting for your answer at [now] (D-99) that can be marked answered, as the
+     * chat's *Mark answered* can (a check-in's question under way can't): the newest [ChatPrompts.MAX_WAITING], oldest
      * first, which the chat's answer may name as answered by your words (10b).
      */
-    private fun waiting(now: Long): List<ChatMessage> {
-        val s = chat.value
-        val underWay = s.felix.checkInDraft != null
-        val ids = Replies.awaitingIds(s.messages, underWay, now, clock.zone())
-        return s.messages.filter { it.id in ids && !(underWay && it.kind == MessageKind.CheckIn) }.takeLast(ChatPrompts.MAX_WAITING)
+    private fun waiting(now: Long, messages: List<ChatMessage>): List<ChatMessage> {
+        val underWay = chat.value.felix.checkInDraft != null
+        val ids = Replies.awaitingIds(messages, underWay, now, clock.zone())
+        return messages.filter { it.id in ids && !(underWay && it.kind == MessageKind.CheckIn) }.takeLast(ChatPrompts.MAX_WAITING)
     }
 
     /**
@@ -692,7 +693,7 @@ class Conversation(
                     val quoted = sent.mapNotNull { m -> m.replyTo?.takeIf { r -> sent.none { it.id == r } }?.let { outbox.find(it) } }
                     val brought = listOfNotNull(ChatPrompts.statsBlock(Stats.weekLines(log.value, settings.value.classMap, at, clock.zone())).takeIf { stats }) +
                         calendar.map { ChatPrompts.calendarBlock(time.events, it, at, clock.zone(), time.read) }
-                    ChatReader(chatClient, clock.zone(), profile = profile(at), settings = settings.value).answer(sent, state.tasks, time.events, chatContext(at, state, time, instructions.value.applied, noted), at, found, read, quoted, noted, brought, last, notLooked)
+                    ChatReader(chatClient, clock.zone(), profile = profile(at), settings = settings.value).answer(sent, state.tasks, time.events, chatContext(at, state, time, instructions.value.applied, noted, sent), at, found, read, quoted, noted, brought, last, notLooked)
                 } finally {
                     sentAt.value = null
                 }
