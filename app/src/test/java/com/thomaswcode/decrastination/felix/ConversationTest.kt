@@ -349,6 +349,10 @@ class ConversationTest {
         assertFalse("- c1 | " in sent)
         assertEquals(now, his().single { it.id == "n1" }.answeredAt)
         assertNull(his().single { it.id == "c1" }.answeredAt)
+        // Said under his answer, quietly: no Undo, nothing wrong.
+        val line = his().last().acts.single()
+        assertEquals("Taken as answered: “Starting the worksheet now?”" to null, line.line to line.action)
+        assertFalse(line.problem)
         assertFalse("n1" in Replies.awaitingIds(stores.chat.value.messages, checkInUnderWay = false, now = now, zone = felix.clock.zone()))
     }
 

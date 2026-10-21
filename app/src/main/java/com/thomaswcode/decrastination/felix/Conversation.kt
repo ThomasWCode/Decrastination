@@ -867,8 +867,15 @@ class Conversation(
                     .filter { p -> p.instant && p.state != ProposalState.Applied && p.note != null }.map { Act(Act.NOT_MADE + "${it.note!!.replaceFirstChar(Char::lowercase)}.", problem = true) }
                 val lines = refused + moved.map { Act(it) }
                 if (lines.isNotEmpty()) chat.update { s -> s.copy(messages = s.messages.map { if (it.id == reply.id) it.copy(acts = it.acts + lines) else it }) }
-                // His messages still waiting that your words answered, at his word (10b, D-99): marked as *Mark answered* marks them.
-                if (reading.answered.isNotEmpty()) mark(reading.answered, reply.at)
+                // His messages still waiting that your words answered, at his word (10b, D-99): marked as *Mark answered* marks them,
+                // and said under his answer, so one that stops waiting doesn't just vanish.
+                if (reading.answered.isNotEmpty()) {
+                    val marked = mark(reading.answered, reply.at)
+                    if (marked.isNotEmpty()) chat.update { s ->
+                        val taken = s.messages.filter { it.id in marked }.map { Act("Taken as answered: “${it.text.trim().take(TAKEN_TEXT)}”") }
+                        s.copy(messages = s.messages.map { if (it.id == reply.id) it.copy(acts = it.acts + taken) else it })
+                    }
+                }
                 // His answer, in the chat whole: the window moved, and it's his notification while the chat isn't on screen.
                 outbox.delivered(alertFor = reply.id)
             }
@@ -1497,6 +1504,9 @@ class Conversation(
 
         /** A due date, as his note says it. */
         private val WHEN = DateTimeFormatter.ofPattern("EEE d MMM HH:mm", Locale.UK)
+
+        /** How much of a message of his marked answered by his word its line under his answer quotes (10b). */
+        private const val TAKEN_TEXT = 60
 
         /** His messages whose answer the app keeps, by a reply to them alone: never marked answered by his word (10b). */
         private val ANSWERS_KEPT = setOf(MessageKind.Question, MessageKind.Completions, MessageKind.EventQuestion, MessageKind.CheckIn, MessageKind.Reminder)
