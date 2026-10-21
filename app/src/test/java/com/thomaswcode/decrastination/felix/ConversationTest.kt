@@ -366,6 +366,19 @@ class ConversationTest {
     }
 
     @Test
+    fun `a question of his whose answer the app keeps isn't his to mark answered, so its answer isn't lost`() = runBlocking {
+        stores.tasks.update { it.copy(tasks = it.tasks + sheet) }
+        val ask = AssessLater(sheet.id, sheet.title, now - 3_600_000L)
+        felix.outbox.send(ChatMessage("q1", Speaker.Felix, "How was the worksheet?", now - 60_000L, kind = MessageKind.Completions, asks = listOf(ask), suggestedReplies = listOf("Harder", "As expected", "Easier")))
+        felix.answers(felix.chatAnswer("Noted.", answered = """["q1"]"""))
+        assertTrue(conversation.ask("the worksheet was harder than I thought"))
+        felix.settle()
+        assertFalse("- q1 | " in felix.server.takeRequest().body.readUtf8())
+        // Still waiting for its reply, which records how it went.
+        assertNull(his().single { it.id == "q1" }.answeredAt)
+    }
+
+    @Test
     fun `with nothing of his waiting, the context lists none, and an id his answer names is let go`() = runBlocking {
         felix.answers(felix.chatAnswer("Fine.", answered = """["n9"]"""))
         assertTrue(conversation.ask("what's due tomorrow?"))

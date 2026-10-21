@@ -566,14 +566,14 @@ class Conversation(
     }
 
     /**
-     * His messages of [messages] still waiting for your answer at [now] (D-99) that can be marked answered, as the
-     * chat's *Mark answered* can (a check-in's question under way can't): the newest [ChatPrompts.MAX_WAITING], oldest
-     * first, which the chat's answer may name as answered by your words (10b).
+     * His nudges of [messages] still waiting for your answer at [now] (D-99): the newest [ChatPrompts.MAX_WAITING], oldest
+     * first, which the chat's answer may name as answered by your words (10b). Not a question whose answer the app keeps
+     * (a reading's, how work went, a calendar event's, the check-in's), nor a reminder (its *Done*): marked so, its answer
+     * would be lost, so each waits for its reply as before ([ANSWERS_KEPT]).
      */
     private fun waiting(now: Long, messages: List<ChatMessage>): List<ChatMessage> {
-        val underWay = chat.value.felix.checkInDraft != null
-        val ids = Replies.awaitingIds(messages, underWay, now, clock.zone())
-        return messages.filter { it.id in ids && !(underWay && it.kind == MessageKind.CheckIn) }.takeLast(ChatPrompts.MAX_WAITING)
+        val ids = Replies.awaitingIds(messages, chat.value.felix.checkInDraft != null, now, clock.zone())
+        return messages.filter { it.id in ids && it.kind !in ANSWERS_KEPT }.takeLast(ChatPrompts.MAX_WAITING)
     }
 
     /**
@@ -1497,5 +1497,8 @@ class Conversation(
 
         /** A due date, as his note says it. */
         private val WHEN = DateTimeFormatter.ofPattern("EEE d MMM HH:mm", Locale.UK)
+
+        /** His messages whose answer the app keeps, by a reply to them alone: never marked answered by his word (10b). */
+        private val ANSWERS_KEPT = setOf(MessageKind.Question, MessageKind.Completions, MessageKind.EventQuestion, MessageKind.CheckIn, MessageKind.Reminder)
     }
 }
