@@ -29,9 +29,9 @@ class StoresTest {
 
     @Test
     fun `a store's copies are let go, deleted or, where that fails, emptied, and another file is left`() = runTest {
-        val store = JsonStore(File(dir, "settings.json"), Settings.serializer(), ::Settings)
-        val copies = listOf("settings.json.v1", "settings.json.unreadable-20261021-010000").map { File(dir, it).apply { writeText("{\"ankiTextbook\":2}") } }
-        val others = listOf("settings.json.tmp", "tasks.json.v2").map { File(dir, it).apply { writeText("{}") } }
+        val store = JsonStore(File(dir, "felix.json"), FelixStore.serializer(), ::FelixStore)
+        val copies = listOf("felix.json.v1", "felix.json.unreadable-20261021-010000").map { File(dir, it).apply { writeText("{\"notes\":[]}") } }
+        val others = listOf("felix.json.tmp", "tasks.json.v2").map { File(dir, it).apply { writeText("{}") } }
         // The folder closed to deletes, where the system allows it (not Windows, where a folder's read-only mark doesn't): each copy emptied instead.
         dir.setWritable(false)
         try {
