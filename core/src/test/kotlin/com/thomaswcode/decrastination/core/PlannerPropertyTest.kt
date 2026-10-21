@@ -485,7 +485,7 @@ class PlannerPropertyTest {
             val hi = minOf(at(bucket.date, window.endMin), busy.filter { it.start >= end }.minOfOrNull { it.start } ?: Long.MAX_VALUE)
             if ((hi - lo) / MINUTE < if (window.kind.atSchool) input.settings.minSchoolSlotMin else 5) continue
             val slot = bucket.slots.firstOrNull { it.chunk?.key == chunk.key }
-            assertTrue(slot != null && slot.start == pin && slot.pinned, "seed=$seed: ${chunk.key} pinned at ${java.time.Instant.ofEpochMilli(pin)}, laid at ${slot?.start?.let { java.time.Instant.ofEpochMilli(it) }}")
+            assertTrue(slot != null && slot.start == pin && slot.pinned, "seed=$seed: ${chunk.key} pinned at ${Instant.ofEpochMilli(pin)}, laid at ${slot?.start?.let { Instant.ofEpochMilli(it) }}")
         }
     }
 

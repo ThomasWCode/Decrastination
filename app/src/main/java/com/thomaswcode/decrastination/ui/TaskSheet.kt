@@ -285,7 +285,7 @@ fun TaskSheet(
                     note = listOfNotNull(
                         if (!own && task.mine.dueAt?.value != null) "Yours: ${task.source.label} says ${sourceDue?.let { Format.at(it, now, zone) } ?: "no date"}" else null,
                         // Where Claude's reading came from (AI-09); one from a photo says what it saw, under Takes.
-                        Enrichments.current(task)?.reason?.takeUnless { fromPhoto(task) }?.let { "Claude: “$it” in ${if (task.source == com.thomaswcode.decrastination.core.Source.Gmail) "the email" else "the instructions"}" },
+                        Enrichments.current(task)?.reason?.takeUnless { fromPhoto(task) }?.let { "Claude: “$it” in ${if (task.source == Source.Gmail) "the email" else "the instructions"}" },
                     ).joinToString(". ").takeIf { it.isNotEmpty() },
                     urgent = task.isOpen && task.hardAt(now) && task.deadlineAt(now)?.let { it < now } == true,
                     onChange = if (changeable) ({ picking = OwnChange.DueOn }) else null,

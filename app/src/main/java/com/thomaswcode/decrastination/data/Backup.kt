@@ -274,8 +274,8 @@ object Backups {
                 memory.rules.any { it.text.isBlank() || it.text.length > kept.MAX_TEXT }
             ) add("what's remembered")
             // What a card takes in AnkiDroid (DX-11): within the bounds it's learned in, each from its stretches.
-            if (calibration.ankiSecondsPerCard.values.any { !it.isFinite() || it !in AnkiProgress.MIN_SECONDS..com.thomaswcode.decrastination.learn.AnkiProgress.MAX_SECONDS } ||
-                calibration.ankiSecondsPerCard.keys != calibration.ankiStretches.keys || calibration.ankiStretches.values.any { it !in 1..com.thomaswcode.decrastination.learn.AnkiProgress.STRETCHES }
+            if (calibration.ankiSecondsPerCard.values.any { !it.isFinite() || it !in AnkiProgress.MIN_SECONDS..AnkiProgress.MAX_SECONDS } ||
+                calibration.ankiSecondsPerCard.keys != calibration.ankiStretches.keys || calibration.ankiStretches.values.any { it !in 1..AnkiProgress.STRETCHES }
             ) add("what the app learned about Anki")
             if (backup.eventAnswers.values.any { !answer(it) }) add("a calendar answer")
             if (!backup.aiUsage.spentUsd.isFinite() || backup.aiUsage.spentUsd < 0 || backup.aiUsage.calls < 0) add("Claude's spending")
