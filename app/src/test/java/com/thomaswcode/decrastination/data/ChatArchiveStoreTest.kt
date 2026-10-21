@@ -104,6 +104,20 @@ class ChatArchiveStoreTest {
     }
 
     @Test
+    fun `clearing takes the copies its months' older shapes were kept as, a month gone already among them`() = runBlocking {
+        val store = ChatArchiveStore(dir)
+        store.add(august + september)
+        // Each kept as a month was brought from an older shape (JsonStore); July's month itself gone since.
+        val copies = listOf("chat-archive-2026-07.json.v3", "chat-archive-2026-08.json.v4", "chat-archive-2026-09.json.v4").map { File(dir, it).apply { writeText("{\"messages\":[]}") } }
+        val other = File(dir, "chat.json.v5").apply { writeText("{}") }
+        store.clear()
+        assertTrue(files().isEmpty())
+        assertTrue(copies.none { it.exists() })
+        // Not the archive's: the window's own copy is the stores' week's to let go.
+        assertTrue(other.exists())
+    }
+
+    @Test
     fun `a month that can't be read and keeps nothing is let go once it's said, and a far year's month is still listed`() = runBlocking {
         File(dir, "chat-archive-2026-08.json").writeText("{")
         val store = ChatArchiveStore(dir)

@@ -151,6 +151,16 @@ class BackupServiceTest {
     }
 
     @Test
+    fun `a reset of the chat takes the copies its archive's months were kept as, with the months`() = runTest {
+        val phone = Phone(full = true)
+        phone.stores.replace(phone.stores.chatArchive, ChatArchive(listOf(ChatMessage("a1", Speaker.You, "hello", Fixtures.at("2026-08-03T10:00"), answeredAt = 1))))
+        val copy = File(phone.dir, "chat-archive-2026-08.json.v4").apply { writeText("{\"messages\":[]}") }
+        phone.service.reset(Reset.Chat)
+        assertEquals(ChatArchive(), phone.stores.chatArchive.value)
+        assertFalse(copy.exists())
+    }
+
+    @Test
     fun `restored into a chat that isn't empty, his messages it hasn't come back with your replies to them`() = runTest {
         val from = Phone(full = false)
         val nudge = ChatMessage("n1", Speaker.Felix, "Ten minutes in: starting?", 100, kind = MessageKind.SlotStart)

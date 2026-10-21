@@ -158,12 +158,14 @@ class Stores(
     suspend fun replace(store: ChatArchiveStore, transform: (ChatArchive) -> ChatArchive): ChatArchive = store.update(transform)
 
     /**
-     * The files older shapes came from (`<name>.v<n>`, [JsonStore]) let go once a week old: called at a
-     * start that's gone well, so each is kept at least a week from its migration, and past a start.
+     * The files older shapes came from (`<name>.v<n>`, [JsonStore]) let go once a week old, the chat
+     * archive's months' among them ([ChatArchiveStore.isOldShape]): called at a start that's gone well, so
+     * each is kept at least a week from its migration, and past a start.
      */
     fun letGoOfOldShapes(now: Long = clock()) {
-        val names = json.map { it.name }.toSet()
-        dir.listFiles { f -> f.isFile && f.name.substringBeforeLast(".v") in names && f.name.substringAfterLast(".v").toIntOrNull() != null }.orEmpty()
+        val names = json.map { it.name }.toSet() + chatArchive.name
+        fun oldShape(name: String) = name.substringBeforeLast(".v") in names && name.substringAfterLast(".v").toIntOrNull() != null || ChatArchiveStore.isOldShape(name)
+        dir.listFiles { f -> f.isFile && oldShape(f.name) }.orEmpty()
             .filter { now - it.lastModified() >= OLD_SHAPE_KEPT_MS }
             .forEach { it.delete() }
     }
