@@ -80,7 +80,7 @@ How the app works in detail is in [spec/](spec/); how the work is done is in [de
 
 ## Felix and the chat
 
-- **D-57. Felix, a strict friend, writes every message** (Q-31); his name and line are yours to change, with no tone setting. "Felix" wherever you're spoken to; "Claude" only for the service, in Settings (Q-44).
+- **D-57. Felix, a strict friend, writes every message** (Q-31), in a sixth-former's voice (4.2.2, 21 Oct; Q16: A and Q29: A, as you read its text on 21 Oct, which left swearing out of his prompts in place of Q30's): lower case, a little slang, short and light on commas; exact where it matters (dates, times, minutes); no emojis; set by his prompts' register and pinned by their examples. A message that's just talk gets a reply and nothing else. His name and line ("your mate who's on your case about the work" by default) are yours to change, with no tone setting. "Felix" wherever you're spoken to; "Claude" only for the service, in Settings (Q-44).
 - **D-58. He speaks only around scheduled work**, school's slots included, setting his own next check (20 minutes if he names none), with no daily ceiling; silent in quiet hours and busy events (your reminders aside, D-100); a standing instruction can quiet him.
 - **D-59. One chat, his, in place of the Instructions page** (Q29), his button on every screen.
 - **D-60. Everything Felix gives is made at once, with an Undo** (3.1.0, 16 Oct): changes, new tasks, days off, busy times, limits, ticks, settings. (Not: cards you apply.)
