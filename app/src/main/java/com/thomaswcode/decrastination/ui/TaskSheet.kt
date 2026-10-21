@@ -53,6 +53,7 @@ import com.thomaswcode.decrastination.core.invite
 import com.thomaswcode.decrastination.enrich.Readings
 import com.thomaswcode.decrastination.enrich.RuleEnricher
 import com.thomaswcode.decrastination.sources.gmail.GmailThreads
+import com.thomaswcode.decrastination.core.GmailWrites
 import java.time.Instant
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
@@ -118,6 +119,8 @@ fun TaskSheet(
     val model by graph.stores.model.state.collectAsStateWithLifecycle()
     // Its notes, read as they change (8a).
     val felix by graph.stores.felix.state.collectAsStateWithLifecycle()
+    // A starred email's finish in Gmail (Stage 11), read as it goes.
+    val gmail by graph.gmailFinishes.state.collectAsStateWithLifecycle()
     // His messages unread, worn by Ask Felix about it as by his button elsewhere (UI-16).
     val unread by graph.conversation.unread.collectAsStateWithLifecycle(0)
     val task = state.tasks.firstOrNull { it.id == taskId }
@@ -211,6 +214,10 @@ fun TaskSheet(
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (!own) Button(onClick = { scope.launch { TaskOpener.open(activity, task)?.let { message = it } } }) { Text("Open in ${task.source.label}") }
                 invite?.let { i -> OutlinedButton(onClick = { message = addToCalendar(activity, i, task.title, zone) }) { Text("Add to calendar") } }
+                // A starred email finished by your word (Stage 11): unstarred and archived in Gmail, after the grace.
+                if (task.source == Source.Gmail && task.isOpen && graph.settings.value.gmailFinishes && GmailWrites.state(gmail.writes, task.id) !in FINISHING) {
+                    OutlinedButton(onClick = { scope.launch { said = finishSaid(graph.gmailFinishes.finish(task.id, explicit = true)) } }) { Text("Finish: unstar and archive") }
+                }
                 // Written work: a photo shows it done, once Claude is on (Q16).
                 if (next != null && photo != null && photo.available && next.photoCheckable) {
                     OutlinedButton(enabled = !photo.checking, onClick = { photo.take(next) }) { Text("Check with a photo") }
@@ -238,6 +245,8 @@ fun TaskSheet(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+            // Its finish in Gmail, where there's one (Stage 11): what it is, with its Undo or It's sorted.
+            if (task.source == Source.Gmail) GmailFinishLine(graph, task)
 
             // About: when it's due, how long it takes, what it says, when it's planned and why.
             SectionHeading("About", sheet = true)
@@ -618,3 +627,6 @@ private fun openLink(activity: Activity, url: String): String? = try {
 
 /** Whether [task]'s reading in force was made from its photo (AI-23): its reason then says what Claude saw, not a quote. */
 private fun fromPhoto(task: TaskItem): Boolean = task.photo != null && Enrichments.current(task)?.fromPhoto == true
+
+/** An email's finish going, or waiting for your OK: its sheet doesn't offer to finish it again meanwhile. */
+private val FINISHING = setOf(GmailWrites.State.Awaiting, GmailWrites.State.Going)

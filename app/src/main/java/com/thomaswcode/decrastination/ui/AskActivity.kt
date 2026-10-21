@@ -506,6 +506,8 @@ class AskActivity : ComponentActivity() {
                 }
             }
         }
+        // The very first email finished here, by Felix's done, waits for your OK (Stage 11): asked here too.
+        GmailOkSheet(graph)
         if (clearing) {
             AlertDialog(
                 onDismissRequest = { clearing = false },

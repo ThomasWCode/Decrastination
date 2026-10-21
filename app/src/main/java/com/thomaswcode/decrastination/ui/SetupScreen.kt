@@ -51,6 +51,7 @@ import com.thomaswcode.decrastination.learn.CalendarTime
 import com.thomaswcode.decrastination.protect.ProtectionActivity
 import com.thomaswcode.decrastination.sources.anki.AnkiProvider
 import com.thomaswcode.decrastination.sync.SyncWorker
+import com.thomaswcode.decrastination.core.GmailWrites
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -174,8 +175,10 @@ fun SetupScreen(graph: AppGraph, activity: Activity, parts: Set<SetupPart> = Set
                 title = "Gmail app password",
                 done = Secret.GmailAppPassword in secrets && state.status(Source.Gmail).works,
                 // The star is the decision (DX-03): said where the account is set up.
-                detail = sourceDetail(state.status(Source.Gmail), if (Secret.GmailAppPassword in secrets) "Saved." else "Not saved. Read-only: nothing is ever sent or changed.") +
-                    " The app reads your starred emails only, each with its whole conversation. Star an email in Gmail to make it a task; unstar it when it's done.",
+                detail = sourceDetail(state.status(Source.Gmail), if (Secret.GmailAppPassword in secrets) "Saved." else "Not saved. Nothing is ever sent, deleted or marked read.") +
+                    " The app reads your starred emails only, each with its whole conversation. Star an email in Gmail to make it a task; unstar it when it's done, or finish its work here" +
+                    (if (graph.settings.value.gmailFinishes) ", which unstars and archives it in Gmail (Settings → Sources)." else ".") +
+                    GmailWrites.givenUp(graph.gmailFinishes.value).joinToString("") { " " + GmailWrites.failure(it) + " Its sheet's It's sorted clears this." },
                 action = "Enter" to { editing = Credential.Gmail },
             )
         }

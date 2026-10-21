@@ -273,6 +273,11 @@ class SettingsActivity : ComponentActivity() {
                     // Each source as Setup has it, and how Teams and Anki are read.
                     SOURCES -> {
                         item { SetupScreen(graph, this@SettingsActivity, setOf(SetupPart.Sources), scroll = false) }
+                        item { Section("Gmail") }
+                        item {
+                            // The one write outside the phone (D-7 as amended): yours to turn off.
+                            SwitchRow("When you finish a starred email's work here, unstar and archive it in Gmail", draft.gmailFinishes) { draft = draft.copy(gmailFinishes = it) }
+                        }
                         item { Section("Teams") }
                         item {
                             SwitchRow("Sync Teams automatically", draft.teamsAutoSync) { draft = draft.copy(teamsAutoSync = it) }
