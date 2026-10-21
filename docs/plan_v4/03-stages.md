@@ -247,7 +247,7 @@ The design is [05](05-the-chat.md); the stores' change is [04](04-data-and-migra
 
 **Tests** and **phone check**: [10](10-emails-done.md), with your mailbox and nothing of it in the PR (D-79).
 
-## Stage 12: the sweep (4.3.1)
+## Stage 12: the sweep (4.3.2)
 
 **Needs** everything. **Does**: what [11](11-conventions-and-docs.md) asks of the code as a whole, now that nothing is moving: every inline fully qualified name left becomes an import (437 at 3.2.0, 258 after Stage 4, most of the rest gone with the moves); comments that only date a change lose the date, and a decision they retell becomes its number; the architecture test's fourth and last rule added, one writer a store, which only holds once every service owns its store (the first three came in Stages 1, 2 and 6f: only the notifier posts, only the gateway builds a client, `core` pure by the module); the baselines of Stage 0 compared with now (test count, `AppGraph`'s size, the stores' sizes, build time) and the README's done-when list ticked; `docs/spec/` read through once against the code. One Codex round.
 
@@ -271,10 +271,10 @@ The conversation digest, 4.4.0 ([13](13-summaries.md), Q28): planned on its own 
 | 9 | 1 | ½ |
 | 7 | 1 | 2½ |
 | 8 | 3 | 6 |
-| 4.1.2 (the phone session's fixes), 4.1.3 (the docs review's fixes), 4.2.1 (the second docs review's) | 3 | ¾ |
+| 4.1.2 (the phone session's fixes), 4.1.3 (the docs review's fixes), 4.2.1 (the second docs review's), 4.3.1 (4.2.1's reviews' and 11's phone check's) | 4 | 1 |
 | 10 | 2 | 1½ |
 | 11 | 1 | 1½ |
 | 12 | 1 | ½ |
-| | 32 (31 releases) | about 25 |
+| | 33 (32 releases) | about 25 |
 
 Evenings and weekends, as every release ([12](12-verification-and-risks.md) §Risks: the phone's away on school days).

@@ -42,11 +42,12 @@ Stage by stage, what each PR needs from your phone and from you, for what and fo
 | — | 4.2.1 | **needed**: install and the script; the archive's months' copies listed (`run-as … ls files`), each to go at the first start a week after it was made | no |
 | 10b | 4.2.2 | **needed**: install; four `chat-ask`s and a `felix-say` (paid); the next morning's briefing; `review` for the summary | **needed**, twice, at your own pace: before the PR, read the register paragraph and the examples (taste: 10 min, by message, no phone); after the install, read a day of his messages and say what's off |
 | 11 | 4.3.0 | **needed**, online: install; `sync --es sources gmail`; `state`; a minute's wait for the write; logcat's IMAP lines | **needed**, 20 min with Gmail open: star a note-to-self email in Gmail; tick its piece on Day; Undo within the grace (again, with a second email); aeroplane mode on and off; look in Gmail (unstarred, out of the inbox); the first-time sheet; the switch off in Settings and a tick that leaves Gmail alone |
-| 12 | 4.3.1 | **needed**: install and the script; the baselines | **helpful**: the done-when list read together, by message |
+| — | 4.3.1 | **needed**: install and the script; two `chat-ask`s (paid) with Gmail's finish switch off | no |
+| 12 | 4.3.2 | **needed**: install and the script; the baselines | **helpful**: the done-when list read together, by message |
 
 ## In sum
 
-- **The phone** is needed for 31 of the 32 PRs, for the install and its check: a plugged-in, unlocked phone on the desk for an evening does several PRs if their reviews are done by then. Two stages want it free of use for an hour (6b, on a weekend) or online for a minute's write (11).
+- **The phone** is needed for 32 of the 33 PRs, for the install and its check: a plugged-in, unlocked phone on the desk for an evening does several PRs if their reviews are done by then. Two stages want it free of use for an hour (6b, on a weekend) or online for a minute's write (11).
 - **You** are needed for nine moments, about an hour and a half at the phone in all: 5a, 5b, 5c (ten, ten and five minutes; done, in one evening with the three PRs stacked), 4.0.10 (five minutes, 19 Oct), 8a (fifteen minutes spread over an evening), 8b (five minutes: your classes' subjects), 11 (twenty minutes with Gmail), and 10b twice by message (a read before, a read after): with Stage 5's, 4.0.10's, 8a's, 8b's, 11's and 10b's read before done (11's on 21 Oct, an hour with its two finds), 10b's read after is left. Four more are helpful but not needed (3, 6b, 7, 12): five minutes each, or slower guarded taps.
 - **No decision waits on you** during the work: every question a stage needs is answered, and the four things that could go wrong mid-PR have their fallback chosen.
 
