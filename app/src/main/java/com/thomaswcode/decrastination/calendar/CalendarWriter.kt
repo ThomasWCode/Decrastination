@@ -31,7 +31,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * The plan written to the calendar you picked (NF-07; docs/plan_v4), moved out of `AppGraph`:
+ * The plan written to the calendar you picked (NF-07; docs/plan_v4):
  * each plan's next seven days, once plans have been quiet a while ([planned], [writeSlots]), a slot
  * you've moved there taken as your time; the app's events taken out of a calendar no longer written to
  * ([clearOldCalendars]); the calendar watched for changes ([watchCalendar], [calendarChanged]); and your
