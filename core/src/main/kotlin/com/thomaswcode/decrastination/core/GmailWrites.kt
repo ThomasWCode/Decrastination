@@ -59,6 +59,9 @@ object GmailWrites {
     /** A finish waiting for your OK: the very first. */
     fun awaiting(write: GmailWrite): Boolean = pending(write) && write.notBefore == null
 
+    /** The tasks whose finish stands (their newest write a finish, not taken back): what an Undo can take back. */
+    fun standing(writes: List<GmailWrite>): Set<String> = writes.map { it.taskId }.toSet().filterTo(HashSet()) { latest(writes, it)?.reverseOf == null }
+
     /** [taskId]'s newest write. */
     fun latest(writes: List<GmailWrite>, taskId: String): GmailWrite? = writes.lastOrNull { it.taskId == taskId }
 

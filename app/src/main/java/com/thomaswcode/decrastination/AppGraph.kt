@@ -58,6 +58,8 @@ import com.thomaswcode.decrastination.sources.powerplanner.PowerPlannerApi
 import com.thomaswcode.decrastination.sources.powerplanner.PowerPlannerSource
 import com.thomaswcode.decrastination.sources.teams.TeamsSource
 import com.thomaswcode.decrastination.sync.AndroidSyncPorts
+import com.thomaswcode.decrastination.sync.AndroidGmailPorts
+import com.thomaswcode.decrastination.sync.GmailFinishes
 import com.thomaswcode.decrastination.sync.Sync
 import com.thomaswcode.decrastination.sync.SyncWorker
 import com.thomaswcode.decrastination.sync.Syncer
@@ -213,10 +215,26 @@ class AppGraph private constructor(context: Context) {
         notes = { task -> Notes.forTask(task, stores.felix.value.notes, settings.value.classMap).map { it.text } },
     )
 
+    /**
+     * A starred email finished here (Stage 11, D-7 as amended): its write to Gmail journaled, made by its worker
+     * after the grace, taken back; the tasks as the plan takes them, and the Gmail read after a write asked of Sync.
+     */
+    val gmailFinishes = GmailFinishes(
+        stores.gmailWrites,
+        settings = { settings.value },
+        task = { id -> planning.asPlanned().firstOrNull { it.id == id } },
+        multiplier = { stores.learning.value.calibration.multiplierFor(it) },
+        clock = clock,
+        ports = AndroidGmailPorts(app, notifier, clock) { sources -> sync.syncNow(sources) },
+    )
+
     /** The blocker's state and decisions (block/Focus.kt). */
     val focus = Focus(
         tasks, settings, stores.session, stores.learning, stores.protection, log, clock,
         onOwnTaskDone = { ownTasks.finishOwnTask(it) },
+        // An email's work all done by a keep or a tick is finished in Gmail; taken back, so is its finish.
+        onWorked = { gmailFinishes.finish(it, explicit = false) },
+        onUnworked = { gmailFinishes.unfinish(it) },
         // A school day by the school calendar (BL-02): a day off blocks from the weekend's time.
         schoolDay = { com.thomaswcode.decrastination.core.SchoolDays.kindOf(it, school.value) == com.thomaswcode.decrastination.core.DayKind.Weekday },
     ) { state, s, now -> planning.plan(state, s, now) }
@@ -279,6 +297,8 @@ class AppGraph private constructor(context: Context) {
                 calendarWriter.answer(key, answer)
             }
             override suspend fun recordCheckIn(checkIn: CheckIn, now: Long): Boolean = learning.recordCheckIn(checkIn, now)
+            override suspend fun finishGmail(taskId: String): GmailFinishes.Finish = gmailFinishes.finish(taskId, explicit = true)
+            override suspend fun unfinishGmail(taskId: String): Boolean = gmailFinishes.unfinish(taskId)
         },
         calendarTime = { sync.calendarTime },
         answered = { record, words -> looks.answered(record, words) },
