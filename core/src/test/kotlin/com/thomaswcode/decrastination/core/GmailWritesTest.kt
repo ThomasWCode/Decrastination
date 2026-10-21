@@ -93,8 +93,8 @@ class GmailWritesTest {
         assertNull(GmailWrites.finish(listOf(made), finish("w2", at = now + 3 * min), confirmed = true, readAt = null))
         assertNull(GmailWrites.finish(listOf(made), finish("w2", at = now + 3 * min), confirmed = true, readAt = now + 2 * min))
         assertEquals(2, GmailWrites.finish(listOf(made), finish("w2", at = now + 9 * min), confirmed = true, readAt = now + 5 * min)!!.size)
-        // One given up changed what it changed and stands no more.
-        assertEquals(2, GmailWrites.finish(listOf(made.copy(gaveUp = true)), finish("w2"), confirmed = true)!!.size)
+        // One given up changed what it changed and stands no more: a finish again takes its place.
+        assertEquals(listOf("w2"), GmailWrites.finish(listOf(made.copy(gaveUp = true)), finish("w2"), confirmed = true)!!.map { it.id })
     }
 
     @Test
@@ -134,5 +134,66 @@ class GmailWritesTest {
         assertEquals(listOf(made), GmailWrites.receipts(writes))
         assertEquals(writes, GmailWrites.prune(writes, now + GmailWrites.RECEIPT_MS - 1))
         assertEquals(listOf(pending), GmailWrites.prune(writes, now + GmailWrites.RECEIPT_MS))
+    }
+
+    @Test
+    fun `a failed try waits its backoff in the journal, and each task's writes go in the order they were journaled`() {
+        var writes = GmailWrites.finish(emptyList(), finish(), confirmed = true)!!
+        writes = GmailWrites.failed(writes, "w1", "no connection", now + 2 * min)
+        assertEquals(now + 32 * min, writes.single().notBefore)
+        assertNull(GmailWrites.next(writes, now + 31 * min))
+        assertEquals("w1", GmailWrites.next(writes, now + 32 * min)?.id)
+        writes = GmailWrites.failed(writes, "w1", "no connection", now + 40 * min)
+        assertEquals(now + 100 * min, writes.single().notBefore)
+        // Half an hour, doubled each time, to five hours.
+        assertEquals(listOf(30L, 60L, 120L, 240L, 300L, 300L).map { it * min }, listOf(1, 2, 3, 4, 5, 9).map(GmailWrites::backoff))
+        // A finish after an Undo that failed waits for it, so the two go in the order you asked.
+        val made = finish().copy(notBefore = now, flagged = listOf("101"), inbox = listOf("101"), unstarred = true, archived = true, doneAt = now)
+        val undo = GmailWrites.failed(GmailWrites.undo(listOf(made), "gmail:1", now + min, "u1")!!, "u1", "no connection", now + min)
+        val again = GmailWrites.finish(undo, finish("w3", at = now + 2 * min), confirmed = true)!!
+        assertNull(GmailWrites.next(again, now + 2 * min + GmailWrites.GRACE_MS))
+        assertEquals("u1", GmailWrites.next(again, now + 31 * min)?.id)
+    }
+
+    @Test
+    fun `a finish again after one given up takes its place, but not from an Undo still to make`() {
+        val gaveUp = finish().copy(notBefore = now, tries = 5, lastError = "no connection", doneAt = now, gaveUp = true)
+        val again = GmailWrites.finish(listOf(gaveUp), finish("w2", at = now + min), confirmed = true)!!
+        assertEquals(listOf("w2"), again.map { it.id })
+        assertTrue(GmailWrites.givenUp(again).isEmpty())
+        // Given up after it took the star off, an Undo of it still to make: kept, as it says what to put back.
+        val partly = gaveUp.copy(flagged = listOf("101"), inbox = listOf("101"), unstarred = true)
+        val undone = GmailWrites.undo(listOf(partly), "gmail:1", now + min, "u1")!!
+        assertEquals(listOf("w1", "u1", "w2"), GmailWrites.finish(undone, finish("w2", at = now + 2 * min), confirmed = true)!!.map { it.id })
+    }
+
+    @Test
+    fun `settled, a task's receipts go once a read that began after them finds it open again, and once old`() {
+        val made = finish().copy(notBefore = now, flagged = listOf("101"), inbox = listOf("101"), unstarred = true, archived = true, doneAt = now)
+        val writes = listOf(made)
+        // Closed by the read after it: kept, for its Undo.
+        assertEquals(writes, GmailWrites.settle(writes, { false }, now + min, now + min))
+        // Open, but the read began before it was made: kept.
+        assertEquals(writes, GmailWrites.settle(writes, { true }, now - min, now + min))
+        // Open after a read that began after it: starred again, a new round.
+        assertTrue(GmailWrites.settle(writes, { true }, now + min, now + min).isEmpty())
+        // Given up: kept till it's sorted. With a write still to make: left as it is.
+        val gaveUp = made.copy(gaveUp = true)
+        assertEquals(listOf(gaveUp), GmailWrites.settle(listOf(gaveUp), { true }, now + min, now + min))
+        val undoing = GmailWrites.undo(writes, "gmail:1", now + min, "u1")!!
+        assertEquals(undoing, GmailWrites.settle(undoing, { true }, now + 2 * min, now + 2 * min))
+        // Old: gone, whatever the read.
+        assertTrue(GmailWrites.settle(writes, { false }, null, now + GmailWrites.RECEIPT_MS).isEmpty())
+    }
+
+    @Test
+    fun `switched off, a finish not yet started is dropped, and one started and an Undo go on`() {
+        assertTrue(GmailWrites.switchedOff(GmailWrites.finish(emptyList(), finish(), confirmed = false)!!).isEmpty())
+        val inGrace = GmailWrites.finish(emptyList(), finish(), confirmed = true)!!
+        assertTrue(GmailWrites.switchedOff(inGrace).isEmpty())
+        val started = GmailWrites.with(inGrace, "w1") { it.copy(flagged = listOf("101"), inbox = listOf("101"), unstarred = true) }
+        assertEquals(started, GmailWrites.switchedOff(started))
+        val undone = GmailWrites.undo(started.map { it.copy(archived = true, doneAt = now) }, "gmail:1", now + min, "u1")!!
+        assertEquals(undone, GmailWrites.switchedOff(undone))
     }
 }

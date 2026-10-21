@@ -95,11 +95,18 @@ class GmailFinishes(
         val confirmed = GmailWrites.OK_HINT in s.hintsSeen
         val now = clock.now()
         var made = false
+        var gone = emptyList<GmailWrite>()
         writes.update { store ->
             GmailWrites.finish(store.writes, GmailWrite(newId(), task.id, task.title, task.sourceId, now, explicit = explicit), confirmed, readAt())
-                ?.let { made = true; store.copy(writes = GmailWrites.prune(it, now)) } ?: store
+                ?.let { journal ->
+                    made = true
+                    gone = store.writes.filter { w -> w.gaveUp && journal.none { it.id == w.id } }
+                    store.copy(writes = GmailWrites.prune(journal, now))
+                } ?: store
         }
         if (!made) return Finish.Pending
+        // One given up that this takes the place of: its notification taken away, as It's sorted does.
+        gone.forEach(ports::sorted)
         if (!confirmed) return Finish.Awaiting
         // The worker set for the first write due, this one's grace or one before it.
         GmailWrites.wake(value)?.let(ports::schedule)
@@ -120,8 +127,29 @@ class GmailFinishes(
         return changed
     }
 
+    /**
+     * [taskId]'s work taken back (a keep or a hand tick undone): its finish by its work taken back, but only where its
+     * work isn't all done now ([GmailFinish.workDone]: a sitting that ticked nothing taken back leaves every step
+     * ticked); one by your word stays.
+     */
+    suspend fun unworked(taskId: String): Boolean {
+        val task = task(taskId)
+        if (task != null && GmailFinish.workDone(task, multiplier(task))) return false
+        return unfinish(taskId, byWork = true)
+    }
+
     /** [taskId]'s finish that stands, by its id: what an act of his made, for its Undo to take back that one. */
     fun latestFinish(taskId: String): String? = GmailWrites.latest(value, taskId)?.takeIf { it.reverseOf == null }?.id
+
+    /**
+     * The journal settled ([GmailWrites.settle]), at a start and after every read: receipts let go once old, or once a
+     * Gmail read that began after them finds their email starred again.
+     */
+    suspend fun settle() {
+        val now = clock.now()
+        val readAt = readAt()
+        writes.update { store -> store.copy(writes = GmailWrites.settle(store.writes, { id -> task(id)?.isOpen == true }, readAt, now)) }
+    }
 
     /**
      * The worker set again for what's journaled and due: at a start, as a stop may have come between a finish's
@@ -132,8 +160,12 @@ class GmailFinishes(
         GmailWrites.wake(value)?.let(ports::ensureScheduled)
     }
 
-    /** *Carry on* (Q18's sheet): every finish waiting for your OK goes after the grace from now. Kept in the hints by the screen. */
+    /**
+     * *Carry on* (Q18's sheet): every finish waiting for your OK goes after the grace from now. Kept in the hints by the
+     * screen. With the switch turned off meanwhile, they're dropped instead ([switchedOff]).
+     */
     suspend fun confirm() {
+        if (!settings().gmailFinishes) return switchedOff()
         val now = clock.now()
         writes.update { it.copy(writes = GmailWrites.confirm(it.writes, now)) }
         GmailWrites.wake(value)?.let(ports::schedule)
@@ -142,6 +174,11 @@ class GmailFinishes(
     /** *Not this time*, or *Turn this off*: every finish waiting for your OK dropped, its task left as it was. */
     suspend fun refuse() {
         writes.update { it.copy(writes = GmailWrites.refuse(it.writes)) }
+    }
+
+    /** Switched off (Settings → Sources → Gmail): every finish not yet started dropped ([GmailWrites.switchedOff]). */
+    suspend fun switchedOff() {
+        writes.update { it.copy(writes = GmailWrites.switchedOff(it.writes)) }
     }
 
     /** *It's sorted*: [taskId]'s writes given up let go, and their notification. */
@@ -153,11 +190,14 @@ class GmailFinishes(
     }
 
     /**
-     * Every write due now made through [writer], oldest first, each command's success kept as it comes: true where
-     * one failed and is to be tried again later, the rest waiting behind it; else the worker's next run set for the
-     * next to go (a grace still running).
+     * Every write due now made through [writer], oldest first, each command's success kept as it comes; one that fails
+     * waits its backoff in the journal ([GmailWrites.failed]) while the rest go on. Then the worker's next run set for
+     * the next to go (a grace still running, a failed try's wait). Whether a try failed, to be tried again.
      */
     suspend fun write(writer: GmailWriter): Boolean {
+        // Switched off meanwhile: a finish not yet started isn't.
+        if (!settings().gmailFinishes) switchedOff()
+        var again = false
         while (true) {
             val next = GmailWrites.next(value, clock.now()) ?: break
             // A worker stopped (a newer time set, the connection gone) isn't a try that failed: what it made is kept, the rest goes next time.
@@ -171,14 +211,10 @@ class GmailFinishes(
             }
             writes.update { it.copy(writes = GmailWrites.failed(it.writes, next.id, words(failed), clock.now())) }
             val after = value.firstOrNull { it.id == next.id }
-            if (after?.gaveUp == true) {
-                ports.gaveUp(after, GmailWrites.failure(after))
-                continue
-            }
-            return true
+            if (after?.gaveUp == true) ports.gaveUp(after, GmailWrites.failure(after)) else again = true
         }
         GmailWrites.wake(value)?.let(ports::schedule)
-        return false
+        return again
     }
 
     /**

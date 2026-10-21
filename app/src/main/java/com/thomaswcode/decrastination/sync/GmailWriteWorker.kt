@@ -29,28 +29,31 @@ import kotlinx.coroutines.CancellationException
 /**
  * The writes to Gmail a finished email makes ([GmailFinishes.write]), as WorkManager work (it outlives the
  * screen it's asked from, and Android 15 cuts an app's network seconds after it leaves the screen): with a
- * connection, after the grace, tried again with the backoff when a try fails. The tries are counted in the
- * journal, not by WorkManager, so a write is given up after [com.thomaswcode.decrastination.core.GmailWrites.MAX_TRIES] whatever ran it.
+ * connection, after the grace, tried again after a wait when a try fails. The tries and their waits are kept in
+ * the journal, not by WorkManager, so a write is given up after [com.thomaswcode.decrastination.core.GmailWrites.MAX_TRIES] whatever ran it,
+ * and the worker set going for another write doesn't cut a wait short.
  */
 class GmailWriteWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
         val graph = AppGraph.get(applicationContext)
-        val again = try {
+        return try {
+            // A try that fails waits in the journal, and the write sets the worker's next run itself.
             graph.gmailFinishes.write(ImapGmailWriter(graph.stores.secrets))
+            Result.success()
         } catch (stopped: CancellationException) {
             throw stopped
         } catch (e: Exception) {
+            // Not a write's try (the journal not read or not written): WorkManager's own wait.
             Log.w(AppGraph.TAG, "Gmail's writes failed", e)
-            true
+            Result.retry()
         }
-        return if (again) Result.retry() else Result.success()
     }
 
     companion object {
         /** One a phone: a new time replaces the one set before. */
         const val NAME = "gmail-write"
 
-        /** The first wait after a failed try; doubled each time, as WorkManager does, to its cap of five hours. */
+        /** WorkManager's first wait after a run that failed outside a write's tries; doubled each time, to its cap of five hours. */
         private const val BACKOFF_MIN = 30L
 
         /** Set to run at [at], measured from [now], once there's a connection: in place of the one set before, or, by [policy] KEEP, only where none is set or running. */
