@@ -70,6 +70,8 @@ class Outbox(
     suspend fun clear() {
         moving.withLock {
             chat.update { it.copy(messages = emptyList()) }
+            // The window's copies with it (Q42): what's cleared isn't kept in one.
+            chat.letGoOfCopies()
             archive.clear()
         }
         notify(clock.now())

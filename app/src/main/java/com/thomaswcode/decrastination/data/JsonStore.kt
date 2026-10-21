@@ -113,6 +113,14 @@ class JsonStore<T>(
     }
 
     /**
+     * The copies kept beside its file let go: an older shape's (`<name>.v<n>`) and those of a file that couldn't be
+     * read (`<name>.unreadable-<when>`), so what *Clear the chat* or a reset takes isn't kept in one (Q42).
+     */
+    suspend fun letGoOfCopies(): Unit = withContext(Dispatchers.IO) {
+        file.absoluteFile.parentFile?.listFiles { f -> f.isFile && isCopy(file.name, f.name) }.orEmpty().forEach { it.delete() }
+    }
+
+    /**
      * Writes what was kept of a file that didn't read whole over it, now that its [problem] is on
      * record: read again at the next start, it would be found unreadable again, and said again,
      * however often you'd seen it. Till then it's left as it was, so a start cut short first finds
@@ -262,6 +270,10 @@ class JsonStore<T>(
 
         /** Copies set aside of each file: the newest so many. */
         const val COPIES_KEPT = 3
+
+        /** Whether [name] is a copy kept beside store file [store]: an older shape's (`.v<n>`), or one of it that couldn't be read (`.unreadable-<when>`). */
+        fun isCopy(store: String, name: String): Boolean =
+            name.startsWith("$store.unreadable-") || name.startsWith("$store.v") && name.removePrefix("$store.v").toIntOrNull() != null
 
         /** A copy set aside of [file] that holds just what it holds now, if there's one: it's been kept, and said, already. */
         fun alreadyAside(file: File): File? {
