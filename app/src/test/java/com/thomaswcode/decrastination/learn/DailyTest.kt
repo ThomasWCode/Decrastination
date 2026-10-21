@@ -113,15 +113,15 @@ class DailyTest {
     fun `the morning's Teams sync is offered at an unlock before school, once`() {
         val now = Fixtures.at("2026-10-09T07:20")
         val state = TeamsAutoSync.State(morningUntil = Fixtures.at("2026-10-09T08:30"))
-        assertEquals(TeamsAutoSync.Trigger.Morning, TeamsAutoSync.due(now, LONDON, settings, state, teamsSyncedAt = null, unlocked = true))
+        assertEquals(TeamsAutoSync.Trigger.Morning, TeamsAutoSync.due(now, LONDON, settings, state, teamsSyncedAt = null, unlocked = true, schoolDay = true))
         // Not without an unlock, and not once offered.
-        assertEquals(null, TeamsAutoSync.due(now, LONDON, settings, state, teamsSyncedAt = null, unlocked = false))
+        assertEquals(null, TeamsAutoSync.due(now, LONDON, settings, state, teamsSyncedAt = null, unlocked = false, schoolDay = true))
         val offered = TeamsAutoSync.offered(state, now, LONDON, settings)
-        assertEquals(null, TeamsAutoSync.due(now + 60_000L, LONDON, settings, offered, teamsSyncedAt = null, unlocked = true))
+        assertEquals(null, TeamsAutoSync.due(now + 60_000L, LONDON, settings, offered, teamsSyncedAt = null, unlocked = true, schoolDay = true))
         // Delayed: not before its five minutes, then even though the morning's window has gone.
         val delayed = state.copy(delayedUntil = now + 5 * 60_000L)
-        assertEquals(null, TeamsAutoSync.due(now + 60_000L, LONDON, settings, delayed, teamsSyncedAt = null, unlocked = true))
-        assertEquals(TeamsAutoSync.Trigger.Delayed, TeamsAutoSync.due(Fixtures.at("2026-10-09T08:45"), LONDON, settings, delayed, teamsSyncedAt = null, unlocked = false))
+        assertEquals(null, TeamsAutoSync.due(now + 60_000L, LONDON, settings, delayed, teamsSyncedAt = null, unlocked = true, schoolDay = true))
+        assertEquals(TeamsAutoSync.Trigger.Delayed, TeamsAutoSync.due(Fixtures.at("2026-10-09T08:45"), LONDON, settings, delayed, teamsSyncedAt = null, unlocked = false, schoolDay = true))
     }
 
     @Test

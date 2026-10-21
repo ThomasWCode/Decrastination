@@ -136,13 +136,18 @@ class ChatArchiveStore(private val dir: File, private val clock: () -> Long = Sy
         }
     }
 
-    /** All of it let go (*Clear the chat*, a reset): every month's file deleted, none read. */
+    /**
+     * All of it let go (*Clear the chat*, a reset): every month's file deleted, none read, and the copies kept of
+     * it with them ([isCopy]: its months' older shapes, and its files that couldn't be read), so what's cleared
+     * isn't kept in one (Q38, Q42).
+     */
     suspend fun clear(): Unit = writing.withLock {
         withContext(Dispatchers.IO) {
             for (file in files()) {
                 months.remove(file)
                 letGo(file)
             }
+            dir.listFiles { f -> f.isFile && isCopy(f.name) }.orEmpty().forEach { letGo(it.name) }
         }
         _changes.update { it + 1 }
     }
@@ -207,6 +212,17 @@ class ChatArchiveStore(private val dir: File, private val clock: () -> Long = Sy
         private val MONTH_FILE = Regex("""chat-archive-\+?\d{4,}-\d{2}\.json""")
 
         private val MONTH = DateTimeFormatter.ofPattern("yyyy-MM", Locale.UK)
+
+        /**
+         * Whether [file] is the copy a month's file, or the archive's one file from before the split ([NAME]), was kept
+         * as when it was brought from an older shape (`<name>.v<n>`, [JsonStore]): let go a week on, as every store's is
+         * ([Stores.letGoOfOldShapes]), or with the months by a clear (D-94).
+         */
+        fun isOldShape(file: String): Boolean = file.substringAfterLast(".v").toIntOrNull() != null &&
+            file.substringBeforeLast(".v").let { it == NAME || MONTH_FILE.matches(it) }
+
+        /** A copy kept of the archive: an older shape's ([isOldShape]), or one of a file of it that couldn't be read (`.unreadable-<when>`, [JsonStore]). */
+        fun isCopy(file: String): Boolean = isOldShape(file) || file.substringBefore(".unreadable-").let { it != file && (it == NAME || MONTH_FILE.matches(it)) }
 
         /** The file of [message]'s month, by its time in UTC: the same on any phone, in any zone. */
         fun fileOf(message: ChatMessage): String = "chat-archive-${Instant.ofEpochMilli(message.at).atOffset(ZoneOffset.UTC).format(MONTH)}.json"

@@ -28,6 +28,24 @@ class StoresTest {
     }
 
     @Test
+    fun `a store's copies are let go, deleted or, where that fails, emptied, and another file is left`() = runTest {
+        val store = JsonStore(File(dir, "felix.json"), FelixStore.serializer(), ::FelixStore)
+        val copies = listOf("felix.json.v1", "felix.json.unreadable-20261021-010000").map { File(dir, it).apply { writeText("{\"notes\":[]}") } }
+        val others = listOf("felix.json.tmp", "tasks.json.v2").map { File(dir, it).apply { writeText("{}") } }
+        // The folder closed to deletes, where the system allows it (not Windows, where a folder's read-only mark doesn't): each copy emptied instead.
+        dir.setWritable(false)
+        try {
+            store.letGoOfCopies()
+        } finally {
+            dir.setWritable(true)
+        }
+        assertTrue(copies.all { !it.exists() || it.length() == 0L })
+        assertTrue(others.all { it.exists() && it.length() > 0 })
+        store.letGoOfCopies()
+        assertTrue(copies.none { it.exists() })
+    }
+
+    @Test
     fun `the tasks keep the timetable they were last read with`() = runTest {
         val file = File(dir, "tasks.json")
         val timetable = Timetable("2026-08-24T00:00:00", listOf(PpClass("c", "Study Period", listOf(PpSchedule("2026-09-05T08:50:00", "2026-09-05T09:45:00", dayOfWeek = 2)))))

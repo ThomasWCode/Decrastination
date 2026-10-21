@@ -123,6 +123,21 @@ class MigrationTest {
     }
 
     @Test
+    fun `the chat archive's months' copies go a week after their migration too, and its old one file's`() {
+        val stores = Stores(dir, Reverse, clock = { now })
+        fun copy(name: String, age: Long) = File(dir, name).apply { writeText("{}"); setLastModified(now - age) }
+        val month = copy("chat-archive-2026-08.json.v4", Stores.OLD_SHAPE_KEPT_MS + 1_000)
+        val whole = copy("chat-archive.json.v2", Stores.OLD_SHAPE_KEPT_MS + 1_000)
+        val recent = copy("chat-archive-2026-09.json.v4", 60_000)
+        // Not a copy: a month's own file, however old, and a name that only looks like one.
+        val own = copy("chat-archive-2026-07.json", Stores.OLD_SHAPE_KEPT_MS + 1_000)
+        val other = copy("chat-archive-notes.json.v4", Stores.OLD_SHAPE_KEPT_MS + 1_000)
+        stores.letGoOfOldShapes(now)
+        assertFalse(month.exists() || whole.exists())
+        assertTrue(recent.exists() && own.exists() && other.exists())
+    }
+
+    @Test
     fun `fields moved between stores are moved before any is read, and moving them again changes nothing`() {
         File(dir, "old.json").writeText("""{"facts":[{"topic":"bus","text":"Takes the bus","at":1}]}""")
         // A made-up move: the facts of old.json into memory.json, the new file written first, the old trimmed after.

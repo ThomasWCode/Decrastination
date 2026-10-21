@@ -288,6 +288,8 @@ class BackupService(
             stores.replace(stores.instructions, InstructionState())
             layInstructions()
         }
+        // The copies kept of every store it cleared with them (Q42): what's reset isn't kept in one.
+        stores.letGoOfCopies(what)
         "${what.title}: reset. A copy of everything from before is in ${saved.where}${if (saved.own) ", which Settings → Backup can restore" else ""}.$archived"
     }
 
