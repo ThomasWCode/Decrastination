@@ -21,6 +21,7 @@ import com.thomaswcode.decrastination.core.WindowKind
 import com.thomaswcode.decrastination.data.CalendarState
 import com.thomaswcode.decrastination.data.ChatMigration
 import com.thomaswcode.decrastination.data.JsonStore
+import com.thomaswcode.decrastination.data.SettingsMigration
 import com.thomaswcode.decrastination.data.ModelState
 import com.thomaswcode.decrastination.data.RuntimeSplit
 import com.thomaswcode.decrastination.data.RuntimeState
@@ -56,7 +57,7 @@ class CalendarWriterTest {
     private val dir: File = Files.createTempDirectory("calendar").toFile()
     private val clock = FixedClock(Fixtures.at("2026-10-19T16:00"), LONDON)
     private val tasks = JsonStore(File(dir, "tasks.json"), TaskState.serializer(), ::TaskState, migrations = listOf(TasksMigration.TASKS))
-    private val settings = JsonStore(File(dir, "settings.json"), Settings.serializer(), ::Settings)
+    private val settings = JsonStore(File(dir, "settings.json"), Settings.serializer(), ::Settings, migrations = listOf(SettingsMigration.SETTINGS))
     private val runtime = JsonStore(File(dir, "runtime.json"), RuntimeState.serializer(), ::RuntimeState, migrations = listOf(ChatMigration.RUNTIME, RuntimeSplit.RUNTIME))
     private val model = JsonStore(File(dir, "model.json"), ModelState.serializer(), ::ModelState)
     private val versions = JsonStore(File(dir, "calendar.json"), CalendarState.serializer(), ::CalendarState, migrations = listOf(RuntimeSplit.CALENDAR))

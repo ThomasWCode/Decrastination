@@ -92,6 +92,12 @@ data class Settings(
     /** Minutes of work that earn one minute of free time (Q22: about 1 for 3). */
     val workMinPerFreeMin: Int = 3,
 
+    /**
+     * Finishing a starred email's work here unstars and archives it in Gmail (D-7 as amended, Q18: A): on by
+     * default, the very first finish waiting for your OK. Not one of Felix's settings: it writes to your mailbox.
+     */
+    val gmailFinishes: Boolean = true,
+
     /** Automatic Teams syncs (Q21): on the first unlock after [teamsFirstUnlockMin], and every so often. */
     val teamsAutoSync: Boolean = true,
     val teamsFirstUnlockMin: Int = 16 * 60 + 45,
@@ -127,8 +133,8 @@ data class Settings(
     val armed: Boolean = false,
     /** How long a change that loosens blocking waits, once armed. */
     val loosenDelayHours: Int = 24,
-    /** The shape this is in ([Migration]): raised with each change of it, a migration bringing older files to it. */
-    val version: Int = 1,
+    /** The shape this is in ([Migration]): raised with each change of it, a migration bringing older files to it. 2 from 4.3.0 ([gmailFinishes]). */
+    val version: Int = 2,
 )
 
 /** A stretch of a day, in minutes after midnight; one that ends before it starts crosses midnight. */

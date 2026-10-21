@@ -14,6 +14,7 @@ import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.data.ChatMigration
 import com.thomaswcode.decrastination.data.JsonStore
+import com.thomaswcode.decrastination.data.SettingsMigration
 import com.thomaswcode.decrastination.data.ModelState
 import com.thomaswcode.decrastination.data.RuntimeSplit
 import com.thomaswcode.decrastination.data.RuntimeState
@@ -43,7 +44,7 @@ import kotlinx.coroutines.test.runTest
 class ModelGatewayTest {
     private val dir: File = Files.createTempDirectory("gateway").toFile()
     private val clock = FixedClock(Fixtures.at("2026-10-14T18:00"), Fixtures.LONDON)
-    private val settings = JsonStore(File(dir, "settings.json"), Settings.serializer(), { Settings(aiEnabled = true, aiKeyActive = true) })
+    private val settings = JsonStore(File(dir, "settings.json"), Settings.serializer(), { Settings(aiEnabled = true, aiKeyActive = true) }, migrations = listOf(SettingsMigration.SETTINGS))
     private val runtime = JsonStore(File(dir, "runtime.json"), RuntimeState.serializer(), ::RuntimeState, migrations = listOf(ChatMigration.RUNTIME, RuntimeSplit.RUNTIME))
     private val model = JsonStore(File(dir, "model.json"), ModelState.serializer(), ::ModelState)
     private val tasks = JsonStore(File(dir, "tasks.json"), TaskState.serializer(), ::TaskState, migrations = listOf(TasksMigration.TASKS))

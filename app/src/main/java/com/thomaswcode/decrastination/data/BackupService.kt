@@ -6,6 +6,7 @@ import com.thomaswcode.decrastination.core.ChatArchive
 import com.thomaswcode.decrastination.core.ChatHistory
 import com.thomaswcode.decrastination.core.ChatState
 import com.thomaswcode.decrastination.core.FelixState
+import com.thomaswcode.decrastination.core.GmailWrites
 import com.thomaswcode.decrastination.core.Instruction
 import com.thomaswcode.decrastination.core.InstructionState
 import com.thomaswcode.decrastination.core.InstructionStatus
@@ -109,6 +110,7 @@ class BackupService(
             chat = stores.chat.value,
             archive = stores.chatArchive.value,
             felixStore = stores.felix.value,
+            gmailWrites = GmailWrites.receipts(stores.gmailWrites.value.writes),
             versions = stores.shapes.mapValues { it.value.version },
         )
 
@@ -188,6 +190,8 @@ class BackupService(
         var felixLeft = 0
         val felixBack = stores.replace(stores.felix) { Backups.mergedFelix(it, backup.felixStore).also { (_, left) -> felixLeft = left }.first }
             .let { it.notes.size + it.reminders.size - felixBefore.notes.size - felixBefore.reminders.size }
+        // The receipts of writes to Gmail it hasn't, by id (4.3.0): an act of the chat restored can undo its finish.
+        stores.replace(stores.gmailWrites) { it.copy(writes = Backups.mergedWrites(it.writes, backup.gmailWrites)) }
         val own = ownAdded.size
         val told = buildList {
             if (own > 0) add("$own task${if (own == 1) "" else "s"} of your own")

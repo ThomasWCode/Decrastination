@@ -1,6 +1,7 @@
 package com.thomaswcode.decrastination.data
 
 import com.thomaswcode.decrastination.Fixtures
+import com.thomaswcode.decrastination.core.GmailWrite
 import com.thomaswcode.decrastination.core.By
 import com.thomaswcode.decrastination.core.Calibration
 import com.thomaswcode.decrastination.core.Change
@@ -304,6 +305,22 @@ class BackupTest {
     }
 
     @Test
+    fun `format 9 keeps the receipts of writes to Gmail, restored by id beside this phone's, never a write still to make`() {
+        val made = GmailWrite("w1", "gmail:t1", "Trip form", "t1", 3, notBefore = 4, flagged = listOf(101L), inbox = listOf(101L), unstarred = true, archived = true, doneAt = 5)
+        val pending = GmailWrite("w2", "gmail:t2", "Club email", "t2", 6, notBefore = 7)
+        val backup = Backup(exportedAt = 1, settings = Settings(), log = ActivityLog(), gmailWrites = listOf(made))
+        val back = Backups.decode(Backups.encode(backup), emptyMap())!!
+        assertEquals(9, Backup.FORMAT)
+        assertEquals(listOf(made), back.gmailWrites)
+        // None in one from before.
+        assertEquals(emptyList(), Backups.decode("""{"app":"Decrastination","format":8,"exportedAt":0,"settings":{},"log":{}}""", emptyMap())!!.gmailWrites)
+        // This phone's own stand; the backup's receipts it hasn't come back, never a pending one.
+        val here = listOf(made.copy(title = "here"), pending)
+        assertEquals(here, Backups.mergedWrites(here, listOf(made, pending.copy(id = "w3"))))
+        assertEquals(listOf(pending, made), Backups.mergedWrites(listOf(pending), listOf(made)))
+    }
+
+    @Test
     fun `format 8 keeps Felix's notes and reminders, restored by id beside this phone's, and refuses what the app never keeps`() {
         val note = Note("n1", "Use the second source", 3, By.Felix, taskId = "teams:essay")
         val standing = Note("n2", "On sheets, not in the book", 4, By.You, scope = NoteScope(subject = "Chemistry"))
@@ -311,7 +328,7 @@ class BackupTest {
         val felix = FelixStore(listOf(note, standing), listOf(reminder))
         val backup = Backup(exportedAt = 1, settings = Settings(), log = ActivityLog(), felixStore = felix)
         val back = Backups.decode(Backups.encode(backup), emptyMap())!!
-        assertEquals(8, Backup.FORMAT)
+        assertTrue(Backup.FORMAT >= 8)
         assertEquals(felix, back.felixStore)
         assertNull(Backups.problem(back))
         // None in one from before.

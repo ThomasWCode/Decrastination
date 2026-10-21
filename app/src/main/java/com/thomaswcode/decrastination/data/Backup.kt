@@ -4,6 +4,8 @@ import com.thomaswcode.decrastination.core.Calibration
 import com.thomaswcode.decrastination.core.Change
 import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.ChatArchive
+import com.thomaswcode.decrastination.core.GmailWrite
+import com.thomaswcode.decrastination.core.GmailWrites
 import com.thomaswcode.decrastination.core.DueKind
 import com.thomaswcode.decrastination.core.Instruction
 import com.thomaswcode.decrastination.core.InstructionRules
@@ -71,6 +73,8 @@ data class Backup(
     val archive: ChatArchive = ChatArchive(),
     /** Felix's notes and reminders (4.1.0): none in a backup from before. */
     val felixStore: FelixStore = FelixStore(),
+    /** The receipts of writes made to Gmail (4.3.0), while their Undo can stand, as the chat restored may undo them: none in a backup from before. */
+    val gmailWrites: List<GmailWrite> = emptyList(),
     /**
      * The version of each store its parts come from, by file (docs/plan_v4/04-data-and-migrations.md): an
      * older one's parts are brought to this build's shapes as it's read ([Backups.decode]). None in a
@@ -88,10 +92,10 @@ data class Backup(
         /**
          * 4 since slots replaced sessions in the log (LR-09, AR-09), 5 with what's remembered
          * (AI-21), 6 with Felix's state, today's slots and the chat (AR-07), 7 with the chat's earlier
-         * messages (4.0.0), 8 with Felix's notes and reminders (4.1.0): an older app refuses it rather
-         * than losing them.
+         * messages (4.0.0), 8 with Felix's notes and reminders (4.1.0), 9 with the receipts of writes to
+         * Gmail (4.3.0): an older app refuses it rather than losing them.
          */
-        const val FORMAT = 8
+        const val FORMAT = 9
     }
 }
 
@@ -141,6 +145,15 @@ object Backups {
     }
 
     /**
+     * This phone's writes to Gmail with [backup]'s receipts it hasn't, by id (4.3.0): a pending one of the backup's
+     * isn't there to bring (a backup keeps none), and this phone's own stand as they are.
+     */
+    fun mergedWrites(writes: List<GmailWrite>, backup: List<GmailWrite>): List<GmailWrite> {
+        val here = writes.mapTo(HashSet()) { it.id }
+        return writes + GmailWrites.receipts(backup).filter { it.id !in here }
+    }
+
+    /**
      * Where each of a backup's parts comes from: its store's file, and its field there (null: the part is
      * the store whole). A store kept in part (tasks.json's own tasks, runtime.json's few fields,
      * instructions.json's) is migrated as an object holding only those fields, so its migrations must
@@ -152,7 +165,7 @@ object Backups {
         "memory" to ("memory.json" to null), "chat" to ("chat.json" to null), "archive" to ("chat-archive.json" to null), "felixStore" to ("felix.json" to null),
         "instructions" to ("instructions.json" to "instructions"), "ownTasks" to ("tasks.json" to "tasks"),
         "calibration" to ("learning.json" to "calibration"), "eventAnswers" to ("calendar.json" to "eventAnswers"),
-        "aiUsage" to ("model.json" to "aiUsage"), "slots" to ("session.json" to "slots"),
+        "aiUsage" to ("model.json" to "aiUsage"), "slots" to ("session.json" to "slots"), "gmailWrites" to ("gmail-writes.json" to "writes"),
     )
 
     /**

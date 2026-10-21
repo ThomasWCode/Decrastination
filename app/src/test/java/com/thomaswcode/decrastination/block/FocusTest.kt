@@ -27,6 +27,7 @@ import com.thomaswcode.decrastination.data.ActivityLog
 import com.thomaswcode.decrastination.data.ChatMigration
 import com.thomaswcode.decrastination.data.MemoryMigration
 import com.thomaswcode.decrastination.data.JsonStore
+import com.thomaswcode.decrastination.data.SettingsMigration
 import com.thomaswcode.decrastination.data.Keeping
 import com.thomaswcode.decrastination.data.PhotoDone
 import com.thomaswcode.decrastination.data.SlotRecord
@@ -55,7 +56,7 @@ class FocusTest {
     private val dir: File = Files.createTempDirectory("focus").toFile()
     private val clock = FixedClock(Fixtures.at("2026-10-10T12:00"), LONDON)
     private val tasks = JsonStore(File(dir, "tasks.json"), TaskState.serializer(), ::TaskState, migrations = listOf(TasksMigration.TASKS))
-    private val settings = JsonStore(File(dir, "settings.json"), Settings.serializer(), ::Settings)
+    private val settings = JsonStore(File(dir, "settings.json"), Settings.serializer(), ::Settings, migrations = listOf(SettingsMigration.SETTINGS))
     private val protection = JsonStore(File(dir, "protection.json"), ProtectionState.serializer(), ::ProtectionState)
     private val session = JsonStore(File(dir, "session.json"), SessionState.serializer(), ::SessionState)
     private val learning = JsonStore(File(dir, "learning.json"), LearningState.serializer(), ::LearningState)

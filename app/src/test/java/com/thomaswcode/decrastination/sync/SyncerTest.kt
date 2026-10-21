@@ -9,6 +9,7 @@ import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.data.JsonStore
+import com.thomaswcode.decrastination.data.SettingsMigration
 import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.data.TasksMigration
 import com.thomaswcode.decrastination.sources.ReadContext
@@ -29,7 +30,7 @@ import kotlin.test.assertTrue
 class SyncerTest {
     private val dir: File = Files.createTempDirectory("sync").toFile()
     private val tasks = JsonStore(File(dir, "tasks.json"), TaskState.serializer(), ::TaskState, migrations = listOf(TasksMigration.TASKS))
-    private val settings = JsonStore(File(dir, "settings.json"), Settings.serializer(), ::Settings)
+    private val settings = JsonStore(File(dir, "settings.json"), Settings.serializer(), ::Settings, migrations = listOf(SettingsMigration.SETTINGS))
     private val clock = FixedClock.at("2026-10-08T17:00:00+01:00")
 
     private class FakeSource(override val source: Source, var answer: suspend (ReadContext) -> SourceRead) : TaskSource {

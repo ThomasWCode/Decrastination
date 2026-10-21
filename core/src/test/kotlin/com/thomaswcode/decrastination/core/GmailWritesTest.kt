@@ -12,7 +12,7 @@ class GmailWritesTest {
     private val min = 60_000L
 
     private fun finish(id: String = "w1", taskId: String = "gmail:1", at: Long = now) =
-        GmailWrite(id, taskId, "Trip consent form", "1", listOf(11L, 12L), 7L, at)
+        GmailWrite(id, taskId, "Trip consent form", "1", at)
 
     @Test
     fun `a finish goes after the grace once one's been OK'd, and the very first waits for your OK`() {
