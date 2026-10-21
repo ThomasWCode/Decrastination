@@ -117,7 +117,7 @@ When a message needs facts neither you nor the app have given him (a competition
 - **SlotEnd**: a slot gone by undone, or a long piece of written work ticked without the photo it needs to earn; once a slot.
 - **DayDone**: today's last slot kept, once a day, with the free time there is.
 - **Question**: the one question a reading had (AI-10), when he's free, at most once a day a task. Your answer is an instruction on the task, kept with it (`TaskItem.answers`), and the task is read again with it ([readings.md](readings.md)).
-- **Completions**: from 19:00, after his check, once an evening, how the work its source confirmed (with no kept slot) went: harder, as expected or easier, as its three replies (LR-05).
+- **Completions**: from 19:00, after his check, once an evening, how the work its source confirmed (with no kept slot) went: harder, about right or easier, as its three replies (LR-05).
 - With no slot of today's under way or to come, nothing more. Otherwise, after his check: **SlotStart**, a slot past his grace with nothing done on its task in it (opened, studied in AnkiDroid, or a slot of it kept), at most three times a slot; **SlotKept**, about one kept slot in three.
 - A slot ended, a slot kept and the day done are said only while fresh (30 minutes), so a restart hours on says nothing stale.
 
@@ -146,7 +146,7 @@ What comes back, and what's done with it:
 
 Three more come at set times:
 - **The morning** (LR-04, `learn/Briefing.kt`, `Looks.morning`): the briefing is his message whole, up to 480 characters. With no slot today, Claude unavailable, or no answer within 20 seconds, it's the day's title and list instead, in his name in the app's words (`Conversation.morningList`), so every morning is in the chat. His notification is then made again, with what waited overnight (below).
-- **The check-in** (LR-02, `felix/CheckInFlow.kt`, `Conversation.askCheckIn`): on Sunday he asks its five questions one at a time in the chat, in the app's words in his register (`FelixWords`: "ok so, 1 to 5, how was the week?"), the first with 1 to 5 ("4", "4/5" or "4 out of 5" taken), the second with what the week shows you put off; each reply is kept under its question, with its question's kind, and the next asked with no call: answered as it comes, it doesn't hide a chat message of yours still waiting (`ChatState.unanswered` is your newest message not yet answered). The form takes them all at once instead, and his questions leave his notification. Then "Thanks: the week's review comes next."
+- **The check-in** (LR-02, `felix/CheckInFlow.kt`, `Conversation.askCheckIn`): on Sunday he asks its five questions one at a time in the chat, in the app's words in his register (`FelixWords`: "ok so, 1 to 5, how was the week?"), the first with 1 to 5 ("4", "4/5" or "4 out of 5" taken), the second with what the week shows you put off; each reply is kept under its question, with its question's kind, and the next asked with no call: answered as it comes, it doesn't hide a chat message of yours still waiting (`ChatState.unanswered` is your newest message not yet answered). The form takes them all at once instead, and his questions leave his notification. Then "nice, the week's review is next."
 - **The review** (LR-01): after Sunday's review, its note's first line, with *Open the review*.
 - **The summary** (NF-02): after the review, "the week's summary's ready. send it?", with *Send it*, which opens it in your email app, addressed, with its subject and words (`Summary.email`).
 
