@@ -213,11 +213,12 @@ class ChatArchiveStore(private val dir: File, private val clock: () -> Long = Sy
         private val MONTH = DateTimeFormatter.ofPattern("yyyy-MM", Locale.UK)
 
         /**
-         * Whether [file] is the copy a month's file was kept as when it was brought from an older shape
-         * (`<month>.v<n>`, [JsonStore]): let go a week on, as every store's is ([Stores.letGoOfOldShapes]),
-         * or with the months by a clear (D-94).
+         * Whether [file] is the copy a month's file, or the archive's one file from before the split ([NAME]), was kept
+         * as when it was brought from an older shape (`<name>.v<n>`, [JsonStore]): let go a week on, as every store's is
+         * ([Stores.letGoOfOldShapes]), or with the months by a clear (D-94).
          */
-        fun isOldShape(file: String): Boolean = file.substringAfterLast(".v").toIntOrNull() != null && MONTH_FILE.matches(file.substringBeforeLast(".v"))
+        fun isOldShape(file: String): Boolean = file.substringAfterLast(".v").toIntOrNull() != null &&
+            file.substringBeforeLast(".v").let { it == NAME || MONTH_FILE.matches(it) }
 
         /** The file of [message]'s month, by its time in UTC: the same on any phone, in any zone. */
         fun fileOf(message: ChatMessage): String = "chat-archive-${Instant.ofEpochMilli(message.at).atOffset(ZoneOffset.UTC).format(MONTH)}.json"

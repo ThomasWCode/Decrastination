@@ -108,7 +108,7 @@ class ChatArchiveStoreTest {
         val store = ChatArchiveStore(dir)
         store.add(august + september)
         // Each kept as a month was brought from an older shape (JsonStore); July's month itself gone since.
-        val copies = listOf("chat-archive-2026-07.json.v3", "chat-archive-2026-08.json.v4", "chat-archive-2026-09.json.v4").map { File(dir, it).apply { writeText("{\"messages\":[]}") } }
+        val copies = listOf("chat-archive-2026-07.json.v3", "chat-archive-2026-08.json.v4", "chat-archive-2026-09.json.v4", "chat-archive.json.v2").map { File(dir, it).apply { writeText("{\"messages\":[]}") } }
         val other = File(dir, "chat.json.v5").apply { writeText("{}") }
         store.clear()
         assertTrue(files().isEmpty())

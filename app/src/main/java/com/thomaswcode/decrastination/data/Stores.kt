@@ -159,11 +159,11 @@ class Stores(
 
     /**
      * The files older shapes came from (`<name>.v<n>`, [JsonStore]) let go once a week old, the chat
-     * archive's months' among them ([ChatArchiveStore.isOldShape]): called at a start that's gone well, so
+     * archive's among them ([ChatArchiveStore.isOldShape]): called at a start that's gone well, so
      * each is kept at least a week from its migration, and past a start.
      */
     fun letGoOfOldShapes(now: Long = clock()) {
-        val names = json.map { it.name }.toSet() + chatArchive.name
+        val names = json.map { it.name }.toSet()
         fun oldShape(name: String) = name.substringBeforeLast(".v") in names && name.substringAfterLast(".v").toIntOrNull() != null || ChatArchiveStore.isOldShape(name)
         dir.listFiles { f -> f.isFile && oldShape(f.name) }.orEmpty()
             .filter { now - it.lastModified() >= OLD_SHAPE_KEPT_MS }
