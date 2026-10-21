@@ -330,6 +330,40 @@ class GmailFinishesTest {
     }
 
     @Test
+    fun `a finish going on from one given up takes in a reply come since`() = runBlocking {
+        val gmail = FakeGmail()
+        finishes.finish(email.id, explicit = true)
+        clock.time += GmailWrites.GRACE_MS
+        gmail.failing = Change.Archive
+        repeat(GmailWrites.MAX_TRIES) { finishes.write(gmail); clock.time += GmailWrites.backoff(it + 1) }
+        gmail.failing = null
+        // A reply come meanwhile, in the inbox.
+        gmail.messages += GmailWriter.Message(13, "103", starred = false, inbox = true)
+        gmail.stored.clear()
+        finishes.finish(email.id, explicit = true)
+        clock.time += GmailWrites.GRACE_MS
+        assertFalse(finishes.write(gmail))
+        assertEquals(listOf(listOf(11L, 12L, 13L) to Change.Archive), gmail.stored)
+        assertEquals(listOf("101", "102", "103"), finishes.value.single().inbox)
+    }
+
+    @Test
+    fun `an Undo in the minute of a finish going on from one given up writes only what puts back the first`() = runBlocking {
+        val gmail = FakeGmail()
+        finishes.finish(email.id, explicit = true)
+        clock.time += GmailWrites.GRACE_MS
+        gmail.failing = Change.Archive
+        repeat(GmailWrites.MAX_TRIES) { finishes.write(gmail); clock.time += GmailWrites.backoff(it + 1) }
+        gmail.failing = null
+        gmail.stored.clear()
+        finishes.finish(email.id, explicit = true)
+        assertTrue(finishes.unfinish(email.id))
+        assertFalse(finishes.write(gmail))
+        assertEquals(listOf(listOf(11L) to Change.Star), gmail.stored)
+        assertEquals(GmailWrites.State.TakenBack, GmailWrites.state(finishes.value, email.id))
+    }
+
+    @Test
     fun `a finish given up and taken back is said no more, and its Undo puts back the star it took`() = runBlocking {
         val gmail = FakeGmail()
         finishes.finish(email.id, explicit = true)

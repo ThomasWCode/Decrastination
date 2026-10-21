@@ -111,7 +111,10 @@ object GmailWrites {
         if (writeId != null && last.id != writeId) return null
         if (byWork && last.explicit) return null
         if (last.flagged == null) return writes - last
-        return writes + last.copy(id = id, at = now, notBefore = now, reverseOf = last.id, flagged = null, inbox = null, unstarred = false, archived = false, tries = 0, lastError = null, doneAt = null, gaveUp = false)
+        // One that's read the conversation but waits now (a failed try's wait, or a finish going on from one given up,
+        // in its minute) stops as it is: the Undo puts back only what it's made, and Gmail isn't finished first.
+        val stopped = if (pending(last) && last.notBefore != null && now < last.notBefore) with(writes, last.id) { it.copy(doneAt = now) } else writes
+        return stopped + last.copy(id = id, at = now, notBefore = now, reverseOf = last.id, flagged = null, inbox = null, unstarred = false, archived = false, tries = 0, lastError = null, doneAt = null, gaveUp = false)
     }
 
     /**

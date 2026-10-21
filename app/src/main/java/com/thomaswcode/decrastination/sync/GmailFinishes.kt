@@ -240,13 +240,18 @@ class GmailFinishes(
         } else {
             val going = writer.open { session ->
                 val messages = session.messages(session.thread(write.threadId))
-                val flagged = write.flagged ?: messages.filter { it.starred }.map { it.id }
-                val inbox = write.inbox ?: messages.filter { it.inbox }.map { it.id }
-                // What's there kept before anything changes: an Undo from now puts it back. Gone meanwhile, nothing changes.
-                if (write.flagged == null && !kept(write.id) { it.copy(flagged = flagged, inbox = inbox) }) return@open false
+                // What's there kept before anything changes, and any starred or in the inbox since a try before (a reply
+                // come, or a finish going on from one given up): an Undo from now puts all of it back. Gone meanwhile,
+                // nothing changes.
+                val flagged = (write.flagged.orEmpty() + messages.filter { it.starred }.map { it.id }).distinct()
+                val inbox = (write.inbox.orEmpty() + messages.filter { it.inbox }.map { it.id }).distinct()
+                if (!kept(write.id) { it.copy(flagged = flagged, inbox = inbox) }) return@open false
+                // Each command on what still needs it: one a try before made isn't made twice, and one come since is.
                 val uids = messages.associate { it.id to it.uid }
-                if (!write.unstarred) changed(session, flagged.mapNotNull(uids::get), GmailWriter.Change.Unstar) && kept(write.id) { it.copy(unstarred = true) }
-                if (!write.archived) changed(session, inbox.mapNotNull(uids::get), GmailWriter.Change.Archive) && kept(write.id) { it.copy(archived = true) }
+                val starred = messages.filter { it.starred }.mapTo(HashSet()) { it.id }
+                val inInbox = messages.filter { it.inbox }.mapTo(HashSet()) { it.id }
+                changed(session, flagged.filter { it in starred }.mapNotNull(uids::get), GmailWriter.Change.Unstar) && kept(write.id) { it.copy(unstarred = true) }
+                changed(session, inbox.filter { it in inInbox }.mapNotNull(uids::get), GmailWriter.Change.Archive) && kept(write.id) { it.copy(archived = true) }
                 true
             }
             if (!going) return
