@@ -98,7 +98,7 @@ It then says what came back, and what waits.
 
 ## Resets
 
-Settings → Reset (LR-08, `BackupService.reset`) clears one part, after saving a copy of everything as `reset-<date>-<time>.json` in `Documents/Decrastination` (in the app's own `backups/` where that can't be written, which Settings → Backup restores from). Where the chat goes and that copy has no room for its earliest messages (past 8 MB), they're kept whole beside it as `chat-archive-<date>-<time>.json`, so none is lost; it isn't a backup to import.
+Settings → Reset (LR-08, `BackupService.reset`) clears one part, after saving a copy of everything as `reset-<date>-<time>.json` in `Documents/Decrastination` (in the app's own `backups/` where that can't be written, which Settings → Backup restores from). Where the chat goes and that copy has no room for its earliest messages (past 8 MB), they're kept whole beside it as `chat-archive-<date>-<time>.json`, so none is lost; it isn't a backup to import. A copy over 8 MB even without them couldn't be read back, so then nothing is reset.
 Nothing goes until its copy is saved. None needs the parent code, and none touches Claude's key, the sources or protection.
 
 | Reset | What goes |

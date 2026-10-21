@@ -264,6 +264,8 @@ class BackupService(
         // it, in use or not, so none a reset of them takes is lost.
         val whole = withContext(Dispatchers.IO) { backupOf(every = true) }
         val (text, leftOut) = Backups.fitted(whole, backupCap)
+        // Over the cap even without the chat's earlier messages, it couldn't be read back: nothing's reset.
+        if (text.toByteArray(Charsets.UTF_8).size > backupCap) return@withContext "Nothing was reset: a copy of it would be too big to restore."
         val all = what == Reset.Everything
         // Nothing goes till its copy is somewhere it can be restored from.
         val saved = keep(name, text) ?: return@withContext "Nothing was reset: a copy of it couldn't be saved first."

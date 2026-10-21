@@ -188,7 +188,7 @@ class AnkiRulesTest {
         val (listed, day) = AnkiRules.quota(decks, 1, null, NOW, LONDON, 21 * 60 + 30, reviewsOnly = true) { it.new }
         val studied = decks.map { it.copy(review = 0, learn = 0) }
         val later = NOW + 3_600_000L
-        val (after, _) = AnkiRules.quota(studied, 1, day, later, LONDON, 21 * 60 + 30, open = setOf(listed!!.sourceId)) { it.new }
+        val (after, _) = AnkiRules.quota(studied, 1, day, later, LONDON, 21 * 60 + 30, open = mapOf(listed!!.sourceId to listed.extra)) { it.new }
         assertTrue(after!!.done)
         val first = Merge.apply(emptyList(), Source.Anki, listOf(listed), NOW)
         val merged = Merge.apply(first.tasks, Source.Anki, listOf(after), later)
@@ -199,8 +199,15 @@ class AnkiRulesTest {
         // No section deck with new cards at all: its reviews listed, then studied, done the same way.
         val noNew = decks.map { it.copy(new = 0) }
         val (reviews, noNewDay) = AnkiRules.quota(noNew, 1, null, NOW, LONDON, 21 * 60 + 30) { it.new }
-        val (studiedNoNew, _) = AnkiRules.quota(noNew.map { it.copy(review = 0, learn = 0) }, 1, noNewDay, later, LONDON, 21 * 60 + 30, open = setOf(reviews!!.sourceId)) { it.new }
+        val (studiedNoNew, _) = AnkiRules.quota(noNew.map { it.copy(review = 0, learn = 0) }, 1, noNewDay, later, LONDON, 21 * 60 + 30, open = mapOf(reviews!!.sourceId to reviews.extra)) { it.new }
         assertTrue(studiedNoNew!!.done)
+        // Listed with new cards of its own, then homework's vocabulary has the day: the reviews studied, it isn't done
+        // early, as its completion would count those cards as studied; no quota rather than one done, as before.
+        val (withNew, newDay) = AnkiRules.quota(decks, 1, null, NOW, LONDON, 21 * 60 + 30) { it.new }
+        assertEquals("true", withNew!!.extra[AnkiRules.EXTRA_NEW_LISTED])
+        val (putOff, offDay) = AnkiRules.quota(decks, 1, newDay, NOW + 60_000L, LONDON, 21 * 60 + 30, reviewsOnly = true, open = mapOf(withNew.sourceId to withNew.extra)) { it.new }
+        assertEquals("true", putOff!!.extra[AnkiRules.EXTRA_NEW_LISTED])
+        assertNull(AnkiRules.quota(studied, 1, offDay, later, LONDON, 21 * 60 + 30, open = mapOf(putOff.sourceId to putOff.extra)) { it.new }.first)
     }
 
     @Test

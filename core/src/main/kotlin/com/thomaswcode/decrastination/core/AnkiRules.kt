@@ -199,8 +199,8 @@ object AnkiRules {
     /**
      * Today's quota: fixes the day's deck on the day's first read ([AnkiDay]), then measures what
      * is left against it. Null when there's nothing to do and nothing was, such as a day with no
-     * reviews and no new cards anywhere; once listed today and still [open], it's done when nothing's
-     * due, not gone, which the merge would take as missed.
+     * reviews and no new cards anywhere; once listed today and still [open], with no new cards of its own
+     * listed at any read today, it's done when nothing's due, not gone, which the merge would take as missed.
      */
     fun quota(
         decks: List<Deck>,
@@ -215,8 +215,8 @@ object AnkiRules {
         reviewsOnly: Boolean = false,
         /** Seconds a card per deck, as learned (DX-11). */
         rates: Map<Long, Double> = emptyMap(),
-        /** The Anki tasks still open, by their source ids: today's quota among them, it was listed today. */
-        open: Set<String> = emptySet(),
+        /** The Anki tasks still open, each one's extra by its source id: today's quota among them, it was listed today. */
+        open: Map<String, Map<String, String>> = emptyMap(),
         unseen: (Deck) -> Int,
     ): Pair<Fetched?, AnkiDay> {
         val day = ankiDay(now, zone)
@@ -227,8 +227,11 @@ object AnkiRules {
         val reviews = dueReviews(decks)
         // A deck chosen this morning that homework has named since is counted there, not twice.
         val newLeft = if (today.reviewsOnly) 0 else today.deckId?.takeIf { it !in homework }?.let { id -> decks.firstOrNull { it.id == id }?.new } ?: 0
-        // Listed today and not done yet: it stays listed, and is done once nothing's due.
-        val listed = QUOTA_PREFIX + day in open
+        // Listed today and not done yet: it stays listed, and is done once nothing's due; but not where new cards
+        // of its own were listed today ([EXTRA_NEW_LISTED]) and a later read gave them to homework or put them off:
+        // done, its completion would count their minutes (a derived task's peak) as studied.
+        val newBefore = open[QUOTA_PREFIX + day]?.get(EXTRA_NEW_LISTED) == "true"
+        val listed = QUOTA_PREFIX + day in open && !newBefore
         if (!listed && today.deckId == null && reviews == 0) return null to today
         // Its deck is homework's for now, or homework's vocabulary has the day, and nothing is due:
         // no quota today, rather than one done. A quota marked done would stay done if the homework
@@ -264,6 +267,8 @@ object AnkiRules {
             extra = buildMap {
                 today.deckId?.let { put(EXTRA_DECK_ID, it.toString()) }
                 today.deckName?.let { put(EXTRA_DECK_NAME, it) }
+                // Kept through the day's reads: a read replaces the task's extra with this one.
+                if (newLeft > 0 || newBefore) put(EXTRA_NEW_LISTED, "true")
             },
         )
         return fetched to today
@@ -379,6 +384,9 @@ object AnkiRules {
 
     const val EXTRA_DECK_ID = "deckId"
     const val EXTRA_DECK_NAME = "deckName"
+
+    /** On today's quota: new cards of its own were listed at a read today. */
+    const val EXTRA_NEW_LISTED = "newListed"
     const val EXTRA_FOR = "for"
 
     /** A deck for homework: the earliest real deadline of its assignments (PL-14), epoch millis; absent where none has one. */

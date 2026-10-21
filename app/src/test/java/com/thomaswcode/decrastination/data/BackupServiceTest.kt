@@ -166,8 +166,18 @@ class BackupServiceTest {
     }
 
     @Test
+    fun `a reset whose copy would be too big to restore, even without the chat's earlier messages, takes nothing`() = runTest {
+        val phone = Phone(full = true, cap = 2_000)
+        val before = phone.states()
+        assertEquals("Nothing was reset: a copy of it would be too big to restore.", phone.service.reset(Reset.Instructions))
+        assertEquals(before, phone.states())
+        assertTrue(phone.folder.files.isEmpty())
+    }
+
+    @Test
     fun `a reset of the chat whose copy has no room for its earliest messages keeps them whole beside it`() = runTest {
-        val small = Phone(full = true, cap = 60_000)
+        // Room for all but the archive's earliest messages: the rest of the copy fits, as it must to be read back.
+        val small = Phone(full = true, cap = 100_000)
         val archive = ChatArchive((1..80).map { ChatMessage("a$it", Speaker.You, "x".repeat(1_000), it.toLong(), answeredAt = it.toLong()) })
         small.stores.replace(small.stores.chatArchive, archive)
         val said = small.service.reset(Reset.Chat)
