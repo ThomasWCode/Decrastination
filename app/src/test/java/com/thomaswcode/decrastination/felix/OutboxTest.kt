@@ -224,9 +224,15 @@ class OutboxTest {
     fun `clearing the chat empties its archive too, and keeps his state`() = runBlocking {
         chat.update { ChatState(listOf(his("a")), felix = FelixState(nextCheckAt = 42)) }
         archive.update { ChatArchive(listOf(his("z", 1))) }
+        // Copies kept of the window: an older shape's, and one that couldn't be read; and one of another store's.
+        val copies = listOf("chat.json.v5", "chat.json.unreadable-20261021-010000").map { File(dir, it).apply { writeText("{}") } }
+        val other = File(dir, "felix.json.v2").apply { writeText("{}") }
         outbox.clear()
         assertTrue(chat.value.messages.isEmpty() && archive.value.messages.isEmpty())
         assertEquals(42L, chat.value.felix.nextCheckAt)
         assertNull(ports.showing)
+        // What's cleared isn't kept in a copy (Q42); another store's stays.
+        assertTrue(copies.none { it.exists() })
+        assertTrue(other.exists())
     }
 }
