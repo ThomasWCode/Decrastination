@@ -59,7 +59,7 @@ data class RuntimeState(
     companion object {
         const val MAX_UNREADABLE = 10
 
-        /** The pairs of tasks said not to be the same work, kept at most. */
+        /** The most pairs said to be different kept: far more than there are. */
         const val MAX_NOT_SAME = 200
 
         /** Three copies kept of each of six files, with room. */
