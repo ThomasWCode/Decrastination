@@ -44,6 +44,7 @@ Stage by stage, what each PR needs from your phone and from you, for what and fo
 | 11 | 4.3.0 | **needed**, online: install; `sync --es sources gmail`; `state`; a minute's wait for the write; logcat's IMAP lines | **needed**, 20 min with Gmail open: star a note-to-self email in Gmail; tick its piece on Day; Undo within the grace (again, with a second email); aeroplane mode on and off; look in Gmail (unstarred, out of the inbox); the first-time sheet; the switch off in Settings and a tick that leaves Gmail alone |
 | — | 4.3.1 | **needed**: install and the script; two `chat-ask`s (paid) with Gmail's finish switch off (`gmail-finishes --ez on false`, then `true` again) | no |
 | 12 | 4.3.2 | **needed**: install and the script; the baselines | **helpful**: the done-when list read together, by message |
+| — | 4.3.3 | **needed**: install and the script (a reset, a reviews-only day and a missed slot's block screen aren't made for a check: the tests hold them) | no |
 
 ## In sum
 
