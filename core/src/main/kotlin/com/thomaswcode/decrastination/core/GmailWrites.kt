@@ -110,8 +110,11 @@ object GmailWrites {
             (w.reverseOf == null || writes.none { it.id == w.reverseOf && pending(it) })
     }
 
-    /** When the next write may go, for the worker's wait: null with none to go (none pending, or only finishes waiting for your OK). */
-    fun wake(writes: List<GmailWrite>): Long? = writes.filter(::pending).mapNotNull { it.notBefore }.minOrNull()
+    /**
+     * When the next write may go, for the worker's wait: each task's first pending write's time, as the rest wait behind
+     * it ([next]); null with none to go (none pending, or only finishes waiting for your OK).
+     */
+    fun wake(writes: List<GmailWrite>): Long? = writes.filter(::pending).groupBy { it.taskId }.mapNotNull { (_, its) -> its.first().notBefore }.minOrNull()
 
     /** *Carry on* (Q18's sheet) at [now]: every finish waiting for your OK goes after the grace. */
     fun confirm(writes: List<GmailWrite>, now: Long): List<GmailWrite> = writes.map { if (awaiting(it)) it.copy(notBefore = now + GRACE_MS) else it }
@@ -182,11 +185,15 @@ object GmailWrites {
     /** *It's sorted*: [taskId]'s given-up writes let go. */
     fun sorted(writes: List<GmailWrite>, taskId: String): List<GmailWrite> = writes.filterNot { it.taskId == taskId && it.gaveUp }
 
-    /** What a backup keeps: the receipts, as a restored chat's acts may undo them; a pending write is this phone's and this hour's. */
-    fun receipts(writes: List<GmailWrite>): List<GmailWrite> = writes.filterNot(::pending)
+    /**
+     * What a backup keeps: the receipts of writes made, as a restored chat's acts may undo them. A pending write is this
+     * phone's and this hour's, and one given up this phone's to sort: restored elsewhere, its task may never come back to
+     * sort it on.
+     */
+    fun receipts(writes: List<GmailWrite>): List<GmailWrite> = writes.filter { !pending(it) && !it.gaveUp }
 
-    /** The writes given up and not yet sorted: Setup's attention mark, each task's sheet. */
-    fun givenUp(writes: List<GmailWrite>): List<GmailWrite> = writes.filter { it.gaveUp }
+    /** The writes given up and not yet sorted, each still its task's newest (an Undo or a finish since takes its place): Setup's attention mark. */
+    fun givenUp(writes: List<GmailWrite>): List<GmailWrite> = writes.filter { it.gaveUp && latest(writes, it.taskId)?.id == it.id }
 
     /** What [taskId]'s finish is, for its sheet. */
     enum class State {
