@@ -21,9 +21,9 @@ object Briefing {
         val today = plan.todayBucket?.chunks.orEmpty()
         if (today.isEmpty()) {
             val tomorrow = plan.tomorrowBucket?.chunks.orEmpty()
-            return "Nothing planned today" to listOfNotNull(tomorrow.takeIf { it.isNotEmpty() }?.let { "Tomorrow: ${it.size} thing${if (it.size == 1) "" else "s"}, ${Format.minutes(it.sumOf { c -> c.minutes })}" })
+            return "nothing planned today" to listOfNotNull(tomorrow.takeIf { it.isNotEmpty() }?.let { "tomorrow: ${it.size} thing${if (it.size == 1) "" else "s"}, ${Format.minutes(it.sumOf { c -> c.minutes })}" })
         }
-        val title = "Today: ${today.size} thing${if (today.size == 1) "" else "s"}, ${Format.minutes(today.sumOf { it.minutes })}"
+        val title = "today: ${today.size} thing${if (today.size == 1) "" else "s"}, ${Format.minutes(today.sumOf { it.minutes })}"
         val lines = today.take(6).map { chunk ->
             val flag = when {
                 chunk.overdue -> " (overdue)"
