@@ -17,8 +17,33 @@ Questions that came up while the stages were built, each with a recommendation a
 
 ### Q36. A briefing whose time moves to one already gone by (from 4.1.3's review)
 
-Since 4.1.3 a weekday off has the weekends' briefing time (D-74). If a day off is taken out on the day itself after 07:00 and before its 08:30 briefing, that day's briefing is skipped: the next is tomorrow's. Setting the time earlier in Settings always did the same. The spec says so ([learning.md](../spec/learning.md)).
+Since 4.1.3 a weekday off has the weekends' briefing time (D-74). If a day off is taken out on the day itself after 07:15 and before its 08:30 briefing, that day's briefing is skipped: the next is tomorrow's (within a quarter of an hour of 07:00, it runs at once). Setting the time earlier in Settings always did the same. The spec says so ([learning.md](../spec/learning.md)).
 
 - **A (recommended).** Leave it: it's rare, and the chat already answers "actually I've got school today".
 - **B.** Run it at once when today's hasn't run and its new time has gone by (before noon, say).
+- ANSWER:
+
+### Q37. 10a's last phone check: a reply asking him to leave you alone for the night (from 10a's phone check)
+
+10a's phone check ([08](08-memory-that-expires.md) §Phone check) ends with a reply "leave me alone tonight" to one of his messages: a standing instruction till 07:00 the next day, said under his answer; `felix-check` then writes nothing; the next day it has gone. It wasn't run with the rest of the check: such an instruction could have quieted his words for a reminder of his due at the next day's first slot, itself still to be checked ([14](14-your-part.md)).
+
+- **A (recommended).** From the PC, once the day's last slot is over (a `felix-say` and the reply by `chat-ask --es replyTo`: two paid calls, a few cents), looked at the next day.
+- **B.** You reply so to one of his messages yourself, and say so; it's looked at the next day.
+- **C.** Drop it: `MemoryTest` holds an instruction's until, and the check's fact with an until went as it should.
+- ANSWER:
+
+### Q38. Copies of the chat archive's months left behind (found in the docs review after 4.2.0)
+
+A store brought to a new version keeps the file it came from as `<name>.v<n>` for a week (D-94, `Stores.letGoOfOldShapes`). The chat archive's month files (`chat-archive-<yyyy-MM>.json`) are brought the same way (`JsonStore.keepOldShape`), but the week's let-go looks only for the main stores' names, so a month's copy is never let go of; and *Clear the chat* and the chat's reset delete only the month files, so a copy keeps what was cleared. 4.2.0 raises the months to version 5, so each month there is gets a copy as it's next read. The docs say what D-94 wants, not this.
+
+- **A (recommended).** A small fix release before 10b: the let-go takes the months' copies too, and a clear or a chat reset deletes them with the months, with tests.
+- **B.** Leave it to Stage 12's sweep.
+- ANSWER:
+
+### Q39. Teams' automatic syncs on a weekday off (found in the docs review after 4.2.0)
+
+Blocking and, since 4.1.3, the briefing go by the school calendar (D-74). The Teams widget's automatic syncs still take every weekday as a school day (`TeamsAutoSync.allowed`), so on a weekday off they wait for the school day's blocking time, as [sources.md](../spec/sources.md) says.
+
+- **A (recommended).** By the school calendar too: a weekday off as a weekend day.
+- **B.** Leave it.
 - ANSWER:
