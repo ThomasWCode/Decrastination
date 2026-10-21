@@ -67,7 +67,8 @@ class Learning(
      * Sunday evening, after the check-in (or without it), the calibration is learned afresh from the
      * log, the capacity checked, and, once Claude is on, the week goes to the model for a note and
      * bounded changes, which apply at once, armed or not. Until then the note is the rules': what
-     * changed, in words. Then what's remembered is tidied, once it's past 70 % of its room (AI-21).
+     * changed, in words. Then what's run out of what's remembered is let go of, and the facts with neither an
+     * until nor a task are tidied once they're past 70 % of the room the rest leave them (AI-21, [MemoryTidy.due]).
      */
     suspend fun review(ifDue: Boolean) {
         val now = clock.now()
