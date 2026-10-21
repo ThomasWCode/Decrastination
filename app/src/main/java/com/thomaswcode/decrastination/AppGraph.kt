@@ -226,7 +226,7 @@ class AppGraph private constructor(context: Context) {
         multiplier = { stores.learning.value.calibration.multiplierFor(it) },
         clock = clock,
         ports = AndroidGmailPorts(app, notifier, clock) { sources -> sync.syncNow(sources) },
-        readAt = { tasks.value.status(Source.Gmail).lastSuccessAt },
+        readAt = { tasks.value.status(Source.Gmail).lastSuccessStartedAt },
     )
 
     /** The blocker's state and decisions (block/Focus.kt). */

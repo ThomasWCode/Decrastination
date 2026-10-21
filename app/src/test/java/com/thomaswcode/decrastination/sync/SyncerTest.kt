@@ -67,6 +67,20 @@ class SyncerTest {
     }
 
     @Test
+    fun `a read that worked is known by when it began, so a change made while it ran isn't taken as seen`() = runTest {
+        val began = clock.time
+        val gmail = FakeSource(Source.Gmail) { clock.time += 5_000; items("m") }
+        val syncer = syncer(listOf(gmail))
+        syncer.sync()
+        assertEquals(began + 5_000, tasks.value.status(Source.Gmail).lastSuccessAt)
+        assertEquals(began, tasks.value.status(Source.Gmail).lastSuccessStartedAt)
+        // A read failed since: when the one that worked began isn't kept.
+        gmail.answer = { throw java.io.IOException("No network") }
+        syncer.sync()
+        assertNull(tasks.value.status(Source.Gmail).lastSuccessStartedAt)
+    }
+
+    @Test
     fun `a sync keeps what was finished a fortnight ago as its record, whichever source it's from`() = runTest {
         val day = 24 * 3_600_000L
         fun done(id: String, source: Source, daysAgo: Int) = TaskItem(
