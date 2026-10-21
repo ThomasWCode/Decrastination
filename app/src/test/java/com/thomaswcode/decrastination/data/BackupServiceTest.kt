@@ -151,7 +151,7 @@ class BackupServiceTest {
     }
 
     @Test
-    fun `each reset takes the copies kept of every store it clears, and of no other`() = runTest {
+    fun `each reset takes the copies kept of every store it clears whole, and of no other`() = runTest {
         for (area in Reset.entries) {
             val phone = Phone(full = true)
             // Each JSON store's copies: an older shape's, and one of a file that couldn't be read.
@@ -159,10 +159,12 @@ class BackupServiceTest {
                 listOf("$name.v1", "$name.unreadable-20261021-010000").map { File(phone.dir, it).apply { writeText("{}") } }
             }
             phone.service.reset(area)
-            val said = phone.stores.all.filter { kept -> kept.resets.any { area == it || area == Reset.Everything } }.map { it.file }.toSet()
+            val said = phone.stores.all.filter { kept -> kept.clears.any { area == it || area == Reset.Everything } }.map { it.file }.toSet()
             for ((name, files) in copies) {
                 if (name in said) assertTrue(files.none { it.exists() }, "$area: $name") else assertTrue(files.all { it.exists() }, "$area: $name")
             }
+            // A memory reset clears only what the settings say about you: their copies stay, as they hold the rest.
+            if (area == Reset.Memories || area == Reset.Everything) assertTrue(copies.getValue("settings.json").all { it.exists() }, "$area")
         }
     }
 
