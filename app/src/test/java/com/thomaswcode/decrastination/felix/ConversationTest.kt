@@ -28,6 +28,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import com.thomaswcode.decrastination.learn.CalendarTime
+import com.thomaswcode.decrastination.sync.GmailFinishes
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -390,6 +391,40 @@ class ConversationTest {
         felix.settle()
         assertFalse("Your messages still waiting for their answer (id" in felix.server.takeRequest().body.readUtf8())
         assertTrue(stores.chat.value.messages.all { it.answeredAt == null || it.from == Speaker.You })
+    }
+
+    @Test
+    fun `his done on a starred email finishes it in Gmail, says so, and its Undo takes the finish back`() = runBlocking {
+        val email = sheet.copy(id = "gmail:t1", source = Source.Gmail, sourceId = "t1", title = "Trip consent form", kind = Kind.Admin)
+        stores.tasks.update { it.copy(tasks = it.tasks + email) }
+        felix.answers(felix.chatAnswer("Finished it.", actions = """[{"type":"done","taskId":"gmail:t1","stepIndex":-1,"setting":"","value":""}]"""))
+        assertTrue(conversation.ask("I'm done with the trip email"))
+        felix.settle()
+        val answer = his().last()
+        assertEquals("Finished: “Trip consent form” (unstarring and archiving it in Gmail)", answer.acts.single().line)
+        assertEquals(listOf("gmail:t1"), felix.owners.gmailFinished)
+        // Still open here: Gmail's read closes it once the write is made.
+        assertTrue(stores.tasks.value.tasks.single { it.id == "gmail:t1" }.isOpen)
+        assertNull(conversation.undoAct(answer.id, 0))
+        assertEquals(listOf("gmail:t1"), felix.owners.gmailUnfinished)
+        assertTrue(his().last().acts.single().undone)
+    }
+
+    @Test
+    fun `the very first finish says Gmail waits for your OK, and with the switch off his done is refused as before`() = runBlocking {
+        val email = sheet.copy(id = "gmail:t1", source = Source.Gmail, sourceId = "t1", title = "Trip consent form", kind = Kind.Admin)
+        stores.tasks.update { it.copy(tasks = it.tasks + email) }
+        felix.owners.gmailFinish = GmailFinishes.Finish.Awaiting
+        felix.answers(felix.chatAnswer("Finished it.", actions = """[{"type":"done","taskId":"gmail:t1","stepIndex":-1,"setting":"","value":""}]"""))
+        assertTrue(conversation.ask("I'm done with the trip email"))
+        felix.settle()
+        assertEquals("Finished here: “Trip consent form”; Gmail waits for your OK in the app", his().last().acts.single().line)
+        stores.settings.update { it.copy(gmailFinishes = false) }
+        felix.answers(felix.chatAnswer("Finished it.", actions = """[{"type":"done","taskId":"gmail:t1","stepIndex":-1,"setting":"","value":""}]"""))
+        assertTrue(conversation.ask("done with it"))
+        felix.settle()
+        assertTrue("“Trip consent form” is done when Gmail says so" in his().last().note.orEmpty())
+        assertEquals(1, felix.owners.gmailFinished.size)
     }
 
     @Test

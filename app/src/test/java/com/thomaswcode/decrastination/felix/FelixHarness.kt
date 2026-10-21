@@ -23,6 +23,7 @@ import com.thomaswcode.decrastination.learn.Learning
 import com.thomaswcode.decrastination.notify.NoticeId
 import com.thomaswcode.decrastination.notify.Notices
 import com.thomaswcode.decrastination.plan.Planning
+import com.thomaswcode.decrastination.sync.GmailFinishes
 import java.io.File
 import java.nio.file.Files
 import java.util.Collections
@@ -141,9 +142,9 @@ class FelixHarness(
         server.enqueue(MockResponse().setHeader("Content-Type", "application/json").setBody(body.toString()).setHeadersDelay(delayMs, TimeUnit.MILLISECONDS))
     }
 
-    /** The chat's answer [reply], with the tasks and changes it offers (the schema's JSON for them), what it names [answered], and nothing else. */
-    fun chatAnswer(reply: String, newTasks: String = "[]", changes: String = "[]", answered: String = "[]"): String =
-        """{"reply":"$reply","newTasks":$newTasks,"changes":$changes,"memories":[],"suggestedReplies":[],"actions":[],"research":"","details":[],"answered":$answered}"""
+    /** The chat's answer [reply], with the tasks and changes it offers (the schema's JSON for them), what it names [answered], the actions it takes ([actions]), and nothing else. */
+    fun chatAnswer(reply: String, newTasks: String = "[]", changes: String = "[]", answered: String = "[]", actions: String = "[]"): String =
+        """{"reply":"$reply","newTasks":$newTasks,"changes":$changes,"memories":[],"suggestedReplies":[],"actions":$actions,"research":"","details":[],"answered":$answered}"""
 
     /** What the service started in the background (an answer asked for as a message is kept), finished. */
     fun settle() = runBlocking {
@@ -263,6 +264,17 @@ class FelixHarness(
             stores.log.update { l -> Learning.withCheckIn(l, checkIn, now)?.also { added = true } ?: l }
             return added
         }
+
+        /** The starred emails finished by his done (Stage 11), each coming to [gmailFinish]. */
+        val gmailFinished = mutableListOf<String>()
+        var gmailFinish = GmailFinishes.Finish.Going
+
+        override suspend fun finishGmail(taskId: String): GmailFinishes.Finish = gmailFinish.also { gmailFinished += taskId }
+
+        /** The finishes taken back. */
+        val gmailUnfinished = mutableListOf<String>()
+
+        override suspend fun unfinishGmail(taskId: String): Boolean = taskId in gmailFinished && gmailUnfinished.add(taskId)
 
         /** Your answer to his question, kept to be read, as `Instructions.addInstruction` keeps one. */
         suspend fun instruction(text: String, about: About, answer: Boolean): String {
