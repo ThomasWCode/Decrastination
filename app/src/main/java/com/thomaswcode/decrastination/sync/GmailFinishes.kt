@@ -36,7 +36,7 @@ class GmailFinishes(
     private val multiplier: (TaskItem) -> Double,
     private val clock: WallClock,
     private val ports: Ports,
-    /** When Gmail was last read whole: a finish made, then read with its task open, was starred again. */
+    /** When the last Gmail read that worked began: a finish made before it, its task open after it, was starred again. */
     private val readAt: () -> Long? = { null },
     private val newId: () -> String = { UUID.randomUUID().toString() },
 ) {
