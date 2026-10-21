@@ -353,6 +353,19 @@ class ConversationTest {
     }
 
     @Test
+    fun `a message of his written after yours, while its answer waits, isn't one your words can answer`() = runBlocking {
+        stores.tasks.update { it.copy(tasks = it.tasks + sheet) }
+        // Your words first; his nudge after them, before the call that answers them is made.
+        stores.chat.update { it.copy(messages = it.messages + ChatMessage("y1", Speaker.You, "started it", now - 120_000L)) }
+        felix.outbox.send(ChatMessage("n1", Speaker.Felix, "Starting the worksheet now?", now - 60_000L, About(taskId = sheet.id, taskTitle = sheet.title), kind = MessageKind.SlotStart, suggestedReplies = listOf("Starting", "Later")))
+        felix.answers(felix.chatAnswer("Good.", answered = """["n1"]"""))
+        conversation.answerChat()
+        felix.settle()
+        assertFalse("- n1 | " in felix.server.takeRequest().body.readUtf8())
+        assertNull(his().single { it.id == "n1" }.answeredAt)
+    }
+
+    @Test
     fun `with nothing of his waiting, the context lists none, and an id his answer names is let go`() = runBlocking {
         felix.answers(felix.chatAnswer("Fine.", answered = """["n9"]"""))
         assertTrue(conversation.ask("what's due tomorrow?"))
