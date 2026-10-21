@@ -15,6 +15,7 @@ import com.thomaswcode.decrastination.core.ChatState
 import com.thomaswcode.decrastination.core.CheckInDraft
 import com.thomaswcode.decrastination.core.DueKind
 import com.thomaswcode.decrastination.core.Duplicates
+import com.thomaswcode.decrastination.core.Fact
 import com.thomaswcode.decrastination.core.FelixSettings
 import com.thomaswcode.decrastination.core.Given
 import com.thomaswcode.decrastination.core.Instruction
@@ -34,6 +35,7 @@ import com.thomaswcode.decrastination.core.Proposal
 import com.thomaswcode.decrastination.core.ProposalState
 import com.thomaswcode.decrastination.core.Reminder
 import com.thomaswcode.decrastination.core.Reminders
+import com.thomaswcode.decrastination.core.Rule
 import com.thomaswcode.decrastination.core.SchoolCalendar
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.Source
@@ -1320,6 +1322,16 @@ class Conversation(
         if (!undone) return "It's changed since: forget it in the list of what ${settings.value.felixName} remembers"
         chat.update { s -> s.copy(messages = s.messages.map { m -> if (m.id != messageId) m else m.copy(memoryEdits = edits.mapIndexed { i, e -> if (i == index) e.copy(undone = true) else e }) }) }
         return null
+    }
+
+    /** [rule] let go of, as Settings → Felix's list deletes one (AI-21). */
+    suspend fun deleteRule(rule: Rule) {
+        memory.update { it.copy(rules = it.rules - rule) }
+    }
+
+    /** [fact] let go of, as Settings → Felix's list deletes one (AI-21). */
+    suspend fun deleteFact(fact: Fact) {
+        memory.update { it.copy(facts = it.facts - fact) }
     }
 
     /** Whether the chat is on screen (AI-24): what arrives then is read there, not a notification. */

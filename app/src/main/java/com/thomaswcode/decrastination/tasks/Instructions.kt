@@ -300,6 +300,26 @@ class Instructions(
         layInstructions()
     }
 
+    /** Days off added to the school calendar (PL-16), as Settings → School adds them. */
+    suspend fun addSchoolDays(entry: NoSchool) {
+        school.update { it.with(entry) }
+    }
+
+    /** A half-day added to the school calendar (PL-16), as Settings → School adds one. */
+    suspend fun addSchoolDays(entry: HalfDay) {
+        school.update { it.with(entry) }
+    }
+
+    /** Days off taken out of the school calendar, as Settings → School deletes them. */
+    suspend fun deleteSchoolDays(entry: NoSchool) {
+        school.update { it.without(entry) }
+    }
+
+    /** A half-day taken out of the school calendar, as Settings → School deletes one. */
+    suspend fun deleteSchoolDays(entry: HalfDay) {
+        school.update { it.without(entry) }
+    }
+
     /**
      * [id]'s days off and half-days put in the school calendar (PL-16), and taken out of it: Settings
      * lists them, and deleting one there is how one is taken back. One left with nothing else to do

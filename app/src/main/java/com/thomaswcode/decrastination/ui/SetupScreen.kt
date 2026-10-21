@@ -239,7 +239,7 @@ fun SetupScreen(graph: AppGraph, activity: Activity, parts: Set<SetupPart> = Set
                 graph.secrets.put(Secret.AnthropicApiKey, key)
                 // The last key's failure isn't this one's: it's tried at once, not after the rest, and
                 // its alert goes.
-                graph.stores.model.update { it.copy(aiUsage = it.aiUsage.newKey()) }
+                graph.gateway.newKey()
                 ModelAlerts.keyFixed(activity)
                 // Put to use at once, armed or not: Claude works on the plan, not the blocker (12 Oct).
                 graph.protection.changeSettings { it.copy(aiKeyActive = true) }
