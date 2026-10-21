@@ -32,7 +32,7 @@ class Ahead(
     private val profile: (Long) -> Profile.Block,
     /** Felix's next message written ahead ([com.thomaswcode.decrastination.felix.Looks.draftAhead]). */
     private val draftAhead: suspend (Plan, Long) -> Unit,
-    /** The notes kept with a task, its own and the standing ones it matches, as the micro-planner's told them (8a, Q14: A). */
+    /** The notes kept with a task, its own and the standing ones it matches, as the micro-planner's told them (D-100). */
     private val notes: (TaskItem) -> List<String>,
     /** The plan made again (its watcher poked), so its calendar events carry the first steps written. */
     private val replan: () -> Unit,

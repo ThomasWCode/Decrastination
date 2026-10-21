@@ -36,11 +36,11 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 
 /**
- * The Conversation's flows (docs/plan_v4, Stages 4 and 5a), on temporary stores, his answers read by
+ * The Conversation's flows (docs/plan_v4), on temporary stores, his answers read by
  * the real chat reader from a stand-in for Claude's API ([FelixHarness]): an answer's cards made as it
  * comes and undone; a card applied and taken back; the check-in's five questions in the chat; a reply
- * from his notification, his chips or the chat under the message it answers, routed by what it is
- * (Stage 5b); his button's count; and what the app says in his name, each in the chat first and his
+ * from his notification, his chips or the chat under the message it answers, routed by what it is;
+ * his button's count; and what the app says in his name, each in the chat first and his
  * one notification after.
  */
 class ConversationTest {

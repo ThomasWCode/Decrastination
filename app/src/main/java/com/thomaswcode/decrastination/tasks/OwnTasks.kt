@@ -25,7 +25,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * Your own tasks (2.0.0, Q28; docs/plan_v4, Stage 6c), moved out of `AppGraph`: kept ([saveOwnTask]),
+ * Your own tasks (Q28; docs/plan_v4), moved out of `AppGraph`: kept ([saveOwnTask]),
  * finished as you say or once their steps are done ([finishOwnTask], [start]), opened again
  * ([reopenOwnTask]), deleted ([deleteOwnTask]), and trimmed to their record a fortnight after
  * they're done ([pruneOwn]). Built like [com.thomaswcode.decrastination.block.Focus]: its stores, the clock and a
@@ -44,7 +44,7 @@ class OwnTasks(
     private val settle: suspend () -> Unit,
 ) {
     /**
-     * Keeps [task] as one of your own (2.0.0, Q28) under [sourceId]: made, or changed if it's there
+     * Keeps [task] as one of your own (Q28) under [sourceId]: made, or changed if it's there
      * already (changed in the form, or a second tap). False if it can't be kept ([OwnTaskRules.problem]).
      * Saved whole, whatever the screen that asked does meanwhile.
      */
@@ -63,7 +63,7 @@ class OwnTasks(
     }
 
     /**
-     * Your own task [taskId] done, as you say (2.0.0), or one done by its tick (NF-06): finished
+     * Your own task [taskId] done, as you say, or one done by its tick (NF-06): finished
      * through the queue a source's confirmation goes through, so it's logged and asked about as any
      * is; but it earns no free time ([com.thomaswcode.decrastination.block.Focus.onCompleted]), as nothing but you says it's done.
      */
@@ -120,7 +120,7 @@ class OwnTasks(
     /** One of your own whose steps are all done finished, from the app's start. */
     fun start() {
         // One of your own whose steps are all done (ticked, or kept in their slots) is finished; and one
-        // done by its tick (NF-06) given steps of yours by the chat (16 Oct).
+        // done by its tick (NF-06) given steps of yours by the chat.
         scope.launch {
             tasks.state.map { s -> s.tasks.filter { (it.source == Source.Own || it.tickDone) && it.isOpen && it.subSteps.isNotEmpty() && it.subSteps.all { st -> st.done } }.map { it.id } }
                 .distinctUntilChanged().collect { ids -> ids.forEach { finishOwnTask(it) } }

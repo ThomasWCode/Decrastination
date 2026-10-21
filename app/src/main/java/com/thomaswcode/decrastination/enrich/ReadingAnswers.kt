@@ -71,7 +71,7 @@ object ReadingAnswers {
     private fun summary(text: String): String? = text.trim().takeIf { it.isNotEmpty() }?.take(MAX_SUMMARY)
 
     /**
-     * The Email job's kinds (AI-02): Admin, as a starred email is always something to do (16 Oct);
+     * The Email job's kinds (AI-02): Admin, as a starred email is always something to do;
      * an older answer's Event is read as one.
      */
     private val EMAIL_KINDS = mapOf("Admin" to Kind.Admin, "Event" to Kind.Admin)
@@ -103,7 +103,7 @@ object ReadingAnswers {
     private fun hours(minutes: Int): String = if (minutes % 60 == 0) "${minutes / 60} hours" else "%.1f hours".format(Locale.UK, minutes / 60.0)
 
     /**
-     * The longest a step is planned in one sitting (your call, 17 Oct: an hour; three before): a
+     * The longest a step is planned in one sitting (D-21: an hour): a
      * longer one is cut into even sittings, as the app can't know which part of the work takes how
      * long, so they're split by time, never by what's in them ([fitParts]).
      */
@@ -124,7 +124,7 @@ object ReadingAnswers {
      * [steps] in sittings ([fitParts]), each part keeping its step's dates, so ticking a piece never
      * ticks off more than it did; but not one that takes the mark of a step of [before] done
      * ([com.thomaswcode.decrastination.core.carryMarks]): done, it isn't planned, and cut, the parts
-     * after its first would lose the mark (#48's review).
+     * after its first would lose the mark.
      */
     internal fun sittings(steps: List<SubStep>, before: List<SubStep>): List<SubStep> =
         carryMarks(steps, before).zip(steps).flatMap { (marked, step) -> if (marked.done) listOf(step) else fitParts(step) }
@@ -156,7 +156,7 @@ object ReadingAnswers {
         val base = Enrichment(inputHash = Enrichments.inputHash(task), by = by, at = now, promptVersion = ReadingPrompts.VERSION)
         return when (job) {
             Enrichments.Job.Email -> json.decodeFromString(Triage.serializer(), text).let { t ->
-                // Starred, an email is always something to do (AI-02, 16 Oct): Admin. Any other kind is
+                // Starred, an email is always something to do (AI-02): Admin. Any other kind is
                 // no answer at all, and the rules' reading stands.
                 val kind = EMAIL_KINDS[t.kind] ?: return null.also { problems += "kind is \"${t.kind.take(20)}\": it must be Admin" }
                 val total = effort(t.effortMin)

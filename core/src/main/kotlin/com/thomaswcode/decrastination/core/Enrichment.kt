@@ -69,7 +69,7 @@ data class Enrichment(
  * where the source gives none.
  */
 fun TaskItem.enriched(): TaskItem = enrichedOnly().let { t ->
-    // Your instructions over both: the deadline you gave; your name for it and your steps (16 Oct),
+    // Your instructions over both: the deadline you gave; your name for it and your steps,
     // their ticks kept by name. A start you gave isn't laid here: the planner places the work from
     // then on ([TaskItem.mine.from?.value]), so it's seen coming.
     t.copy(
@@ -140,7 +140,7 @@ private fun TaskItem.enrichedOnly(): TaskItem {
         // A reading from before starred-only reading may say an email is only to read; starred, it
         // never is (AI-02): the rules' kind stands until it's read again ([Enrichments.stale]).
         kind = when {
-            // Starred, always something to do (16 Oct): an event's email too, what it asks before it.
+            // Starred, always something to do: an event's email too, what it asks before it.
             source == Source.Gmail -> Kind.Admin
             else -> base.kind
         },
@@ -167,8 +167,8 @@ private fun TaskItem.stepsFromEnrichment(): Boolean = subSteps.isNotEmpty() && s
 
 /**
  * Whether some of the steps its enrichment gave are done: newer prompts could give its work as other
- * steps (fewer, longer, since 3.1.1), and a mark goes only to a step of its name ([carryMarks]), so
- * work done would be planned again (#47's review). Not read again for newer prompts alone, then:
+ * steps (fewer, longer), and a mark goes only to a step of its name ([carryMarks]), so
+ * work done would be planned again. Not read again for newer prompts alone, then:
  * only when its text changes or you ask, when the steps done are said to be ([com.thomaswcode.decrastination.enrich.ReadingPrompts.describe]).
  */
 private fun TaskItem.partDone(): Boolean = stepsFromEnrichment() && subSteps.any { it.done }
@@ -219,7 +219,7 @@ object Enrichments {
     fun inputHash(task: TaskItem): String {
         val text = (listOf(
             task.source.name,
-            // The source's name, not yours (16 Oct): renaming a task isn't new content to read.
+            // The source's name, not yours: renaming a task isn't new content to read.
             task.sourceValues?.title ?: task.title,
             task.detail,
             task.className.orEmpty(),

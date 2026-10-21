@@ -168,7 +168,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
- * Asking Claude (2.0.0, Q29), in place of the Instructions page: **Chat**, where you tell it about
+ * Asking Claude (Q29), in place of the Instructions page: **Chat**, where you tell it about
  * your work and it answers with cards to add a task or apply changes, and where every message of
  * Felix's is, what he writes unasked among them; and **Your changes**, the instructions in use (taken
  * back there) and any still to check. A message about a task, an event or a day comes from its page,
@@ -290,7 +290,7 @@ class AskActivity : ComponentActivity() {
         val graph = AppGraph.get(this)
         graph.conversation.chatInFront = false
         val now = graph.clock.now()
-        // Every message closed again for the next visit, its labels done with (5c), and what it showed read.
+        // Every message closed again for the next visit, its labels done with, and what it showed read.
         screen.paused(read = now.takeIf { chatTab })
         // What arrived while it was on screen was seen: read up to now, so only what comes after is his notification.
         if (chatTab) graph.scope.launch { graph.conversation.read(now) }
@@ -351,7 +351,7 @@ class AskActivity : ComponentActivity() {
         var draft by rememberSaveable { mutableStateOf("") }
         var menu by remember { mutableStateOf(false) }
         var clearing by remember { mutableStateOf(false) }
-        // What he remembers, from the menu, each to delete (your call, 16 Oct), as Settings → Felix has it.
+        // What he remembers, from the menu, each to delete, as Settings → Felix has it.
         var remembering by rememberSaveable { mutableStateOf(false) }
         // A card's task being changed before it's added: "<message id>|<proposal id>".
         var editing by rememberSaveable { mutableStateOf<String?>(null) }
@@ -498,7 +498,7 @@ class AskActivity : ComponentActivity() {
         editing?.split('|', limit = 2)?.let { (messageId, proposalId) ->
             val proposal = chat.messages.firstOrNull { it.id == messageId }?.proposals?.firstOrNull { it.id == proposalId }
             val task = proposal?.task
-            // Added as it came (16 Oct): it's changed as any task of yours is, in the form.
+            // Added as it came (D-60): it's changed as any task of yours is, in the form.
             val added = proposal?.made?.takeIf { proposal.state == ProposalState.Applied }?.let { id -> tasks.tasks.firstOrNull { it.id == id } }
             if (added != null) {
                 OwnTaskForm(graph, added) { editing = null }
@@ -519,7 +519,7 @@ class AskActivity : ComponentActivity() {
                 }
             }
         }
-        // The very first email finished here, by Felix's done, waits for your OK (Stage 11): asked here too.
+        // The very first email finished here, by Felix's done, waits for your OK: asked here too.
         GmailOkSheet(graph)
         if (clearing) {
             AlertDialog(
@@ -726,13 +726,13 @@ private fun ColumnScope.Chat(
 /** How long the message his notification opened the chat at stays tinted. */
 private const val FLASH_MS = 1_000L
 
-/** How long Mark answered's Undo stays at the foot (D-99): six seconds, your call. */
+/** How long Mark answered's Undo stays at the foot (D-99): six seconds. */
 private const val UNDO_BAR_MS = 6_000L
 
 /** How near the top of the list (in rows) scrolling back loads the archive's next page. */
 private const val EARLIER_WITHIN = 5
 
-/** The line over a day's first message (5b): "Today", "Yesterday", or its date. */
+/** The line over a day's first message: "Today", "Yesterday", or its date. */
 @Composable
 private fun DayLine(date: LocalDate, today: LocalDate) {
     Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
@@ -745,7 +745,7 @@ private fun DayLine(date: LocalDate, today: LocalDate) {
     }
 }
 
-/** The line over the first message unread when the chat opened, for that visit only (5b), as messaging apps draw it. */
+/** The line over the first message unread when the chat opened, for that visit only, as messaging apps draw it. */
 @Composable
 private fun NewMessages() {
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -796,7 +796,7 @@ private fun SwipeToReply(onReply: () -> Unit, content: @Composable () -> Unit) {
 }
 
 /**
- * A message's bubble, [colour] in [shape]: held, Reply and Copy (5b), and Mark answered where it waits
+ * A message's bubble, [colour] in [shape]: held, Reply and Copy, and Mark answered where it waits
  * for your answer ([onMarkAnswered], D-99); the one his notification opened the chat at ([flash]) tinted
  * for a moment.
  */
@@ -834,7 +834,7 @@ private fun Bubble(message: ChatMessage, colour: Color, shape: Shape, flash: Boo
 }
 
 /**
- * When [message] was sent, in small type under its bubble (5b); and, while it waits for your answer
+ * When [message] was sent, in small type under its bubble; and, while it waits for your answer
  * ([waiting], D-99), saying so, a tap on it the message's Reply ([onAnswer]).
  */
 @Composable
@@ -849,7 +849,7 @@ private fun Time(message: ChatMessage, zone: ZoneId, waiting: Boolean = false, o
     }
 }
 
-/** The message a reply answers, over its words (5b): who wrote it and its first line, in a tinted block; tapped, [onOpen] goes to it. */
+/** The message a reply answers, over its words: who wrote it and its first line, in a tinted block; tapped, [onOpen] goes to it. */
 @Composable
 private fun Quote(quote: ChatMessage, name: String, onOpen: () -> Unit) {
     Row(
@@ -892,7 +892,7 @@ private fun Yours(graph: AppGraph, message: ChatMessage, quote: ChatMessage?, na
 }
 
 /**
- * Felix answering, on his side (your call, 16 Oct, in place of "Felix is thinking… 12 s"): three
+ * Felix answering, on his side (in place of "Felix is thinking… 12 s"): three
  * dots rising in turn in a bubble of his, as a messaging app shows someone typing; and once the
  * call has run [CANCEL_AFTER_S], a way to stop waiting (AC-08).
  */
@@ -977,12 +977,12 @@ private fun Claudes(graph: AppGraph, screen: ChatScreenState, message: ChatMessa
         message.proposals.filter { it.open != null }.forEach { ProposalCard(graph, message.id, it, tasks, now, zone, onEdit, live) }
         AnimatedVisibility(folds && open) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                // What he searched the web for, and the pages it found, each to open (16 Oct).
+                // What he searched the web for, and the pages it found, each to open.
                 Searched(message)
                 message.proposals.filter { it.open == null }.forEach { ProposalCard(graph, message.id, it, tasks, now, zone, onEdit, live) }
                 // What it remembered or forgot (AI-21), in small type under its words, each with its Undo.
                 Remembered(graph, message, live)
-                // What it did beyond its cards (AI-14; 16 Oct, everything he does), likewise, each with its Undo;
+                // What it did beyond its cards (AI-14; D-60, everything he does), likewise, each with its Undo;
                 // and what it says of them with nothing to undo (a change refused, where a time went).
                 Acts(graph, message, live)
                 message.note?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 4.dp)) }
@@ -991,7 +991,7 @@ private fun Claudes(graph: AppGraph, screen: ChatScreenState, message: ChatMessa
     }
 }
 
-/** The corner of a bubble with something folded under it (5c): down while it's closed, up while it's open; red where something under it went wrong. */
+/** The corner of a bubble with something folded under it: down while it's closed, up while it's open; red where something under it went wrong. */
 @Composable
 private fun Chevron(open: Boolean, problem: Boolean, modifier: Modifier, onToggle: () -> Unit) {
     Icon(
@@ -1102,7 +1102,7 @@ private fun Opens(message: ChatMessage) {
     }) { Text(if (week != null) "Send it" else "Open the review") }
 }
 
-/** What [message]'s searches were for (16 Oct), in small type, and the pages they found, each a link to open. */
+/** What [message]'s searches were for, in small type, and the pages they found, each a link to open. */
 @Composable
 private fun Searched(message: ChatMessage) {
     if (message.searched.isEmpty() && message.sources.isEmpty()) return
@@ -1128,7 +1128,7 @@ private fun Searched(message: ChatMessage) {
 
 /**
  * What [message] remembered or forgot (AI-21), a line each in small type, each with its Undo while
- * it can be taken back (your call, 16 Oct): a fact gone, and the one it replaced back.
+ * it can be taken back (D-64): a fact gone, and the one it replaced back.
  */
 @Composable
 private fun Remembered(graph: AppGraph, message: ChatMessage, live: Boolean) {
@@ -1156,14 +1156,14 @@ private fun Remembered(graph: AppGraph, message: ChatMessage, live: Boolean) {
     said?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(horizontal = 4.dp)) }
 }
 
-/**
- * What [message]'s actions did (16 Oct: a step ticked or to do again, a task done, open again or
- * deleted, a setting set; 4.1.0, a reminder set, moved or cancelled, a note added or deleted), a line each in small type, each with its Undo while it can be taken back;
- * and the lines with nothing to undo (a change not made, where a time went, a text read in full).
- */
 /** The longest the chat's Undo buttons wait before reading the day again (a delay doesn't count deep sleep). */
 private const val DAY_CHECK_MS = 5 * 60_000L
 
+/**
+ * What [message]'s actions did (a step ticked or to do again, a task done, open again or
+ * deleted, a setting set; a reminder set, moved or cancelled, a note added or deleted), a line each in small type, each with its Undo while it can be taken back;
+ * and the lines with nothing to undo (a change not made, where a time went, a text read in full).
+ */
 @Composable
 private fun Acts(graph: AppGraph, message: ChatMessage, live: Boolean) {
     if (message.acts.isEmpty()) return
@@ -1172,7 +1172,7 @@ private fun Acts(graph: AppGraph, message: ChatMessage, live: Boolean) {
     val settings by graph.settings.state.collectAsStateWithLifecycle()
     val chat by graph.chat.state.collectAsStateWithLifecycle()
     val felix by graph.stores.felix.state.collectAsStateWithLifecycle()
-    // A starred email's finish while it stands (Stage 11): its Done's Undo takes it back.
+    // A starred email's finish while it stands: its Done's Undo takes it back.
     val gmail by graph.gmailFinishes.state.collectAsStateWithLifecycle()
     // Today's kept pieces (G1), as the log changes, and the day.
     val log by graph.log.state.collectAsStateWithLifecycle()
@@ -1208,7 +1208,7 @@ private fun Acts(graph: AppGraph, message: ChatMessage, live: Boolean) {
 }
 
 /**
- * One thing Felix did, made as it came (your call, 16 Oct), with what you can do about it: undo it,
+ * One thing Felix did, made as it came (D-60, 16 Oct), with what you can do about it: undo it,
  * change a task it added, or make it again once undone. One from before then still waits to be added
  * or applied, changed first, or set aside.
  */
@@ -1351,7 +1351,7 @@ private fun InputBar(
     }
     Surface(tonalElevation = 3.dp) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
-            // The message this one replies to (5b): whose, its first line, and ✕ to reply to none.
+            // The message this one replies to: whose, its first line, and ✕ to reply to none.
             replyingTo?.let { r ->
                 Row(Modifier.fillMaxWidth().padding(bottom = 6.dp).height(IntrinsicSize.Min), verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.width(3.dp).fillMaxHeight().background(MaterialTheme.colorScheme.primary))

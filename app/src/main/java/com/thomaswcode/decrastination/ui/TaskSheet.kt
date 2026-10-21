@@ -104,7 +104,7 @@ fun TaskSheetHost(graph: AppGraph, activity: Activity, taskId: String, plan: Pla
 }
 
 /**
- * A task (2.0.0, Q30), in three parts (UI-09). **Do**: its next piece done (its slot kept, LR-09),
+ * A task (Q30), in three parts (UI-09). **Do**: its next piece done (its slot kept, LR-09),
  * its steps where they're ticked here, the task where it lives, a photo of the work, and one of
  * your own all done; a source's task has no Done of its own, as its source says. **About**: when
  * it's due, how long it takes and when it can start, each changed at once, armed or not; what it
@@ -134,9 +134,9 @@ fun TaskSheet(
     val instructions by graph.instructions.state.collectAsStateWithLifecycle()
     val learning by graph.stores.learning.state.collectAsStateWithLifecycle()
     val model by graph.stores.model.state.collectAsStateWithLifecycle()
-    // Its notes, read as they change (8a).
+    // Its notes, read as they change.
     val felix by graph.stores.felix.state.collectAsStateWithLifecycle()
-    // A starred email's finish in Gmail (Stage 11), read as it goes.
+    // A starred email's finish in Gmail, read as it goes.
     val gmail by graph.gmailFinishes.state.collectAsStateWithLifecycle()
     // His messages unread, worn by Ask Felix about it as by his button elsewhere (UI-16).
     val unread by graph.conversation.unread.collectAsStateWithLifecycle(0)
@@ -231,7 +231,7 @@ fun TaskSheet(
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (!own) Button(onClick = { scope.launch { TaskOpener.open(activity, task)?.let { message = it } } }) { Text("Open in ${task.source.label}") }
                 invite?.let { i -> OutlinedButton(onClick = { message = addToCalendar(activity, i, task.title, zone) }) { Text("Add to calendar") } }
-                // A starred email finished by your word (Stage 11): unstarred and archived in Gmail, after the grace.
+                // A starred email finished by your word: unstarred and archived in Gmail, after the grace.
                 if (task.source == Source.Gmail && task.isOpen && graph.settings.value.gmailFinishes && GmailWrites.state(gmail.writes, task.id) !in FINISHING) {
                     OutlinedButton(onClick = { scope.launch { said = finishSaid(graph.gmailFinishes.finish(task.id, explicit = true)) } }) { Text("Finish: unstar and archive") }
                 }
@@ -262,7 +262,7 @@ fun TaskSheet(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            // Its finish in Gmail, where there's one (Stage 11): what it is, with its Undo or It's sorted.
+            // Its finish in Gmail, where there's one: what it is, with its Undo or It's sorted.
             if (task.source == Source.Gmail) GmailFinishLine(graph, task)
 
             // About: when it's due, how long it takes, what it says, when it's planned and why.
@@ -300,7 +300,7 @@ fun TaskSheet(
                     "${Format.minutes(task.effortMin)} in all" + if (task.workedMin > 0) ", ${Format.minutes(task.workedMin)} worked" else "",
                     note = listOfNotNull(
                         if (!own && task.mine.minutes?.minutes != null) {
-                            // A total Felix worked out at your pace (17 Oct), or your own.
+                            // A total Felix worked out at your pace, or your own.
                             if (task.pacedMinutes) {
                                 "The app's ${Format.minutes(task.mine.minutes?.paced?.from ?: task.appEffortMin)} at your pace" +
                                     if (task.mine.minutes?.paced?.from == null || task.mine.minutes?.paced?.from == task.appEffortMin) "" else ", which it now reckons ${Format.minutes(task.appEffortMin)}"
@@ -336,7 +336,7 @@ fun TaskSheet(
                 )
             }
             Notes(task, now, zone, byId, onOpen = { scope.launch { TaskOpener.open(activity, task)?.let { message = it } } }, onLink = { message = openLink(activity, it) })
-            // What's kept with it (8a): Felix's notes and yours, the standing ones it matches, each with its delete; yours added here (Q14: A).
+            // What's kept with it: Felix's notes and yours, the standing ones it matches, each with its delete; yours added here (D-100).
             TaskSheetModel.notes(task, felix.notes, graph.settings.value.classMap, graph.settings.value.felixName, now, zone).let { notes ->
                 if (notes.isNotEmpty()) Text("Notes", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 notes.forEach { n ->
@@ -472,7 +472,7 @@ fun TaskSheet(
         else -> Unit
     }
 
-    // Your note on it (8a): kept with it, told to Felix whenever it comes up.
+    // Your note on it: kept with it, told to Felix whenever it comes up.
     if (sheet.noting) {
         var words by rememberSaveable { mutableStateOf("") }
         AlertDialog(
@@ -515,7 +515,7 @@ fun TaskSheet(
             },
             dismissButton = { TextButton(onClick = { confirming = null }) { Text("Cancel") } },
         )
-        // A standing note's delete (8a): it goes from every task it's for, not only this one.
+        // A standing note's delete: it goes from every task it's for, not only this one.
         else -> TaskSheetModel.notes(task, felix.notes, graph.settings.value.classMap, graph.settings.value.felixName, now, zone).firstOrNull { it.every != null && confirming == "unnote:${it.id}" }?.let { n ->
             AlertDialog(
                 onDismissRequest = { confirming = null },

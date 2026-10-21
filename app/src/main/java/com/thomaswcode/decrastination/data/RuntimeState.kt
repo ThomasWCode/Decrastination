@@ -14,7 +14,7 @@ import java.time.ZoneOffset
 import kotlinx.serialization.Serializable
 
 /**
- * What's left of the app's state from moment to moment once each owner has its own file (Stage 7): the
+ * What's left of the app's state from moment to moment once each owner has its own file: the
  * notifier's counts and held list, the daily runs, the last backup, Teams' syncs, duplicates told apart,
  * the files found unreadable. Kept in `runtime.json`.
  */
@@ -164,7 +164,7 @@ data class CompletionRecord(
     val dueAt: Long? = null,
     val firstSeenAt: Long,
     val doneAt: Long,
-    /** Your answer to "how was it?": harder, as expected, easier (Phase 5). */
+    /** Your answer to "how was it?": harder, as expected, easier. */
     val assessment: String? = null,
     /** And the line you added, if any. */
     val note: String? = null,

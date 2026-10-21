@@ -31,7 +31,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * The plan written to the calendar you picked (NF-07; docs/plan_v4, Stage 6a), moved out of `AppGraph`:
+ * The plan written to the calendar you picked (NF-07; docs/plan_v4), moved out of `AppGraph`:
  * each plan's next seven days, once plans have been quiet a while ([planned], [writeSlots]), a slot
  * you've moved there taken as your time; the app's events taken out of a calendar no longer written to
  * ([clearOldCalendars]); the calendar watched for changes ([watchCalendar], [calendarChanged]); and your
@@ -64,7 +64,7 @@ class CalendarWriter(
     private val quietMs: Long = CALENDAR_WRITE_QUIET_MS,
 ) {
     /**
-     * The plan to write to the calendar, once plans have been quiet [quietMs] (17 Oct): a burst of
+     * The plan to write to the calendar, once plans have been quiet [quietMs]: a burst of
      * changes (a chat answer's, one after another) is one write, not an event inserted and changed
      * again while the calendar's sync still has it in hand, which brought copies of it back.
      */
@@ -116,7 +116,7 @@ class CalendarWriter(
         }
         // Each event's version remembered once it's written (not a move of yours taken: its event is
         // at your time), so a copy the calendar's sync makes of it is known at the next write. Not
-        // one an event of yours already had (#48's third review): remembered, the next write would
+        // one an event of yours already had: remembered, the next write would
         // take yours for a copy.
         val moved = written.taken.map { it.desired.uri }.toSet()
         runCatching {
@@ -185,7 +185,7 @@ class CalendarWriter(
         if (!provider.allowed()) return false
         return runCatching {
             provider.deleteOwn(calendarId)
-            // And copies of its events that lost the app's marks (17 Oct), by their words and [versions].
+            // And copies of its events that lost the app's marks, by their words and [versions].
             val copies = provider.unmarked(calendarId).filter { SlotCalendarDiff.isCopy(calendarId, it.title, it.description, it.start, it.end, versions) }.map { it.id }
             if (copies.isNotEmpty()) provider.apply(calendarId, clock.zone(), emptyList(), emptyList(), copies)
         }.isSuccess

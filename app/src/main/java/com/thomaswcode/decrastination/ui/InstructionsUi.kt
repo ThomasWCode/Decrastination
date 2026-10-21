@@ -138,7 +138,7 @@ fun InstructionContent(graph: AppGraph, instruction: Instruction, tasks: Map<Str
 }
 
 /**
- * Your words about [about] said to Claude, in the chat (2.0.0, Q29), which opens: Claude answers
+ * Your words about [about] said to Claude, in the chat (Q29), which opens: Claude answers
  * there, with cards to apply. One of yours still waiting is answered with them (D-98).
  */
 fun sendInstruction(activity: Activity, text: String, about: About) {

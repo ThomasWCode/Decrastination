@@ -32,7 +32,7 @@ class EnrichmentTest {
     fun `an email is a task whatever its reading's kind, and takes its deadline where the source has none`() {
         val task = email()
         val deadline = Fixtures.at("2026-10-12T09:00")
-        // An older reading's Event is a task too (16 Oct): every starred email is one.
+        // An older reading's Event is a task too: every starred email is one.
         val enriched = task.copy(enrichment = enrichment(task).copy(kind = Kind.Event, deadline = deadline, effortMin = 5)).enriched()
         assertEquals(Kind.Admin, enriched.kind)
         assertEquals(deadline, enriched.dueAt)

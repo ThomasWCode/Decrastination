@@ -23,7 +23,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.emptyFlow
 
 /**
- * Your instructions' and your own tasks' services on temporary stores (docs/plan_v4, Stage 6c), as
+ * Your instructions' and your own tasks' services on temporary stores (docs/plan_v4), as
  * AppGraph makes them, with the real focus and plan; Claude is off (no key), and what Android does
  * (the calendar read again, the widget, a finish's completions) is counted.
  */

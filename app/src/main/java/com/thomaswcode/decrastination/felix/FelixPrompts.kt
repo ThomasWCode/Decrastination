@@ -28,7 +28,7 @@ object FelixPrompts {
     enum class Reason { SlotStart, SlotEnd, SlotKept, DayDone, Morning, Question, Completions, Summary, Reply, CheckIn, Reminder }
 
     /**
-     * How he writes (docs/plan_v4/09-his-voice.md, Q16: A, as you read its text on 21 Oct): a sixth-former's register,
+     * How he writes (docs/plan_v4/09-his-voice.md): a sixth-former's register,
      * still exact where it matters and still him (D-57), in both his prompts, pinned by their examples (AI-07).
      */
     const val REGISTER = "How you write: like a sixth-former texting a mate. Lower case is fine, and so are contractions and the odd \"alr\", \"gonna\", \"tbh\" or \"ngl\"; keep it short and light on commas, with a full stop between thoughts. No customer-service politeness (\"I'll put this in as a task for…\", \"Would you like me to…\"): say what you've done in a few words (\"done, fri 23 oct, 19:00\") and ask the way a friend asks (\"what day's that then?\"). Exact where it matters: dates, times and minutes written plainly (\"fri 23 oct, 19:00\", \"40 min\"), one thing a sentence, never a joke in place of the answer, and never a task's id in your words. Still strict about the work: no guilt, no sarcasm at them, no praise for nothing, no promise the app can't keep. No emojis, and no capitals for shouting."
@@ -69,7 +69,7 @@ object FelixPrompts {
      * or kept), or the [task] it's about, with the task's own text cut at [TEXT] (D-93); today's
      * slots kept, missed and to come, and the free time there is ([freeMin]); his last messages of his
      * own from the chat, [recent], with your replies to them; and, for a Question, the [question] to put.
-     * Since 4.1.0: the task's [notes] (its own, and the standing ones it matches); for a Reminder, its
+     * The task's [notes] (its own, and the standing ones it matches); for a Reminder, its
      * words as you set them ([reminder]), the slot then under way or next its piece, and [now] the moment
      * it's for; for a SlotStart, your reminder that came at the slot's start ([reminder]), so it isn't said
      * twice; for the Morning, today's [reminders].
@@ -98,7 +98,7 @@ object FelixPrompts {
         appendLine("Now: ${Instant.ofEpochMilli(now).atZone(zone).format(NOW)}")
         val piece = slot?.chunk
         if (reason == Reason.Reminder) {
-            // What's going on at its moment (8a): the slot under way or next, and the task it's about.
+            // What's going on at its moment: the slot under way or next, and the task it's about.
             if (slot != null && piece != null) appendLine("Slot then: ${piece.label}, ${clock(slot.start)}–${clock(slot.end)}, ${if (slot.start <= now) "under way" else "next"}")
             task?.let { appendLine("Task: ${it.title}") }
         } else if (slot != null && piece != null) {
@@ -128,7 +128,7 @@ object FelixPrompts {
             appendLine("Its task's own text (${TaskText.about(task)}):")
             appendLine(TaskText.brief(task, TEXT) ?: "  (no text of its own)")
         }
-        // What's kept with it (8a), and their reminder: the one to say, or one said already at this slot's start.
+        // What's kept with it, and their reminder: the one to say, or one said already at this slot's start.
         if (notes.isNotEmpty()) appendLine("Notes on it: " + notes.joinToString("; "))
         reminder?.let { appendLine(if (reason == Reason.Reminder) "Their reminder, in their words: “$it”" else "Their reminder for this slot, sent at its start, so not to say again: “$it”") }
         val kept = today.count { it.outcome.kept }

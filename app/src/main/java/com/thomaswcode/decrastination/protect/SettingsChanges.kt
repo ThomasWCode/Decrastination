@@ -43,7 +43,7 @@ object SettingsChanges {
 
     /**
      * For each setting, whether a new value loosens blocking compared with the old. Only the
-     * blocker's own settings can (your call, 12 Oct): what's blocked, when, how free time is earned,
+     * blocker's own settings can (D-46): what's blocked, when, how free time is earned,
      * and protection itself. Everything about the work (when you work, how it's cut up and spread,
      * Anki, the Teams syncs, Claude, the reminders) is yours to change at once, as due dates and
      * minutes are, though moving work off today and tomorrow can lift the pressure: blocked apps
@@ -193,7 +193,7 @@ object SettingsChanges {
      * [change] to [fields] made at once, armed or not, with no wait: read from what's been asked for,
      * as a change of yours is, and those fields laid over [current]. A change waiting for one of them
      * is replaced by it, even one asking for the same value, which now applies; the others keep their
-     * wait. For the weekly review's bounded changes, which you said needn't wait (11 Oct, IMP-P2-015).
+     * wait. For the weekly review's bounded changes, which needn't wait (D-71, IMP-P2-015).
      */
     fun atOnce(current: Settings, pending: List<PendingChange>, fields: Set<String>, change: (Settings) -> Settings): Outcome {
         val wanted = encode(change(requested(current, pending)))

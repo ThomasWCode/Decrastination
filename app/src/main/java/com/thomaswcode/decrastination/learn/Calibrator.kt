@@ -28,7 +28,7 @@ object Calibrator {
     const val WEIGHT = 0.3
 
     /**
-     * Timed pieces a class needs before its own multiplier is used (IMP-P2-016, your call): until
+     * Timed pieces a class needs before its own multiplier is used (IMP-P2-016, D-70): until
      * then its kind's, so one long evening can't set a new class's figure.
      */
     const val MIN_CLASS_TIMED = 3

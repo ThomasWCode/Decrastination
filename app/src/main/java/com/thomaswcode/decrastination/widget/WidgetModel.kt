@@ -24,7 +24,7 @@ import java.time.ZoneId
 data class WidgetModel(
     /** "17:00–17:30 · Moments Prep", its slot's time first (UI-05); "Do: Moments Prep" with no slot; "Nothing due". */
     val headline: String,
-    /** The piece's first step under it (AI-15's micro-plan, phase 7), where there's room; null without one. */
+    /** The piece's first step under it (AI-15's micro-plan), where there's room; null without one. */
     val label: String?,
     val badge: String?,
     /** The badge is bad news: overdue, due today, behind. */

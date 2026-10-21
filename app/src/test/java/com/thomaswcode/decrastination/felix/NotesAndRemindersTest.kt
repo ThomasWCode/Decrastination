@@ -31,7 +31,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 
 /**
- * Notes and reminders through the Conversation (docs/plan_v4/07-notes-and-reminders.md, Stage 8a), on
+ * Notes and reminders through the Conversation (docs/plan_v4/07-notes-and-reminders.md), on
  * temporary stores, his answers from a stand-in for Claude's API ([FelixHarness]): made at once from his
  * answer, each with its Undo, undone only while it's as he left it.
  */

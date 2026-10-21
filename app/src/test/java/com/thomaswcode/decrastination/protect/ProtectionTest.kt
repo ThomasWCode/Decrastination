@@ -30,7 +30,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
 
 /**
- * Protection's flows on temporary stores (docs/plan_v4, Stage 6b), unarmed and armed: a change at once
+ * Protection's flows on temporary stores (docs/plan_v4), unarmed and armed: a change at once
  * or waiting its hours, counted on the uptime clock; a parent code used, and what it allows; a waiting
  * change cancelled; the weekly review's changes at once; and the device admin kept in step with arming.
  * The rules themselves are `ProtectTest`'s.

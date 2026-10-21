@@ -116,7 +116,7 @@ object Stats {
     }
 
     /**
-     * This week so far and last week in figures, as Felix is told them when he asks (G6, 8c): each week's time
+     * This week so far and last week in figures, as Felix is told them when he asks (G6): each week's time
      * worked in kept slots, its slots kept and missed, its work finished and the real deadlines among it met
      * (PL-14), then its subjects, busiest first, as [bySubject] names them; [MAX_WEEK_LINES] lines at most,
      * each week an even share of them: past its share, its last line says how many more subjects there are.

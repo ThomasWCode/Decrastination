@@ -18,7 +18,7 @@ import kotlinx.serialization.json.JsonObjectBuilder
 /**
  * Power Planner's web API, as its open-source web app uses it (docs/spec/sources.md): every
  * call a JSON POST carrying the web app's "rate-limited development key". Verified with your
- * account on 8 Oct (docs/spec/sources.md).
+ * account (docs/spec/sources.md).
  */
 class PowerPlannerApi(private val http: Http) {
 
@@ -48,7 +48,7 @@ class PowerPlannerApi(private val http: Http) {
 
     /**
      * The agenda's items. An answer without them is a failed read, not an empty agenda: an empty one
-     * comes as `"Items":[]` (checked on 10 Oct), and a missing list taken as empty would finish every
+     * comes as `"Items":[]` (checked), and a missing list taken as empty would finish every
      * stored item (BUG-P2-007).
      */
     fun agenda(login: Login, semesterId: String, nowIso: String): List<PpItem> =

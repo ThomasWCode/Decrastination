@@ -88,7 +88,7 @@ object Profile {
         val facts = memory.facts.sortedByDescending { it.at }.takeWhile { f -> (room - (f.topic.length + f.text.length)).also { room = it } >= 0 }
         if (facts.isNotEmpty()) {
             lines += "Remembered:"
-            // One that's passing says so (10a): till when, or with which task.
+            // One that's passing says so: till when, or with which task.
             val titles = tasks.associate { it.id to it.title }
             facts.forEach { f -> lines += "- ${f.topic}: ${f.text}" + (Memories.held(f.until, f.taskId, titles::get, zone)?.let { " ($it)" } ?: "") }
         }

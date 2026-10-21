@@ -119,7 +119,7 @@ import kotlinx.serialization.json.JsonPrimitive
  *   and applied once it's read; `instructions` logs them all with Claude's reading,
  *   `instruction-discard --es id <id|all>` discards those not applied, and
  *   `instruction-delete --es id <id>` takes one applied back, as *Take back* does.
- * - Your own tasks (2.0.0): `own-add --es title "<name>"` (with `--es due 2026-10-16T17:00`,
+ * - Your own tasks: `own-add --es title "<name>"` (with `--es due 2026-10-16T17:00`,
  *   `--ei minutes 45`, `--es kind Revision`), logging its id; `own-done`, `own-reopen` and
  *   `own-delete --es task <id>`; and `quick-minutes --es task <id> --ei minutes N` (`--ei minutes 0`
  *   takes it back), a task's minutes as its sheet sets them. `forget-task --es task own:<id>` leaves no
@@ -179,7 +179,7 @@ class CommandActivity : Activity() {
             }
             "state" -> logState(graph)
             "anki-counts" -> logAnkiCounts()
-            // The plan's next seven days: each day's minutes, its slots and what has none (phase 3).
+            // The plan's next seven days: each day's minutes, its slots and what has none.
             "plan" -> {
                 val plan = graph.planning.plan()
                 val zone = graph.clock.zone()
@@ -330,7 +330,7 @@ class CommandActivity : Activity() {
                 graph.protection.changeSettings { s -> FelixSettings.set(s, name, value)?.also { said = it.second }?.first ?: s }
                 Log.i(TAG, "setting: " + (said ?: "$name not set to $value"))
             }
-            // Finishing emails in Gmail (Stage 11) on or off, --ez on true|false, as Settings → Sources → Gmail's switch
+            // Finishing emails in Gmail on or off, --ez on true|false, as Settings → Sources → Gmail's switch
             // sets it: not one of Felix's settings, so not `setting`'s.
             "gmail-finishes" -> {
                 val on = intent.getBooleanExtra("on", true)
@@ -385,7 +385,7 @@ class CommandActivity : Activity() {
             }
             "chat-context" -> {
                 // What the chat sends Claude with your newest message now, the plan included; and the
-                // conversation's turns as your newest message was sent, a reply's quote among them (5b).
+                // conversation's turns as your newest message was sent, a reply's quote among them.
                 File(filesDir, "chat-context.txt").writeText(graph.conversation.chatContext().whole)
                 val messages = graph.chat.value.messages
                 val sent = messages.take(messages.indexOfLast { it.from == Speaker.You } + 1)
@@ -396,7 +396,7 @@ class CommandActivity : Activity() {
             "chat-ask" -> {
                 // --es text "<words>": sent to the chat as on the phone (a paid call); Claude's reply logged.
                 // --es replyTo <message id>: a reply to that message, routed as a swipe's or his notification's
-                // is (5b): a question of his answered with no call, logged as what follows it.
+                // is: a question of his answered with no call, logged as what follows it.
                 val text = intent.getStringExtra("text")
                 val asked = if (text.isNullOrBlank()) Conversation.Asked.Nothing else graph.conversation.send(text, replyTo = intent.getStringExtra("replyTo"))
                 if (asked == Conversation.Asked.Nothing) {
@@ -421,7 +421,7 @@ class CommandActivity : Activity() {
                 ChatHistory.his(chat.messages).takeLast(10).forEach { m ->
                     Log.i(TAG, "felix ${m.kind}${if (m.byApp) " (the app's words)" else ""} ${m.pieceKey}: ${m.text.ifBlank { "(silent)" }} ${m.suggestedReplies}${ChatHistory.replyOf(m, chat.messages)?.let { r -> " / reply: ${r.text}" }.orEmpty()}")
                 }
-                // His notes and reminders (8a), each with when it comes and what he's written ahead.
+                // His notes and reminders, each with when it comes and what he's written ahead.
                 graph.conversation.notesAndReminders().forEach { Log.i(TAG, "felix $it") }
             }
             "felix-check" -> graph.looks.check().also { Log.i(TAG, "felix-check done") }
@@ -654,7 +654,7 @@ class CommandActivity : Activity() {
             Log.i(TAG, "  [${task.status}] ${task.source.label} ${task.kind.label} ${task.effortMin}m due ${task.dueAt} | ${task.title}")
         }
         Log.i(TAG, "Secrets set: ${graph.secrets.present.value.joinToString()}")
-        // The writes to Gmail journaled (Stage 11): each by its task's id, never its title.
+        // The writes to Gmail journaled: each by its task's id, never its title.
         for (w in graph.gmailFinishes.value) {
             Log.i(TAG, "Gmail write ${w.id}: ${w.taskId} ${GmailWrites.state(graph.gmailFinishes.value, w.taskId)}${if (w.reverseOf != null) " (an Undo)" else ""}, not before ${w.notBefore}, unstarred ${w.unstarred}, archived ${w.archived}, tries ${w.tries} ${w.lastError.orEmpty()}, done ${w.doneAt}${if (w.gaveUp) ", given up" else ""}")
         }

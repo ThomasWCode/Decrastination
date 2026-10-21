@@ -49,7 +49,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 /**
- * Your instructions (docs/plan_v4, Stage 6c), moved out of `AppGraph`: written and read by Claude
+ * Your instructions (docs/plan_v4), moved out of `AppGraph`: written and read by Claude
  * ([addInstruction], [readInstructions]), or made yourself as quick changes ([addOwnChange],
  * [laterToday], [takeBackQuick]); applied at once once read, or refused saying why ([applyInstruction]);
  * deleted or taken back ([deleteInstruction]); and laid over everything they change ([layInstructions],
@@ -92,7 +92,7 @@ class Instructions(
 
     /**
      * Writes down a new instruction about [about] and has Claude read it: applied once it's read
-     * (your call, 16 Oct), and taken back under Your changes.
+     * (D-67), and taken back under Your changes.
      */
     suspend fun addInstruction(text: String, about: About, answer: Boolean = false): String {
         val id = UUID.randomUUID().toString()
@@ -213,7 +213,7 @@ class Instructions(
                         },
                     )
                 }
-                // Made as soon as it's read (your call, 16 Oct: nothing of his waits for Apply), as the
+                // Made as soon as it's read (D-67: nothing of his waits for Apply), as the
                 // chat's are; one that can't be is marked unclear, saying why. Taken back under Your changes.
                 if (reading is InstructionAnswers.Reading.Changes) applyInstruction(next.id)
                 null
@@ -231,7 +231,7 @@ class Instructions(
 
     /**
      * Applies [id], read and checked by you, at once, armed or not: what an instruction changes is
-     * the work, yours to change (12 Oct), never the blocker.
+     * the work, yours to change, never the blocker.
      */
     suspend fun applyInstruction(id: String): Unit = applying.withLock {
         val instruction = instructions.value.instructions.firstOrNull { it.id == id && it.state == InstructionStatus.Understood } ?: return@withLock

@@ -145,7 +145,7 @@ class ChatArchiveStore(private val dir: File, private val clock: () -> Long = Sy
     /**
      * All of it let go (*Clear the chat*, a reset): every month's file deleted, none read, and the copies kept of
      * it with them ([isCopy]: its months' older shapes, and its files that couldn't be read), so what's cleared
-     * isn't kept in one (Q38, Q42). Not while a month's being read, whose first read may write it again: after.
+     * isn't kept in one (D-94). Not while a month's being read, whose first read may write it again: after.
      */
     suspend fun clear(): Unit = writing.withLock {
         withContext(Dispatchers.IO) {

@@ -118,7 +118,7 @@ class JsonStore<T>(
 
     /**
      * The copies kept beside its file let go: an older shape's (`<name>.v<n>`) and those of a file that couldn't be
-     * read (`<name>.unreadable-<when>`), so what *Clear the chat* or a reset takes isn't kept in one (Q42). Each is
+     * read (`<name>.unreadable-<when>`), so what *Clear the chat* or a reset takes isn't kept in one (D-94). Each is
      * deleted, or, where that fails, emptied, as the archive's months are, so what's cleared can't come back from it.
      */
     suspend fun letGoOfCopies(): Unit = withContext(Dispatchers.IO) {
@@ -245,7 +245,7 @@ class JsonStore<T>(
 
         /**
          * As [says], its copy named only while [there] finds it: a clear or a reset takes the copies of what it
-         * clears (Q42), and a file set aside again keeps only its newest few ([COPIES_KEPT]).
+         * clears (D-94), and a file set aside again keeps only its newest few ([COPIES_KEPT]).
          */
         fun says(there: (String) -> Boolean): String = if (copy == null || there(copy)) says else copy(copy = null).says
     }

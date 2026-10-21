@@ -85,8 +85,8 @@ object TaskOpener {
     }
 
     /**
-     * Gmail's app opens its inbox for any link, a conversation's included (tried on the phone,
-     * 9 Oct), and has no other way in from outside: so it's opened, and told what to look for.
+     * Gmail's app opens its inbox for any link, a conversation's included (tried on the phone),
+     * and has no other way in from outside: so it's opened, and told what to look for.
      */
     private fun openGmail(context: Context, task: TaskItem): Pair<Boolean, String> {
         if (!launch(context, GMAIL)) return false to "Gmail isn't installed"

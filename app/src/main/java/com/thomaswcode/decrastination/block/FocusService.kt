@@ -272,7 +272,7 @@ class FocusService : AccessibilityService() {
     /**
      * Covers [target] with the block screen. NO_USER_ACTION tells Android this isn't the user
      * leaving it, so a playing video gets no onUserLeaveHint and doesn't float off into
-     * picture-in-picture (8 Oct). Window changes come in bursts as it opens: one block per burst.
+     * picture-in-picture. Window changes come in bursts as it opens: one block per burst.
      */
     private fun block(target: Focus.Target, reason: BlockPolicy.Reason) {
         val now = SystemClock.uptimeMillis()
@@ -848,7 +848,7 @@ class FocusService : AccessibilityService() {
         /**
          * Whether Android has this service bound. [AccessibilityManager.getEnabledAccessibilityServiceList]
          * lists the bound services, not the setting's enabled ones: a crashed service, still in the
-         * setting, isn't in it (a crash on the phone showed exactly that, 9 Oct).
+         * setting, isn't in it (a crash on the phone showed exactly that).
          */
         fun isBound(context: Context): Boolean {
             val manager = context.getSystemService(AccessibilityManager::class.java) ?: return false

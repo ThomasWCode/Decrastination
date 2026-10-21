@@ -8,8 +8,8 @@ import java.time.ZoneId
 import kotlinx.serialization.Serializable
 
 /**
- * Whether a blocked app (or site) may be used now (docs/spec/blocking-and-protection.md, with the hours decided
- * on 8 Oct). Pure: everything it depends on comes in through [Input].
+ * Whether a blocked app (or site) may be used now (docs/spec/blocking-and-protection.md, with the hours of
+ * D-50). Pure: everything it depends on comes in through [Input].
  *
  * 1. A parent-approved unblock (the override) lets everything through until it ends.
  * 2. Sleep (22:30–07:00) is never blocked, and nor is the time before blocking starts: 16:45 on a

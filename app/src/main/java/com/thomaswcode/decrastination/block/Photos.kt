@@ -30,7 +30,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * Photos (docs/plan_v4, Stage 6d), moved out of `AppGraph` and `PhotoChecks`: a photo of a task's work
+ * Photos (docs/plan_v4), moved out of `AppGraph` and `PhotoChecks`: a photo of a task's work
  * kept with it and read with it (AI-23, [attachPhoto]); a photo of homework read into tasks of your own
  * (NF-01, [readPhotoOf]); the photos no task holds let go ([sweepPhotos]); and a photo of written work
  * checked, its piece ticked off if it's done (AI-16, [check]). Built like [Focus]: its stores, the

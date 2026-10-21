@@ -5,7 +5,7 @@ import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/** Whether the chat's actions can still be undone (16 Oct). */
+/** Whether the chat's actions can still be undone. */
 class ChatActsTest {
     private val now = Fixtures.at("2026-10-16T20:00")
     private val settings = Settings()

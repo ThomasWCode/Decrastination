@@ -16,7 +16,7 @@ import kotlinx.serialization.json.Json
 /**
  * Your starred emails as tasks, one per conversation (docs/spec/sources.md). A conversation is
  * a task while any message of it is starred, and every message of it is read, starred or not, yours
- * included (the owner, 14 Oct): the star is the decision, and the rest of the conversation is what
+ * included (D-10): the star is the decision, and the rest of the conversation is what
  * it's about. Unstarred (or deleted), it's done; starred again, the same task reopens. Pure, for the
  * tests.
  */
@@ -294,7 +294,7 @@ object GmailThreads {
             Fetched(
                 sourceId = conversation.threadId,
                 title = subject,
-                // Starred, a task (16 Oct): an invite's time is when it's due, and Add to calendar on its sheet.
+                // Starred, a task: an invite's time is when it's due, and Add to calendar on its sheet.
                 kind = triage.kind,
                 detail = text,
                 dueAt = invite?.start ?: triage.dueAt,

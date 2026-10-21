@@ -53,7 +53,7 @@ import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 
 /**
- * The form for a task of your own (2.0.0, Q28): a new one (from [initial], Claude's, if given), or
+ * The form for a task of your own (Q28): a new one (from [initial], Claude's, if given), or
  * [editing] one. Saved under an id chosen as it opens ([com.thomaswcode.decrastination.tasks.OwnTasks.saveOwnTask]), so a second tap, or
  * the form made again after a turn of the phone, changes the one task; or, given [onSave], handed
  * to that (a card of Claude's, added as you've changed it). Every field is kept through a turn too.

@@ -9,7 +9,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 
-/** The settings Felix may change from the chat (16 Oct). */
+/** The settings Felix may change from the chat. */
 class FelixSettingsTest {
     private val settings = Settings()
 

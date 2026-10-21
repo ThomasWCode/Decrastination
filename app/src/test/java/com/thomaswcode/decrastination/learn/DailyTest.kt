@@ -245,7 +245,7 @@ class ReviewInputTest {
             ReviewInput.Change("softMinPerDay", 45, "less undated work got done"),
             ReviewInput.Change("marginDays", 9, "too far"),
             ReviewInput.Change("armed", 0, "not allowed"),
-            // A piece's length is yours since 17 Oct: the review leaves it.
+            // A piece's length is yours: the review leaves it.
             ReviewInput.Change("boxMin", 25, "shorter pieces got finished"),
         )
         val applied = ReviewInput.apply(Settings(boxMin = 60), changes)

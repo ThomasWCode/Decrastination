@@ -42,7 +42,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
 /**
- * Every store's shapes as they've been, read with the app's own serializers (docs/plan_v4, Stage 0).
+ * Every store's shapes as they've been, read with the app's own serializers (docs/plan_v4).
  * Each folder of `fixtures/stores/` is a shape a phone's files may be in, made up, never taken from
  * the phone: every later migration is tested from every one of them, each read as the app reads it at
  * a start, through [Stores] (its moves, then each store's migrations). The newest is the shape now:
@@ -280,7 +280,7 @@ class StoresDecodeTest {
     }
 
     private companion object {
-        /** The first shape: Stage 0's. */
+        /** The first shape. */
         const val FIRST = "2026-10-18"
 
         /**

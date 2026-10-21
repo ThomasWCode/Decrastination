@@ -70,7 +70,7 @@ class Outbox(
     suspend fun clear() {
         moving.withLock {
             chat.update { it.copy(messages = emptyList()) }
-            // The window's copies with it (Q42): what's cleared isn't kept in one.
+            // The window's copies with it (D-94): what's cleared isn't kept in one.
             chat.letGoOfCopies()
             archive.clear()
         }
@@ -166,7 +166,7 @@ class Outbox(
         /**
          * His notification's room, its lines' characters together: about what One UI shows of an expanded
          * notification above its Reply and chips. Its height is held, and what runs past it is cut off, the
-         * buttons with it (20 Oct, on the phone: three long answers left no Reply).
+         * buttons with it (on the phone: three long answers left no Reply).
          */
         const val NOTICE_ROOM = 360
 

@@ -34,7 +34,7 @@ data class Instruction(
     /**
      * Your answer to Felix's question about its task (AI-10), kept with the task too, which is read
      * again with it: one Claude can't make a change of (it tells, rather than changes) is let go,
-     * not left for you to check (16 Oct).
+     * not left for you to check.
      */
     val answer: Boolean = false,
     /**
@@ -86,7 +86,7 @@ enum class ChangeType {
     /** The task is due by [Change.time] instead. */
     DueBy,
 
-    /** The whole task takes [Change.minutes], as you reckon it (2.0.0). */
+    /** The whole task takes [Change.minutes], as you reckon it. */
     Minutes,
 
     /** Every event named [Change.eventKey] takes [Change.eventAnswer] of your time ("free", "busy", "load:<minutes>"). */
@@ -111,7 +111,7 @@ enum class ChangeType {
     AtTime,
 
     /**
-     * A task's steps replaced with [Change.steps] (AI-19; any task's since 16 Oct, but Anki's, which
+     * A task's steps replaced with [Change.steps] (AI-19; any task's, but Anki's, which
      * are its cards): made on one of your own, laid over another's; its ticks kept by name.
      */
     Steps,
@@ -119,7 +119,7 @@ enum class ChangeType {
     /** The task is the same work as another listed one ([Change.afterTaskId]), which is kept (DX-15): this one's hidden. */
     SameAs,
 
-    /** The task's name in the app is [Change.title] (16 Oct): made on one of your own; over another's, its source keeping its own. */
+    /** The task's name in the app is [Change.title]: made on one of your own; over another's, its source keeping its own. */
     Rename,
 }
 
@@ -152,10 +152,10 @@ data class Change(
     /** [ChangeType.Rename]'s new name. */
     val title: String? = null,
     /**
-     * [ChangeType.Minutes]'s total is the app's own estimate at your pace, as Felix worked it out
-     * (17 Oct), not your own reckoning; this is that estimate of the app's, its minutes then (#50's
-     * review). Planned as given, but what's finished still teaches the pace, measured against this,
-     * while the task is as it was then ([pacedHash], [TaskItem.pacedTeaches]).
+     * [ChangeType.Minutes]'s total is the app's own estimate at your pace, as Felix worked it out,
+     * not your own reckoning; this is that estimate of the app's, its minutes then. Planned as given,
+     * but what's finished still teaches the pace, measured against this, while the task is as it was
+     * then ([pacedHash], [TaskItem.pacedTeaches]).
      */
     val pacedFrom: Int? = null,
     /** The task's content when it was paced ([Enrichments.inputHash]): read again for newer prompts alone, it's the same. */
@@ -414,7 +414,7 @@ object InstructionRules {
      * Whether [change] puts [task]'s work after its real deadline (PL-04): all of it on a day after
      * the deadline's, or its next piece at or after the deadline. Then it isn't applied: it's due
      * before then. Not once the deadline has gone by at [now]: overdue work can't be put before it,
-     * and any time from now is as soon as it can be (16 Oct: an overdue task's card wouldn't apply).
+     * and any time from now is as soon as it can be (an overdue task's card wouldn't apply).
      */
     fun latePin(change: Change, task: TaskItem, zone: ZoneId, now: Long): Boolean {
         val real = task.realDeadline?.takeIf { it > now } ?: return false
