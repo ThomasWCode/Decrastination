@@ -198,12 +198,12 @@ class CommandActivity : Activity() {
                 contentResolver.query(
                     CalendarContract.Events.CONTENT_URI,
                     arrayOf(CalendarContract.Events._ID, CalendarContract.Events.CUSTOM_APP_URI, CalendarContract.Events.DTSTART, CalendarContract.Events.HAS_ALARM),
-                    "${android.provider.CalendarContract.Events.CALENDAR_ID} = ? AND ${android.provider.CalendarContract.Events.CUSTOM_APP_PACKAGE} = ? AND ${android.provider.CalendarContract.Events.DELETED} = 0",
+                    "${CalendarContract.Events.CALENDAR_ID} = ? AND ${CalendarContract.Events.CUSTOM_APP_PACKAGE} = ? AND ${CalendarContract.Events.DELETED} = 0",
                     arrayOf(calendarId.toString(), packageName), CalendarContract.Events.DTSTART,
                 )?.use { c ->
                     while (c.moveToNext()) {
                         val reminders = CalendarContract.Reminders.query(contentResolver, c.getLong(0), arrayOf(CalendarContract.Reminders.MINUTES))?.use { it.count } ?: 0
-                        Log.i(TAG, "calendar-written ${c.getString(1)} at ${java.time.Instant.ofEpochMilli(c.getLong(2)).atZone(zone).toLocalDateTime()}, hasAlarm ${c.getInt(3)}, reminders $reminders")
+                        Log.i(TAG, "calendar-written ${c.getString(1)} at ${Instant.ofEpochMilli(c.getLong(2)).atZone(zone).toLocalDateTime()}, hasAlarm ${c.getInt(3)}, reminders $reminders")
                     }
                 }
             }
@@ -244,7 +244,7 @@ class CommandActivity : Activity() {
                 val events = CalendarContract.Events.CONTENT_URI
                 val found = contentResolver.query(
                     events, arrayOf(CalendarContract.Events._ID, CalendarContract.Events.DTSTART, CalendarContract.Events.DTEND),
-                    "${android.provider.CalendarContract.Events.CALENDAR_ID} = ? AND ${android.provider.CalendarContract.Events.CUSTOM_APP_PACKAGE} = ? AND ${android.provider.CalendarContract.Events.CUSTOM_APP_URI} LIKE ? AND ${android.provider.CalendarContract.Events.DELETED} = 0",
+                    "${CalendarContract.Events.CALENDAR_ID} = ? AND ${CalendarContract.Events.CUSTOM_APP_PACKAGE} = ? AND ${CalendarContract.Events.CUSTOM_APP_URI} LIKE ? AND ${CalendarContract.Events.DELETED} = 0",
                     arrayOf(calendarId.toString(), packageName, "%/$key"), null,
                 )?.use { c -> if (c.moveToFirst()) Triple(c.getLong(0), c.getLong(1), c.getLong(2)) else null }
                 if (found == null) return@withContext Log.w(TAG, "No event of the app's for $key")
@@ -417,7 +417,7 @@ class CommandActivity : Activity() {
             "felix" -> {
                 val chat = graph.chat.value
                 val state = chat.felix
-                Log.i(TAG, "felix: next check ${state.nextCheckAt?.let { java.time.Instant.ofEpochMilli(it).atZone(graph.clock.zone()).toLocalTime() }}, last sent ${state.lastSentAt}, activity ${state.activity.keys}, questions ${state.questions.size}, to ask how it went ${state.assessLater.size}, check-in ${state.checkInDraft?.step}; read to ${chat.readAt}")
+                Log.i(TAG, "felix: next check ${state.nextCheckAt?.let { Instant.ofEpochMilli(it).atZone(graph.clock.zone()).toLocalTime() }}, last sent ${state.lastSentAt}, activity ${state.activity.keys}, questions ${state.questions.size}, to ask how it went ${state.assessLater.size}, check-in ${state.checkInDraft?.step}; read to ${chat.readAt}")
                 ChatHistory.his(chat.messages).takeLast(10).forEach { m ->
                     Log.i(TAG, "felix ${m.kind}${if (m.byApp) " (the app's words)" else ""} ${m.pieceKey}: ${m.text.ifBlank { "(silent)" }} ${m.suggestedReplies}${ChatHistory.replyOf(m, chat.messages)?.let { r -> " / reply: ${r.text}" }.orEmpty()}")
                 }

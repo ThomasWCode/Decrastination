@@ -9,6 +9,7 @@ import com.thomaswcode.decrastination.data.SlotRecord
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.SettingsLimits
 import java.time.Instant
+import java.time.format.TextStyle
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -136,7 +137,7 @@ object ReviewInput {
         val byHour = slots.groupBy { Instant.ofEpochMilli(it.start).atZone(zone).hour }.toSortedMap()
         if (byHour.isNotEmpty()) appendLine("Kept by hour: " + byHour.entries.joinToString { (h, s) -> "%02d:00 %s".format(Locale.UK, h, split(s)) })
         val byDay = slots.groupBy { Instant.ofEpochMilli(it.start).atZone(zone).dayOfWeek }.toSortedMap()
-        if (byDay.isNotEmpty()) appendLine("Kept by day: " + byDay.entries.joinToString { (d, s) -> "${d.getDisplayName(java.time.format.TextStyle.SHORT, Locale.UK)} ${split(s)}" })
+        if (byDay.isNotEmpty()) appendLine("Kept by day: " + byDay.entries.joinToString { (d, s) -> "${d.getDisplayName(TextStyle.SHORT, Locale.UK)} ${split(s)}" })
         val photos = slots.count { it.photo }
         if (photos > 0) appendLine("Pieces a photo check found done: $photos.")
         // By window (AI-18): where in the day the work went, moves included.
