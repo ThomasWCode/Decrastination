@@ -1,7 +1,7 @@
 # Blocking and protection
 
 How the blocker covers distracting apps and sites while today's work isn't done, how free time is earned and spent, and how protection, once armed, makes switching the blocker off or loosening it slow and visible.
-Protection never locks you out of your phone: it guards only the app's own pages, and the block screen always lets you go home.
+Protection never locks you out of your phone: it guards only the app's own pages and the few that would undo it (below), and the block screen always lets you go home.
 
 ## The blocker
 
@@ -37,7 +37,7 @@ It stays reported until an address is read again, the browser is blocked outrigh
 4. While today's work isn't done, blocking is strict (`Reason.TodayUndone`).
 5. Otherwise earned free time is spent while a blocked app is in front; with none left, it's blocked (`Reason.NoFreeTime`).
 
-**Today's work isn't done** (BL-01) while today's bucket holds pieces (`Plan.pressure`), or while a slot missed today has gone to tomorrow, until today's working hours end (BL-11, `Focus.missedKeepsPressure`). Tomorrow's work alone never blocks. A missed slot whose task has since finished went to no day: once the plan's made without it, it keeps nothing on (`SlotState.reconciled`).
+**Today's work isn't done** (BL-01) while today's bucket holds pieces (`Plan.pressure`), or while a slot missed today has gone to tomorrow, until today's working hours end (BL-11, `Focus.missedKeepsPressure`). Tomorrow's work alone never blocks. A missed slot whose task has since finished, or gone, went to no day: once the plan's made without it, it keeps nothing on (`SlotState.reconciled`).
 A piece you move yourself (a time, a day or a start you give its task) is recorded moved and its miss forgotten, so moving work doesn't keep the evening blocked the way letting it lapse does.
 
 From a PC, `force-block` makes blocking hours apply for up to two hours whatever the time, for testing (`ProtectionState.forceActiveUntil`); it can only tighten.
@@ -63,7 +63,7 @@ While it's spent, a silent notification counts it down, and a heads-up comes in 
 - a piece under `photoFromMin` (20 minutes) earns on its tick;
 - a longer piece of written homework earns when its photo check passes, once, or on the photo itself if the photo comes first;
 - a longer piece no photo can check (revision, admin, a deck) earns by its source: AnkiDroid's cards counted as you leave it (NF-03), or its task confirmed done by its source the same day;
-- a longer piece of one of your own that isn't written work earns nothing, and its line and **Done** say so.
+- a longer piece of one of your own that isn't written work earns nothing, and its **Done** says so.
 
 What today's slots earn is at most today's plan's share at the ratio: the pieces left today and those kept today, less what kept slots have earned (`Focus.slotRoomMin`). A piece ticked ahead of its day, or work past the day's plan, earns nothing more today.
 

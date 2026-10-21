@@ -68,7 +68,7 @@ Read through AnkiDroid's own provider, `content://com.ichi2.anki.flashcards` (`s
 
 - **Decks** (`AnkiProvider.decks`): each deck's name, today's counts (`deck_count`, `[learn, review, new]`), its New cards/day (`new.perDay` in its options) and its description.
 - **Cards never studied** (`AnkiProvider.unseenCards`): Anki's own search of notes, a side at a time (`deck:"…" is:new card:1`, then `card:2`, up to four), so a deck learnt both ways counts two cards a word.
-- They're asked again only once a deck's counts or options change, or after an hour (`UnseenCache`, AR-08).
+- They're asked again only once a deck's counts or its New cards/day change, or after an hour (`UnseenCache`, AR-08).
 - Section decks are named `Textbook N::x.y`; which textbook a number means is a setting (`ankiTextbook`, Q18).
 
 Its tasks are derived from the counts (`core/AnkiRules.kt`), never listed by AnkiDroid:
@@ -143,7 +143,7 @@ Made in the app, not read from anywhere (Q28): `Source.Own` ("Yours"), keyed `ow
 ## The sync
 
 - **When.** `sync/SyncWorker.kt` reads every source every 15 minutes (WorkManager's shortest period), with no network constraint, and at once when asked (`SyncWorker.syncNow`, all sources or some).
-- A sync of all or some sources also runs on a refresh (Work, the widget, Settings), when the Teams widget's list changes, when AnkiDroid leaves the screen, when Anki's settings change, when a reading finds new deck sections, when Felix reads a source for you from the chat (G2), and from Setup.
+- A sync of all or some sources also runs on a refresh (the main screen's ↻, on any tab, and the widget's), when the Teams widget's list changes, when AnkiDroid leaves the screen, when Anki's settings change, when a reading finds new deck sections, when Felix reads a source for you from the chat (G2), and from Setup.
 - *Check it's done* on a piece reads just its task's source and says whether it agrees (`ui/PieceActions.kt`).
 - **How** (`sync/Syncer.kt`, which the app reaches through `sync/Sync.kt`): one sync at a time; the sources in turn, Anki last, as its deck tasks come from the others' homework; each read on its own, waited for at most 90 s.
 - **A failed source fails only itself.** Its error is kept in its `SourceStatus` with the time of the attempt; its tasks stay as they are, and the other sources carry on.
@@ -161,7 +161,7 @@ Made in the app, not read from anywhere (Q28): `Source.Own` ("Yours"), keyed `ow
 - **Listed as finished** (Power Planner at 100 %, a deck studied), an open task is done. **Not listed**, an open task is done: handed in, ticked, unstarred. A derived task (Anki's) is missed instead: only its counts say it's done.
 - **Listed again**, a done task opens again afresh, its minutes worked and its steps' ticks starting from nothing. A derived task once done stays done, as does one done by its tick.
 - A task already finished when first seen isn't added (a derived one is, as done). A finished task is kept 14 days from its finish, or from its last sighting (`Merge.KEEP_FINISHED_MS`), and longer while it's the same work as an open task.
-- A fortnight after it's finished, a task still kept keeps only its record (`Merge.trimmed`, after every merge, C-Q3): its text, reading, answers and photo go, with an email's message ids and how far its text was read, and its attachments' list (an assignment's reference materials too); its title, dates, estimates, minutes, steps and their ticks, and your values stay, as the reading laid them, and while its source lists it as finished still, the merge leaves it so. Listed again as open, its text comes back and it's read again, as a task seen for the first time.
+- A fortnight after it's finished, a task still kept keeps only its record (`Merge.trimmed`, after every merge, C-Q3): its text, reading, answers and photo go, with an email's messages' UIDs and how far its text was read, and its attachments' list (an assignment's reference materials too); its title, dates, estimates, minutes, steps and their ticks, and your values stay, as the reading laid them, and while its source lists it as finished still, the merge leaves it so. Listed again as open, its text comes back and it's read again, as a task seen for the first time.
 
 Every merge lays the rest over the source's values (`TaskItem.enriched`, `core/Enrichment.kt`):
 - **The reading** (readings.md), always over what the source says now (`sourceValues`), so a new reading leaves none of the last one's dates.
