@@ -14,12 +14,12 @@ import com.thomaswcode.decrastination.core.WallClock
 import com.thomaswcode.decrastination.data.CalendarState
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.TaskState
+import com.thomaswcode.decrastination.felix.FelixWords
 import com.thomaswcode.decrastination.learn.CalendarEvent
 import com.thomaswcode.decrastination.learn.CalendarTime
 import com.thomaswcode.decrastination.learn.EventJudge
 import com.thomaswcode.decrastination.sources.teams.TeamsProvider
 import com.thomaswcode.decrastination.widget.WidgetUpdater
-import com.thomaswcode.decrastination.felix.FelixWords
 import java.time.ZoneId
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
