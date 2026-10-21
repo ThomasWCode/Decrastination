@@ -94,6 +94,9 @@ class Focus(
 
     fun today(now: Long = clock.now()): LocalDate = Instant.ofEpochMilli(now).atZone(clock.zone()).toLocalDate()
 
+    /** Whether [now]'s day is a school day by the school calendar (BL-02), as blocking's start and Teams' automatic syncs (D-105) take it. */
+    fun schoolDayAt(now: Long = clock.now()): Boolean = schoolDay(today(now))
+
     /** Whether a blocked app may be in front now, by [plan]: the plan now, or one Felix is shown, so they agree. */
     fun verdict(now: Long = clock.now(), plan: Plan = this.plan(now)): BlockPolicy.Verdict {
         val state = protection.value

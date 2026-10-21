@@ -2,15 +2,15 @@ package com.thomaswcode.decrastination.block
 
 import com.thomaswcode.decrastination.core.Settings
 import kotlinx.serialization.Serializable
-import java.time.DayOfWeek
 import java.time.Instant
 import java.time.ZoneId
 
 /**
  * When the app asks the Teams widget to sync on its own (Q21, decided 8 Oct): on the first unlock
- * after 16:45, and every three hours, never while asleep (22:30–07:00) and, on weekdays, not
- * before 16:45. Only while the phone is unlocked and in use, which the focus service knows; every
- * one is announced first by a banner counting down 10 s, with Cancel and Delay 5 min. Pure.
+ * after 16:45, and every three hours, never while asleep (22:30–07:00) and, on school days by the
+ * school calendar, not before 16:45 (a weekday off as a weekend day, D-105). Only while the phone is
+ * unlocked and in use, which the focus service knows; every one is announced first by a banner
+ * counting down 10 s, with Cancel and Delay 5 min. Pure.
  */
 object TeamsAutoSync {
 
@@ -48,6 +48,8 @@ object TeamsAutoSync {
         teamsSyncedAt: Long?,
         /** The phone was unlocked just now. */
         unlocked: Boolean,
+        /** Today is a school day by the school calendar (D-105). */
+        schoolDay: Boolean,
     ): Trigger? {
         if (!settings.teamsAutoSync) return null
         val recent = teamsSyncedAt != null && now - teamsSyncedAt < RECENT_MS
@@ -58,7 +60,7 @@ object TeamsAutoSync {
         // The morning briefing's sync: at the next unlock in its hour and a half, school day or not.
         val morning = state.morningUntil
         if (unlocked && morning != null && now < morning && !recent && !BlockPolicy.isQuiet(now, zone, settings)) return Trigger.Morning
-        if (!allowed(now, zone, settings)) return null
+        if (!allowed(now, zone, settings, schoolDay)) return null
         val today = Instant.ofEpochMilli(now).atZone(zone).toLocalDate().toString()
         val minute = BlockPolicy.minuteOfDay(now, zone)
         if (unlocked && state.firstUnlockDay != today && minute >= settings.teamsFirstUnlockMin && !recent) return Trigger.FirstUnlock
@@ -75,12 +77,13 @@ object TeamsAutoSync {
      */
     fun stillWanted(now: Long, zone: ZoneId, settings: Settings): Boolean = settings.teamsAutoSync && !BlockPolicy.isQuiet(now, zone, settings)
 
-    /** Within the hours automatic syncs may happen. */
-    fun allowed(now: Long, zone: ZoneId, settings: Settings): Boolean {
+    /**
+     * Within the hours automatic syncs may happen: outside quiet hours, and on a [schoolDay] from the
+     * school day's blocking time; a weekend or a weekday off any time (D-105).
+     */
+    fun allowed(now: Long, zone: ZoneId, settings: Settings, schoolDay: Boolean): Boolean {
         if (BlockPolicy.isQuiet(now, zone, settings)) return false
-        val day = Instant.ofEpochMilli(now).atZone(zone).dayOfWeek
-        val weekend = day == DayOfWeek.SATURDAY || day == DayOfWeek.SUNDAY
-        return weekend || BlockPolicy.minuteOfDay(now, zone) >= settings.weekdayBlockFromMin
+        return !schoolDay || BlockPolicy.minuteOfDay(now, zone) >= settings.weekdayBlockFromMin
     }
 
     /**
