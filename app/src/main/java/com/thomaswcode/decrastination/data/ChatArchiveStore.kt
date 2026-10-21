@@ -40,6 +40,12 @@ class ChatArchiveStore(private val dir: File, private val clock: () -> Long = Sy
     /** Held while it's written: a month's move, a question answered, all of it replaced. */
     private val writing = Mutex()
 
+    /**
+     * Held while months are read, and while a month is let go: a month's first read can write its file again in
+     * this build's shape ([JsonStore]), so a clear in the middle of that read would see the month come back.
+     */
+    private val reading = Any()
+
     private val _changes = MutableStateFlow(0L)
 
     /** Raised at each write, so what's shown of it is read again. */
@@ -67,10 +73,10 @@ class ChatArchiveStore(private val dir: File, private val clock: () -> Long = Sy
     val holdsAny: Boolean get() = files().isNotEmpty()
 
     /** All of it, oldest first: every month read. */
-    val value: ChatArchive get() = ChatArchive(files().flatMap { month(it).value.messages })
+    val value: ChatArchive get() = synchronized(reading) { ChatArchive(files().flatMap { month(it).value.messages }) }
 
     /** Its newest [n] messages, oldest first: the months read back from the newest as far as they take. */
-    fun recent(n: Int): List<ChatMessage> {
+    fun recent(n: Int): List<ChatMessage> = synchronized(reading) {
         val got = ArrayDeque<List<ChatMessage>>()
         var count = 0
         for (file in files().asReversed()) {
@@ -79,17 +85,17 @@ class ChatArchiveStore(private val dir: File, private val clock: () -> Long = Sy
             got.addFirst(messages)
             count += messages.size
         }
-        return got.flatten().takeLast(n)
+        got.flatten().takeLast(n)
     }
 
     /** Message [id]: the months read back from the newest till it's found. */
-    fun find(id: String): ChatMessage? {
+    fun find(id: String): ChatMessage? = synchronized(reading) {
         for (file in files().asReversed()) month(file).value.messages.firstOrNull { it.id == id }?.let { return it }
-        return null
+        null
     }
 
     /** How many of its newest messages are to be shown for [id] to be the oldest of them ([recent]); null where it isn't there. */
-    fun back(id: String): Int? {
+    fun back(id: String): Int? = synchronized(reading) {
         var after = 0
         for (file in files().asReversed()) {
             val messages = month(file).value.messages
@@ -97,7 +103,7 @@ class ChatArchiveStore(private val dir: File, private val clock: () -> Long = Sy
             if (at >= 0) return after + messages.size - at
             after += messages.size
         }
-        return null
+        null
     }
 
     /**
@@ -139,15 +145,16 @@ class ChatArchiveStore(private val dir: File, private val clock: () -> Long = Sy
     /**
      * All of it let go (*Clear the chat*, a reset): every month's file deleted, none read, and the copies kept of
      * it with them ([isCopy]: its months' older shapes, and its files that couldn't be read), so what's cleared
-     * isn't kept in one (Q38, Q42).
+     * isn't kept in one (Q38, Q42). Not while a month's being read, whose first read may write it again: after.
      */
     suspend fun clear(): Unit = writing.withLock {
         withContext(Dispatchers.IO) {
-            for (file in files()) {
-                months.remove(file)
-                letGo(file)
+            synchronized(reading) {
+                // What's held of each month read goes with its file, so none of it can be written back.
+                months.clear()
+                files().forEach(::letGo)
+                dir.listFiles { f -> f.isFile && isCopy(f.name) }.orEmpty().forEach { letGo(it.name) }
             }
-            dir.listFiles { f -> f.isFile && isCopy(f.name) }.orEmpty().forEach { letGo(it.name) }
         }
         _changes.update { it + 1 }
     }
@@ -166,7 +173,7 @@ class ChatArchiveStore(private val dir: File, private val clock: () -> Long = Sy
         for (file in (files() + byMonth.keys).toSortedSet()) {
             val messages = byMonth[file].orEmpty()
             month(file).update { it.copy(messages = messages) }
-            if (messages.isEmpty()) {
+            if (messages.isEmpty()) synchronized(reading) {
                 months.remove(file)
                 letGo(file)
             }
@@ -186,15 +193,19 @@ class ChatArchiveStore(private val dir: File, private val clock: () -> Long = Sy
             // good) or its copy did (it's all there is of it): there nothing's written, and it stays.
             val wrote = store.keepRecovered()
             if (wrote && store.problem?.copy != null && store.value.messages.isEmpty()) {
-                months.remove(file)
-                withContext(Dispatchers.IO) { letGo(file) }
+                withContext(Dispatchers.IO) {
+                    synchronized(reading) {
+                        months.remove(file)
+                        letGo(file)
+                    }
+                }
             }
         }
     }
 
     /**
      * Month [file] let go: deleted, or, where that fails, written empty, so what was cleared can't come
-     * back (it then shows nothing, and goes at the next clear).
+     * back (it then shows nothing, and goes at the next clear). With [reading] held.
      */
     private fun letGo(file: String) {
         val f = File(dir, file)

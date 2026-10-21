@@ -238,6 +238,12 @@ class JsonStore<T>(
             }
 
         private val copied: String get() = copy?.let { " (the file as it was is kept as $it)" } ?: ""
+
+        /**
+         * As [says], its copy named only while [there] finds it: a clear or a reset takes the copies of what it
+         * clears (Q42), and a file set aside again keeps only its newest few ([COPIES_KEPT]).
+         */
+        fun says(there: (String) -> Boolean): String = if (copy == null || there(copy)) says else copy(copy = null).says
     }
 
     companion object {

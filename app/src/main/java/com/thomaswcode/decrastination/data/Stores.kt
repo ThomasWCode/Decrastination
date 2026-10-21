@@ -150,6 +150,9 @@ class Stores(
     /** Files that couldn't be read whole at this start, and where each was set aside (the archive's months, read later: [ChatArchiveStore.onProblem]). */
     val problems: List<JsonStore.Unreadable> get() = json.mapNotNull { it.problem } + movedAside + chatArchive.problems + listOfNotNull(unsplit, secrets.problem)
 
+    /** Whether [file] is in the stores' folder: a copy one of [problems] named, which a clear or a reset may have taken since. */
+    fun holds(file: String): Boolean = File(dir, file).isFile
+
     /** What was kept of each file that didn't read whole written over it, now its problem is on record ([JsonStore.keepRecovered]). */
     suspend fun keepRecovered() {
         json.forEach { it.keepRecovered() }
