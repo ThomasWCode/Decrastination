@@ -135,7 +135,7 @@ How the app works in detail is in [spec/](spec/); how the work is done is in [de
 ## Development
 
 - **D-82. Each release is a PR, checked on the phone before it's merged**: backup first, `adb install -r`, never uninstalling ([development.md](development.md#the-phone)).
-- **D-83. Codex rounds are your call per PR**: by default at least three, each round's findings fixed before the next, and more past three while a round still finds real bugs (20 Oct; three was the limit before); some PRs one round, some none. Every thread is answered and resolved; no `@codex review` may be left unanswered at merge.
+- **D-83. Codex rounds are your call per PR**: by default each round's findings fixed before the next, and the rounds stop at the first with at most one P2 and no P1, once that one's fixed (21 Oct; before, three was the minimum, and before that the limit); some PRs one round, some none. Every thread is answered and resolved; no `@codex review` may be left unanswered at merge.
 - **D-84. Merged with a merge commit** (`Merge #N: <title>`), the branch deleted, a release tagged `vX.Y.Z`.
 - **D-85. No attribution, co-author or session lines** in commits or PR descriptions.
 - **D-86. Every change of behaviour has unit tests**; CI runs the tests, lint and assemble; no test is switched off.
