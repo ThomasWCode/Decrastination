@@ -127,6 +127,16 @@ class ModelGatewayTest {
     }
 
     @Test
+    fun `a new key put in isn't held by the last key's failure`() = runTest {
+        assertIs<Called.Failed>(ask { throw keyRejected })
+        settle()
+        assertEquals(ModelHold.Resting, gateway.hold(interactive = true))
+        gateway.newKey()
+        assertNull(model.value.aiUsage.keyProblem)
+        assertNull(gateway.hold(interactive = true))
+    }
+
+    @Test
     fun `a key problem that couldn't be shown is shown when the alerts are put right`() = runTest {
         alerts.showing = false
         assertIs<Called.Failed>(ask { throw keyRejected })

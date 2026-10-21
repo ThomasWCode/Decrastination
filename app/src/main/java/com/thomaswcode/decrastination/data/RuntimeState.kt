@@ -1,6 +1,7 @@
 package com.thomaswcode.decrastination.data
 
 import com.thomaswcode.decrastination.block.TeamsAutoSync
+import com.thomaswcode.decrastination.core.Duplicates
 import com.thomaswcode.decrastination.core.Fact
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Source
@@ -52,8 +53,14 @@ data class RuntimeState(
     fun seenUnreadable(seen: JsonStore.Unreadable): RuntimeState =
         copy(unreadable = unreadable - seen, unreadableSeen = (unreadableSeen + listOfNotNull(seen.copy)).distinct().takeLast(MAX_UNREADABLE_SEEN))
 
+    /** Tasks [a] and [b] said not to be the same work (DX-15): not asked about again, the newest [MAX_NOT_SAME] pairs kept. */
+    fun withNotSame(a: String, b: String): RuntimeState = copy(notSame = (notSame + Duplicates.key(a, b)).distinct().takeLast(MAX_NOT_SAME))
+
     companion object {
         const val MAX_UNREADABLE = 10
+
+        /** The pairs of tasks said not to be the same work, kept at most. */
+        const val MAX_NOT_SAME = 200
 
         /** Three copies kept of each of six files, with room. */
         const val MAX_UNREADABLE_SEEN = 24

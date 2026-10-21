@@ -62,6 +62,19 @@ class ConversationTest {
     private fun his() = stores.chat.value.messages.filter { it.from == Speaker.Felix }
 
     @Test
+    fun `a fact or a rule deleted from Settings' list goes, and only it`() = runBlocking {
+        val football = Fact("football", "on Tuesdays", now)
+        val cold = Fact("cold", "this week", now)
+        val blunt = Rule("be blunter", now)
+        val quiet = Rule("not before 8", now)
+        stores.memory.update { MemoryState(facts = listOf(football, cold), rules = listOf(blunt, quiet)) }
+        conversation.deleteFact(cold)
+        conversation.deleteRule(blunt)
+        assertEquals(listOf(football), stores.memory.value.facts)
+        assertEquals(listOf(quiet), stores.memory.value.rules)
+    }
+
+    @Test
     fun `what's remembered that has run out isn't in the profile, and is let go of, silently`() = runBlocking {
         val hour = 3_600_000L
         stores.memory.update {

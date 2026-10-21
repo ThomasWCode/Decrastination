@@ -345,10 +345,9 @@ private fun SameLine(graph: AppGraph, task: TaskItem, other: TaskItem) {
             }
         }) { Text("Same") }
         TextButton(onClick = {
-            graph.scope.launch { graph.runtime.update { it.copy(notSame = (it.notSame + Duplicates.key(task.id, other.id)).distinct().takeLast(MAX_NOT_SAME)) } }
+            graph.scope.launch { graph.notSame(task.id, other.id) }
         }) { Text("Different") }
     }
 }
 
 /** The most pairs said to be different kept: far more than there are. */
-private const val MAX_NOT_SAME = 200

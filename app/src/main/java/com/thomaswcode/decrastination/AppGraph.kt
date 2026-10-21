@@ -159,6 +159,9 @@ class AppGraph private constructor(context: Context) {
     /** Takes [seen] off Setup's list of files found unreadable. */
     suspend fun forgetUnreadable(seen: JsonStore.Unreadable) = runtime.update { it.seenUnreadable(seen) }
 
+    /** Tasks [a] and [b] said, on Work, not to be the same work (DX-15). */
+    suspend fun notSame(a: String, b: String) = runtime.update { it.withNotSame(a, b) }
+
     private val syncer = Syncer(
         tasks = tasks,
         settings = settings,

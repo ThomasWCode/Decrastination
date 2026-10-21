@@ -179,6 +179,15 @@ class StoresTest {
     }
 
     @Test
+    fun `two tasks said not to be the same work are kept once a pair, the newest so many`() {
+        val said = RuntimeState().withNotSame("teams:a", "gmail:b").withNotSame("gmail:b", "teams:a")
+        assertEquals(1, said.notSame.size)
+        val many = (1..RuntimeState.MAX_NOT_SAME + 5).fold(said) { s, n -> s.withNotSame("own:$n", "teams:a") }
+        assertEquals(RuntimeState.MAX_NOT_SAME, many.notSame.size)
+        assertFalse(said.notSame.single() in many.notSame)
+    }
+
+    @Test
     fun `a file found unreadable is said with its copy only while the copy's there, which a reset takes`() = runTest {
         File(dir, "memory.json").writeText("{not json")
         val stores = Stores(dir, Reverse)
