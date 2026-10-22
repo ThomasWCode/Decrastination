@@ -356,6 +356,12 @@ class SlotterTest {
         // The evening isn't school; lunch keeps five minutes after its slot.
         assertEquals(listOf("10:45" to 30, "13:45" to 20), gaps("2026-10-13T07:00"))
         assertEquals(listOf("10:50" to 25, "13:45" to 20), gaps("2026-10-13T10:50"))
+        // A run long enough for a long break keeps it after its slot, as the slots are laid.
+        val study = listOf(w("09:00", "10:30", WindowKind.Study))
+        val first = Slot(SlotKind.Work, chunk("b", 30), Fixtures.at("2026-10-13T09:00"), Fixtures.at("2026-10-13T09:30"), WindowKind.Study, pinned = false)
+        val long = settings.copy(slotLongBreakAfterMin = 30)
+        assertEquals(listOf("09:45" to 45), Slotter.schoolGaps(LocalDate.parse(tuesday), study, emptyList(), listOf(first), Fixtures.at("2026-10-13T07:00"), LONDON, long).map { hm(it.start) to it.minutes })
+        assertEquals(listOf("09:35" to 55), Slotter.schoolGaps(LocalDate.parse(tuesday), study, emptyList(), listOf(first), Fixtures.at("2026-10-13T07:00"), LONDON, settings).map { hm(it.start) to it.minutes })
     }
 
     @Test

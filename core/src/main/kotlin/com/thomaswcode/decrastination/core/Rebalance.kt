@@ -15,6 +15,8 @@ object Rebalance {
     /** The most he's asked about in a morning. */
     const val MAX_ASKED = 3
 
+    private const val MINUTE = 60_000L
+
     /** Task [taskId]'s step [index] ([first]) and the one after it ([second]), the first too long for [gap]. */
     data class Candidate(val taskId: String, val title: String, val index: Int, val first: SubStep, val second: SubStep, val gap: Gap)
 
@@ -34,29 +36,43 @@ object Rebalance {
      * at school, too long for a free time there before its slot today (or with none), and the step after it
      * needing it, alike in its dates and place, so the work moved between them keeps them; both Felix's, as
      * D-4 keeps yours and the reading's as they were given. None of a task whose rebalance you took back
-     * ([declined]). The earliest such time each, at most [MAX_ASKED].
+     * ([declined]). Each its own free time, the earliest its piece can be done in, at most [MAX_ASKED].
      */
     fun candidates(plan: Plan, tasks: List<TaskItem>, declined: Set<String>, now: Long): List<Candidate> {
         val today = plan.todayBucket ?: return emptyList()
         val gaps = today.gaps.filter { it.start >= now && it.minutes >= MIN_STEP_MIN }
         if (gaps.isEmpty()) return emptyList()
-        return tasks.asSequence().filter { it.isOpen && it.source != Source.Anki && it.id !in declined }.mapNotNull { task ->
-            val index = task.subSteps.indexOfFirst { !it.done }.takeIf { it >= 0 } ?: return@mapNotNull null
+        // Each free time for one rebalance: two made for the same one, only one would fit it.
+        val taken = HashSet<Long>()
+        val out = mutableListOf<Candidate>()
+        for (task in tasks) {
+            if (out.size == MAX_ASKED) break
+            if (!task.isOpen || task.source == Source.Anki || task.id in declined) continue
+            val index = task.subSteps.indexOfFirst { !it.done }.takeIf { it >= 0 } ?: continue
             val first = task.subSteps[index]
-            val second = task.subSteps.getOrNull(index + 1) ?: return@mapNotNull null
-            if (first.origin != StepOrigin.Felix || second.origin != StepOrigin.Felix || second.done || second.anyOrder) return@mapNotNull null
+            val second = task.subSteps.getOrNull(index + 1) ?: continue
+            if (first.origin != StepOrigin.Felix || second.origin != StepOrigin.Felix || second.done || second.anyOrder) continue
             // Today's work: a task for another day isn't rewritten for today's free time.
-            if (today.chunks.none { it.taskId == task.id && it.stepIndex == index }) return@mapNotNull null
-            if (worked(task) > 0) return@mapNotNull null
+            val piece = today.chunks.firstOrNull { it.taskId == task.id && it.stepIndex == index } ?: continue
+            if (worked(task) > 0) continue
+            // Its piece laid at the step's own minutes: not shared out to a total you gave, nor shortened by work
+            // or its source's progress, so the minutes he gives are the ones laid.
+            if (piece.minutes != first.minutes) continue
             // Work for home only never goes in a free time at school (PL-15), however it's cut.
             val where = Where.of(first.where) ?: Planner.whereOf(task)
-            if (where == Where.Home) return@mapNotNull null
+            if (where == Where.Home) continue
             // What moves to the second keeps its dates and place: no later deadline for it, nowhere it couldn't be done.
-            if (first.from != second.from || first.dueAt != second.dueAt || (Where.of(second.where) ?: Planner.whereOf(task)) != where) return@mapNotNull null
+            if (first.from != second.from || first.dueAt != second.dueAt || (Where.of(second.where) ?: Planner.whereOf(task)) != where) continue
             val slot = today.slots.firstOrNull { it.kind == SlotKind.Work && it.chunk?.taskId == task.id && it.chunk?.stepIndex == index }
-            val gap = gaps.firstOrNull { it.minutes < first.minutes && (slot == null || it.start < slot.start) } ?: return@mapNotNull null
-            Candidate(task.id, task.title, index, first, second, gap)
-        }.take(MAX_ASKED).toList()
+            // One its piece can be done in: before its slot, once its task opens, over before a deadline that day.
+            val gap = gaps.firstOrNull { g ->
+                g.start !in taken && g.minutes < first.minutes && (slot == null || g.start < slot.start) &&
+                    (piece.availableAt ?: Long.MIN_VALUE) <= g.start && !(piece.hard && piece.deadline < g.start + g.minutes * MINUTE)
+            } ?: continue
+            taken += gap.start
+            out += Candidate(task.id, task.title, index, first, second, gap)
+        }
+        return out
     }
 
     /**
