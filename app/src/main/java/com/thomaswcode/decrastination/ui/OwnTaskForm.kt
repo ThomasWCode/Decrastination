@@ -264,10 +264,14 @@ internal fun changedRow(rows: List<StepRow>, i: Int, changed: StepRow): List<Ste
 /** [rows] with row [i] moved [by] one place, its mark (D-109) going with it: its chip shows it there. */
 internal fun movedRow(rows: List<StepRow>, i: Int, by: Int): List<StepRow> = rows.toMutableList().also { it.add(i + by, it.removeAt(i)) }
 
-/** The form's [rows] as the task's steps, as listed: each with its own dates and mark as its row had them, and its id where it was one of [start]'s. */
-internal fun stepsOf(rows: List<StepRow>, start: OwnTask): List<OwnStep> = rows.map { r ->
+/**
+ * The form's [rows] as the task's steps, as listed: each with its own dates and mark as its row had them, and
+ * its id where it was one of [start]'s. The first step's mark is false, having none before it (D-109): a row
+ * moved to the top, or left there, keeps none its chip, not shown there, couldn't clear.
+ */
+internal fun stepsOf(rows: List<StepRow>, start: OwnTask): List<OwnStep> = rows.mapIndexed { i, r ->
     val was = r.wasIndex?.let { start.steps.getOrNull(it) }
-    OwnStep(r.title.trim(), r.min, r.from, r.dueAt, r.where, id = was?.id.orEmpty(), wasIndex = r.wasIndex, anyOrder = r.anyOrder)
+    OwnStep(r.title.trim(), r.min, r.from, r.dueAt, r.where, id = was?.id.orEmpty(), wasIndex = r.wasIndex, anyOrder = r.anyOrder && i > 0)
 }
 
 private val STEPS = Json { ignoreUnknownKeys = true }
