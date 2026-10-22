@@ -81,6 +81,9 @@ object Rebalance {
             // A step whose sections an Anki deck holds is the deck's work, which the plan leaves out: as his step it would lose
             // them and be planned twice, so none of such a task.
             if (task.subSteps.any { it.ankiSections.isNotEmpty() }) continue
+            // Nor the second over an hour once he's split them, however he does: two of the reading's only where their sum
+            // less the shortest first he may make stays within an hour.
+            if (first.origin == StepOrigin.Reading && planned[index] + planned[index + 1] - MIN_STEP_MIN > Sittings.MAX_MIN) continue
             // Work for home only never goes in a free time at school (PL-15), however it's cut.
             val where = Where.of(first.where) ?: Planner.whereOf(task)
             if (where == Where.Home) continue
