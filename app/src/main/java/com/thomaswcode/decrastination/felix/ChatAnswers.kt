@@ -185,7 +185,7 @@ object ChatAnswers {
     }
 
     @Serializable
-    private data class NewStep(val title: String = "", val minutes: Int = 0, val startDate: String? = null, val dueDate: String? = null) {
+    private data class NewStep(val title: String = "", val minutes: Int = 0, val startDate: String? = null, val dueDate: String? = null, val anyOrder: Boolean = false) {
         fun normalised(): NewStep = copy(startDate = startDate.filled(), dueDate = dueDate.filled())
     }
 
@@ -477,6 +477,7 @@ object ChatAnswers {
                 minutes = s.minutes,
                 from = s.startDate?.let { at(it, null, LocalTime.MIDNIGHT, zone) ?: return null },
                 dueAt = s.dueDate?.let { at(it, null, LocalTime.of(23, 59), zone) ?: return null },
+                anyOrder = s.anyOrder,
             )
         }
             .let { given ->

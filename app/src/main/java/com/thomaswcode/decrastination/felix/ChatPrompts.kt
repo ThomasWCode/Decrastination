@@ -157,7 +157,7 @@ object ChatPrompts {
         You are ${settings.felixName}: ${settings.felixLine}, and this is the chat in a UK sixth-form student's (Year $year) planner app. The app gathers their homework (Teams), their own planner (Power Planner), emails they've starred (Gmail), German vocabulary (Anki) and tasks they add themselves; plans the work into the evenings before each is due, around their calendar; and blocks distracting apps while work is due.
 
         The student tells you about their work. You can:
-        1. Add tasks of their own (newTasks): something to do that isn't listed ("write my UCAS statement by 1 December", "buy mum a present before Sunday"). Give a short title in their words; kind: Homework, Revision, Admin, or Event for something that happens at a time (an appointment, a match); subject if it's for one (else an empty string); dueDate and dueTime if they gave them (an event's start; with no time, an event starts at 09:00 and anything else is due by the end of that day); minutes for the whole thing (your best estimate if they didn't say, and say so in your reply); startDate if it can't be started before a day; notes only for something worth keeping (else an empty string); and steps only for a big task worth splitting, each with minutes (adding up to the task's) and its own dates where it has them.
+        1. Add tasks of their own (newTasks): something to do that isn't listed ("write my UCAS statement by 1 December", "buy mum a present before Sunday"). Give a short title in their words; kind: Homework, Revision, Admin, or Event for something that happens at a time (an appointment, a match); subject if it's for one (else an empty string); dueDate and dueTime if they gave them (an event's start; with no time, an event starts at 09:00 and anything else is due by the end of that day); minutes for the whole thing (your best estimate if they didn't say, and say so in your reply); startDate if it can't be started before a day; notes only for something worth keeping (else an empty string); and steps only for a big task worth splitting, each with minutes (adding up to the task's), its own dates where it has them, and anyOrder: true where it doesn't need the steps before it done first, false where it builds on them.
         2. Change their tasks and days (changes), with these:
 """ + InstructionPrompts.CHANGE_TYPES.prependIndent("        ") + """
         A due date at a class's next lesson ("it's due next lesson", "next chemistry") is a DueBy with lesson the class, as the lessons' list names it (its subject or one of its names), and date and time empty: the app sets it to that lesson's start. Give lesson only for that; when it's refused, ask them the date.
@@ -192,6 +192,7 @@ object ChatPrompts {
         "minutes" to INTEGER,
         "startDate" to DATE,
         "dueDate" to DATE,
+        "anyOrder" to mapOf("type" to "boolean"),
     )
 
     private val TASK = InstructionPrompts.obj(
@@ -553,7 +554,7 @@ object ChatPrompts {
             val finish = if (t.source == Source.Gmail && settings?.gmailFinishes == true) " | finish with done" else ""
             appendLine("- ${t.id} | ${t.title.take(MAX_TITLE)} | ${t.source.label} | ${classOf(t, classMap)} | ${t.kind.label} | $due | ${minutes(t)} | ${t.workedMin + t.photoMin} | ${start?.let(::at) ?: "-"} | $holds$finish")
             // Its steps by their place, for a tick (AI-14).
-            t.subSteps.take(OwnTaskRules.MAX_STEPS).forEachIndexed { i, step -> appendLine("    step $i: ${step.title.take(MAX_TITLE)} (${step.minutes} min)${if (step.done) ", done" else ""}") }
+            t.subSteps.take(OwnTaskRules.MAX_STEPS).forEachIndexed { i, step -> appendLine("    step $i: ${step.title.take(MAX_TITLE)} (${step.minutes} min)${if (step.anyOrder) ", in any order" else ""}${if (step.done) ", done" else ""}") }
             // Its own notes, by id for a delete, whose each is, within their room; the standing ones it matches
             // (D-100) by id, listed once below.
             for ((i, n) in Notes.on(t.id, notes).withIndex()) {

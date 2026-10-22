@@ -97,6 +97,17 @@ class ReadingAnswersTest {
     }
 
     @Test
+    fun `an assignment's steps say which don't need the ones before them done first (D-109)`() {
+        val e = parse(
+            Enrichments.Job.Assignment,
+            """{"subSteps":[{"title":"Questions 1-6","minutes":30,"ankiSections":[],"from":null,"due":null,"where":"anywhere","anyOrder":false},{"title":"Read the article on page 12","minutes":20,"ankiSections":[],"from":null,"due":null,"where":"anywhere","anyOrder":true}],"effortMin":50,"ankiSections":[],"testDate":null}""",
+            assignment("Questions 1-6, and read the article on page 12."),
+        )!!
+        assertEquals(listOf(false, true), e.subSteps!!.map { it.anyOrder })
+        assertTrue("anyOrder: true where it doesn't need the steps before it done first" in ReadingPrompts.system(Enrichments.Job.Assignment))
+    }
+
+    @Test
     fun `what's out of range is dropped rather than trusted`() {
         val e = parse(Enrichments.Job.Email, """{"kind":"Admin","actionableFrom":"1999-01-01","deadline":"2031-01-01T09:00","effortMin":5000,"nextStep":"  "}""")!!
         assertEquals(Kind.Admin, e.kind)

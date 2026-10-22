@@ -66,7 +66,7 @@ object InstructionAnswers {
 
     /** A step of a [ChangeType.Steps] change, its dates empty for none. */
     @Serializable
-    internal data class GivenStep(val title: String = "", val minutes: Int = 0, val startDate: String = "", val dueDate: String = "", val where: String = "anywhere")
+    internal data class GivenStep(val title: String = "", val minutes: Int = 0, val startDate: String = "", val dueDate: String = "", val where: String = "anywhere", val anyOrder: Boolean = false)
 
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -174,6 +174,7 @@ object InstructionAnswers {
                         from = from,
                         dueAt = due,
                         where = s.where.takeIf { it == "home" || it == "anywhere" },
+                        anyOrder = s.anyOrder,
                     )
                 } ?: return null
                 Change(type, taskId = id, steps = steps)
