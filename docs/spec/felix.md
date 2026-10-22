@@ -122,7 +122,7 @@ When a message needs facts neither you nor the app have given him (a competition
 - A slot ended, a slot kept and the day done are said only while fresh (30 minutes), so a restart hours on says nothing stale.
 
 Each is written by `FelixCaller.say` (AI-22, medium effort) from `felix/FelixPrompts.kt` (`FelixPrompts.describe`), told:
-- the reason and the time; the piece with its minutes, slot and what earns its free time, and its first action (AI-15);
+- the reason and the time; the piece with its minutes, slot and what earns its free time, and its first action (AI-15); its task's due date, as the app plans by it (4.3.9);
 - its task's own text, up to 1 500 characters (`FelixPrompts.TEXT`): a longer one as its reading's summary, else its start and end; with what's attached (D-93);
 - its task's notes, its own and the standing ones it matches (4.1.0); at a slot's start, your reminder that came then, so he doesn't say it twice; in the morning, your reminders that come today;
 - today's slots kept, missed and to come; the free time; his last six messages of his own from the chat and your reply to each (`ChatHistory.replyOf`: the message of yours answering it, or the next of yours within ten minutes); and the question.

@@ -473,6 +473,7 @@ Reason: SlotStart
 Now: Tuesday 13 October 2026, 17:00
 Piece: Rates of reaction worksheet: part 1 of 2, 30 min, slot 16:50–17:20; it earns its free time with a photo of it, which it needs to earn
 First action: Read question 1 and underline what it asks
+Its task's due: Thu 15 Oct, 08:30
 Its task's own text (Teams; links: https://example.org/rates-sheet):
   Answer questions 1 to 8 on the sheet. For question 5, use the results table from Monday's practical.
   Show your working for the calculations.
@@ -492,6 +493,7 @@ Recent, oldest first:
 Reason: SlotEnd
 Now: Tuesday 13 October 2026, 17:26
 Piece: Rates of reaction worksheet: part 1 of 2, 30 min, slot 16:50–17:20; it went by undone, and has been moved to later
+Its task's due: Thu 15 Oct, 08:30
 Its task's own text (Teams; links: https://example.org/rates-sheet):
   Answer questions 1 to 8 on the sheet. For question 5, use the results table from Monday's practical.
   Show your working for the calculations.
@@ -509,6 +511,7 @@ Recent, oldest first:
 Reason: SlotEnd
 Now: Tuesday 13 October 2026, 17:22
 Piece: Rates of reaction worksheet: part 1 of 2, 30 min, slot 16:50–17:20; ticked done, but it earns its free time only with a photo of it
+Its task's due: Thu 15 Oct, 08:30
 Its task's own text (Teams; links: https://example.org/rates-sheet):
   Answer questions 1 to 8 on the sheet. For question 5, use the results table from Monday's practical.
   Show your working for the calculations.
@@ -526,6 +529,7 @@ Recent, oldest first:
 Reason: SlotKept
 Now: Tuesday 13 October 2026, 17:21
 Piece: Rates of reaction worksheet: part 1 of 2, 30 min, slot 16:50–17:20; kept
+Its task's due: Thu 15 Oct, 08:30
 Its task's own text (Teams; links: https://example.org/rates-sheet):
   Answer questions 1 to 8 on the sheet. For question 5, use the results table from Monday's practical.
   Show your working for the calculations.
@@ -544,6 +548,7 @@ Recent, oldest first:
 Reason: DayDone
 Now: Tuesday 13 October 2026, 21:40
 Piece: Rates of reaction worksheet: part 1 of 2, 30 min, slot 16:50–17:20; kept
+Its task's due: Thu 15 Oct, 08:30
 Its task's own text (Teams; links: https://example.org/rates-sheet):
   Answer questions 1 to 8 on the sheet. For question 5, use the results table from Monday's practical.
   Show your working for the calculations.
@@ -575,6 +580,7 @@ Recent, oldest first:
 Reason: Question
 Now: Tuesday 13 October 2026, 17:00
 Task: Rates of reaction worksheet
+Its task's due: Thu 15 Oct, 08:30
 Its task's own text (Teams; links: https://example.org/rates-sheet):
   Answer questions 1 to 8 on the sheet. For question 5, use the results table from Monday's practical.
   Show your working for the calculations.
