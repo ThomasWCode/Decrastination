@@ -289,6 +289,12 @@ class BackupTest {
         val restored = Backups.restoredInstructions(backed, here = listOf(aAfterB))
         assertEquals(listOf("saturday" to InstructionStatus.Applied, "due" to InstructionStatus.Applied, "b-after-a" to InstructionStatus.Unclear), restored.map { it.id to it.state })
         assertEquals(dueFriday.appliedAt, restored.single { it.id == "due" }.appliedAt)
+        // Those not in use, as a reset's copy holds them, come back after them as they were, but one here already.
+        val reading = Instruction("reading", "reading", at = now, state = InstructionStatus.Reading)
+        val unclear = Instruction("unclear", "unclear", at = now, state = InstructionStatus.Unclear, note = "It can't be told which task")
+        val all = Backups.restoredInstructions(backed + reading + unclear, here = listOf(aAfterB, unclear))
+        assertEquals(listOf("saturday", "due", "b-after-a", "reading"), all.map { it.id })
+        assertEquals(reading, all.last())
     }
 
     @Test

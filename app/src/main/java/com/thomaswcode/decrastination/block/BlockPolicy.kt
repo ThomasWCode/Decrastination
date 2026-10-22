@@ -15,7 +15,7 @@ import kotlinx.serialization.Serializable
  * 2. Sleep (22:30–07:00) is never blocked, and nor is the time before blocking starts: 16:45 on a
  *    school day, 10:00 on a weekend or a day off (BL-02).
  * 3. Otherwise: while today's work isn't done, blocking is strict (BL-01: today's pieces still to
- *    do, or a slot missed today that went to tomorrow, BL-11).
+ *    do, or a slot missed today with no time left today, BL-11).
  *    Between today's slots, after one kept, earned time can be spent till the next starts (BL-10).
  * 4. With nothing left today, earned free time is spent while a blocked app is in front; with none
  *    left, it's blocked until more is earned.
@@ -26,7 +26,7 @@ object BlockPolicy {
         val now: Long,
         val zone: ZoneId,
         val settings: Settings,
-        /** Today's work isn't done (BL-01): pieces still to do today, or a slot missed today that went to tomorrow (BL-11). */
+        /** Today's work isn't done (BL-01): pieces still to do today, or a slot missed today with no time left today (BL-11). */
         val pressure: Boolean,
         val creditLeftMs: Long,
         val overrideUntil: Long? = null,

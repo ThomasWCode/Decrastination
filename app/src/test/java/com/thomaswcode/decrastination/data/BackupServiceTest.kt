@@ -3,6 +3,8 @@ package com.thomaswcode.decrastination.data
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.core.Act
 import com.thomaswcode.decrastination.core.Calibration
+import com.thomaswcode.decrastination.core.Change
+import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.ChatAction
 import com.thomaswcode.decrastination.core.ChatArchive
 import com.thomaswcode.decrastination.core.ChatMessage
@@ -11,6 +13,8 @@ import com.thomaswcode.decrastination.core.MemoryState
 import com.thomaswcode.decrastination.core.Fact
 import com.thomaswcode.decrastination.core.ChatState
 import com.thomaswcode.decrastination.core.FixedClock
+import com.thomaswcode.decrastination.core.Instruction
+import com.thomaswcode.decrastination.core.InstructionStatus
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.MessageKind
 import com.thomaswcode.decrastination.core.Settings
@@ -141,8 +145,54 @@ class BackupServiceTest {
     }
 
     @Test
+    fun `a reset of your changes keeps every instruction in its copy, in use or not, and its copy brings each back as it was`() = runTest {
+        val phone = Phone(full = true)
+        val reading = Instruction("being-read", "skip the essay on Friday", at = clock.time, state = InstructionStatus.Reading)
+        val unclear = Instruction("left-unclear", "the usual", at = clock.time, state = InstructionStatus.Unclear, note = "It can't be told which task")
+        phone.stores.replace(phone.stores.instructions) { it.copy(instructions = it.instructions + reading + unclear) }
+        val before = phone.stores.instructions.value.instructions
+        assertTrue(before.any { it.state == InstructionStatus.Applied })
+        phone.service.reset(Reset.Instructions)
+        assertTrue(phone.stores.instructions.value.instructions.isEmpty())
+        val copy = phone.folder.files.keys.single { it.startsWith("reset-") }
+        val said = phone.service.importBackup(phone.folder.files.getValue(copy))
+        settle()
+        assertEquals(before.map { it.id }.toSet(), phone.stores.instructions.value.instructions.map { it.id }.toSet())
+        assertEquals(reading, phone.stores.instructions.value.instructions.single { it.id == "being-read" })
+        assertEquals(unclear, phone.stores.instructions.value.instructions.single { it.id == "left-unclear" })
+        // Those of the fixtures' too: every one not in use, said.
+        val notInUse = before.count { it.state != InstructionStatus.Applied }
+        assertTrue(notInUse > 2 && "$notInUse not in use back as they were" in said, said)
+        // The nightly backup keeps those in use alone, as before.
+        assertTrue(Backups.decode(phone.service.exportBackup(), phone.stores.shapes)!!.instructions.all { it.state == InstructionStatus.Applied })
+    }
+
+    @Test
+    fun `a reset whose copy would be too big to restore, even without the chat's earlier messages, takes nothing`() = runTest {
+        val phone = Phone(full = true, cap = 2_000)
+        val before = phone.states()
+        assertEquals("Nothing was reset: a copy of it would be too big to restore.", phone.service.reset(Reset.Instructions))
+        assertEquals(before, phone.states())
+        assertTrue(phone.folder.files.isEmpty())
+    }
+
+    @Test
+    fun `a reset whose copy Import would refuse takes nothing`() = runTest {
+        val phone = Phone(full = true)
+        // Read and waiting, its due date further ahead than a backup's instructions are let hold.
+        val far = Instruction("far-off", "the trip's form", at = clock.time, state = InstructionStatus.Understood, changes = listOf(Change(ChangeType.DueBy, taskId = "own:far", time = clock.time + 500 * 86_400_000L)))
+        phone.stores.replace(phone.stores.instructions) { it.copy(instructions = it.instructions + far) }
+        val before = phone.states()
+        val said = phone.service.reset(Reset.Instructions)
+        assertTrue(said.startsWith("Nothing was reset: a copy of it couldn't be restored ("), said)
+        assertEquals(before, phone.states())
+        assertTrue(phone.folder.files.isEmpty())
+    }
+
+    @Test
     fun `a reset of the chat whose copy has no room for its earliest messages keeps them whole beside it`() = runTest {
-        val small = Phone(full = true, cap = 60_000)
+        // Room for all but the archive's earliest messages: the rest of the copy fits, as it must to be read back.
+        val small = Phone(full = true, cap = 100_000)
         val archive = ChatArchive((1..80).map { ChatMessage("a$it", Speaker.You, "x".repeat(1_000), it.toLong(), answeredAt = it.toLong()) })
         small.stores.replace(small.stores.chatArchive, archive)
         val said = small.service.reset(Reset.Chat)

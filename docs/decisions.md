@@ -111,7 +111,7 @@ How the app works in detail is in [spec/](spec/); how the work is done is in [de
 - **D-69. Your own reckoning teaches the pace nothing; a total Felix works out at your pace still does** (3.1.4, 17 Oct), measured against the app's estimate it came from, while the task's content is unchanged (`TaskItem.pacedTeaches`; a read for newer prompts keeps it, new content ends it). Steps you or Felix give without a new total are planned as given, and the task still teaches the pace against the app's estimate, its total.
 - **D-70. A class's own multiplier counts from its third timed piece**; its kind's until then (IMP-P2-016).
 - **D-71. The weekly review's bounded changes apply at once, armed or not**, and say what changed: the margin, undated minutes, the free-time ratio, school-day hours by up to an hour; never the piece length (D-33). Reviews that only propose were declined. The ratio can go anywhere in its range, so the review may loosen a stricter one you set without D-46's wait (17 Oct, as intended).
-- **D-72. Reset**: a row per area and *Everything learned*, a backup first, no code; never the key, the sources or protection.
+- **D-72. Reset**: a row per area and *Everything learned*, a backup first, no code; never the key, the sources or protection. The backup first holds every instruction, in use or not, so a reset of your changes loses none (21 Oct, Q51: A); and a reset whose copy couldn't be restored (too big, or something in it Import would refuse) takes nothing, whatever it resets (21 Oct, Q54: A).
 
 ## Notifications
 

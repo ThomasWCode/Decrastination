@@ -135,10 +135,10 @@ class BlockPolicyTest {
         assertEquals("Blocking: off until 16:45; free time 5 min", Focus.blockingLine(BlockPolicy.Verdict.Allow(BlockPolicy.Reason.BeforeBlock), two, 5, 16 * 60 + 45, null))
         assertEquals("Blocking: off: quiet hours; free time 0 min", Focus.blockingLine(BlockPolicy.Verdict.Allow(BlockPolicy.Reason.Quiet), emptyList(), 0, 16 * 60 + 45, null))
         assertEquals("Blocking: off while their free time is spent; free time 25 min", Focus.blockingLine(BlockPolicy.Verdict.Spend, emptyList(), 25, 16 * 60 + 45, null))
-        // A slot missed today went to tomorrow (BL-11): on till the day's hours end, with work left or none.
-        assertEquals("Blocking: on till 18:30: a slot missed today went to tomorrow; free time 0 min", Focus.blockingLine(BlockPolicy.Verdict.Block(BlockPolicy.Reason.TodayUndone), emptyList(), 0, 16 * 60 + 45, null, 18 * 60 + 30))
+        // A slot missed today with no time left today (BL-11): on till the day's hours end, with work left or none.
+        assertEquals("Blocking: on till 18:30: a slot missed today has no time left today; free time 0 min", Focus.blockingLine(BlockPolicy.Verdict.Block(BlockPolicy.Reason.TodayUndone), emptyList(), 0, 16 * 60 + 45, null, 18 * 60 + 30))
         assertEquals(
-            "Blocking: on till 18:30: a slot missed today went to tomorrow; today's work left: 2 pieces, 1 h; free time 12 min",
+            "Blocking: on till 18:30: a slot missed today has no time left today; today's work left: 2 pieces, 1 h; free time 12 min",
             Focus.blockingLine(BlockPolicy.Verdict.Block(BlockPolicy.Reason.TodayUndone), two, 12, 16 * 60 + 45, null, 18 * 60 + 30),
         )
     }
