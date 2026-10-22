@@ -1,5 +1,6 @@
 package com.thomaswcode.decrastination.enrich
 
+import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.sources.gmail.GmailThreads
@@ -31,7 +32,7 @@ object TaskText {
     private fun cut(s: String): String = if (s.length <= MAX_ITEM) s else s.take(MAX_ITEM - 1) + "…"
 
     /**
-     * What its text holds, as its line in the chat's list says it (8c): who an email's from, what's attached and
+     * What its text holds, as its line in the chat's list says it: who an email's from, what's attached and
      * linked, and how long its text is ("text 1,850 characters", or "no text"), within [max] characters; what's
      * attached and linked cut first, the length always there.
      */
@@ -115,7 +116,7 @@ object TaskText {
     }
 
     /** What the task's reading in force made of its text, where it made anything. */
-    private fun summary(task: TaskItem): String? = com.thomaswcode.decrastination.core.Enrichments.current(task)?.summary?.takeIf { it.isNotBlank() }
+    private fun summary(task: TaskItem): String? = Enrichments.current(task)?.summary?.takeIf { it.isNotBlank() }
 
     /** Whether it has anything of its own to tell: its text, or what's attached to it. */
     fun has(task: TaskItem): Boolean = task.detail.isNotBlank() || GmailThreads.attachmentsOf(task).isNotEmpty() || TeamsRows.linksOf(task).isNotEmpty()

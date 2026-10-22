@@ -136,7 +136,7 @@ class ChatScreenState {
         offered = false
     }
 
-    /** His messages with what's under them open (5c): none once the screen's paused ([paused]), so coming back finds every one closed. */
+    /** His messages with what's under them open: none once the screen's paused ([paused]), so coming back finds every one closed. */
     var open: Set<String> by mutableStateOf(emptySet())
         private set
 

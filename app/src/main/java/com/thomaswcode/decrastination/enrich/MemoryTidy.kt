@@ -31,7 +31,7 @@ object MemoryTidy {
     }
 
     /**
-     * Whether [fact] is one a tidy may rewrite (10a): one with neither an until nor a task. Those with either go by
+     * Whether [fact] is one a tidy may rewrite: one with neither an until nor a task. Those with either go by
      * themselves, and a merge would lose when; they leave the rest less room ([due]).
      */
     fun tidied(fact: Fact): Boolean = fact.until == null && fact.taskId == null

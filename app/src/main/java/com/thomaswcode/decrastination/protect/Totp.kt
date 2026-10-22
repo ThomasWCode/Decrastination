@@ -1,5 +1,6 @@
 package com.thomaswcode.decrastination.protect
 
+import java.io.ByteArrayOutputStream
 import kotlinx.serialization.Serializable
 import java.net.URLEncoder
 import java.nio.ByteBuffer
@@ -9,7 +10,7 @@ import javax.crypto.spec.SecretKeySpec
 
 /**
  * Time-based one-time codes (RFC 6238, as every authenticator app makes them): the parent
- * override decided on 8 Oct (Q17). Arming shows a secret once, as a QR code, for your dad's
+ * override (Q17). Arming shows a secret once, as a QR code, for your dad's
  * authenticator; afterwards a code he reads out applies one pending change at once. The secret
  * lives only in the encrypted store and is never shown again. Pure.
  */
@@ -63,7 +64,7 @@ object Totp {
 
     fun fromBase32(text: String): ByteArray {
         val clean = text.uppercase().filter { it in ALPHABET }
-        val out = java.io.ByteArrayOutputStream()
+        val out = ByteArrayOutputStream()
         var buffer = 0
         var bits = 0
         for (c in clean) {

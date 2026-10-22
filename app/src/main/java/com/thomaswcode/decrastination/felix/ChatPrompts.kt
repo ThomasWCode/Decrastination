@@ -48,7 +48,7 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 
 /**
- * What Claude is told in the chat (2.0.0, Q29), and the shape of its answer: a reply, tasks of your
+ * What Claude is told in the chat (Q29), and the shape of its answer: a reply, tasks of your
  * own it would add, and changes it would make. Pure, so the wording, the schema and the checks are
  * tested without the API.
  */
@@ -94,7 +94,7 @@ object ChatPrompts {
     /** A message a reply quotes, cut to this ([turns]): its point, not all of it. */
     private const val MAX_QUOTE = 300
 
-    /** The most of his messages still waiting for their answer listed in the context (10b), the newest: a day's few, with room to spare. */
+    /** The most of his messages still waiting for their answer listed in the context, the newest: a day's few, with room to spare. */
     const val MAX_WAITING = 10
 
     /** How much of each one's words the list gives. */
@@ -106,19 +106,19 @@ object ChatPrompts {
     private val CLOCK = DateTimeFormatter.ofPattern("HH:mm", Locale.UK)
 
     /**
-     * What looking things up is for (16 Oct), when he may ([Settings.felixSearches]): asked for in
+     * What looking things up is for, when he may ([Settings.felixSearches]): asked for in
      * the answer, made in a call of its own ([WebResearcher]), and answered again with what it found.
      */
     private val RESEARCH = """
         6. Look things up (research): when their message needs facts that neither they nor the app have given you (a competition's rules and dates, an exam board's specification, what an event involves), give what to search the web for in a few words, reply only that you're looking it up, and change nothing: you'll be asked again with what's found, to answer and act on (its steps, dates and minutes). Never for what the lists here tell you, nor for anything about the student themselves; most messages need none, and research is then an empty string.
     """.trimIndent()
 
-    /** What [READ]'s `details` asks for beside tasks' ids (8c): the week's numbers (G6), and the calendar past the fortnight (G7). */
+    /** What [READ]'s `details` asks for beside tasks' ids: the week's numbers (G6), and the calendar past the fortnight (G7). */
     const val ASK_STATS = "stats"
     const val ASK_CALENDAR = "calendar"
 
     /**
-     * [word] as a request for the calendar (G7, 8c): `calendar`, the four weeks after the fortnight (empty), or
+     * [word] as a request for the calendar (G7): `calendar`, the four weeks after the fortnight (empty), or
      * `calendar:yyyy-MM`, that month (yyyy-MM). Null for any other word, and for a month that isn't four digits of
      * a year and two of a month, as one far off (a signed year) couldn't be made a time.
      */
@@ -135,20 +135,20 @@ object ChatPrompts {
     private const val NO_RESEARCH = "6. research is always an empty string: you can't look things up."
 
     /**
-     * What he can ask for before answering (8c): a task's whole text (D-93), its text in the context being cut
+     * What he can ask for before answering: a task's whole text (D-93), its text in the context being cut
      * short ([BRIEF_TEXT]); the week's numbers ([ASK_STATS], G6); the calendar past the fortnight
      * ([ASK_CALENDAR], G7). Asked for in the answer, and answered again with them ([turns]).
      */
     private const val READ = "7. Ask for more before answering (details), where your answer needs what the context doesn't give: a task's id, up to three, for its whole text (to quote it or answer from it: each task's line says how long its text is and what comes with it; the texts listed are cut short, a long one to its reading's summary, so where what they ask about, an amount, a name, an order or a date, isn't in what you're shown, ask for the text rather than say it isn't there); stats, for the week's numbers (this week so far and last week: time worked, slots kept and missed, work finished and deadlines met, by subject), for a message about how a week went; calendar, for the four weeks after the fortnight, or calendar:YYYY-MM for a month (calendar:2026-12), for anything after the fortnight's events listed. Then reply only that you're looking, and change nothing: you'll be asked again with what they bring, to answer and act on. Never a text for the task a message is about, which comes whole; most messages need none, and details is then an empty list."
 
     /**
-     * A reminder (Stage 8a, Q9: B): its words theirs, at a time, at their next slot on a task, or a while before a
+     * A reminder (D-100): its words theirs, at a time, at their next slot on a task, or a while before a
      * task's due; one listed moved or reworded in place by its id. A change of its own type, on the changes' fields,
      * as a list of its own made the chat's grammar too large for the API to compile (Q13: B).
      */
     private const val REMIND = "8. Remind (changes, type Remind): when they ask to be reminded of something, that's a reminder, not a task: title its words, theirs, as you'd say them then; eventKey \"at\" for a date and time (date, time), \"slotStart\" for the start of their next slot on a task (taskId, and date only where it's not to be from today), or \"beforeDue\" for a while before a task's due (taskId, minutes before it). To move or reword one already set (\"push it to 8\"), afterTaskId its id from the reminders' list, with eventKey and its time as they're to be, and title empty to keep its words; a new one's afterTaskId is empty. Say when it'll come. Not for work to plan, which is a task; most messages need none."
 
-    /** A note on a task, or standing, for every task its scope matches (Stage 8a, Q31: A): a change of its own type, as [REMIND] is. */
+    /** A note on a task, or standing, for every task its scope matches (D-100): a change of its own type, as [REMIND] is. */
     private const val NOTE = "9. Note (changes, type Note): something to keep with a task for when it comes up (what the teacher said, which source to use, what they've decided): taskId, and title the words; or, for every task of a subject, a class, a source or with a word in its title (\"all her chemistry homework on sheets\"), taskId empty and eventKey what it's for, as kind:value: subject:Chemistry, class:12X/Ch1 (its code), source:Teams (or Power Planner, Gmail, Anki, Yours), title:essay, several joined by ; (subject:Chemistry;source:Teams). Not a reminder, nor a fact about them; most messages need none."
 
     /** The chat's instructions, as Felix (AI-24; Q-44: the chat is him too), for a student in Year [year] (AI-06). */
@@ -208,7 +208,7 @@ object ChatPrompts {
 
     /**
      * A memory to keep or forget (AI-21): a string each, so no union is added (the API takes 16); how long it holds
-     * and a fact's task (10a) plain strings too, empty for none.
+     * and a fact's task plain strings too, empty for none.
      */
     val MEMORY: Map<String, Any> = InstructionPrompts.obj(
         "topic" to STRING,
@@ -218,7 +218,7 @@ object ChatPrompts {
         "taskId" to STRING,
     )
 
-    /** Something to do for the student (AI-14; 16 Oct, more of it; 4.1.0, a reminder cancelled, a note deleted; 4.1.1, a piece kept or not), plain fields so no union is added: stepIndex -1, setting and value empty for none. */
+    /** Something to do for the student (AI-14), plain fields so no union is added: stepIndex -1, setting and value empty for none. */
     private val ACTION = InstructionPrompts.obj(
         "type" to mapOf("type" to "string", "enum" to listOf("tickStep", "untickStep", "done", "reopen", "delete", "open", "setting", "cancelReminder", "deleteNote", "keepPiece", "unkeepPiece", "sync")),
         "taskId" to STRING,
@@ -227,7 +227,7 @@ object ChatPrompts {
         "value" to STRING,
     )
 
-    /** The chat's change types beyond the instructions' (Stage 8a, Q13: B): a reminder, and a note. */
+    /** The chat's change types beyond the instructions' (Q13: B): a reminder, and a note. */
     const val REMIND_TYPE = "Remind"
     const val NOTE_TYPE = "Note"
 
@@ -238,13 +238,13 @@ object ChatPrompts {
 
     /**
      * A change as the chat gives it: the instructions' reader's, and whether a Minutes total is the
-     * app's estimate at the student's pace (17 Oct), so the pace still learns from the task. A plain
-     * boolean, so no union is added. Its types gain the chat's own two (8a, [REMIND_TYPE], [NOTE_TYPE]); and
-     * a DueBy's class whose next lesson it's due at (G8, 4.1.1), a plain string, empty for none.
+     * app's estimate at the student's pace, so the pace still learns from the task. A plain
+     * boolean, so no union is added. Its types gain the chat's own two ([REMIND_TYPE], [NOTE_TYPE]); and
+     * a DueBy's class whose next lesson it's due at (G8), a plain string, empty for none.
      */
     private val CHANGE = InstructionPrompts.obj(
         *(
-            // Its types the instructions' and the chat's own two (8a): a reminder and a note, on the same fields.
+            // Its types the instructions' and the chat's own two: a reminder and a note, on the same fields.
             listOf("type" to mapOf("type" to "string", "enum" to ChangeType.entries.map { it.name } + REMIND_TYPE + NOTE_TYPE)) +
                 InstructionPrompts.CHANGE_FIELDS.filterNot { it.first == "type" } + ("paced" to mapOf("type" to "boolean")) + ("lesson" to STRING)
             ).toTypedArray(),
@@ -257,11 +257,11 @@ object ChatPrompts {
         "memories" to mapOf("type" to "array", "items" to MEMORY),
         "suggestedReplies" to mapOf("type" to "array", "items" to STRING),
         "actions" to mapOf("type" to "array", "items" to ACTION),
-        // What to look up on the web (16 Oct), empty for nothing: a plain string, so no union is added.
+        // What to look up on the web, empty for nothing: a plain string, so no union is added.
         "research" to STRING,
         // The tasks whose whole text to read (D-93), none for nothing.
         "details" to mapOf("type" to "array", "items" to STRING),
-        // His messages still waiting that their words answer (10b, D-99), by id, none for none: plain strings, so no union is added.
+        // His messages still waiting that their words answer (D-99), by id, none for none: plain strings, so no union is added.
         "answered" to mapOf("type" to "array", "items" to STRING),
     )
 
@@ -276,10 +276,10 @@ object ChatPrompts {
      * so a long list of tasks can't push it out: the list loses its end, and the plan its far days.
      * Your newest words come after what they're about, in full ([aboutText], D-93), and before what
      * a web search [found], the tasks he asked to [read] whole ([readText]), and what else he asked for
-     * [brought] (8c: the week's numbers, the calendar further out), each under its own heading, in a room of their own
+     * [brought] (the week's numbers, the calendar further out), each under its own heading, in a room of their own
      * ([BROUGHT_ROOM], [fitted]); a search that couldn't be made said so ([notLooked]), so he doesn't ask again; at the last round a
      * message has ([lastRound]), said to be the last, so he answers from what he has ([ChatRounds.MAX_ROUNDS]). A message of yours that
-     * replies to one that isn't just before it starts with that one, quoted (5b), as the window may not
+     * replies to one that isn't just before it starts with that one, quoted, as the window may not
      * hold it.
      */
     fun turns(
@@ -321,14 +321,14 @@ object ChatPrompts {
             val before = lead.joinToString("\n") { (if (it.byApp) "(The app wrote to them for you: “" else "(You'd written to them: “") + it.text.trim().take(MAX_TEXT) + "”)" }
             listOf(folded.first().first to before + "\n\n" + folded.first().second) + folded.drop(1)
         }
-        // After what it's about, in full; with what a web search found for it (16 Oct) and the tasks
+        // After what it's about, in full; with what a web search found for it and the tasks
         // he asked to read, to answer and act on. What it's about never at your words' cost: cut
         // to the room they leave, however much it says.
         val words = texts.last().second
         val about = aboutText(recent.last { it.from == Speaker.You }.about, tasks, events)?.take((budget - words.length - 2).coerceAtLeast(0))?.takeIf { it.isNotEmpty() }
         val head = listOfNotNull(about, words, found?.let(ResearchPrompts::told), notLooked?.let { "Your web search couldn't be made ($it): answer without it, and leave research empty." }, read.takeIf { it.isNotEmpty() }?.let(::readText))
         val tail = listOfNotNull(LAST.takeIf { lastRound })
-        // What else he asked for (8c) in a room of its own, so it can't crowd out the context the rest of the turn is
+        // What else he asked for in a room of its own, so it can't crowd out the context the rest of the turn is
         // cut to, nor be cut off its end unseen.
         val broughtRoom = minOf(BROUGHT_ROOM, budget - (head + tail).sumOf { it.length + 2 } - 2 * brought.size).coerceAtLeast(0)
         val newest = (head + fitted(brought, broughtRoom) + tail).joinToString("\n\n").take(budget)
@@ -351,7 +351,7 @@ object ChatPrompts {
 
     private const val PLAN_GAP = "\n\n"
 
-    /** The most of your newest turn what a round brings beside the texts takes (8c): the week's numbers, and sixty events of the calendar with room to spare. */
+    /** The most of your newest turn what a round brings beside the texts takes: the week's numbers, and sixty events of the calendar with room to spare. */
     private const val BROUGHT_ROOM = 12_000
 
     /**
@@ -472,10 +472,10 @@ object ChatPrompts {
 
     /**
      * What the app knows now: today, the open tasks, the fortnight's events, and the changes in use;
-     * since 16 Oct the student's own finished lately (to open again) and the [settings] he may change,
-     * with their values; since 17 Oct their pace as [calibration] has learned it, and what each task's
+     * the student's own finished lately (to open again) and the [settings] he may change,
+     * with their values; their pace as [calibration] has learned it, and what each task's
      * minutes come to in the plan by it, so he allows for it in the minutes he sets (planned as he
-     * sets them); since 4.1.0 each task's own [notes] under its steps (within a room of their own) with the
+     * sets them); each task's own [notes] under its steps (within a room of their own) with the
      * ids of the standing ones it matches, those listed once after the tasks, and the [reminders] still to
      * come, each by its id, when it comes ([moments], by id) and its words. The plan's sent beside it ([plan], [turns]).
      */
@@ -502,7 +502,7 @@ object ChatPrompts {
             val pace = calibration?.multiplier(t.kind, t.className) ?: 1.0
             return when {
                 abs(pace - 1.0) < 0.005 -> "${t.effortMin}"
-                // Felix's paced total (#50's review): with the app's estimate now, where it's another, and
+                // Felix's paced total: with the app's estimate now, where it's another, and
                 // whether the task has changed since, so he can set it again.
                 t.pacedMinutes -> "${t.effortMin}, as given: the app's ${t.mine.minutes?.paced?.from} at their pace" +
                     (if (t.appEffortMin != t.mine.minutes?.paced?.from) ", which it now puts at ${t.appEffortMin}" else "") +
@@ -514,7 +514,7 @@ object ChatPrompts {
         val byId = tasks.associateBy { it.id }
         appendLine("Today: ${Instant.ofEpochMilli(now).atZone(zone).format(TODAY)} (${zone.id})")
         appendLine()
-        // His nudges still waiting for their answer (D-99), by id, so he can name those their words answer (10b): first, at
+        // His nudges still waiting for their answer (D-99), by id, so he can name those their words answer: first, at
         // most ten short lines, so a context too long for its room (a long list of reminders) never loses them. None, no list.
         if (waiting.isNotEmpty()) {
             appendLine("Your messages still waiting for their answer (id | when | what it's about | your words):")
@@ -524,7 +524,7 @@ object ChatPrompts {
             }
             appendLine()
         }
-        // The reminders still to come (8a), by id, to move or cancel; so one isn't set twice. First, so a context too
+        // The reminders still to come, by id, to move or cancel; so one isn't set twice. First, so a context too
         // long for its room never loses them ([turns]): the lists after them can run long.
         appendLine("Reminders set, still to come (id | when | their words | its task):")
         val toCome = reminders.filter(Reminders::pending).sortedBy { moments[it.id] ?: Long.MAX_VALUE }
@@ -537,9 +537,9 @@ object ChatPrompts {
         appendLine("Open tasks (id | title | from | its class, and its subject | kind | due, a real deadline unless marked a plan, which is never overdue and moves on once it passes | minutes in all, with what the plan makes of them at their pace where it's learned | minutes worked so far | can't start before | what its text holds: who an email's from, what's attached and linked, how long its text is):")
         // By the date shown (the deadline in force, PL-14), so a plan's date gone by doesn't crowd nearer ones out of the list.
         val open = tasks.filter { it.isOpen && !it.hidden }.sortedBy { it.deadlineAt(now) ?: it.dueAt ?: Long.MAX_VALUE }
-        // The notes' room (8a), so many can't crowd out what comes after them; the standing ones, each once.
+        // The notes' room, so many can't crowd out what comes after them; the standing ones, each once.
         var noteRoom = MAX_NOTES_TEXT
-        // What each task's text holds (8c), in a room of its own, spent by the deadline in force as the list is, so no
+        // What each task's text holds, in a room of its own, spent by the deadline in force as the list is, so no
         // task is crowded out of it: past the room, its length alone. A task the app made (an Anki quota) has none of its own.
         var holdsRoom = MAX_HOLDS
         val standing = Notes.live(notes).filter { it.scope != null }.sortedBy { it.at }
@@ -549,13 +549,13 @@ object ChatPrompts {
             // A date the app or Claude set is a plan, not a deadline (PL-14): said, so it's not called overdue.
             val due = (t.deadlineAt(now) ?: t.dueAt)?.let { at(it) + if (t.hardAt(now)) "" else " (a plan)" } ?: "no date"
             val holds = if (t.derived) "-" else TaskText.holds(t, if (holdsRoom >= HOLDS_LINE) HOLDS_LINE else 0).also { holdsRoom -= it.length }
-            // A starred email he can finish (Stage 11): its done unstars and archives it in Gmail.
+            // A starred email he can finish: its done unstars and archives it in Gmail.
             val finish = if (t.source == Source.Gmail && settings?.gmailFinishes == true) " | finish with done" else ""
             appendLine("- ${t.id} | ${t.title.take(MAX_TITLE)} | ${t.source.label} | ${classOf(t, classMap)} | ${t.kind.label} | $due | ${minutes(t)} | ${t.workedMin + t.photoMin} | ${start?.let(::at) ?: "-"} | $holds$finish")
             // Its steps by their place, for a tick (AI-14).
             t.subSteps.take(OwnTaskRules.MAX_STEPS).forEachIndexed { i, step -> appendLine("    step $i: ${step.title.take(MAX_TITLE)} (${step.minutes} min)${if (step.done) ", done" else ""}") }
-            // Its own notes (8a), by id for a delete, whose each is, within their room; the standing ones it matches
-            // (Q31: A) by id, listed once below.
+            // Its own notes, by id for a delete, whose each is, within their room; the standing ones it matches
+            // (D-100) by id, listed once below.
             for ((i, n) in Notes.on(t.id, notes).withIndex()) {
                 val line = "    note ${n.id} (${if (n.by == By.Felix) "yours" else "theirs"}): ${n.text.take(Notes.MAX_TEXT)}"
                 if (line.length > noteRoom) {
@@ -569,13 +569,13 @@ object ChatPrompts {
             standing.filter { Notes.matches(it.scope!!, t, classMap) }.takeIf { it.isNotEmpty() }?.let { "    standing notes for it: " + it.joinToString { n -> n.id } }
                 ?.takeIf { it.length <= noteRoom }?.let { line -> appendLine(line); noteRoom -= line.length }
         }
-        // The standing notes once (Q31: A), each told under every task it matches by its id.
+        // The standing notes once (D-100), each told under every task it matches by its id.
         if (standing.isNotEmpty()) {
             appendLine()
             appendLine("Standing notes, for every task they match (id | whose | the tasks they're for | their words):")
             standing.forEach { appendLine("- ${it.id} | ${if (it.by == By.Felix) "yours" else "theirs"} | ${Notes.scopeLine(it.scope!!)} | ${it.text.take(Notes.MAX_TEXT)}") }
         }
-        // A finished task's notes (8a), by id, so he can say or delete them: the newest first, in what's left of their room.
+        // A finished task's notes, by id, so he can say or delete them: the newest first, in what's left of their room.
         val closed = Notes.live(notes).filter { n -> byId[n.taskId]?.isOpen == false }.sortedByDescending { it.at }
         if (closed.isNotEmpty()) {
             appendLine()
@@ -590,7 +590,7 @@ object ChatPrompts {
                 noteRoom -= line.length
             }
         }
-        // Their pace (17 Oct): what the app's own estimates are planned by, never minutes given.
+        // Their pace: what the app's own estimates are planned by, never minutes given.
         if (calibration != null) {
             appendLine()
             appendLine("Their pace, learned from work they've finished (kind, and class where it's its own | how long their work takes against the app's own estimates): the plan stretches only the app's estimates by it.")
@@ -633,7 +633,7 @@ object ChatPrompts {
             appendLine("Changes already in use:")
             inUse.take(InstructionPrompts.MAX_TASKS).forEach { appendLine("- " + InstructionRules.describe(it, byId, zone)) }
         }
-        // Their own finished lately (16 Oct), to open again if one wasn't.
+        // Their own finished lately, to open again if one wasn't.
         val finished = tasks.filter { (it.source == Source.Own || it.tickDone) && it.status == Status.Done && (it.doneAt ?: 0L) > now - FINISHED_MS }
             .sortedByDescending { it.doneAt }
         if (finished.isNotEmpty()) {
@@ -646,7 +646,7 @@ object ChatPrompts {
             appendLine("Settings you can change (setting | what it is | its value now):")
             FelixSettings.describe(settings).forEach { appendLine("- $it") }
         }
-        // Each open task's own text, cut short (D-93): what it asks of them; what comes with it is on its line (8c).
+        // Each open task's own text, cut short (D-93): what it asks of them; what comes with it is on its line.
         // Last, so it's what a context too long for its room loses first ([turns]).
         val withText = open.take(InstructionPrompts.MAX_TASKS).filter { !it.derived && it.detail.isNotBlank() }
         if (withText.isNotEmpty()) {
@@ -671,14 +671,14 @@ object ChatPrompts {
         return "- ${EventJudge.key(e)} | ${e.title.take(MAX_TITLE)} | $time"
     }
 
-    /** The week's numbers as a round brings them (G6, 8c): [lines] ([com.thomaswcode.decrastination.learn.Stats.weekLines]) under their own heading. */
+    /** The week's numbers as a round brings them (G6): [lines] ([com.thomaswcode.decrastination.learn.Stats.weekLines]) under their own heading. */
     fun statsBlock(lines: List<String>): String = buildString {
         append("The week's numbers you asked for (answer from them, and leave details empty):")
         lines.forEach { append("\n").append(it) }
     }
 
     /**
-     * The calendar a round brings (G7, 8c), its events listed as the fortnight's are: [month] (yyyy-MM), or with it
+     * The calendar a round brings (G7), its events listed as the fortnight's are: [month] (yyyy-MM), or with it
      * empty the four weeks after the fortnight; at most [InstructionPrompts.MAX_EVENTS] events, saying how many more
      * there are and from when, and where the calendar's last good [read] began and ended (a day back, and the plan's
      * reach then, [CalendarTime.readUntil]), so a month crowded by repeating events, one past the read, or a calendar
@@ -743,7 +743,7 @@ object ChatPrompts {
     private val LESSON_DAY = DateTimeFormatter.ofPattern("EEE d MMM HH:mm", Locale.UK)
 
     /**
-     * Each open task's own text as the context gives it, at most (D-93). Its cut to 250 (8c) didn't hold in the
+     * Each open task's own text as the context gives it, at most (D-93). Its cut to 250 didn't hold in the
      * chat's eval by its rule (a round more on one of its cases), so it stays at 600, beside each line's room.
      */
     const val BRIEF_TEXT = 600
@@ -751,11 +751,11 @@ object ChatPrompts {
     /** All of their texts in the context, at most. */
     private const val MAX_TEXTS = 12_000
 
-    /** What a task's text holds, on its line (8c): at most this much a line, and all the lines' together. */
+    /** What a task's text holds, on its line: at most this much a line, and all the lines' together. */
     private const val HOLDS_LINE = 160
     private const val MAX_HOLDS = 6_000
 
-    /** The tasks' own notes under them in the context, at most (8a): the rest are on their sheets. */
+    /** The tasks' own notes under them in the context, at most: the rest are on their sheets. */
     private const val MAX_NOTES_TEXT = 6_000
 
     /** A task's whole text, as a message about it, or his asking to read it, carries it (D-93). */
@@ -769,7 +769,7 @@ object ChatPrompts {
     private const val EVENT_PLACE = 200
     private const val EVENT_TEXT = 500
 
-    /** How far back, and how many, of the student's own finished tasks the chat's told of (16 Oct). */
+    /** How far back, and how many, of the student's own finished tasks the chat's told of. */
     private const val FINISHED_MS = 7 * 24 * 3_600_000L
     private const val MAX_FINISHED = 15
 
@@ -783,8 +783,8 @@ object ChatPrompts {
      * the fortnight, in a line naming its tasks; then each of the next [PLAN_DAYS] days, its minutes
      * against its working time, its work a task a line with the pieces that day, and its events from
      * *Coming up*. The days go last, the nearest first, so a plan cut to fit ([turns]) loses only its
-     * far days; each summary is at most [PLAN_LIST] lines. Since 4.1.1 (G1) today's slots and the next
-     * piece of each task with no steps say their keys, so he can keep one done, and the pieces [kept]
+     * far days; each summary is at most [PLAN_LIST] lines. Today's slots and the next
+     * piece of each task with no steps say their keys (G1), so he can keep one done, and the pieces [kept]
      * today (their keys and labels), which the plan no longer shows, so he can take one back; and after
      * the slot under way, [blocking]: whether blocking applies and why, and the free time (G5).
      */

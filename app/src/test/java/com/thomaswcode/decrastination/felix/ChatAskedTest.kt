@@ -2,18 +2,24 @@ package com.thomaswcode.decrastination.felix
 
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
+import com.thomaswcode.decrastination.core.Act
+import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Speaker
+import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.WindowKind
 import com.thomaswcode.decrastination.data.ActivityLog
 import com.thomaswcode.decrastination.data.CompletionRecord
 import com.thomaswcode.decrastination.data.SlotOutcome
 import com.thomaswcode.decrastination.data.SlotRecord
+import com.thomaswcode.decrastination.enrich.Pricing
 import com.thomaswcode.decrastination.learn.CalendarEvent
 import com.thomaswcode.decrastination.learn.CalendarTime
 import com.thomaswcode.decrastination.learn.EventJudge
 import com.thomaswcode.decrastination.learn.Stats
+import java.time.LocalDate
+import java.time.ZoneOffset
 import kotlinx.coroutines.runBlocking
 import okhttp3.mockwebserver.MockResponse
 import kotlin.test.Test
@@ -21,7 +27,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/** What he asks for before answering beside the tasks' texts (8c): the week's numbers (G6) and the calendar further out (G7). */
+/** What he asks for before answering beside the tasks' texts: the week's numbers (G6) and the calendar further out (G7). */
 class ChatAskedTest {
     // A Tuesday evening: this week began yesterday.
     private val now = Fixtures.at("2026-10-20T19:00")
@@ -106,7 +112,7 @@ class ChatAskedTest {
             event(4, "Seven weeks on", "2026-12-08T10:00"),
             // Across the fortnight's end (18:00 on 3 Nov, GMT by then), and all day on its last day: the fortnight lists both.
             event(5, "Across the end", "2026-11-03T17:00", hours = 2),
-            CalendarEvent(6, "On the last day", java.time.LocalDate.parse("2026-11-03").atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli(), java.time.LocalDate.parse("2026-11-04").atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli(), allDay = true),
+            CalendarEvent(6, "On the last day", LocalDate.parse("2026-11-03").atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli(), LocalDate.parse("2026-11-04").atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli(), allDay = true),
         )
         val block = ChatPrompts.calendarBlock(events, "", now, LONDON, read())
         assertTrue(block.startsWith("The calendar you asked for, the four weeks after the fortnight, Tuesday 3 November 2026 to Tuesday 1 December 2026"), block)
@@ -127,7 +133,7 @@ class ChatAskedTest {
         assertTrue(ChatPrompts.calendarBlock(others, "2026-12", now, LONDON, read()).endsWith("\n(none)"))
         // An all-day event by its date, as the calendar keeps it (midnight to midnight, UTC): one on the last day of
         // September isn't October's in summer time, and one on the first of October is.
-        fun allDay(id: Long, title: String, date: String) = CalendarEvent(id, title, java.time.LocalDate.parse(date).atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli(), java.time.LocalDate.parse(date).plusDays(1).atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli(), allDay = true)
+        fun allDay(id: Long, title: String, date: String) = CalendarEvent(id, title, LocalDate.parse(date).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli(), LocalDate.parse(date).plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli(), allDay = true)
         val october = ChatPrompts.calendarBlock(listOf(allDay(1, "Last of September", "2026-09-30"), allDay(2, "First of October", "2026-10-01")), "2026-10", Fixtures.at("2026-09-20T12:00"), LONDON, read(Fixtures.at("2026-09-20T12:00")))
         assertTrue("| First of October |" in october && "Last of September" !in october, october)
     }
@@ -185,7 +191,7 @@ class ChatAskedTest {
             assertFalse(sent.take(2).any { "That's the last that can be brought" in it })
             assertTrue("That's the last that can be brought for this message" in sent[2], sent[2])
             val reply = felix.stores.chat.value.messages.last { it.from == Speaker.Felix }
-            assertTrue(reply.acts.any { it.problem && it.line.startsWith(com.thomaswcode.decrastination.core.Act.NOT_BROUGHT) }, reply.acts.toString())
+            assertTrue(reply.acts.any { it.problem && it.line.startsWith(Act.NOT_BROUGHT) }, reply.acts.toString())
             assertEquals(3, felix.stores.model.value.calls.size)
         }
     }
@@ -205,7 +211,7 @@ class ChatAskedTest {
             assertTrue("Your web search couldn't be made (the search failed)" in sent[2] && "The week's numbers you asked for" in sent[2], sent[2])
             val reply = felix.stores.chat.value.messages.last { it.from == Speaker.Felix }
             assertEquals("A steady week.", reply.text)
-            assertTrue(reply.acts.any { it.problem && it.line.startsWith(com.thomaswcode.decrastination.core.Act.NOT_LOOKED_UP) }, reply.acts.toString())
+            assertTrue(reply.acts.any { it.problem && it.line.startsWith(Act.NOT_LOOKED_UP) }, reply.acts.toString())
         }
     }
 
@@ -215,8 +221,8 @@ class ChatAskedTest {
         val events = (1..60).map { i -> event(i.toLong(), "A long-titled rehearsal of the winter concert, part $i of many, in the main hall".repeat(2), "2026-12-%02dT10:00".format(1 + (i - 1) / 3)) }
         val block = ChatPrompts.calendarBlock(events, "2026-12", now, LONDON, read())
         assertTrue(block.length > 12_000, "${block.length}")
-        val long = (1..3).map { i -> com.thomaswcode.decrastination.core.TaskItem(id = "teams:l$i", source = Source.Teams, sourceId = "l$i", title = "Long $i", kind = Kind.Homework, detail = "w ".repeat(6_000), firstSeenAt = now, lastSeenAt = now) }
-        val asked = com.thomaswcode.decrastination.core.ChatMessage("y1", Speaker.You, "What's on, and what do these say?", now)
+        val long = (1..3).map { i -> TaskItem(id = "teams:l$i", source = Source.Teams, sourceId = "l$i", title = "Long $i", kind = Kind.Homework, detail = "w ".repeat(6_000), firstSeenAt = now, lastSeenAt = now) }
+        val asked = ChatMessage("y1", Speaker.You, "What's on, and what do these say?", now)
         val newest = ChatPrompts.turns(listOf(asked), "CONTEXT ".repeat(2_000), long.associateBy { it.id }, LONDON, read = long, brought = listOf(block)).single().second
         val calendar = newest.substringAfter("The calendar you asked for")
         assertTrue(calendar.contains("more lines left out for room)"), calendar.takeLast(300))
@@ -224,6 +230,6 @@ class ChatAskedTest {
         assertTrue(calendar.substringBefore("\n(…").trimEnd().endsWith("10:00 to Thu 10 Dec 2026 11:00") || calendar.substringBefore("\n(…").lines().last().contains(" | "), calendar.substringBefore("\n(…").takeLast(200))
         // The context keeps room beside it.
         assertTrue("CONTEXT CONTEXT" in newest, newest.take(200))
-        assertTrue(newest.length <= com.thomaswcode.decrastination.enrich.Pricing.MAX_INPUT_CHARS)
+        assertTrue(newest.length <= Pricing.MAX_INPUT_CHARS)
     }
 }

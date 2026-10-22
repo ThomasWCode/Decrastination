@@ -1,7 +1,7 @@
 package com.thomaswcode.decrastination.core
 
 /**
- * What is blocked, as decided on 8 Oct (Q8): video and social apps; in Chrome and Brave, the
+ * What is blocked (Q8): video and social apps; in Chrome and Brave, the
  * same services' sites, read from the address bar; Firefox and Tor outright, since their address
  * bars aren't read. Never blocked: calls, messages, WhatsApp, Slack, Teams, school and study apps,
  * maps and travel, banking, authenticators, AI assistants, health and support apps, none of

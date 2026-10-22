@@ -4,6 +4,7 @@ import com.thomaswcode.decrastination.core.Calibration
 import com.thomaswcode.decrastination.core.Change
 import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.ChatArchive
+import com.thomaswcode.decrastination.core.ChatState
 import com.thomaswcode.decrastination.core.GmailWrite
 import com.thomaswcode.decrastination.core.GmailWrites
 import com.thomaswcode.decrastination.core.DueKind
@@ -12,6 +13,8 @@ import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.InstructionState
 import com.thomaswcode.decrastination.core.InstructionStatus
 import com.thomaswcode.decrastination.core.Kind
+import com.thomaswcode.decrastination.core.Memories
+import com.thomaswcode.decrastination.core.MemoryState
 import com.thomaswcode.decrastination.core.Mine
 import com.thomaswcode.decrastination.core.Notes
 import com.thomaswcode.decrastination.core.OwnTaskRules
@@ -19,13 +22,18 @@ import com.thomaswcode.decrastination.core.Reminders
 import com.thomaswcode.decrastination.core.SchoolCalendar
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.SettingsLimits
+import com.thomaswcode.decrastination.core.SlotState
 import com.thomaswcode.decrastination.core.Source
+import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.enriched
 import com.thomaswcode.decrastination.enrich.AiUsage
+import com.thomaswcode.decrastination.learn.AnkiProgress
 import com.thomaswcode.decrastination.learn.Calibrator
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
+import java.time.DayOfWeek
+import java.time.LocalDate
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -61,14 +69,14 @@ data class Backup(
     /** The school calendar (PL-16): days off and half-days, none in a backup from before. */
     val school: SchoolCalendar = SchoolCalendar(),
     /** What Felix remembers (AI-21): none in a backup from before. */
-    val memory: com.thomaswcode.decrastination.core.MemoryState = com.thomaswcode.decrastination.core.MemoryState(),
+    val memory: MemoryState = MemoryState(),
     /** Today's slots' starts and misses (AR-07), for a restore the same day. */
-    val slots: com.thomaswcode.decrastination.core.SlotState = com.thomaswcode.decrastination.core.SlotState(),
+    val slots: SlotState = SlotState(),
     /**
      * The chat (AR-07, LR-08), so a reset's copy holds what it clears: restored where this phone's is
      * empty, Felix's state with it ([com.thomaswcode.decrastination.core.ChatState.felix]). None in a backup from before.
      */
-    val chat: com.thomaswcode.decrastination.core.ChatState = com.thomaswcode.decrastination.core.ChatState(),
+    val chat: ChatState = ChatState(),
     /** The chat's earlier messages, while the backup has room for them, the oldest left out first ([Backups.fitted]). */
     val archive: ChatArchive = ChatArchive(),
     /** Felix's notes and reminders (4.1.0): none in a backup from before. */
@@ -145,7 +153,7 @@ object Backups {
     }
 
     /**
-     * This phone's writes to Gmail with [backup]'s receipts it hasn't, by id (4.3.0), in the order they were made, so a
+     * This phone's writes to Gmail with [backup]'s receipts it hasn't, by id, in the order they were made, so a
      * backup's older one never comes after this phone's newer for its task: a pending one of the backup's isn't there
      * to bring (a backup keeps none), and this phone's own stand as they are.
      */
@@ -207,7 +215,7 @@ object Backups {
             val said = (versions[file] as? JsonPrimitive)?.intOrNull
             // A store the backup carries (PARTS) that's newer than this build's isn't read, wherever its parts
             // are: one of its parts renamed or moved there would otherwise be passed over, and the backup
-            // restored without it. One it doesn't carry (the calendar's record) has nothing in it to lose.
+            // restored without it. One it doesn't carry (`runtime.json`, say) has nothing in it to lose.
             if (said != null && said > shape.version && PARTS.values.any { it.first == file }) return null
             val parts = PARTS.filterValues { it.first == file }.keys.filter { it in backup }
             if (parts.isEmpty()) continue
@@ -240,12 +248,12 @@ object Backups {
             val log = backup.log
             if (log.slots.any { it.workedMin !in 0..DAY_MIN || it.plannedMin !in 0..DAY_MIN || it.start < 0 || it.end < it.start }) add("a slot's minutes")
             if (log.completions.any { it.estimateMin < 0 || it.workedMin < 0 }) add("a finished task's minutes")
-            if (log.days.any { it.plannedMin < 0 || (it.doneMin ?: 0) < 0 || runCatching { java.time.LocalDate.parse(it.date) }.isFailure }) add("a day's plan")
+            if (log.days.any { it.plannedMin < 0 || (it.doneMin ?: 0) < 0 || runCatching { LocalDate.parse(it.date) }.isFailure }) add("a day's plan")
             if (log.checkIns.any { it.feel !in 1..5 }) add("a check-in's answer")
             // The weeks' rollups (PL-10), as a review writes them: each from its Monday, no count below
             // nothing, and none past what a week holds.
             if (log.weeks.any { w ->
-                    runCatching { java.time.LocalDate.parse(w.week) }.getOrNull()?.dayOfWeek != java.time.DayOfWeek.MONDAY ||
+                    runCatching { LocalDate.parse(w.week) }.getOrNull()?.dayOfWeek != DayOfWeek.MONDAY ||
                         listOf(w.minutes, w.finished, w.onTime, w.dated, w.blocks, w.fullDays, w.slotsKept, w.slotsMissed).any { it < 0 } ||
                         w.onTime > w.finished || w.dated > w.finished || w.fullDays > 7 || w.minutes > 7 * DAY_MIN
                 } || log.weeks.map { it.week }.toSet().size != log.weeks.size
@@ -260,14 +268,14 @@ object Backups {
             // What's remembered as the app keeps it (AI-21): in its room, every fact with a topic, and
             // each within the bounds it's kept to, as all of it goes with every call.
             val memory = backup.memory
-            val kept = com.thomaswcode.decrastination.core.Memories
+            val kept = Memories
             if (kept.chars(memory.facts) > kept.FACT_BUDGET_CHARS || memory.rules.size > kept.RULE_MAX ||
                 memory.facts.any { it.topic.isBlank() || it.text.isBlank() || it.topic.length > kept.MAX_TOPIC || it.text.length > kept.MAX_TEXT } ||
                 memory.rules.any { it.text.isBlank() || it.text.length > kept.MAX_TEXT }
             ) add("what's remembered")
             // What a card takes in AnkiDroid (DX-11): within the bounds it's learned in, each from its stretches.
-            if (calibration.ankiSecondsPerCard.values.any { !it.isFinite() || it !in com.thomaswcode.decrastination.learn.AnkiProgress.MIN_SECONDS..com.thomaswcode.decrastination.learn.AnkiProgress.MAX_SECONDS } ||
-                calibration.ankiSecondsPerCard.keys != calibration.ankiStretches.keys || calibration.ankiStretches.values.any { it !in 1..com.thomaswcode.decrastination.learn.AnkiProgress.STRETCHES }
+            if (calibration.ankiSecondsPerCard.values.any { !it.isFinite() || it !in AnkiProgress.MIN_SECONDS..AnkiProgress.MAX_SECONDS } ||
+                calibration.ankiSecondsPerCard.keys != calibration.ankiStretches.keys || calibration.ankiStretches.values.any { it !in 1..AnkiProgress.STRETCHES }
             ) add("what the app learned about Anki")
             if (backup.eventAnswers.values.any { !answer(it) }) add("a calendar answer")
             if (!backup.aiUsage.spentUsd.isFinite() || backup.aiUsage.spentUsd < 0 || backup.aiUsage.calls < 0) add("Claude's spending")
@@ -315,7 +323,7 @@ object Backups {
             task.stepsPerDay == null && !task.derived && task.aiEffortMin == null &&
             // Its one extra of yours: where it's done, when that's at home (PL-15).
             task.extra.keys.all { it == OwnTaskRules.EXTRA_WHERE } && task.extra[OwnTaskRules.EXTRA_WHERE].let { it == null || it == "home" } &&
-            task.status != com.thomaswcode.decrastination.core.Status.Missed && task.photosCounted.values.all { it in minutes } &&
+            task.status != Status.Missed && task.photosCounted.values.all { it in minutes } &&
             task.subSteps.all { it.timedMin in minutes } &&
             task.enrichment == null &&
             OwnTaskRules.problem(OwnTaskRules.draftOf(task)) == null
@@ -342,7 +350,7 @@ object Backups {
         if (instruction.id.isBlank() || instruction.changes.size > MAX_CHANGES) return false
         fun named(id: String?) = !id.isNullOrBlank()
         fun day(change: Change) = when {
-            change.date != null -> change.weekday == null && runCatching { java.time.LocalDate.parse(change.date) }.isSuccess
+            change.date != null -> change.weekday == null && runCatching { LocalDate.parse(change.date) }.isSuccess
             else -> change.weekday in 1..7
         }
         fun time(at: Long?) = at != null && at in (exportedAt - 730 * DAY_MS)..(exportedAt + 400 * DAY_MS)
@@ -364,16 +372,16 @@ object Backups {
                 ChangeType.SameAs -> named(change.taskId) && named(change.afterTaskId) && change.afterTaskId != change.taskId
                 // A task's steps (AI-19): some, each named, with its minutes.
                 ChangeType.Steps -> named(change.taskId) && change.steps.orEmpty().let { steps -> steps.size in 1..OwnTaskRules.MAX_STEPS && steps.all { it.title.isNotBlank() && it.minutes in OwnTaskRules.MINUTES } }
-                // A task's name (16 Oct): one, within a name's length.
+                // A task's name: one, within a name's length.
                 ChangeType.Rename -> named(change.taskId) && change.title?.let { it.isNotBlank() && it.length <= OwnTaskRules.MAX_TITLE } == true
             }
         }
     }
 
-    private fun isDate(text: String?): Boolean = text != null && runCatching { java.time.LocalDate.parse(text) }.isSuccess
+    private fun isDate(text: String?): Boolean = text != null && runCatching { LocalDate.parse(text) }.isSuccess
 
     /**
-     * Whether [felix] is what the app keeps (4.1.0): each note and reminder under an id of its own, with
+     * Whether [felix] is what the app keeps: each note and reminder under an id of its own, with
      * words within their length, and a task's id, where one's given, not blank; a note on a task or standing,
      * never both nor neither, a standing one's scope named within [Notes.MAX_SCOPE]; a reminder due as
      * its kind needs (a time, its task's slot from a time, minutes before its task's deadline). Not how
@@ -435,7 +443,7 @@ object Backups {
      * The instructions to add from a backup's ([backed], those in use), beside those [here], each as
      * applying it here would go, in the order they were applied: one already here isn't added; one
      * that would have tasks wait for each other in a circle comes back unclear, saying so. The rest,
-     * due dates as well, armed or not (12 Oct), are in use at once.
+     * due dates as well, armed or not (D-46), are in use at once.
      */
     fun restoredInstructions(backed: List<Instruction>, here: List<Instruction>): List<Instruction> {
         val added = mutableListOf<Instruction>()
@@ -493,13 +501,13 @@ object Backups {
      * What's remembered here, with the backup's added (AI-21): a fact of a topic not here, a rule not
      * here; this phone's own wins, and what's past the room goes, oldest first.
      */
-    fun mergedMemory(here: com.thomaswcode.decrastination.core.MemoryState, backup: com.thomaswcode.decrastination.core.MemoryState): com.thomaswcode.decrastination.core.MemoryState {
+    fun mergedMemory(here: MemoryState, backup: MemoryState): MemoryState {
         fun same(a: String, b: String) = a.trim().equals(b.trim(), ignoreCase = true)
         // Each with its own time, so the room is kept oldest first, wherever each came from.
         val facts = (here.facts + backup.facts.filter { f -> here.facts.none { same(it.topic, f.topic) } }.distinctBy { it.topic.trim().lowercase() }).sortedBy { it.at }.toMutableList()
-        while (facts.size > 1 && com.thomaswcode.decrastination.core.Memories.chars(facts) > com.thomaswcode.decrastination.core.Memories.FACT_BUDGET_CHARS) facts.removeAt(0)
-        val rules = (here.rules + backup.rules.filter { r -> here.rules.none { same(it.text, r.text) } }.distinctBy { it.text.trim().lowercase() }).take(com.thomaswcode.decrastination.core.Memories.RULE_MAX)
-        return com.thomaswcode.decrastination.core.MemoryState(facts, rules)
+        while (facts.size > 1 && Memories.chars(facts) > Memories.FACT_BUDGET_CHARS) facts.removeAt(0)
+        val rules = (here.rules + backup.rules.filter { r -> here.rules.none { same(it.text, r.text) } }.distinctBy { it.text.trim().lowercase() }).take(Memories.RULE_MAX)
+        return MemoryState(facts, rules)
     }
 
     /**

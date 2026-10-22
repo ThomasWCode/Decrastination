@@ -1,6 +1,12 @@
 package com.thomaswcode.decrastination.ui
 
 import android.app.Activity
+import android.content.ActivityNotFoundException
+import android.content.Intent
+import android.net.Uri
+import android.provider.CalendarContract
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -26,6 +32,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -33,10 +40,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.block.Focus
+import com.thomaswcode.decrastination.block.PhotoChecks
 import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.Change
 import com.thomaswcode.decrastination.core.ChangeType
@@ -54,9 +64,16 @@ import com.thomaswcode.decrastination.enrich.Readings
 import com.thomaswcode.decrastination.enrich.RuleEnricher
 import com.thomaswcode.decrastination.sources.gmail.GmailThreads
 import com.thomaswcode.decrastination.core.GmailWrites
+import com.thomaswcode.decrastination.enrich.MicroPlans
+import com.thomaswcode.decrastination.sources.teams.TeamsRows
+import java.io.File
 import java.time.Instant
+import java.time.ZoneId
+import kotlin.math.abs
 import kotlin.math.roundToInt
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * A task opened from Day or Work, with what goes with it: the form for one of your own, the chat
@@ -87,7 +104,7 @@ fun TaskSheetHost(graph: AppGraph, activity: Activity, taskId: String, plan: Pla
 }
 
 /**
- * A task (2.0.0, Q30), in three parts (UI-09). **Do**: its next piece done (its slot kept, LR-09),
+ * A task (Q30), in three parts (UI-09). **Do**: its next piece done (its slot kept, LR-09),
  * its steps where they're ticked here, the task where it lives, a photo of the work, and one of
  * your own all done; a source's task has no Done of its own, as its source says. **About**: when
  * it's due, how long it takes and when it can start, each changed at once, armed or not; what it
@@ -117,9 +134,9 @@ fun TaskSheet(
     val instructions by graph.instructions.state.collectAsStateWithLifecycle()
     val learning by graph.stores.learning.state.collectAsStateWithLifecycle()
     val model by graph.stores.model.state.collectAsStateWithLifecycle()
-    // Its notes, read as they change (8a).
+    // Its notes, read as they change.
     val felix by graph.stores.felix.state.collectAsStateWithLifecycle()
-    // A starred email's finish in Gmail (Stage 11), read as it goes.
+    // A starred email's finish in Gmail, read as it goes.
     val gmail by graph.gmailFinishes.state.collectAsStateWithLifecycle()
     // His messages unread, worn by Ask Felix about it as by his button elsewhere (UI-16).
     val unread by graph.conversation.unread.collectAsStateWithLifecycle(0)
@@ -151,14 +168,14 @@ fun TaskSheet(
     // An email's steps and your own are ticked here; the rest are what their source says.
     val ticksHere = Focus.tickable(task) && task.subSteps.isNotEmpty()
     // A photo of the work (AI-23), for a task Claude reads: kept with it, and read with it.
-    val shot = androidx.compose.runtime.remember { java.io.File(activity.cacheDir, "photos/work.jpg").also { it.parentFile?.mkdirs() } }
-    val camera = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.TakePicture()) { taken ->
+    val shot = remember { File(activity.cacheDir, "photos/work.jpg").also { it.parentFile?.mkdirs() } }
+    val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { taken ->
         if (!taken) {
             shot.delete()
             return@rememberLauncherForActivityResult
         }
         graph.scope.launch {
-            val jpeg = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.thomaswcode.decrastination.block.PhotoChecks.shrink(shot).also { shot.delete() } }
+            val jpeg = withContext(Dispatchers.IO) { PhotoChecks.shrink(shot).also { shot.delete() } }
             if (jpeg == null) {
                 message = "Couldn't read the photo."
             } else {
@@ -214,7 +231,7 @@ fun TaskSheet(
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (!own) Button(onClick = { scope.launch { TaskOpener.open(activity, task)?.let { message = it } } }) { Text("Open in ${task.source.label}") }
                 invite?.let { i -> OutlinedButton(onClick = { message = addToCalendar(activity, i, task.title, zone) }) { Text("Add to calendar") } }
-                // A starred email finished by your word (Stage 11): unstarred and archived in Gmail, after the grace.
+                // A starred email finished by your word: unstarred and archived in Gmail, after the grace.
                 if (task.source == Source.Gmail && task.isOpen && graph.settings.value.gmailFinishes && GmailWrites.state(gmail.writes, task.id) !in FINISHING) {
                     OutlinedButton(onClick = { scope.launch { said = finishSaid(graph.gmailFinishes.finish(task.id, explicit = true)) } }) { Text("Finish: unstar and archive") }
                 }
@@ -224,7 +241,7 @@ fun TaskSheet(
                 }
                 // The work itself photographed, so Claude reads its size from it (AI-23).
                 if (task.isOpen && Enrichments.jobFor(task, GmailThreads::textRead) != null) {
-                    OutlinedButton(onClick = { camera.launch(androidx.core.content.FileProvider.getUriForFile(activity, "${activity.packageName}.photos", shot)) }) {
+                    OutlinedButton(onClick = { camera.launch(FileProvider.getUriForFile(activity, "${activity.packageName}.photos", shot)) }) {
                         Text(if (task.photo == null) "Add a photo of the work" else "Photograph the work again")
                     }
                 }
@@ -245,7 +262,7 @@ fun TaskSheet(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            // Its finish in Gmail, where there's one (Stage 11): what it is, with its Undo or It's sorted.
+            // Its finish in Gmail, where there's one: what it is, with its Undo or It's sorted.
             if (task.source == Source.Gmail) GmailFinishLine(graph, task)
 
             // About: when it's due, how long it takes, what it says, when it's planned and why.
@@ -268,7 +285,7 @@ fun TaskSheet(
                     note = listOfNotNull(
                         if (!own && task.mine.dueAt?.value != null) "Yours: ${task.source.label} says ${sourceDue?.let { Format.at(it, now, zone) } ?: "no date"}" else null,
                         // Where Claude's reading came from (AI-09); one from a photo says what it saw, under Takes.
-                        Enrichments.current(task)?.reason?.takeUnless { fromPhoto(task) }?.let { "Claude: “$it” in ${if (task.source == com.thomaswcode.decrastination.core.Source.Gmail) "the email" else "the instructions"}" },
+                        Enrichments.current(task)?.reason?.takeUnless { fromPhoto(task) }?.let { "Claude: “$it” in ${if (task.source == Source.Gmail) "the email" else "the instructions"}" },
                     ).joinToString(". ").takeIf { it.isNotEmpty() },
                     urgent = task.isOpen && task.hardAt(now) && task.deadlineAt(now)?.let { it < now } == true,
                     onChange = if (changeable) ({ picking = OwnChange.DueOn }) else null,
@@ -283,7 +300,7 @@ fun TaskSheet(
                     "${Format.minutes(task.effortMin)} in all" + if (task.workedMin > 0) ", ${Format.minutes(task.workedMin)} worked" else "",
                     note = listOfNotNull(
                         if (!own && task.mine.minutes?.minutes != null) {
-                            // A total Felix worked out at your pace (17 Oct), or your own.
+                            // A total Felix worked out at your pace, or your own.
                             if (task.pacedMinutes) {
                                 "The app's ${Format.minutes(task.mine.minutes?.paced?.from ?: task.appEffortMin)} at your pace" +
                                     if (task.mine.minutes?.paced?.from == null || task.mine.minutes?.paced?.from == task.appEffortMin) "" else ", which it now reckons ${Format.minutes(task.appEffortMin)}"
@@ -297,7 +314,7 @@ fun TaskSheet(
                         // Read from its photo (AI-23), with what Claude saw in it.
                         if (fromPhoto(task)) "From your photo" + (Enrichments.current(task)?.reason?.takeIf { it.isNotBlank() }?.let { ": “$it”" } ?: "") else null,
                         // The app's estimate as the plan takes it: by how long such work has taken you.
-                        learning.calibration.multiplierFor(task).takeIf { kotlin.math.abs(it - 1.0) >= 0.05 }?.let { m ->
+                        learning.calibration.multiplierFor(task).takeIf { abs(it - 1.0) >= 0.05 }?.let { m ->
                             "Planned as ${Format.minutes((task.effortMin * m).roundToInt())}: such work has taken you ${if (m > 1) "longer" else "less time"}"
                         },
                     ).joinToString(". ").takeIf { it.isNotEmpty() },
@@ -319,7 +336,7 @@ fun TaskSheet(
                 )
             }
             Notes(task, now, zone, byId, onOpen = { scope.launch { TaskOpener.open(activity, task)?.let { message = it } } }, onLink = { message = openLink(activity, it) })
-            // What's kept with it (8a): Felix's notes and yours, the standing ones it matches, each with its delete; yours added here (Q14: A).
+            // What's kept with it: Felix's notes and yours, the standing ones it matches, each with its delete; yours added here (D-100).
             TaskSheetModel.notes(task, felix.notes, graph.settings.value.classMap, graph.settings.value.felixName, now, zone).let { notes ->
                 if (notes.isNotEmpty()) Text("Notes", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 notes.forEach { n ->
@@ -339,7 +356,7 @@ fun TaskSheet(
             }
             if (!ticksHere) Steps(graph, task, now, zone)
             // Its next piece's first steps (AI-15), as written ahead.
-            next?.let { model.microPlans[it.key] }?.let(com.thomaswcode.decrastination.enrich.MicroPlans::lines)?.takeIf { it.isNotEmpty() }?.let { lines ->
+            next?.let { model.microPlans[it.key] }?.let(MicroPlans::lines)?.takeIf { it.isNotEmpty() }?.let { lines ->
                 Text("Its next piece", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 lines.forEach { Text(it, style = MaterialTheme.typography.bodyMedium) }
             }
@@ -455,7 +472,7 @@ fun TaskSheet(
         else -> Unit
     }
 
-    // Your note on it (8a): kept with it, told to Felix whenever it comes up.
+    // Your note on it: kept with it, told to Felix whenever it comes up.
     if (sheet.noting) {
         var words by rememberSaveable { mutableStateOf("") }
         AlertDialog(
@@ -498,7 +515,7 @@ fun TaskSheet(
             },
             dismissButton = { TextButton(onClick = { confirming = null }) { Text("Cancel") } },
         )
-        // A standing note's delete (8a): it goes from every task it's for, not only this one.
+        // A standing note's delete: it goes from every task it's for, not only this one.
         else -> TaskSheetModel.notes(task, felix.notes, graph.settings.value.classMap, graph.settings.value.felixName, now, zone).firstOrNull { it.every != null && confirming == "unnote:${it.id}" }?.let { n ->
             AlertDialog(
                 onDismissRequest = { confirming = null },
@@ -532,7 +549,7 @@ private fun Field(label: String, value: String, note: String? = null, urgent: Bo
 
 /** What's out of the ordinary about [task], and what it says. */
 @Composable
-private fun Notes(task: TaskItem, now: Long, zone: java.time.ZoneId, byId: Map<String, TaskItem>, onOpen: () -> Unit, onLink: (String) -> Unit) {
+private fun Notes(task: TaskItem, now: Long, zone: ZoneId, byId: Map<String, TaskItem>, onOpen: () -> Unit, onLink: (String) -> Unit) {
     val lines = buildList {
         task.mine.after?.value?.takeIf { task.isOpen && InstructionRules.waiting(task, byId) }?.let { add("Waits, as you said, until “${byId[it]?.title ?: it}” is done" to false) }
         if (task.mine.notATask != null) add("You said it isn't a task: take that back in Felix's chat, under Your changes" to false)
@@ -558,13 +575,13 @@ private fun Notes(task: TaskItem, now: Long, zone: java.time.ZoneId, byId: Map<S
         )
     }
     // An assignment's links (DX-08), each opened in the browser.
-    com.thomaswcode.decrastination.sources.teams.TeamsRows.linksOf(task).forEach { link ->
+    TeamsRows.linksOf(task).forEach { link ->
         Text(
             link,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.primary,
             maxLines = 1,
-            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            overflow = TextOverflow.Ellipsis,
             modifier = Modifier.clickable { onLink(link) },
         )
     }
@@ -576,7 +593,7 @@ private const val MAX_PLANNED = 6
 
 /** [task]'s steps, each with its minutes and dates; an email's or one of your own's ticked off here. */
 @Composable
-private fun Steps(graph: AppGraph, task: TaskItem, now: Long, zone: java.time.ZoneId) {
+private fun Steps(graph: AppGraph, task: TaskItem, now: Long, zone: ZoneId) {
     if (task.subSteps.isEmpty()) return
     val scope = rememberCoroutineScope()
     // As the plan shares them: your minutes over its steps add up to exactly yours.
@@ -601,27 +618,27 @@ private fun Steps(graph: AppGraph, task: TaskItem, now: Long, zone: java.time.Zo
  * [invite] as a new event in your calendar app, filled in for you to save (DX-02): its name (else
  * the email's [title]), its times and its place. What went wrong where no app takes it.
  */
-private fun addToCalendar(activity: Activity, invite: Invite, title: String, zone: java.time.ZoneId): String? {
-    val intent = android.content.Intent(android.content.Intent.ACTION_INSERT)
-        .setData(android.provider.CalendarContract.Events.CONTENT_URI)
-        .putExtra(android.provider.CalendarContract.Events.TITLE, invite.summary.ifBlank { title })
-        .putExtra(android.provider.CalendarContract.EXTRA_EVENT_BEGIN_TIME, invite.calendarTimes(zone).first)
-        .putExtra(android.provider.CalendarContract.EXTRA_EVENT_END_TIME, invite.calendarTimes(zone).second)
-        .putExtra(android.provider.CalendarContract.EXTRA_EVENT_ALL_DAY, invite.allDay(zone))
-    invite.location?.let { intent.putExtra(android.provider.CalendarContract.Events.EVENT_LOCATION, it) }
+private fun addToCalendar(activity: Activity, invite: Invite, title: String, zone: ZoneId): String? {
+    val intent = Intent(Intent.ACTION_INSERT)
+        .setData(CalendarContract.Events.CONTENT_URI)
+        .putExtra(CalendarContract.Events.TITLE, invite.summary.ifBlank { title })
+        .putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, invite.calendarTimes(zone).first)
+        .putExtra(CalendarContract.EXTRA_EVENT_END_TIME, invite.calendarTimes(zone).second)
+        .putExtra(CalendarContract.EXTRA_EVENT_ALL_DAY, invite.allDay(zone))
+    invite.location?.let { intent.putExtra(CalendarContract.Events.EVENT_LOCATION, it) }
     return try {
         activity.startActivity(intent)
         null
-    } catch (e: android.content.ActivityNotFoundException) {
+    } catch (e: ActivityNotFoundException) {
         "No calendar app to add it to"
     }
 }
 
 /** [url] in the browser (DX-08); what went wrong where nothing on the phone opens it. */
 private fun openLink(activity: Activity, url: String): String? = try {
-    activity.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url)))
+    activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
     null
-} catch (e: android.content.ActivityNotFoundException) {
+} catch (e: ActivityNotFoundException) {
     "Nothing on the phone opens $url"
 }
 

@@ -4,6 +4,8 @@ import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.Fetched
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.TaskItem
+import com.thomaswcode.decrastination.sources.gmail.GmailThreads
+import com.thomaswcode.decrastination.sources.gmail.Mime
 import java.io.IOException
 
 /** Turns the provider's rows into tasks. Pure, for the tests. */
@@ -38,7 +40,7 @@ object TeamsRows {
                 // Its reference materials by name and its links (DX-08), where the widget gives them
                 // (0.4.0 on): the files kept as an email's are, and their names sent with it.
                 lines(row["attachments"]).takeIf { it.isNotEmpty() }?.let { names ->
-                    put(com.thomaswcode.decrastination.sources.gmail.GmailThreads.EXTRA_ATTACHMENTS, com.thomaswcode.decrastination.sources.gmail.GmailThreads.attachmentsExtra(names.map { com.thomaswcode.decrastination.sources.gmail.Mime.Attachment(it, "") }))
+                    put(GmailThreads.EXTRA_ATTACHMENTS, GmailThreads.attachmentsExtra(names.map { Mime.Attachment(it, "") }))
                 }
                 lines(row["links"]).takeIf { it.isNotEmpty() }?.let { put(EXTRA_LINKS, it.joinToString("\n")) }
             },

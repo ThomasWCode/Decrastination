@@ -6,6 +6,7 @@ import com.thomaswcode.decrastination.sources.powerplanner.ClassesResponse
 import com.thomaswcode.decrastination.sources.powerplanner.AgendaResponse
 import com.thomaswcode.decrastination.sources.powerplanner.SemesterResponse
 import com.thomaswcode.decrastination.sources.teams.TeamsRows
+import java.time.Instant
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
@@ -13,6 +14,9 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
 import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit
+import java.util.Locale
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -112,7 +116,7 @@ class PlannerTest {
         assertEquals("Due today", tonight.next!!.whyLine(wednesday, LONDON))
         val pg = tonight.todayBucket!!.chunks.first { it.title == "Pg 60&61" }
         assertEquals(Why.Overdue, pg.why)
-        assertEquals("Overdue since " + Planner.date(pg.deadline, LONDON).format(java.time.format.DateTimeFormatter.ofPattern("EEE d MMM", java.util.Locale.UK)), pg.whyLine(wednesday, LONDON))
+        assertEquals("Overdue since " + Planner.date(pg.deadline, LONDON).format(DateTimeFormatter.ofPattern("EEE d MMM", Locale.UK)), pg.whyLine(wednesday, LONDON))
     }
 
     @Test
@@ -239,7 +243,7 @@ class PlannerTest {
         fun dayOf(step: String) = plan.buckets.first { b -> b.chunks.any { it.step == step } }.date
         // Saturday holds both now (840 minutes): the draft first in the day, as it's first in order.
         assertTrue(dayOf("Draft") <= dayOf("Final"), "draft ${dayOf("Draft")}, final ${dayOf("Final")}")
-        // Each in four sittings of 50 (3.1.2), numbered on across the runs.
+        // Each in four sittings of 50, numbered on across the runs.
         assertEquals((1..8).toList(), plan.chunksOf("teams:e").map { it.part })
         assertEquals(setOf(8), plan.chunksOf("teams:e").map { it.parts }.toSet())
     }
@@ -548,7 +552,7 @@ class PlannerTest {
     @Test
     fun `an undated chunk bigger than the allowance still finds a day`() {
         // Half an hour of undated work a day, and a piece of 45 minutes (a step of the app's over an
-        // hour is in sittings since 3.1.2, so none is bigger than the hour it allows by default).
+        // hour is in sittings, so none is bigger than the hour it allows by default).
         val big = task("big", null, effort = 45, kind = Kind.Admin, steps = listOf(SubStep("all of it", 45)))
         val plan = Planner.plan(Planner.Input(listOf(big), Fixtures.at("2026-10-08T17:00"), LONDON, settings.copy(softMinPerDay = 30)))
         assertEquals(1, plan.ordered.size)
@@ -668,7 +672,7 @@ class PlannerTest {
     @Test
     fun `work whose last usable day comes first is placed first`() {
         // The essay is due later but has a three-day margin, so its last usable day (Wednesday)
-        // comes before the other's (Friday): it claims its days first, its sittings (3.1.2) over its
+        // comes before the other's (Friday): it claims its days first, its sittings over its
         // two evenings, and the form's fit after it.
         val margins = Calibration(marginDays = mapOf(Kind.Admin to 0, Kind.Homework to 3))
         val admin = task("form", Fixtures.at("2026-10-16T23:00"), kind = Kind.Admin, steps = listOf(SubStep("a", 310), SubStep("b", 310), SubStep("c", 310)))
@@ -744,7 +748,7 @@ class PlannerTest {
         val tasks = listOf(task("a", Fixtures.at("2026-10-14T23:59"), effort = 30), task("b", Fixtures.at("2026-10-14T23:59"), effort = 30))
         val plan = Planner.plan(windowed(tasks, "2026-10-13T16:50"))
         val slots = plan.todayBucket!!.slots
-        fun hm(time: Long) = java.time.Instant.ofEpochMilli(time).atZone(LONDON).toLocalTime().toString()
+        fun hm(time: Long) = Instant.ofEpochMilli(time).atZone(LONDON).toLocalTime().toString()
         assertEquals(listOf("16:50–17:20", "17:25–17:55"), slots.map { hm(it.start) + "–" + hm(it.end) })
         assertEquals(slots[0].chunk, plan.next)
         assertEquals(slots[1].chunk, plan.then)
@@ -763,7 +767,7 @@ class PlannerTest {
         // Tuesday 16:30, one half hour due Thursday night: tonight at 16:45, as nothing else is planned.
         val tasks = listOf(task("hw", Fixtures.at("2026-10-15T23:59"), effort = 30))
         val first = Planner.plan(windowed(tasks, "2026-10-13T16:30")).todaySlots
-        fun hm(time: Long) = java.time.Instant.ofEpochMilli(time).atZone(LONDON).toLocalTime().toString()
+        fun hm(time: Long) = Instant.ofEpochMilli(time).atZone(LONDON).toLocalTime().toString()
         assertEquals(listOf("16:45"), first.map { hm(it.start) })
         // 16:50, its start kept: under way, it stays where it was, not moved to tomorrow.
         val starts = first.associate { it.chunk!!.key to it.start }
@@ -827,7 +831,7 @@ class PlannerTest {
         // Tuesday 16:50: three half hours due tomorrow night, at 16:50, 17:25 and 18:00.
         val tasks = listOf("a", "b", "c").map { task(it, Fixtures.at("2026-10-14T23:59"), effort = 30) }
         val first = Planner.plan(windowed(tasks, "2026-10-13T16:50")).todaySlots
-        fun hm(time: Long) = java.time.Instant.ofEpochMilli(time).atZone(LONDON).toLocalTime().toString()
+        fun hm(time: Long) = Instant.ofEpochMilli(time).atZone(LONDON).toLocalTime().toString()
         assertEquals(listOf("16:50", "17:25", "18:00"), first.map { hm(it.start) })
         // 17:30: a's slot went by undone, so its start isn't kept (PL-13); b's under way and c's stay.
         val starts = first.associate { it.chunk!!.key to it.start }
@@ -1061,7 +1065,7 @@ class PlannerTest {
 
     @Test
     fun `a step over an hour as planned is in sittings, only its last ticking it`() {
-        // An hour's step at a 1.5 calibration is 90 minutes as planned (#48's review): two sittings of
+        // An hour's step at a 1.5 calibration is 90 minutes as planned: two sittings of
         // 45, the first the step, the last "Continue and finish", each with its step's own title to tick by.
         val input = Planner.Input(
             listOf(task("t", Fixtures.at("2026-10-20T09:00"), effort = 60, steps = listOf(SubStep("Write the essay", 60)))),
@@ -1107,7 +1111,7 @@ class PlannerTest {
 
     @Test
     fun `steps you gave are planned as you gave them, however long`() {
-        // Your call (17 Oct): a task of your own's hour and a half, and two hours given a Teams task as
+        // D-34: a task of your own's hour and a half, and two hours given a Teams task as
         // one step (by you, or Felix): each one piece, never cut back into sittings.
         val own = task("mine", Fixtures.at("2026-10-20T09:00"), effort = 90, steps = listOf(SubStep("Revise chapter 3", 90))).copy(id = "own:mine", source = Source.Own, sourceId = "mine")
         val given = task("t", Fixtures.at("2026-10-20T09:00"), effort = 60, steps = listOf(SubStep("Write the essay", 120))).yours(steps = listOf(OwnStep("Write the essay", 120)))
@@ -1119,7 +1123,7 @@ class PlannerTest {
 
     @Test
     fun `steps you or Felix gave are planned at their own minutes, not stretched by the learned pace`() {
-        // Your call (17 Oct): the pace is for the app's own estimates. At 1.5, Claude's hour is 90
+        // D-35: the pace is for the app's own estimates. At 1.5, Claude's hour is 90
         // minutes; two hours you or Felix gave a Teams task stay two hours.
         val pace = Calibration(multipliers = mapOf(Calibration.key(Kind.Homework, null) to 1.5))
         val claude = task("c", Fixtures.at("2026-10-20T09:00"), effort = 60, steps = listOf(SubStep("Read", 60)))
@@ -1132,7 +1136,7 @@ class PlannerTest {
 
     @Test
     fun `a step read before sittings is planned in them, and a done one stays done`() {
-        // Read by older prompts (#48's review): half an hour done, three hours still to do in one step.
+        // Read by older prompts: half an hour done, three hours still to do in one step.
         val steps = listOf(SubStep("Read the sources", 30, done = true), SubStep("Write the essay", 180))
         val pieces = plan(listOf(task("t", Fixtures.at("2026-10-20T09:00"), effort = 210, steps = steps)), "2026-10-08T17:00").chunksOf("teams:t")
         assertEquals(listOf("Write the essay" to 60, "Continue: Write the essay" to 60, "Continue and finish: Write the essay" to 60), pieces.map { it.shown to it.minutes })
@@ -1310,7 +1314,7 @@ class PlannerTest {
         val plan = spread(listOf(task("t", Fixtures.at("2026-11-02T23:59"), effort = 60)), "2026-10-12T08:00")
         val days = plan.dayOf("t")
         assertEquals(2, days.size)
-        assertTrue(java.time.temporal.ChronoUnit.DAYS.between(days[0], days[1]) in 1..7, "$days")
+        assertTrue(ChronoUnit.DAYS.between(days[0], days[1]) in 1..7, "$days")
         assertEquals(listOf(Why.Spread, Why.MinimumTouch), plan.ordered.map { it.why })
         assertEquals("Kept within a week of its last piece", plan.ordered.last().whyLine(LocalDate.parse("2026-10-12"), LONDON))
     }

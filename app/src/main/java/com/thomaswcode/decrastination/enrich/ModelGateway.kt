@@ -160,6 +160,11 @@ class ModelGateway(
         if (alerts.keyProblem(problem)) model.update { it.copy(aiUsage = it.aiUsage.alerted(problem)) }
     }
 
+    /** A new key put in: the last key's failure isn't this one's, so it's tried at once, not after the rest. */
+    suspend fun newKey() {
+        model.update { it.copy(aiUsage = it.aiUsage.newKey()) }
+    }
+
     /**
      * A model call that went through, counted in [month] (or a newer one counted since): its cost,
      * and the key working again if it wasn't, its alert then gone; not when a failure since, of a

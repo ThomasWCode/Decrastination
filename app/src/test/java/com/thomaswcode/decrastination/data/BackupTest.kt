@@ -12,11 +12,13 @@ import com.thomaswcode.decrastination.core.ChatState
 import com.thomaswcode.decrastination.core.DayKind
 import com.thomaswcode.decrastination.core.Due
 import com.thomaswcode.decrastination.core.DueKind
+import com.thomaswcode.decrastination.core.Fact
 import com.thomaswcode.decrastination.core.FelixState
 import com.thomaswcode.decrastination.core.HalfDay
 import com.thomaswcode.decrastination.core.Instruction
 import com.thomaswcode.decrastination.core.InstructionStatus
 import com.thomaswcode.decrastination.core.Kind
+import com.thomaswcode.decrastination.core.MemoryState
 import com.thomaswcode.decrastination.core.NoSchool
 import com.thomaswcode.decrastination.core.Note
 import com.thomaswcode.decrastination.core.NoteScope
@@ -25,15 +27,19 @@ import com.thomaswcode.decrastination.core.OwnTask
 import com.thomaswcode.decrastination.core.OwnTaskRules
 import com.thomaswcode.decrastination.core.Reminder
 import com.thomaswcode.decrastination.core.Reminders
+import com.thomaswcode.decrastination.core.Rule
 import com.thomaswcode.decrastination.core.SchoolCalendar
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.SlotState
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.core.Window
+import com.thomaswcode.decrastination.core.WindowKind
 import com.thomaswcode.decrastination.core.yours
 import com.thomaswcode.decrastination.enrich.AiUsage
 import java.io.ByteArrayInputStream
+import java.time.Instant
+import java.time.ZoneId
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -128,33 +134,33 @@ class BackupTest {
 
     /** A slot of [key]'s kept, laid at [start]. */
     private fun slot(key: String, start: Long) = SlotRecord(
-        date = java.time.Instant.ofEpochMilli(start).atZone(java.time.ZoneId.of("Europe/London")).toLocalDate().toString(), key = key, taskId = key.substringBefore('#'),
-        kind = Kind.Homework, label = key, plannedMin = 30, start = start, end = start + 30 * 60_000L, window = com.thomaswcode.decrastination.core.WindowKind.Evening,
+        date = Instant.ofEpochMilli(start).atZone(ZoneId.of("Europe/London")).toLocalDate().toString(), key = key, taskId = key.substringBefore('#'),
+        kind = Kind.Homework, label = key, plannedMin = 30, start = start, end = start + 30 * 60_000L, window = WindowKind.Evening,
         outcome = SlotOutcome.Kept, workedMin = 30, at = start + 30 * 60_000L,
     )
 
     @Test
     fun `what's remembered is merged, this phone's own winning, and one past its bounds refused`() {
-        val here = com.thomaswcode.decrastination.core.MemoryState(facts = listOf(com.thomaswcode.decrastination.core.Fact("football", "on Tuesdays", 5)))
-        val theirs = com.thomaswcode.decrastination.core.MemoryState(
-            facts = listOf(com.thomaswcode.decrastination.core.Fact("Football", "on Mondays", 1), com.thomaswcode.decrastination.core.Fact("sleep", "in bed by 22:30", 2)),
-            rules = listOf(com.thomaswcode.decrastination.core.Rule("be blunter", 3)),
+        val here = MemoryState(facts = listOf(Fact("football", "on Tuesdays", 5)))
+        val theirs = MemoryState(
+            facts = listOf(Fact("Football", "on Mondays", 1), Fact("sleep", "in bed by 22:30", 2)),
+            rules = listOf(Rule("be blunter", 3)),
         )
         val merged = Backups.mergedMemory(here, theirs)
         assertEquals(listOf("sleep" to "in bed by 22:30", "football" to "on Tuesdays"), merged.facts.map { it.topic to it.text })
         assertEquals(listOf("be blunter"), merged.rules.map { it.text })
-        assertNotNull(Backups.problem(backup().copy(memory = com.thomaswcode.decrastination.core.MemoryState(facts = listOf(com.thomaswcode.decrastination.core.Fact("", "x", 1))))))
+        assertNotNull(Backups.problem(backup().copy(memory = MemoryState(facts = listOf(Fact("", "x", 1))))))
         // Each within the bounds it's kept to, as all of it goes with every call.
-        assertNotNull(Backups.problem(backup().copy(memory = com.thomaswcode.decrastination.core.MemoryState(rules = listOf(com.thomaswcode.decrastination.core.Rule("x".repeat(301), 1))))))
-        assertNotNull(Backups.problem(backup().copy(memory = com.thomaswcode.decrastination.core.MemoryState(facts = listOf(com.thomaswcode.decrastination.core.Fact("t".repeat(61), "x", 1))))))
+        assertNotNull(Backups.problem(backup().copy(memory = MemoryState(rules = listOf(Rule("x".repeat(301), 1))))))
+        assertNotNull(Backups.problem(backup().copy(memory = MemoryState(facts = listOf(Fact("t".repeat(61), "x", 1))))))
         assertEquals(
             null,
-            Backups.problem(backup().copy(memory = com.thomaswcode.decrastination.core.MemoryState(facts = listOf(com.thomaswcode.decrastination.core.Fact("t".repeat(60), "x".repeat(300), 1)), rules = listOf(com.thomaswcode.decrastination.core.Rule("x".repeat(300), 1))))),
+            Backups.problem(backup().copy(memory = MemoryState(facts = listOf(Fact("t".repeat(60), "x".repeat(300), 1)), rules = listOf(Rule("x".repeat(300), 1))))),
         )
         // Over the room together: the oldest go, wherever they came from.
         val big = "x".repeat(2_900)
-        val local = com.thomaswcode.decrastination.core.MemoryState(facts = listOf(com.thomaswcode.decrastination.core.Fact("old", big, 1), com.thomaswcode.decrastination.core.Fact("mid", big, 5)))
-        val newer = com.thomaswcode.decrastination.core.MemoryState(facts = listOf(com.thomaswcode.decrastination.core.Fact("new", big, 9)))
+        val local = MemoryState(facts = listOf(Fact("old", big, 1), Fact("mid", big, 5)))
+        val newer = MemoryState(facts = listOf(Fact("new", big, 9)))
         assertEquals(listOf("mid", "new"), Backups.mergedMemory(local, newer).facts.map { it.topic })
     }
 
@@ -279,7 +285,7 @@ class BackupTest {
         // Here already: A waits for B.
         val aAfterB = instruction("a-after-b", now - 5_000, Change(ChangeType.After, taskId = "teams:a", afterTaskId = "teams:b"))
         val backed = listOf(bAfterA, dueFriday, saturday, aAfterB)
-        // A due date too, armed or not: the work is yours to change (12 Oct).
+        // A due date too, armed or not: the work is yours to change.
         val restored = Backups.restoredInstructions(backed, here = listOf(aAfterB))
         assertEquals(listOf("saturday" to InstructionStatus.Applied, "due" to InstructionStatus.Applied, "b-after-a" to InstructionStatus.Unclear), restored.map { it.id to it.state })
         assertEquals(dueFriday.appliedAt, restored.single { it.id == "due" }.appliedAt)

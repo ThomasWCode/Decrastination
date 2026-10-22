@@ -8,6 +8,7 @@ import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.core.TaskItem
+import com.thomaswcode.decrastination.core.Timetable
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.SettingsMigration
 import com.thomaswcode.decrastination.data.TaskState
@@ -21,11 +22,15 @@ import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import java.io.File
+import java.io.IOException
 import java.nio.file.Files
+import java.util.concurrent.CountDownLatch
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 class SyncerTest {
     private val dir: File = Files.createTempDirectory("sync").toFile()
@@ -54,7 +59,7 @@ class SyncerTest {
         val syncer = syncer(listOf(teams, gmail))
         syncer.sync()
 
-        gmail.answer = { throw java.io.IOException("No network") }
+        gmail.answer = { throw IOException("No network") }
         teams.answer = { items("b") }
         val report = syncer.sync()
 
@@ -75,7 +80,7 @@ class SyncerTest {
         assertEquals(began + 5_000, tasks.value.status(Source.Gmail).lastSuccessAt)
         assertEquals(began, tasks.value.status(Source.Gmail).lastSuccessStartedAt)
         // A read failed since: when the one that worked began isn't kept.
-        gmail.answer = { throw java.io.IOException("No network") }
+        gmail.answer = { throw IOException("No network") }
         syncer.sync()
         assertNull(tasks.value.status(Source.Gmail).lastSuccessStartedAt)
     }
@@ -108,12 +113,12 @@ class SyncerTest {
 
     @Test
     fun `the timetable read is kept, and a failed read leaves it as it was`() = runTest {
-        val timetable = com.thomaswcode.decrastination.core.Timetable("2026-08-24T00:00:00", emptyList())
+        val timetable = Timetable("2026-08-24T00:00:00", emptyList())
         val planner = FakeSource(Source.PowerPlanner) { SourceRead(emptyList(), timetable = timetable) }
         val syncer = syncer(listOf(planner))
         syncer.sync()
         assertEquals(timetable, tasks.value.timetable)
-        planner.answer = { throw java.io.IOException("No network") }
+        planner.answer = { throw IOException("No network") }
         syncer.sync()
         assertEquals(timetable, tasks.value.timetable)
     }
@@ -121,14 +126,14 @@ class SyncerTest {
     @Test
     fun `a read that blocks is abandoned at the timeout, not waited for`() = runTest {
         // A blocking call ignores cancellation: the sync must give up on it anyway.
-        val release = java.util.concurrent.CountDownLatch(1)
+        val release = CountDownLatch(1)
         val stuck = FakeSource(Source.Gmail) {
             release.await()
             items("late")
         }
         val syncer = Syncer(tasks, settings, listOf(stuck), FixedClock(clock.time), timeoutMs = 200)
         val started = System.nanoTime()
-        val report = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { syncer.sync() }
+        val report = withContext(Dispatchers.Default) { syncer.sync() }
         release.countDown()
         assertTrue((System.nanoTime() - started) / 1_000_000 < 5_000)
         assertEquals("No answer in 0 s", report.failures[Source.Gmail])
@@ -136,20 +141,20 @@ class SyncerTest {
 
     @Test
     fun `a read given up on and still stuck isn't joined by another`() = runTest {
-        val release = java.util.concurrent.CountDownLatch(1)
+        val release = CountDownLatch(1)
         val stuck = FakeSource(Source.Anki) {
             release.await()
             items("late")
         }
         val syncer = Syncer(tasks, settings, listOf(stuck), FixedClock(clock.time), timeoutMs = 200)
-        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { syncer.sync() }
-        val again = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { syncer.sync() }
+        withContext(Dispatchers.Default) { syncer.sync() }
+        val again = withContext(Dispatchers.Default) { syncer.sync() }
         assertEquals("Still waiting for the last read, which hasn't answered", again.failures[Source.Anki])
         assertEquals(1, stuck.seen.size)
         // Once it has wound down, the next sync reads again.
         release.countDown()
         Thread.sleep(300)
-        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { syncer.sync() }
+        withContext(Dispatchers.Default) { syncer.sync() }
         assertEquals(2, stuck.seen.size)
     }
 

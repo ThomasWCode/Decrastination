@@ -100,7 +100,7 @@ Every PR is a release ([development.md](../development.md)): cleanup-only releas
 | 10b | His voice; just talk; the summary email in the third person | 4.2.2, done (#102) | feature | 5, 6e, 9 | ½ |
 | 11 | Emails done | 4.3.0, done (#103) | feature, data | 1, 3, 6d, 7 | 1½ |
 | — | Found in 4.2.1's reviews and 11's phone check: a month of the chat archive read for the first time just as a clear runs could come back; Setup's list of the files that couldn't be read could name a copy a clear has since deleted; Felix, asked to mark an email done with the Gmail switch off, says he can't finish it in Gmail and offers *not a task*, rather than calling that done (your calls, 21 Oct) | 4.3.1, done (#105) | fix | 11 | ¼ |
-| 12 | The sweep: imports, comments, the architecture test complete, baselines compared | 4.3.2 | cleanup | all | ½ |
+| 12 | The sweep: imports, comments, the architecture test complete, baselines compared | 4.3.2 (#106) | cleanup | all | ½ |
 
 About twenty-five days in 33 PRs (32 releases), 3.3.4 to 3.3.6, 4.0.3, 4.0.4, 4.0.10, 4.1.2, 4.1.3, 4.2.1 and 4.3.1 among them, evenings and weekends. After it, the conversation digest as 4.4.0 ([13](13-summaries.md)). You've said you won't use the app until the whole of it is in (Q21): each release is still built and checked on the phone, but nothing between releases has to serve a day's use.
 
@@ -121,7 +121,7 @@ About twenty-five days in 33 PRs (32 releases), 3.3.4 to 3.3.6, 4.0.3, 4.0.4, 4.
 
 ## Decisions it adds
 
-Numbered in `docs/decisions.md` by the PRs that apply them (the next free number is D-107; D-94 is 3.3.2's, D-95 to D-97 4.0.0's, D-98 4.0.1's, amended by 4.0.10, D-99 4.0.10's, D-100 4.1.0's, D-101 4.1.1's, D-102 4.1.4's, D-103 4.2.0's, D-104 Q36's, D-105 4.2.1's and D-106 4.3.0's):
+Numbered in `docs/decisions.md` by the PRs that apply them (the next free number is D-108; D-94 is 3.3.2's, D-95 to D-97 4.0.0's, D-98 4.0.1's, amended by 4.0.10, D-99 4.0.10's, D-100 4.1.0's, D-101 4.1.1's, D-102 4.1.4's, D-103 4.2.0's, D-104 Q36's, D-105 4.2.1's, D-106 4.3.0's and D-107 4.3.2's):
 
 - The chat is Felix's one visible voice; a notification is made from it and never beside it (5a). A reply from a notification and one in the chat are the same turn, routed by the message it answers (5b).
 - The chat keeps every message for you; what he's sent of it is the recent window (5a).
@@ -135,18 +135,18 @@ Numbered in `docs/decisions.md` by the PRs that apply them (the next free number
 
 ## Done when
 
-- `AppGraph.kt` is under 400 lines and holds no feature logic; each service has tests of its own; one class builds Claude clients; one object names every notification id; the architecture test holds all four rules.
-- Every message in his name since 4.0.0 is in the chat, and `felix-say` twice gives one notification with both. A tapped notification opens the chat at that message; a reply from it and a reply swiped in the chat answer the same message the same way.
-- His bubble shows a chevron and nothing under it until opened; a new message's label slides out and back; a message that's just talk has neither.
-- Scrolling up past the chat's oldest message loads the earlier ones; `chat-context` shows only the window.
-- "Remind me at 7 to…" sets a reminder (not a task) that arrives at 7 as his message written for that moment (your words, when he couldn't write); "remind me when I next sit down to…" arrives at that slot's start.
-- "Tell me to do her assignments on sheets" lands on every task of that class: on each sheet, under each in his context, in his slot message for each.
-- "Don't message me tonight" is gone by morning without your deleting it.
-- The private chat and Felix evals pass at the rate they pass today after the voice change.
-- "It's due next lesson" dates a task to that class's next lesson; "how did last week go?" and "what's on in December?" are answered after a round; the chat's eval scores at least what it did before 8c.
-- Ticking the last piece of a starred email unstars and archives it within a minute online, and after reconnecting offline; Undo within the grace leaves Gmail untouched.
-- A new override of yours is a field in one place, not six; no store is rewritten for a change that isn't its own: the half-minute state has a file of its own, under 10 KB.
-- All tests pass, more of them than the 874 the plan began with; every release checked on the phone; the baselines of Stage 0 compared and bettered.
+- [x] `AppGraph.kt` is under 400 lines and holds no feature logic; each service has tests of its own; one class builds Claude clients; one object names every notification id; the architecture test holds all four rules. *(Settled by D-107 at 4.3.2: `AppGraph.kt` is 537 lines, the stores and services made and the flows that join them, accepted as wiring; every service has tests of its own, Planning's through `PlanSnapshotTest`, which plans through it on temporary stores; `ModelGateway` alone builds a client and `NoticeId` names every notification, both held by `ArchitectureTest`; its fourth rule holds each store's writers named and no screen among them, not one writer a store.)*
+- [x] Every message in his name since 4.0.0 is in the chat, and `felix-say` twice gives one notification with both. A tapped notification opens the chat at that message; a reply from it and a reply swiped in the chat answer the same message the same way. *(5a and 5b, on the phone with you on 18 Oct.)*
+- [x] His bubble shows a chevron and nothing under it until opened; a new message's label slides out and back; a message that's just talk has neither. *(5c on 18 Oct; just talk with 10b on 21 Oct.)*
+- [ ] Scrolling up past the chat's oldest message loads the earlier ones; `chat-context` shows only the window. *(Built and tested, the archive a month a file since 4.0.4; not yet seen on the phone, whose chat has no month past its window yet: [14](14-your-part.md) §Still to check, 2.)*
+- [x] "Remind me at 7 to…" sets a reminder (not a task) that arrives at 7 as his message written for that moment (your words, when he couldn't write); "remind me when I next sit down to…" arrives at that slot's start. *(8a, on the phone on 20 and 21 Oct.)*
+- [x] "Tell me to do her assignments on sheets" lands on every task of that class: on each sheet, under each in his context, in his slot message for each. *(8a's standing notes, Q31: A.)*
+- [ ] "Don't message me tonight" is gone by morning without your deleting it. *(10a; set on 21 Oct at 19:05 till 07:00, to be seen gone on 22 Oct.)*
+- [x] The private chat and Felix evals pass at the rate they pass today after the voice change. *(10b: 23 of 23, from 0.957 before the voice.)*
+- [x] "It's due next lesson" dates a task to that class's next lesson; "how did last week go?" and "what's on in December?" are answered after a round; the chat's eval scores at least what it did before 8c. *(8b and 8c, on the phone on 20 and 21 Oct; the text kept at 600 by the eval's rule, D-102.)*
+- [x] Ticking the last piece of a starred email unstars and archives it within a minute online, and after reconnecting offline; Undo within the grace leaves Gmail untouched. *(11, with you and Gmail on 21 Oct; a star's kind stays drawn on Gmail's website, Gmail's limit, D-106.)*
+- [x] A new override of yours is a field in one place, not six; no store is rewritten for a change that isn't its own: the half-minute state has a file of its own, under 10 KB. *(7: `TaskItem.mine`; `session.json` 7,202 bytes on the phone.)*
+- [ ] All tests pass, more of them than the 874 the plan began with; every release checked on the phone; the baselines of Stage 0 compared and bettered. *(In part: 1,297 tests pass; every release was checked on the phone; the baselines are compared in [01](01-current-state.md), `AppGraph` and the runtime's file far smaller, but the tests take 71 s where they took 13, and a full build 109 s where it took 90.)*
 
 ## The documents
 

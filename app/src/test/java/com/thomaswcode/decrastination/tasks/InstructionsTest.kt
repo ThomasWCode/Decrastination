@@ -5,12 +5,14 @@ import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.Change
 import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.ChatMessage
+import com.thomaswcode.decrastination.core.HalfDay
 import com.thomaswcode.decrastination.core.Instruction
 import com.thomaswcode.decrastination.core.InstructionStatus
 import com.thomaswcode.decrastination.core.NoSchool
 import com.thomaswcode.decrastination.core.OwnTask
 import com.thomaswcode.decrastination.core.Proposal
 import com.thomaswcode.decrastination.core.ProposalState
+import com.thomaswcode.decrastination.core.SchoolCalendar
 import com.thomaswcode.decrastination.core.Speaker
 import kotlin.test.AfterTest
 import kotlin.test.Test
@@ -22,7 +24,7 @@ import kotlin.test.assertTrue
 import kotlinx.coroutines.runBlocking
 
 /**
- * Your instructions' service on temporary stores (docs/plan_v4, Stage 6c): a quick change applied and
+ * Your instructions' service on temporary stores (docs/plan_v4): a quick change applied and
  * taken back; one refused, past a real deadline, on your own task as the form wouldn't take it, or in
  * a circle; one deleted, discarded or taken back, its card told; what one makes on the school calendar
  * and on your own tasks; and those waiting for Claude while it can't be asked. The rules themselves are
@@ -139,6 +141,19 @@ class InstructionsTest {
         assertEquals(listOf(NoSchool("2026-10-26", "2026-10-30")), h.stores.school.value.noSchool)
         assertEquals(Fixtures.at("2026-10-24T18:00"), task("own:mine").dueAt)
         assertNull(state("off"))
+    }
+
+    @Test
+    fun `days off and a half-day added and deleted in Settings go into the school calendar and out of it`() = runBlocking {
+        val off = NoSchool("2026-10-26", "2026-10-30", "a holiday")
+        val half = HalfDay("2026-10-23", 12 * 60 + 30)
+        h.instructions.addSchoolDays(off)
+        h.instructions.addSchoolDays(half)
+        assertEquals(listOf(off), h.stores.school.value.noSchool)
+        assertEquals(listOf(half), h.stores.school.value.halfDays)
+        h.instructions.deleteSchoolDays(off)
+        h.instructions.deleteSchoolDays(half)
+        assertEquals(SchoolCalendar(), h.stores.school.value)
     }
 
     @Test

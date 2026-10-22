@@ -7,7 +7,7 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.temporal.TemporalAdjusters
 
-/** The Tasks tab's sections, by when each task is due (2.0.0, Q30), in the order they're shown. */
+/** The Tasks tab's sections, by when each task is due (Q30), in the order they're shown. */
 enum class DueGroup(val title: String) {
     Overdue("Overdue"),
     Today("Today"),

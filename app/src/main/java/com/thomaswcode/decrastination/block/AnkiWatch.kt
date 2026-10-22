@@ -8,6 +8,7 @@ import com.thomaswcode.decrastination.learn.AnkiProgress
 import com.thomaswcode.decrastination.learn.AnkiReading
 import com.thomaswcode.decrastination.learn.DeckCount
 import com.thomaswcode.decrastination.sources.anki.AnkiProvider
+import java.time.Instant
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
@@ -89,7 +90,7 @@ class AnkiWatch(private val graph: AppGraph) {
             val tasks = graph.tasks.value
             val plan = graph.planning.plan(now = now)
             // Visits that didn't finish a deck's cards: their minutes kept towards the one that does.
-            var worked = graph.stores.anki.value.ankiWorked.on(java.time.Instant.ofEpochMilli(now).atZone(zone).toLocalDate().toString())
+            var worked = graph.stores.anki.value.ankiWorked.on(Instant.ofEpochMilli(now).atZone(zone).toLocalDate().toString())
             val studied = AnkiProgress.done(stretch, tasks.tasks, reviewsOnly = tasks.ankiDay?.reviewsOnly == true)
             // The decks studied: work on their tasks, as Felix sees it (LR-03).
             graph.looks.noteActivity(studied.filter { it.cards > 0 }.map { it.taskId }, now)

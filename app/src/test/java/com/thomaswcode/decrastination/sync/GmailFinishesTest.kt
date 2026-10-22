@@ -25,6 +25,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 
 /**
@@ -219,9 +220,9 @@ class GmailFinishesTest {
         finishes.finish("gmail:t3", explicit = true)
         clock.time += GmailWrites.GRACE_MS
         val stopping = object : GmailWriter {
-            override suspend fun <T> open(block: suspend (GmailWriter.Session) -> T): T = throw kotlinx.coroutines.CancellationException("stopped")
+            override suspend fun <T> open(block: suspend (GmailWriter.Session) -> T): T = throw CancellationException("stopped")
         }
-        assertFailsWith<kotlinx.coroutines.CancellationException> { finishes.write(stopping) }
+        assertFailsWith<CancellationException> { finishes.write(stopping) }
         assertEquals(0, finishes.value.single { it.taskId == "gmail:t3" }.tries)
         assertFalse(finishes.write(gmail))
         // Another email, offline each time: given up at the fifth, said, and its receipt kept till it's sorted.

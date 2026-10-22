@@ -64,10 +64,10 @@ object ChatAnswers {
             val bucket = buckets.firstOrNull { it.date == day } ?: return@mapNotNull null
             val slots = bucket.slots
                 .filter { it.kind == SlotKind.Work && it.chunk?.taskId == c.taskId }
-            val laid = slots.firstOrNull { it.pinned } ?: slots.minByOrNull { kotlin.math.abs(it.start - asked) }
+            val laid = slots.firstOrNull { it.pinned } ?: slots.minByOrNull { abs(it.start - asked) }
             when {
                 laid == null -> "${at(asked).format(hm)} had no free time, nor any after it that day."
-                kotlin.math.abs(laid.start - asked) <= 60_000L -> null
+                abs(laid.start - asked) <= 60_000L -> null
                 else -> "${at(asked).format(hm)} had no free time: it's at ${at(laid.start).format(hm)}."
             }
         }.distinct()
@@ -82,26 +82,26 @@ object ChatAnswers {
         val suggestedReplies: List<String> = emptyList(),
         /** Steps to tick and tasks to show (AI-14), each checked against what there is. */
         val actions: List<ChatAction> = emptyList(),
-        /** What it asks to look up on the web first (16 Oct, [WebResearcher]): its answer is then only that it's looking. */
+        /** What it asks to look up on the web first ([WebResearcher]): its answer is then only that it's looking. */
         val research: String? = null,
         /** The tasks whose whole text it asks to read first (D-93): its answer is then only that it's reading. */
         val details: List<String> = emptyList(),
-        /** Reminders to set, and those listed to move or reword under their own ids (Stage 8a), each checked. */
+        /** Reminders to set, and those listed to move or reword under their own ids, each checked. */
         val reminders: List<Reminder> = emptyList(),
-        /** Notes to keep on tasks (Stage 8a), each checked. */
+        /** Notes to keep on tasks, each checked. */
         val notes: List<Note> = emptyList(),
-        /** Whether it asks for the week's numbers first (G6, 8c): its answer is then only that it's looking. */
+        /** Whether it asks for the week's numbers first (G6): its answer is then only that it's looking. */
         val stats: Boolean = false,
-        /** The calendar it asks for first (G7, 8c), as [ChatPrompts.calendarAsk] reads it: empty for the four weeks after the fortnight, else a month (yyyy-MM). */
+        /** The calendar it asks for first (G7), as [ChatPrompts.calendarAsk] reads it: empty for the four weeks after the fortnight, else a month (yyyy-MM). */
         val calendar: String? = null,
-        /** His messages still waiting that the words answered (10b, D-99): those the context listed ([ChatPrompts.Context.waiting]). */
+        /** His messages still waiting that the words answered (D-99): those the context listed ([ChatPrompts.Context.waiting]). */
         val answered: List<String> = emptyList(),
     )
 
     /**
-     * [reading]'s cards, each made as it comes, with its Undo (your call, 16 Oct: nothing he does waits
-     * for a button; AI-24 had only changes to what exists made so): its changes on one card, first;
-     * then its new tasks, a card each; then a card for each task to show (AI-14), with its Open; one opened where it lives (G3) has none.
+     * [reading]'s cards, each made as it comes, with its Undo (D-60, AI-24): its changes on one card, first;
+     * then its new tasks, a card each; then a card for each task to show (AI-14), with its Open;
+     * one opened where it lives (G3) has none.
      */
     fun cards(reading: Reading, tasks: Map<String, TaskItem>, zone: ZoneId, id: () -> String = { UUID.randomUUID().toString() }): List<Proposal> {
         val changes = reading.changes.takeIf { it.isNotEmpty() }?.let {
@@ -126,7 +126,7 @@ object ChatAnswers {
     )
 
     /**
-     * A reminder as his answer gives it (Stage 8a): from a change of type Remind (Q13: B), its words its
+     * A reminder as his answer gives it: from a change of type Remind (Q13: B), its words its
      * title, when it comes its eventKey, a listed reminder's id to move its afterTaskId, a BeforeDue's
      * minutes its minutes ([fromChange]).
      */
@@ -140,7 +140,7 @@ object ChatAnswers {
         val minutesBefore: Int = -1,
     )
 
-    /** A note as his answer gives it (Stage 8a): from a change of type Note, its words its title; on a task, or for every task its scope matches (Q31: A), read from its eventKey ([fromChange]). */
+    /** A note as his answer gives it: from a change of type Note, its words its title; on a task, or for every task its scope matches (D-100), read from its eventKey ([fromChange]). */
     private data class GivenNote(val taskId: String = "", val text: String = "", val subject: String = "", val className: String = "", val source: String = "", val titleContains: String = "")
 
     /** [c], a Remind change, as a reminder. */
@@ -165,7 +165,7 @@ object ChatAnswers {
     /** An open's value that opens the task where it lives (G3), not its page here. */
     const val OPEN_SOURCE = "source"
 
-    /** The most actions one answer takes: a few at most is what's meant (ten since there are more kinds, 16 Oct). */
+    /** The most actions one answer takes: a few at most is what's meant (ten since there are more kinds). */
     private const val MAX_ACTIONS = 10
 
     @Serializable
@@ -217,7 +217,7 @@ object ChatAnswers {
         if (answer.newTasks.size > MAX_TASKS) leftOut += "${answer.newTasks.size - MAX_TASKS} more tasks than the app takes at once"
         val byId = tasks.associateBy { it.id }
         val titles = events.associate { EventJudge.key(it) to it.title } + listOfNotNull(about.eventKey?.let { it to (about.eventTitle ?: it) })
-        // His reminders and notes come as changes of their own types (8a, Q13: B): taken out first, made their own way.
+        // His reminders and notes come as changes of their own types (Q13: B): taken out first, made their own way.
         val (kept, given) = answer.changes.take(MAX_CHANGES).map(InstructionAnswers.Given::normalised).partition { it.type == ChatPrompts.REMIND_TYPE || it.type == ChatPrompts.NOTE_TYPE }
         var changes = given.map { lessonOf(it, context, now, zone) ?: it }.mapNotNull { g ->
             // A due date at a class's next lesson it can't be set from (G8): refused, saying why, so he asks.
@@ -238,16 +238,16 @@ object ChatAnswers {
         }
         val replies = answer.suggestedReplies.map { it.trim().take(FelixAnswers.MAX_REPLY) }.filter { it.isNotEmpty() }.distinct().take(FelixAnswers.MAX_REPLIES)
         // A step ticked or unticked, a listed task shown (AI-14); a task of yours done, open again or
-        // deleted, a setting set (16 Oct): each only as the task, or the setting, can be.
+        // deleted, a setting set: each only as the task, or the setting, can be.
         val actions = answer.actions.take(MAX_ACTIONS).mapNotNull { a -> action(a, byId, settings, felix, context, leftOut) }.distinct()
         // Tasks to read in full (D-93): listed and open, not the one the message is about (it came whole); and beside
-        // them what else it asks for (8c), each once: the week's numbers, and the calendar past the fortnight or a
+        // them what else it asks for, each once: the week's numbers, and the calendar past the fortnight or a
         // month of it, the first asked for. Any other word is dropped.
         val asked = answer.details.map(String::trim)
         val details = asked.filter { id -> id != about.taskId && byId[id]?.let { it.isOpen && !it.hidden } == true }.distinct().take(ChatPrompts.MAX_READ)
         val stats = asked.any { it.equals(ChatPrompts.ASK_STATS, ignoreCase = true) }
         val calendar = asked.firstNotNullOfOrNull(ChatPrompts::calendarAsk)
-        // Reminders and notes (Stage 8a): each as the app can keep it, the rest said.
+        // Reminders and notes: each as the app can keep it, the rest said.
         // Those the answer cancels make room, as they're cancelled before its reminders are made.
         val cancelled = actions.filter { it.type == ChatAction.Type.CancelReminder }.mapNotNull { it.value }.toSet()
         // A deadline the answer sets is the one a reminder before it's due goes by, as its changes are made first.
@@ -257,7 +257,7 @@ object ChatAnswers {
         // Those the answer deletes make room too.
         val deleted = actions.filter { it.type == ChatAction.Type.DeleteNote }.mapNotNull { it.value }.toSet()
         val notes = notes(kept.filter { it.type == ChatPrompts.NOTE_TYPE }.map(::noteOf), byId, felix, now, leftOut, deleted)
-        // His messages the words answered (10b): only those the context listed as waiting, each once; any other id dropped.
+        // His messages the words answered: only those the context listed as waiting, each once; any other id dropped.
         val waiting = context?.waiting.orEmpty()
         val answered = answer.answered.map(String::trim).filter { it in waiting }.distinct()
         return Reading(reply.take(ChatPrompts.MAX_TEXT), made, changes, leftOut, answer.memories.take(MAX_MEMORIES), replies, actions, answer.research.trim().take(ResearchPrompts.MAX_QUESTION).takeIf { it.isNotEmpty() }, details, reminders, notes, stats, calendar, answered)
@@ -339,7 +339,7 @@ object ChatAnswers {
 
     /**
      * [given] as notes the app keeps, at most [MAX_NOTES]: each with its words, on a listed task (open or
-     * finished), no more on one than [Notes.PER_TASK] with [felix]'s; or standing (Q31: A), for every task
+     * finished), no more on one than [Notes.PER_TASK] with [felix]'s; or standing (D-100), for every task
      * of a subject, a class, a source the app reads or with a word in its title, never on a task too, no more
      * than [Notes.MAX_STANDING], those the same answer deletes ([deleted]) not counted; what can't be is said in [leftOut].
      */
@@ -430,7 +430,7 @@ object ChatAnswers {
             if (byId[of]?.let { it.isOpen || (!keep && (it.source == Source.Own || it.tickDone)) } != true) return no("a piece of a task that's finished")
             return ChatAction(if (keep) ChatAction.Type.KeepPiece else ChatAction.Type.UnkeepPiece, of, value = key)
         }
-        // A reminder cancelled, still to come; a note deleted, still kept (Stage 8a): by id, their task's taken from them.
+        // A reminder cancelled, still to come; a note deleted, still kept: by id, their task's taken from them.
         if (a.type == "cancelReminder") {
             val r = felix.reminders.firstOrNull { it.id == a.value.trim() }?.takeIf(Reminders::pending) ?: return no("a reminder to cancel that isn't one still to come")
             return ChatAction(ChatAction.Type.CancelReminder, r.taskId.orEmpty(), value = r.id)
@@ -454,7 +454,7 @@ object ChatAnswers {
             "tickStep" -> if (task.isOpen && step?.done == false) act(ChatAction.Type.TickStep, task.id, a.stepIndex) else no("a step to tick that isn't one of $name's still to do")
             "untickStep" -> if (task.isOpen && step?.done == true) act(ChatAction.Type.UntickStep, task.id, a.stepIndex) else no("a step to untick that isn't one of $name's done")
             // Done by you: your own, or one done by its tick (NF-06), or a starred email, unstarred and archived in Gmail
-            // (Stage 11, with the switch on); another is done when its source says.
+            // (with the switch on); another is done when its source says.
             "done" -> when {
                 !task.isOpen -> no("$name, finished already")
                 own || task.tickDone -> act(ChatAction.Type.Done, task.id)

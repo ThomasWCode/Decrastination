@@ -8,6 +8,7 @@ import com.thomaswcode.decrastination.core.SchoolCalendar
 import com.thomaswcode.decrastination.core.Settings
 import java.io.File
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.KSerializer
 
 /**
  * Every store the app keeps, made in one place (docs/plan_v4/02-target-architecture.md §Stores): each
@@ -28,7 +29,7 @@ class Stores(
     /** What the moves found they couldn't read, set aside before they wrote over it: said at this start as a store's file is ([problems]). */
     private val movedAside: List<JsonStore.Unreadable> = moves.flatMap { it.run(dir) }
 
-    private fun <T> store(name: String, serializer: kotlinx.serialization.KSerializer<T>, default: () -> T, unreadable: () -> T = default, migrations: List<Migration> = emptyList(), onWrite: (T) -> T = { it }) =
+    private fun <T> store(name: String, serializer: KSerializer<T>, default: () -> T, unreadable: () -> T = default, migrations: List<Migration> = emptyList(), onWrite: (T) -> T = { it }) =
         JsonStore(File(dir, name), serializer, default, unreadable = unreadable, clock = clock, migrations = migrations, onWrite = onWrite)
 
     val tasks = store("tasks.json", TaskState.serializer(), ::TaskState, migrations = listOf(TasksMigration.TASKS), onWrite = TaskState::withStepIds)
@@ -86,16 +87,16 @@ class Stores(
     /** Days with no school and half-days (PL-16), told to the chat or added in Settings. */
     val school = store("school.json", SchoolCalendar.serializer(), ::SchoolCalendar)
 
-    /** What Felix remembers (AI-21): facts, and standing instructions, each able to expire (10a). */
+    /** What Felix remembers (AI-21): facts, and standing instructions, each able to expire. */
     val memory = store("memory.json", MemoryState.serializer(), ::MemoryState, migrations = listOf(MemoryMigration.MEMORY))
 
-    /** What Felix keeps at your asking (Stage 8a): notes on tasks, standing notes, and reminders with their drafts. */
+    /** What Felix keeps at your asking: notes on tasks, standing notes, and reminders with their drafts. */
     val felix = store("felix.json", FelixStore.serializer(), ::FelixStore)
 
     /** The versions of its events the app has written to calendars, so a copy of one is known; what it wrote where; your answers about events. */
     val calendar = store("calendar.json", CalendarState.serializer(), ::CalendarState, migrations = listOf(RuntimeSplit.CALENDAR))
 
-    /** The writes to Gmail a finished email makes (4.3.0), journaled before they're made, and their receipts while their Undo stands. */
+    /** The writes to Gmail a finished email makes, journaled before they're made, and their receipts while their Undo stands. */
     val gmailWrites = store("gmail-writes.json", GmailWriteStore.serializer(), ::GmailWriteStore)
 
     private val json = listOf(tasks, settings, runtime, session, protection, model, anki, learning, log, instructions, chat, school, memory, felix, calendar, gmailWrites)
@@ -103,7 +104,7 @@ class Stores(
     /**
      * A store, what a backup keeps of it ([backup]; none, and [why] says why), and the resets that
      * change it themselves ([resets]; what they set going, such as your changes laid on the tasks
-     * again, aside), of which those that clear it whole take its copies too ([clears], Q42): one that
+     * again, aside), of which those that clear it whole take its copies too ([clears], D-94): one that
      * changes only part of it leaves them, as they hold the rest.
      */
     class Kept(val file: String, val backup: String?, val why: String? = null, val resets: Set<Reset> = emptySet(), val clears: Set<Reset> = resets) {
@@ -137,7 +138,7 @@ class Stores(
 
     /**
      * The copies kept of each store [what] clears whole let go ([all]'s [Kept.clears]; [Reset.Everything], every store a
-     * reset clears whole), so what's reset isn't kept in one (Q42). The chat's archive takes its own as it's cleared ([ChatArchiveStore.clear]).
+     * reset clears whole), so what's reset isn't kept in one (D-94). The chat's archive takes its own as it's cleared ([ChatArchiveStore.clear]).
      */
     suspend fun letGoOfCopies(what: Reset) {
         val files = all.filter { kept -> kept.clears.any { what == it || what == Reset.Everything } }.mapTo(HashSet()) { it.file }

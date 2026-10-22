@@ -1,7 +1,10 @@
 package com.thomaswcode.decrastination.enrich
 
+import com.thomaswcode.decrastination.core.Enrichment
 import com.thomaswcode.decrastination.core.Enrichments
+import com.thomaswcode.decrastination.core.MemoryState
 import com.thomaswcode.decrastination.core.Planner
+import com.thomaswcode.decrastination.core.SchoolCalendar
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.withEnrichment
@@ -84,7 +87,7 @@ class EvalSetTest {
                     appendLine()
                     // The second system block every call sends (AI-05), here from the settings' defaults.
                     appendLine("=== PROFILE ===")
-                    appendLine(Profile.block(com.thomaswcode.decrastination.core.Settings(), listOf(case.task), null, com.thomaswcode.decrastination.core.SchoolCalendar(), com.thomaswcode.decrastination.core.MemoryState(), nowOf(case), zone))
+                    appendLine(Profile.block(Settings(), listOf(case.task), null, SchoolCalendar(), MemoryState(), nowOf(case), zone))
                     appendLine()
                     appendLine("=== USER ===")
                     appendLine(redact(user))
@@ -151,7 +154,7 @@ class EvalSetTest {
     }
 
     /** Each label of [case]'s against what the app made of the answer ([made]: the task as enriched). */
-    private fun check(case: Case, made: TaskItem, e: com.thomaswcode.decrastination.core.Enrichment, now: Long, answer: String): List<Pair<String, Boolean>> = buildList {
+    private fun check(case: Case, made: TaskItem, e: Enrichment, now: Long, answer: String): List<Pair<String, Boolean>> = buildList {
         val expect = case.expect
         fun day(time: Long?) = time?.let { Instant.ofEpochMilli(it).atZone(zone).toLocalDate().toString() } ?: "none"
         expect.kind?.let { add("kind ${e.kind?.name ?: "-"} (want $it)" to (e.kind?.name == it)) }

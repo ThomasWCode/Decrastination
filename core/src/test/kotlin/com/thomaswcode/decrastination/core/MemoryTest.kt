@@ -118,7 +118,7 @@ class MemoryTest {
         assertNull(Memories.undo(filled, forgot.single()))
     }
 
-    // --- Memory that expires (10a) ---
+    // --- Memory that expires ---
 
     private val now = Fixtures.at("2026-10-20T21:00")
     private val trip = TaskItem(id = "gmail:trip", source = Source.Gmail, sourceId = "trip", title = "Trip consent form", kind = Kind.Admin, firstSeenAt = now, lastSeenAt = now)

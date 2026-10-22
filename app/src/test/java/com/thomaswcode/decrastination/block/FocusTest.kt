@@ -15,9 +15,11 @@ import com.thomaswcode.decrastination.core.SlotState
 import com.thomaswcode.decrastination.core.SlotKind
 import com.thomaswcode.decrastination.core.Slot
 import com.thomaswcode.decrastination.core.DayWindow
+import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.FixedClock
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.MissedSlot
+import com.thomaswcode.decrastination.core.OwnStep
 import com.thomaswcode.decrastination.core.Planner
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Status
@@ -102,12 +104,12 @@ class FocusTest {
 
     @Test
     fun `a total Felix works out at your pace still teaches the pace, measured against the app's estimate`() = runTest {
-        // 17 Oct: 40 minutes of the app's, Felix's steps and total of 60 at a pace of 1.5; and two hours of your own reckoning.
+        // 40 minutes of the app's, Felix's steps and total of 60 at a pace of 1.5; and two hours of your own reckoning.
         val base = task("paced", effort = 40, steps = listOf(SubStep("Past paper", 60)))
         val paced = base.copy( status = Status.Done, doneAt = clock.time,
-        ).yours(steps = listOf(com.thomaswcode.decrastination.core.OwnStep("Past paper", 60)), minutes = 60, pacedFrom = 40, pacedHash = com.thomaswcode.decrastination.core.Enrichments.inputHash(base))
+        ).yours(steps = listOf(OwnStep("Past paper", 60)), minutes = 60, pacedFrom = 40, pacedHash = Enrichments.inputHash(base))
         val yours = task("yours", effort = 40).copy( status = Status.Done, doneAt = clock.time).yours(minutes = 120)
-        // #50's review: estimated anew at 80 since, its content the same (read again for newer prompts):
+        // Estimated anew at 80 since, its content the same (read again for newer prompts):
         // still measured against the 40 Felix worked from. Its content changed: as a total of yours.
         val anew = paced.copy(id = "teams:anew", sourceId = "anew", sourceEffortMin = 80)
         val changed = paced.copy(id = "teams:changed", sourceId = "changed", detail = "Also questions 9 to 12.")
@@ -121,10 +123,10 @@ class FocusTest {
 
     @Test
     fun `with your steps and minutes, finishing earns no more than the app's estimate at the pace learned`() = runTest {
-        // #49's review: 40 minutes of the app's at a pace of 1.5 is an hour; your steps and minutes say 80.
+        // 40 minutes of the app's at a pace of 1.5 is an hour; your steps and minutes say 80.
         learning.update { it.copy(calibration = Calibration(multipliers = mapOf(Calibration.key(Kind.Homework, null) to 1.5))) }
         val steps = listOf(SubStep("Past paper", 80))
-        val given = task("hw", effort = 40, steps = steps).copy( status = Status.Done, doneAt = clock.time).yours(steps = listOf(com.thomaswcode.decrastination.core.OwnStep("Past paper", 80)), minutes = 80)
+        val given = task("hw", effort = 40, steps = steps).copy( status = Status.Done, doneAt = clock.time).yours(steps = listOf(OwnStep("Past paper", 80)), minutes = 80)
         focus.onCompleted(listOf(given))
         // The less of the two, each in its own scale: the app's hour, a third of it.
         assertEquals(20 * 60_000L, focus.creditLeftMs())
@@ -522,7 +524,7 @@ class FocusTest {
 
     @Test
     fun `a step in sittings is kept a sitting at a time, only its last ticking it`() = runTest {
-        // An hour and a half read before sittings (#48's review): two of 45, the first's minutes worked on the step.
+        // An hour and a half read before sittings: two of 45, the first's minutes worked on the step.
         val (first, last) = laid(task("t", due = "2026-10-12T23:59", steps = listOf(SubStep("Essay", 90)), effort = 90))
         assertEquals(listOf("Essay", "Continue and finish: Essay"), listOf(first, last).map { it.chunk!!.shown })
         clock.time = first.end
@@ -788,8 +790,6 @@ class FocusTest {
         assertFalse(log.value.slots.single().earned)
     }
 
-    // --- Codex's second review of phase 4 ---
-
     @Test
     fun `a slot kept part-way before a stop is carried through at start-up, once`() = runTest {
         val (first, second) = laid(task("t", due = "2026-10-12T23:59", steps = listOf(SubStep("Q1", 15), SubStep("Q2", 15)), effort = 30))
@@ -916,8 +916,6 @@ class FocusTest {
         tasks.update { it.copy(tasks = listOf(task("plan", kind = Kind.Admin, due = "2026-10-12T23:59", effort = 30).copy(id = "own:plan", source = Source.Own))) }
         assertEquals("Finish today's slot (30 min)", focus.rewardLine(focus.plan()))
     }
-
-    // --- Codex's third review of phase 4 ---
 
     @Test
     fun `a photo's reward on a slot kept already, stopped part-way, is given at start-up, once`() = runTest {

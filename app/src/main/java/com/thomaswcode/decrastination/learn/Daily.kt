@@ -22,7 +22,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 /**
- * The app's own times of day (Phase 5): the morning briefing (07:00 on a school day, 08:30 on any
+ * The app's own times of day: the morning briefing (07:00 on a school day, 08:30 on any
  * other, D-74), the Sunday check-in's reminder, and the weekly review after it.
  */
 object Daily {
@@ -174,10 +174,10 @@ class DailyReceiver : BroadcastReceiver() {
                 graph.runtime.update { it.copy(dailyRanAt = it.dailyRanAt + (action to graph.clock.now())) }
                 when (action) {
                     Daily.ACTION_BRIEFING -> {
-                        // What's remembered that's run out let go of first (10a), so what Settings lists is what he's told.
+                        // What's remembered that's run out let go of first, so what Settings lists is what he's told.
                         runCatching { graph.conversation.forgetExpired() }.onFailure { Log.w(AppGraph.TAG, "Forgetting what's run out failed", it) }
                         Briefing.run(context)
-                        // Felix's notes and reminders kept as long as they're wanted (8a), each morning: not the briefing's
+                        // Felix's notes and reminders kept as long as they're wanted, each morning: not the briefing's
                         // failure, so not one that runs it again.
                         runCatching { graph.conversation.pruneFelix() }.onFailure { Log.w(AppGraph.TAG, "Pruning Felix's notes and reminders failed", it) }
                     }

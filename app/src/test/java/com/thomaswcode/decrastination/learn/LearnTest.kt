@@ -18,6 +18,8 @@ import com.thomaswcode.decrastination.data.ActivityLog
 import com.thomaswcode.decrastination.data.CompletionRecord
 import com.thomaswcode.decrastination.core.Settings
 import java.time.LocalDate
+import java.time.ZoneId
+import java.time.ZoneOffset
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -228,8 +230,8 @@ class EventJudgeTest {
     private val start = Fixtures.at("2026-10-10T14:00")
 
     private fun event(title: String, allDay: Boolean = false, busy: Boolean = true, calendar: String = "Thomas", hours: Int = 2) = CalendarEvent(
-        id = title.hashCode().toLong(), title = title, start = if (allDay) LocalDate.parse("2026-10-10").atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli() else start,
-        end = if (allDay) LocalDate.parse("2026-10-11").atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli() else start + hours * HOUR,
+        id = title.hashCode().toLong(), title = title, start = if (allDay) LocalDate.parse("2026-10-10").atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli() else start,
+        end = if (allDay) LocalDate.parse("2026-10-11").atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli() else start + hours * HOUR,
         allDay = allDay, busy = busy, calendar = calendar,
     )
 
@@ -285,7 +287,7 @@ class EventJudgeTest {
         // answer; a trip three weeks on isn't asked yet (DX-14), but takes its few hours out of its
         // day meanwhile.
         val now = Fixtures.at("2026-10-08T17:00")
-        val trip = CalendarEvent(5, "School trip", LocalDate.parse("2026-10-29").atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli(), LocalDate.parse("2026-10-30").atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli(), allDay = true)
+        val trip = CalendarEvent(5, "School trip", LocalDate.parse("2026-10-29").atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli(), LocalDate.parse("2026-10-30").atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli(), allDay = true)
         val time = EventJudge.time(listOf(event("Van hire", allDay = true), trip), emptyMap(), LONDON, askUntil = now + 7 * DAY)
         assertEquals(listOf("Van hire"), time.toAsk.map { it.title })
         assertEquals(mapOf(LocalDate.parse("2026-10-10") to 24 * 60, LocalDate.parse("2026-10-29") to EventJudge.FEW_HOURS_MIN), time.dayLoads)
@@ -349,7 +351,7 @@ class CalendarQuestionsTest {
     fun `a question names a timed event's day where you are, and an all-day one's as stored`() {
         // Just after midnight in summer time: still Saturday here, though Friday in UTC.
         assertEquals("Saturday 10 October", CalendarTime.questionDay(event(5, "Party", "2026-10-10T00:30", "2026-10-10T05:00"), LONDON))
-        val utcMidnight = LocalDate.parse("2026-10-12").atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli()
+        val utcMidnight = LocalDate.parse("2026-10-12").atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
         assertEquals("Monday 12 October", CalendarTime.questionDay(CalendarEvent(6, "Holiday", utcMidnight, utcMidnight + DAY, allDay = true), LONDON))
     }
 }
@@ -395,7 +397,7 @@ class DaysTest {
         // Planned in London; a slot at 21:30 there is that day's, though it's the next day in Tokyo.
         val day = DayRecord("2026-10-09", 30, listOf(DayChunk("teams:a", 30)), zone = "Europe/London")
         val log = ActivityLog(slots = listOf(kept("teams:a", 30, "2026-10-09T21:30")))
-        assertEquals(30, Days.finish(day, log, java.time.ZoneId.of("Asia/Tokyo")).doneMin)
+        assertEquals(30, Days.finish(day, log, ZoneId.of("Asia/Tokyo")).doneMin)
     }
 
     @Test
@@ -481,31 +483,31 @@ class DaysReplanTest {
 
     @Test
     fun `a class forgotten learns nothing from its work before, and afresh from its work after`() {
-        fun done(at: String, worked: Int) = com.thomaswcode.decrastination.data.CompletionRecord(
-            taskId = "t$at", title = "t", source = com.thomaswcode.decrastination.core.Source.Teams, kind = com.thomaswcode.decrastination.core.Kind.Homework,
-            className = "Physics", estimateMin = 30, workedMin = worked, firstSeenAt = com.thomaswcode.decrastination.Fixtures.at(at) - 3_600_000L,
-            doneAt = com.thomaswcode.decrastination.Fixtures.at(at),
+        fun done(at: String, worked: Int) = CompletionRecord(
+            taskId = "t$at", title = "t", source = Source.Teams, kind = Kind.Homework,
+            className = "Physics", estimateMin = 30, workedMin = worked, firstSeenAt = Fixtures.at(at) - 3_600_000L,
+            doneAt = Fixtures.at(at),
         )
         val before = listOf("2026-10-01T18:00", "2026-10-02T18:00", "2026-10-03T18:00").map { done(it, 60) }
-        val forgetting = com.thomaswcode.decrastination.core.Calibration(forgotten = mapOf("Homework|Physics" to com.thomaswcode.decrastination.Fixtures.at("2026-10-04T00:00")))
+        val forgetting = Calibration(forgotten = mapOf("Homework|Physics" to Fixtures.at("2026-10-04T00:00")))
         assertEquals(emptyList(), Calibrator.remembered(before, forgetting))
         val after = before + listOf("2026-10-05T18:00", "2026-10-06T18:00", "2026-10-07T18:00").map { done(it, 30) }
         assertEquals(3, Calibrator.remembered(after, forgetting).size)
-        val learned = Calibrator.learn(com.thomaswcode.decrastination.data.ActivityLog(completions = after), forgetting, java.time.LocalDate.parse("2026-10-08")).calibration
+        val learned = Calibrator.learn(ActivityLog(completions = after), forgetting, LocalDate.parse("2026-10-08")).calibration
         assertEquals(3, learned.timed["Homework|Physics"])
         assertEquals(forgetting.forgotten, learned.forgotten)
     }
 
     @Test
     fun `reset, the calibration learns only from what comes after`() {
-        fun done(at: String, worked: Int) = com.thomaswcode.decrastination.data.CompletionRecord(
-            taskId = "t$at", title = "t", source = com.thomaswcode.decrastination.core.Source.Teams, kind = com.thomaswcode.decrastination.core.Kind.Homework,
-            estimateMin = 30, workedMin = worked, firstSeenAt = com.thomaswcode.decrastination.Fixtures.at(at) - 3_600_000L, doneAt = com.thomaswcode.decrastination.Fixtures.at(at),
+        fun done(at: String, worked: Int) = CompletionRecord(
+            taskId = "t$at", title = "t", source = Source.Teams, kind = Kind.Homework,
+            estimateMin = 30, workedMin = worked, firstSeenAt = Fixtures.at(at) - 3_600_000L, doneAt = Fixtures.at(at),
         )
-        val reset = com.thomaswcode.decrastination.core.Calibration(learnFrom = com.thomaswcode.decrastination.Fixtures.at("2026-10-04T00:00"))
-        val log = com.thomaswcode.decrastination.data.ActivityLog(completions = listOf(done("2026-10-01T18:00", 90), done("2026-10-05T18:00", 30)))
+        val reset = Calibration(learnFrom = Fixtures.at("2026-10-04T00:00"))
+        val log = ActivityLog(completions = listOf(done("2026-10-01T18:00", 90), done("2026-10-05T18:00", 30)))
         assertEquals(listOf("t2026-10-05T18:00"), Calibrator.remembered(log.completions, reset).map { it.taskId })
-        val learned = Calibrator.learn(log, reset, java.time.LocalDate.parse("2026-10-08")).calibration
+        val learned = Calibrator.learn(log, reset, LocalDate.parse("2026-10-08")).calibration
         assertEquals(1, learned.timed["Homework|"])
         assertEquals(reset.learnFrom, learned.learnFrom)
     }

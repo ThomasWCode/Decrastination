@@ -92,7 +92,7 @@ object AnkiProvider {
 
     /**
      * Opens AnkiDroid with [deckId] selected: studying it, with [study] (its reviewer is exported
-     * and opens on the selected deck, tried on the phone on 9 Oct), or on the deck list, where the
+     * and opens on the selected deck, tried on the phone), or on the deck list, where the
      * selected deck is highlighted. The reviewer is started only if the deck was selected, or it
      * would open on whichever deck was before; otherwise the deck list.
      */

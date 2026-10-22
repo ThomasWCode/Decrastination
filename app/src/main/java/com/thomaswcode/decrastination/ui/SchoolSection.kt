@@ -62,12 +62,12 @@ fun SchoolSection(graph: AppGraph) {
         school.noSchool.forEach { entry ->
             val days = if (entry.from == entry.to) day(entry.from) else "${day(entry.from)} to ${day(entry.to)}"
             Entry("No school, $days" + entry.label.takeIf { it.isNotBlank() }?.let { " · $it" }.orEmpty()) {
-                scope.launch { graph.school.update { it.without(entry) } }
+                scope.launch { graph.instructions.deleteSchoolDays(entry) }
             }
         }
         school.halfDays.forEach { entry ->
             Entry("Half-day, ${day(entry.date)}: ends %02d:%02d".format(Locale.UK, entry.endsAtMin / 60, entry.endsAtMin % 60)) {
-                scope.launch { graph.school.update { it.without(entry) } }
+                scope.launch { graph.instructions.deleteSchoolDays(entry) }
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -83,7 +83,7 @@ fun SchoolSection(graph: AppGraph) {
     when {
         adding == "half" -> DateTimeDialog("Half-day", initialDay = today, initialTime = LocalTime.of(12, 30), earliest = today, onClose = { adding = null }) { date, time ->
             val end = time ?: LocalTime.of(12, 30)
-            scope.launch { graph.school.update { it.with(HalfDay(date.toString(), end.hour * 60 + end.minute)) } }
+            scope.launch { graph.instructions.addSchoolDays(HalfDay(date.toString(), end.hour * 60 + end.minute)) }
             adding = null
         }
         step.firstOrNull() == "off" && step.size == 1 -> DateTimeDialog("First day off", initialDay = today, initialTime = null, earliest = today, onClose = { adding = null }) { first, _ ->
@@ -104,7 +104,7 @@ fun SchoolSection(graph: AppGraph) {
             confirmButton = {
                 TextButton(onClick = {
                     val entry = NoSchool(step[1], step[2], label.trim())
-                    scope.launch { graph.school.update { it.with(entry) } }
+                    scope.launch { graph.instructions.addSchoolDays(entry) }
                     adding = null
                 }) { Text("Add") }
             },
@@ -116,7 +116,7 @@ fun SchoolSection(graph: AppGraph) {
 /** One row of a list saved at once (a day off, a half-day, a memory), and its delete, [action] said aloud. */
 @Composable
 internal fun Entry(text: String, action: String = "Delete", onDelete: () -> Unit) {
-    // A little apart, so a long one's lines aren't read as the next's (16 Oct).
+    // A little apart, so a long one's lines aren't read as the next's.
     Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
         IconButton(onClick = onDelete) { Icon(painterResource(R.drawable.ic_close), contentDescription = action) }

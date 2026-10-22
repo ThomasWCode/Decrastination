@@ -2,7 +2,7 @@
 
 Everything the app sends the model as Felix, call by call, and how it changes with the circumstances. How he behaves is in [felix.md](felix.md).
 
-The exact prompts and schemas are the golden copies in [`app/src/test/resources/prompts/`](../../app/src/test/resources/prompts/), which `GoldenPromptsTest` holds the code to; the prompts below are those copies, with his default name and line. Every other example here is made up, as the repository is public, but each was made by the app's own code from that made-up data, so its shape is exact.
+The exact prompts and schemas are the golden copies in [`app/src/test/resources/prompts/`](../../app/src/test/resources/prompts/), which `GoldenPromptsTest` holds the code to; the prompts below are those copies, with his default name and line, but the web search's, which has none: it's written from the code (`FelixInputsDocTest`). Every other example here is made up, as the repository is public, but each was made by the app's own code from that made-up data, so its shape is exact.
 
 `FelixInputsDocTest` writes every example and prompt here, each into the fence after its `<!-- generated: … -->` or `<!-- golden: … -->` mark, and fails when one is out of date. After a change to what Felix is sent, `./gradlew testDebugUnitTest --tests '*FelixInputsDocTest*' -PupdateDocs=true` writes them again; the words around them are edited here.
 
@@ -18,7 +18,7 @@ Messages in his name that no call writes, and what becomes of your replies, are 
 
 ## Every call
 
-- **Model**: `claude-opus-5-5`, with the API's fallback to another model where it must (`fallbacks: default`, beta `server-side-fallback-2026-07-01`); the answer is credited to the model that gave it (D-24).
+- **Model**: `claude-opus-5-5`, with the API's fallback to another model where it must (`fallbacks: default`, beta `server-side-fallback-2026-07-01`); its cost is reckoned at that model's rates (`Pricing.costUsd`). Which model gave his answer isn't kept: only a reading is credited to one (D-24).
 - **Effort**: medium, as for every answer someone waits for (AC-02, `ModelEffort`); at most 16,000 tokens out.
 - **System**: two blocks, the call's own prompt (cached for an hour), then [the profile](#the-profile) (not cached). The web search has no profile.
 - **Input**: at most 40,000 characters (`Pricing.MAX_INPUT_CHARS`), as the cap's dearest call assumes.
@@ -59,7 +59,7 @@ Remembered:
 
 - You send a message on the chat's tab.
 - You reply to a message, from his notification (AI-24), his chips, or a swipe or *Reply* in the chat, all one way in (D-98): your reply goes into the chat under the message it answers, but for an answer the app takes with no call ([below](#in-his-name-but-not-his-words)).
-- A message waiting is asked again: *Try again*, the chat opened again, or the model back from a rest.
+- A message waiting is asked again: *Try again*, the chat opened again, the model back from a rest, after each sync, or at a start.
 
 One answer at a time: a message sent while he answers another of yours lets that answer go, and he answers both together (D-98). While the model can't be asked (Claude off, resting, the cap), your message says why and waits.
 
@@ -89,7 +89,7 @@ Your words start with what they're about, where the screen you asked from knows:
 
 *What gives?* and *Split this into steps* put their words in the box, for you to change and send.
 
-Before those words comes what they're about, in full (D-93): the task's whole text (up to 8,000 characters) with its sender, attachments and links, and your answers to its questions; or the event's place and description (500 characters). A task with no text of its own, or an event with neither, adds nothing.
+Before those words comes what they're about, in full (D-93): the task's whole text (up to 8,000 characters) with its sender, attachments and links, and your answers to its questions; or the event's place (200 characters) and description (500). A task with no text, attachment or link of its own and no answers, or an event with neither, adds nothing.
 
 ### The context
 
@@ -97,7 +97,7 @@ What the app knows when you send (`ChatPrompts.context`):
 - **Today**: the date, the time and the time zone.
 - **His nudges still waiting for your answer** (4.2.2, D-99), where there are any, first, so a long context never loses them: the newest ten, each by its id, with when he sent it, what it's about and his words (cut at 160 characters), so his answer can name in `answered` those your words answer without replying to them, which are marked answered as *Mark answered* marks them. Not his questions whose answers the app keeps, nor a reminder: each waits for its reply.
 - **The reminders still to come** (4.1.0), next, so a context too long for its room never loses them: each by its id, with when it comes as the plan has it now, your words and its task; "(none)" with none, so "what have I asked you to remind me of?" has its answer.
-- **Open tasks**, up to 80, by the deadline in force: each with its id, title, source, its class and the subject the class map gives it (4.1.1), kind, due date (marked "(a plan)" where the app or Claude set it), its minutes and what the plan makes of them at your pace, the minutes worked, when it can start, and what its text holds (4.1.4: its length, an email's sender, its attachments' names, its links); under it, its steps, numbered for a tick, then its own notes (4.1.0), each by its id and whose it is, and the ids of the standing ones it matches, all of them in a room of 6,000 characters (the rest are on their sheets).
+- **Open tasks**, up to 80, by the deadline in force: each with its id, title, source, its class and the subject the class map gives it (4.1.1), kind, due date (marked "(a plan)" where the app or Claude set it), its minutes and what the plan makes of them at your pace, the minutes worked, when it can start, and what its text holds (4.1.4: its length, an email's sender, its attachments' names, its links), and on an email's, with finishing emails on, "finish with done"; under it, its steps, numbered for a tick, then its own notes (4.1.0), each by its id and whose it is, and the ids of the standing ones it matches, all of them in a room of 6,000 characters (the rest are on their sheets).
 - **Standing notes** (4.1.0, Q31: A), each once: its id, whose it is, the tasks it's for and its words.
 - **Notes on finished tasks** (4.1.0), the newest first, in what's left of the notes' room: each by its id, whose it is, its task and its words, so he can say or delete them.
 - **Your pace**: each multiplier learned (by kind, and by class where it has its own), with the timed pieces it's from; or that none is learned yet.
@@ -109,7 +109,7 @@ What the app knows when you send (`ChatPrompts.context`):
 - **The settings he may change**, with their values now (`FelixSettings`).
 - **The tasks' own text** (D-93, `TaskText`): each open task's (but Anki's counts) that has any, by the deadline in force: its id, then its text (an assignment's instructions, an email's conversation, a planner item's details, your notes), at most 600 characters; 12,000 characters in all. Who an email's from, what's attached and linked, and how long the whole text is are on its line in the list above (4.1.4: `TaskText.holds`, 160 characters a line, 6,000 in all, by the deadline in force, past that its length alone), so he knows which texts to ask for whole. A longer text is its reading's summary of all of it: the reading writes one for a text over about 600 characters, at no extra call ([readings.md](readings.md#the-three-jobs)). A text past the 16,000 characters a reading sees has its summary said to be of its start, with its end after it. With none (Claude off when it was read, or read before summaries), its start and its end, saying how much of the middle was left out: a conversation is kept oldest first, so its end holds the newest replies, where a changed date or a new ask turns up. The task in full and the tasks he reads are whole up to 8,000 characters; past that, the summary first, then the start and end. It comes last, so a context too long for its room loses it first.
 
-Not sent: a task's reading, but as its minutes and steps; a finished task's text.
+Not sent: a task's reading, but as its minutes, its steps and a long text's summary; a finished task's text.
 
 ### The plan
 
@@ -322,15 +322,18 @@ The whole text of the tasks you asked to read (answer and act on it, and leave d
 | `changes` | of the instructions' types (`NotATask` to `Rename`), each with its fields, and `paced` on a Minutes total worked out at your pace (D-69); and the chat's own two (4.1.0, Q13: B): `Remind`, a reminder set or one listed moved (words in `title`, when in `eventKey`, a listed one's id in `afterTaskId`), and `Note`, on a task or, its scope in `eventKey`, standing; and `lesson` on a DueBy (4.1.1, G8): the class whose next lesson it's due at, its date and time the app's to set | 40, reminders and notes 10 each |
 | `memories` | a fact or a standing instruction, by topic; `until`, how long it holds, and a fact's `taskId`, each empty for none (4.2.0) | 5 |
 | `suggestedReplies` | replies you might give, in your words | 3, of 40 characters each |
-| `actions` | tick or untick a step, finish, reopen or delete one of your own, open a task (on a card, or where it lives: value `source`), set a setting, cancel a reminder, delete a note; and (4.1.1) keep a piece or take it back (`keepPiece`, `unkeepPiece`, by its key), and ask a source to read (`sync`, the source in `setting`) | 10 |
+| `actions` | tick or untick a step, finish, reopen or delete one of your own (a starred email finished too, with finishing emails on), open a task (on a card, or where it lives: value `source`), set a setting, cancel a reminder, delete a note; and (4.1.1) keep a piece or take it back (`keepPiece`, `unkeepPiece`, by its key), and ask a source to read (`sync`, the source in `setting`) | 10 |
 | `research` | what to look up on the web, or empty | |
 | `details` | the tasks whose whole text to read before answering; and (4.1.4) `stats` for the week's numbers, `calendar` or `calendar:YYYY-MM` for the calendar further out | 3 tasks, each kind once |
+| `answered` | his messages still waiting that your words answer without replying to them, by their ids from the context's list (D-99); an id not listed is dropped | those listed |
 
-Everything in it is made at once, with an Undo (D-60); what can't be used is said under his reply.
+Everything in it is made at once, with an Undo (D-60), but a source's read and the messages he names answered, which have none; what can't be used is said under his reply.
 
 ### The chat's prompt
 
 With searches off, its item 6 reads instead: "6. research is always an empty string: you can't look things up."
+
+With finishing emails in Gmail switched off (D-106), item 5 leaves emails out of `done`, and has him say he can't finish one in Gmail and ask whether to mark it not a task instead: its copy is `chat-gmail-off.txt`.
 
 <!-- golden: chat.txt -->
 ```text
@@ -661,7 +664,7 @@ It names Summary and Reply among its reasons, but no message of his is asked for
 - **The morning's list**, where he has no words for the morning; **the week's review's note**, with *Open the review*.
 - **A calendar event's question** (Q7): the app's own text, its answers (*All of it*, *A few hours*, *None*) kept for every event of its name, with no call.
 - **How work went, with Claude off** (LR-05): a message for each completion, its answers kept as below.
-- **The week's summary**: written in a call of its own, about you in the third person (D-66); "the summary is ready" is the app's own text, with *Send it*.
+- **The week's summary**: written in a call of its own, about you in the third person (D-66); "the week's summary's ready. send it?" is the app's own text, with *Send it*.
 - **Your answer to his Question**: read by the instructions reader, as an instruction on that task, and the task read again (AI-10); not by him.
 - **An answer to Completions** (*harder*, *about right*, *easier*, or the app's *Harder*, *As expected*, *Easier*): kept on each of those completions (LR-05), with no call.
 - **A reminder he has no words for** (4.1.0): yours as you set it ("reminder: …"), marked late where it is; its *done*, *snooze 15 min* and *snooze 1 h* kept on it, with no call.

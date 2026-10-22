@@ -1,5 +1,6 @@
 package com.thomaswcode.decrastination.felix
 
+import com.anthropic.core.jsonMapper
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
 import com.thomaswcode.decrastination.core.About
@@ -186,7 +187,7 @@ class ChatTest {
         assertTrue("x Update: it's now due Monday." in section, section)
         // Nothing of its own (the bridge), or Anki's counts: not listed.
         assertFalse("teams:bridge" in section || "anki:quota" in section, section)
-        // Who it's from, what's attached and linked, and how long its text is: on each task's line (8c).
+        // Who it's from, what's attached and linked, and how long its text is: on each task's line.
         val list = text.substringBefore("The tasks' own text")
         assertTrue("| links: https://example.org/forces; text 43 characters\n" in list, list)
         assertTrue("| from Ms Example; attachments: form.pdf (107 KB); text 1,053 characters\n" in list, list)
@@ -432,7 +433,7 @@ class ChatTest {
     @Test
     fun `a total Felix works out at the student's pace is read as paced, and the instructions' reader is never asked for one`() {
         val reading = parse("""{"reply":"Split, at your pace.","changes":[{"type":"Minutes","taskId":"teams:bridge","minutes":150,"paced":true}]}""")!!
-        // With the app's estimate it came from, as it is now (#50's review).
+        // With the app's estimate it came from, as it is now.
         assertEquals(Change(ChangeType.Minutes, taskId = "teams:bridge", minutes = 150, pacedFrom = 100, pacedHash = Enrichments.inputHash(bridge)), reading.changes.single())
         // The chat's schema has it; the instructions' reader's hasn't, as it reads the student's own words.
         assertTrue("paced" in ChatPrompts.SCHEMA.toString())
@@ -441,7 +442,7 @@ class ChatTest {
 
     @Test
     fun `the context gives the student's pace, and what each task's minutes come to in the plan by it`() {
-        // Your call (17 Oct): Felix knows the pace, so he allows for it; minutes given are planned as given.
+        // D-63: Felix knows the pace, so he allows for it; minutes given are planned as given.
         val pace = Calibration(multipliers = mapOf("Homework|" to 1.5, "Homework|Physics" to 1.25), timed = mapOf("Homework|" to 6, "Homework|Physics" to 3))
         val physics = bridge.copy(id = "teams:physics", sourceId = "physics", title = "Physics", className = "Physics")
         val given = bridge.copy(id = "teams:given", sourceId = "given", title = "Given", subSteps = listOf(SubStep("All of it", 100))).yours(steps = listOf(OwnStep("All of it", 100)))
@@ -630,7 +631,7 @@ class ChatTest {
         )
         var n = 0
         val cards = ChatAnswers.cards(reading, mapOf(bridge.id to bridge), LONDON) { "c${++n}" }
-        // Days off and a new task too (your call, 16 Oct): nothing waits for Add or Apply.
+        // Days off and a new task too (D-60): nothing waits for Add or Apply.
         assertEquals(listOf("c1" to true, "c2" to true), cards.take(2).map { it.id to it.instant })
         assertEquals(listOf(ChangeType.AtTime, ChangeType.NoSchool), cards[0].changes.map { it.type })
         assertEquals("Statement", cards[1].task?.title)
@@ -876,7 +877,7 @@ class ChatTest {
         val turn = ChatPrompts.turns(messages, "", emptyMap(), LONDON, found = looked).single().second
         assertTrue("What a web search found for “Essay prize rules and dates”" in turn && "Entries close 23 October 2026; 2,000 words." in turn && "From: Essay prize; Rules" in turn, turn)
         // The tool as the live call of the 16th sent it: the basic search, three at most, from the UK.
-        val tool = com.anthropic.core.jsonMapper().writeValueAsString(searchTool(LONDON))
+        val tool = jsonMapper().writeValueAsString(searchTool(LONDON))
         for (part in listOf("\"type\":\"web_search_20250305\"", "\"name\":\"web_search\"", "\"max_uses\":3", "\"country\":\"GB\"", "\"timezone\":\"Europe/London\"", "\"type\":\"approximate\"")) {
             assertTrue(part in tool, tool)
         }

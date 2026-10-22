@@ -36,7 +36,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
 
 /**
- * The Settings screen's state and actions without Compose (docs/plan_v4, Stage 6b): your edits over
+ * The Settings screen's state and actions without Compose (docs/plan_v4): your edits over
  * what it showed, a change made elsewhere laid under them, the save through the real Protection on
  * temporary stores, the fields that don't parse, the lists' edits, and the state kept through a turn
  * of the phone.

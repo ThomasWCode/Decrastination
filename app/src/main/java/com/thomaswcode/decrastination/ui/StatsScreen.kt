@@ -1,11 +1,13 @@
 package com.thomaswcode.decrastination.ui
 
+import android.content.Intent
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -17,8 +19,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -30,18 +35,28 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.core.Blocklist
 import com.thomaswcode.decrastination.enrich.AiUsage
+import com.thomaswcode.decrastination.learn.Export
 import com.thomaswcode.decrastination.learn.Stats
+import java.io.File
+import java.time.DayOfWeek
+import java.time.Instant
 import kotlinx.coroutines.delay
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
+import java.time.format.TextStyle
+import java.time.temporal.ChronoUnit
 import java.util.Locale
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * The last fortnight (docs/spec/learning.md): what got finished, the slots kept, the blocks, what
@@ -65,8 +80,8 @@ fun StatsScreen(graph: AppGraph) {
     // The period (PL-10): two weeks, six, or this term as the school calendar has it.
     var period by rememberSaveable { mutableStateOf(Stats.DAYS) }
     val school by graph.school.state.collectAsStateWithLifecycle()
-    val today = java.time.Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
-    val termDays = remember(school, today) { (java.time.temporal.ChronoUnit.DAYS.between(Stats.termStart(today) { school.isSchoolDay(it) }, today) + 1).toInt().coerceAtLeast(1) }
+    val today = Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
+    val termDays = remember(school, today) { (ChronoUnit.DAYS.between(Stats.termStart(today) { school.isSchoolDay(it) }, today) + 1).toInt().coerceAtLeast(1) }
     val days = if (period == TERM) termDays else period
     val stats = remember(log, now, days) { Stats.summary(log, now, zone, days) }
     val subjects = remember(log, now, days, settings.classMap) { Stats.bySubject(log, settings.classMap, now, zone, days) }
@@ -74,7 +89,7 @@ fun StatsScreen(graph: AppGraph) {
     val suggested = remember(heat) { Stats.suggestedWeekdayHours(heat) }
     var proposing by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    val context = androidx.compose.ui.platform.LocalContext.current
+    val context = LocalContext.current
     val learned = remember(learning.calibration) { Stats.calibrationRows(learning.calibration) }
     // A class's figure to forget (LR-06), asked first.
     var forgetting by remember { mutableStateOf<Stats.CalibrationRow?>(null) }
@@ -89,38 +104,38 @@ fun StatsScreen(graph: AppGraph) {
     val shown = if (allDays) stats.days else stats.days.take(WEEK)
 
     forgetting?.let { row ->
-        androidx.compose.material3.AlertDialog(
+        AlertDialog(
             onDismissRequest = { forgetting = null },
             title = { Text("Forget this?") },
             text = { Text("${row.line.substringBefore(':')}: what the app has learned goes, and its work so far won't teach it again. Its kind's figure stands for it meanwhile.") },
             confirmButton = {
-                androidx.compose.material3.TextButton(onClick = {
+                TextButton(onClick = {
                     forgetting = null
                     row.forget?.let { key -> scope.launch { graph.learning.forgetCalibration(key) } }
                 }) { Text("Forget") }
             },
-            dismissButton = { androidx.compose.material3.TextButton(onClick = { forgetting = null }) { Text("Keep") } },
+            dismissButton = { TextButton(onClick = { forgetting = null }) { Text("Keep") } },
         )
     }
     if (proposing && suggested != null) {
-        androidx.compose.material3.AlertDialog(
+        AlertDialog(
             onDismissRequest = { proposing = false },
             title = { Text("Weekday hours from your slots?") },
             text = { Text("From ${Format.clock(suggested.startMin)} to ${Format.clock(suggested.endMin)}, where most of your kept slots were on weekdays. Now ${Format.clock(settings.weekdayHours.startMin)} to ${Format.clock(settings.weekdayHours.endMin)}.") },
             confirmButton = {
-                androidx.compose.material3.TextButton(onClick = {
+                TextButton(onClick = {
                     proposing = false
                     scope.launch { graph.protection.changeSettings { it.copy(weekdayHours = suggested) } }
                 }) { Text("Set them") }
             },
-            dismissButton = { androidx.compose.material3.TextButton(onClick = { proposing = false }) { Text("Keep mine") } },
+            dismissButton = { TextButton(onClick = { proposing = false }) { Text("Keep mine") } },
         )
     }
     LazyColumn(Modifier.fillMaxWidth(), contentPadding = PaddingValues(bottom = FELIX_ROOM)) {
         item(key = "period") {
-            androidx.compose.foundation.layout.FlowRow(Modifier.padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FlowRow(Modifier.padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf(Stats.DAYS to "2 weeks", SIX_WEEKS to "6 weeks", TERM to "This term").forEach { (value, label) ->
-                    androidx.compose.material3.FilterChip(selected = period == value, onClick = { period = value }, label = { Text(label) })
+                    FilterChip(selected = period == value, onClick = { period = value }, label = { Text(label) })
                 }
             }
         }
@@ -190,19 +205,19 @@ fun StatsScreen(graph: AppGraph) {
                 GroupTile {
                     HeatGrid(heat)
                     suggested?.let { w ->
-                        androidx.compose.material3.TextButton(onClick = { proposing = true }) { Text("Set weekday hours from this (${Format.clock(w.startMin)}–${Format.clock(w.endMin)})") }
+                        TextButton(onClick = { proposing = true }) { Text("Set weekday hours from this (${Format.clock(w.startMin)}–${Format.clock(w.endMin)})") }
                     }
                 }
             }
         }
         item(key = "export") {
-            androidx.compose.material3.TextButton(modifier = Modifier.padding(horizontal = 8.dp), onClick = {
+            TextButton(modifier = Modifier.padding(horizontal = 8.dp), onClick = {
                 scope.launch {
-                    val file = java.io.File(context.cacheDir, "exports/decrastination-$today.zip")
-                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.thomaswcode.decrastination.learn.Export.zip(com.thomaswcode.decrastination.learn.Export.csv(log, learning.calibration, zone, graph.stores.chatArchive.value.messages + graph.chat.value.messages), file) }
-                    val uri = androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.photos", file)
-                    val send = android.content.Intent(android.content.Intent.ACTION_SEND).setType("application/zip").putExtra(android.content.Intent.EXTRA_STREAM, uri).addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    context.startActivity(android.content.Intent.createChooser(send, "Export the record"))
+                    val file = File(context.cacheDir, "exports/decrastination-$today.zip")
+                    withContext(Dispatchers.IO) { Export.zip(Export.csv(log, learning.calibration, zone, graph.stores.chatArchive.value.messages + graph.chat.value.messages), file) }
+                    val uri = FileProvider.getUriForFile(context, "${context.packageName}.photos", file)
+                    val send = Intent(Intent.ACTION_SEND).setType("application/zip").putExtra(Intent.EXTRA_STREAM, uri).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    context.startActivity(Intent.createChooser(send, "Export the record"))
                 }
             }) { Text("Export the record as CSV") }
         }
@@ -218,7 +233,7 @@ fun StatsScreen(graph: AppGraph) {
                             } else {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(row.line, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f).padding(vertical = 3.dp))
-                                    androidx.compose.material3.TextButton(onClick = { forgetting = row }) { Text("Forget") }
+                                    TextButton(onClick = { forgetting = row }) { Text("Forget") }
                                 }
                             }
                         }
@@ -265,12 +280,12 @@ private const val TERM = -1
 
 /** Slots kept by weekday and hour (PL-09): a row a day, a cell an hour from 7 to 23, darker for more kept, red where more were missed. */
 @Composable
-private fun HeatGrid(heat: Map<Pair<java.time.DayOfWeek, Int>, Pair<Int, Int>>) {
+private fun HeatGrid(heat: Map<Pair<DayOfWeek, Int>, Pair<Int, Int>>) {
     val most = heat.values.maxOfOrNull { it.first }?.coerceAtLeast(1) ?: 1
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        java.time.DayOfWeek.entries.forEach { day ->
+        DayOfWeek.entries.forEach { day ->
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(day.getDisplayName(java.time.format.TextStyle.SHORT, Locale.UK), style = MaterialTheme.typography.labelSmall, modifier = Modifier.width(32.dp))
+                Text(day.getDisplayName(TextStyle.SHORT, Locale.UK), style = MaterialTheme.typography.labelSmall, modifier = Modifier.width(32.dp))
                 (7..23).forEach { hour ->
                     val (kept, missed) = heat[day to hour] ?: (0 to 0)
                     val colour = when {

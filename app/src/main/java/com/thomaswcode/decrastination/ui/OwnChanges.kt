@@ -12,9 +12,9 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 /**
- * A change you can make to a task yourself, with no Claude (IMP-P2-001; minutes since 2.0.0), from
+ * A change you can make to a task yourself, with no Claude (IMP-P2-001), from
  * its sheet ([TaskSheet]). Kept as a quick change (an instruction already read) and applied at once,
- * armed or not: the work is yours to change (12 Oct).
+ * armed or not: the work is yours to change (D-46).
  */
 enum class OwnChange {
     NotATask,

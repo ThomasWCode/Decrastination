@@ -117,7 +117,7 @@ private fun DebugPage(graph: AppGraph, activity: Activity) {
                 )
             }
             item(key = "notes") {
-                // His notes and reminders (8a), read as they change.
+                // His notes and reminders, read as they change.
                 val kept by graph.stores.felix.state.collectAsStateWithLifecycle()
                 val lines = remember(round, kept, state) { graph.conversation.notesAndReminders(now) }
                 Block(activity, "Felix's notes and reminders", lines.joinToString("\n").ifEmpty { "none" })

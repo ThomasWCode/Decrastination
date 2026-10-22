@@ -1,5 +1,6 @@
 package com.thomaswcode.decrastination.ui
 
+import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import com.thomaswcode.decrastination.AppGraph
@@ -9,6 +10,7 @@ import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.sources.anki.AnkiProvider
 import com.thomaswcode.decrastination.sources.gmail.GmailThreads
 import com.thomaswcode.decrastination.sources.teams.TeamsProvider
+import com.thomaswcode.decrastination.sources.teams.TeamsRows
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -61,7 +63,7 @@ object TaskOpener {
                 .putExtra(MainActivity.EXTRA_TAB, MainActivity.TAB_TASKS)
                 .putExtra(MainActivity.EXTRA_TASK, task.id)
                 .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-            if (context !is android.app.Activity) intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            if (context !is Activity) intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             context.startActivity(intent)
             true to null
         }
@@ -70,7 +72,7 @@ object TaskOpener {
     private suspend fun openTeams(context: Context, task: TaskItem): Pair<Boolean, String?> {
         val result = runCatching {
             // Feedback to read opens its assignment (NF-06).
-            withContext(Dispatchers.IO) { TeamsProvider.call(context.contentResolver, TeamsProvider.METHOD_OPEN, task.extra[com.thomaswcode.decrastination.sources.teams.TeamsRows.EXTRA_FEEDBACK_ON] ?: task.sourceId) }
+            withContext(Dispatchers.IO) { TeamsProvider.call(context.contentResolver, TeamsProvider.METHOD_OPEN, task.extra[TeamsRows.EXTRA_FEEDBACK_ON] ?: task.sourceId) }
         }.getOrNull()
         if (result?.getBoolean(TeamsProvider.RESULT_STARTED) == true) return true to null
         val reason = when (result?.getString(TeamsProvider.RESULT_REASON)) {
@@ -83,8 +85,8 @@ object TaskOpener {
     }
 
     /**
-     * Gmail's app opens its inbox for any link, a conversation's included (tried on the phone,
-     * 9 Oct), and has no other way in from outside: so it's opened, and told what to look for.
+     * Gmail's app opens its inbox for any link, a conversation's included (tried on the phone),
+     * and has no other way in from outside: so it's opened, and told what to look for.
      */
     private fun openGmail(context: Context, task: TaskItem): Pair<Boolean, String> {
         if (!launch(context, GMAIL)) return false to "Gmail isn't installed"

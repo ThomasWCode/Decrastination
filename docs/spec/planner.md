@@ -16,6 +16,8 @@ It's pure Kotlin: everything comes in through `Planner.Input`, so the same input
 - **Today's slots** in the last plan: their starts (`previousSlots`) and those missed (`missedSlots`, PL-13).
 
 A task is planned when it's open, available (`TaskItem.isAvailable`), not hidden (`TaskItem.hidden`: not a task, or the same as another) and not waiting for another open task (`InstructionRules.waiting`).
+
+A start you gave (`mine.from`) leaves the task on the plan: its work is placed from then on (`TaskItem.notBefore`), on that day only in the time after the start, and none of it is slotted earlier. Past the plan's last day, it's `OpensLater`.
 Events (`Kind.Event`) are reminders in `Plan.events`, not work.
 
 ## A day's time (PL-15)
@@ -77,7 +79,7 @@ Claude's reading cuts a long step when it's read (`ReadingAnswers.fitParts`), bu
 - How many the whole step takes is counted from its planned minutes, and how many are left from what's left of it, so the ones left keep their names as earlier ones are kept.
 - Keys (`Chunk.keyOf`): a step's piece is `id#i`; a sitting before its step's last is `id#i#n`, n being how many of the step's sittings come after it. Counted from the end, keeping one renumbers none, so kept starts and pins hold.
 - The last sitting has the step's own key, and only it ticks the step (`Chunk.ticks`). Keeping one before it adds its minutes to the task's worked minutes (`Focus.finish`), which come off the sittings left.
-- Steps you or Felix gave (`TaskItem.yourSteps`: a task of your own's, or `mine.steps` on any task) are never cut, however long (D-34). Boxes need no sittings: none is longer than `boxMin`.
+- Steps you or Felix gave (`TaskItem.yourSteps`: a task of your own's, or `mine.steps` on any task) are never cut, however long (D-34). Boxes are never cut into sittings: each is at most `boxMin`, however long that's set (10 to 240 minutes).
 
 ## Real deadlines and plans (PL-14)
 
@@ -86,7 +88,7 @@ Claude's reading cuts a long step when it's read (`ReadingAnswers.fitParts`), bu
 
 - Any other date is a plan: one Claude read without quoting it, the rules' guess, a test date before the source's deadline, a step's own dates. It orders the work and can leave a piece behind, but it's never overdue or due today.
 - Gone by, a plan gives way to the real deadline behind it (`TaskItem.deadlineAt`); with none, the work is undated again, its week counted on from that date. A step's own dates gone by are dropped.
-- Undated work has a soft deadline (`Planner.softWeek`): `softDeadlineDays` (7) after it's first seen, a week more at a time once that's gone by, so it still comes round by its week's end.
+- Undated work has a soft deadline (`Planner.softWeek`): `softDeadlineDays` (7) after it's first seen, and as many days more at a time once that's gone by, so it still comes round by its week's end.
 - Only a real deadline can be overdue, or count as met or missed in Stats and the margins.
 
 ## The last usable day
@@ -103,7 +105,7 @@ Work is placed in this order, each taking its days' time before the next:
 
 1. Work you put on a day, and a piece at a time you gave, on that time's day (PL-04).
 2. Work dated later today, then tomorrow: those deadlines can still be met. A task with some brings its overdue blocks along, ahead of it, ranked by the task's soonest deadline to come rather than their own.
-3. Overdue work, the oldest deadline first, into today.
+3. Overdue work, the oldest deadline first, into today; then undated work whose week ends today.
 4. Dated work due after tomorrow, spread over its window (PL-01), the earliest last usable day first.
 5. Undated work, backwards from its soft week.
 
@@ -120,7 +122,7 @@ Work due by today goes on the first day it can (`placeNow`): today, unless a per
 6. A day without room passes its piece to the nearest that has some, earlier first.
 7. A task its window can't hold in order is placed backwards from its last usable day instead (`placeBack`).
 
-Spreading gives today a fair share of each task's days, not a far task's whole work in its last ones. Blocking reads today's work (`Plan.pressure`), so it lifts once today's share is done, unless a slot missed today went to tomorrow, which keeps it on till the day's hours end (BL-11, [blocking-and-protection.md](blocking-and-protection.md)).
+Spreading gives today a fair share of each task's days, not a far task's whole work in its last ones. Blocking reads today's work (`Plan.pressure`), so it lifts once today's share is done, unless a slot missed today went to a later day, which keeps it on till the day's hours end (BL-11, [blocking-and-protection.md](blocking-and-protection.md)).
 
 ## Backwards, and behind
 
@@ -130,7 +132,7 @@ Spreading gives today a fair share of each task's days, not a far task's whole w
 
 ## Undated work
 
-Undated work goes after everything dated, backwards from its soft week, at most `softMinPerDay` (60) minutes of it a day.
+Undated work goes after everything dated, backwards from its soft week, at most `softMinPerDay` (60) minutes of it a day. On the day its week ends, it goes into today with the overdue work, before dated work is spread.
 A day's first undated piece may be longer than that, never longer than the day's time, so no piece is too big for every day. A batch first seen together spreads over its week instead of filling one evening.
 
 ## Anki decks
@@ -165,7 +167,7 @@ Each piece carries its reason (`Chunk.why`), set as it's placed, and its sheet s
 - due today or tomorrow; overdue, naming its deadline's day; spread over the days to its deadline; kept within a week of its last piece; a day apart from the last revision piece; the day with most room;
 - undated, filling spare time this week; packed as late as its days allow; where you put it; moved when its time passed (PL-13); kept where today's slot had it, where keeping it changed its day (PL-13); couldn't fit before its deadline.
 
-Behind with no room before the deadline itself, a piece says it couldn't fit, but overdue and undated work keep their own reason; behind only the safety margin, it keeps the reason that placed it.
+Behind with no room before the deadline itself, a piece says it couldn't fit. Overdue and undated work keep their own reason, and work you put on a day or at a time says where you put it. Behind only the safety margin, a piece keeps the reason that placed it.
 The plan Felix reads has each as a short code (`[why: spread]`).
 
 ## What won't fit (PL-02)

@@ -9,6 +9,9 @@ import java.io.File
 import java.nio.file.AccessDeniedException
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
+import java.security.KeyStoreException
+import java.time.Instant
+import javax.crypto.AEADBadTagException
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -176,6 +179,15 @@ class StoresTest {
     }
 
     @Test
+    fun `two tasks said not to be the same work are kept once a pair, the newest so many`() {
+        val said = RuntimeState().withNotSame("teams:a", "gmail:b").withNotSame("gmail:b", "teams:a")
+        assertEquals(1, said.notSame.size)
+        val many = (1..RuntimeState.MAX_NOT_SAME + 5).fold(said) { s, n -> s.withNotSame("own:$n", "teams:a") }
+        assertEquals(RuntimeState.MAX_NOT_SAME, many.notSame.size)
+        assertFalse(said.notSame.single() in many.notSame)
+    }
+
+    @Test
     fun `a file found unreadable is said with its copy only while the copy's there, which a reset takes`() = runTest {
         File(dir, "memory.json").writeText("{not json")
         val stores = Stores(dir, Reverse)
@@ -244,7 +256,7 @@ class StoresTest {
         val file = File(dir, "secrets.bin").apply { writeBytes(byteArrayOf(1, 2, 3)) }
         val broken = object : SecretCipher {
             override fun encrypt(plain: ByteArray) = plain
-            override fun decrypt(sealed: ByteArray): ByteArray = throw javax.crypto.AEADBadTagException()
+            override fun decrypt(sealed: ByteArray): ByteArray = throw AEADBadTagException()
         }
         val store = SecretStore(file, broken, { AT }, retryWaitMs = 0)
         assertTrue(store.present.value.isEmpty())
@@ -273,7 +285,7 @@ class StoresTest {
         var calls = 0
         val flaky = object : SecretCipher {
             override fun encrypt(plain: ByteArray) = Reverse.encrypt(plain)
-            override fun decrypt(sealed: ByteArray): ByteArray = if (calls++ == 0) throw java.security.KeyStoreException("busy") else Reverse.decrypt(sealed)
+            override fun decrypt(sealed: ByteArray): ByteArray = if (calls++ == 0) throw KeyStoreException("busy") else Reverse.decrypt(sealed)
         }
         val store = SecretStore(file, flaky, retryWaitMs = 0)
         assertEquals("abcd efgh", store[Secret.GmailAppPassword])
@@ -281,7 +293,7 @@ class StoresTest {
         // Failing at every try that start, then back: the file was left, so the next start reads it all.
         val down = object : SecretCipher {
             override fun encrypt(plain: ByteArray) = Reverse.encrypt(plain)
-            override fun decrypt(sealed: ByteArray): ByteArray = throw java.security.KeyStoreException("down")
+            override fun decrypt(sealed: ByteArray): ByteArray = throw KeyStoreException("down")
         }
         assertTrue(SecretStore(file, down, retryWaitMs = 0).present.value.isEmpty())
         assertEquals("abcd efgh", SecretStore(file, Reverse)[Secret.GmailAppPassword])
@@ -298,6 +310,6 @@ class StoresTest {
 
     private companion object {
         /** 11 Oct 2026, 08:30 UTC. */
-        val AT = java.time.Instant.parse("2026-10-11T08:30:00Z").toEpochMilli()
+        val AT = Instant.parse("2026-10-11T08:30:00Z").toEpochMilli()
     }
 }

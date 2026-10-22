@@ -13,6 +13,7 @@ import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.enrich.ReadingPrompts
 import java.io.ByteArrayInputStream
+import java.time.Instant
 import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -133,7 +134,7 @@ class GmailTest {
         assertEquals("Thomas White", message.fromName)
         assertEquals("tom@example.com", message.fromAddress)
         assertEquals(true, message.sent)
-        assertEquals(java.time.Instant.parse("2026-08-28T20:46:52Z").toEpochMilli(), message.receivedAt)
+        assertEquals(Instant.parse("2026-08-28T20:46:52Z").toEpochMilli(), message.receivedAt)
     }
 
     private fun message(uid: Long, thread: String, at: Long, subject: String, name: String?, address: String?, sent: Boolean = false) =

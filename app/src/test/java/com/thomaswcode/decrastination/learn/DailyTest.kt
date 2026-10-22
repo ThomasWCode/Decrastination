@@ -10,6 +10,7 @@ import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
 import com.thomaswcode.decrastination.block.TeamsAutoSync
 import com.thomaswcode.decrastination.core.Calibration
+import com.thomaswcode.decrastination.core.DayKind
 import com.thomaswcode.decrastination.core.HalfDay
 import com.thomaswcode.decrastination.core.NoSchool
 import com.thomaswcode.decrastination.core.SchoolCalendar
@@ -21,8 +22,11 @@ import com.thomaswcode.decrastination.data.ActivityLog
 import com.thomaswcode.decrastination.data.CompletionRecord
 import com.thomaswcode.decrastination.data.DailyRetry
 import com.thomaswcode.decrastination.core.Settings
+import com.thomaswcode.decrastination.core.Window
 import com.thomaswcode.decrastination.data.WeeklyReview
 import com.thomaswcode.decrastination.enrich.ClaudeReviewer
+import com.thomaswcode.decrastination.enrich.ModelGateway
+import com.thomaswcode.decrastination.enrich.Pricing
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -164,7 +168,7 @@ class ReviewInputTest {
             checkIns = listOf(CheckIn("2026-10-05", Fixtures.at("2026-10-11T19:40"), 3, long, long, long, long)),
         )
         val text = ReviewInput.describe(log, Calibration(), Settings(), Fixtures.at("2026-10-12T10:00"), LONDON, week = "2026-10-05")
-        assertTrue(text.length <= com.thomaswcode.decrastination.enrich.Pricing.MAX_INPUT_CHARS, "${text.length}")
+        assertTrue(text.length <= Pricing.MAX_INPUT_CHARS, "${text.length}")
         assertTrue("Their Sunday answers" in text)
         assertTrue("and 160 more before those" in text)
     }
@@ -241,7 +245,7 @@ class ReviewInputTest {
             ReviewInput.Change("softMinPerDay", 45, "less undated work got done"),
             ReviewInput.Change("marginDays", 9, "too far"),
             ReviewInput.Change("armed", 0, "not allowed"),
-            // A piece's length is yours since 17 Oct: the review leaves it.
+            // A piece's length is yours: the review leaves it.
             ReviewInput.Change("boxMin", 25, "shorter pieces got finished"),
         )
         val applied = ReviewInput.apply(Settings(boxMin = 60), changes)
@@ -252,9 +256,9 @@ class ReviewInputTest {
         val hours = ReviewInput.apply(Settings(), listOf(ReviewInput.Change("weekdayHoursStart", Settings().weekdayHours.startMin - 45, "earlier starts went well"), ReviewInput.Change("weekdayHoursEnd", Settings().weekdayHours.endMin + 90, "too far")))
         assertEquals(Settings().weekdayHours.copy(startMin = Settings().weekdayHours.startMin - 45), hours.weekdayHours)
         // Two ends each within reach that would meet or cross: neither moves.
-        val short = Settings().copy(weekdayHours = com.thomaswcode.decrastination.core.Window(17 * 60, 18 * 60))
+        val short = Settings().copy(weekdayHours = Window(17 * 60, 18 * 60))
         assertEquals(short.weekdayHours, ReviewInput.apply(short, listOf(ReviewInput.Change("weekdayHoursStart", 17 * 60 + 50, "later"), ReviewInput.Change("weekdayHoursEnd", 17 * 60 + 10, "earlier"))).weekdayHours)
-        assertEquals(com.thomaswcode.decrastination.core.Window(17 * 60 + 30, 18 * 60), ReviewInput.apply(short, listOf(ReviewInput.Change("weekdayHoursStart", 17 * 60 + 30, "later"))).weekdayHours)
+        assertEquals(Window(17 * 60 + 30, 18 * 60), ReviewInput.apply(short, listOf(ReviewInput.Change("weekdayHoursStart", 17 * 60 + 30, "later"))).weekdayHours)
         assertEquals(false, ReviewInput.allowed(ReviewInput.Change("weekdayHoursEnd", Settings().weekdayHours.endMin + 90, "x"), Settings()))
         assertEquals("weekdayHours", ReviewInput.fieldOf("weekdayHoursEnd"))
         // Put back as it was, whatever the bounds (LR-01), and said in words.
@@ -265,13 +269,13 @@ class ReviewInputTest {
 
     @Test
     fun `the review reads last week's review and its changes, the days, the windows, Felix and the subjects`() {
-        val last = com.thomaswcode.decrastination.data.WeeklyReview(
+        val last = WeeklyReview(
             Fixtures.at("2026-10-04T19:00"), listOf("Shorter pieces this week."), by = "claude", week = "2026-09-28",
             changes = listOf(ReviewInput.Change("boxMin", 30, "shorter pieces got finished")), settingsBefore = mapOf("boxMin" to 45),
         )
         val slot = SlotRecord(
             date = "2026-10-06", key = "teams:a#0", taskId = "teams:a", kind = Kind.Homework, className = "12.1 Physics", label = "a", plannedMin = 30,
-            start = Fixtures.at("2026-10-06T17:00"), end = Fixtures.at("2026-10-06T17:30"), window = com.thomaswcode.decrastination.core.WindowKind.Evening,
+            start = Fixtures.at("2026-10-06T17:00"), end = Fixtures.at("2026-10-06T17:30"), window = WindowKind.Evening,
             outcome = SlotOutcome.Kept, workedMin = 30, earned = true, at = Fixtures.at("2026-10-06T17:25"),
         )
         // His message in the chat about the slot, and your reply to it.
@@ -279,7 +283,7 @@ class ReviewInputTest {
             ChatMessage("f1", Speaker.Felix, "Ten minutes in: are you starting?", Fixtures.at("2026-10-06T17:10"), kind = MessageKind.SlotStart, pieceKey = "teams:a#0"),
             ChatMessage("y1", Speaker.You, "yes", Fixtures.at("2026-10-06T17:12"), replyTo = "f1", answeredAt = Fixtures.at("2026-10-06T17:12")),
         )
-        val day = com.thomaswcode.decrastination.learn.DayRecord("2026-10-06", plannedMin = 60, chunks = emptyList(), doneMin = 30, full = false, kind = com.thomaswcode.decrastination.core.DayKind.Weekday)
+        val day = DayRecord("2026-10-06", plannedMin = 60, chunks = emptyList(), doneMin = 30, full = false, kind = DayKind.Weekday)
         val log = ActivityLog(reviews = listOf(last), slots = listOf(slot), days = listOf(day))
         val text = ReviewInput.describe(log, Calibration(), Settings(boxMin = 30, classMap = mapOf("12.1 Physics" to "Physics")), Fixtures.at("2026-10-11T19:00"), LONDON, week = "2026-10-05", messages = felix)
         assertTrue("Last week's review said: Shorter pieces this week." in text, text)
@@ -307,7 +311,7 @@ class ClaudeReviewerTest {
                 ),
             )
             server.enqueue(MockResponse().setHeader("Content-Type", "application/json").setBody(body.toString()))
-            val result = ClaudeReviewer(com.thomaswcode.decrastination.enrich.ModelGateway.build("test-key", server.url("").toString().trimEnd('/'))).review("Finished this week: ...")
+            val result = ClaudeReviewer(ModelGateway.build("test-key", server.url("").toString().trimEnd('/'))).review("Finished this week: ...")
             val request = Json.parseToJsonElement(server.takeRequest().body.readUtf8()).jsonObject
             assertEquals("high", request["output_config"]!!.jsonObject["effort"]!!.jsonPrimitive.content)
             assertEquals("default", request["fallbacks"]!!.jsonPrimitive.content)

@@ -7,9 +7,9 @@ import java.util.Locale
 import kotlinx.serialization.Serializable
 
 /**
- * A reminder Felix keeps at your asking (docs/plan_v4/07-notes-and-reminders.md, Stage 8a): your
+ * A reminder Felix keeps at your asking (docs/plan_v4/07-notes-and-reminders.md): your
  * [text], delivered as his message when it's [due], in his words for that moment written just before
- * ([draft], Q9: B; Q24), or yours as you set them where he can't write. Set from the chat ([by]);
+ * ([draft], D-100), or yours as you set them where he can't write. Set from the chat ([by]);
  * [sentAt] once delivered, [snoozedTo] by a snooze (it comes again then), [doneAt] by its *Done*.
  * Cancelled ([cancelledAt]), it's never delivered and kept whole for the cancel's Undo; one whose task
  * closes before it comes is let go ([letGoAt]), said in the chat ([Reminders.letGo]), and back, said too,

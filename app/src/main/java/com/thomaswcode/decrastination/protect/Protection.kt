@@ -17,7 +17,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 /**
- * Protection (docs/spec/blocking-and-protection.md; docs/plan_v4, Stage 6b), moved out of `AppGraph`:
+ * Protection (docs/spec/blocking-and-protection.md; docs/plan_v4):
  * a settings change applied at once, or, once armed, pending if it loosens blocking ([changeSettings]);
  * the weekly review's bounded changes at once ([applyReviewChanges]); the waits counted and what's due
  * applied ([applyDueChanges]); a parent code used ([useParentCode]), and a waiting change cancelled or
@@ -72,7 +72,7 @@ class Protection(
 
     /**
      * The weekly review's [changes] to the planner's numbers, within their bounds, applied at once,
-     * armed or not: you said they needn't wait (11 Oct, IMP-P2-015). Only the fields
+     * armed or not (D-71, IMP-P2-015). Only the fields
      * [ReviewInput.apply] sets can change this way; everything else waits as ever.
      */
     suspend fun applyReviewChanges(changes: List<ReviewInput.Change>) = changing.withLock {

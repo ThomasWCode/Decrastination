@@ -59,7 +59,7 @@ class BlockPolicyTest {
         overrideUntil: String? = null,
         forceUntil: String? = null,
         // Monday to Friday, unless said otherwise (a day off school).
-        schoolDay: Boolean = java.time.LocalDate.parse(at.take(10)).dayOfWeek.value <= 5,
+        schoolDay: Boolean = LocalDate.parse(at.take(10)).dayOfWeek.value <= 5,
         gapUntil: String? = null,
     ) = BlockPolicy.decide(
         BlockPolicy.Input(

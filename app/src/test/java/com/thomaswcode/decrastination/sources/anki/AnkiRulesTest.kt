@@ -5,9 +5,13 @@ import com.thomaswcode.decrastination.Fixtures.LONDON
 import com.thomaswcode.decrastination.core.AnkiDay
 import com.thomaswcode.decrastination.core.AnkiRules
 import com.thomaswcode.decrastination.core.Deck
+import com.thomaswcode.decrastination.core.Enrichment
+import com.thomaswcode.decrastination.core.Enrichments
+import com.thomaswcode.decrastination.core.Fetched
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.SourceValues
+import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.core.TaskItem
 import java.time.LocalDate
 import kotlin.test.Test
@@ -123,7 +127,7 @@ class AnkiRulesTest {
 
     @Test
     fun `homework's vocabulary is due soon when a deck still to learn is due by tomorrow, or overdue`() {
-        fun deck(due: String, done: Boolean = false) = com.thomaswcode.decrastination.core.Fetched("deck:1", "Learn Anki deck 1.2", Kind.Homework, dueAt = Fixtures.at(due), done = done, derived = true)
+        fun deck(due: String, done: Boolean = false) = Fetched("deck:1", "Learn Anki deck 1.2", Kind.Homework, dueAt = Fixtures.at(due), done = done, derived = true)
         assertTrue(AnkiRules.homeworkDueSoon(listOf(deck("2026-10-09T08:30")), NOW, LONDON))
         assertTrue(AnkiRules.homeworkDueSoon(listOf(deck("2026-10-01T08:30")), NOW, LONDON))
         assertTrue(!AnkiRules.homeworkDueSoon(listOf(deck("2026-10-10T08:30")), NOW, LONDON))
@@ -194,7 +198,7 @@ class AnkiRulesTest {
         kind = Kind.Homework,
         firstSeenAt = 0,
         lastSeenAt = 0,
-        status = if (open) com.thomaswcode.decrastination.core.Status.Open else com.thomaswcode.decrastination.core.Status.Done,
+        status = if (open) Status.Open else Status.Done,
     )
 
     @Test
@@ -304,7 +308,7 @@ class AnkiRulesTest {
     fun `sections the enrichment read link decks when the pattern finds none, and never beat it`() {
         // "Revise the family topic" names no section the pattern can see; the enrichment read 1.2.
         val unread = assignment("Familie", "Revise the family topic for Monday's test", Fixtures.at("2026-10-12T08:30"))
-        val enriched = unread.copy(enrichment = com.thomaswcode.decrastination.core.Enrichment(com.thomaswcode.decrastination.core.Enrichments.inputHash(unread), "claude-opus-5-5", 0, ankiSections = listOf("1.2")))
+        val enriched = unread.copy(enrichment = Enrichment(Enrichments.inputHash(unread), "claude-opus-5-5", 0, ankiSections = listOf("1.2")))
         assertEquals(emptyList(), AnkiRules.homeworkDecks(decks, 1, listOf(unread), unseen = { 25 }, now = NOW, zone = LONDON).map { it.sourceId })
         assertEquals(listOf("deck:12"), AnkiRules.homeworkDecks(decks, 1, listOf(enriched), unseen = { 25 }, now = NOW, zone = LONDON).map { it.sourceId })
         // Where the pattern finds a section, it wins over the enrichment's.
@@ -329,9 +333,9 @@ class AnkiRulesTest {
         )
         val topics = AnkiRules.topics(decks, textbook = 2)
         assertEquals(mapOf("1.3" to "Holidays and travel", "1.4" to "School"), topics)
-        fun task(detail: String) = com.thomaswcode.decrastination.core.TaskItem(
-            id = "teams:v", source = com.thomaswcode.decrastination.core.Source.Teams, sourceId = "v", title = "Vocab", detail = detail,
-            kind = com.thomaswcode.decrastination.core.Kind.Homework, firstSeenAt = 0, lastSeenAt = 0,
+        fun task(detail: String) = TaskItem(
+            id = "teams:v", source = Source.Teams, sourceId = "v", title = "Vocab", detail = detail,
+            kind = Kind.Homework, firstSeenAt = 0, lastSeenAt = 0,
         )
         assertEquals(listOf(1 to 3), AnkiRules.sectionsOf(task("Learn the vocabulary for holidays and travel."), topics))
         // Two named, or a word inside another, is none.

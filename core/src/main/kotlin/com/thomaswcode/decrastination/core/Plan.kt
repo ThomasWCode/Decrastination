@@ -37,10 +37,10 @@ enum class Why {
     /** Its window couldn't hold it in order: placed as late as its days allow. */
     Packed,
 
-    /** Where you put it (phase 3). */
+    /** Where you put it. */
     Pinned,
 
-    /** Moved when its time passed (phase 3). */
+    /** Moved when its time passed. */
     Refitted,
     /** Kept on today, where the last plan had its slot, under way or still to come (PL-13). */
     Kept,
@@ -96,8 +96,8 @@ data class Chunk(
     /** Its deadline is a real one (PL-14), which its slot on the deadline's day keeps before (PL-12). */
     val hard: Boolean = false,
     /**
-     * Which of its step's sittings it is, where the planner cut a step over an hour as planned
-     * (3.1.2's review); null for a step in one piece, a box, or a whole task.
+     * Which of its step's sittings it is, where the planner cut a step over an hour as planned;
+     * null for a step in one piece, a box, or a whole task.
      */
     val sitting: Sitting? = null,
 ) {
@@ -172,7 +172,7 @@ data class Chunk(
 
 /**
  * One of a step's sittings ([Chunk.sitting]), as the planner cuts a step over an hour as planned
- * ([Sittings]; 3.1.2's review): [after], how many of its step's come after it, so keeping one
+ * ([Sittings]): [after], how many of its step's come after it, so keeping one
  * renumbers none of the rest; and its [title]. Its last is the step's, keeping it ticks the step;
  * keeping one before it counts its minutes as worked on the step, as a session stopped early does.
  */
@@ -327,7 +327,7 @@ data class Plan(
 
 /**
  * What the app has learned about how long things take you (docs/spec/learning.md), applied by the
- * planner. Phase 5 learns it; until then every value is its default.
+ * planner.
  */
 @Serializable
 data class Calibration(
@@ -371,7 +371,7 @@ data class Calibration(
     /**
      * What [task]'s estimate is multiplied by: what's been learned of the app's estimates for its
      * kind and class; your own minutes ([TaskItem.yourMinutes]), and steps you or Felix gave
-     * ([TaskItem.yourSteps], your call, 17 Oct), as they are, as you meant them: the pace is for the
+     * ([TaskItem.yourSteps], D-34), as they are, as you meant them: the pace is for the
      * app's own estimates, and Felix is told it, to allow for it when he sets times.
      */
     fun multiplierFor(task: TaskItem): Double = if (task.yourMinutes || task.yourSteps) 1.0 else multiplier(task.kind, task.className)
@@ -396,10 +396,10 @@ enum class DayKind(val label: String) {
     /** A school day's evening. */
     Weekday("Weekday evenings"),
 
-    /** Saturday and Sunday (phase 3: a day off school too). */
+    /** Saturday and Sunday (a day off school too). */
     Weekend("Weekends"),
 
-    /** A school day's windows in the day (phase 3): no records of its own until phase 4's slots. */
+    /** A school day's windows in the day. */
     School("School windows"),
     ;
 
@@ -409,5 +409,5 @@ enum class DayKind(val label: String) {
     }
 }
 
-/** Time the calendar says is taken (Phase 5): a whole interval, epoch millis. */
+/** Time the calendar says is taken: a whole interval, epoch millis. */
 data class Busy(val start: Long, val end: Long)

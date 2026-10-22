@@ -36,11 +36,11 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 
 /**
- * The Conversation's flows (docs/plan_v4, Stages 4 and 5a), on temporary stores, his answers read by
+ * The Conversation's flows (docs/plan_v4), on temporary stores, his answers read by
  * the real chat reader from a stand-in for Claude's API ([FelixHarness]): an answer's cards made as it
  * comes and undone; a card applied and taken back; the check-in's five questions in the chat; a reply
- * from his notification, his chips or the chat under the message it answers, routed by what it is
- * (Stage 5b); his button's count; and what the app says in his name, each in the chat first and his
+ * from his notification, his chips or the chat under the message it answers, routed by what it is;
+ * his button's count; and what the app says in his name, each in the chat first and his
  * one notification after.
  */
 class ConversationTest {
@@ -60,6 +60,19 @@ class ConversationTest {
 
     /** His messages in the chat, oldest first. */
     private fun his() = stores.chat.value.messages.filter { it.from == Speaker.Felix }
+
+    @Test
+    fun `a fact or a rule deleted from Settings' list goes, and only it`() = runBlocking {
+        val football = Fact("football", "on Tuesdays", now)
+        val cold = Fact("cold", "this week", now)
+        val blunt = Rule("be blunter", now)
+        val quiet = Rule("not before 8", now)
+        stores.memory.update { MemoryState(facts = listOf(football, cold), rules = listOf(blunt, quiet)) }
+        conversation.deleteFact(cold)
+        conversation.deleteRule(blunt)
+        assertEquals(listOf(football), stores.memory.value.facts)
+        assertEquals(listOf(quiet), stores.memory.value.rules)
+    }
 
     @Test
     fun `what's remembered that has run out isn't in the profile, and is let go of, silently`() = runBlocking {
