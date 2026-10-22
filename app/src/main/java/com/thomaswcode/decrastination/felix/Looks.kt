@@ -5,6 +5,8 @@ import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.block.BlockPolicy
 import com.thomaswcode.decrastination.block.Focus
 import com.thomaswcode.decrastination.core.About
+import com.thomaswcode.decrastination.core.Change
+import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.core.ChatState
 import com.thomaswcode.decrastination.core.DueKind
@@ -16,6 +18,8 @@ import com.thomaswcode.decrastination.core.MemoryEdit
 import com.thomaswcode.decrastination.core.MessageKind
 import com.thomaswcode.decrastination.core.Notes
 import com.thomaswcode.decrastination.core.Plan
+import com.thomaswcode.decrastination.core.Proposal
+import com.thomaswcode.decrastination.core.Rebalance
 import com.thomaswcode.decrastination.core.Reminder
 import com.thomaswcode.decrastination.core.Reminders
 import com.thomaswcode.decrastination.core.Settings
@@ -82,6 +86,8 @@ class Looks(
     private val addInstruction: suspend (text: String, about: About, answer: Boolean) -> String,
     /** How a completion went, on record ([com.thomaswcode.decrastination.learn.Learning.recordAssessment]). */
     private val assess: suspend (taskId: String, doneAt: Long, answer: String) -> Unit,
+    /** A change of his under a message of his made at once, as the chat's are ([Conversation.applyProposal]). */
+    private val applyProposal: suspend (messageId: String, proposalId: String) -> Unit,
 ) {
     /** One look at a time: a check while one writes is covered by it. */
     private val writing = Mutex()
@@ -202,16 +208,29 @@ class Looks(
         val caller = gateway.client(ModelEffort.Job.Felix)?.let { FelixCaller(it) } ?: return@withLock false
         val settings = this.settings.value
         val profile = this.profile(now)
-        val user = FelixPrompts.describe(FelixPrompts.Reason.Morning, plan, null, null, today(now), chat.value.messages, null, settings, now, clock.zone(), reminders = remindersToday(plan, now))
+        // Two of his steps he may rebalance to fit a free time at school today (D-110), none of a task he's had one taken back on.
+        val rebalance = Rebalance.candidates(plan, tasks.value.tasks, Rebalance.declined(chat.value.messages), now)
+        val user = FelixPrompts.describe(FelixPrompts.Reason.Morning, plan, null, null, today(now), chat.value.messages, null, settings, now, clock.zone(), reminders = remindersToday(plan, now), rebalance = rebalance)
         // Asked in the app's scope, not the briefing's: past [MORNING_MS] the briefing goes without
         // it, and the call, paid for, comes back and is counted all the same.
         val call = scope.async {
             gateway.call(interactive = false, record = ModelCalls.OnRecord(ModelEffort.Job.Felix, "Morning") { r: FelixCaller.Result -> r.usage to ModelCalls.outcome(r.refused, r.answer == null) }, cost = { r: FelixCaller.Result -> r.costUsd to r.refused }) { caller.say(FelixPrompts.system(settings, profile.year), profile.text, user, maxMessage = FelixAnswers.MAX_MORNING) }
         }
         val called = withTimeoutOrNull(MORNING_MS) { call.await() }
-        val answer = (called as? Called.Answered)?.value?.answer?.takeIf { it.message.isNotBlank() } ?: return@withLock false
+        val result = (called as? Called.Answered)?.value
+        val answer = result?.answer?.takeIf { it.message.isNotBlank() } ?: return@withLock false
+        // Each rebalance he gave for steps he was asked about, as his Steps change on its task, under his message (D-110).
+        val known = tasks.value.tasks.associateBy { it.id }
+        val proposals = result.rebalances.mapNotNull { given ->
+            val candidate = rebalance.firstOrNull { it.taskId == given.taskId && it.index == given.stepIndex } ?: return@mapNotNull null
+            val steps = known[candidate.taskId]?.let { Rebalance.steps(it, candidate, given) } ?: return@mapNotNull null
+            Proposal(UUID.randomUUID().toString(), changes = listOf(Change(ChangeType.Steps, taskId = candidate.taskId, steps = steps)), lines = listOf(Rebalance.line(candidate, given)), instant = true)
+        }.distinctBy { it.changes.single().taskId }
         // His message whole, with no list of the day beside it (D-65): the room is his.
-        outbox.send(ChatMessage(UUID.randomUUID().toString(), Speaker.Felix, answer.message, now, kind = MessageKind.Morning, suggestedReplies = answer.replies))
+        val message = ChatMessage(UUID.randomUUID().toString(), Speaker.Felix, answer.message, now, kind = MessageKind.Morning, suggestedReplies = answer.replies, proposals = proposals)
+        outbox.send(message)
+        // Made at once, each with its Undo, as his changes in the chat are.
+        proposals.forEach { applyProposal(message.id, it.id) }
         answer.memories.takeIf { it.isNotEmpty() }?.let { remember(it) }
         true
     }

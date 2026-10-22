@@ -10,6 +10,7 @@ import com.thomaswcode.decrastination.core.FelixAnswer
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.MessageKind
 import com.thomaswcode.decrastination.core.Planner
+import com.thomaswcode.decrastination.core.Rebalance
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Speaker
@@ -116,6 +117,20 @@ class FelixTest {
         // No next check given: the default is the caller's (20 minutes, Q-31); an empty message, his silence.
         assertEquals(FelixAnswer(), FelixAnswers.parse("""{"message":"","replies":[],"nextCheckMin":null,"memories":[]}"""))
         assertNull(FelixAnswers.parse("not JSON"))
+    }
+
+    @Test
+    fun `the steps he rebalanced in a morning's answer are read beside it, at most as many as he's asked about (D-110)`() {
+        val one = """{"taskId":"teams:sheet","stepIndex":0,"firstTitle":"Question 1","firstMinutes":25,"secondTitle":"Questions 2 and 3","secondMinutes":40}"""
+        val text = """{"message":"morning.","replies":[],"nextCheckMin":null,"memories":[],"rebalances":[$one,$one,$one,$one]}"""
+        val read = FelixAnswers.rebalances(text)
+        assertEquals(Rebalance.MAX_ASKED, read.size)
+        assertEquals(Rebalance.Given("teams:sheet", 0, "Question 1", 25, "Questions 2 and 3", 40), read.first())
+        // Read beside his answer, which keeps none of them.
+        assertEquals("morning.", FelixAnswers.parse(text)!!.message)
+        assertEquals(emptyList(), FelixAnswers.rebalances("""{"message":"morning."}"""))
+        assertEquals(emptyList(), FelixAnswers.rebalances("not JSON"))
+        assertTrue("Never cut one piece of work by time" in FelixPrompts.system(Settings(), 12))
     }
 
     @Test

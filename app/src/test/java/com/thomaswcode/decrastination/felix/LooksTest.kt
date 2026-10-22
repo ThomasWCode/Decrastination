@@ -1,12 +1,17 @@
 package com.thomaswcode.decrastination.felix
 
 import com.thomaswcode.decrastination.Fixtures
+import com.thomaswcode.decrastination.core.By
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.MessageKind
+import com.thomaswcode.decrastination.core.ProposalState
+import com.thomaswcode.decrastination.core.Rebalance
 import com.thomaswcode.decrastination.core.SlotKind
 import com.thomaswcode.decrastination.core.SlotState
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Speaker
+import com.thomaswcode.decrastination.core.StepOrigin
+import com.thomaswcode.decrastination.core.SubStep
 import com.thomaswcode.decrastination.core.TaskItem
 import java.time.Instant
 import kotlin.test.AfterTest
@@ -108,5 +113,48 @@ class LooksTest {
         assertEquals("" to MessageKind.SlotStart, silent.text to silent.kind)
         assertNull(felix.ports.showing)
         assertEquals(1, FelixRules.sent(stores.chat.value.messages, 0).size)
+    }
+
+    @Test
+    fun `the morning's call may rebalance two of his steps to fit a free time at school, made at once with an Undo, and not asked about once taken back`() = runBlocking {
+        // A school day's 07:00: the worksheet, due tomorrow morning, in two of his steps; 45 minutes is
+        // longer than break (30), either lunch (25 and 40), so its first is tonight's.
+        felix.clock.time = Fixtures.at("2026-10-20T07:00")
+        stores.tasks.update {
+            it.copy(
+                tasks = listOf(
+                    TaskItem(
+                        id = "teams:sheet", source = Source.Teams, sourceId = "sheet", title = "Forces worksheet", dueAt = Fixtures.at("2026-10-21T08:30"),
+                        kind = Kind.Homework, sourceEffortMin = 65, firstSeenAt = now, lastSeenAt = now,
+                        subSteps = listOf(
+                            SubStep("Questions 1 and 2", 45, where = "anywhere", id = "q12", origin = StepOrigin.Felix),
+                            SubStep("Question 3", 20, where = "anywhere", id = "q3", origin = StepOrigin.Felix),
+                        ),
+                    ),
+                ),
+            )
+        }
+        felix.answers(
+            """{"message":"morning. question 1 at break, the rest tonight.","replies":[],"nextCheckMin":null,"memories":[],
+              "rebalances":[{"taskId":"teams:sheet","stepIndex":0,"firstTitle":"Question 1","firstMinutes":25,"secondTitle":"Questions 2 and 3","secondMinutes":40}]}""",
+        )
+        assertTrue(felix.looks.morning())
+        val asked = felix.server.takeRequest().body.readUtf8()
+        assertTrue("Steps you may rebalance" in asked && "teams:sheet | Forces worksheet | 0" in asked && "10:45, 30 min" in asked, asked)
+        val message = stores.chat.value.messages.single()
+        val proposal = message.proposals.single()
+        assertEquals(MessageKind.Morning to ProposalState.Applied, message.kind to proposal.state)
+        // His change on the task, named by what it made, its two steps moved and their ids kept.
+        val made = stores.instructions.value.instructions.single { it.id == proposal.made }
+        assertEquals(By.Felix, made.by)
+        assertEquals("“Forces worksheet”: “Question 1” (25 min), then “Questions 2 and 3” (40 min)", made.text)
+        val steps = made.changes.single().steps!!
+        assertEquals(listOf("Question 1" to 25, "Questions 2 and 3" to 40), steps.map { it.title to it.minutes })
+        assertEquals(listOf("q12", "q3"), steps.map { it.id })
+        // Taken back: the change gone, and the task no longer one to ask about.
+        felix.conversation.undoProposal(message.id, proposal.id)
+        assertTrue(stores.instructions.value.instructions.none { it.id == proposal.made })
+        assertEquals(setOf("teams:sheet"), Rebalance.declined(stores.chat.value.messages))
+        assertEquals(emptyList(), Rebalance.candidates(felix.planning.plan(), stores.tasks.value.tasks, Rebalance.declined(stores.chat.value.messages), felix.clock.now()))
     }
 }
