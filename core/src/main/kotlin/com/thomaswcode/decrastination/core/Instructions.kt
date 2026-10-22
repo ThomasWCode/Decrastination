@@ -167,7 +167,7 @@ data class Change(
 data class InstructionState(
     val instructions: List<Instruction> = emptyList(),
     /** The shape this is in ([com.thomaswcode.decrastination.data.Migration]): raised with each change of it. */
-    val version: Int = 2,
+    val version: Int = 3,
 ) {
     /** Every step a change holds with an id ([withIds]): given as it's first stored, so the task steps it's laid as keep it. */
     fun withStepIds(): InstructionState {
@@ -399,7 +399,7 @@ object InstructionRules {
             ChangeType.HalfDay -> "Half-day on ${day(change)}, ends ${clock(change.endMin)}"
             ChangeType.OnDay -> "All of ${title(change.taskId)} on ${day(change)}"
             ChangeType.AtTime -> "${title(change.taskId)} at ${clock(change.startMin)} on ${day(change)}"
-            ChangeType.Steps -> "${title(change.taskId)} in steps: " + change.steps.orEmpty().joinToString(", ") { "${it.title} (${it.minutes} min)" }
+            ChangeType.Steps -> "${title(change.taskId)} in steps: " + change.steps.orEmpty().joinToString(", ") { "${it.title} (${it.minutes} min${if (it.anyOrder) ", in any order" else ""})" }
             ChangeType.SameAs -> "${title(change.taskId)} is the same work as ${title(change.afterTaskId)}: only that one is planned"
             ChangeType.Rename -> {
                 val task = change.taskId?.let { tasks[it] }

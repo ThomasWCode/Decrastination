@@ -4,6 +4,7 @@ import com.anthropic.core.jsonMapper
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
 import com.thomaswcode.decrastination.core.About
+import com.thomaswcode.decrastination.core.By
 import com.thomaswcode.decrastination.core.Calibration
 import com.thomaswcode.decrastination.core.Change
 import com.thomaswcode.decrastination.core.ChangeType
@@ -36,6 +37,7 @@ import com.thomaswcode.decrastination.core.Why
 import com.thomaswcode.decrastination.core.WindowKind
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.yours
+import com.thomaswcode.decrastination.core.asSubStep
 import com.thomaswcode.decrastination.enrich.Found
 import com.thomaswcode.decrastination.enrich.InstructionPrompts
 import com.thomaswcode.decrastination.enrich.ResearchPrompts
@@ -82,6 +84,18 @@ class ChatTest {
         assertEquals(Fixtures.at("2026-11-08T23:59"), task.steps[0].dueAt)
         assertEquals(Change(ChangeType.Minutes, taskId = "teams:bridge", minutes = 90), reading.changes.single())
         assertTrue(reading.leftOut.isEmpty())
+    }
+
+    @Test
+    fun `a new task's steps and a task's new steps say which don't need the ones before them done first (D-109)`() {
+        val reading = parse("""{"reply":"I'd add it, and split the worksheet.","newTasks":[{"title":"Statement","kind":"Admin","subject":"","dueDate":"2026-12-01","dueTime":"","startDate":"","minutes":480,"notes":"",
+            "steps":[{"title":"Draft","minutes":240,"startDate":"","dueDate":"","anyOrder":false},{"title":"Ask for a reference","minutes":240,"startDate":"","dueDate":"","anyOrder":true}]}],
+            "changes":[{"type":"Steps","taskId":"teams:bridge","afterTaskId":"","eventKey":"","eventTime":"","minutes":-1,"date":"","endDate":"","weekday":"","time":"","endTime":"","title":"",
+            "steps":[{"title":"Questions 1-5","minutes":50,"startDate":"","dueDate":"","where":"anywhere","anyOrder":false},{"title":"Questions 6-10","minutes":50,"startDate":"","dueDate":"","where":"anywhere","anyOrder":true}]}]}""")!!
+        assertEquals(listOf(false, true), reading.tasks.single().steps.map { it.anyOrder })
+        assertEquals(listOf(false, true), reading.changes.single().steps!!.map { it.anyOrder })
+        // Laid on the task, the step says so too.
+        assertEquals(listOf(false, true), reading.changes.single().steps!!.map { it.asSubStep(By.Felix).anyOrder })
     }
 
     @Test

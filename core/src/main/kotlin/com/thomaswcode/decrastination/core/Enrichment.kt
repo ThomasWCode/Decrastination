@@ -103,7 +103,7 @@ fun carryMarks(steps: List<SubStep>, before: List<SubStep>): List<SubStep> {
 
 /** A step you or Felix ([by]) gave, as the task keeps it: where it's done as the planner reads it (PL-15), with its id. */
 fun OwnStep.asSubStep(by: By = By.You): SubStep =
-    SubStep(title.trim().take(OwnTaskRules.MAX_TITLE), minutes, from = from, dueAt = dueAt, where = Where.of(where)?.name?.lowercase(), id = id, origin = if (by == By.Felix) StepOrigin.Felix else StepOrigin.Yours)
+    SubStep(title.trim().take(OwnTaskRules.MAX_TITLE), minutes, from = from, dueAt = dueAt, where = Where.of(where)?.name?.lowercase(), id = id, origin = if (by == By.Felix) StepOrigin.Felix else StepOrigin.Yours, anyOrder = anyOrder)
 
 private fun TaskItem.enrichedOnly(): TaskItem {
     // Finished, its reading let go a fortnight on ([trimmed], C-Q3): what the reading laid stays on its

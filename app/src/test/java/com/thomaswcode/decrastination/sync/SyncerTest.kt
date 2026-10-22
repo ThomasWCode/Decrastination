@@ -11,6 +11,7 @@ import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.Timetable
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.SettingsMigration
+import com.thomaswcode.decrastination.data.StepOrderMigration
 import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.data.TasksMigration
 import com.thomaswcode.decrastination.sources.ReadContext
@@ -34,7 +35,7 @@ import kotlinx.coroutines.withContext
 
 class SyncerTest {
     private val dir: File = Files.createTempDirectory("sync").toFile()
-    private val tasks = JsonStore(File(dir, "tasks.json"), TaskState.serializer(), ::TaskState, migrations = listOf(TasksMigration.TASKS))
+    private val tasks = JsonStore(File(dir, "tasks.json"), TaskState.serializer(), ::TaskState, migrations = listOf(TasksMigration.TASKS, StepOrderMigration.TASKS))
     private val settings = JsonStore(File(dir, "settings.json"), Settings.serializer(), ::Settings, migrations = listOf(SettingsMigration.SETTINGS))
     private val clock = FixedClock.at("2026-10-08T17:00:00+01:00")
 

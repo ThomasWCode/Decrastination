@@ -50,6 +50,10 @@
                                 "type": "null"
                             }
                         ]
+                    },
+                    "anyOrder": {
+                        "type": "boolean",
+                        "description": "true where it doesn't need the steps before it done first; false where it builds on them, and for the first"
                     }
                 },
                 "required": [
@@ -58,7 +62,8 @@
                     "ankiSections",
                     "where",
                     "from",
-                    "due"
+                    "due",
+                    "anyOrder"
                 ],
                 "additionalProperties": false
             }

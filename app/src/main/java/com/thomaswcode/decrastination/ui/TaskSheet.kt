@@ -600,12 +600,13 @@ private fun Steps(graph: AppGraph, task: TaskItem, now: Long, zone: ZoneId) {
     val planned = task.plannedStepMinutes(1.0)
     Text("Steps", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     task.subSteps.forEachIndexed { index, step ->
-        // A step's own date is a plan, never overdue (PL-14).
+        // A step's own date is a plan, never overdue (PL-14); one that doesn't need the steps before it says so (D-109).
         val dates = listOfNotNull(step.from?.let { "from " + Format.at(it, now, zone) }, step.dueAt?.let { Format.due(it, hard = false, now, zone) }).joinToString(", ")
         val minutes = Format.minutes(planned[index])
+        val details = listOfNotNull(minutes, dates.ifEmpty { null }, "in any order".takeIf { step.anyOrder }).joinToString("; ")
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                "• ${step.title} ($minutes${if (dates.isEmpty()) "" else "; $dates"})${if (step.done) " ✓" else ""}",
+                "• ${step.title} ($details)${if (step.done) " ✓" else ""}",
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.weight(1f),
             )
