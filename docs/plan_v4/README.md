@@ -102,8 +102,11 @@ Every PR is a release ([development.md](../development.md)): cleanup-only releas
 | — | Found in 4.2.1's reviews and 11's phone check: a month of the chat archive read for the first time just as a clear runs could come back; Setup's list of the files that couldn't be read could name a copy a clear has since deleted; Felix, asked to mark an email done with the Gmail switch off, says he can't finish it in Gmail and offers *not a task*, rather than calling that done (your calls, 21 Oct) | 4.3.1, done (#105) | fix | 11 | ¼ |
 | 12 | The sweep: imports, comments, the architecture test complete, baselines compared | 4.3.2, done (#106) | cleanup | all | ½ |
 | — | Found in Stage 12's read of the spec: a reset of your changes kept only those in use in its copy, so one being read or left unclear was lost; a quota with no new cards of its own, studied to nothing due, was taken as missed; the block screen said a missed slot went to tomorrow, where it has no time left today (your calls, 21 Oct) | 4.3.3, done (#107) | fix | 12 | ¼ |
+| — | Found at the morning check of 22 Oct: a task's steps laid out of their order within a day, a short later one in an earlier gap (your call, 22 Oct) | 4.3.4 | fix | 12 | ¼ |
+| — | Felix marks the steps that don't depend on the one before, which can then fill a gap as before (your call, 22 Oct) | 4.3.5 | feature, data | 4.3.4 | ½ |
+| — | In a school day's 07:00 briefing call, Felix may rebalance two adjacent steps of his own, not yet begun, so the next fits a gap: still two steps, their minutes adding up as before, neither under 15, shown with Undo (your call, 22 Oct) | 4.3.6 | feature | 4.3.5 | 1 |
 
-About twenty-five days in 34 PRs (33 releases), 3.3.4 to 3.3.6, 4.0.3, 4.0.4, 4.0.10, 4.1.2, 4.1.3, 4.2.1, 4.3.1 and 4.3.3 among them, evenings and weekends. After it, the conversation digest as 4.4.0 ([13](13-summaries.md)). You've said you won't use the app until the whole of it is in (Q21): each release is still built and checked on the phone, but nothing between releases has to serve a day's use.
+About twenty-seven days in 37 PRs (36 releases), 3.3.4 to 3.3.6, 4.0.3, 4.0.4, 4.0.10, 4.1.2, 4.1.3, 4.2.1, 4.3.1 and 4.3.3 to 4.3.6 among them, evenings and weekends. After it, the conversation digest as 4.4.0 ([13](13-summaries.md)). You've said you won't use the app until the whole of it is in (Q21): each release is still built and checked on the phone, but nothing between releases has to serve a day's use.
 
 ## What changes substantially
 
@@ -122,7 +125,7 @@ About twenty-five days in 34 PRs (33 releases), 3.3.4 to 3.3.6, 4.0.3, 4.0.4, 4.
 
 ## Decisions it adds
 
-Numbered in `docs/decisions.md` by the PRs that apply them (the next free number is D-108; D-94 is 3.3.2's, D-95 to D-97 4.0.0's, D-98 4.0.1's, amended by 4.0.10, D-99 4.0.10's, D-100 4.1.0's, D-101 4.1.1's, D-102 4.1.4's, D-103 4.2.0's, D-104 Q36's, D-105 4.2.1's, D-106 4.3.0's and D-107 4.3.2's):
+Numbered in `docs/decisions.md` by the PRs that apply them (the next free number is D-109; D-94 is 3.3.2's, D-95 to D-97 4.0.0's, D-98 4.0.1's, amended by 4.0.10, D-99 4.0.10's, D-100 4.1.0's, D-101 4.1.1's, D-102 4.1.4's, D-103 4.2.0's, D-104 Q36's, D-105 4.2.1's, D-106 4.3.0's, D-107 4.3.2's and D-108 4.3.4's):
 
 - The chat is Felix's one visible voice; a notification is made from it and never beside it (5a). A reply from a notification and one in the chat are the same turn, routed by the message it answers (5b).
 - The chat keeps every message for you; what he's sent of it is the recent window (5a).

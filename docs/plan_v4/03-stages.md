@@ -271,10 +271,11 @@ The conversation digest, 4.4.0 ([13](13-summaries.md), Q28): planned on its own 
 | 9 | 1 | ½ |
 | 7 | 1 | 2½ |
 | 8 | 3 | 6 |
-| 4.1.2 (the phone session's fixes), 4.1.3 (the docs review's fixes), 4.2.1 (the second docs review's), 4.3.1 (4.2.1's reviews' and 11's phone check's), 4.3.3 (Stage 12's read of the spec's) | 5 | 1¼ |
+| 4.1.2 (the phone session's fixes), 4.1.3 (the docs review's fixes), 4.2.1 (the second docs review's), 4.3.1 (4.2.1's reviews' and 11's phone check's), 4.3.3 (Stage 12's read of the spec's), 4.3.4 (the morning check's) | 6 | 1½ |
 | 10 | 2 | 1½ |
 | 11 | 1 | 1½ |
 | 12 | 1 | ½ |
-| | 34 (33 releases) | about 25 |
+| 4.3.5 (Felix's mark on the steps that don't depend on the one before), 4.3.6 (his steps rebalanced for a gap) | 2 | 1½ |
+| | 37 (36 releases) | about 27½ |
 
 Evenings and weekends, as every release ([12](12-verification-and-risks.md) §Risks: the phone's away on school days).
