@@ -34,7 +34,7 @@ object Examples {
             Email:
             Three open days worth booking: Bristol (book by 20 October), Exeter (book by 1 November) and Bath (book by 15 November). Each takes about ten minutes to register for.
             """.trimIndent(),
-            """{"kind":"Admin","actionableFrom":null,"deadline":"2026-11-15","deadlineQuoted":true,"effortMin":30,"nextStep":"Register for the Bristol open day","question":null,"reason":"Bristol (book by 20 October), Exeter (book by 1 November) and Bath (book by 15 November)","blocks":[{"title":"Register for the Bristol open day","minutes":10,"from":null,"due":"2026-10-20"},{"title":"Register for the Exeter open day","minutes":10,"from":null,"due":"2026-11-01"},{"title":"Register for the Bath open day","minutes":10,"from":null,"due":"2026-11-15"}],"summary":""}""",
+            """{"kind":"Admin","actionableFrom":null,"deadline":"2026-11-15","deadlineQuoted":true,"effortMin":30,"nextStep":"Register for the Bristol open day","question":null,"reason":"Bristol (book by 20 October), Exeter (book by 1 November) and Bath (book by 15 November)","blocks":[{"title":"Register for the Bristol open day","minutes":10,"from":null,"due":"2026-10-20","anyOrder":false},{"title":"Register for the Exeter open day","minutes":10,"from":null,"due":"2026-11-01","anyOrder":true},{"title":"Register for the Bath open day","minutes":10,"from":null,"due":"2026-11-15","anyOrder":true}],"summary":""}""",
         ),
         Example(
             """
@@ -62,7 +62,7 @@ object Examples {
             1. Learn vocabulary 2.1 and 2.2 for the unit test on Thursday 15 October.
             2. Read the article on page 34 and answer questions 1-5 in full sentences.
             """.trimIndent(),
-            """{"subSteps":[{"title":"Learn vocabulary 2.1 and 2.2","minutes":30,"ankiSections":["2.1","2.2"],"where":"anywhere","from":null,"due":null},{"title":"Read the article on page 34 and answer questions 1-5 in full sentences","minutes":45,"ankiSections":[],"where":"home","from":null,"due":null}],"effortMin":75,"ankiSections":["2.1","2.2"],"testDate":"2026-10-15","question":null,"reason":"for the unit test on Thursday 15 October","summary":""}""",
+            """{"subSteps":[{"title":"Learn vocabulary 2.1 and 2.2","minutes":30,"ankiSections":["2.1","2.2"],"where":"anywhere","from":null,"due":null,"anyOrder":false},{"title":"Read the article on page 34 and answer questions 1-5 in full sentences","minutes":45,"ankiSections":[],"where":"home","from":null,"due":null,"anyOrder":true}],"effortMin":75,"ankiSections":["2.1","2.2"],"testDate":"2026-10-15","question":null,"reason":"for the unit test on Thursday 15 October","summary":""}""",
             due = "2026-10-13T08:30",
         ),
         Example(
@@ -75,7 +75,7 @@ object Examples {
             Details:
             Print the attached past paper and answer questions 1-6 on pages 2-5. Mark your answers with the mark scheme on Teams, then upload a photo of your marked work.
             """.trimIndent(),
-            """{"subSteps":[{"title":"Past paper 1, questions 1-6 (print it first), then mark it and upload a photo","minutes":55,"ankiSections":[],"where":"home","from":null,"due":null}],"effortMin":55,"ankiSections":[],"testDate":null,"question":null,"reason":"","summary":""}""",
+            """{"subSteps":[{"title":"Past paper 1, questions 1-6 (print it first), then mark it and upload a photo","minutes":55,"ankiSections":[],"where":"home","from":null,"due":null,"anyOrder":false}],"effortMin":55,"ankiSections":[],"testDate":null,"question":null,"reason":"","summary":""}""",
             due = "2026-10-14T08:30",
         ),
         Example(
@@ -88,7 +88,7 @@ object Examples {
             Details:
             Complete all of exercise 6B (questions 1-20) and check your answers in the back of the book.
             """.trimIndent(),
-            """{"subSteps":[{"title":"Exercise 6B, questions 1-20, then check the answers in the back","minutes":100,"ankiSections":[],"where":"anywhere","from":null,"due":null}],"effortMin":100,"ankiSections":[],"testDate":null,"question":null,"reason":"","summary":""}""",
+            """{"subSteps":[{"title":"Exercise 6B, questions 1-20, then check the answers in the back","minutes":100,"ankiSections":[],"where":"anywhere","from":null,"due":null,"anyOrder":false}],"effortMin":100,"ankiSections":[],"testDate":null,"question":null,"reason":"","summary":""}""",
             due = "2026-10-16T08:30",
         ),
         Example(
@@ -101,7 +101,7 @@ object Examples {
             Details:
             Complete worksheet 4 on momentum, questions 1-8.
             """.trimIndent(),
-            """{"subSteps":[{"title":"Complete worksheet 4, questions 1-8","minutes":40,"ankiSections":[],"where":"anywhere","from":null,"due":null}],"effortMin":40,"ankiSections":[],"testDate":null,"question":null,"reason":"","summary":""}""",
+            """{"subSteps":[{"title":"Complete worksheet 4, questions 1-8","minutes":40,"ankiSections":[],"where":"anywhere","from":null,"due":null,"anyOrder":false}],"effortMin":40,"ankiSections":[],"testDate":null,"question":null,"reason":"","summary":""}""",
             due = "2026-10-12T08:30",
         ),
     )

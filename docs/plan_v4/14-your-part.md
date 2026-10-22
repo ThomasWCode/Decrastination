@@ -46,7 +46,7 @@ Stage by stage, what each PR needs from your phone and from you, for what and fo
 | 12 | 4.3.2 | **needed**: install and the script; the baselines | **helpful**: the done-when list read together, by message |
 | — | 4.3.3 | **needed**: install and the script (a reset, a reviews-only day and a missed slot's block screen aren't made for a check: the tests hold them) | no |
 | — | 4.3.4 | **needed**: install and the script; the day's slots read back (`calendar.json`), each task's steps in their order | no |
-| — | 4.3.5 | **needed**: install and the script; the version bump re-reads the open tasks (about 40 calls, 60 cents, online) | no |
+| — | 4.3.5 | **needed**: install and the script; the version bump re-reads the open tasks (about 40 calls, 60 cents, online), and a step marked "in any order" on its task's sheet | no |
 | — | 4.3.6 | **needed**: install and the script; a school day's briefing, its rebalance seen in the chat with its Undo | **helpful**: the eval's splits read, by message |
 
 ## In sum

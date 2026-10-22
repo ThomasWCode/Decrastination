@@ -45,7 +45,7 @@ object ReadingAnswers {
     )
 
     @Serializable
-    private data class Step(val title: String, val minutes: Int, val ankiSections: List<String> = emptyList(), val from: String? = null, val due: String? = null, val where: String? = null)
+    private data class Step(val title: String, val minutes: Int, val ankiSections: List<String> = emptyList(), val from: String? = null, val due: String? = null, val where: String? = null, val anyOrder: Boolean = false)
 
     @Serializable
     private data class Split(val subSteps: List<Step>, val effortMin: Int, val ankiSections: List<String> = emptyList(), val testDate: String? = null, val question: String? = null, val reason: String = "", val summary: String = "")
@@ -117,7 +117,8 @@ object ReadingAnswers {
         val parts = Sittings.count(step.minutes)
         if (parts <= 1) return listOf(step)
         val minutes = Sittings.even(step.minutes, parts)
-        return Sittings.titles(step.title, parts, finishes = true).mapIndexed { i, title -> step.copy(title = title.take(MAX_TITLE), minutes = minutes[i]) }
+        // Only its first part may be free of the steps before it (D-109): the rest follow it.
+        return Sittings.titles(step.title, parts, finishes = true).mapIndexed { i, title -> step.copy(title = title.take(MAX_TITLE), minutes = minutes[i], anyOrder = step.anyOrder && i == 0) }
     }
 
     /**
@@ -289,7 +290,7 @@ object ReadingAnswers {
             }
             if (due != null && opens != null && due < opens) return no("$name is due ${at(due)}, before the email can be started on ${at(opens)}")
             val sections = if (vocabulary && AnkiRules.vocabularyOnly(step.title)) sections(step.ankiSections) else emptyList()
-            SubStep(step.title.trim().take(MAX_TITLE), step.minutes, ankiSections = sections, from = from, dueAt = due, where = Where.of(step.where)?.name?.lowercase())
+            SubStep(step.title.trim().take(MAX_TITLE), step.minutes, ankiSections = sections, from = from, dueAt = due, where = Where.of(step.where)?.name?.lowercase(), anyOrder = step.anyOrder)
         }
         for (i in read.indices) {
             val from = read[i].from ?: continue
@@ -336,6 +337,8 @@ object ReadingAnswers {
                     ("The rest: " + run.joinToString("; ") { it.title }).take(MAX_TITLE),
                     run.sumOf { it.minutes },
                     where = if (run.any { Where.of(it.where) == Where.Home }) "home" else run.map { it.where }.distinct().singleOrNull(),
+                    // Free of the steps before it only where every one of them was (D-109).
+                    anyOrder = run.all { it.anyOrder },
                 )
             }
             run.clear()

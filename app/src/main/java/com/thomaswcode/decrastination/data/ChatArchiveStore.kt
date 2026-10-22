@@ -217,7 +217,7 @@ class ChatArchiveStore(private val dir: File, private val clock: () -> Long = Sy
         const val NAME = "chat-archive.json"
 
         /** What brings a month of an older shape to this one: the tasks its acts keep, in their second shape (4.0.13). */
-        val MIGRATIONS: List<Migration> = listOf(TasksMigration.ARCHIVE, FelixStore.ARCHIVE, FelixStore.ARCHIVE_PIECES, MemoryMigration.ARCHIVE)
+        val MIGRATIONS: List<Migration> = listOf(TasksMigration.ARCHIVE, FelixStore.ARCHIVE, FelixStore.ARCHIVE_PIECES, MemoryMigration.ARCHIVE, StepOrderMigration.ARCHIVE)
 
         /** A month's file, as [fileOf] names it: a year past 9999 written with its sign and more digits. */
         private val MONTH_FILE = Regex("""chat-archive-\+?\d{4,}-\d{2}\.json""")

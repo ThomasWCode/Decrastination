@@ -17,14 +17,14 @@ A piece goes at the first free time it fits whole, where it may be done:
 - work for home only in the evening, never in a school window (PL-15);
 - a piece due that day at a real deadline only in a slot over by then;
 - not before its task opens (a deck's next cards at 04:00), on five minutes;
-- a step not yet begun after its task's steps before it that day (D-108): no earlier than the end of the last of them, and not at all while one of them has no time, a gap only it would fit going to other work. A pinned step is where you put it, and one under way stays where it is.
+- a step not yet begun after its task's steps before it that day (D-108): no earlier than the end of the last of them, and not at all while one of them has no time, a gap only it would fit going to other work. A pinned step is where you put it, and one under way stays where it is. A step in one piece that doesn't need the steps before it (D-109) may take a gap ahead of them, a step after it still following it; one in sittings follows them, as a sitting kept is counted on the task's steps in their order (planner.md).
 
 Breaks are kept around each piece within its window: `slotBreakMin` (5) before and after it, or after it `slotLongBreakMin` (15) once `slotLongBreakAfterMin` (90) of work has run without a long one. Past a window's edges there's nothing to keep apart.
 
 What's laid, in turn:
 1. Outside breaks, on a weekend or a day off school.
 2. Pins: pieces at a time you gave (PL-04).
-3. Today's starts kept from the last plan (PL-13): a step's only where it follows the steps before it; a task whose kept starts aren't in its steps' order (as a plan before D-108 could lay them) is laid afresh, its steps pinned today or begun aside, as they may stand ahead of the steps before them.
+3. Today's starts kept from the last plan (PL-13): a step's only where it follows the steps before it; a task whose kept starts aren't in its steps' order (as a plan before D-108 could lay them) is laid afresh, its steps pinned today or begun aside, as they may stand ahead of the steps before them, and those in one piece that don't need the steps before them.
 4. The rest, in order, each task's steps in theirs whatever the day's order between tasks: a step at its kept start where that's still free and follows the steps before it (one of them moved, a missed one say), else at the first free time after them.
 
 ## Outside breaks

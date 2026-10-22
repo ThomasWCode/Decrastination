@@ -328,6 +328,27 @@ class SlotterTest {
     }
 
     @Test
+    fun `a step that doesn't need the ones before it takes an earlier gap, and the step after it follows both`() {
+        // Learning the vocabulary needn't wait for the questions (D-109): lunch holds it. The essay needs both.
+        val windows = listOf(w("10:45", "11:00", WindowKind.Break), w("13:15", "13:40", WindowKind.Break), w("17:00", "22:00"))
+        val steps = listOf(step("questions", 0, 60), step("vocab", 1, 25).copy(anyOrder = true), step("essay", 2, 30))
+        val (slots, unslotted) = slot(tuesday, steps, windows)
+        assertEquals(listOf("vocab 13:15–13:40", "questions 17:00–18:00", "essay 18:05–18:35"), slots.described())
+        assertEquals(emptyList(), unslotted)
+    }
+
+    @Test
+    fun `a step that doesn't need the ones before it but is in sittings follows them, its sittings counted on the steps in order`() {
+        // Reading in two sittings, free of the questions before it: a sitting kept is counted on the first
+        // step still to do, so it waits for the questions; lunch's 25 minutes stay free.
+        val windows = listOf(w("13:15", "13:40", WindowKind.Break), w("17:00", "22:00"))
+        val reading = step("reading", 1, 25).copy(anyOrder = true)
+        val steps = listOf(step("questions", 0, 60), reading.copy(title = "reading 1", sitting = Sitting(1, "reading")), reading.copy(title = "reading 2", part = 3, sitting = Sitting(0, "reading")))
+        val (slots, _) = slot(tuesday, steps, windows)
+        assertEquals(listOf("questions 17:00–18:00", "reading 1 18:05–18:30", "reading 2 18:35–19:00"), slots.described())
+    }
+
+    @Test
     fun `steps the day lists out of their order are laid in it`() {
         val (slots, _) = slot(tuesday, listOf(step("revise", 1, 25), step("plan", 0, 30)), listOf(w("17:00", "22:00")))
         assertEquals(listOf("plan 17:00–17:30", "revise 17:35–18:00"), slots.described())

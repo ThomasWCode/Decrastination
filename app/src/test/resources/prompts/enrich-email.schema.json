@@ -87,13 +87,18 @@
                                 "type": "null"
                             }
                         ]
+                    },
+                    "anyOrder": {
+                        "type": "boolean",
+                        "description": "true where it doesn't need the blocks before it done first; false where it builds on them, and for the first"
                     }
                 },
                 "required": [
                     "title",
                     "minutes",
                     "from",
-                    "due"
+                    "due",
+                    "anyOrder"
                 ],
                 "additionalProperties": false
             }
