@@ -223,7 +223,9 @@ class Looks(
         // Each rebalance he gave for steps he was asked about, as his Steps change on its task, under his message (D-110);
         // only where they're one still, the call back: in it a task can be finished or begun, or its free time gone.
         val back = clock.now()
-        val current = Rebalance.candidates(planning.plan(now = back), tasks.value.tasks, Rebalance.declined(chat.value.messages), back)
+        // The settings as they are now, for the plans tried and the rests checked alike: they may have changed in the call.
+        val settingsBack = this.settings.value
+        val current = Rebalance.candidates(planning.plan(now = back, settings = settingsBack), tasks.value.tasks, Rebalance.declined(chat.value.messages), back)
         val known = tasks.value.tasks.associateBy { it.id }
         // Each tried on the plan with those made before it, made only where its first step is laid in the free
         // time he was shown, its rests kept: one he leaves out can leave an earlier one free for another's.
@@ -236,7 +238,7 @@ class Looks(
             if (made.any { it.changes.single().taskId == candidate.taskId }) return@mapNotNull null
             val steps = known[candidate.taskId]?.let { Rebalance.steps(it, candidate, given) } ?: return@mapNotNull null
             val tried = Rebalance.instruction(candidate, steps, back)
-            if (!Rebalance.laidAsOffered(planning.plan(now = back, trying = made + tried), candidate, settings)) return@mapNotNull null
+            if (!Rebalance.laidAsOffered(planning.plan(now = back, trying = made + tried, settings = settingsBack), candidate, settingsBack)) return@mapNotNull null
             made += tried
             Proposal(UUID.randomUUID().toString(), changes = tried.changes, lines = listOf(Rebalance.line(candidate, given)), instant = true)
         }
