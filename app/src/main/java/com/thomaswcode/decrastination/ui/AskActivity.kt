@@ -1249,7 +1249,9 @@ private fun ProposalCard(graph: AppGraph, messageId: String, proposal: Proposal,
                 if (task.steps.isNotEmpty()) {
                     task.steps.forEach { s ->
                         val dates = listOfNotNull(s.from?.let { "from " + Format.at(it, now, zone) }, s.dueAt?.let { Format.due(it, hard = false, now, zone) }).joinToString(", ")
-                        Text("• ${s.title} (${Format.minutes(s.minutes)}${if (dates.isEmpty()) "" else "; $dates"})", style = MaterialTheme.typography.bodySmall)
+                        // One that doesn't need the steps before it says so (D-109), as the task's sheet does.
+                        val details = listOfNotNull(Format.minutes(s.minutes), dates.ifEmpty { null }, "in any order".takeIf { s.anyOrder }).joinToString("; ")
+                        Text("• ${s.title} ($details)", style = MaterialTheme.typography.bodySmall)
                     }
                 }
                 if (task.notes.isNotBlank()) Text(task.notes, style = MaterialTheme.typography.bodySmall)
