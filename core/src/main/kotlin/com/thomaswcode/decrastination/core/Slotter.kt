@@ -30,7 +30,9 @@ object Slotter {
      * breaks where [outside], as many as the work laid around them leaves room for; pinned pieces ([pins], by [Chunk.key]) at their time, or the next free
      * start; pieces at the time they had ([previous]) where it's still free, one under way or just
      * over ([GRACE_MS]) included;
-     * the rest, in order, at the first free time each fits whole. A piece has a break of
+     * the rest, in order, at the first free time each fits whole. A task's steps keep their order
+     * (D-108): one not yet begun goes no earlier than the end of the steps before it, and waits
+     * unslotted while one of them has no time; one pinned or under way stays where it is. A piece has a break of
      * `slotBreakMin` before it and after it in its window, or after it `slotLongBreakMin` once
      * `slotLongBreakAfterMin` of work has gone without a long one. What fits nowhere is unslotted, in order.
      */
@@ -105,9 +107,15 @@ object Slotter {
     ): Pair<List<Slot>, List<Chunk>> {
         val free = intervals(date, windows, busy, now, zone, settings.minSchoolSlotMin)
         val day = at(date, 0, zone) until at(date.plusDays(1), 0, zone)
+        val ordered = stepsInOrder(chunks)
         // Each work slot with its window, for its breaks.
         val work = mutableListOf<Pair<Slot, DayWindow>>()
-        val left = chunks.toMutableList()
+        val left = ordered.toMutableList()
+        // Tasks whose steps' times from the last plan aren't in the steps' order (a plan before D-108): laid afresh.
+        val shuffled = ordered.filter { it.stepIndex != null }.groupBy { it.taskId }.filterValues { steps ->
+            val times = steps.mapNotNull { step -> previous[step.key]?.takeIf { it in day } }
+            times != times.sorted()
+        }.keys
 
         fun allowed(chunk: Chunk, interval: Interval) = chunk.where != Where.Home || !interval.window.kind.atSchool
         fun beforeDeadline(chunk: Chunk, start: Long): Boolean {
@@ -153,6 +161,17 @@ object Slotter {
             carve(free, maxOf(start - settings.slotBreakMin * MINUTE, at(date, interval.window.startMin, zone)), minOf(end + rest * MINUTE, at(date, interval.window.endMin, zone)))
             left.remove(chunk)
         }
+        // The earliest a step can start (D-108): the end of the last of its task's steps before it today,
+        // once each of them is laid; null while one isn't. A piece with no step of its own, any time.
+        fun follows(chunk: Chunk): Long? {
+            if (chunk.stepIndex == null) return Long.MIN_VALUE
+            var from = Long.MIN_VALUE
+            for (before in ordered) {
+                if (before.taskId != chunk.taskId || before.stepIndex == null || before.part >= chunk.part) continue
+                from = maxOf(from, work.firstOrNull { it.first.chunk == before }?.first?.end ?: return null)
+            }
+            return from
+        }
 
         // The outside breaks [slot] chose, laid first.
         for (slot in breaks) carve(free, slot.start, slot.end)
@@ -177,18 +196,30 @@ object Slotter {
             place(chunk, later.second, later.first, pinned = true)
         }
         // Kept where they were: a start from the last plan whose time is still free from now on,
-        // one under way included (else [Plan.slotAt] would never find one).
+        // one under way included (else [Plan.slotAt] would never find one). A step not yet begun only
+        // after the steps before it, and not where its task's steps were laid out of their order.
         for (chunk in left.toList()) {
             val start = previous[chunk.key]?.takeIf { it in day } ?: continue
             val interval = holding(chunk, start) ?: continue
+            if (start > now && (chunk.taskId in shuffled || start < (follows(chunk) ?: continue))) continue
             if (allowed(chunk, interval) && beforeDeadline(chunk, start) && start >= opens(chunk)) place(chunk, start, interval, pinned = false)
         }
-        // The rest, in order, at the first free time each fits whole.
+        // The rest, in order, at the first free time each fits whole: a step after the steps before it, at
+        // its start from the last plan where that's still free and follows them (one before it moved, say).
         for (chunk in left.toList()) {
-            val (interval, start) = free.firstNotNullOfOrNull { iv -> startIn(chunk, iv)?.let { iv to it } } ?: continue
+            val after = follows(chunk) ?: continue
+            val kept = previous[chunk.key]?.takeIf { chunk.stepIndex != null && chunk.taskId !in shuffled && it in day && it >= after }
+                ?.let { start -> holding(chunk, start)?.takeIf { allowed(chunk, it) && beforeDeadline(chunk, start) && start >= opens(chunk) }?.let { it to start } }
+            val (interval, start) = kept ?: free.firstNotNullOfOrNull { iv -> startIn(chunk, iv, after)?.let { iv to it } } ?: continue
             place(chunk, start, interval, pinned = false)
         }
-        return (work.map { it.first } + breaks).sortedBy { it.start } to chunks.filter { it in left }
+        return (work.map { it.first } + breaks).sortedBy { it.start } to ordered.filter { it in left }
+    }
+
+    /** [chunks] with each task's steps in their order ([Chunk.part]), in the places its steps have among them: the day's order between tasks kept. */
+    private fun stepsInOrder(chunks: List<Chunk>): List<Chunk> {
+        val steps = chunks.filter { it.stepIndex != null }.groupBy { it.taskId }.mapValues { (_, own) -> own.sortedBy { it.part }.iterator() }
+        return chunks.map { if (it.stepIndex == null) it else steps.getValue(it.taskId).next() }
     }
 
     /**

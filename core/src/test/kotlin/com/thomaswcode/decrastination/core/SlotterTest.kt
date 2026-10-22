@@ -23,6 +23,9 @@ class SlotterTest {
         behind = false, part = part, parts = 1, taskMinutes = minutes, availableAt = availableAt, why = Why.Spread, where = where, hard = true,
     )
 
+    /** Step [index] of one task's, the essay's: [name] as its title, so a slot says which. */
+    private fun step(name: String, index: Int, minutes: Int) = chunk("essay", minutes, part = index + 1).copy(title = name, step = name, stepIndex = index)
+
     private fun slot(
         date: String,
         chunks: List<Chunk>,
@@ -233,5 +236,70 @@ class SlotterTest {
         assertEquals(Fixtures.at("2026-10-13T17:35"), Slotter.firstFreeAfter(slots, windows, emptyList(), Fixtures.at("2026-10-13T14:00"), 30, Where.Home, date, LONDON, breakMin = 5))
         // Done anywhere, the study period's rest from 15:10 holds 20 minutes.
         assertEquals(Fixtures.at("2026-10-13T15:10"), Slotter.firstFreeAfter(slots, windows, emptyList(), Fixtures.at("2026-10-13T14:00"), 20, Where.Anywhere, date, LONDON, breakMin = 5))
+    }
+
+    @Test
+    fun `a task's steps keep their order in the day, a short later one not taking an earlier gap`() {
+        // A quarter of an hour at break, 25 minutes at lunch, the evening: revising (25 minutes) fits lunch, but
+        // follows the research; lunch goes to another task's piece.
+        val windows = listOf(w("10:45", "11:00", WindowKind.Break), w("13:15", "13:40", WindowKind.Break), w("17:00", "22:00"))
+        val steps = listOf(step("pick", 0, 15), step("research", 1, 60), step("plan", 2, 30), step("revise", 3, 25))
+        val (slots, unslotted) = slot(tuesday, steps + chunk("vocab", 20), windows)
+        assertEquals(listOf("pick 10:45–11:00", "vocab 13:15–13:35", "research 17:00–18:00", "plan 18:05–18:35", "revise 18:50–19:15"), slots.described())
+        assertEquals(emptyList(), unslotted)
+    }
+
+    @Test
+    fun `a step waits unslotted while one before it has no time, though it would fit`() {
+        val windows = listOf(w("10:45", "11:15", WindowKind.Break), w("17:00", "18:00"))
+        val (slots, unslotted) = slot(tuesday, listOf(step("research", 0, 90), step("plan", 1, 30)), windows)
+        assertEquals(emptyList(), slots.described())
+        assertEquals(listOf("research", "plan"), unslotted.map { it.title })
+    }
+
+    @Test
+    fun `a pinned step stays where it's pinned, and the steps after it follow it`() {
+        val steps = listOf(step("pick", 0, 15), step("plan", 1, 30), step("draft", 2, 55))
+        val evening = listOf(w("17:00", "22:00"))
+        val plan = mapOf(steps[1].key to Fixtures.at("2026-10-13T19:30"))
+        assertEquals(listOf("pick 17:00–17:15", "plan 19:30–20:00", "draft 20:05–21:00"), slot(tuesday, steps, evening, pins = plan).first.described())
+        // Pinned before the steps it follows, as you put it (D-4): they go round it, in their order.
+        val draft = mapOf(steps[2].key to Fixtures.at("2026-10-13T17:00"))
+        assertEquals(listOf("draft 17:00–17:55", "pick 18:00–18:15", "plan 18:20–18:50"), slot(tuesday, steps, evening, pins = draft).first.described())
+    }
+
+    @Test
+    fun `steps keep their times from the last plan in their order, and are laid afresh where those were out of it`() {
+        val windows = listOf(w("13:15", "13:45", WindowKind.Break), w("17:00", "22:00"))
+        val steps = listOf(step("plan", 0, 30), step("revise", 1, 25))
+        val kept = mapOf(steps[0].key to Fixtures.at("2026-10-13T17:30"), steps[1].key to Fixtures.at("2026-10-13T18:30"))
+        assertEquals(listOf("plan 17:30–18:00", "revise 18:30–18:55"), slot(tuesday, steps, windows, previous = kept).first.described())
+        // Revising before the plan, as a plan before D-108 could lay them: both laid afresh, in order.
+        val shuffled = mapOf(steps[0].key to Fixtures.at("2026-10-13T17:00"), steps[1].key to Fixtures.at("2026-10-13T13:15"))
+        assertEquals(listOf("plan 13:15–13:45", "revise 17:00–17:25"), slot(tuesday, steps, windows, previous = shuffled).first.described())
+    }
+
+    @Test
+    fun `a step after one that moved keeps its start from the last plan where it still follows`() {
+        // Planning was missed, so its start was let go of (PL-13); laid again from now, it ends before the draft's start.
+        val steps = listOf(step("plan", 0, 30), step("draft", 1, 55))
+        val previous = mapOf(steps[1].key to Fixtures.at("2026-10-13T19:00"))
+        val (slots, _) = slot(tuesday, steps, listOf(w("17:00", "22:00")), now = "2026-10-13T17:55", previous = previous)
+        assertEquals(listOf("plan 17:55–18:25", "draft 19:00–19:55"), slots.described())
+    }
+
+    @Test
+    fun `a step under way stays where it is, though a step before it is laid after it`() {
+        val windows = listOf(w("13:15", "13:45", WindowKind.Break), w("17:00", "22:00"))
+        val steps = listOf(step("plan", 0, 30), step("revise", 1, 25))
+        val previous = mapOf(steps[0].key to Fixtures.at("2026-10-13T17:00"), steps[1].key to Fixtures.at("2026-10-13T13:15"))
+        val (slots, _) = slot(tuesday, steps, windows, now = "2026-10-13T13:20", previous = previous)
+        assertEquals(listOf("revise 13:15–13:40", "plan 17:00–17:30"), slots.described())
+    }
+
+    @Test
+    fun `steps the day lists out of their order are laid in it`() {
+        val (slots, _) = slot(tuesday, listOf(step("revise", 1, 25), step("plan", 0, 30)), listOf(w("17:00", "22:00")))
+        assertEquals(listOf("plan 17:00–17:30", "revise 17:35–18:00"), slots.described())
     }
 }
