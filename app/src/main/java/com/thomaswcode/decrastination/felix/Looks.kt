@@ -13,6 +13,7 @@ import com.thomaswcode.decrastination.core.DueKind
 import com.thomaswcode.decrastination.core.FelixDraft
 import com.thomaswcode.decrastination.core.FelixRetry
 import com.thomaswcode.decrastination.core.Given
+import com.thomaswcode.decrastination.core.Instruction
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.MemoryEdit
 import com.thomaswcode.decrastination.core.MessageKind
@@ -224,13 +225,20 @@ class Looks(
         val back = clock.now()
         val current = Rebalance.candidates(planning.plan(now = back), tasks.value.tasks, Rebalance.declined(chat.value.messages), back)
         val known = tasks.value.tasks.associateBy { it.id }
-        val proposals = result.rebalances.mapNotNull { given ->
+        // Each tried on the plan with those made before it, made only where its first step is laid in the free
+        // time he was shown, its rests kept: one he leaves out can leave an earlier one free for another's.
+        val made = mutableListOf<Instruction>()
+        val proposals = result.rebalances.sortedBy { given -> rebalance.firstOrNull { it.taskId == given.taskId && it.index == given.stepIndex }?.gap?.start ?: Long.MAX_VALUE }.mapNotNull { given ->
             val asked = rebalance.firstOrNull { it.taskId == given.taskId && it.index == given.stepIndex } ?: return@mapNotNull null
             // The same free time too: his message names the one he was shown.
             val candidate = current.firstOrNull { it.taskId == asked.taskId && it.index == asked.index && it.first == asked.first && it.second == asked.second && it.gap == asked.gap } ?: return@mapNotNull null
+            if (made.any { it.changes.single().taskId == candidate.taskId }) return@mapNotNull null
             val steps = known[candidate.taskId]?.let { Rebalance.steps(it, candidate, given) } ?: return@mapNotNull null
-            Proposal(UUID.randomUUID().toString(), changes = listOf(Change(ChangeType.Steps, taskId = candidate.taskId, steps = steps)), lines = listOf(Rebalance.line(candidate, given)), instant = true)
-        }.distinctBy { it.changes.single().taskId }
+            val tried = Rebalance.instruction(candidate, steps, back)
+            if (!Rebalance.laidAsOffered(planning.plan(now = back, trying = made + tried), candidate, settings)) return@mapNotNull null
+            made += tried
+            Proposal(UUID.randomUUID().toString(), changes = tried.changes, lines = listOf(Rebalance.line(candidate, given)), instant = true)
+        }
         // One he gave that isn't made, his message would still say it was: the day's list in the app's words
         // instead ([Briefing]), what he remembered kept all the same.
         if (proposals.size < result.rebalances.size) {

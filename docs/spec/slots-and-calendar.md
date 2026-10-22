@@ -10,7 +10,7 @@ After each plan: today's slots are saved (`Planning.keepSlots`), the slot alarms
 
 ## The slotter (PL-12)
 
-`Slotter.slot` lays each day's pieces, in the day's order ([planner.md](planner.md)), into its windows (`DayBucket.slots`). A piece no free time holds whole is `unslotted`: still the day's work, with no time. Today's free times at school its slots leave, from now on, are its `gaps` (`Slotter.schoolGaps`: its school windows less busy time and each work slot with its breaks as they're laid, `slotBreakMin` before it and after it that or `slotLongBreakMin` once its run reaches `slotLongBreakAfterMin`, those of at least `minSchoolSlotMin`), for Felix's rebalance (D-110, felix.md).
+`Slotter.slot` lays each day's pieces, in the day's order ([planner.md](planner.md)), into its windows (`DayBucket.slots`). A piece no free time holds whole is `unslotted`: still the day's work, with no time. Today's free times at school its slots leave, from now on, are its `gaps` (`Slotter.schoolGaps`: its school windows less busy time and each work slot with its breaks as they're laid, within its window, `slotBreakMin` before it and after it that or `slotLongBreakMin` once its run in that window reaches `slotLongBreakAfterMin`, those of at least `minSchoolSlotMin`), for Felix's rebalance (D-110, felix.md).
 
 A day's free time is its windows less busy time (the calendar's and yours); today's starts from now, rounded up to five minutes. A school stretch under `minSchoolSlotMin` (15) is dropped, an evening one under 5.
 A piece goes at the first free time it fits whole, where it may be done:

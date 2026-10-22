@@ -282,7 +282,10 @@ object Slotter {
                 from = before.start
             }
             val rest = if (run >= settings.slotLongBreakAfterMin) settings.slotLongBreakMin else settings.slotBreakMin
-            carve(free, slot.start - settings.slotBreakMin * MINUTE, slot.end + rest * MINUTE)
+            // Within its window: past its edges there's nothing to keep apart, as [lay] has it.
+            val opens = window?.let { at(date, it.startMin, zone) } ?: Long.MIN_VALUE
+            val closes = window?.let { at(date, it.endMin, zone) } ?: Long.MAX_VALUE
+            carve(free, maxOf(slot.start - settings.slotBreakMin * MINUTE, opens), minOf(slot.end + rest * MINUTE, closes))
         }
         return free.filter { it.minutes >= settings.minSchoolSlotMin }.map { Gap(it.start, it.minutes) }
     }
