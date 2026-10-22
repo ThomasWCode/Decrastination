@@ -31,4 +31,14 @@ class OwnTaskFormTest {
         assertEquals(listOf(draft, null, null), steps.map { it.dueAt })
         assertEquals(listOf(false, true, false), steps.map { it.anyOrder })
     }
+
+    @Test
+    fun `a row retitled or moved loses its mark, and its other changes keep it`() {
+        val rows = rowsOf(task, editing = true)
+        assertEquals(listOf(false, false), changedRow(rows, 1, rows[1].copy(title = "Ask for two references")).map { it.anyOrder })
+        assertEquals(listOf(false, true), changedRow(rows, 1, rows[1].copy(minutes = "200", where = "home")).map { it.anyOrder })
+        val moved = movedRow(rows, 1, -1)
+        assertEquals(listOf("Ask for a reference", "First draft"), moved.map { it.title })
+        assertEquals(listOf(false, false), moved.map { it.anyOrder })
+    }
 }
