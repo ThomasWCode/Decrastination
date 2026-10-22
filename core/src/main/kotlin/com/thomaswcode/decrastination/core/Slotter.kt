@@ -69,10 +69,10 @@ object Slotter {
             carve(free, start, start + length)
         }
         // The work's time with its rests as they'd be laid back to back: a longer one after each run
-        // of `slotLongBreakAfterMin`, as [lay] gives them.
+        // of `slotLongBreakAfterMin`, as [lay] gives them, each task's steps in their order.
         var run = 0
         var need = 0
-        for (chunk in chunks) {
+        for (chunk in stepsInOrder(chunks)) {
             run += chunk.minutes
             val long = run >= settings.slotLongBreakAfterMin
             need += chunk.minutes + if (long) settings.slotLongBreakMin else settings.slotBreakMin
@@ -112,8 +112,9 @@ object Slotter {
         val work = mutableListOf<Pair<Slot, DayWindow>>()
         val left = ordered.toMutableList()
         // Tasks whose steps' times from the last plan aren't in the steps' order (a plan before D-108): laid afresh.
+        // Steps pinned today or begun are left out: they stay where they are, ahead of the steps before them or not.
         val shuffled = ordered.filter { it.stepIndex != null }.groupBy { it.taskId }.filterValues { steps ->
-            val times = steps.mapNotNull { step -> previous[step.key]?.takeIf { it in day } }
+            val times = steps.filter { step -> pins[step.key]?.takeIf { it in day } == null }.mapNotNull { step -> previous[step.key]?.takeIf { it in day && it > now } }
             times != times.sorted()
         }.keys
 

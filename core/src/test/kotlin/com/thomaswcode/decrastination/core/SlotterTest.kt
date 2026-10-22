@@ -289,6 +289,36 @@ class SlotterTest {
     }
 
     @Test
+    fun `a step pinned or begun ahead of the steps before it leaves the others their starts from the last plan`() {
+        val steps = listOf(step("pick", 0, 15), step("plan", 1, 30), step("draft", 2, 55))
+        val evening = listOf(w("17:00", "22:00"))
+        val draft = mapOf(steps[2].key to Fixtures.at("2026-10-13T17:00"))
+        // Drums from 18:00 to 18:30 put picking after them; with the drums gone, the next plan keeps the starts it had.
+        val drums = Busy(Fixtures.at("2026-10-13T18:00"), Fixtures.at("2026-10-13T18:30"))
+        val first = slot(tuesday, steps, evening, busy = listOf(drums), pins = draft).first
+        assertEquals(listOf("draft 17:00–17:55", "pick 18:30–18:45", "plan 18:50–19:20"), first.described())
+        val kept = first.associate { it.chunk!!.key to it.start }
+        assertEquals(first.described(), slot(tuesday, steps, evening, pins = draft, previous = kept).first.described())
+        // Drafting begun at 14:00 before the plan, which a missed slot moved to 17:00: revising keeps 18:30.
+        val study = listOf(w("14:00", "15:00", WindowKind.Study), w("17:00", "22:00"))
+        val begun = listOf(step("plan", 0, 30), step("draft", 1, 55), step("revise", 2, 25))
+        val previous = mapOf(begun[0].key to Fixtures.at("2026-10-13T17:00"), begun[1].key to Fixtures.at("2026-10-13T14:00"), begun[2].key to Fixtures.at("2026-10-13T18:30"))
+        val (laid, _) = slot(tuesday, begun, study, now = "2026-10-13T14:10", previous = previous)
+        assertEquals(listOf("draft 14:00–14:55", "plan 17:00–17:30", "revise 18:30–18:55"), laid.described())
+    }
+
+    @Test
+    fun `the room for breaks outside counts a task's steps in their order, as they're laid`() {
+        // Listed 60, 30, 60 and 30 minutes they'd want two long rests; laid in their order, 60, 60, 30 and 30, one.
+        // So laid, they leave room for the break outside at 13:00, which counting them as listed gave up.
+        val midday = settings.copy(outsideBreaks = 1, outsideTimes = listOf(13 * 60))
+        val steps = listOf(step("a", 0, 60), step("c", 2, 30), step("b", 1, 60), step("d", 3, 30))
+        val (slots, unslotted) = Slotter.slot(LocalDate.parse(saturday), steps, listOf(w("10:00", "13:50")), emptyList(), emptyMap(), emptyMap(), Fixtures.at("2026-10-12T08:00"), LONDON, midday, true) { null }
+        assertEquals(listOf("a 10:00–11:00", "b 11:05–12:05", "c 12:20–12:50", "outside 13:00–13:20", "d 13:20–13:50"), slots.described())
+        assertEquals(emptyList(), unslotted)
+    }
+
+    @Test
     fun `a step under way stays where it is, though a step before it is laid after it`() {
         val windows = listOf(w("13:15", "13:45", WindowKind.Break), w("17:00", "22:00"))
         val steps = listOf(step("plan", 0, 30), step("revise", 1, 25))
