@@ -880,7 +880,9 @@ object Planner {
                 val due = Instant.ofEpochMilli(chunk.deadline).atZone(zone)
                 if (chunk.hard && due.toLocalDate() == day) due.hour * 60 + due.minute else null
             }
-            DayBucket(day, capacity.getValue(day), chunks, slots, unslotted)
+            // Today's free times at school, for two of Felix's steps to be rebalanced to fit one (D-110).
+            val gaps = if (day == today) Slotter.schoolGaps(day, windows, input.busy + input.hardBusy, slots, input.now, zone, input.settings) else emptyList()
+            DayBucket(day, capacity.getValue(day), chunks, slots, unslotted, gaps)
         }
         // A task's runs left out for the same reason are one line: their pieces and minutes together, the soonest opening.
         val gaps = unplanned.groupBy { it.taskId to it.reason }.values.map { same ->
@@ -1063,7 +1065,7 @@ object Planner {
      * Where [task]'s work can be done, where its steps don't say (PL-15): your own task's as you set it;
      * an Anki deck's anywhere; Teams homework at home (the laptop, the books); the rest anywhere.
      */
-    private fun whereOf(task: TaskItem): Where = when (task.source) {
+    internal fun whereOf(task: TaskItem): Where = when (task.source) {
         Source.Own -> Where.of(task.extra[OwnTaskRules.EXTRA_WHERE]) ?: Where.Anywhere
         Source.Teams -> if (task.kind == Kind.Homework) Where.Home else Where.Anywhere
         else -> Where.Anywhere

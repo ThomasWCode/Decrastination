@@ -258,6 +258,19 @@ object Slotter {
     }
 
     /**
+     * The free times at school on [date] that [slots] leave, from [now] on (D-110): its school windows less
+     * [busy] and each work slot with `slotBreakMin` either side, those of at least `minSchoolSlotMin`.
+     */
+    fun schoolGaps(date: LocalDate, windows: List<DayWindow>, busy: List<Busy>, slots: List<Slot>, now: Long, zone: ZoneId, settings: Settings): List<Gap> {
+        val free = intervals(date, windows.filter { it.kind.atSchool }, busy, now, zone, settings.minSchoolSlotMin)
+        for (slot in slots) {
+            val gap = if (slot.kind == SlotKind.Work) settings.slotBreakMin * MINUTE else 0
+            carve(free, slot.start - gap, slot.end + gap)
+        }
+        return free.filter { it.minutes >= settings.minSchoolSlotMin }.map { Gap(it.start, it.minutes) }
+    }
+
+    /**
      * [windows] on [date] as free intervals: [busy] taken out, none before [now] (rounded up to the
      * next five minutes), a school one with under [minSchoolMin] left and an evening's under five dropped.
      */
