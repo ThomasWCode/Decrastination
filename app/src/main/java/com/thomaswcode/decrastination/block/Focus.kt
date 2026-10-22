@@ -207,7 +207,7 @@ class Focus(
      */
     fun blockingLine(plan: Plan, now: Long = clock.now()): String {
         val today = today(now)
-        // A slot missed today that went to tomorrow keeps it on till the day's hours end (BL-11), whatever's done.
+        // A slot missed today with no time left today keeps it on till the day's hours end (BL-11), whatever's done.
         val spilledTill = if (missedKeepsPressure(now)) hoursEndMin(today) else null
         return blockingLine(verdict(now, plan), plan.todayBucket?.chunks.orEmpty(), (creditLeftMs(now) / 60_000L).toInt(), BlockPolicy.blockFromMin(settings.value, schoolDay(today)), rewardLine(plan, now), spilledTill)
     }
@@ -216,7 +216,7 @@ class Focus(
     fun earnsBy(piece: Chunk): EarnsBy = piece.earnsBy(settings.value.photoFromMin)
 
     /**
-     * A slot missed today that went to tomorrow keeps today's work undone (BL-11), till the day's
+     * A slot missed today with no time left today keeps today's work undone (BL-11), till the day's
      * hours end: letting a slot lapse doesn't buy the evening. A move of yours forgets it (PL-13).
      */
     fun missedKeepsPressure(now: Long = clock.now()): Boolean {
@@ -848,7 +848,7 @@ class Focus(
         /**
          * [verdict] in words, with today's [pieces] still to do, the [freeMin] there is, when blocking starts
          * ([blockFromMin], minutes after midnight) and what finishing earns ([reward], [rewardLine]); where a slot
-         * missed today went to tomorrow (BL-11), when the day's hours end ([spilledTillMin]), till which it's on: pure.
+         * missed today has no time left today (BL-11), when the day's hours end ([spilledTillMin]), till which it's on: pure.
          */
         fun blockingLine(verdict: BlockPolicy.Verdict, pieces: List<Chunk>, freeMin: Int, blockFromMin: Int, reward: String?, spilledTillMin: Int? = null): String {
             val left = "${pieces.size} piece${if (pieces.size == 1) "" else "s"}, ${Format.minutes(pieces.sumOf { it.minutes })}"
@@ -856,7 +856,7 @@ class Focus(
                 is BlockPolicy.Verdict.Block -> when {
                     verdict.reason != BlockPolicy.Reason.TodayUndone -> "on: no free time left today"
                     // On till the day's hours end, whatever's done: letting a slot lapse doesn't buy the evening.
-                    spilledTillMin != null -> "on till %02d:%02d: a slot missed today went to tomorrow".format(spilledTillMin / 60, spilledTillMin % 60) + if (pieces.isEmpty()) "" else "; today's work left: $left"
+                    spilledTillMin != null -> "on till %02d:%02d: a slot missed today has no time left today".format(spilledTillMin / 60, spilledTillMin % 60) + if (pieces.isEmpty()) "" else "; today's work left: $left"
                     else -> "on until today's work's done ($left)"
                 }
                 BlockPolicy.Verdict.Spend -> "off while their free time is spent"

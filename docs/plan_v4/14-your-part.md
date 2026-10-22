@@ -44,6 +44,7 @@ Stage by stage, what each PR needs from your phone and from you, for what and fo
 | 11 | 4.3.0 | **needed**, online: install; `sync --es sources gmail`; `state`; a minute's wait for the write; logcat's IMAP lines | **needed**, 20 min with Gmail open: star a note-to-self email in Gmail; tick its piece on Day; Undo within the grace (again, with a second email); aeroplane mode on and off; look in Gmail (unstarred, out of the inbox); the first-time sheet; the switch off in Settings and a tick that leaves Gmail alone |
 | — | 4.3.1 | **needed**: install and the script; two `chat-ask`s (paid) with Gmail's finish switch off (`gmail-finishes --ez on false`, then `true` again) | no |
 | 12 | 4.3.2 | **needed**: install and the script; the baselines | **helpful**: the done-when list read together, by message |
+| — | 4.3.3 | **needed**: install and the script (a reset, a reviews-only day and a missed slot's block screen aren't made for a check: the tests hold them) | no |
 
 ## In sum
 
@@ -53,14 +54,13 @@ Stage by stage, what each PR needs from your phone and from you, for what and fo
 
 ## Still to check
 
-Everything else in Stage 5 was checked on the phone with you on 18 Oct, or by the scripts after its last install, and two more of its checks on 19 Oct: the chat left on *Your changes* with a fold open, his next notification tapped, and the *Chat* tab showed at his message, under the *New messages* line, every fold closed. These want your taps, or a day of their own, whenever they come up; none needs a session of its own:
+Everything else in Stage 5 was checked on the phone with you on 18 Oct, or by the scripts after its last install, and two more of its checks on 19 Oct: the chat left on *Your changes* with a fold open, his next notification tapped, and the *Chat* tab showed at his message, under the *New messages* line, every fold closed. 8a's reminder and 10a's rule were checked on 21 and 22 Oct: the reminder came at its time in his words, and its *Done* chip, tapped in the chat (the same entrance as the notification's), marked it done with no call; the reply to a `felix-say` made a rule till 07:00, `felix-check` wrote nothing, and his next look's message was empty, as were the night's three nudges, none sent; at 07:00 the rule was gone (`memory`), let go of with the briefing. These want your taps, or a day of their own, whenever they come up; none needs a session of its own:
 
 1. With more of his messages unread than a screen holds, open the chat (his button, not his notification): it opens at the *New messages* line, not at its foot.
 2. Once the chat has messages past its window (a fortnight old and past the newest 200, days away), scroll back past them: the older rows show under *Earlier messages* with no Undo or buttons of their own, read a month at a time (4.0.4).
 3. The week's check-in answered on a Sunday (in the chat or on its form): kept once in the log, and the week's review asked for, now through `Learning` (6e). 6e's check couldn't answer one from the PC on 19 Oct, as that week had its check-in already.
-4. 10a's rule from "leave me alone tonight": `memory` after 07:00 the next morning shows it gone. Checked on 21 Oct: 8a's reminder came at its time in his words, and its *Done* chip, tapped in the chat (the same entrance as the notification's), marked it done with no call; the reply to a `felix-say` made a rule till 07:00, `felix-check` wrote nothing, and his next look's message was empty.
-5. 10b's: the next morning's briefing in his register; then you read a day of his messages and say what's off (his nudges ran to three sentences where his prompt asks for two).
-6. A slot missed today, then its task finished: blocking as the day's other slots have it (4.1.3; not seen live, as blocking applies only within the day's hours).
+4. 10b's: you read a day of his messages and say what's off (his nudges ran to three sentences where his prompt asks for two). His first whole day in the new voice is 22 Oct; its briefing, checked that morning, was in his register.
+5. A slot missed today, then its task finished: blocking as the day's other slots have it (4.1.3; not seen live, as blocking applies only within the day's hours).
 
 ## When the phone is away
 
@@ -74,9 +74,9 @@ So it went for Stage 6: `main`'s 4.0.4 went on first, then Stage 6's five PRs (#
 2. **Stage 5** (the chat; done, in one evening with you): three short sessions with you, or one evening for all three.
 3. **Stages 6, 9 and 7** (eight PRs, the services, the names and the data release; done): three or four phone evenings; a five-minute look after 7.
 4. **Stage 8** (reminders, the gaps and what he's sent; done): one evening with you for 8a's fifteen minutes, a glance the next day for the SlotStart reminder; 8b your classes' subjects first, five minutes; 8c only the phone.
-5. **Stage 10** (done; 10b's session with 4.2.1 and 11's on 21 Oct): 10a needed only the phone; the voice's text was read by you before 10b started. Left: 10b's briefing and your read of a day of his messages, and 10a's rule gone the next morning (§Still to check).
+5. **Stage 10** (done; 10b's session with 4.2.1 and 11's on 21 Oct): 10a needed only the phone; the voice's text was read by you before 10b started. Left: your read of a day of his messages (§Still to check); 10b's briefing and 10a's rule gone the next morning were checked on 22 Oct.
 6. **Stage 11** (done, 21 Oct): an evening with Gmail open, about an hour with its two finds (a star's kind that Gmail's website still draws, and a lost connection's first retry).
-7. **Stage 12**: the phone, and the done-when list read together.
+7. **Stage 12** (done, 22 Oct): only the phone; the done-when list ([README](README.md)), ticked by 4.3.2 with what holds, is yours to read together whenever you like.
 
 On any evening the phone is connected and you're not using it, I can run a stage's install and its scripted checks, wait for your taps where they're needed, and carry on with the next PR's code meanwhile.
 

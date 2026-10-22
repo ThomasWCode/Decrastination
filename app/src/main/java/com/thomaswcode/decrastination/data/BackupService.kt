@@ -91,7 +91,7 @@ class BackupService(
     fun encoded(): Pair<String, Int> = backupOf().let { Backups.fitted(it, backupCap) }
 
     /** All the app keeps, as a backup holds it, the chat's earlier messages whole. */
-    private fun backupOf(): Backup =
+    private fun backupOf(every: Boolean = false): Backup =
         Backup(
             exportedAt = clock.now(),
             versionName = versionName,
@@ -102,7 +102,9 @@ class BackupService(
             calibration = stores.learning.value.calibration,
             eventAnswers = stores.calendar.value.eventAnswers,
             aiUsage = stores.model.value.aiUsage,
-            instructions = stores.instructions.value.applied,
+            // Those in use; for a reset's copy ([every]) all of them, one still being read or left unclear too,
+            // as the reset takes them all.
+            instructions = stores.instructions.value.let { if (every) it.instructions else it.applied },
             ownTasks = stores.tasks.value.tasks.filter { it.source == Source.Own },
             school = stores.school.value,
             memory = stores.memory.value,
@@ -142,7 +144,7 @@ class BackupService(
         val backup = Backups.decode(text, stores.shapes) ?: return "That isn't a Decrastination backup (or it's from a newer version)."
         Backups.problem(backup)?.let { return "Nothing was restored: $it." }
         changeSettings { Backups.importedSettings(it, backup) }
-        val (restored, unclear) = restoreInstructions(backup.instructions)
+        val (restored, unclear, asTheyWere) = restoreInstructions(backup.instructions)
         // Your own tasks not here already: no source can give them back. The instructions' say is laid
         // over them afresh, from those in use here.
         val ownAdded = Backups.restoredOwnTasks(backup.ownTasks, stores.tasks.value.tasks).map { it.id }.toSet()
@@ -201,6 +203,7 @@ class BackupService(
             if (felixLeft > 0) add("$felixLeft of the backup's notes and reminders left out, past what the app keeps")
             if (restored > 0) add("$restored instruction${if (restored == 1) "" else "s"} restored")
             if (unclear > 0) add("$unclear left unapplied under Your changes in Felix's chat, as ${if (unclear == 1) "it" else "they"} would have tasks wait for each other in a circle")
+            if (asTheyWere > 0) add("$asTheyWere not in use back as ${if (asTheyWere == 1) "it was" else "they were"} under Your changes in Felix's chat")
         }.takeIf { it.isNotEmpty() }?.joinToString(", ", prefix = " ", postfix = ".") ?: ""
         // Today's slots, restored the same day (AR-07).
         val today = Instant.ofEpochMilli(clock.now()).atZone(clock.zone()).toLocalDate().toString()
@@ -226,18 +229,20 @@ class BackupService(
     }
 
     /**
-     * A backup's instructions in use ([backed]) taken in, in the order they were applied, each as
+     * A backup's instructions ([backed]) taken in: those in use in the order they were applied, each as
      * applying it here would go: one already here is left as it is; one that would have tasks wait
      * for each other in a circle with those here comes back unclear, saying so. The rest are
-     * applied, due dates too (yours to change, D-46). Says how many were applied, and how many
-     * are unclear.
+     * applied, due dates too (yours to change, D-46). Those not in use (a reset's copy holds them)
+     * come back as they were. Says how many were applied, how many came back unclear for a circle,
+     * and how many came back as they were.
      */
-    private suspend fun restoreInstructions(backed: List<Instruction>): Pair<Int, Int> = applying.withLock {
+    private suspend fun restoreInstructions(backed: List<Instruction>): Triple<Int, Int, Int> = applying.withLock {
         val added = Backups.restoredInstructions(backed, stores.instructions.value.instructions)
         stores.replace(stores.instructions) { state -> state.copy(instructions = state.instructions + added.filter { a -> state.instructions.none { it.id == a.id } }) }
+        val inUse = backed.filter { it.state == InstructionStatus.Applied }.mapTo(HashSet()) { it.id }
         val applied = added.count { it.state == InstructionStatus.Applied }
         if (applied > 0) layInstructions()
-        applied to added.count { it.state == InstructionStatus.Unclear }
+        Triple(applied, added.count { it.state == InstructionStatus.Unclear && it.id in inUse }, added.count { it.id !in inUse })
     }
 
     /** Raised at each reset of the record (LR-08), so a review already out when it came doesn't put back what it took. */
@@ -255,9 +260,23 @@ class BackupService(
         // To the second: two resets the same day each keep their copy.
         val stamp = Instant.ofEpochMilli(now).atZone(clock.zone()).format(DateTimeFormatter.ofPattern("yyyy-MM-dd-HHmmss", Locale.UK))
         val name = "reset-$stamp.json"
-        // The chat's archive read whole for it: off the main thread a reset's asked from.
-        val whole = withContext(Dispatchers.IO) { backupOf() }
-        val (text, leftOut) = Backups.fitted(whole, backupCap)
+        // Made, fitted and checked off the main thread a reset's asked from: the chat's archive read whole for it, and the
+        // copy (up to 8 MB) encoded, then decoded as Import reads it. Every instruction in it, in use or not, so none a
+        // reset of them takes is lost.
+        val (whole, fitted, refused) = withContext(Dispatchers.IO) {
+            val whole = backupOf(every = true)
+            val fitted = Backups.fitted(whole, backupCap)
+            val refused = when {
+                // Over the cap even without the chat's earlier messages, it couldn't be read back: nothing's reset.
+                fitted.first.toByteArray(Charsets.UTF_8).size > backupCap -> "Nothing was reset: a copy of it would be too big to restore."
+                // Nor where Import would refuse it (a part it can't read, something the app never writes): checked as Import checks.
+                else -> Backups.decode(fitted.first, stores.shapes).let { decoded -> if (decoded == null) "it couldn't be read back" else Backups.problem(decoded) }
+                    ?.let { "Nothing was reset: a copy of it couldn't be restored ($it)." }
+            }
+            Triple(whole, fitted, refused)
+        }
+        refused?.let { return@withContext it }
+        val (text, leftOut) = fitted
         val all = what == Reset.Everything
         // Nothing goes till its copy is somewhere it can be restored from.
         val saved = keep(name, text) ?: return@withContext "Nothing was reset: a copy of it couldn't be saved first."

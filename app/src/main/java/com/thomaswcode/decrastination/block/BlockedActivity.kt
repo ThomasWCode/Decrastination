@@ -187,7 +187,7 @@ class BlockedActivity : ComponentActivity() {
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             when (reason) {
                 BlockPolicy.Reason.TodayUndone -> {
-                    if (spilled) Text("A slot you missed went to tomorrow, so tonight stays blocked.", style = MaterialTheme.typography.bodyMedium)
+                    if (spilled) Text("A slot you missed has no time left today, so tonight stays blocked.", style = MaterialTheme.typography.bodyMedium)
                     if (today.isNotEmpty()) Text("While today's work isn't done, blocking is strict. Today:", style = MaterialTheme.typography.bodyMedium)
                     today.take(12).forEach { Text("• ${it.label} (${Format.minutes(it.minutes)})", style = MaterialTheme.typography.bodySmall) }
                     if (today.size > 12) Text("and ${today.size - 12} more", style = MaterialTheme.typography.bodySmall)

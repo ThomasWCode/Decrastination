@@ -126,7 +126,7 @@ class Stores(
         Kept("anki.json", backup = null, why = "what AnkiDroid showed this phone"),
         Kept("learning.json", backup = "the calibration", resets = setOf(Reset.Stats, Reset.Calibration)),
         Kept("log.json", backup = "all of it", resets = setOf(Reset.Stats)),
-        Kept("instructions.json", backup = "the instructions in use", resets = setOf(Reset.Instructions)),
+        Kept("instructions.json", backup = "the instructions in use (a reset's copy: every one)", resets = setOf(Reset.Instructions)),
         Kept("chat.json", backup = "all of it, Felix's state with it", resets = setOf(Reset.Chat)),
         Kept("chat-archive.json", backup = "the chat's earlier messages, while the backup has room for them, the oldest left out first", resets = setOf(Reset.Chat)),
         Kept("school.json", backup = "all of it"),
