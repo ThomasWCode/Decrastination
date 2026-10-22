@@ -74,6 +74,9 @@ class RebalanceTest {
         val other = task(*pair, id = "teams:other")
         val both = listOf(piece(), piece(1), piece(0, "teams:other"), piece(1, "teams:other"))
         assertEquals(listOf("teams:sheet"), Rebalance.candidates(plan(chunks = both), listOf(task(*pair), other), emptySet(), now).map { it.taskId })
+        // Taken in the day's order of their pieces, the more urgent first, not the store's.
+        val urgentFirst = listOf(piece(0, "teams:other"), piece(1, "teams:other"), piece(), piece(1))
+        assertEquals(listOf("teams:other"), Rebalance.candidates(plan(chunks = urgentFirst), listOf(task(*pair), other), emptySet(), now).map { it.taskId })
         // With lunch free too, the second has it.
         val lunch = Gap(Fixtures.at("2026-10-13T13:15"), 25)
         val two = Rebalance.candidates(plan(gaps = listOf(breakTime, lunch), chunks = both), listOf(task(*pair), other), emptySet(), now)

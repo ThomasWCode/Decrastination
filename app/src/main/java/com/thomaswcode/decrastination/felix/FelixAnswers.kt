@@ -25,9 +25,12 @@ object FelixAnswers {
         return bounded(answer, maxMessage)
     }
 
-    /** The steps he rebalanced in [text], a morning's answer (D-110), at most [Rebalance.MAX_ASKED]: each checked against what he was asked about as it's made. */
+    /**
+     * The steps he rebalanced in [text], a morning's answer (D-110), every one: each is checked against what he
+     * was asked about as it's made, and one that isn't keeps his message, which may name it, from being sent.
+     */
     fun rebalances(text: String): List<Rebalance.Given> =
-        runCatching { json.decodeFromString(Rebalances.serializer(), text).rebalances }.getOrDefault(emptyList()).take(Rebalance.MAX_ASKED)
+        runCatching { json.decodeFromString(Rebalances.serializer(), text).rebalances }.getOrDefault(emptyList())
 
     @Serializable
     private data class Rebalances(val rebalances: List<Rebalance.Given> = emptyList())
