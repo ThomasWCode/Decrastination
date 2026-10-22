@@ -181,7 +181,10 @@ data class Chunk(
 data class Sitting(val after: Int, val title: String)
 
 /** Free time at school today, from [start], [minutes] long ([DayBucket.gaps]). */
-data class Gap(val start: Long, val minutes: Int)
+data class Gap(val start: Long, val minutes: Int) {
+    /** When it ends: what stays the same of one under way as the clock moves on. */
+    val end: Long get() = start + minutes * 60_000L
+}
 
 /** What lets a kept slot earn (BL-08). */
 enum class EarnsBy {
