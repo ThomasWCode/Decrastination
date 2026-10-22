@@ -230,8 +230,9 @@ class Looks(
         val made = mutableListOf<Instruction>()
         val proposals = result.rebalances.sortedBy { given -> rebalance.firstOrNull { it.taskId == given.taskId && it.index == given.stepIndex }?.gap?.start ?: Long.MAX_VALUE }.mapNotNull { given ->
             val asked = rebalance.firstOrNull { it.taskId == given.taskId && it.index == given.stepIndex } ?: return@mapNotNull null
-            // The same free time too: his message names the one he was shown.
-            val candidate = current.firstOrNull { it.taskId == asked.taskId && it.index == asked.index && it.first == asked.first && it.second == asked.second && it.gap == asked.gap } ?: return@mapNotNull null
+            // The same free time too, by its end (one under way starts later as the clock moves on): his
+            // message names the one he was shown, and his minutes are checked against what's left of it.
+            val candidate = current.firstOrNull { it.taskId == asked.taskId && it.index == asked.index && it.first == asked.first && it.second == asked.second && it.gap.end == asked.gap.end } ?: return@mapNotNull null
             if (made.any { it.changes.single().taskId == candidate.taskId }) return@mapNotNull null
             val steps = known[candidate.taskId]?.let { Rebalance.steps(it, candidate, given) } ?: return@mapNotNull null
             val tried = Rebalance.instruction(candidate, steps, back)
