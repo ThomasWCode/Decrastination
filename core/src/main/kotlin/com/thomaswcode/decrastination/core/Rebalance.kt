@@ -101,6 +101,34 @@ object Rebalance {
         }
     }
 
+    /** [candidate]'s rebalance into [steps] as his Steps change, at [at]: to try a plan with ([laidAsOffered]) before it's made. */
+    fun instruction(candidate: Candidate, steps: List<OwnStep>, at: Long): Instruction = Instruction(
+        "rebalance:${candidate.taskId}", "", at = at, state = InstructionStatus.Applied,
+        changes = listOf(Change(ChangeType.Steps, taskId = candidate.taskId, steps = steps)), appliedAt = at, by = By.Felix,
+    )
+
+    /**
+     * Whether [plan], tried with [candidate]'s rebalance, lays its first step in the free time it was offered,
+     * with the rest the slots keep after it before the next work (a long one once its run reaches
+     * `slotLongBreakAfterMin`, counted over any window, the cautious way): else his message, which names
+     * that time, wouldn't be true, or a rest would be cut short by a slot that can't move.
+     */
+    fun laidAsOffered(plan: Plan, candidate: Candidate, settings: Settings): Boolean {
+        val work = plan.todaySlots.filter { it.kind == SlotKind.Work }.sortedBy { it.start }
+        val slot = work.firstOrNull { it.chunk?.taskId == candidate.taskId && it.chunk?.stepIndex == candidate.index } ?: return false
+        if (slot.start < candidate.gap.start || slot.end > candidate.gap.start + candidate.gap.minutes * MINUTE) return false
+        var run = ((slot.end - slot.start) / MINUTE).toInt()
+        var from = slot.start
+        for (before in work.filter { it.end <= slot.start }.asReversed()) {
+            if (from - before.end >= settings.slotLongBreakMin * MINUTE) break
+            run += ((before.end - before.start) / MINUTE).toInt()
+            from = before.start
+        }
+        val rest = if (run >= settings.slotLongBreakAfterMin) settings.slotLongBreakMin else settings.slotBreakMin
+        val next = work.firstOrNull { it.start >= slot.end && it != slot } ?: return true
+        return next.start - slot.end >= rest * MINUTE
+    }
+
     /** What a rebalance made, as its card under his message says it. */
     fun line(candidate: Candidate, given: Given): String =
         "“${candidate.title}”: “${given.firstTitle.trim()}” (${given.firstMinutes} min), then “${given.secondTitle.trim()}” (${given.secondMinutes} min)"

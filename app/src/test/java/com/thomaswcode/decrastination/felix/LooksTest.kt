@@ -168,6 +168,23 @@ class LooksTest {
         assertEquals(emptyList(), stores.instructions.value.instructions)
     }
 
+    @Test
+    fun `a rebalance whose first step a plan tried with it would lay elsewhere isn't made, nor his words for it sent`() = runBlocking {
+        // Two worksheets: the first is shown break, the second lunch. He rebalances the second alone, and
+        // break, left free, would take its first step: not the lunch his message names.
+        worksheetInSteps()
+        stores.tasks.update { s -> s.copy(tasks = s.tasks + s.tasks.single().copy(id = "teams:sheet2", sourceId = "sheet2", title = "Waves worksheet")) }
+        felix.answers(
+            """{"message":"morning. waves q1 at lunch.","replies":[],"nextCheckMin":null,"memories":[],
+              "rebalances":[{"taskId":"teams:sheet2","stepIndex":0,"firstTitle":"Question 1","firstMinutes":20,"secondTitle":"Questions 2 and 3","secondMinutes":45}]}""",
+        )
+        assertFalse(felix.looks.morning())
+        val asked = felix.server.takeRequest().body.readUtf8()
+        assertTrue("teams:sheet | Forces worksheet | 0" in asked && "teams:sheet2 | Waves worksheet | 0" in asked && "13:15, 25 min" in asked, asked)
+        assertEquals(emptyList(), stores.chat.value.messages)
+        assertEquals(emptyList(), stores.instructions.value.instructions)
+    }
+
     /**
      * A school day's 07:00: the worksheet, due tomorrow morning, in two of his steps; 45 minutes is longer
      * than break (30) or either lunch (25 and 40), so its first is tonight's.
