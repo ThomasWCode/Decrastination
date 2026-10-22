@@ -226,7 +226,8 @@ class Looks(
         val known = tasks.value.tasks.associateBy { it.id }
         val proposals = result.rebalances.mapNotNull { given ->
             val asked = rebalance.firstOrNull { it.taskId == given.taskId && it.index == given.stepIndex } ?: return@mapNotNull null
-            val candidate = current.firstOrNull { it.taskId == asked.taskId && it.index == asked.index && it.first == asked.first && it.second == asked.second } ?: return@mapNotNull null
+            // The same free time too: his message names the one he was shown.
+            val candidate = current.firstOrNull { it.taskId == asked.taskId && it.index == asked.index && it.first == asked.first && it.second == asked.second && it.gap == asked.gap } ?: return@mapNotNull null
             val steps = known[candidate.taskId]?.let { Rebalance.steps(it, candidate, given) } ?: return@mapNotNull null
             Proposal(UUID.randomUUID().toString(), changes = listOf(Change(ChangeType.Steps, taskId = candidate.taskId, steps = steps)), lines = listOf(Rebalance.line(candidate, given)), instant = true)
         }.distinctBy { it.changes.single().taskId }

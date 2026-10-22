@@ -60,6 +60,10 @@ class RebalanceTest {
         assertEquals(emptyList(), Rebalance.candidates(plan(chunks = listOf(piece().copy(hard = true, deadline = Fixtures.at("2026-10-13T10:50")), piece(1))), listOf(task(*pair)), emptySet(), now))
         // Laid at other minutes than the step's own (shared out to a total you gave, or shortened by work): his wouldn't be the ones laid.
         assertEquals(emptyList(), Rebalance.candidates(plan(chunks = listOf(piece().copy(minutes = 30), piece(1))), listOf(task(*pair)), emptySet(), now))
+        // Held at a time you gave later today: the pin would keep it there.
+        val pinned = Slot(SlotKind.Work, piece(), Fixtures.at("2026-10-13T17:00"), Fixtures.at("2026-10-13T17:40"), WindowKind.Evening, pinned = true)
+        assertEquals(emptyList(), Rebalance.candidates(plan(slots = listOf(pinned)), listOf(task(*pair)), emptySet(), now))
+        assertEquals(emptyList(), Rebalance.candidates(plan(chunks = listOf(piece().copy(why = Why.Pinned), piece(1))), listOf(task(*pair)), emptySet(), now))
         // Its slot today before the free time: nothing to gain.
         val early = Slot(SlotKind.Work, piece(), Fixtures.at("2026-10-13T08:50"), Fixtures.at("2026-10-13T09:30"), WindowKind.Study, pinned = false)
         assertEquals(emptyList(), Rebalance.candidates(plan(slots = listOf(early)), listOf(task(*pair)), emptySet(), now))
