@@ -103,6 +103,12 @@ class RebalanceTest {
         // One of its steps still to do over an hour as planned: laid in sittings, which his never are, so not asked about.
         val long = task(step("Questions 1 and 2", 30, StepOrigin.Reading), step("Question 3", 20, StepOrigin.Reading), step("Write it up", 50, StepOrigin.Reading))
         assertEquals(emptyList(), Rebalance.candidates(plan(chunks = listOf(piece().copy(minutes = 45), piece(1).copy(minutes = 30))), listOf(long), emptySet(), now, paced))
+        // Two that his split could leave with a second over an hour (40 and 50 minutes: 20 and 70), which as his would be
+        // laid whole: not asked about. His own may (D-34).
+        val wide = { origin: StepOrigin -> task(step("Questions 1 and 2", 40, origin), step("Questions 3 to 6", 50, origin)) }
+        val wideChunks = listOf(piece().copy(minutes = 40), piece(1).copy(minutes = 50))
+        assertEquals(emptyList(), Rebalance.candidates(plan(chunks = wideChunks), listOf(wide(StepOrigin.Reading)), emptySet(), now))
+        assertEquals(1, Rebalance.candidates(plan(chunks = wideChunks), listOf(wide(StepOrigin.Felix)), emptySet(), now).size)
         // A step whose sections an Anki deck holds is the deck's work: as his step it would be planned twice, so not asked about.
         val vocab = task(step("Questions 1 and 2", 30, StepOrigin.Reading), step("Question 3", 20, StepOrigin.Reading), step("Vocabulary", 15, StepOrigin.Rules).copy(ankiSections = listOf("1.1")))
         assertEquals(emptyList(), Rebalance.candidates(plan(chunks = listOf(piece().copy(minutes = 45), piece(1).copy(minutes = 30))), listOf(vocab), emptySet(), now, paced))
