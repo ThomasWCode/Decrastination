@@ -28,7 +28,7 @@ data class TaskState(
      */
     val timetable: Timetable? = null,
     /** The shape this is in ([Migration]): raised with each change of it, a migration bringing older files to it. */
-    val version: Int = 2,
+    val version: Int = 3,
 ) {
     val open: List<TaskItem> get() = tasks.filter { it.isOpen }
 

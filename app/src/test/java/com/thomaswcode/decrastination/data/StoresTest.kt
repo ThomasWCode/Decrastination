@@ -52,27 +52,27 @@ class StoresTest {
     fun `the tasks keep the timetable they were last read with`() = runTest {
         val file = File(dir, "tasks.json")
         val timetable = Timetable("2026-08-24T00:00:00", listOf(PpClass("c", "Study Period", listOf(PpSchedule("2026-09-05T08:50:00", "2026-09-05T09:45:00", dayOfWeek = 2)))))
-        JsonStore(file, TaskState.serializer(), ::TaskState, migrations = listOf(TasksMigration.TASKS)).update { it.copy(timetable = timetable) }
-        assertEquals(timetable, JsonStore(file, TaskState.serializer(), ::TaskState, migrations = listOf(TasksMigration.TASKS)).value.timetable)
+        JsonStore(file, TaskState.serializer(), ::TaskState, migrations = listOf(TasksMigration.TASKS, StepOrderMigration.TASKS)).update { it.copy(timetable = timetable) }
+        assertEquals(timetable, JsonStore(file, TaskState.serializer(), ::TaskState, migrations = listOf(TasksMigration.TASKS, StepOrderMigration.TASKS)).value.timetable)
     }
 
     @Test
     fun `an unreadable file is set aside and the state starts afresh`() = runTest {
         val file = File(dir, "tasks.json").apply { writeText("{not json") }
-        val store = JsonStore(file, TaskState.serializer(), ::TaskState, clock = { AT }, migrations = listOf(TasksMigration.TASKS))
+        val store = JsonStore(file, TaskState.serializer(), ::TaskState, clock = { AT }, migrations = listOf(TasksMigration.TASKS, StepOrderMigration.TASKS))
         assertEquals(TaskState(), store.value)
         val problem = store.problem!!
         assertEquals("tasks.json.unreadable-20261011-083000", problem.copy)
         assertEquals("{not json", File(dir, problem.copy!!).readText())
         assertFalse(problem.kept)
         // Not replaced till it's on record: a start cut short before then finds it again, with the same copy.
-        assertEquals(problem.copy, JsonStore(file, TaskState.serializer(), ::TaskState, clock = { AT + 1000 }, migrations = listOf(TasksMigration.TASKS)).problem?.copy)
+        assertEquals(problem.copy, JsonStore(file, TaskState.serializer(), ::TaskState, clock = { AT + 1000 }, migrations = listOf(TasksMigration.TASKS, StepOrderMigration.TASKS)).problem?.copy)
         // On record: what it started from is the file now, and the next start reads it, with nothing to say.
         store.keepRecovered()
-        assertNull(JsonStore(file, TaskState.serializer(), ::TaskState, clock = { AT + 2000 }, migrations = listOf(TasksMigration.TASKS)).problem)
+        assertNull(JsonStore(file, TaskState.serializer(), ::TaskState, clock = { AT + 2000 }, migrations = listOf(TasksMigration.TASKS, StepOrderMigration.TASKS)).problem)
         assertEquals(1, dir.listFiles { f -> f.name.startsWith("tasks.json.unreadable-") }!!.size)
         // A file that reads is no problem.
-        assertNull(JsonStore(File(dir, "other.json").apply { writeText("{}") }, TaskState.serializer(), ::TaskState, migrations = listOf(TasksMigration.TASKS)).problem)
+        assertNull(JsonStore(File(dir, "other.json").apply { writeText("{}") }, TaskState.serializer(), ::TaskState, migrations = listOf(TasksMigration.TASKS, StepOrderMigration.TASKS)).problem)
     }
 
     @Test
@@ -172,7 +172,7 @@ class StoresTest {
         assertEquals(stores.all.size, stores.all.map { it.file }.toSet().size)
         // Every JSON store's shape is known to a backup, at the version its state says, each with a migration from every one before.
         assertEquals(made - "secrets.bin", stores.shapes.keys)
-        assertEquals(mapOf("calendar.json" to 2, "chat.json" to 6, "chat-archive.json" to 5, "instructions.json" to 2, "log.json" to 3, "memory.json" to 2, "runtime.json" to 3, "settings.json" to 2, "tasks.json" to 2), stores.shapes.filterValues { it.version > 1 }.mapValues { it.value.version })
+        assertEquals(mapOf("calendar.json" to 2, "chat.json" to 7, "chat-archive.json" to 6, "instructions.json" to 3, "log.json" to 3, "memory.json" to 2, "runtime.json" to 3, "settings.json" to 2, "tasks.json" to 3), stores.shapes.filterValues { it.version > 1 }.mapValues { it.value.version })
         assertTrue(stores.shapes.values.all { Migration.complete(it.version, it.migrations) })
         // And each is said in words when it can't be read, not by its file's name.
         for (file in made) assertTrue(!JsonStore.Unreadable(file, null, kept = false, at = 0).says.startsWith(file), file)

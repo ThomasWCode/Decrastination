@@ -167,7 +167,7 @@ data class Change(
 data class InstructionState(
     val instructions: List<Instruction> = emptyList(),
     /** The shape this is in ([com.thomaswcode.decrastination.data.Migration]): raised with each change of it. */
-    val version: Int = 2,
+    val version: Int = 3,
 ) {
     /** Every step a change holds with an id ([withIds]): given as it's first stored, so the task steps it's laid as keep it. */
     fun withStepIds(): InstructionState {

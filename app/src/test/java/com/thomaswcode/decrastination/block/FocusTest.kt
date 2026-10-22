@@ -3,6 +3,7 @@ package com.thomaswcode.decrastination.block
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
 import com.thomaswcode.decrastination.core.Calibration
+import com.thomaswcode.decrastination.data.StepOrderMigration
 import java.time.LocalDate
 import com.thomaswcode.decrastination.core.yours
 import com.thomaswcode.decrastination.data.LearningState
@@ -57,7 +58,7 @@ import kotlinx.coroutines.test.runTest
 class FocusTest {
     private val dir: File = Files.createTempDirectory("focus").toFile()
     private val clock = FixedClock(Fixtures.at("2026-10-10T12:00"), LONDON)
-    private val tasks = JsonStore(File(dir, "tasks.json"), TaskState.serializer(), ::TaskState, migrations = listOf(TasksMigration.TASKS))
+    private val tasks = JsonStore(File(dir, "tasks.json"), TaskState.serializer(), ::TaskState, migrations = listOf(TasksMigration.TASKS, StepOrderMigration.TASKS))
     private val settings = JsonStore(File(dir, "settings.json"), Settings.serializer(), ::Settings, migrations = listOf(SettingsMigration.SETTINGS))
     private val protection = JsonStore(File(dir, "protection.json"), ProtectionState.serializer(), ::ProtectionState)
     private val session = JsonStore(File(dir, "session.json"), SessionState.serializer(), ::SessionState)
