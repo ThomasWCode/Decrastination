@@ -577,6 +577,9 @@ class InstructionRulesTest {
         val change = InstructionAnswers.change(given, mapOf(own.id to ticked), emptyMap(), Fixtures.at("2026-10-12T17:00"), Fixtures.LONDON)!!
         assertEquals(listOf("Plan", "Draft", "Polish"), change.steps!!.map { it.title })
         assertEquals("“Essay” in steps: Plan (20 min), Draft (30 min), Polish (10 min)", InstructionRules.describe(change, mapOf(own.id to ticked), Fixtures.LONDON))
+        // A step that doesn't need the ones before it says so (D-109).
+        val free = change.copy(steps = change.steps!!.mapIndexed { i, s -> if (i == 1) s.copy(anyOrder = true) else s })
+        assertEquals("“Essay” in steps: Plan (20 min), Draft (30 min, in any order), Polish (10 min)", InstructionRules.describe(free, mapOf(own.id to ticked), Fixtures.LONDON))
         val draft = OwnTaskRules.draftWith(ticked, change)!!
         val made = OwnTaskRules.edited(ticked, draft)
         assertEquals(listOf("Plan" to true, "Draft" to false, "Polish" to false), made.subSteps.map { it.title to it.done })

@@ -165,6 +165,10 @@ class ReadingAnswersTest {
         assertEquals(120, short.effortMin)
         assertEquals(140, long.subSteps!!.sumOf { it.minutes })
         assertTrue(long.subSteps!!.last().title.startsWith("The rest: Question 12"))
+        // The rest keep the mark only where every one of them had it (D-109).
+        assertEquals(false, long.subSteps!!.last().anyOrder)
+        val free = (1..14).joinToString(",") { """{"title":"Question $it","minutes":10,"ankiSections":[],"anyOrder":${it > 1}}""" }
+        assertEquals(true, parse(Enrichments.Job.Assignment, """{"subSteps":[$free],"effortMin":140,"ankiSections":[],"testDate":null}""", task)!!.subSteps!!.last().anyOrder)
         // A test's day: done before school that morning.
         assertEquals(Fixtures.at("2026-10-12T08:30"), e.testDate)
         assertEquals(40, e.effortMin)

@@ -337,6 +337,8 @@ object ReadingAnswers {
                     ("The rest: " + run.joinToString("; ") { it.title }).take(MAX_TITLE),
                     run.sumOf { it.minutes },
                     where = if (run.any { Where.of(it.where) == Where.Home }) "home" else run.map { it.where }.distinct().singleOrNull(),
+                    // Free of the steps before it only where every one of them was (D-109).
+                    anyOrder = run.all { it.anyOrder },
                 )
             }
             run.clear()
