@@ -362,6 +362,11 @@ class SlotterTest {
         val long = settings.copy(slotLongBreakAfterMin = 30)
         assertEquals(listOf("09:45" to 45), Slotter.schoolGaps(LocalDate.parse(tuesday), study, emptyList(), listOf(first), Fixtures.at("2026-10-13T07:00"), LONDON, long).map { hm(it.start) to it.minutes })
         assertEquals(listOf("09:35" to 55), Slotter.schoolGaps(LocalDate.parse(tuesday), study, emptyList(), listOf(first), Fixtures.at("2026-10-13T07:00"), LONDON, settings).map { hm(it.start) to it.minutes })
+        // Two study periods five minutes apart are two runs, as they're laid: the second's slot keeps a short break.
+        val two = listOf(w("09:00", "09:30", WindowKind.Study), w("09:35", "10:30", WindowKind.Study))
+        val second = Slot(SlotKind.Work, chunk("c", 20), Fixtures.at("2026-10-13T09:35"), Fixtures.at("2026-10-13T09:55"), WindowKind.Study, pinned = false)
+        val longer = settings.copy(slotLongBreakAfterMin = 45)
+        assertEquals(listOf("10:00" to 30), Slotter.schoolGaps(LocalDate.parse(tuesday), two, emptyList(), listOf(first, second), Fixtures.at("2026-10-13T07:00"), LONDON, longer).map { hm(it.start) to it.minutes })
     }
 
     @Test
