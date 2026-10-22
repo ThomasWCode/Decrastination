@@ -24,7 +24,7 @@ Breaks are kept around each piece within its window: `slotBreakMin` (5) before a
 What's laid, in turn:
 1. Outside breaks, on a weekend or a day off school.
 2. Pins: pieces at a time you gave (PL-04).
-3. Today's starts kept from the last plan (PL-13): a step's only where it follows the steps before it; a task whose kept starts aren't in its steps' order (as a plan before D-108 could lay them) is laid afresh.
+3. Today's starts kept from the last plan (PL-13): a step's only where it follows the steps before it; a task whose kept starts aren't in its steps' order (as a plan before D-108 could lay them) is laid afresh, its steps pinned today or begun aside, as they may stand ahead of the steps before them.
 4. The rest, in order, each task's steps in theirs whatever the day's order between tasks: a step at its kept start where that's still free and follows the steps before it (one of them moved, a missed one say), else at the first free time after them.
 
 ## Outside breaks
