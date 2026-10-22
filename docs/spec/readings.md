@@ -45,7 +45,7 @@ The Assignment prompt asks for the steps the student will actually do, as few as
 - dates on a step only where the instructions give them, and none after the hand-in.
 - Learning numbered vocabulary is a step of its own, its sections in `ankiSections`: the planner leaves it out where your Anki deck tasks hold them. A step asking for anything else too is planned whole (`AnkiRules.vocabularyOnly`).
 - **Where** (PL-15): each of an assignment's steps is "home" (the laptop, books or quiet) or "anywhere" (a free period at school). The planner keeps "home" steps out of school time (planner.md); a step without one, an email's or planner item's block included, goes by its task's.
-- **In any order** (D-109): each step and block says whether it needs the ones before it done first (`anyOrder`): true for a separate piece of work (separate questions or exercises, a reading task beside vocabulary to learn, separate applications), false for one that builds on them, and for the first. A day's slots may lay one marked so ahead of them (slots-and-calendar.md).
+- **In any order** (D-109): each step and block says whether it needs the ones before it done first (`anyOrder`): true for a separate piece of work (separate questions or exercises, a reading task beside vocabulary to learn, separate applications), false for one that builds on them, and for the first; of a step or block cut into parts as it's read, only the first part keeps it. A day's slots may lay one marked so, in one piece, ahead of them (slots-and-calendar.md).
 
 Emails' and planner items' blocks follow the same rule: only separately dated pieces, never one job cut up.
 

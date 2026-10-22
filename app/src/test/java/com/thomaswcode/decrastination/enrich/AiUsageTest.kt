@@ -138,6 +138,8 @@ class AiUsageTest {
         // An hour or less is one sitting.
         assertEquals(listOf(step.copy(minutes = 60)), ReadingAnswers.fitParts(step.copy(minutes = 60)))
         assertEquals(listOf(31, 30), ReadingAnswers.fitParts(step.copy(minutes = 61)).map { it.minutes })
+        // Free of the steps before it (D-109), its first part alone is: the rest follow it.
+        assertEquals(listOf(true, false, false), ReadingAnswers.fitParts(step.copy(minutes = 150, anyOrder = true)).map { it.anyOrder })
     }
 
     @Test

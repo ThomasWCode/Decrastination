@@ -117,7 +117,8 @@ object ReadingAnswers {
         val parts = Sittings.count(step.minutes)
         if (parts <= 1) return listOf(step)
         val minutes = Sittings.even(step.minutes, parts)
-        return Sittings.titles(step.title, parts, finishes = true).mapIndexed { i, title -> step.copy(title = title.take(MAX_TITLE), minutes = minutes[i]) }
+        // Only its first part may be free of the steps before it (D-109): the rest follow it.
+        return Sittings.titles(step.title, parts, finishes = true).mapIndexed { i, title -> step.copy(title = title.take(MAX_TITLE), minutes = minutes[i], anyOrder = step.anyOrder && i == 0) }
     }
 
     /**

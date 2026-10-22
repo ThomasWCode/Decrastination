@@ -338,13 +338,14 @@ class SlotterTest {
     }
 
     @Test
-    fun `a step that doesn't need the ones before it keeps its own sittings in order`() {
-        // Reading in two sittings, free of the questions before it: its first at lunch, its second after the first.
+    fun `a step that doesn't need the ones before it but is in sittings follows them, its sittings counted on the steps in order`() {
+        // Reading in two sittings, free of the questions before it: a sitting kept is counted on the first
+        // step still to do, so it waits for the questions; lunch's 25 minutes stay free.
         val windows = listOf(w("13:15", "13:40", WindowKind.Break), w("17:00", "22:00"))
         val reading = step("reading", 1, 25).copy(anyOrder = true)
-        val steps = listOf(step("questions", 0, 60), reading.copy(title = "reading 1", sitting = Sitting(1, "reading")), reading.copy(title = "reading 2", part = 3))
+        val steps = listOf(step("questions", 0, 60), reading.copy(title = "reading 1", sitting = Sitting(1, "reading")), reading.copy(title = "reading 2", part = 3, sitting = Sitting(0, "reading")))
         val (slots, _) = slot(tuesday, steps, windows)
-        assertEquals(listOf("reading 1 13:15–13:40", "questions 17:00–18:00", "reading 2 18:05–18:30"), slots.described())
+        assertEquals(listOf("questions 17:00–18:00", "reading 1 18:05–18:30", "reading 2 18:35–19:00"), slots.described())
     }
 
     @Test

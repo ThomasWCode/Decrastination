@@ -74,7 +74,7 @@ fun OwnTaskForm(graph: AppGraph, editing: TaskItem?, initial: OwnTask? = null, o
     var hours by rememberSaveable { mutableStateOf((start.minutes / 60).toString()) }
     var minutes by rememberSaveable { mutableStateOf((start.minutes % 60).toString()) }
     // Its steps as you change them (UI-15), kept through a turn of the phone as their words.
-    var stepsText by rememberSaveable { mutableStateOf(STEPS.encodeToString(ListSerializer(StepRow.serializer()), start.steps.mapIndexed { i, st -> StepRow(st.title, st.minutes.toString(), st.where, wasIndex = i.takeIf { editing != null }) })) }
+    var stepsText by rememberSaveable { mutableStateOf(STEPS.encodeToString(ListSerializer(StepRow.serializer()), start.steps.mapIndexed { i, st -> StepRow(st.title, st.minutes.toString(), st.where, wasIndex = i.takeIf { editing != null }, anyOrder = st.anyOrder) })) }
     val rows = STEPS.decodeFromString(ListSerializer(StepRow.serializer()), stepsText)
     fun setRows(next: List<StepRow>) { stepsText = STEPS.encodeToString(ListSerializer(StepRow.serializer()), next) }
     var picking by rememberSaveable { mutableStateOf<String?>(null) }
@@ -96,7 +96,7 @@ fun OwnTaskForm(graph: AppGraph, editing: TaskItem?, initial: OwnTask? = null, o
         // The steps as listed, each with its own dates as it had them.
         steps = rows.map { r ->
             val was = r.wasIndex?.let { start.steps.getOrNull(it) }
-            OwnStep(r.title.trim(), r.min, was?.from, was?.dueAt, r.where, id = was?.id.orEmpty(), wasIndex = r.wasIndex, anyOrder = was?.anyOrder == true)
+            OwnStep(r.title.trim(), r.min, was?.from, was?.dueAt, r.where, id = was?.id.orEmpty(), wasIndex = r.wasIndex, anyOrder = r.anyOrder)
         },
         fromForm = true,
     )
@@ -241,9 +241,12 @@ fun OwnTaskForm(graph: AppGraph, editing: TaskItem?, initial: OwnTask? = null, o
     }
 }
 
-/** A step as the form has it (UI-15): its words as typed, where it can be done, and the step it was. */
+/**
+ * A step as the form has it (UI-15): its words as typed, where it can be done, and the step it was; and
+ * whether it needs the steps before it (D-109), as Felix marked it, kept with the row, a task he proposed's too.
+ */
 @Serializable
-private data class StepRow(val title: String, val minutes: String, val where: String? = null, val wasIndex: Int? = null) {
+private data class StepRow(val title: String, val minutes: String, val where: String? = null, val wasIndex: Int? = null, val anyOrder: Boolean = false) {
     val min: Int get() = minutes.toIntOrNull() ?: 0
 }
 
