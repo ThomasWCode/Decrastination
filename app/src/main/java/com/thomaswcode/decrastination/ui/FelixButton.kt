@@ -19,7 +19,7 @@ import com.thomaswcode.decrastination.core.About
 
 /**
  * Felix on every screen (UI-16): his chat, about [about] (the task a screen is about, if it's one),
- * from a button of Material's standard size, 56 dp (your call, 16 Oct: the small one was 40), wearing
+ * from a button of Material's standard size, 56 dp (the small one was 40), wearing
  * how many of his messages are unread (docs/plan_v4/05-the-chat.md §4).
  */
 @Composable

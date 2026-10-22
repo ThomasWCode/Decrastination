@@ -1,6 +1,7 @@
 package com.thomaswcode.decrastination.learn
 
 import android.content.Context
+import android.util.Log
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.SchoolDays
@@ -56,7 +57,7 @@ object Briefing {
     suspend fun run(context: Context) {
         val graph = AppGraph.get(context)
         // What the night held back (LR-07), first thing.
-        runCatching { graph.notifier.postHeld() }.onFailure { android.util.Log.w(AppGraph.TAG, "Posting what was held back failed", it) }
+        runCatching { graph.notifier.postHeld() }.onFailure { Log.w(AppGraph.TAG, "Posting what was held back failed", it) }
         // The calendar read first: woken by its alarm, the app has had no time to read it yet.
         graph.sync.refreshCalendar()
         val now = graph.clock.now()
@@ -69,9 +70,9 @@ object Briefing {
         }
         graph.runtime.update { it.copy(teamsAuto = it.teamsAuto.copy(morningUntil = now + MORNING_OFFER_MS)) }
         val (title, lines) = summary(plan)
-        // Felix's sentence or two on the day in place of the list (LR-04, 16 Oct); without it, the list
+        // Felix's sentence or two on the day in place of the list (LR-04); without it, the list
         // in his name, in the app's words: every morning is in the chat.
-        val his = runCatching { graph.looks.morning(now) }.onFailure { android.util.Log.w(AppGraph.TAG, "Felix's morning message failed", it) }.getOrDefault(false)
+        val his = runCatching { graph.looks.morning(now) }.onFailure { Log.w(AppGraph.TAG, "Felix's morning message failed", it) }.getOrDefault(false)
         // Either way his notification's made again with it, and with what waited overnight for the
         // morning (LR-07), quiet hours that outlast the briefing or not ([Outbox.notice]).
         if (!his) graph.conversation.morningList(title, lines)

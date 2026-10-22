@@ -58,9 +58,9 @@ class Focus(
     private val clock: WallClock,
     /** One of your own whose work a kept slot finished (LR-09): finished, as Done does. */
     private val onOwnTaskDone: suspend (String) -> Unit = {},
-    /** A task's work moved on by a slot kept or a step ticked by hand: an email's all done is finished in Gmail (Stage 11). */
+    /** A task's work moved on by a slot kept or a step ticked by hand: an email's all done is finished in Gmail. */
     private val onWorked: suspend (String) -> Unit = {},
-    /** A keep or a tick of a task's taken back: an email's finish with it (Stage 11). */
+    /** A keep or a tick of a task's taken back: an email's finish with it. */
     private val onUnworked: suspend (String) -> Unit = {},
     /** Whether [LocalDate] is a school day (BL-02): by the school calendar; without one, Monday to Friday. */
     private val schoolDay: (LocalDate) -> Boolean = { it.dayOfWeek.value <= 5 },
@@ -335,7 +335,7 @@ class Focus(
         val index = chunk.stepIndex?.let { i -> stepAt(task, i, chunk.step.orEmpty()).takeIf { it >= 0 } ?: return null }
         // A sitting before its step's last ticks nothing: its minutes are worked on the step, as a
         // session stopped early's are. The last ticks it, with the step's sittings not kept before it
-        // (ticked ahead, or by the chat), as one piece of it would have been (3.1.2's review).
+        // (ticked ahead, or by the chat), as one piece of it would have been.
         val ticks = index?.takeIf { chunk.ticks != null }
         val rest = if (ticks == null) 0 else plan.chunksOf(chunk.taskId).filter { it.stepIndex == chunk.stepIndex && it.key != key }.sumOf { it.minutes }
         val worked = chunk.minutes + rest + extraMin.coerceAtLeast(0)
@@ -560,7 +560,7 @@ class Focus(
     }
 
     /**
-     * The piece [key] of [taskId] the photo check found done (Phase 5, BL-08): its slot kept, or a
+     * The piece [key] of [taskId] the photo check found done (BL-08): its slot kept, or a
      * kept one's free time earned. Saved first ([RuntimeState.photosDone]), so a stop part-way is
      * finished at start-up.
      */
@@ -601,7 +601,7 @@ class Focus(
     }
 
     /**
-     * The step of [taskId] at [index], still [title], to do again (16 Oct: Felix unticks it, or undoes
+     * The step of [taskId] at [index], still [title], to do again (Felix unticks it, or undoes
      * his tick): one ticked by keeping its slot has that slot taken back ([unkeepSlot]: its record
      * gone, its minutes off the task, the free time it earned given back as far as it's left); one
      * ticked by hand is to do again, with the minutes it kept back on the steps after it. With
@@ -760,7 +760,7 @@ class Focus(
             // Reading or archiving an email, or an event passing, isn't work that earns time. Free
             // time is for the day the work was confirmed: given late (the app stopped first), after
             // that day is over, it has gone as the rest of that day's has.
-            // Nor is a task of your own you said is done: no source confirms it (your call, 12 Oct); its
+            // Nor is a task of your own you said is done: no source confirms it (D-54); its
             // slots earned their time. Nor one done by its tick (NF-06), for the same reason.
             val earned = fresh.filter { it.kind != Kind.Info && it.kind != Kind.Event && it.source != Source.Own && !it.tickDone && today(it.doneAt ?: now) == today }.sumOf { task ->
                 // Less what its kept slots and photo checks already earned time for: as stored while it's still
@@ -795,7 +795,7 @@ class Focus(
                 }
                 // By your minutes or by the app's estimate, each in its own scale, the less: raising a
                 // task's minutes plans more time for it, but can't make finishing it earn more. The app's
-                // estimate leaves out your steps as well as your minutes (#49's review): yours are planned
+                // estimate leaves out your steps as well as your minutes: yours are planned
                 // as given, its by the pace learned.
                 val remaining = minOf(owed(counted), owed(counted.copy(mine = counted.mine.copy(minutes = null, steps = null))))
                 Credit.forCompletion(remaining.roundToInt().coerceAtLeast(0), ratio)
@@ -822,7 +822,7 @@ class Focus(
                         className = task.className,
                         // What was left of it when first seen: progress it already had isn't work done here,
                         // nor is vocabulary its decks hold (their own records learn from it). A total Felix
-                        // worked out at your pace, against the app's estimate it came from (17 Oct; #50's review).
+                        // worked out at your pace, against the app's estimate it came from.
                         estimateMin = ((if (task.pacedTeaches) task.mine.minutes?.paced?.from ?: task.appEffortMin else task.effortMin) * (1 - task.sourceProgress.coerceIn(0.0, 1.0)) - deckMinutes(task)).roundToInt().coerceAtLeast(1),
                         workedMin = worked(task),
                         // The deadline in force when it was done (a plan's gone by gives way to the real one

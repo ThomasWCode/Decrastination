@@ -1,14 +1,23 @@
 package com.thomaswcode.decrastination.debug
 
+import android.accounts.Account
 import android.app.Activity
 import android.app.admin.DevicePolicyManager
+import android.content.ContentResolver
+import android.content.ContentUris
+import android.content.ContentValues
 import android.content.Intent
 import android.os.Bundle
+import android.provider.CalendarContract
 import android.util.Log
 import androidx.core.net.toUri
+import com.anthropic.models.messages.OutputConfig
 import com.thomaswcode.decrastination.AppGraph
+import com.thomaswcode.decrastination.BuildConfig
 import com.thomaswcode.decrastination.block.FocusService
+import com.thomaswcode.decrastination.block.FreeTimeNotice
 import com.thomaswcode.decrastination.block.TeamsAutoSync
+import com.thomaswcode.decrastination.calendar.SlotCalendar
 import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.AnkiRules
 import com.thomaswcode.decrastination.core.ChangeType
@@ -56,10 +65,16 @@ import com.thomaswcode.decrastination.sources.gmail.GmailThreads
 import com.thomaswcode.decrastination.sync.SyncWorker
 import com.thomaswcode.decrastination.ui.OpenTaskActivity
 import com.thomaswcode.decrastination.core.GmailWrites
+import com.thomaswcode.decrastination.ui.minutesChange
 import java.io.File
+import java.time.DayOfWeek
+import java.time.Instant
+import java.time.LocalDateTime
+import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -104,7 +119,7 @@ import kotlinx.serialization.json.JsonPrimitive
  *   and applied once it's read; `instructions` logs them all with Claude's reading,
  *   `instruction-discard --es id <id|all>` discards those not applied, and
  *   `instruction-delete --es id <id>` takes one applied back, as *Take back* does.
- * - Your own tasks (2.0.0): `own-add --es title "<name>"` (with `--es due 2026-10-16T17:00`,
+ * - Your own tasks: `own-add --es title "<name>"` (with `--es due 2026-10-16T17:00`,
  *   `--ei minutes 45`, `--es kind Revision`), logging its id; `own-done`, `own-reopen` and
  *   `own-delete --es task <id>`; and `quick-minutes --es task <id> --ei minutes N` (`--ei minutes 0`
  *   takes it back), a task's minutes as its sheet sets them. `forget-task --es task own:<id>` leaves no
@@ -128,7 +143,7 @@ class CommandActivity : Activity() {
         val viaAlias = intent.component?.className == ALIAS
         val command = intent.getStringExtra("cmd")
         // The debug page's buttons (AR-03): from the app itself, as the activity isn't exported.
-        val fromDebugPage = !viaAlias && com.thomaswcode.decrastination.BuildConfig.DEBUG && command in PLAIN
+        val fromDebugPage = !viaAlias && BuildConfig.DEBUG && command in PLAIN
         // Starting another app's screen has to happen while this one is in front.
         if (viaAlias && command == "open") startActivity(OpenTaskActivity.intent(this, intent.getStringExtra("task")))
         finish()
@@ -164,11 +179,11 @@ class CommandActivity : Activity() {
             }
             "state" -> logState(graph)
             "anki-counts" -> logAnkiCounts()
-            // The plan's next seven days: each day's minutes, its slots and what has none (phase 3).
+            // The plan's next seven days: each day's minutes, its slots and what has none.
             "plan" -> {
                 val plan = graph.planning.plan()
                 val zone = graph.clock.zone()
-                fun hm(time: Long) = java.time.Instant.ofEpochMilli(time).atZone(zone).toLocalTime().toString()
+                fun hm(time: Long) = Instant.ofEpochMilli(time).atZone(zone).toLocalTime().toString()
                 for (bucket in plan.buckets.take(7)) {
                     val slots = bucket.slots.joinToString { "${it.kind} ${hm(it.start)}-${hm(it.end)} ${it.key}${if (it.pinned) " pinned" else ""}" }
                     Log.i(TAG, "plan ${bucket.date}: ${bucket.plannedMin} of ${bucket.capacityMin} min; slots [$slots]; unslotted ${bucket.unslotted.map { it.key }}")
@@ -181,14 +196,14 @@ class CommandActivity : Activity() {
                 val calendarId = graph.settings.value.calendarWriteId ?: return@withContext Log.w(TAG, "No calendar written to")
                 val zone = graph.clock.zone()
                 contentResolver.query(
-                    android.provider.CalendarContract.Events.CONTENT_URI,
-                    arrayOf(android.provider.CalendarContract.Events._ID, android.provider.CalendarContract.Events.CUSTOM_APP_URI, android.provider.CalendarContract.Events.DTSTART, android.provider.CalendarContract.Events.HAS_ALARM),
-                    "${android.provider.CalendarContract.Events.CALENDAR_ID} = ? AND ${android.provider.CalendarContract.Events.CUSTOM_APP_PACKAGE} = ? AND ${android.provider.CalendarContract.Events.DELETED} = 0",
-                    arrayOf(calendarId.toString(), packageName), android.provider.CalendarContract.Events.DTSTART,
+                    CalendarContract.Events.CONTENT_URI,
+                    arrayOf(CalendarContract.Events._ID, CalendarContract.Events.CUSTOM_APP_URI, CalendarContract.Events.DTSTART, CalendarContract.Events.HAS_ALARM),
+                    "${CalendarContract.Events.CALENDAR_ID} = ? AND ${CalendarContract.Events.CUSTOM_APP_PACKAGE} = ? AND ${CalendarContract.Events.DELETED} = 0",
+                    arrayOf(calendarId.toString(), packageName), CalendarContract.Events.DTSTART,
                 )?.use { c ->
                     while (c.moveToNext()) {
-                        val reminders = android.provider.CalendarContract.Reminders.query(contentResolver, c.getLong(0), arrayOf(android.provider.CalendarContract.Reminders.MINUTES))?.use { it.count } ?: 0
-                        Log.i(TAG, "calendar-written ${c.getString(1)} at ${java.time.Instant.ofEpochMilli(c.getLong(2)).atZone(zone).toLocalDateTime()}, hasAlarm ${c.getInt(3)}, reminders $reminders")
+                        val reminders = CalendarContract.Reminders.query(contentResolver, c.getLong(0), arrayOf(CalendarContract.Reminders.MINUTES))?.use { it.count } ?: 0
+                        Log.i(TAG, "calendar-written ${c.getString(1)} at ${Instant.ofEpochMilli(c.getLong(2)).atZone(zone).toLocalDateTime()}, hasAlarm ${c.getInt(3)}, reminders $reminders")
                     }
                 }
             }
@@ -197,22 +212,22 @@ class CommandActivity : Activity() {
             "calendar-sync" -> withContext(Dispatchers.IO) {
                 val accounts = mutableSetOf<Pair<String, String>>()
                 contentResolver.query(
-                    android.provider.CalendarContract.Calendars.CONTENT_URI,
-                    arrayOf(android.provider.CalendarContract.Calendars.ACCOUNT_NAME, android.provider.CalendarContract.Calendars.ACCOUNT_TYPE), null, null, null,
+                    CalendarContract.Calendars.CONTENT_URI,
+                    arrayOf(CalendarContract.Calendars.ACCOUNT_NAME, CalendarContract.Calendars.ACCOUNT_TYPE), null, null, null,
                 )?.use { c -> while (c.moveToNext()) accounts += c.getString(0).orEmpty() to c.getString(1).orEmpty() }
                 for ((name, type) in accounts.filter { it.second == "com.google" }) {
-                    val extras = android.os.Bundle().apply {
-                        putBoolean(android.content.ContentResolver.SYNC_EXTRAS_MANUAL, true)
-                        putBoolean(android.content.ContentResolver.SYNC_EXTRAS_EXPEDITED, true)
+                    val extras = Bundle().apply {
+                        putBoolean(ContentResolver.SYNC_EXTRAS_MANUAL, true)
+                        putBoolean(ContentResolver.SYNC_EXTRAS_EXPEDITED, true)
                     }
-                    runCatching { android.content.ContentResolver.requestSync(android.accounts.Account(name, type), android.provider.CalendarContract.AUTHORITY, extras) }
+                    runCatching { ContentResolver.requestSync(Account(name, type), CalendarContract.AUTHORITY, extras) }
                         .onSuccess { Log.i(TAG, "Calendar sync asked for one account") }.onFailure { Log.w(TAG, "Calendar sync not asked for", it) }
                 }
             }
             // The calendar the plan's written to, picked by its name, as Settings → Calendar does (NF-07).
             "calendar-pick" -> {
                 val name = intent.getStringExtra("name")
-                val calendar = com.thomaswcode.decrastination.calendar.SlotCalendar.calendars(this).firstOrNull { it.writable && it.name == name }
+                val calendar = SlotCalendar.calendars(this).firstOrNull { it.writable && it.name == name }
                 if (calendar == null) {
                     Log.w(TAG, "No calendar named $name to write to")
                 } else {
@@ -226,15 +241,15 @@ class CommandActivity : Activity() {
                 val key = intent.getStringExtra("key")
                 val calendarId = graph.settings.value.calendarWriteId
                 if (key == null || calendarId == null) return@withContext Log.w(TAG, "$command needs --es key and a calendar written to")
-                val events = android.provider.CalendarContract.Events.CONTENT_URI
+                val events = CalendarContract.Events.CONTENT_URI
                 val found = contentResolver.query(
-                    events, arrayOf(android.provider.CalendarContract.Events._ID, android.provider.CalendarContract.Events.DTSTART, android.provider.CalendarContract.Events.DTEND),
-                    "${android.provider.CalendarContract.Events.CALENDAR_ID} = ? AND ${android.provider.CalendarContract.Events.CUSTOM_APP_PACKAGE} = ? AND ${android.provider.CalendarContract.Events.CUSTOM_APP_URI} LIKE ? AND ${android.provider.CalendarContract.Events.DELETED} = 0",
+                    events, arrayOf(CalendarContract.Events._ID, CalendarContract.Events.DTSTART, CalendarContract.Events.DTEND),
+                    "${CalendarContract.Events.CALENDAR_ID} = ? AND ${CalendarContract.Events.CUSTOM_APP_PACKAGE} = ? AND ${CalendarContract.Events.CUSTOM_APP_URI} LIKE ? AND ${CalendarContract.Events.DELETED} = 0",
                     arrayOf(calendarId.toString(), packageName, "%/$key"), null,
                 )?.use { c -> if (c.moveToFirst()) Triple(c.getLong(0), c.getLong(1), c.getLong(2)) else null }
                 if (found == null) return@withContext Log.w(TAG, "No event of the app's for $key")
                 val (id, start, end) = found
-                val uri = android.content.ContentUris.withAppendedId(events, id)
+                val uri = ContentUris.withAppendedId(events, id)
                 if (command == "calendar-delete") {
                     contentResolver.delete(uri, null, null)
                     Log.i(TAG, "Deleted the event for $key")
@@ -242,9 +257,9 @@ class CommandActivity : Activity() {
                     val by = intent.getIntExtra("by", 30) * 60_000L
                     contentResolver.update(
                         uri,
-                        android.content.ContentValues().apply {
-                            put(android.provider.CalendarContract.Events.DTSTART, start + by)
-                            put(android.provider.CalendarContract.Events.DTEND, end + by)
+                        ContentValues().apply {
+                            put(CalendarContract.Events.DTSTART, start + by)
+                            put(CalendarContract.Events.DTEND, end + by)
                         },
                         null, null,
                     )
@@ -275,7 +290,7 @@ class CommandActivity : Activity() {
                 // Reviews run from here (any but a Sunday evening's) were tests: dropped.
                 val zone = graph.clock.zone()
                 graph.log.update { log ->
-                    log.copy(reviews = log.reviews.filter { r -> java.time.Instant.ofEpochMilli(r.at).atZone(zone).let { it.dayOfWeek == java.time.DayOfWeek.SUNDAY && it.hour * 60 + it.minute >= graph.settings.value.checkInMin } })
+                    log.copy(reviews = log.reviews.filter { r -> Instant.ofEpochMilli(r.at).atZone(zone).let { it.dayOfWeek == DayOfWeek.SUNDAY && it.hour * 60 + it.minute >= graph.settings.value.checkInMin } })
                 }
                 graph.runtime.update { it.copy(teamsAuto = TeamsAutoSync.State()) }
                 graph.stores.protection.update {
@@ -290,8 +305,8 @@ class CommandActivity : Activity() {
             // notifications from a PC: --ei minutes <n> till it would end; nothing is spent or given, and clean-up takes them away.
             "free-time" -> {
                 val minutes = intent.getIntExtra("minutes", 2).coerceIn(1, 60)
-                com.thomaswcode.decrastination.block.FreeTimeNotice.show(this, "A test", graph.clock.now() + minutes * 60_000L)
-                com.thomaswcode.decrastination.block.FreeTimeNotice.warn(this, "A test")
+                FreeTimeNotice.show(this, "A test", graph.clock.now() + minutes * 60_000L)
+                FreeTimeNotice.warn(this, "A test")
                 Log.i(TAG, "free-time: the countdown to $minutes min and the heads-up posted (notifications ${if (graph.notifier.allowed()) "allowed" else "not allowed"})")
             }
             "clear-parent-code" -> graph.secrets.put(Secret.TotpSecret, null).also { Log.i(TAG, "Parent code cleared") }
@@ -315,7 +330,7 @@ class CommandActivity : Activity() {
                 graph.protection.changeSettings { s -> FelixSettings.set(s, name, value)?.also { said = it.second }?.first ?: s }
                 Log.i(TAG, "setting: " + (said ?: "$name not set to $value"))
             }
-            // Finishing emails in Gmail (Stage 11) on or off, --ez on true|false, as Settings → Sources → Gmail's switch
+            // Finishing emails in Gmail on or off, --ez on true|false, as Settings → Sources → Gmail's switch
             // sets it: not one of Felix's settings, so not `setting`'s.
             "gmail-finishes" -> {
                 val on = intent.getBooleanExtra("on", true)
@@ -342,7 +357,7 @@ class CommandActivity : Activity() {
                 graph.sync.refreshCalendar()
                 val time = graph.sync.calendarTime
                 // How far it was read (DX-14: as far as the plan reaches).
-                val last = time.events.maxOfOrNull { it.start }?.let { java.time.Instant.ofEpochMilli(it).atZone(graph.clock.zone()).toLocalDate() }
+                val last = time.events.maxOfOrNull { it.start }?.let { Instant.ofEpochMilli(it).atZone(graph.clock.zone()).toLocalDate() }
                 Log.i(TAG, "Calendar: ${time.events.size} events, the last on $last; ${time.busy.size} busy, loads ${time.dayLoads}, ${time.toAsk.size} to ask about; allowed ${CalendarTime.allowed(this)}")
             }
             "assess" -> {
@@ -370,7 +385,7 @@ class CommandActivity : Activity() {
             }
             "chat-context" -> {
                 // What the chat sends Claude with your newest message now, the plan included; and the
-                // conversation's turns as your newest message was sent, a reply's quote among them (5b).
+                // conversation's turns as your newest message was sent, a reply's quote among them.
                 File(filesDir, "chat-context.txt").writeText(graph.conversation.chatContext().whole)
                 val messages = graph.chat.value.messages
                 val sent = messages.take(messages.indexOfLast { it.from == Speaker.You } + 1)
@@ -381,7 +396,7 @@ class CommandActivity : Activity() {
             "chat-ask" -> {
                 // --es text "<words>": sent to the chat as on the phone (a paid call); Claude's reply logged.
                 // --es replyTo <message id>: a reply to that message, routed as a swipe's or his notification's
-                // is (5b): a question of his answered with no call, logged as what follows it.
+                // is: a question of his answered with no call, logged as what follows it.
                 val text = intent.getStringExtra("text")
                 val asked = if (text.isNullOrBlank()) Conversation.Asked.Nothing else graph.conversation.send(text, replyTo = intent.getStringExtra("replyTo"))
                 if (asked == Conversation.Asked.Nothing) {
@@ -402,11 +417,11 @@ class CommandActivity : Activity() {
             "felix" -> {
                 val chat = graph.chat.value
                 val state = chat.felix
-                Log.i(TAG, "felix: next check ${state.nextCheckAt?.let { java.time.Instant.ofEpochMilli(it).atZone(graph.clock.zone()).toLocalTime() }}, last sent ${state.lastSentAt}, activity ${state.activity.keys}, questions ${state.questions.size}, to ask how it went ${state.assessLater.size}, check-in ${state.checkInDraft?.step}; read to ${chat.readAt}")
+                Log.i(TAG, "felix: next check ${state.nextCheckAt?.let { Instant.ofEpochMilli(it).atZone(graph.clock.zone()).toLocalTime() }}, last sent ${state.lastSentAt}, activity ${state.activity.keys}, questions ${state.questions.size}, to ask how it went ${state.assessLater.size}, check-in ${state.checkInDraft?.step}; read to ${chat.readAt}")
                 ChatHistory.his(chat.messages).takeLast(10).forEach { m ->
                     Log.i(TAG, "felix ${m.kind}${if (m.byApp) " (the app's words)" else ""} ${m.pieceKey}: ${m.text.ifBlank { "(silent)" }} ${m.suggestedReplies}${ChatHistory.replyOf(m, chat.messages)?.let { r -> " / reply: ${r.text}" }.orEmpty()}")
                 }
-                // His notes and reminders (8a), each with when it comes and what he's written ahead.
+                // His notes and reminders, each with when it comes and what he's written ahead.
                 graph.conversation.notesAndReminders().forEach { Log.i(TAG, "felix $it") }
             }
             "felix-check" -> graph.looks.check().also { Log.i(TAG, "felix-check done") }
@@ -443,13 +458,13 @@ class CommandActivity : Activity() {
             }
             "ai-effort" -> {
                 // --es job <Chat|Email|…> --es level <low|medium|high>, or level none: back to its own (AC-02); till the app restarts.
-                val job = intent.getStringExtra("job")?.let { name -> com.thomaswcode.decrastination.enrich.ModelEffort.Job.entries.firstOrNull { it.name.equals(name, ignoreCase = true) } }
+                val job = intent.getStringExtra("job")?.let { name -> ModelEffort.Job.entries.firstOrNull { it.name.equals(name, ignoreCase = true) } }
                 val level = intent.getStringExtra("level")
                 when {
                     job == null -> Log.w(TAG, "ai-effort needs --es job, one of ${com.thomaswcode.decrastination.enrich.ModelEffort.Job.entries.joinToString()}")
-                    level == "none" -> com.thomaswcode.decrastination.enrich.ModelEffort.overrides.remove(job).also { Log.i(TAG, "ai-effort: $job as its own again") }
-                    else -> runCatching { com.anthropic.models.messages.OutputConfig.Effort.of(level.orEmpty().lowercase()) }
-                        .onSuccess { com.thomaswcode.decrastination.enrich.ModelEffort.overrides[job] = it; Log.i(TAG, "ai-effort: $job at $it till the app restarts") }
+                    level == "none" -> ModelEffort.overrides.remove(job).also { Log.i(TAG, "ai-effort: $job as its own again") }
+                    else -> runCatching { OutputConfig.Effort.of(level.orEmpty().lowercase()) }
+                        .onSuccess { ModelEffort.overrides[job] = it; Log.i(TAG, "ai-effort: $job at $it till the app restarts") }
                         .onFailure { Log.w(TAG, "ai-effort needs --es level low, medium or high") }
                 }
             }
@@ -515,14 +530,14 @@ class CommandActivity : Activity() {
             "own-add" -> {
                 val title = intent.getStringExtra("title")
                 val zone = graph.clock.zone()
-                val due = intent.getStringExtra("due")?.let { runCatching { java.time.LocalDateTime.parse(it).atZone(zone).toInstant().toEpochMilli() }.getOrNull() }
+                val due = intent.getStringExtra("due")?.let { runCatching { LocalDateTime.parse(it).atZone(zone).toInstant().toEpochMilli() }.getOrNull() }
                 val kind = intent.getStringExtra("kind")?.let { k -> Kind.entries.firstOrNull { it.name.equals(k, ignoreCase = true) } } ?: Kind.Homework
                 val task = OwnTask(title = title.orEmpty(), kind = kind, dueAt = due, minutes = intent.getIntExtra("minutes", kind.defaultEffortMin))
                 val problem = OwnTaskRules.problem(task)
                 if (problem != null) {
                     Log.w(TAG, "own-add: $problem")
                 } else {
-                    val id = java.util.UUID.randomUUID().toString()
+                    val id = UUID.randomUUID().toString()
                     graph.ownTasks.saveOwnTask(id, task)
                     Log.i(TAG, "own-add: ${TaskItem.id(Source.Own, id)}")
                 }
@@ -548,8 +563,8 @@ class CommandActivity : Activity() {
                     task == null -> Log.w(TAG, "quick-minutes needs --es task <id>")
                     minutes == 0 -> graph.instructions.takeBackQuick(task.id, ChangeType.Minutes).also { Log.i(TAG, "quick-minutes: taken back") }
                     minutes in OwnTaskRules.MINUTES -> {
-                        val (change, text) = com.thomaswcode.decrastination.ui.minutesChange(task, minutes)
-                        graph.instructions.addOwnChange(java.util.UUID.randomUUID().toString(), text, About(taskId = task.id, taskTitle = task.title), change)
+                        val (change, text) = minutesChange(task, minutes)
+                        graph.instructions.addOwnChange(UUID.randomUUID().toString(), text, About(taskId = task.id, taskTitle = task.title), change)
                         Log.i(TAG, "quick-minutes: ${task.title} takes $minutes min")
                     }
                     else -> Log.w(TAG, "quick-minutes needs --ei minutes 1..${OwnTaskRules.MINUTES.last} (0 takes it back)")
@@ -608,7 +623,7 @@ class CommandActivity : Activity() {
         }
         try {
             val values = withContext(Dispatchers.IO) {
-                kotlinx.serialization.json.Json.decodeFromString<Map<String, String>>(file.readText())
+                Json.decodeFromString<Map<String, String>>(file.readText())
             }
             val secrets = values.mapNotNull { (key, value) -> Secret.entries.firstOrNull { it.name == key }?.let { it to value } }.toMap()
             // A new Power Planner login invalidates the saved session.
@@ -639,7 +654,7 @@ class CommandActivity : Activity() {
             Log.i(TAG, "  [${task.status}] ${task.source.label} ${task.kind.label} ${task.effortMin}m due ${task.dueAt} | ${task.title}")
         }
         Log.i(TAG, "Secrets set: ${graph.secrets.present.value.joinToString()}")
-        // The writes to Gmail journaled (Stage 11): each by its task's id, never its title.
+        // The writes to Gmail journaled: each by its task's id, never its title.
         for (w in graph.gmailFinishes.value) {
             Log.i(TAG, "Gmail write ${w.id}: ${w.taskId} ${GmailWrites.state(graph.gmailFinishes.value, w.taskId)}${if (w.reverseOf != null) " (an Undo)" else ""}, not before ${w.notBefore}, unstarred ${w.unstarred}, archived ${w.archived}, tries ${w.tries} ${w.lastError.orEmpty()}, done ${w.doneAt}${if (w.gaveUp) ", given up" else ""}")
         }

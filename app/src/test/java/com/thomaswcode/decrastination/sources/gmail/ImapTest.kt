@@ -1,7 +1,14 @@
 package com.thomaswcode.decrastination.sources.gmail
 
+import com.thomaswcode.decrastination.core.Merge
+import com.thomaswcode.decrastination.core.Source
+import com.thomaswcode.decrastination.core.TaskItem
+import com.thomaswcode.decrastination.sources.SourceUnavailable
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
+import java.io.EOFException
+import java.io.IOException
+import java.time.ZoneId
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -57,7 +64,7 @@ class ImapTest {
 
     @Test
     fun `a closed connection is an error, not an empty answer`() {
-        assertFailsWith<java.io.EOFException> { reader("* 1 FETCH (UID").readLine() }
+        assertFailsWith<EOFException> { reader("* 1 FETCH (UID").readLine() }
     }
 
     /** A scripted server: what it answers, and what the client sent. */
@@ -170,11 +177,11 @@ class ImapTest {
             """ENVELOPE ("Thu, 8 Oct 2026" "Trip" (("$name" NIL "${name.lowercase()}" "example.com")) NIL NIL NIL NIL NIL NIL "<$uid@x>"))"""
 
     /** The conversation of [uids] as a read leaves it stored: under validity 11, its text read. */
-    private fun storedConversation(vararg uids: Long): com.thomaswcode.decrastination.core.TaskItem {
+    private fun storedConversation(vararg uids: Long): TaskItem {
         val messages = uids.map { MailMessage(it, "${1000 + it}", "100", it, "Trip", "Hughes", "hughes@example.com", sent = false) }
         val conversation = GmailThreads.conversation(messages, 11)
-        val fetched = GmailThreads.fetched(listOf(conversation), mapOf(conversation.version to GmailThreads.Body("Bring the form.")), 0, java.time.ZoneId.of("Europe/London"))
-        return com.thomaswcode.decrastination.core.Merge.apply(emptyList(), com.thomaswcode.decrastination.core.Source.Gmail, fetched, 0).tasks.single()
+        val fetched = GmailThreads.fetched(listOf(conversation), mapOf(conversation.version to GmailThreads.Body("Bring the form.")), 0, ZoneId.of("Europe/London"))
+        return Merge.apply(emptyList(), Source.Gmail, fetched, 0).tasks.single()
     }
 
     @Test
@@ -207,7 +214,7 @@ class ImapTest {
     @Test
     fun `no All Mail, no read`() {
         val script = Script("* LIST (\\HasNoChildren) \"/\" \"INBOX\"\nd1 OK Success\n")
-        assertFailsWith<com.thomaswcode.decrastination.sources.SourceUnavailable> { StarredConversations.list(script.client, emptyList()) }
+        assertFailsWith<SourceUnavailable> { StarredConversations.list(script.client, emptyList()) }
     }
 
     @Test
@@ -215,7 +222,7 @@ class ImapTest {
         val script = Script("* OK Gimap ready\nd1 NO [AUTHENTICATIONFAILED] Invalid credentials (Failure)\n")
         script.client.greeting()
         val error = assertFailsWith<ImapClient.CommandFailed> { script.client.login("me", "wrong") }
-        assertIs<java.io.IOException>(error)
+        assertIs<IOException>(error)
         assertEquals("LOGIN: NO [AUTHENTICATIONFAILED] Invalid credentials (Failure)", error.message)
     }
 

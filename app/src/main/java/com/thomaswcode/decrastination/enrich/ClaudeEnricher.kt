@@ -2,16 +2,24 @@ package com.thomaswcode.decrastination.enrich
 
 import com.anthropic.client.AnthropicClient
 import com.anthropic.core.JsonValue
+import com.anthropic.models.messages.Base64ImageSource
+import com.anthropic.models.messages.ContentBlockParam
+import com.anthropic.models.messages.ImageBlockParam
 import com.anthropic.models.messages.JsonOutputFormat
 import com.anthropic.models.messages.Message
 import com.anthropic.models.messages.MessageCreateParams
 import com.anthropic.models.messages.OutputConfig
 import com.anthropic.models.messages.StopReason
+import com.anthropic.models.messages.TextBlockParam
+import com.thomaswcode.decrastination.core.Enrichment
 import com.thomaswcode.decrastination.core.Enrichments
+import com.thomaswcode.decrastination.core.SubStep
 import com.thomaswcode.decrastination.core.TaskItem
+import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.time.ZoneId
+import java.util.Base64
 
 /**
  * The model's enrichment (docs/spec/readings.md): Claude Opus 5.5 at high effort, its answer held
@@ -47,7 +55,7 @@ class ClaudeEnricher(
         val answeredBy = message.model().asString().ifBlank { by }
         val strict = ReadingAnswers.read(job, text, task, answeredBy, now, zone, salvage = false)
         // A reading the photo was in says so (AI-23).
-        fun seen(e: com.thomaswcode.decrastination.core.Enrichment?) = if (photo != null) e?.copy(fromPhoto = true) else e
+        fun seen(e: Enrichment?) = if (photo != null) e?.copy(fromPhoto = true) else e
         val complaint = strict.complaint ?: return Enricher.Result(seen(strict.enrichment), cost, usage = usage, answer = text)
         // A check it failed (AI-01): read with the dates that can't be left out meanwhile, and the
         // answer and its problem kept to put back once ([repair]).
@@ -84,7 +92,7 @@ class ClaudeEnricher(
     }
 
     /** [task]'s photo of its work (AI-23), from its file; none if it has none, or it can't be read. */
-    private suspend fun photoOf(task: TaskItem): ByteArray? = task.photo?.let { p -> withContext(Dispatchers.IO) { runCatching { java.io.File(p.path).readBytes() }.getOrNull() } }
+    private suspend fun photoOf(task: TaskItem): ByteArray? = task.photo?.let { p -> withContext(Dispatchers.IO) { runCatching { File(p.path).readBytes() }.getOrNull() } }
 
     /** The item as the user's turn: with [photo], the photo first and the model told what it is. */
     private fun MessageCreateParams.Builder.item(task: TaskItem, job: Enrichments.Job, photo: ByteArray?, text: String) {
@@ -92,19 +100,19 @@ class ClaudeEnricher(
             addUserMessage(text)
             return
         }
-        val image = com.anthropic.models.messages.ImageBlockParam.builder()
-            .source(com.anthropic.models.messages.Base64ImageSource.builder().data(java.util.Base64.getEncoder().encodeToString(photo)).mediaType(com.anthropic.models.messages.Base64ImageSource.MediaType.IMAGE_JPEG).build())
+        val image = ImageBlockParam.builder()
+            .source(Base64ImageSource.builder().data(Base64.getEncoder().encodeToString(photo)).mediaType(Base64ImageSource.MediaType.IMAGE_JPEG).build())
             .build()
         addUserMessageOfBlockParams(
             listOf(
-                com.anthropic.models.messages.ContentBlockParam.ofImage(image),
-                com.anthropic.models.messages.ContentBlockParam.ofText(com.anthropic.models.messages.TextBlockParam.builder().text(ReadingPrompts.photo(job) + "\n\n" + text).build()),
+                ContentBlockParam.ofImage(image),
+                ContentBlockParam.ofText(TextBlockParam.builder().text(ReadingPrompts.photo(job) + "\n\n" + text).build()),
             ),
         )
     }
 
     /** [task]'s steps as planned before (AI-08): its own, or its last reading's. */
-    private fun previous(task: TaskItem): List<com.thomaswcode.decrastination.core.SubStep> = task.subSteps.ifEmpty { task.enrichment?.subSteps.orEmpty() }
+    private fun previous(task: TaskItem): List<SubStep> = task.subSteps.ifEmpty { task.enrichment?.subSteps.orEmpty() }
 
     private fun textOf(message: Message): String = message.content().mapNotNull { block -> block.text().orElse(null)?.text() }.joinToString("")
 

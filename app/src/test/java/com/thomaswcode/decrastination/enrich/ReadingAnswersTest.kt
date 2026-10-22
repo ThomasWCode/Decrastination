@@ -2,12 +2,19 @@ package com.thomaswcode.decrastination.enrich
 
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
+import com.thomaswcode.decrastination.core.DayWindow
 import com.thomaswcode.decrastination.core.Enrichment
 import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.Kind
+import com.thomaswcode.decrastination.core.Planner
+import com.thomaswcode.decrastination.core.Settings
+import com.thomaswcode.decrastination.core.SlotKind
 import com.thomaswcode.decrastination.core.SubStep
 import com.thomaswcode.decrastination.core.TaskItem
+import com.thomaswcode.decrastination.core.TaskPhoto
+import com.thomaswcode.decrastination.core.WindowKind
 import com.thomaswcode.decrastination.core.withEnrichment
+import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -390,14 +397,14 @@ class ReadingAnswersTest {
     @Test
     fun `a piece's first steps are read, asked once for its task as it is, and kept for today and tomorrow`() {
         val task = assignment("1. Read pages 40-44.\n2. Write the essay.").copy(dueAt = Fixtures.at("2026-10-09T23:59"))
-        val chunk = com.thomaswcode.decrastination.core.Planner.plan(com.thomaswcode.decrastination.core.Planner.Input(listOf(task), NOW, LONDON, com.thomaswcode.decrastination.core.Settings(), windows = mapOf(java.time.LocalDate.parse("2026-10-09") to listOf(com.thomaswcode.decrastination.core.DayWindow(17 * 60, 22 * 60, com.thomaswcode.decrastination.core.WindowKind.Evening)))))
-        val piece = chunk.todaySlots.first { it.kind == com.thomaswcode.decrastination.core.SlotKind.Work }.chunk!!
+        val chunk = Planner.plan(Planner.Input(listOf(task), NOW, LONDON, Settings(), windows = mapOf(LocalDate.parse("2026-10-09") to listOf(DayWindow(17 * 60, 22 * 60, WindowKind.Evening)))))
+        val piece = chunk.todaySlots.first { it.kind == SlotKind.Work }.chunk!!
         val made = MicroPlans.parse("""{"first":"Open the essay title and read it aloud","next":["List three points","Write the first paragraph","An extra"],"doneWhen":"A paragraph a point"}""", piece, task, NOW)!!
         assertEquals(listOf("List three points", "Write the first paragraph"), made.next)
         assertEquals(listOf("First: Open the essay title and read it aloud", "Then: List three points; Write the first paragraph", "Done when: A paragraph a point"), MicroPlans.lines(made))
         val tasks = mapOf(task.id to task)
         // Each of today's pieces is due one.
-        val keys = chunk.todaySlots.filter { it.kind == com.thomaswcode.decrastination.core.SlotKind.Work }.mapNotNull { it.chunk?.key }
+        val keys = chunk.todaySlots.filter { it.kind == SlotKind.Work }.mapNotNull { it.chunk?.key }
         assertEquals(keys, MicroPlans.due(chunk, tasks, emptyMap()).map { it.first.key })
         // Written: not due again, till its task changes.
         assertEquals(keys - piece.key, MicroPlans.due(chunk, tasks, mapOf(piece.key to made)).map { it.first.key })
@@ -415,7 +422,7 @@ class ReadingAnswersTest {
         // The piece itself changed (its step renamed, its minutes): written for again.
         assertTrue(MicroPlans.hashOf(task, piece) != MicroPlans.hashOf(task, piece.copy(step = "Read pages 40-46")))
         assertTrue(MicroPlans.hashOf(task, piece) != MicroPlans.hashOf(task, piece.copy(minutes = piece.minutes + 10)))
-        // The notes kept with its task (8a): told it, and a note added has it written for again; with none, as before.
+        // The notes kept with its task: told it, and a note added has it written for again; with none, as before.
         val noted = listOf("use the second source")
         assertTrue("Notes kept with it: use the second source" in MicroPlans.describe(piece, task, noted))
         assertTrue(MicroPlans.hashOf(task, piece) != MicroPlans.hashOf(task, piece, noted))
@@ -427,7 +434,7 @@ class ReadingAnswersTest {
     @Test
     fun `a photo of the work is read with its task, and a photo of homework read into tasks`() {
         val task = assignment("Essay")
-        val photographed = task.copy(photo = com.thomaswcode.decrastination.core.TaskPhoto("/x.jpg", "ab12cd34ef56ab12", NOW))
+        val photographed = task.copy(photo = TaskPhoto("/x.jpg", "ab12cd34ef56ab12", NOW))
         // A task photographed is read again (AI-23).
         assertNotEquals(Enrichments.inputHash(task), Enrichments.inputHash(photographed))
         assertTrue("say in reason what you saw" in ReadingPrompts.photo(Enrichments.Job.Assignment))

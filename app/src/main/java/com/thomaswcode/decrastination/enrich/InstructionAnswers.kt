@@ -1,14 +1,18 @@
 package com.thomaswcode.decrastination.enrich
 
+import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.Change
 import com.thomaswcode.decrastination.core.ChangeType
+import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.OwnStep
 import com.thomaswcode.decrastination.core.OwnTaskRules
+import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.learn.CalendarEvent
 import com.thomaswcode.decrastination.learn.EventJudge
 import java.time.DayOfWeek
+import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
@@ -75,7 +79,7 @@ object InstructionAnswers {
      * listed, the [events] too, and every date and time must read and be plausible. One change that
      * can't be made and none are: you're told why, and can write it again.
      */
-    fun parse(text: String, tasks: List<TaskItem>, events: List<CalendarEvent>, about: com.thomaswcode.decrastination.core.About, now: Long, zone: ZoneId): Reading {
+    fun parse(text: String, tasks: List<TaskItem>, events: List<CalendarEvent>, about: About, now: Long, zone: ZoneId): Reading {
         val answer = runCatching { json.decodeFromString(Answer.serializer(), text) }.getOrNull()
             ?: return Reading.Unclear("Claude's answer couldn't be read")
         if (!answer.understood || answer.changes.isEmpty()) {
@@ -103,11 +107,11 @@ object InstructionAnswers {
             ChangeType.StartFrom -> task?.let { id -> at(g.date, g.time, LocalTime.MIDNIGHT, zone)?.takeIf { plausible(it, now) }?.let { Change(type, taskId = id, time = it) } }
             ChangeType.DueBy -> task?.let { id -> at(g.date, g.time, LocalTime.of(23, 59), zone)?.takeIf { plausible(it, now) }?.let { Change(type, taskId = id, time = it) } }
             // At least a minute for each of its steps, as yours are shared out over them.
-            // A paced total keeps the app's estimate it came from, and the task's content, as they are now (#50's review).
+            // A paced total keeps the app's estimate it came from, and the task's content, as they are now.
             ChangeType.Minutes -> task?.let { id ->
                 val t = tasks.getValue(id)
                 g.minutes?.takeIf { it in OwnTaskRules.minutesFor(t) }?.let {
-                    Change(type, taskId = id, minutes = it, pacedFrom = t.appEffortMin.takeIf { g.paced }, pacedHash = com.thomaswcode.decrastination.core.Enrichments.inputHash(t).takeIf { g.paced })
+                    Change(type, taskId = id, minutes = it, pacedFrom = t.appEffortMin.takeIf { g.paced }, pacedHash = Enrichments.inputHash(t).takeIf { g.paced })
                 }
             }
             ChangeType.After -> task?.let { id -> g.afterTaskId?.takeIf { it in tasks && it != id }?.let { Change(type, taskId = id, afterTaskId = it) } }
@@ -150,14 +154,14 @@ object InstructionAnswers {
             }
             // The same work as another listed task (DX-15), which is kept.
             ChangeType.SameAs -> task?.let { id -> g.afterTaskId?.takeIf { it in tasks && it != id }?.let { Change(type, taskId = id, afterTaskId = it) } }
-            // A task's name in the app (16 Oct): not one derived from Anki's counts, whose name is their count.
+            // A task's name in the app: not one derived from Anki's counts, whose name is their count.
             ChangeType.Rename -> task?.takeIf { !tasks.getValue(it).derived }?.let { id -> g.title.trim().takeIf { it.isNotEmpty() }?.let { Change(type, taskId = id, title = it.take(OwnTaskRules.MAX_TITLE)) } }
-            // Any task's steps (16 Oct; your own's only before) but Anki's, which are its cards, each with
+            // Any task's steps but Anki's, which are its cards, each with
             // its minutes and its dates readable (AI-19).
-            ChangeType.Steps -> task?.takeIf { !tasks.getValue(it).derived && tasks.getValue(it).source != com.thomaswcode.decrastination.core.Source.Anki }?.let { id ->
+            ChangeType.Steps -> task?.takeIf { !tasks.getValue(it).derived && tasks.getValue(it).source != Source.Anki }?.let { id ->
                 // A step's dates: readable, in range, its start not after its end, and neither after the task's day.
-                val dueDay = tasks.getValue(id).dueAt?.let { java.time.Instant.ofEpochMilli(it).atZone(zone).toLocalDate() }
-                fun dayOf(time: Long) = java.time.Instant.ofEpochMilli(time).atZone(zone).toLocalDate()
+                val dueDay = tasks.getValue(id).dueAt?.let { Instant.ofEpochMilli(it).atZone(zone).toLocalDate() }
+                fun dayOf(time: Long) = Instant.ofEpochMilli(time).atZone(zone).toLocalDate()
                 val steps = g.steps.takeIf { it.isNotEmpty() && it.size <= OwnTaskRules.MAX_STEPS }?.map { s ->
                     if (s.title.isBlank() || s.minutes < 1) return null
                     val from = s.startDate.takeIf { it.isNotBlank() }?.let { at(it, null, LocalTime.MIDNIGHT, zone)?.takeIf { t -> plausible(t, now) } ?: return null }
@@ -186,7 +190,7 @@ object InstructionAnswers {
             val task = tasks[c.taskId] ?: continue
             val sum = c.steps.orEmpty().sumOf { it.minutes }
             // Your own task's minutes as the form has them; a source's task's, the estimate in force.
-            val total = if (task.source == com.thomaswcode.decrastination.core.Source.Own) {
+            val total = if (task.source == Source.Own) {
                 OwnTaskRules.draftOf(task).let { draft -> if (draft.steps.isEmpty()) draft.minutes else draft.steps.sumOf { it.minutes } }
             } else {
                 task.effortMin
@@ -202,7 +206,7 @@ object InstructionAnswers {
         ChangeType.entries.none { it.name == g.type } -> "a change of a kind the app doesn't make"
         g.type in setOf("NotATask", "StartFrom", "DueBy", "Minutes", "After", "OnDay", "AtTime", "Steps", "SameAs", "Rename") && g.taskId !in tasks -> "it names a task that isn't listed"
         g.type == "SameAs" -> "the task it's the same as isn't listed"
-        g.type in setOf("Steps", "Rename") && tasks[g.taskId]?.let { it.derived || (g.type == "Steps" && it.source == com.thomaswcode.decrastination.core.Source.Anki) } == true -> "an Anki task's steps and name come from its cards"
+        g.type in setOf("Steps", "Rename") && tasks[g.taskId]?.let { it.derived || (g.type == "Steps" && it.source == Source.Anki) } == true -> "an Anki task's steps and name come from its cards"
         g.type == "Rename" -> "the new name is missing"
         g.type == "Steps" -> "a step has no name or minutes, or a date that doesn't read, is out of range or falls after the task's"
         g.type == "After" -> "it waits on a task that isn't listed"

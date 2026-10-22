@@ -89,8 +89,8 @@ class AndroidSyncPorts(private val context: Context) : SyncPorts {
 }
 
 /**
- * What the app reads (docs/spec/sources.md; docs/plan_v4, Stage 6d), moved out of `AppGraph` and
- * `CalendarTime`: the sources, through the syncer ([sync], [refreshAll]); the Teams widget asked to
+ * What the app reads (docs/spec/sources.md; docs/plan_v4): the sources, through the syncer ([sync],
+ * [refreshAll]); the Teams widget asked to
  * sync ([requestTeamsSync]) and watched ([start]); and the phone's calendar as busy time
  * ([refreshCalendar], [calendarTime]), what it can't judge asked about in Felix's name. Built like
  * [com.thomaswcode.decrastination.block.Focus]: its stores, the clock, the syncer, [SyncPorts] for
@@ -125,7 +125,7 @@ class Sync(
     fun syncNow(sources: Set<Source>? = null) = ports.syncNow(sources)
 
     /**
-     * The calendar's busy time and per-day loads (Phase 5), as last read and judged: the calendar as the
+     * The calendar's busy time and per-day loads, as last read and judged: the calendar as the
      * planner counts it, from its last read. A plan made before that read is dropped with it.
      */
     @Volatile

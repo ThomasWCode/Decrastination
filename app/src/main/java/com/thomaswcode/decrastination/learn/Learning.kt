@@ -28,7 +28,7 @@ import com.thomaswcode.decrastination.protect.Protection
 import java.time.LocalDate
 
 /**
- * What the app learns from the log (docs/spec/learning.md; docs/plan_v4, Stage 6e), moved out of
+ * What the app learns from the log (docs/spec/learning.md; docs/plan_v4), moved out of
  * `Review`, `AppGraph` and `Assessment`: the week's review ([review]: the calibration learned afresh,
  * the capacity checked, Claude's note and bounded changes, what's remembered tidied); a figure
  * forgotten ([forgetCalibration]); a review's change or tidy put back ([undoReviewChange],
@@ -144,7 +144,7 @@ class Learning(
         val before = changes.mapNotNull { c -> ReviewInput.valueOf(asked, c.setting)?.let { c.setting to it } }.toMap()
         // Not after a reset of the record that came while Claude was asked (LR-08): the review's let go.
         if (resets() != generation) return Outcome(why = "the record was reset while Claude was asked")
-        // At once, armed or not (your call, 11 Oct); laid over what's been asked for, so a change
+        // At once, armed or not (D-71); laid over what's been asked for, so a change
         // waiting for another setting keeps its wait.
         if (changes.isNotEmpty()) protection.applyReviewChanges(changes)
         val note = answer.note.ifEmpty { listOf("No note this week.") }
@@ -159,12 +159,12 @@ class Learning(
      * answer that isn't a tidy, or the facts changed while it was out.
      */
     suspend fun tidyMemory(now: Long, force: Boolean = false): MemoryTidyRecord? {
-        // What's run out let go of first (10a): it'd count to the tidy's being due, and its going while the call's
+        // What's run out let go of first: it'd count to the tidy's being due, and its going while the call's
         // out would throw the tidy away ([MemoryTidy.applied]).
         forgetExpired(now)
         val before = memory.value.facts
         if (before.isEmpty() || !(force || MemoryTidy.due(before))) return null
-        // Only those with neither an until nor a task are tidied (10a); the rest kept as they are.
+        // Only those with neither an until nor a task are tidied; the rest kept as they are.
         val plain = before.filter(MemoryTidy::tidied)
         if (plain.isEmpty()) return null
         // The profile without the facts, which it's given to tidy.

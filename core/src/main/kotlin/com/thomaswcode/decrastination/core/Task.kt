@@ -16,7 +16,7 @@ enum class Source(val label: String, val synced: Boolean = true) {
     Anki("Anki"),
     Gmail("Gmail"),
 
-    /** Your own tasks, made in the app (2.0.0, Q28). */
+    /** Your own tasks, made in the app (Q28). */
     Own("Yours", synced = false),
     ;
 
@@ -125,7 +125,7 @@ data class TaskItem(
     val kind: Kind,
     /** An estimate the source itself implies (Anki's card counts), or the rules' guess. */
     val sourceEffortMin: Int? = null,
-    /** The enrichment's estimate (Phase 4). */
+    /** The enrichment's estimate. */
     val aiEffortMin: Int? = null,
     /** How far the source says it is (Power Planner's percent complete), 0 to 1. */
     val sourceProgress: Double = 0.0,
@@ -180,14 +180,14 @@ data class TaskItem(
     val doneAt: Long? = null,
     /** Source-specific values: Gmail's sender and labels, an Anki deck id, a Teams tab. */
     val extra: Map<String, String> = emptyMap(),
-    /** What the enrichment said about it (Phase 4), laid over the source's values at every merge. */
+    /** What the enrichment said about it, laid over the source's values at every merge. */
     val enrichment: Enrichment? = null,
     /** The source's own kind, deadline and start, before the enrichment's overlay; null before Phase 4. */
     val sourceValues: SourceValues? = null,
     /**
      * Your instructions' say about it, each value with who set it ([Mine], [InstructionRules]), laid
      * over the source's and the enrichment's at every merge: its minutes beat every other estimate;
-     * its steps (any task's but Anki's, 16 Oct) the source's and the reading's ([enriched]), their
+     * its steps (any task's but Anki's) the source's and the reading's ([enriched]), their
      * ticks kept by name; its name its source's, which is kept ([SourceValues.title]).
      */
     val mine: Mine = Mine(),
@@ -202,8 +202,8 @@ data class TaskItem(
 
     /**
      * Not work to plan: one you've said isn't a task, or is the same as another. Every starred email
-     * is a task (your call, 16 Oct, in place of 9 Oct's events and emails only to read), what to do
-     * about an event among them; where that isn't clear, Claude's reading asks (AI-10).
+     * is a task (D-10), what to do about an event among them; where that isn't clear, Claude's
+     * reading asks (AI-10).
      */
     val hidden: Boolean get() = mine.notATask != null || mine.sameAs != null
 
@@ -265,15 +265,15 @@ data class TaskItem(
 
     /**
      * Your minutes are the app's own estimate at your pace, as Felix worked them out to size its
-     * steps (your call, 17 Oct), not your own reckoning: planned as given, like any of yours. Only
+     * steps (D-63), not your own reckoning: planned as given, like any of yours. Only
      * where the app made the estimate: never a task of your own.
      */
     val pacedMinutes: Boolean get() = mine.minutes?.paced != null && source != Source.Own
 
     /**
      * What's finished teaches the pace, as the app's own tasks do, measured against the estimate
-     * Felix worked from ([Paced.from]): your minutes [pacedMinutes], of the task as it was then
-     * (#50's review). Read again for newer prompts alone (or *Read again*), its content's the same
+     * Felix worked from ([Paced.from]): your minutes [pacedMinutes], of the task as it was then.
+     * Read again for newer prompts alone (or *Read again*), its content's the same
      * and the estimate he worked from stands, whatever the new one; once its content has changed
      * (new instructions, a new email), the work may have too, and it's as your own.
      */
@@ -282,7 +282,7 @@ data class TaskItem(
     /**
      * Its steps are yours: typed into a task of your own, or given any task by you or Felix (an
      * instruction): planned as you gave them, at their own minutes (not stretched by the pace learned
-     * of the app's estimates) and however long, never cut into sittings (your call, 17 Oct).
+     * of the app's estimates) and however long, never cut into sittings (D-34).
      */
     val yourSteps: Boolean get() = mine.steps != null || source == Source.Own
 
@@ -319,7 +319,7 @@ data class TaskItem(
         fun sourceOf(id: String): Source? = Source.entries.firstOrNull { id.startsWith(it.name.lowercase() + ":") }
 
         /**
-         * Whether task [id], not in the list, is gone, for what was kept on it since [since] (8a): one of your own
+         * Whether task [id], not in the list, is gone, for what was kept on it since [since]: one of your own
          * at once (deleted); a source's once that source has been read since ([readAt], its last good read), so one
          * not listed only because its source hasn't been read yet (a backup restored before the first sync) is waited for.
          */
@@ -368,7 +368,7 @@ fun shareOut(total: Int, parts: List<Int>): List<Int> {
 
 /**
  * What a source said about a task's kind, deadline, start and name, kept so an overlay can be redone.
- * [title] is null for one kept from before names could be given (16 Oct): its [TaskItem.title] is it.
+ * [title] is null for one kept from before names could be given: its [TaskItem.title] is it.
  */
 @Serializable
 data class SourceValues(val kind: Kind, val dueAt: Long? = null, val availableFrom: Long? = null, val title: String? = null)

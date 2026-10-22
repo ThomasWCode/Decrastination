@@ -28,6 +28,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.thomaswcode.decrastination.AppGraph
@@ -35,6 +36,7 @@ import com.thomaswcode.decrastination.learn.CheckIn
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.data.WeeklyReview
 import com.thomaswcode.decrastination.learn.ReviewInput
+import com.thomaswcode.decrastination.learn.Summary
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -56,7 +58,7 @@ class ReviewsActivity : ComponentActivity() {
         // From the summary's notification (NF-02): its email opened over the page, once.
         if (savedInstanceState == null) intent.getStringExtra(EXTRA_SEND)?.let { week ->
             graph.log.value.reviews.firstOrNull { it.week == week }?.summary?.let { text ->
-                runCatching { startActivity(com.thomaswcode.decrastination.learn.Summary.email(graph.settings.value.summaryEmail, week, text)) }
+                runCatching { startActivity(Summary.email(graph.settings.value.summaryEmail, week, text)) }
             }
         }
     }
@@ -121,8 +123,8 @@ private fun ReviewCard(review: WeeklyReview, checkIn: CheckIn?, settings: Settin
             review.summary?.let { text ->
                 Text("The week's summary", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(text, style = MaterialTheme.typography.bodyMedium)
-                val context = androidx.compose.ui.platform.LocalContext.current
-                review.week?.let { week -> TextButton(onClick = { runCatching { context.startActivity(com.thomaswcode.decrastination.learn.Summary.email(settings.summaryEmail, week, text)) } }) { Text("Send it") } }
+                val context = LocalContext.current
+                review.week?.let { week -> TextButton(onClick = { runCatching { context.startActivity(Summary.email(settings.summaryEmail, week, text)) } }) { Text("Send it") } }
             }
             checkIn?.let { c ->
                 fun said(text: String) = text.ifBlank { "-" }

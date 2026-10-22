@@ -135,7 +135,7 @@ class BackupService(
      * once armed one that loosens blocking waits; the instructions as applying each here would go
      * ([restoreInstructions]); the log, the calibration and the calendar answers armed or not. They
      * were kept back while armed, as an edited file could teach the planner to plan less; but the
-     * plan is yours to change at once now (12 Oct), and free time is earned in a ledger no backup holds.
+     * plan is yours to change at once now (D-46), and free time is earned in a ledger no backup holds.
      * A backup of an older shape is brought to this build's first ([Backups.decode]).
      */
     suspend fun importBackup(text: String): String {
@@ -177,20 +177,20 @@ class BackupService(
             }
         }
         if (chatBack > 0) stores.replace(stores.chatArchive) { a -> if (a.messages.isEmpty()) backup.archive else a }
-        // What it remembered (AI-21), what's run out on either side let go of first (10a), so one here can't take the
+        // What it remembered (AI-21), what's run out on either side let go of first, so one here can't take the
         // place of the backup's that holds: by the chat as it's now restored, whose acts' Undos bring deleted tasks back.
         val now = clock.now()
         val tasks = stores.tasks.value
         val held = ChatActs.held(stores.chat.value.messages)
         fun live(memory: MemoryState) = Memories.expired(memory, tasks.tasks.associateBy { it.id }, now, held) { source -> tasks.status(source).lastSuccessAt }
         stores.replace(stores.memory) { Backups.mergedMemory(live(it), live(backup.memory)) }
-        // Felix's notes and reminders it hasn't, by id (4.1.0): the chat's acts on them can be undone, and a reminder
+        // Felix's notes and reminders it hasn't, by id: the chat's acts on them can be undone, and a reminder
         // still to come comes, late if its time has gone by.
         val felixBefore = stores.felix.value
         var felixLeft = 0
         val felixBack = stores.replace(stores.felix) { Backups.mergedFelix(it, backup.felixStore).also { (_, left) -> felixLeft = left }.first }
             .let { it.notes.size + it.reminders.size - felixBefore.notes.size - felixBefore.reminders.size }
-        // The receipts of writes to Gmail it hasn't, by id (4.3.0): an act of the chat restored can undo its finish.
+        // The receipts of writes to Gmail it hasn't, by id: an act of the chat restored can undo its finish.
         stores.replace(stores.gmailWrites) { it.copy(writes = Backups.mergedWrites(it.writes, backup.gmailWrites)) }
         val own = ownAdded.size
         val told = buildList {
@@ -229,7 +229,7 @@ class BackupService(
      * A backup's instructions in use ([backed]) taken in, in the order they were applied, each as
      * applying it here would go: one already here is left as it is; one that would have tasks wait
      * for each other in a circle with those here comes back unclear, saying so. The rest are
-     * applied, due dates too (yours to change, 12 Oct). Says how many were applied, and how many
+     * applied, due dates too (yours to change, D-46). Says how many were applied, and how many
      * are unclear.
      */
     private suspend fun restoreInstructions(backed: List<Instruction>): Pair<Int, Int> = applying.withLock {
@@ -283,7 +283,7 @@ class BackupService(
             // The chat, its earlier messages, and his state with it: what he's waiting to say, the check-in's answers so far.
             stores.replace(stores.chat, ChatState())
             stores.replace(stores.chatArchive, ChatArchive())
-            // His notes and reminders (Q12: A), which the chat set.
+            // His notes and reminders (D-100), which the chat set.
             stores.replace(stores.felix, FelixStore())
             // His notification too, a check-in's question among them: nothing's left to answer it.
             cancelFelix()
@@ -292,7 +292,7 @@ class BackupService(
             stores.replace(stores.instructions, InstructionState())
             layInstructions()
         }
-        // The copies kept of every store it cleared with them (Q42): what's reset isn't kept in one.
+        // The copies kept of every store it cleared with them (D-94): what's reset isn't kept in one.
         stores.letGoOfCopies(what)
         "${what.title}: reset. A copy of everything from before is in ${saved.where}${if (saved.own) ", which Settings → Backup can restore" else ""}.$archived"
     }

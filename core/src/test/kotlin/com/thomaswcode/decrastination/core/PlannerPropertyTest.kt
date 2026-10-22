@@ -2,8 +2,11 @@ package com.thomaswcode.decrastination.core
 
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
+import java.time.DayOfWeek
+import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
+import java.time.temporal.ChronoUnit
 import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -96,7 +99,7 @@ class PlannerPropertyTest {
             calibration = Calibration(yields = DayKind.entries.filter { chance(25) }.associateWith { 0.5 + random.nextInt(51) / 100.0 }),
             // School days as windows, some of the time (PL-15): break, lunch, maybe a study period, the evening.
             windows = if (!chance(50)) emptyMap() else (0L..30L).map { today.plusDays(it) }.associateWith { day ->
-                val weekend = day.dayOfWeek == java.time.DayOfWeek.SATURDAY || day.dayOfWeek == java.time.DayOfWeek.SUNDAY
+                val weekend = day.dayOfWeek == DayOfWeek.SATURDAY || day.dayOfWeek == DayOfWeek.SUNDAY
                 if (weekend) {
                     listOf(DayWindow(8 * 60, 22 * 60, WindowKind.Evening))
                 } else {
@@ -247,7 +250,7 @@ class PlannerPropertyTest {
             val pieces = placed[task.id].orEmpty()
             if (pieces.isEmpty() || pieces.any { (_, c) -> c.soft || c.behind || c.overdue || c.dueToday || c.dueSoon }) return@mapNotNull null
             val first = task.notBefore?.takeIf { it > input.now }?.let { maxOf(today, Planner.date(it, zone)) } ?: today
-            val dueAt = java.time.Instant.ofEpochMilli(due).atZone(zone)
+            val dueAt = Instant.ofEpochMilli(due).atZone(zone)
             val margin = input.settings.marginDays.toLong()
             val last = dueAt.toLocalDate().minusDays(margin).let { if (margin == 0L && dueAt.toLocalTime() < LocalTime.NOON) it.minusDays(1) else it }
             Spread(task, generateSequence(first) { it.plusDays(1) }.takeWhile { it <= last }.toList(), pieces.sortedWith(compareBy({ it.first }, { it.second.part })))
@@ -276,7 +279,7 @@ class PlannerPropertyTest {
             for (i in 1 until spread.pieces.size) {
                 val (before, _) = spread.pieces[i - 1]
                 val (day, chunk) = spread.pieces[i]
-                if (java.time.temporal.ChronoUnit.DAYS.between(before, day) <= 7) continue
+                if (ChronoUnit.DAYS.between(before, day) <= 7) continue
                 val week = generateSequence(before.plusDays(1)) { it.plusDays(1) }.take(7).filter { it in spread.window }
                 assertTrue(week.none { hadRoom(plan, input, spread.task, it, chunk) }, "seed=$seed: ${spread.task.id} part ${chunk.part} on $day, more than a week after $before, with room in between")
             }
@@ -482,7 +485,7 @@ class PlannerPropertyTest {
             val hi = minOf(at(bucket.date, window.endMin), busy.filter { it.start >= end }.minOfOrNull { it.start } ?: Long.MAX_VALUE)
             if ((hi - lo) / MINUTE < if (window.kind.atSchool) input.settings.minSchoolSlotMin else 5) continue
             val slot = bucket.slots.firstOrNull { it.chunk?.key == chunk.key }
-            assertTrue(slot != null && slot.start == pin && slot.pinned, "seed=$seed: ${chunk.key} pinned at ${java.time.Instant.ofEpochMilli(pin)}, laid at ${slot?.start?.let { java.time.Instant.ofEpochMilli(it) }}")
+            assertTrue(slot != null && slot.start == pin && slot.pinned, "seed=$seed: ${chunk.key} pinned at ${Instant.ofEpochMilli(pin)}, laid at ${slot?.start?.let { Instant.ofEpochMilli(it) }}")
         }
     }
 

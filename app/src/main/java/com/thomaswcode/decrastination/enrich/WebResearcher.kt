@@ -15,7 +15,7 @@ import kotlinx.coroutines.withContext
 /** What a web search found ([ResearchPrompts]): its answer in words, what it was asked and searched for, and the pages it read. */
 data class Found(val question: String, val text: String, val searched: List<String>, val sources: List<WebSource>)
 
-/** Claude's web search tool (16 Oct): [ResearchPrompts.MAX_SEARCHES] searches at most, from the UK, in [zone]. */
+/** Claude's web search tool: [ResearchPrompts.MAX_SEARCHES] searches at most, from the UK, in [zone]. */
 internal fun searchTool(zone: ZoneId): WebSearchTool20250305 =
     WebSearchTool20250305.builder().maxUses(ResearchPrompts.MAX_SEARCHES.toLong()).userLocation(UserLocation.builder().country("GB").timezone(zone.id).build()).build()
 

@@ -54,7 +54,7 @@ How code is named, laid out and commented once the plan is done, and how the doc
 | `docs/development.md` | how changes are made, reviewed, checked on the phone and shipped; the public repository's rules |
 | `docs/plan_v4/` | this plan |
 
-Nothing else: the old plans, reviews, findings and per-release notes were deleted once their decisions and still-true facts had moved, and there's no change log or history folder; git's tags and the PR descriptions hold what changed when. This plan's folder goes the same way once the plan is done: its decisions numbered in `decisions.md`, its still-true facts in `spec/`, the folder deleted.
+Nothing else: the old plans, reviews, findings and per-release notes were deleted once their decisions and still-true facts had moved, and there's no change log or history folder; git's tags and the PR descriptions hold what changed when. This plan's folder goes the same way once the plan is done: its decisions numbered in `decisions.md`, its still-true facts in `spec/`, the folder deleted. After Stage 12 it stays for now, to be cleaned and deleted later (D-107).
 
 ### Writing the spec
 

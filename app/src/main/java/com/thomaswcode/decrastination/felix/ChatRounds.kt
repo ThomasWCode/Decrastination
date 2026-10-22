@@ -2,8 +2,8 @@ package com.thomaswcode.decrastination.felix
 
 
 /**
- * What the chat's answer asks for before it's his: a web search (16 Oct), tasks' whole texts (D-93),
- * the week's numbers and the calendar past the fortnight (G6, G7: 8c), each round asking him again
+ * What the chat's answer asks for before it's his: a web search, tasks' whole texts (D-93),
+ * the week's numbers and the calendar past the fortnight (G6, G7), each round asking him again
  * with what it brought. Pure.
  */
 object ChatRounds {

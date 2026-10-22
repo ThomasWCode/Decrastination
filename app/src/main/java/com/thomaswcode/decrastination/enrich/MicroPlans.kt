@@ -40,7 +40,7 @@ object MicroPlans {
 
     /**
      * [chunk] as the model reads it: its task's title, subject and instructions, the piece and its minutes, its
-     * attachments' names, and the [notes] kept with the task (Stage 8a, Q14: A), so a first action can take them in.
+     * attachments' names, and the [notes] kept with the task (D-100), so a first action can take them in.
      */
     fun describe(chunk: Chunk, task: TaskItem, notes: List<String> = emptyList()): String = buildString {
         appendLine("Task: ${task.title}")
@@ -58,8 +58,8 @@ object MicroPlans {
     /**
      * What a piece's micro-plan is written for: its task as it is, and the piece as [describe] says
      * it (which, its step's name or its sitting's, its minutes, of how many parts), so a step
-     * renamed or a piece resized is written for again; and its task's [notes] where there are any
-     * (8a), so a note added is too. With none, as before 4.1.0, so no plan is written again for nothing.
+     * renamed or a piece resized is written for again; and its task's [notes] where there are any,
+     * so a note added is too. With none, as before 4.1.0, so no plan is written again for nothing.
      */
     fun hashOf(task: TaskItem, chunk: Chunk, notes: List<String> = emptyList()): String =
         Enrichments.inputHash(task) + "#" + (chunk.stepIndex ?: -chunk.part) + "#" + Integer.toHexString("${chunk.shown.orEmpty()}|${chunk.minutes}|${chunk.parts}".hashCode()) +

@@ -13,22 +13,23 @@ import com.thomaswcode.decrastination.core.OwnTaskRules
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.tasks.Instructions
+import com.thomaswcode.decrastination.tasks.OwnTasks
 import java.time.LocalDate
 import java.time.ZoneId
 import java.util.UUID
 
 /**
- * What a task's sheet holds (docs/plan_v4, Stage 6c; C-Q11), beside what it says ([TaskSheetModel]):
+ * What a task's sheet holds (docs/plan_v4; C-Q11), beside what it says ([TaskSheetModel]):
  * the picker or the question open over it ([picking], [confirming]), its last words ([message], what
  * went wrong; [said], what an action did), and whether the instructions on it are shown; and its
  * changes, through your instructions and your own tasks ([make], [undo], [later], [tomorrow],
- * [notATask], [finish], [reopen], [delete], [homeOnly]); since 4.1.0 your notes on it ([note], [unnote]). A plain class, tested without Compose: the
+ * [notATask], [finish], [reopen], [delete], [homeOnly]); your notes on it ([note], [unnote]). A plain class, tested without Compose: the
  * sheet keeps one through a turn of the phone ([saver]) and draws from it.
  */
 class TaskSheetState(
     private val instructions: Instructions,
-    private val ownTasks: com.thomaswcode.decrastination.tasks.OwnTasks,
-    /** Your note on a task kept, or why it can't be ([com.thomaswcode.decrastination.felix.Conversation.addNote], 8a). */
+    private val ownTasks: OwnTasks,
+    /** Your note on a task kept, or why it can't be ([com.thomaswcode.decrastination.felix.Conversation.addNote]). */
     private val addNote: suspend (taskId: String, text: String) -> String? = { _, _ -> null },
     /** A note deleted ([com.thomaswcode.decrastination.felix.Conversation.deleteNote]). */
     private val deleteNote: suspend (id: String) -> Unit = {},
@@ -48,10 +49,10 @@ class TaskSheetState(
     /** Whether the instructions on the task are shown, unfolded. */
     var showInstructions: Boolean by mutableStateOf(false)
 
-    /** Whether the box for a note of yours is open over the sheet (8a). */
+    /** Whether the box for a note of yours is open over the sheet. */
     var noting: Boolean by mutableStateOf(false)
 
-    /** Your note [text] on [task] (8a, Q14: A): kept, the box shut; or what's wrong, said. */
+    /** Your note [text] on [task] (D-100): kept, the box shut; or what's wrong, said. */
     suspend fun note(task: TaskItem, text: String) {
         message = addNote(task.id, text)
         if (message == null) noting = false
@@ -112,7 +113,7 @@ class TaskSheetState(
         /** The sheet's state through its being made again, [instructions], [ownTasks] and the notes' owner's [addNote] and [deleteNote] given to it again. */
         fun saver(
             instructions: Instructions,
-            ownTasks: com.thomaswcode.decrastination.tasks.OwnTasks,
+            ownTasks: OwnTasks,
             addNote: suspend (String, String) -> String? = { _, _ -> null },
             deleteNote: suspend (String) -> Unit = {},
         ): Saver<TaskSheetState, Any> = listSaver(

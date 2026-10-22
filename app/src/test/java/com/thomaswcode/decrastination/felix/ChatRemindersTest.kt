@@ -26,7 +26,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** The chat's reminders and notes (Stage 8a): read from his answer and checked, and told to him in the context. */
+/** The chat's reminders and notes: read from his answer and checked, and told to him in the context. */
 class ChatRemindersTest {
     // Tuesday 20 Oct 2026, 17:00.
     private val now = Fixtures.at("2026-10-20T17:00")

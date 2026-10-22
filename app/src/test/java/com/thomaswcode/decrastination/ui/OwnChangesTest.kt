@@ -7,6 +7,8 @@ import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
 import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.LocalTime
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -48,8 +50,8 @@ class OwnChangesTest {
     @Test
     fun `a due date and time picked, and minutes, are the changes their sheet makes`() {
         val task = task(Fixtures.at("2026-10-12T08:30"))
-        assertEquals(java.time.LocalTime.of(8, 30), dueTimeOf(task, LONDON))
-        val (due, text) = dueChange(task, java.time.LocalDateTime.parse("2026-10-16T17:15"), LONDON)
+        assertEquals(LocalTime.of(8, 30), dueTimeOf(task, LONDON))
+        val (due, text) = dueChange(task, LocalDateTime.parse("2026-10-16T17:15"), LONDON)
         assertEquals(Fixtures.at("2026-10-16T17:15"), due.time)
         assertEquals("Due Fri 16 Oct 17:15 (set in Tasks)", text)
         val (minutes, words) = minutesChange(task, 90)

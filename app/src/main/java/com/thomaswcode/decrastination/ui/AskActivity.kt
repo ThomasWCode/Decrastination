@@ -4,15 +4,24 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
+import android.speech.RecognizerIntent
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.StartOffset
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -114,6 +123,9 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.SuggestionChip
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -138,6 +150,7 @@ import com.thomaswcode.decrastination.core.OwnTask
 import com.thomaswcode.decrastination.core.OwnTaskRules
 import com.thomaswcode.decrastination.core.Proposal
 import com.thomaswcode.decrastination.core.ProposalState
+import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.felix.ChatPrompts
@@ -155,7 +168,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
- * Asking Claude (2.0.0, Q29), in place of the Instructions page: **Chat**, where you tell it about
+ * Asking Claude (Q29), in place of the Instructions page: **Chat**, where you tell it about
  * your work and it answers with cards to add a task or apply changes, and where every message of
  * Felix's is, what he writes unasked among them; and **Your changes**, the instructions in use (taken
  * back there) and any still to check. A message about a task, an event or a day comes from its page,
@@ -277,7 +290,7 @@ class AskActivity : ComponentActivity() {
         val graph = AppGraph.get(this)
         graph.conversation.chatInFront = false
         val now = graph.clock.now()
-        // Every message closed again for the next visit, its labels done with (5c), and what it showed read.
+        // Every message closed again for the next visit, its labels done with, and what it showed read.
         screen.paused(read = now.takeIf { chatTab })
         // What arrived while it was on screen was seen: read up to now, so only what comes after is his notification.
         if (chatTab) graph.scope.launch { graph.conversation.read(now) }
@@ -338,7 +351,7 @@ class AskActivity : ComponentActivity() {
         var draft by rememberSaveable { mutableStateOf("") }
         var menu by remember { mutableStateOf(false) }
         var clearing by remember { mutableStateOf(false) }
-        // What he remembers, from the menu, each to delete (your call, 16 Oct), as Settings → Felix has it.
+        // What he remembers, from the menu, each to delete, as Settings → Felix has it.
         var remembering by rememberSaveable { mutableStateOf(false) }
         // A card's task being changed before it's added: "<message id>|<proposal id>".
         var editing by rememberSaveable { mutableStateOf<String?>(null) }
@@ -427,7 +440,7 @@ class AskActivity : ComponentActivity() {
                     if (last != null && last.suggestedReplies.isNotEmpty()) {
                         FlowRow(Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             last.suggestedReplies.forEach { reply ->
-                                androidx.compose.material3.SuggestionChip(onClick = {
+                                SuggestionChip(onClick = {
                                     // Answered by it: the box replies to nothing, till his next question's offered.
                                     if (screen.replyingTo?.id == last.id) screen.sent()
                                     graph.scope.launch { graph.conversation.ask(reply, replyTo = last.id) }
@@ -485,7 +498,7 @@ class AskActivity : ComponentActivity() {
         editing?.split('|', limit = 2)?.let { (messageId, proposalId) ->
             val proposal = chat.messages.firstOrNull { it.id == messageId }?.proposals?.firstOrNull { it.id == proposalId }
             val task = proposal?.task
-            // Added as it came (16 Oct): it's changed as any task of yours is, in the form.
+            // Added as it came (D-60): it's changed as any task of yours is, in the form.
             val added = proposal?.made?.takeIf { proposal.state == ProposalState.Applied }?.let { id -> tasks.tasks.firstOrNull { it.id == id } }
             if (added != null) {
                 OwnTaskForm(graph, added) { editing = null }
@@ -499,14 +512,14 @@ class AskActivity : ComponentActivity() {
             }
         }
         if (remembering) {
-            androidx.compose.material3.ModalBottomSheet(onDismissRequest = { remembering = false }) {
+            ModalBottomSheet(onDismissRequest = { remembering = false }) {
                 Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
                     Text("What ${settings.felixName} remembers", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(horizontal = 16.dp))
                     MemorySection(graph)
                 }
             }
         }
-        // The very first email finished here, by Felix's done, waits for your OK (Stage 11): asked here too.
+        // The very first email finished here, by Felix's done, waits for your OK: asked here too.
         GmailOkSheet(graph)
         if (clearing) {
             AlertDialog(
@@ -713,13 +726,13 @@ private fun ColumnScope.Chat(
 /** How long the message his notification opened the chat at stays tinted. */
 private const val FLASH_MS = 1_000L
 
-/** How long Mark answered's Undo stays at the foot (D-99): six seconds, your call. */
+/** How long Mark answered's Undo stays at the foot (D-99): six seconds. */
 private const val UNDO_BAR_MS = 6_000L
 
 /** How near the top of the list (in rows) scrolling back loads the archive's next page. */
 private const val EARLIER_WITHIN = 5
 
-/** The line over a day's first message (5b): "Today", "Yesterday", or its date. */
+/** The line over a day's first message: "Today", "Yesterday", or its date. */
 @Composable
 private fun DayLine(date: LocalDate, today: LocalDate) {
     Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
@@ -732,7 +745,7 @@ private fun DayLine(date: LocalDate, today: LocalDate) {
     }
 }
 
-/** The line over the first message unread when the chat opened, for that visit only (5b), as messaging apps draw it. */
+/** The line over the first message unread when the chat opened, for that visit only, as messaging apps draw it. */
 @Composable
 private fun NewMessages() {
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -783,7 +796,7 @@ private fun SwipeToReply(onReply: () -> Unit, content: @Composable () -> Unit) {
 }
 
 /**
- * A message's bubble, [colour] in [shape]: held, Reply and Copy (5b), and Mark answered where it waits
+ * A message's bubble, [colour] in [shape]: held, Reply and Copy, and Mark answered where it waits
  * for your answer ([onMarkAnswered], D-99); the one his notification opened the chat at ([flash]) tinted
  * for a moment.
  */
@@ -821,7 +834,7 @@ private fun Bubble(message: ChatMessage, colour: Color, shape: Shape, flash: Boo
 }
 
 /**
- * When [message] was sent, in small type under its bubble (5b); and, while it waits for your answer
+ * When [message] was sent, in small type under its bubble; and, while it waits for your answer
  * ([waiting], D-99), saying so, a tap on it the message's Reply ([onAnswer]).
  */
 @Composable
@@ -836,7 +849,7 @@ private fun Time(message: ChatMessage, zone: ZoneId, waiting: Boolean = false, o
     }
 }
 
-/** The message a reply answers, over its words (5b): who wrote it and its first line, in a tinted block; tapped, [onOpen] goes to it. */
+/** The message a reply answers, over its words: who wrote it and its first line, in a tinted block; tapped, [onOpen] goes to it. */
 @Composable
 private fun Quote(quote: ChatMessage, name: String, onOpen: () -> Unit) {
     Row(
@@ -879,7 +892,7 @@ private fun Yours(graph: AppGraph, message: ChatMessage, quote: ChatMessage?, na
 }
 
 /**
- * Felix answering, on his side (your call, 16 Oct, in place of "Felix is thinking… 12 s"): three
+ * Felix answering, on his side (in place of "Felix is thinking… 12 s"): three
  * dots rising in turn in a bubble of his, as a messaging app shows someone typing; and once the
  * call has run [CANCEL_AFTER_S], a way to stop waiting (AC-08).
  */
@@ -890,7 +903,7 @@ private fun Typing(graph: AppGraph) {
     LaunchedEffect(since) {
         while (since != null) {
             clock = graph.clock.now()
-            kotlinx.coroutines.delay(1_000)
+            delay(1_000)
         }
     }
     val long = since?.let { (clock - it) / 1_000 >= CANCEL_AFTER_S } == true
@@ -906,17 +919,17 @@ private fun Typing(graph: AppGraph) {
 /** Three dots, each rising and brightening in turn, [DOT_STEP_MS] after the one before: a wave every [DOT_CYCLE_MS]. */
 @Composable
 private fun Dots(modifier: Modifier) {
-    val wave = androidx.compose.animation.core.rememberInfiniteTransition(label = "typing")
+    val wave = rememberInfiniteTransition(label = "typing")
     val colour = MaterialTheme.colorScheme.onSurfaceVariant
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {
         repeat(3) { i ->
             val up by wave.animateFloat(
                 initialValue = 0f,
                 targetValue = 1f,
-                animationSpec = androidx.compose.animation.core.infiniteRepeatable(
-                    animation = androidx.compose.animation.core.tween(DOT_CYCLE_MS / 2, easing = androidx.compose.animation.core.FastOutSlowInEasing),
-                    repeatMode = androidx.compose.animation.core.RepeatMode.Reverse,
-                    initialStartOffset = androidx.compose.animation.core.StartOffset(i * DOT_STEP_MS),
+                animationSpec = infiniteRepeatable(
+                    animation = tween(DOT_CYCLE_MS / 2, easing = FastOutSlowInEasing),
+                    repeatMode = RepeatMode.Reverse,
+                    initialStartOffset = StartOffset(i * DOT_STEP_MS),
                 ),
                 label = "dot $i",
             )
@@ -926,7 +939,7 @@ private fun Dots(modifier: Modifier) {
                         translationY = -up * 3.dp.toPx()
                         alpha = 0.35f + 0.65f * up
                     }
-                    .background(colour, androidx.compose.foundation.shape.CircleShape),
+                    .background(colour, CircleShape),
             )
         }
     }
@@ -964,12 +977,12 @@ private fun Claudes(graph: AppGraph, screen: ChatScreenState, message: ChatMessa
         message.proposals.filter { it.open != null }.forEach { ProposalCard(graph, message.id, it, tasks, now, zone, onEdit, live) }
         AnimatedVisibility(folds && open) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                // What he searched the web for, and the pages it found, each to open (16 Oct).
+                // What he searched the web for, and the pages it found, each to open.
                 Searched(message)
                 message.proposals.filter { it.open == null }.forEach { ProposalCard(graph, message.id, it, tasks, now, zone, onEdit, live) }
                 // What it remembered or forgot (AI-21), in small type under its words, each with its Undo.
                 Remembered(graph, message, live)
-                // What it did beyond its cards (AI-14; 16 Oct, everything he does), likewise, each with its Undo;
+                // What it did beyond its cards (AI-14; D-60, everything he does), likewise, each with its Undo;
                 // and what it says of them with nothing to undo (a change refused, where a time went).
                 Acts(graph, message, live)
                 message.note?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 4.dp)) }
@@ -978,7 +991,7 @@ private fun Claudes(graph: AppGraph, screen: ChatScreenState, message: ChatMessa
     }
 }
 
-/** The corner of a bubble with something folded under it (5c): down while it's closed, up while it's open; red where something under it went wrong. */
+/** The corner of a bubble with something folded under it: down while it's closed, up while it's open; red where something under it went wrong. */
 @Composable
 private fun Chevron(open: Boolean, problem: Boolean, modifier: Modifier, onToggle: () -> Unit) {
     Icon(
@@ -1082,31 +1095,31 @@ private const val LABEL_SLIDE_MS = 250
 @Composable
 private fun Opens(message: ChatMessage) {
     val opens = message.opens ?: return
-    val context = androidx.compose.ui.platform.LocalContext.current
+    val context = LocalContext.current
     val week = opens.removePrefix(Conversation.OPENS_SUMMARY).takeIf { opens.startsWith(Conversation.OPENS_SUMMARY) }
     OutlinedButton(onClick = {
         context.startActivity(Intent(context, ReviewsActivity::class.java).apply { week?.let { putExtra(ReviewsActivity.EXTRA_SEND, it) } })
     }) { Text(if (week != null) "Send it" else "Open the review") }
 }
 
-/** What [message]'s searches were for (16 Oct), in small type, and the pages they found, each a link to open. */
+/** What [message]'s searches were for, in small type, and the pages they found, each a link to open. */
 @Composable
 private fun Searched(message: ChatMessage) {
     if (message.searched.isEmpty() && message.sources.isEmpty()) return
-    val context = androidx.compose.ui.platform.LocalContext.current
+    val context = LocalContext.current
     Column(Modifier.padding(horizontal = 4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
         if (message.searched.isNotEmpty()) {
             Text("Searched the web for " + message.searched.joinToString(", ") { "“$it”" }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         message.sources.forEach { source ->
             Text(
-                source.title.ifBlank { android.net.Uri.parse(source.url).host ?: source.url },
-                style = MaterialTheme.typography.bodySmall.copy(textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline),
+                source.title.ifBlank { Uri.parse(source.url).host ?: source.url },
+                style = MaterialTheme.typography.bodySmall.copy(textDecoration = TextDecoration.Underline),
                 color = MaterialTheme.colorScheme.primary,
                 maxLines = 1,
-                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.clickable {
-                    runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(source.url))) }
+                    runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(source.url))) }
                 },
             )
         }
@@ -1115,7 +1128,7 @@ private fun Searched(message: ChatMessage) {
 
 /**
  * What [message] remembered or forgot (AI-21), a line each in small type, each with its Undo while
- * it can be taken back (your call, 16 Oct): a fact gone, and the one it replaced back.
+ * it can be taken back (D-64): a fact gone, and the one it replaced back.
  */
 @Composable
 private fun Remembered(graph: AppGraph, message: ChatMessage, live: Boolean) {
@@ -1130,7 +1143,7 @@ private fun Remembered(graph: AppGraph, message: ChatMessage, live: Boolean) {
                 edit.line,
                 style = MaterialTheme.typography.bodySmall,
                 color = quiet,
-                textDecoration = if (edit.undone) androidx.compose.ui.text.style.TextDecoration.LineThrough else null,
+                textDecoration = if (edit.undone) TextDecoration.LineThrough else null,
                 modifier = Modifier.weight(1f),
             )
             when {
@@ -1143,14 +1156,14 @@ private fun Remembered(graph: AppGraph, message: ChatMessage, live: Boolean) {
     said?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(horizontal = 4.dp)) }
 }
 
-/**
- * What [message]'s actions did (16 Oct: a step ticked or to do again, a task done, open again or
- * deleted, a setting set; 4.1.0, a reminder set, moved or cancelled, a note added or deleted), a line each in small type, each with its Undo while it can be taken back;
- * and the lines with nothing to undo (a change not made, where a time went, a text read in full).
- */
 /** The longest the chat's Undo buttons wait before reading the day again (a delay doesn't count deep sleep). */
 private const val DAY_CHECK_MS = 5 * 60_000L
 
+/**
+ * What [message]'s actions did (a step ticked or to do again, a task done, open again or
+ * deleted, a setting set; a reminder set, moved or cancelled, a note added or deleted), a line each in small type, each with its Undo while it can be taken back;
+ * and the lines with nothing to undo (a change not made, where a time went, a text read in full).
+ */
 @Composable
 private fun Acts(graph: AppGraph, message: ChatMessage, live: Boolean) {
     if (message.acts.isEmpty()) return
@@ -1159,7 +1172,7 @@ private fun Acts(graph: AppGraph, message: ChatMessage, live: Boolean) {
     val settings by graph.settings.state.collectAsStateWithLifecycle()
     val chat by graph.chat.state.collectAsStateWithLifecycle()
     val felix by graph.stores.felix.state.collectAsStateWithLifecycle()
-    // A starred email's finish while it stands (Stage 11): its Done's Undo takes it back.
+    // A starred email's finish while it stands: its Done's Undo takes it back.
     val gmail by graph.gmailFinishes.state.collectAsStateWithLifecycle()
     // Today's kept pieces (G1), as the log changes, and the day.
     val log by graph.log.state.collectAsStateWithLifecycle()
@@ -1182,7 +1195,7 @@ private fun Acts(graph: AppGraph, message: ChatMessage, live: Boolean) {
                 act.line,
                 style = MaterialTheme.typography.bodySmall,
                 color = quiet,
-                textDecoration = if (act.undone) androidx.compose.ui.text.style.TextDecoration.LineThrough else null,
+                textDecoration = if (act.undone) TextDecoration.LineThrough else null,
                 modifier = Modifier.weight(1f),
             )
             when {
@@ -1195,7 +1208,7 @@ private fun Acts(graph: AppGraph, message: ChatMessage, live: Boolean) {
 }
 
 /**
- * One thing Felix did, made as it came (your call, 16 Oct), with what you can do about it: undo it,
+ * One thing Felix did, made as it came (D-60, 16 Oct), with what you can do about it: undo it,
  * change a task it added, or make it again once undone. One from before then still waits to be added
  * or applied, changed first, or set aside.
  */
@@ -1212,23 +1225,23 @@ private fun ProposalCard(graph: AppGraph, messageId: String, proposal: Proposal,
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             // A task shown (AI-14): its name, and Open, to its sheet.
             proposal.open?.let { id ->
-                val context = androidx.compose.ui.platform.LocalContext.current
+                val context = LocalContext.current
                 Text("Task", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
                 Text(tasks[id]?.title ?: "A task no longer listed", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 if (id in tasks) {
                     Button(onClick = {
                         context.startActivity(
-                            android.content.Intent(context, MainActivity::class.java)
+                            Intent(context, MainActivity::class.java)
                                 .putExtra(MainActivity.EXTRA_TAB, MainActivity.TAB_TASKS)
                                 .putExtra(MainActivity.EXTRA_TASK, id)
-                                .addFlags(android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP or android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP),
+                                .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP),
                         )
                     }) { Text("Open") }
                 }
                 return@Column
             }
             // Added, the task as it is now (changed since with Change, or on its page); else as he gave it.
-            val task = proposal.made?.takeIf { applied }?.let { tasks[it] }?.takeIf { it.source == com.thomaswcode.decrastination.core.Source.Own }?.let(OwnTaskRules::draftOf) ?: proposal.task
+            val task = proposal.made?.takeIf { applied }?.let { tasks[it] }?.takeIf { it.source == Source.Own }?.let(OwnTaskRules::draftOf) ?: proposal.task
             if (task != null) {
                 Text(if (task.kind == Kind.Event) "New event of yours" else "New task of yours", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
                 Text(task.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
@@ -1324,21 +1337,21 @@ private fun InputBar(
     onSend: () -> Unit,
 ) {
     // Your words by voice (UI-07): put in the box after what's there, not sent, so they're read first.
-    val context = androidx.compose.ui.platform.LocalContext.current
+    val context = LocalContext.current
     val speech = remember {
-        Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
-            .putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            .putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE, "en-GB")
+        Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+            .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            .putExtra(RecognizerIntent.EXTRA_LANGUAGE, "en-GB")
     }
     val canSpeak = remember { speech.resolveActivity(context.packageManager) != null }
-    val listen = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()) { result ->
-        result.data?.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()?.trim()?.takeIf { it.isNotEmpty() }?.let { heard ->
+    val listen = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()?.trim()?.takeIf { it.isNotEmpty() }?.let { heard ->
             onDraft((if (draft.isBlank()) heard else "${draft.trimEnd()} $heard").take(ChatPrompts.MAX_TEXT))
         }
     }
     Surface(tonalElevation = 3.dp) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
-            // The message this one replies to (5b): whose, its first line, and ✕ to reply to none.
+            // The message this one replies to: whose, its first line, and ✕ to reply to none.
             replyingTo?.let { r ->
                 Row(Modifier.fillMaxWidth().padding(bottom = 6.dp).height(IntrinsicSize.Min), verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.width(3.dp).fillMaxHeight().background(MaterialTheme.colorScheme.primary))

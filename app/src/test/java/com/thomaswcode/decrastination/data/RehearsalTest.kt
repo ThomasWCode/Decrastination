@@ -17,6 +17,7 @@ import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.enrich.AiUsage
 import java.io.File
 import java.nio.file.Files
+import java.util.Locale
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -30,7 +31,7 @@ import kotlinx.serialization.json.contentOrNull
 import org.junit.Assume.assumeTrue
 
 /**
- * The rehearsal of a release's migrations on the phone's own data (docs/plan_v4, Stages 0 and 3), before
+ * The rehearsal of a release's migrations on the phone's own data (docs/plan_v4), before
  * it's installed: every store in a phone backup, unpacked by `scripts/rehearse.sh` into the git-ignored
  * `private/rehearsal/<name>/` (its `files/`, and the nightly backup beside them where there is one),
  * read as each file is, then as the app will read it, through [Stores] with the migrations there are,
@@ -336,7 +337,7 @@ class RehearsalTest {
             val usage = field("aiUsage")?.let { JsonStore.json.decodeFromJsonElement(AiUsage.serializer(), it) } ?: AiUsage()
             val slots = field("slots")?.let { JsonStore.json.decodeFromJsonElement(SlotState.serializer(), it) } ?: SlotState()
             val calibration = field("calibration")?.let { JsonStore.json.decodeFromJsonElement(Calibration.serializer(), it) } ?: Calibration()
-            appendLine("Runtime: the month ${usage.month}, spent \$${"%.2f".format(java.util.Locale.UK, usage.spentUsd)} in ${usage.calls} calls; calls kept ${size("calls")}; Anki readings ${size("ankiReadings")}; micro-plans ${size("microPlans")}")
+            appendLine("Runtime: the month ${usage.month}, spent \$${"%.2f".format(Locale.UK, usage.spentUsd)} in ${usage.calls} calls; calls kept ${size("calls")}; Anki readings ${size("ankiReadings")}; micro-plans ${size("microPlans")}")
             appendLine("  today's slots ${slots.previous.size}, missed ${slots.missed.size}; changes waiting ${size("pending")}; held notifications ${size("heldNotifications")}; kept slots under way ${size("keeping")}; rewarded ${size("rewarded")}")
             appendLine("  your event answers ${size("eventAnswers")}, asked ${size("eventsAsked")}; calendar events written ${size("calendarWritten")}; calibration ${calibration.multipliers.size} multipliers, ${calibration.timed.size} timed")
         }

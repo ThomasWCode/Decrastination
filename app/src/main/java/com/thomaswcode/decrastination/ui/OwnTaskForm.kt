@@ -16,6 +16,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -47,10 +48,12 @@ import java.time.LocalTime
 import java.util.UUID
 import androidx.compose.ui.draw.rotate
 import kotlinx.coroutines.launch
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.json.Json
 
 /**
- * The form for a task of your own (2.0.0, Q28): a new one (from [initial], Claude's, if given), or
+ * The form for a task of your own (Q28): a new one (from [initial], Claude's, if given), or
  * [editing] one. Saved under an id chosen as it opens ([com.thomaswcode.decrastination.tasks.OwnTasks.saveOwnTask]), so a second tap, or
  * the form made again after a turn of the phone, changes the one task; or, given [onSave], handed
  * to that (a card of Claude's, added as you've changed it). Every field is kept through a turn too.
@@ -239,17 +242,17 @@ fun OwnTaskForm(graph: AppGraph, editing: TaskItem?, initial: OwnTask? = null, o
 }
 
 /** A step as the form has it (UI-15): its words as typed, where it can be done, and the step it was. */
-@kotlinx.serialization.Serializable
+@Serializable
 private data class StepRow(val title: String, val minutes: String, val where: String? = null, val wasIndex: Int? = null) {
     val min: Int get() = minutes.toIntOrNull() ?: 0
 }
 
-private val STEPS = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+private val STEPS = Json { ignoreUnknownKeys = true }
 
 /** One step: its name, its minutes, whether it needs home, and its moves and delete. */
 @Composable
 private fun StepEditor(row: StepRow, first: Boolean, last: Boolean, onChange: (StepRow) -> Unit, onMove: (Int) -> Unit, onDelete: () -> Unit) {
-    androidx.compose.material3.OutlinedCard(Modifier.fillMaxWidth()) {
+    OutlinedCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             OutlinedTextField(
                 row.title,

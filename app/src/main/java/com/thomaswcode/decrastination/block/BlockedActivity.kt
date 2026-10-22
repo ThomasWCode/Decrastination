@@ -9,13 +9,16 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -31,11 +34,13 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.thomaswcode.decrastination.AppGraph
+import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.Chunk
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.ui.AppTheme
@@ -44,6 +49,7 @@ import com.thomaswcode.decrastination.ui.Format
 import com.thomaswcode.decrastination.ui.PieceActions
 import com.thomaswcode.decrastination.ui.rememberPhotoCheck
 import com.thomaswcode.decrastination.widget.WidgetModel
+import java.time.ZoneId
 import kotlinx.coroutines.delay
 
 /**
@@ -122,14 +128,14 @@ class BlockedActivity : ComponentActivity() {
         val photo = rememberPhotoCheck(graph, this, plan) { _, text -> message = text }
 
         // Felix here too (UI-16), about the next piece's task.
-        androidx.compose.foundation.layout.Box(Modifier.fillMaxSize()) {
+        Box(Modifier.fillMaxSize()) {
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
             Column(
                 Modifier.fillMaxSize().safeDrawingPadding().verticalScroll(rememberScrollState()).padding(24.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 // On the app's pale blue by day, its navy by night ([com.thomaswcode.decrastination.ui.Colours]).
-                Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp)) {
+                Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = RoundedCornerShape(16.dp)) {
                     Text("Not now", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
                 }
                 Text("${targetLabel()} is blocked. ${verdict.reason.headline}.", style = MaterialTheme.typography.bodyLarge)
@@ -150,19 +156,19 @@ class BlockedActivity : ComponentActivity() {
                 AnimatedVisibility(why) { Why(verdict.reason, plan.todayBucket?.chunks.orEmpty(), settings.workMinPerFreeMin, graph.focus.missedKeepsPressure(now), settings) }
                 OutlinedButton(onClick = ::goHome, modifier = Modifier.fillMaxWidth()) { Text("Go to the home screen") }
                 // Room under it for Felix's button.
-                androidx.compose.foundation.layout.Spacer(Modifier.size(72.dp))
+                Spacer(Modifier.size(72.dp))
             }
         }
         FelixFab(
             this@BlockedActivity,
-            next?.let { com.thomaswcode.decrastination.core.About(taskId = it.taskId, taskTitle = it.title) } ?: com.thomaswcode.decrastination.core.About(),
-            Modifier.align(androidx.compose.ui.Alignment.BottomEnd).safeDrawingPadding().padding(16.dp),
+            next?.let { About(taskId = it.taskId, taskTitle = it.title) } ?: About(),
+            Modifier.align(Alignment.BottomEnd).safeDrawingPadding().padding(16.dp),
         )
         }
     }
 
     @Composable
-    private fun NextCard(chunk: Chunk, now: Long, zone: java.time.ZoneId) {
+    private fun NextCard(chunk: Chunk, now: Long, zone: ZoneId) {
         Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer), modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text("Do", style = MaterialTheme.typography.labelLarge)

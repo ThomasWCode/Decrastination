@@ -3,7 +3,7 @@ package com.thomaswcode.decrastination.core
 import java.util.Locale
 
 /**
- * The settings Felix may change from the chat (your call, 16 Oct): those about the work and about
+ * The settings Felix may change from the chat (D-61): those about the work and about
  * him, never the blocker's own (what's blocked, when, how free time is earned, protection:
  * [com.thomaswcode.decrastination.protect.SettingsChanges]), nor Claude's (its key, its cap), the
  * calendars, your classes, what Claude's told of you, the Teams syncs or where the summary goes.

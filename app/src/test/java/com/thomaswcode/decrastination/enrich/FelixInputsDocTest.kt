@@ -127,7 +127,7 @@ class FelixInputsDocTest {
         CalendarEvent(1, "Drum lesson", Fixtures.at("2026-10-14T18:00"), Fixtures.at("2026-10-14T18:45"), allDay = false),
         CalendarEvent(2, "Open day", LocalDate.parse("2026-10-17").atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli(), LocalDate.parse("2026-10-18").atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli(), allDay = true, location = "The university's main hall", description = "Talks every hour from 10:30; subject stands all day."),
     )
-    // What Felix keeps at your asking (8a): a note of his on the worksheet, a standing one of yours for maths, a reminder about the form and one for the worksheet's slot.
+    // What Felix keeps at your asking: a note of his on the worksheet, a standing one of yours for maths, a reminder about the form and one for the worksheet's slot.
     private val noteOnSheet = Note("n1", "Use Monday's results table for question 5", Fixtures.at("2026-10-12T19:04"), By.Felix, taskId = "teams:t1")
     private val notes = listOf(noteOnSheet, Note("n2", "Do these on paper, not in the textbook", Fixtures.at("2026-10-11T18:30"), By.You, scope = NoteScope(subject = "Maths")))
     private val reminders = listOf(
@@ -170,7 +170,7 @@ class FelixInputsDocTest {
         val moments = reminders.mapNotNull { r -> Reminders.moment(r, planned, byId, now)?.let { r.id to it } }.toMap()
         // Each class's next lessons (G8), the timetable read this morning: "the worksheet's due next lesson" has the worksheet's class and its lessons.
         val lessons = Lessons.Timetabled(Lessons.groups(Lessons.next(timetable, now, LONDON, school), settings.classMap), Fixtures.at("2026-10-13T07:00"), stale = false)
-        // His nudge of 17:00 still waiting for your answer (D-99): listed by id, so an answer can name it answered (10b).
+        // His nudge of 17:00 still waiting for your answer (D-99): listed by id, so an answer can name it answered.
         val waiting = ChatMessage("m4", Speaker.Felix, "Starting the worksheet? First: read question 1 and underline what it asks.", Fixtures.at("2026-10-13T17:00"), About(taskId = worksheet.id, taskTitle = worksheet.title), kind = MessageKind.SlotStart, suggestedReplies = listOf("Starting now", "Give me ten minutes"))
         val context = ChatPrompts.Context(
             known = ChatPrompts.context(tasks, events, applied, now, LONDON, settings.classMap, emptyList(), settings, calibration, notes, reminders, moments, lessons, listOf(waiting)),
@@ -182,7 +182,7 @@ class FelixInputsDocTest {
         val his = ChatMessage("m4", Speaker.Felix, "Starting the worksheet? First: read question 1 and underline what it asks.", Fixtures.at("2026-10-13T17:00"), kind = MessageKind.SlotStart)
         val yours = ChatMessage("m5", Speaker.You, "Give me ten minutes", Fixtures.at("2026-10-13T17:02"))
         ChatPrompts.turns(listOf(his, yours), "(the context, as above)", byId, LONDON, plan = "(the plan, as above)").forEachIndexed { i, (from, text) -> out["reply turn $i: $from"] = text }
-        // A reply swiped in the chat to his earlier message, which isn't the one just before: quoted (5b).
+        // A reply swiped in the chat to his earlier message, which isn't the one just before: quoted.
         val answer = ChatMessage("m5a", Speaker.Felix, "Ten minutes, then.", Fixtures.at("2026-10-13T17:02"))
         val quoted = ChatMessage("m8", Speaker.You, "Can that be at seven instead?", now, replyTo = his.id)
         out["quoted reply"] = ChatPrompts.turns(listOf(his, yours.copy(answeredAt = answer.at), answer, quoted), "(the context, as above)", byId, LONDON, plan = "(the plan, as above)").last().second
@@ -217,7 +217,7 @@ class FelixInputsDocTest {
         out["felix Morning"] = FelixPrompts.describe(FelixPrompts.Reason.Morning, plan("2026-10-13T07:00"), null, null, emptyList(), recent, null, settings, Fixtures.at("2026-10-13T07:00"), LONDON, reminders = listOf("17:00 Ask about question 7"))
         out["felix Question"] = FelixPrompts.describe(FelixPrompts.Reason.Question, p, null, worksheet, emptyList(), recent, "Does question 5 need Monday's results, or can it be done from the textbook?", settings, at, LONDON)
         out["felix Completions"] = FelixPrompts.describe(FelixPrompts.Reason.Completions, p, null, null, emptyList(), recent, null, settings, Fixtures.at("2026-10-13T19:10"), LONDON, done = listOf(worksheet.title, vectors.title))
-        // A reminder (8a), written ten minutes before its moment, as of it: the slot then and its task, your words.
+        // A reminder, written ten minutes before its moment, as of it: the slot then and its task, your words.
         val form8 = Fixtures.at("2026-10-14T08:00")
         val morning = plan("2026-10-14T07:50")
         out["felix Reminder"] = FelixPrompts.describe(FelixPrompts.Reason.Reminder, morning, morning.slotAt(form8) ?: morning.nextSlot(form8), form, emptyList(), recent, null, settings, form8, LONDON, reminder = "Bring the signed consent form")

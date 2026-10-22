@@ -1,5 +1,6 @@
 package com.thomaswcode.decrastination.ui
 
+import com.thomaswcode.decrastination.core.Invite
 import java.time.Duration
 import java.time.Instant
 import java.time.ZoneId
@@ -22,7 +23,7 @@ object Format {
      * An invite's time and place (DX-02): "Fri 16 Oct 18:00–20:00, Main Hall"; over days, from one to
      * the other; a day's, "Mon 26 Oct, all day"; days', "Mon 26 Oct to Fri 30 Oct".
      */
-    fun invite(invite: com.thomaswcode.decrastination.core.Invite, zone: ZoneId): String {
+    fun invite(invite: Invite, zone: ZoneId): String {
         val start = Instant.ofEpochMilli(invite.start).atZone(zone)
         val end = Instant.ofEpochMilli(invite.end).atZone(zone)
         val days = invite.dayRange(zone)
@@ -62,7 +63,7 @@ object Format {
     /** A minute of the day as "16:45". */
     fun clock(minute: Int): String = "%02d:%02d".format(Locale.UK, minute / 60, minute % 60)
 
-    /** A moment's time of day, as under a chat message (5b): "16:45". */
+    /** A moment's time of day, as under a chat message: "16:45". */
     fun time(time: Long, zone: ZoneId): String = Instant.ofEpochMilli(time).atZone(zone).format(TIME)
 
     /** "45 min", "1 h 30 min". */

@@ -51,7 +51,7 @@ class GoldenPromptsTest {
             put("$name.schema.json", pretty(json(schema)))
         }
         prompt("chat", ChatPrompts.system(SETTINGS, YEAR), ChatPrompts.SCHEMA)
-        // With finishing emails in Gmail switched off (Stage 11): an email's done is then its source's, as Teams' is.
+        // With finishing emails in Gmail switched off: an email's done is then its source's, as Teams' is.
         put("chat-gmail-off.txt", ChatPrompts.system(SETTINGS.copy(gmailFinishes = false), YEAR))
         prompt("instruction", InstructionPrompts.system(YEAR), InstructionPrompts.SCHEMA)
         prompt("photo-check", PhotoChecker.system(YEAR), PhotoChecker.SCHEMA)
@@ -187,7 +187,7 @@ class GoldenPromptsTest {
         val MEMORY = MemoryState(
             facts = listOf(
                 Fact("football", "Training is on Tuesdays", NOW),
-                // Passing (10a): till a day, and with a task.
+                // Passing: till a day, and with a task.
                 Fact("cold", "Feeling rough this week", NOW, until = Fixtures.at("2026-10-19T00:00")),
                 Fact("worksheet", "Can be handed in on paper", NOW, taskId = "teams:g1"),
             ),

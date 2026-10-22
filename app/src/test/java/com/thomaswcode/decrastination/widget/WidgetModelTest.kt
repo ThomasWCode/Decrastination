@@ -2,6 +2,7 @@ package com.thomaswcode.decrastination.widget
 
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
+import com.thomaswcode.decrastination.block.Credit
 import com.thomaswcode.decrastination.core.DayWindow
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Planner
@@ -128,7 +129,7 @@ class WidgetModelTest {
     @Test
     fun `free time shows in the summary`() {
         val plan = Planner.plan(Planner.Input(emptyList(), now, LONDON, Settings()))
-        val credit = SessionState(credit = com.thomaswcode.decrastination.block.Credit().earn(java.time.LocalDate.of(2026, 10, 9), 15.0))
+        val credit = SessionState(credit = Credit().earn(LocalDate.of(2026, 10, 9), 15.0))
         assertEquals("Nothing due soon · 15 min of free time", WidgetModel.from(plan, TaskState(), LONDON, credit).summary)
     }
 

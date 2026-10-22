@@ -28,7 +28,7 @@ data class AnkiDay(
     val deckName: String? = null,
     /**
      * Homework's vocabulary was due by tomorrow at a read this day: the quota is the reviews alone,
-     * no new cards, for the rest of the day (your call, 10 Oct). It stays so once set, however that
+     * no new cards, for the rest of the day (D-9). It stays so once set, however that
      * homework goes.
      */
     val reviewsOnly: Boolean = false,
@@ -38,9 +38,9 @@ data class AnkiDay(
  * The Anki tasks (docs/spec/sources.md), from the deck counts, pure:
  *
  * - **The daily quota**: every due review, plus the new cards of the lowest-numbered section deck
- *   of the current textbook that still has some (your answer, 7 Oct; the textbook, Q18). Due at
+ *   of the current textbook that still has some (Q18). Due at
  *   21:30. Done once nothing is due and that deck has no new cards left today. On a day homework's
- *   vocabulary is due by tomorrow, the reviews alone (your call, 10 Oct: [AnkiDay.reviewsOnly]).
+ *   vocabulary is due by tomorrow, the reviews alone (D-9: [AnkiDay.reviewsOnly]).
  * - **A deck homework names**: "Learn vocabulary column 1.2" in an open German assignment makes
  *   `Textbook 1::1.2` a task with the assignment's deadline, in steps of the deck's own new cards a
  *   day ([Deck.newPerDay]). Done once every card in it has been seen (its reviews are the
@@ -266,7 +266,7 @@ object AnkiRules {
     /**
      * Whether any deck homework names ([homework], as [homeworkDecks] made them) still has cards
      * to learn and is due by tomorrow, or overdue: then the day's vocabulary is homework's, and the
-     * quota takes no new cards (your call, 10 Oct).
+     * quota takes no new cards (D-9).
      */
     fun homeworkDueSoon(homework: List<Fetched>, now: Long, zone: ZoneId): Boolean {
         val tomorrow = Instant.ofEpochMilli(now).atZone(zone).toLocalDate().plusDays(1)

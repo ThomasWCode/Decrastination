@@ -1,7 +1,9 @@
 package com.thomaswcode.decrastination.data
 
 import com.thomaswcode.decrastination.Fixtures
+import com.thomaswcode.decrastination.core.Act
 import com.thomaswcode.decrastination.core.Calibration
+import com.thomaswcode.decrastination.core.ChatAction
 import com.thomaswcode.decrastination.core.ChatArchive
 import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.core.Rule
@@ -9,10 +11,12 @@ import com.thomaswcode.decrastination.core.MemoryState
 import com.thomaswcode.decrastination.core.Fact
 import com.thomaswcode.decrastination.core.ChatState
 import com.thomaswcode.decrastination.core.FixedClock
+import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.MessageKind
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Speaker
+import com.thomaswcode.decrastination.core.TaskItem
 import java.io.File
 import java.nio.file.Files
 import kotlin.test.Test
@@ -30,7 +34,7 @@ import kotlinx.coroutines.test.runTest
 
 /**
  * Backups and resets through the backup service (AR-07, LR-08), on phones whose stores are in temporary
- * folders: a full one, every store as Stage 0's fixtures have it, and an empty one; a folder that keeps
+ * folders: a full one, every store as the fixtures have it, and an empty one; a folder that keeps
  * a map; and what isn't the backup's own counted.
  */
 class BackupServiceTest {
@@ -228,9 +232,9 @@ class BackupServiceTest {
     fun `a fact whose task the backup's chat can still bring back is kept, into an empty phone`() = runTest {
         val hour = 3_600_000L
         val from = Phone(full = false)
-        val gone = com.thomaswcode.decrastination.core.TaskItem(id = "own:gone", source = com.thomaswcode.decrastination.core.Source.Own, sourceId = "gone", title = "A task since deleted", kind = com.thomaswcode.decrastination.core.Kind.Admin, firstSeenAt = clock.time - hour, lastSeenAt = clock.time - hour)
+        val gone = TaskItem(id = "own:gone", source = Source.Own, sourceId = "gone", title = "A task since deleted", kind = Kind.Admin, firstSeenAt = clock.time - hour, lastSeenAt = clock.time - hour)
         // Its delete's act in the chat, not undone: its Undo brings the task back.
-        val act = com.thomaswcode.decrastination.core.Act("Deleted “A task since deleted”.", action = com.thomaswcode.decrastination.core.ChatAction(com.thomaswcode.decrastination.core.ChatAction.Type.Delete, gone.id), was = gone)
+        val act = Act("Deleted “A task since deleted”.", action = ChatAction(ChatAction.Type.Delete, gone.id), was = gone)
         from.stores.replace(from.stores.chat, ChatState(listOf(ChatMessage("f1", Speaker.Felix, "Deleted it.", clock.time - hour, acts = listOf(act)))))
         from.stores.replace(from.stores.memory, MemoryState(facts = listOf(Fact("deadline", "the essay can be late", clock.time - hour, taskId = gone.id))))
         val to = Phone(full = false)

@@ -6,7 +6,7 @@ import kotlinx.serialization.json.JsonPrimitive
 
 /**
  * `runtime.json` split by owner and by how often it changes (docs/plan_v4/04-data-and-migrations.md
- * §`runtime.json` split, Stage 7): the half-minute state to `session.json`, protection's to
+ * §`runtime.json` split): the half-minute state to `session.json`, protection's to
  * `protection.json`, the model's to `model.json`, the Anki watch's to `anki.json`, the calendar's to
  * `calendar.json` beside the versions it wrote, the calibration to `learning.json`; the rest stays. Each
  * field moves as it is, under its own name. On the JSON.

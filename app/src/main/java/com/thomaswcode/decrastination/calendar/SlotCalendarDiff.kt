@@ -1,6 +1,10 @@
 package com.thomaswcode.decrastination.calendar
 
 import com.thomaswcode.decrastination.core.Plan
+import com.thomaswcode.decrastination.core.Source
+import com.thomaswcode.decrastination.enrich.MicroPlan
+import java.nio.ByteBuffer
+import java.security.MessageDigest
 import java.time.ZoneId
 
 /**
@@ -9,7 +13,7 @@ import java.time.ZoneId
  * differ is updated; one of the app's no longer a slot is deleted; and a piece's event you've moved
  * (its start no longer what the app wrote, nor what the plan has now) is a hand move, for the app to
  * take as your time, not to put back. A copy of one of its events that's lost the app's marks is
- * deleted ([isCopy], 17 Oct). Pure.
+ * deleted ([isCopy]). Pure.
  */
 object SlotCalendarDiff {
     const val URI_PREFIX = "decrastination://slot/"
@@ -35,21 +39,21 @@ object SlotCalendarDiff {
      * yours could be worded so.
      */
     fun looksWritten(description: String): Boolean =
-        description == OUTSIDE || com.thomaswcode.decrastination.core.Source.entries.any { description.startsWith(it.label + ". ") }
+        description == OUTSIDE || Source.entries.any { description.startsWith(it.label + ". ") }
 
     /** One version of an event as the app writes it to [calendarId], as a fingerprint of its title and times. */
     fun version(calendarId: Long, title: String, start: Long, end: Long): Long {
-        val digest = java.security.MessageDigest.getInstance("SHA-256").digest("$calendarId\n$title\n$start\n$end".toByteArray(Charsets.UTF_8))
-        return java.nio.ByteBuffer.wrap(digest, 0, 8).long
+        val digest = MessageDigest.getInstance("SHA-256").digest("$calendarId\n$title\n$start\n$end".toByteArray(Charsets.UTF_8))
+        return ByteBuffer.wrap(digest, 0, 8).long
     }
 
     /**
      * Whether an event of [calendarId] that has none of the app's marks is a copy of one of its own:
      * in its words ([looksWritten]), and under a title and at times the app wrote there ([versions],
-     * as [version]). 17 Oct: the calendar's sync, run while the app changed an event it was still
+     * as [version]). The calendar's sync, run while the app changed an event it was still
      * sending, brought it back as a new event, the app's marks left off, stale as its slot moved on;
-     * such a copy is deleted, never left over the plan. Its words alone aren't enough (#47's
-     * review): an event of yours worded like one is never deleted.
+     * such a copy is deleted, never left over the plan. Its words alone aren't enough: an event
+     * of yours worded like one is never deleted.
      */
     fun isCopy(calendarId: Long, title: String, description: String, start: Long, end: Long, versions: Set<Long>): Boolean =
         looksWritten(description) && version(calendarId, title, start, end) in versions
@@ -58,7 +62,7 @@ object SlotCalendarDiff {
      * Of [desired]'s versions, those an event of yours already has in [calendarId] ([unmarked]: none
      * of the app's marks, in its words), under a slot's title at its times before the app has ever
      * written that version (not one of [versions]), so it can't be a copy of one. Not remembered
-     * ([remembered]) while it's there, so no write takes it for one (#48's third review): remembered,
+     * ([remembered]) while it's there, so no write takes it for one: remembered,
      * the next write would have deleted it.
      */
     fun yours(calendarId: Long, desired: List<Desired>, unmarked: List<Existing>, versions: Set<Long>): Set<Long> {
@@ -118,7 +122,7 @@ object SlotCalendarDiff {
         starts + taken.mapNotNull { move -> before[move.desired.uri]?.let { move.desired.uri to it } }
 
     /** [plan]'s slots, work and outside, from today for [DAYS] days, as events. */
-    fun desired(plan: Plan, zone: ZoneId, micro: Map<String, com.thomaswcode.decrastination.enrich.MicroPlan> = emptyMap()): List<Desired> = (0 until DAYS).flatMap { offset ->
+    fun desired(plan: Plan, zone: ZoneId, micro: Map<String, MicroPlan> = emptyMap()): List<Desired> = (0 until DAYS).flatMap { offset ->
         val date = plan.today.plusDays(offset)
         plan.bucket(date)?.slots.orEmpty().map { slot ->
             val chunk = slot.chunk

@@ -232,7 +232,7 @@ class OutboxTest {
         assertTrue(chat.value.messages.isEmpty() && archive.value.messages.isEmpty())
         assertEquals(42L, chat.value.felix.nextCheckAt)
         assertNull(ports.showing)
-        // What's cleared isn't kept in a copy (Q42); another store's stays.
+        // What's cleared isn't kept in a copy (D-94); another store's stays.
         assertTrue(copies.none { it.exists() })
         assertTrue(other.exists())
     }

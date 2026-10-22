@@ -32,7 +32,7 @@ class EnrichmentTest {
     fun `an email is a task whatever its reading's kind, and takes its deadline where the source has none`() {
         val task = email()
         val deadline = Fixtures.at("2026-10-12T09:00")
-        // An older reading's Event is a task too (16 Oct): every starred email is one.
+        // An older reading's Event is a task too: every starred email is one.
         val enriched = task.copy(enrichment = enrichment(task).copy(kind = Kind.Event, deadline = deadline, effortMin = 5)).enriched()
         assertEquals(Kind.Admin, enriched.kind)
         assertEquals(deadline, enriched.dueAt)
@@ -314,7 +314,7 @@ class EnrichmentTest {
     @Test
     fun `a model's reading of the text as it is, by older prompts, is stale only by its version`() {
         val task = assignment()
-        val read = com.thomaswcode.decrastination.core.Enrichment(Enrichments.inputHash(task), "claude-opus-5-5", 0, effortMin = 40, promptVersion = 1)
+        val read = Enrichment(Enrichments.inputHash(task), "claude-opus-5-5", 0, effortMin = 40, promptVersion = 1)
         assertTrue(Enrichments.staleOnlyByVersion(task.copy(enrichment = read), "rules", ReadingPrompts.VERSION))
         // By these prompts, by the rules, or of text since changed: not so.
         assertFalse(Enrichments.staleOnlyByVersion(task.copy(enrichment = read.copy(promptVersion = ReadingPrompts.VERSION)), "rules", ReadingPrompts.VERSION))

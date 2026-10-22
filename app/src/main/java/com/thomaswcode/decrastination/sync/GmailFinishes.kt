@@ -51,7 +51,7 @@ class GmailFinishes(
         /** A Gmail-only read asked for now, so a finished email's task closes as its source says. */
         fun syncGmail()
 
-        /** [write] given up, said in the app's own notification (Q18: C, Q27) in [words], opening its task's sheet. */
+        /** [write] given up, said in the app's own notification (D-106) in [words], opening its task's sheet. */
         fun gaveUp(write: GmailWrite, words: String)
 
         /** [write]'s notification taken away: sorted. */
@@ -164,7 +164,7 @@ class GmailFinishes(
     }
 
     /**
-     * *Carry on* (Q18's sheet): every finish waiting for your OK goes after the grace from now. Kept in the hints by the
+     * *Carry on* (D-106's sheet): every finish waiting for your OK goes after the grace from now. Kept in the hints by the
      * screen. With the switch turned off meanwhile, they're dropped instead ([switchedOff]).
      */
     suspend fun confirm() {

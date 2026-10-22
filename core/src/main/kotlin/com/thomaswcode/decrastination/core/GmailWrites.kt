@@ -44,10 +44,10 @@ data class GmailWrite(
 
 /** The journal's rules (docs/plan_v4/10-emails-done.md): the grace, the first finish's OK, Undo, tries and receipts. Pure. */
 object GmailWrites {
-    /** How long a finish waits before it's made: an Undo within it leaves Gmail untouched (Q18: A). */
+    /** How long a finish waits before it's made: an Undo within it leaves Gmail untouched (D-106). */
     const val GRACE_MS = 60_000L
 
-    /** Tries before a write is given up and said (Q18: C, the app's own notification). */
+    /** Tries before a write is given up and said (D-106, the app's own notification). */
     const val MAX_TRIES = 5
 
     /** How long a receipt is kept: as long as the act that made it can be undone (its message's month in the chat's window, at most). */
@@ -133,7 +133,7 @@ object GmailWrites {
      */
     fun wake(writes: List<GmailWrite>): Long? = writes.filter(::pending).groupBy { it.taskId }.mapNotNull { (_, its) -> its.first().notBefore }.minOrNull()
 
-    /** *Carry on* (Q18's sheet) at [now]: every finish waiting for your OK goes after the grace. */
+    /** *Carry on* (D-106's sheet) at [now]: every finish waiting for your OK goes after the grace. */
     fun confirm(writes: List<GmailWrite>, now: Long): List<GmailWrite> = writes.map { if (awaiting(it)) it.copy(notBefore = now + GRACE_MS) else it }
 
     /** *Not this time*, or *Turn this off*: every finish waiting for your OK dropped, its task left open. */

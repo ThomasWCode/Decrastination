@@ -4,6 +4,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
+import java.time.ZoneOffset
 
 /**
  * A calendar invite an email carries (DX-02): what it's called, when it starts and ends, and where,
@@ -41,7 +42,7 @@ data class Invite(val summary: String, val start: Long, val end: Long, val locat
      */
     fun calendarTimes(zone: ZoneId): Pair<Long, Long> {
         val (first, after) = dayRange(zone) ?: return start to end
-        fun utc(day: LocalDate) = day.atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli()
+        fun utc(day: LocalDate) = day.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
         return utc(first) to utc(after)
     }
 

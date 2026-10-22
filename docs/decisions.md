@@ -143,6 +143,7 @@ How the app works in detail is in [spec/](spec/); how the work is done is in [de
 - **D-88. A new setting needs a default, a range, a label and a field on its screen**, and its place in protection's list if it can loosen blocking.
 - **D-89. The docs change with the code**, in the same PR: the spec for behaviour, this file for decisions. Comments say what and why, and cite requirement ids and decisions.
 - **D-90. Not built:** focus sessions, streaks, an exams page, recurring work, rules by sender, two weekend windows, task search, a free-time ledger, reviews that only propose. A rewrite of the app isn't wanted; its restructuring is planned instead ([plan_v4/](plan_v4/README.md)).
+- **D-107. The structure as Stage 12 left it** (4.3.2, 21 Oct; Q48: A, Q49: A, Q50): each store is updated only by the files the architecture test names for it, its owner first, each writing its own part of it (one writer where there's one, as `gmail-writes.json`'s), and no screen updates a store; a single writer for every store isn't planned. `AppGraph` holds the wiring (the stores and the services made, and the flows that join them), whatever its length: 537 lines at 4.3.2, not the plan's 400. The plan's folder stays for now, to be cleaned and deleted later. Applies: `ArchitectureTest`, `AppGraph`, [plan_v4/](plan_v4/README.md).
 
 ## Costs
 

@@ -27,7 +27,7 @@ object Channels {
     /** Everything Felix says (AI-24, LR-03): his one notification, made from the chat. */
     const val FELIX = "felix"
 
-    /** Your sources (Q27: A): a write to Gmail that couldn't be made; outside the day's ceiling. */
+    /** Your sources (D-106): a write to Gmail that couldn't be made; outside the day's ceiling. */
     const val SOURCES = "sources"
 
     fun create(context: Context) {

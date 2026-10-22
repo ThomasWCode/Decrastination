@@ -16,7 +16,7 @@ Each call's text is cut to 40 000 characters, the profile to 16 000. What else e
 | Job | What it sends besides |
 |---|---|
 | An email's reading | The starred conversation, oldest first: who sent each message and when, the subject, its text (up to 16 000 characters), attachments by name; your answers to its question; its steps as planned |
-| An assignment's or an item's reading | The task's title, class, due date and instructions (an assignment's with its attachments' names, its links and the decks' topics); your answers to its question |
+| An assignment's or an item's reading | Today's date; the task's title, class, due date and instructions (an assignment's with its attachments' names, its links and the decks' topics); your answers to its question; its steps as planned |
 | A photo with a task (AI-23) | The photo of the work, with its reading |
 | A photo of homework (NF-01) | The photo, and today's date |
 | A photo check | Up to three photos of the work; the piece, its task's title, subject, steps done and instructions (1 500 characters) |
@@ -28,7 +28,7 @@ Each call's text is cut to 40 000 characters, the profile to 16 000. What else e
 | The week's summary (NF-02) | The week's numbers, finished and missed work, the review's note, Felix's counts, the changes you asked for |
 | The memory tidy | The facts Felix remembers with neither an until nor a task, with the day of each, beside a profile without the facts |
 
-**The web search** (`enrich/WebResearcher.kt`): what to look up, your message's words and today's date go to Claude, with no profile. Claude's web search tool then searches the web (at most three searches, located in the UK) and reads the pages it finds.
+**The web search** (`enrich/WebResearcher.kt`): what to look up, your message's words and today's date go to Claude, with your year group in its instructions and your time zone given to the search tool, but no profile. Claude's web search tool then searches the web (at most three searches, located in the UK) and reads the pages it finds.
 It runs only while Felix may search (`felixSearches`), and only when a message needs facts neither you nor the app have given ([felix.md](felix.md)).
 
 **The sources** ([sources.md](sources.md)):
@@ -40,17 +40,17 @@ It runs only while Felix may search (`felixSearches`), and only when a message n
 
 **What you send yourself**: the week's summary opens in your email app to send, to the address in Settings → Notifications; the record (Stats' export, CSV files, PL-11) and a backup (Export) go wherever you share or save them.
 
-Nothing else: no analytics, no crash reports (crashes are written down on the phone), and no Android cloud backup. From a PC, `ai-endpoint` sends Claude's calls to a stand-in server instead, till the app restarts ([storage-and-backups.md](storage-and-backups.md)).
+Nothing else: no analytics, no crash reports (crashes are written down on the phone), and no Android cloud backup. From a PC, `ai-endpoint` sends Claude's calls to a stand-in server instead, till the app restarts; `ai-check` sends one task of each reading's job, and made-up words for the other jobs, to the stand-in it names, with a dummy key, outside the gateway; and `ai-prompts` and `chat-context` write what would be sent into the app's files ([storage-and-backups.md](storage-and-backups.md)).
 
 ## What's kept on the phone
 
 | What | Where | How long |
 |---|---|---|
-| Tasks, their text and readings | `tasks.json` | A finished task while its source still lists it, then a fortnight; one its source stops listing is finished then; your own till you delete it. A fortnight after it's finished, its text, reading, answers, photo and attachments' list go, its record kept (C-Q3) |
+| Tasks, their text and readings | `tasks.json` | A finished task while its source still lists it, or a fortnight from its finish where that's longer; one its source stops listing is finished then; your own till you delete it. A fortnight after it's finished, its text, reading, answers, photo and attachments' list go, its record kept (C-Q3) |
 | The activity log | `log.json` | 120 days; each week's totals two years |
 | The chat | `chat.json`, `chat-archive-<yyyy-MM>.json` | Every message, Felix's among them, till you clear it: the newest 200 or 14 days' in `chat.json`, the rest in the archive, a file a month |
 | What Felix remembers | `memory.json` | Facts within 6 000 characters, the oldest out first; up to 20 standing instructions; till you delete them, or, one held for a while, till it runs out: its date gone by, a fortnight after its task finished, or its task gone for good (D-103) |
-| Felix's notes and your reminders | `felix.json` | A note till it, or the task of yours it's on, is deleted (kept while that Undo stands), or, on a source's task, till that source stops listing it and has been read since (the morning's prune); a reminder a month after it's sent, done or let go, a cancelled one while its Undo stands |
+| Felix's notes and your reminders | `felix.json` | A note till it, or the task of yours it's on, is deleted (kept while that Undo stands), or, on a source's task, till that task has left the task list (a fortnight after it's finished, longer while its source lists it as finished) and its source has been read since the note was made (the morning's prune); a reminder a month after it's sent, done or let go, a cancelled one while its Undo stands |
 | Your changes | `instructions.json` | Till you take them back |
 | Claude's calls | `model.json` | The last 100: job, what it's about, tokens, time, outcome, cost |
 | Photos of work | `files/photos/` | While a task holds one |
@@ -59,8 +59,12 @@ Nothing else: no analytics, no crash reports (crashes are written down on the ph
 | Daily backups | `Documents/Decrastination` | The newest 14; a reset's copy till you delete it |
 | Copies of unreadable files | `files/` | The newest three of each |
 | The file a migration came from | `files/` (`<name>.v<n>`) | A week from the migration, then let go at the next start |
+| Writes to Gmail for emails finished here | `gmail-writes.json` | Each with its email's subject and Gmail's ids: till it's made; its receipt a month, or till a read finds the email starred again; one given up till *It's sorted*. No reset clears it |
+| Your answers about calendar events | `calendar.json` | By each event's name, till you change them |
+| Days off school and half-days | `school.json` | Till you take them away |
+| The record exported from Stats | the app's cache | The day's copy, till Android clears the cache |
 
-A backup is plain JSON in the phone's shared `Documents` folder, holding the chat, what Felix remembers, his notes and your reminders, your changes, your own tasks, the log and the settings (the summary's address among them).
+A backup is plain JSON in the phone's shared `Documents` folder, holding the chat and its earlier messages, what Felix remembers, his notes and your reminders, your changes, your own tasks, the school calendar's days off, your answers about calendar events (by the events' names), the receipts of writes to Gmail (each with its email's subject), the log, what's learned, Claude's month and the settings (the summary's address among them).
 Apps with access to all files (a file manager, a sync app) can read it, and so can a PC over USB.
 
 ## Secrets

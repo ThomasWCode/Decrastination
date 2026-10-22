@@ -13,6 +13,7 @@ import com.thomaswcode.decrastination.data.RuntimeSplit
 import com.thomaswcode.decrastination.data.RuntimeState
 import java.io.File
 import java.nio.file.Files
+import java.util.IdentityHashMap
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -110,7 +111,7 @@ class NotifierTest {
     private class FakeTray : Notifier.Tray {
         var allowed = true
         val off = mutableSetOf<String>()
-        val reads = java.util.IdentityHashMap<Notification, Notifier.Read>()
+        val reads = IdentityHashMap<Notification, Notifier.Read>()
         val posted = mutableListOf<Pair<Int, String?>>()
         val showing = mutableListOf<Pair<Int, String?>>()
         val rebuilt = mutableListOf<HeldNotification>()

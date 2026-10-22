@@ -37,6 +37,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.work.WorkManager
 import com.thomaswcode.decrastination.AppGraph
+import com.thomaswcode.decrastination.BuildConfig
 import com.thomaswcode.decrastination.R
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.sync.SyncWorker
@@ -113,7 +114,7 @@ class MainActivity : ComponentActivity() {
             protection.protection.problems.isNotEmpty() || runtime.unreadable.isNotEmpty() ||
             Source.SYNCED.all { tasks.status(it).lastSuccessAt == null && tasks.status(it).error == null }
         var menu by remember { mutableStateOf(false) }
-        // The very first email finished here waits for your OK (Stage 11): asked over whichever tab is open.
+        // The very first email finished here waits for your OK: asked over whichever tab is open.
         GmailOkSheet(graph)
         Scaffold(
             // Felix on every screen (UI-16): the Tasks tab has him above its New task.
@@ -168,7 +169,7 @@ class MainActivity : ComponentActivity() {
         /** The tab to open on: [TAB_TASKS] from a dropped plan's alert; or [OPEN_SETUP], Setup over the plan, from a protection or key alert. */
         const val EXTRA_TAB = "tab"
 
-        /** A task to open in Tasks, by id: one of your own's Open (2.0.0). */
+        /** A task to open in Tasks, by id: one of your own's Open. */
         const val EXTRA_TASK = "task"
         const val TAB_TASKS = 1
         const val OPEN_SETUP = 3
@@ -184,7 +185,7 @@ class MainActivity : ComponentActivity() {
             "Reviews" to ReviewsActivity::class.java,
             "Settings" to SettingsActivity::class.java,
             // The debug page (AR-03), on a debug build.
-            ("Debug" to DebugActivity::class.java).takeIf { com.thomaswcode.decrastination.BuildConfig.DEBUG },
+            ("Debug" to DebugActivity::class.java).takeIf { BuildConfig.DEBUG },
         )
     }
 }

@@ -4,6 +4,7 @@ import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
 import com.thomaswcode.decrastination.core.Fact
 import com.thomaswcode.decrastination.core.Kind
+import com.thomaswcode.decrastination.core.Memories
 import com.thomaswcode.decrastination.core.MemoryState
 import com.thomaswcode.decrastination.core.NoSchool
 import com.thomaswcode.decrastination.core.PpClass
@@ -105,7 +106,7 @@ class ProfileTest {
         assertTrue("- topic 150: " in text)
         assertFalse("- topic 1: " in text)
         val facts = text.substringAfter("Remembered:").lines().filter { it.startsWith("- ") }
-        assertTrue(facts.sumOf { it.removePrefix("- ").length - 2 } <= com.thomaswcode.decrastination.core.Memories.FACT_BUDGET_CHARS)
+        assertTrue(facts.sumOf { it.removePrefix("- ").length - 2 } <= Memories.FACT_BUDGET_CHARS)
     }
 
     @Test

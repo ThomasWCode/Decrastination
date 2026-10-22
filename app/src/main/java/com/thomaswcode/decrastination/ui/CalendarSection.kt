@@ -27,6 +27,7 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.calendar.SlotCalendar
+import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.learn.CalendarTime
 import kotlinx.coroutines.launch
 
@@ -58,7 +59,7 @@ fun CalendarSection(graph: AppGraph, activity: Activity, choosing: Boolean = tru
         refresh++
         onPauseOrDispose { }
     }
-    fun change(change: (com.thomaswcode.decrastination.core.Settings) -> com.thomaswcode.decrastination.core.Settings) {
+    fun change(change: (Settings) -> Settings) {
         scope.launch { graph.protection.changeSettings(change) }
     }
 

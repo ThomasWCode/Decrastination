@@ -80,15 +80,15 @@ object Profile {
         if (lines.last().endsWith(":")) lines.removeAt(lines.lastIndex)
         // What's remembered, within its own bounds (AI-21): every standing instruction, and the
         // facts newest first, the oldest past their room left out.
-        memory.rules.take(com.thomaswcode.decrastination.core.Memories.RULE_MAX).takeIf { it.isNotEmpty() }?.let { rules ->
+        memory.rules.take(Memories.RULE_MAX).takeIf { it.isNotEmpty() }?.let { rules ->
             lines += "How Felix should behave:"
             rules.forEach { lines += "- ${it.text}" + (Memories.held(it.until, null, { null }, zone)?.let { held -> " ($held)" } ?: "") }
         }
-        var room = com.thomaswcode.decrastination.core.Memories.FACT_BUDGET_CHARS
+        var room = Memories.FACT_BUDGET_CHARS
         val facts = memory.facts.sortedByDescending { it.at }.takeWhile { f -> (room - (f.topic.length + f.text.length)).also { room = it } >= 0 }
         if (facts.isNotEmpty()) {
             lines += "Remembered:"
-            // One that's passing says so (10a): till when, or with which task.
+            // One that's passing says so: till when, or with which task.
             val titles = tasks.associate { it.id to it.title }
             facts.forEach { f -> lines += "- ${f.topic}: ${f.text}" + (Memories.held(f.until, f.taskId, titles::get, zone)?.let { " ($it)" } ?: "") }
         }

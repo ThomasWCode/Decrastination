@@ -2,6 +2,7 @@ package com.thomaswcode.decrastination.block
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
+import android.app.KeyguardManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -195,7 +196,7 @@ class FocusService : AccessibilityService() {
         // Connected (or restarted) while the phone is already unlocked and in use: the unlock it
         // missed counts, so the first-unlock Teams sync can still be offered.
         val power = getSystemService(PowerManager::class.java)
-        val keyguard = getSystemService(android.app.KeyguardManager::class.java)
+        val keyguard = getSystemService(KeyguardManager::class.java)
         if (power?.isInteractive == true && keyguard?.isKeyguardLocked != true) unlockedAt = SystemClock.elapsedRealtime()
         _connected.value = true
         Log.i(TAG, "Focus service connected")
@@ -271,7 +272,7 @@ class FocusService : AccessibilityService() {
     /**
      * Covers [target] with the block screen. NO_USER_ACTION tells Android this isn't the user
      * leaving it, so a playing video gets no onUserLeaveHint and doesn't float off into
-     * picture-in-picture (8 Oct). Window changes come in bursts as it opens: one block per burst.
+     * picture-in-picture. Window changes come in bursts as it opens: one block per burst.
      */
     private fun block(target: Focus.Target, reason: BlockPolicy.Reason) {
         val now = SystemClock.uptimeMillis()
@@ -764,7 +765,7 @@ class FocusService : AccessibilityService() {
     /** The phone on, unlocked, and not in a call: a moment the Teams sync may take the screen. */
     private fun inUse(): Boolean {
         val power = getSystemService(PowerManager::class.java)
-        val keyguard = getSystemService(android.app.KeyguardManager::class.java)
+        val keyguard = getSystemService(KeyguardManager::class.java)
         if (power?.isInteractive != true || keyguard?.isKeyguardLocked == true) return false
         return getSystemService(AudioManager::class.java)?.mode == AudioManager.MODE_NORMAL
     }
@@ -847,7 +848,7 @@ class FocusService : AccessibilityService() {
         /**
          * Whether Android has this service bound. [AccessibilityManager.getEnabledAccessibilityServiceList]
          * lists the bound services, not the setting's enabled ones: a crashed service, still in the
-         * setting, isn't in it (a crash on the phone showed exactly that, 9 Oct).
+         * setting, isn't in it (a crash on the phone showed exactly that).
          */
         fun isBound(context: Context): Boolean {
             val manager = context.getSystemService(AccessibilityManager::class.java) ?: return false

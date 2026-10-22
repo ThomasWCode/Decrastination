@@ -3,12 +3,14 @@ package com.thomaswcode.decrastination.widget
 import com.thomaswcode.decrastination.core.Chunk
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.SlotKind
+import com.thomaswcode.decrastination.core.Slotter
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.data.ProtectionState
 import com.thomaswcode.decrastination.data.SessionState
 import com.thomaswcode.decrastination.data.SlotOutcome
 import com.thomaswcode.decrastination.data.SlotRecord
 import com.thomaswcode.decrastination.data.TaskState
+import com.thomaswcode.decrastination.enrich.MicroPlan
 import com.thomaswcode.decrastination.ui.Format
 import com.thomaswcode.decrastination.ui.Groups
 import java.time.ZoneId
@@ -22,7 +24,7 @@ import java.time.ZoneId
 data class WidgetModel(
     /** "17:00–17:30 · Moments Prep", its slot's time first (UI-05); "Do: Moments Prep" with no slot; "Nothing due". */
     val headline: String,
-    /** The piece's first step under it (AI-15's micro-plan, phase 7), where there's room; null without one. */
+    /** The piece's first step under it (AI-15's micro-plan), where there's room; null without one. */
     val label: String?,
     val badge: String?,
     /** The badge is bad news: overdue, due today, behind. */
@@ -67,7 +69,7 @@ data class WidgetModel(
             armed: Boolean = false,
             reward: String? = null,
             slots: List<SlotRecord> = emptyList(),
-            micro: Map<String, com.thomaswcode.decrastination.enrich.MicroPlan> = emptyMap(),
+            micro: Map<String, MicroPlan> = emptyMap(),
         ): WidgetModel {
             val now = plan.now
             val next = plan.next
@@ -121,7 +123,7 @@ data class WidgetModel(
          */
         fun day(plan: Plan, slots: List<SlotRecord>): String? {
             val now = plan.now
-            val ahead = plan.todaySlots.filter { it.kind == SlotKind.Work && it.chunk != null && it.end + com.thomaswcode.decrastination.core.Slotter.GRACE_MS > now }
+            val ahead = plan.todaySlots.filter { it.kind == SlotKind.Work && it.chunk != null && it.end + Slotter.GRACE_MS > now }
             val kept = slots.count { it.outcome.kept }
             val total = kept + slots.count { it.outcome == SlotOutcome.Missed } + ahead.size
             if (total == 0) return null

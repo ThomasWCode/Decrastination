@@ -3,8 +3,8 @@ package com.thomaswcode.decrastination.core
 import kotlinx.serialization.Serializable
 
 /**
- * A note Felix keeps at your asking (docs/plan_v4/07-notes-and-reminders.md, Stage 8a): on one task
- * ([taskId]), or standing, for every task its [scope] matches (Q31: A), never both; told to him
+ * A note Felix keeps at your asking (docs/plan_v4/07-notes-and-reminders.md): on one task
+ * ([taskId]), or standing, for every task its [scope] matches (D-100), never both; told to him
  * whenever the task comes up, and shown on its sheet. Yours from the sheet, his from the chat ([by]).
  * Deleted, it's marked so ([deletedAt]), shown nowhere and kept whole for the delete's Undo, till
  * that can no longer be undone ([Notes.prune]).
@@ -21,7 +21,7 @@ data class Note(
 )
 
 /**
- * What a standing note is for (Q31: A): every task of a [subject] (a class code's subject, by the
+ * What a standing note is for (D-100): every task of a [subject] (a class code's subject, by the
  * class map), of a class ([className], its code), from a [source], or with a word in its title
  * ([titleContains], from a word's start). Of those given, a task matches every one; each named in at
  * most [Notes.MAX_SCOPE] characters.
@@ -59,7 +59,7 @@ object Notes {
     fun on(taskId: String, notes: List<Note>): List<Note> = live(notes).filter { it.taskId == taskId }.sortedBy { it.at }
 
     /**
-     * [task]'s notes (Q31: A): its own, then every standing one whose scope it matches ([matches]),
+     * [task]'s notes (D-100): its own, then every standing one whose scope it matches ([matches]),
      * each oldest first, none deleted; [classMap] is Settings' (a class code to its subject).
      */
     fun forTask(task: TaskItem, notes: List<Note>, classMap: Map<String, String>): List<Note> =

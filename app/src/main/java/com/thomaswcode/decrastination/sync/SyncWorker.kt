@@ -28,7 +28,7 @@ import com.thomaswcode.decrastination.notify.Notify
  *
  * Every sync not started from a screen in use goes through here. Since Android 15 an app with
  * nothing in the foreground loses its network a few seconds after leaving it, and its open
- * sockets are cut ("Software caused connection abort", seen on the phone on 8 Oct with Gmail's
+ * sockets are cut ("Software caused connection abort", seen on the phone with Gmail's
  * IMAP); a running job keeps its network.
  */
 class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {

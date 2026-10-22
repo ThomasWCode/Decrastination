@@ -1,7 +1,10 @@
 package com.thomaswcode.decrastination.enrich
 
+import com.anthropic.client.AnthropicClient
+import com.anthropic.core.ClientOptions
 import com.anthropic.core.JsonValue
 import com.anthropic.core.http.Headers
+import com.anthropic.errors.BadRequestException
 import com.anthropic.errors.UnauthorizedException
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.core.Enrichment
@@ -124,6 +127,16 @@ class ModelGatewayTest {
     }
 
     @Test
+    fun `a new key put in isn't held by the last key's failure`() = runTest {
+        assertIs<Called.Failed>(ask { throw keyRejected })
+        settle()
+        assertEquals(ModelHold.Resting, gateway.hold(interactive = true))
+        gateway.newKey()
+        assertNull(model.value.aiUsage.keyProblem)
+        assertNull(gateway.hold(interactive = true))
+    }
+
+    @Test
     fun `a key problem that couldn't be shown is shown when the alerts are put right`() = runTest {
         alerts.showing = false
         assertIs<Called.Failed>(ask { throw keyRejected })
@@ -152,7 +165,7 @@ class ModelGatewayTest {
     @Test
     fun `a request the API won't take isn't sent again for that task till it changes`() = runTest {
         val task = TaskItem(id = "teams:a", source = Source.Teams, sourceId = "a", title = "A task", kind = Kind.Homework, firstSeenAt = clock.time, lastSeenAt = clock.time)
-        val refused = com.anthropic.errors.BadRequestException.builder().headers(Headers.builder().build()).body(JsonValue.from(mapOf("type" to "error", "error" to mapOf("type" to "invalid_request_error", "message" to "no")))).build()
+        val refused = BadRequestException.builder().headers(Headers.builder().build()).body(JsonValue.from(mapOf("type" to "error", "error" to mapOf("type" to "invalid_request_error", "message" to "no")))).build()
         assertIs<Called.Failed>(ask(task = task) { throw refused })
         assertEquals(mapOf("teams:a" to Enrichments.inputHash(task)), model.value.enrichFailed)
         assertEquals("BadRequest", model.value.aiUsage.lastFailureClass)
@@ -196,8 +209,8 @@ class ModelGatewayTest {
     }
 
     /** The HTTP client under [this] (the SDK wraps it afresh for each job's options, its retries around it): its connections. */
-    private fun com.anthropic.client.AnthropicClient.underlying(): Any =
-        com.anthropic.core.ClientOptions::class.java.getDeclaredField("originalHttpClient").apply { isAccessible = true }.get(options())
+    private fun AnthropicClient.underlying(): Any =
+        ClientOptions::class.java.getDeclaredField("originalHttpClient").apply { isAccessible = true }.get(options())
 
     /** The reconciling and the stores' writes run on the gateway's scope: waited for. */
     private fun settle() = runBlocking { job.children.toList().joinAll() }

@@ -63,7 +63,7 @@ class Looks(
     private val log: JsonStore<ActivityLog>,
     /** The chat: his messages, and his state between looks ([ChatState.felix]). */
     private val chat: JsonStore<ChatState>,
-    /** His notes and reminders (Stage 8a): the reminders delivered as they come, and written for just before. */
+    /** His notes and reminders: the reminders delivered as they come, and written for just before. */
     private val felix: JsonStore<FelixStore>,
     private val clock: WallClock,
     private val scope: CoroutineScope,
@@ -102,7 +102,7 @@ class Looks(
             return
         }
         try {
-            // Reminders gone by first (8a), Claude on or off: they're yours, and never nothing.
+            // Reminders gone by first, Claude on or off: they're yours, and never nothing.
             sweepReminders(now)
             val trigger = due(now)
             if (trigger != null) write(trigger, now) else draft(focus.plan(now), now)
@@ -117,10 +117,10 @@ class Looks(
     private val sweeping = Mutex()
 
     /**
-     * Your reminders as they come (Stage 8a, docs/plan_v4/07-notes-and-reminders.md §Delivery): each one
+     * Your reminders as they come (docs/plan_v4/07-notes-and-reminders.md §Delivery): each one
      * whose moment has come by [now] delivered as his message, kind Reminder, about its task, with its
      * replies (*Done* and two snoozes), through his outbox, so it's in the chat and on his notification,
-     * whatever the hour (Q10: A); one gone by more than [Reminders.LATE_MS] (the phone off) marked late.
+     * whatever the hour (D-100); one gone by more than [Reminders.LATE_MS] (the phone off) marked late.
      * His words written for it ahead where they're there and it's on time; else yours as you set them,
      * the app's ([FelixWords.reminder]). One whose task closed before it came is let go first, said in
      * a note of his in the app's words. At its alarm, at each of his looks, and at a start; and with each
@@ -191,7 +191,7 @@ class Looks(
 
     /**
      * The morning's message (LR-04): his sentence or two on the day's shape, whole, as the briefing,
-     * with no list of the day beside it (your call, 16 Oct), so it has [FelixAnswers.MAX_MORNING]
+     * with no list of the day beside it (D-65), so it has [FelixAnswers.MAX_MORNING]
      * characters. False, the day's list going instead in the app's words, with no slot today, Claude
      * off or resting, no answer within [MORNING_MS], or an empty one. It sets no check: the day's slots
      * do that.
@@ -210,7 +210,7 @@ class Looks(
         }
         val called = withTimeoutOrNull(MORNING_MS) { call.await() }
         val answer = (called as? Called.Answered)?.value?.answer?.takeIf { it.message.isNotBlank() } ?: return@withLock false
-        // His message whole, with no list of the day beside it (your call, 16 Oct): the room is his.
+        // His message whole, with no list of the day beside it (D-65): the room is his.
         outbox.send(ChatMessage(UUID.randomUUID().toString(), Speaker.Felix, answer.message, now, kind = MessageKind.Morning, suggestedReplies = answer.replies))
         answer.memories.takeIf { it.isNotEmpty() }?.let { remember(it) }
         true
@@ -360,7 +360,7 @@ class Looks(
      * His answer for [trigger] as it stands at [at] (now, or when a draft's for), as the call went;
      * [interactive], due now, it goes through a rest (AC-04: as the chat does, but for a key that
      * failed or the cap). About [task] (its trigger's, or a reminder's), with your [reminder]'s words
-     * and the task's [notes] where there are any (8a).
+     * and the task's [notes] where there are any.
      */
     private suspend fun ask(
         caller: FelixCaller,
@@ -380,11 +380,11 @@ class Looks(
         return called
     }
 
-    /** [task]'s notes, its own and the standing ones it matches (8a), as he's told them. */
+    /** [task]'s notes, its own and the standing ones it matches, as he's told them. */
     private fun notesOf(task: TaskItem): List<String> = Notes.forTask(task, felix.value.notes, settings.value.classMap).map { it.text }
 
     /**
-     * Your reminder at [trigger]'s slot's start (8a), for his SlotStart: sent at it, or still to come with it
+     * Your reminder at [trigger]'s slot's start, for his SlotStart: sent at it, or still to come with it
      * its next, so he doesn't say it twice.
      */
     private fun slotReminder(trigger: FelixRules.Trigger): String? {
@@ -396,7 +396,7 @@ class Looks(
         }?.text
     }
 
-    /** Your reminders that come today (8a), as his morning's told them: "16:00 dentist". */
+    /** Your reminders that come today, as his morning's told them: "16:00 dentist". */
     private fun remindersToday(plan: Plan, now: Long): List<String> {
         val zone = clock.zone()
         val today = Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
@@ -423,7 +423,7 @@ class Looks(
     }
 
     /**
-     * His words for the reminders due within [FelixRules.AHEAD_MS] (Stage 8a): at once after one's set,
+     * His words for the reminders due within [FelixRules.AHEAD_MS]: at once after one's set,
      * moved or brought back, so one due inside the window has them without waiting for a plan or a look.
      */
     suspend fun draftReminders(now: Long = clock.now()) = writeReminders(planning.plan(now = now), now)
@@ -433,7 +433,7 @@ class Looks(
 
     /**
      * His words for each reminder of yours due within [FelixRules.AHEAD_MS] of [now] by [plan] and not
-     * asked for its moment yet ([Reminders.asked]): one call each (Q9: B; Q24), written as of its
+     * asked for its moment yet ([Reminders.asked]): one call each (D-100), written as of its
      * moment, kept on it unless it changed meanwhile; one that came back with none isn't asked again for
      * that moment. None with Claude off, resting or over the cap: the sweep sends your words then.
      */

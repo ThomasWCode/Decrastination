@@ -1,6 +1,7 @@
 package com.thomaswcode.decrastination.ui
 
 import android.app.Activity
+import android.os.SystemClock
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -29,8 +30,15 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -50,17 +58,21 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.core.About
+import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.SchoolDays
 import com.thomaswcode.decrastination.core.Slot
 import com.thomaswcode.decrastination.core.SlotKind
+import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.WindowKind
 import com.thomaswcode.decrastination.data.SlotOutcome
 import com.thomaswcode.decrastination.data.SlotRecord
+import com.thomaswcode.decrastination.enrich.MicroPlan
 import com.thomaswcode.decrastination.learn.CalendarEvent
 import com.thomaswcode.decrastination.learn.CalendarTime
 import com.thomaswcode.decrastination.learn.EventJudge
+import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -133,7 +145,7 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
         DayModel.from(plan, day, calendar.events, log.slots, SchoolDays.windows(day, settings, tasks.timetable, school), now, zone)
     }
     val list = rememberLazyListState()
-    val snackbar = remember { androidx.compose.material3.SnackbarHostState() }
+    val snackbar = remember { SnackbarHostState() }
     // Before the day's rows: the strip, today's DO NOW card, the day's heading and what you've said
     // about it, its deadlines that won't fit.
     val head = 4 + (if (today) 1 + plan.wontFit.size else 0)
@@ -148,7 +160,7 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
         item(key = "week") { WeekStrip(plan, day) { chosen = it.toString() } }
         if (today) {
             item(key = "next") {
-                val unread = com.thomaswcode.decrastination.core.Source.SYNCED.filter { tasks.status(it).lastSuccessAt == null }
+                val unread = Source.SYNCED.filter { tasks.status(it).lastSuccessAt == null }
                 NextCard(
                     graph, activity, plan, zone, photo, ::messageOf, say,
                     empty = if (unread.isNotEmpty()) "Nothing planned yet: ${unread.joinToString { it.label }} not read yet." else "No work is planned. New tasks appear as the sources are read.",
@@ -167,7 +179,7 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
         // Your instructions about the day, its limit and busy times, and one more (the Calendar page's, UI-11).
         item(key = "said-$day") {
             val rules = instructions.applied.flatMap { it.changes }.filter { c ->
-                (c.type == com.thomaswcode.decrastination.core.ChangeType.DayLimit || c.type == com.thomaswcode.decrastination.core.ChangeType.BusyTime) &&
+                (c.type == ChangeType.DayLimit || c.type == ChangeType.BusyTime) &&
                     (c.date == day.toString() || (c.date == null && c.weekday == day.dayOfWeek.value))
             }
             Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
@@ -207,14 +219,14 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
                     onDone = {
                         val chunk = row.slot.chunk ?: return@PlannedRow
                         // One swipe, one Done.
-                        val at = android.os.SystemClock.elapsedRealtime()
+                        val at = SystemClock.elapsedRealtime()
                         if (lastDone?.let { (key, t) -> key == chunk.key && at - t < SWIPE_AGAIN_MS } == true) return@PlannedRow
                         lastDone = chunk.key to at
                         scope.launch {
                             val since = graph.clock.now()
                             if (!graph.focus.keepSlot(chunk.key, seenAt = now)) {
                                 snackbar.showSnackbar("That piece has changed since (done, or planned again).")
-                            } else if (snackbar.showSnackbar(listOfNotNull("Done: ${chunk.label}", stillPlanned(graph, chunk.taskId)).joinToString(". "), actionLabel = "Undo", duration = androidx.compose.material3.SnackbarDuration.Short) == androidx.compose.material3.SnackbarResult.ActionPerformed) {
+                            } else if (snackbar.showSnackbar(listOfNotNull("Done: ${chunk.label}", stillPlanned(graph, chunk.taskId)).joinToString(". "), actionLabel = "Undo", duration = SnackbarDuration.Short) == SnackbarResult.ActionPerformed) {
                                 if (!graph.focus.unkeepSlot(chunk.key, since)) snackbar.showSnackbar("It can't be taken back now: its task is finished.")
                             }
                         }
@@ -256,7 +268,7 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
         }
     }
 
-    androidx.compose.material3.SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).padding(bottom = 72.dp))
+    SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).padding(bottom = 72.dp))
     }
 
     // A piece's actions, as the block screen has them.
@@ -308,7 +320,7 @@ private fun dayName(day: LocalDate, today: LocalDate) = when (day) {
     else -> day.format(LONG_DAY)
 }
 
-private fun clock(at: Long, zone: ZoneId) = java.time.Instant.ofEpochMilli(at).atZone(zone).format(CLOCK)
+private fun clock(at: Long, zone: ZoneId) = Instant.ofEpochMilli(at).atZone(zone).format(CLOCK)
 
 private fun eventKey(event: CalendarEvent) = "${event.id}@${event.start}"
 
@@ -416,7 +428,7 @@ private fun verdict(judgement: EventJudge.Judgement, asked: Boolean): String = w
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun PlannedRow(row: DayModel.Row.Planned, plan: Plan, zone: ZoneId, message: String?, today: Boolean, micro: com.thomaswcode.decrastination.enrich.MicroPlan?, onOpen: () -> Unit, onMove: () -> Unit, onDone: () -> Unit, onLater: () -> Unit) {
+private fun PlannedRow(row: DayModel.Row.Planned, plan: Plan, zone: ZoneId, message: String?, today: Boolean, micro: MicroPlan?, onOpen: () -> Unit, onMove: () -> Unit, onDone: () -> Unit, onLater: () -> Unit) {
     val slot: Slot = row.slot
     val chunk = slot.chunk
     if (slot.kind == SlotKind.Outside || chunk == null) {
@@ -429,15 +441,15 @@ private fun PlannedRow(row: DayModel.Row.Planned, plan: Plan, zone: ZoneId, mess
         return
     }
     val now = row.state == DayModel.State.Now
-    val swipe = androidx.compose.material3.rememberSwipeToDismissBoxState(positionalThreshold = { it * 0.4f })
+    val swipe = rememberSwipeToDismissBoxState(positionalThreshold = { it * 0.4f })
     val scope = rememberCoroutineScope()
-    androidx.compose.material3.SwipeToDismissBox(
+    SwipeToDismissBox(
         state = swipe,
         modifier = Modifier.padding(horizontal = 12.dp, vertical = 3.dp),
         // Later today is today's: another day's slot is held to move it.
         enableDismissFromStartToEnd = today,
         backgroundContent = {
-            val done = swipe.dismissDirection == androidx.compose.material3.SwipeToDismissBoxValue.EndToStart
+            val done = swipe.dismissDirection == SwipeToDismissBoxValue.EndToStart
             Row(
                 Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp),
                 horizontalArrangement = if (done) Arrangement.End else Arrangement.Start,
@@ -448,8 +460,8 @@ private fun PlannedRow(row: DayModel.Row.Planned, plan: Plan, zone: ZoneId, mess
             // Back in place: the row goes when the plan's made again.
             scope.launch { swipe.reset() }
             when (value) {
-                androidx.compose.material3.SwipeToDismissBoxValue.EndToStart -> onDone()
-                androidx.compose.material3.SwipeToDismissBoxValue.StartToEnd -> onLater()
+                SwipeToDismissBoxValue.EndToStart -> onDone()
+                SwipeToDismissBoxValue.StartToEnd -> onLater()
                 else -> Unit
             }
         },

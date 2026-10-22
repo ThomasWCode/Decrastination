@@ -5,6 +5,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
+import java.time.temporal.ChronoUnit
 import kotlin.math.ceil
 import kotlin.math.roundToInt
 
@@ -19,7 +20,7 @@ import kotlin.math.roundToInt
  *    the minutes already worked, and never under 5 ("finish and hand in"). Sub-steps still to do
  *    go the same way: the minutes worked past the steps ticked off, or the source's progress
  *    where that leaves less, come off the next ones; and one of the app's still over an hour as
- *    planned is in sittings ([Sittings], 3.1.2's review), only its last ticking it (steps you gave
+ *    planned is in sittings ([Sittings]), only its last ticking it (steps you gave
  *    are as you gave them).
  * 3. Work due later today or tomorrow comes first, as its deadlines can still be met: it takes
  *    today's time before work already past its deadline. A task with some brings its overdue
@@ -329,7 +330,7 @@ object Planner {
         // have its own day (a deck of 300 unseen cards is 15 days of 20).
         val stepDays = items.maxOfOrNull { item ->
             val perDay = item.task.stepsPerDay ?: return@maxOfOrNull 0L
-            val start = item.notBefore?.takeIf { it > input.now }?.let { java.time.temporal.ChronoUnit.DAYS.between(today, date(it, zone)) } ?: 0L
+            val start = item.notBefore?.takeIf { it > input.now }?.let { ChronoUnit.DAYS.between(today, date(it, zone)) } ?: 0L
             start + (item.chunks.size + perDay - 1) / perDay
         } ?: 0L
         val horizon = minOf(maxOf(lastDeadline, today.plusDays(MIN_HORIZON_DAYS), today.plusDays(stepDays)), today.plusDays(MAX_HORIZON_DAYS))
@@ -1016,7 +1017,7 @@ object Planner {
                     if (off == 0) piece else Piece(piece.step, piece.minutes - off, from = piece.from, due = piece.due, index = piece.index, where = piece.where)
                 }
             }
-            // A step still over an hour as planned, in sittings (3.1.2's review).
+            // A step still over an hour as planned, in sittings.
             return progressed.flatMap { sittings(it, task, planned) }
         }
         if (task.effortMin <= 0) return emptyList()
@@ -1037,12 +1038,12 @@ object Planner {
     /**
      * [piece] of a step of [task]'s in sittings where the step is over an hour as planned
      * ([planned]: the calibration's minutes, or yours shared out over its steps; or a step read
-     * before sittings), as Claude's are cut when read ([Sittings], 3.1.2's review). What's left of
+     * before sittings), as Claude's are cut when read ([Sittings]). What's left of
      * it in even sittings of an hour at most, each named for its place among the whole step's, so
      * keeping one leaves the rest called and keyed as they were ([Sitting.after]). Its last is the
      * step's; the others' minutes, kept, are worked on it, so they come off it as a session stopped
      * early's do. Not a step you gave ([TaskItem.yourSteps]): that's planned as you gave it, however
-     * long (your call, 17 Oct).
+     * long (D-34).
      */
     private fun sittings(piece: Piece, task: TaskItem, planned: List<Int>): List<Piece> {
         if (task.yourSteps) return listOf(piece)
