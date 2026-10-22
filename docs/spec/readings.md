@@ -23,7 +23,7 @@ What a job is sent is `ReadingPrompts.describe`; what it answers is `ReadingProm
 
 **Assignment**: a Teams assignment.
 - Sent: today, its title, class and the source's due time, the Anki decks by topic (DX-10), its reference materials by name and its links (DX-08), your answers, its steps as last planned, and its instructions.
-- Returns: `subSteps` (each with title, minutes, `ankiSections`, `where`, `from` and `due`), `effortMin` (their sum), `ankiSections`, `testDate`, `question`, `reason` and `summary`.
+- Returns: `subSteps` (each with title, minutes, `ankiSections`, `where`, `from`, `due` and `anyOrder`), `effortMin` (their sum), `ankiSections`, `testDate`, `question`, `reason` and `summary`.
 - Revising for a test after the hand-in gets no step: its day goes in `testDate`, read as 08:30 that day, which brings the task's date forward when it's earlier than the source's.
 
 **Effort**: a Power Planner task.
@@ -32,7 +32,7 @@ What a job is sent is `ReadingPrompts.describe`; what it answers is `ReadingProm
 
 Every job:
 - Its prompt (`ReadingPrompts.system`) is its brief, the limits its answer is checked against, from the checks' own values (`ReadingPrompts.limits`, AI-03), and made-up worked examples (`enrich/Examples.kt`, AI-07), each an answer the checks pass whole.
-- The schema says what the minutes, the dates, `where`, a step's `ankiSections`, `reason` and `summary` are for, with the limits of the minutes, `reason` and `summary` (AI-20); the brief describes the rest. The year group comes from the profile (AI-06).
+- The schema says what the minutes, the dates, `where`, a step's `ankiSections`, a step's or block's `anyOrder`, `reason` and `summary` are for, with the limits of the minutes, `reason` and `summary` (AI-20); the brief describes the rest. The year group comes from the profile (AI-06).
 - `reason` (Email and Assignment) quotes the phrase that gave the date, kind or test date, at most 160 characters (AI-09), shown under the due date on the task's sheet.
 - `summary`, last (D-93): for a text over about 600 characters, what it asks of the student from all of it, in at most 400 characters (500 kept): an email's what to do and by when, what to bring, send or pay, and what a later message changed; an assignment's work, parts, needs, dates and hand-in. Empty for a shorter text. Felix is told it in place of a text too long for his room ([felix.md](felix.md)); the readings made before it have none, and his room keeps the text's start and end instead.
 
@@ -45,6 +45,7 @@ The Assignment prompt asks for the steps the student will actually do, as few as
 - dates on a step only where the instructions give them, and none after the hand-in.
 - Learning numbered vocabulary is a step of its own, its sections in `ankiSections`: the planner leaves it out where your Anki deck tasks hold them. A step asking for anything else too is planned whole (`AnkiRules.vocabularyOnly`).
 - **Where** (PL-15): each of an assignment's steps is "home" (the laptop, books or quiet) or "anywhere" (a free period at school). The planner keeps "home" steps out of school time (planner.md); a step without one, an email's or planner item's block included, goes by its task's.
+- **In any order** (D-109): each step and block says whether it needs the ones before it done first (`anyOrder`): true for a separate piece of work (separate questions or exercises, a reading task beside vocabulary to learn, separate applications), false for one that builds on them, and for the first. A day's slots may lay one marked so ahead of them (slots-and-calendar.md).
 
 Emails' and planner items' blocks follow the same rule: only separately dated pieces, never one job cut up.
 
@@ -120,7 +121,7 @@ It runs again once Claude can be asked again (its rest over, `EnrichWorker.retry
 
 ## The prompts' version (AC-06)
 
-`ReadingPrompts.VERSION` is 8. Each reading keeps the version of the prompts that made it (`Enrichment.promptVersion`; 1 where none is stored).
+`ReadingPrompts.VERSION` is 9. Each reading keeps the version of the prompts that made it (`Enrichment.promptVersion`; 1 where none is stored).
 - With Claude on, an open task Claude read under an older version is read again once, within the run's 20 calls, the oldest first.
 - **Not a task with a step of its reading done** (`partDone`, `core/Enrichment.kt`): newer prompts could give its work as other steps, and a tick goes only to a step of its name, so work done would be planned again. It's read again only when its content changes or you ask.
 - Read for such a reason, Claude is told which steps are done: each listed "(N min, done)", to be kept exactly as it is (title and minutes, still in `effortMin`), with only the work left given in the others (AI-08, `ReadingPrompts.describe`).

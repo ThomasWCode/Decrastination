@@ -85,6 +85,10 @@ Notes (on a task, or standing, for every task a scope matches) and reminders, ve
 
 `Fact.until`, `Fact.taskId`, `Rule.until`, each with a default: a file from before reads as it is; its version is raised as it loads all the same, and so are `chat.json`'s (6) and the archive's months' (5), for the answers' memory edits, and `log.json`'s (3), for the reviews' tidies (`MemoryMigration`), so an older build sets a newer file aside.
 
+### A step's order, 4.3.5
+
+`SubStep.anyOrder` and `OwnStep.anyOrder` (D-109), each with a default: a file from before reads as it is, every step needing the ones before it; its version is raised as it loads all the same, `tasks.json`'s (3) and `instructions.json`'s (3), and `chat.json`'s (7) and the archive's months' (6), whose acts and proposals keep tasks and steps for an Undo (`StepOrderMigration`), so an older build sets a newer file aside. Tested from every shape, `fixtures/stores/2026-10-22-4.3.5` the shape now.
+
 ### `gmail-writes.json` (v1), Stage 11
 
 The journal of writes to Gmail: the pending ones, in no backup (a pending write is this phone's and this hour's), and the receipts of completed ones, which the backup does carry (format 9), since a restored chat still holds the act whose Undo needs them; cleared by nothing in Reset.
