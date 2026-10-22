@@ -33,12 +33,13 @@ class OwnTaskFormTest {
     }
 
     @Test
-    fun `a row retitled or moved loses its mark, and its other changes keep it`() {
+    fun `a row keeps its mark through a new title or a move, and its chip sets or clears it (D-109)`() {
         val rows = rowsOf(task, editing = true)
-        assertEquals(listOf(false, false), changedRow(rows, 1, rows[1].copy(title = "Ask for two references")).map { it.anyOrder })
-        assertEquals(listOf(false, true), changedRow(rows, 1, rows[1].copy(minutes = "200", where = "home")).map { it.anyOrder })
-        val moved = movedRow(rows, 1, -1)
-        assertEquals(listOf("Ask for a reference", "First draft"), moved.map { it.title })
-        assertEquals(listOf(false, false), moved.map { it.anyOrder })
+        assertEquals(listOf(false, true), changedRow(rows, 1, rows[1].copy(title = "Ask for two references")).map { it.anyOrder })
+        assertEquals(listOf("Ask for a reference" to true, "First draft" to false), movedRow(rows, 1, -1).map { it.title to it.anyOrder })
+        // Its chip: cleared, then set again.
+        val cleared = changedRow(rows, 1, rows[1].copy(anyOrder = false))
+        assertEquals(listOf(false, false), cleared.map { it.anyOrder })
+        assertEquals(listOf(false, true), changedRow(cleared, 1, cleared[1].copy(anyOrder = true)).map { it.anyOrder })
     }
 }
