@@ -80,6 +80,11 @@ data class SubStep(
     val id: String = "",
     /** Where it came from: what tells the reading's steps from the rest. */
     val origin: StepOrigin = StepOrigin.Source,
+    /**
+     * It doesn't need the steps before it done first, as the reading or Felix marked it (D-109):
+     * separate questions, say, not a draft after its plan. A day's slots may lay it ahead of them.
+     */
+    val anyOrder: Boolean = false,
 )
 
 /**

@@ -40,6 +40,8 @@ data class OwnStep(
     /** Its id, made when it's first stored (an instruction's, [InstructionState.withStepIds]) and kept: the task step it's laid as keeps it ([asSubStep]). */
     val id: String = "",
     @Transient val wasIndex: Int? = null,
+    /** It doesn't need the steps before it done first, as Felix marked it (D-109); the task step it's laid as says so too. */
+    val anyOrder: Boolean = false,
 )
 
 /** [this] with each step that has no id, or one a step before it has, given a new one ([newStepId]). */
@@ -120,7 +122,7 @@ object OwnTaskRules {
         dueAt = task.sourceValues?.dueAt ?: task.dueAt,
         startFrom = task.notBefore,
         minutes = task.sourceEffortMin ?: task.kind.defaultEffortMin,
-        steps = task.subSteps.mapIndexed { i, s -> OwnStep(s.title, s.minutes, s.from, s.dueAt, s.where, id = s.id, wasIndex = i) },
+        steps = task.subSteps.mapIndexed { i, s -> OwnStep(s.title, s.minutes, s.from, s.dueAt, s.where, id = s.id, wasIndex = i, anyOrder = s.anyOrder) },
         where = task.extra[EXTRA_WHERE] ?: "anywhere",
     )
 
@@ -277,6 +279,7 @@ object OwnTaskRules {
             SubStep(
                 s.title.trim().take(MAX_TITLE), s.minutes, done = was?.done == true, byHand = was?.byHand == true, timedMin = was?.timedMin ?: 0,
                 from = s.from, dueAt = s.dueAt, where = Where.of(s.where)?.name?.lowercase(), id = s.id.ifEmpty { was?.id.orEmpty() }, origin = StepOrigin.OwnTask,
+                anyOrder = s.anyOrder,
             )
         }
         val minutes = when {
