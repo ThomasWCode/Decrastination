@@ -60,13 +60,17 @@
                                 "dueDate": {
                                     "type": "string",
                                     "description": "YYYY-MM-DD, or empty"
+                                },
+                                "anyOrder": {
+                                    "type": "boolean"
                                 }
                             },
                             "required": [
                                 "title",
                                 "minutes",
                                 "startDate",
-                                "dueDate"
+                                "dueDate",
+                                "anyOrder"
                             ],
                             "additionalProperties": false
                         }
@@ -190,6 +194,9 @@
                                         "anywhere",
                                         "home"
                                     ]
+                                },
+                                "anyOrder": {
+                                    "type": "boolean"
                                 }
                             },
                             "required": [
@@ -197,7 +204,8 @@
                                 "minutes",
                                 "startDate",
                                 "dueDate",
-                                "where"
+                                "where",
+                                "anyOrder"
                             ],
                             "additionalProperties": false
                         }

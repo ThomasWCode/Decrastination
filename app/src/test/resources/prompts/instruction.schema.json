@@ -116,6 +116,9 @@
                                         "anywhere",
                                         "home"
                                     ]
+                                },
+                                "anyOrder": {
+                                    "type": "boolean"
                                 }
                             },
                             "required": [
@@ -123,7 +126,8 @@
                                 "minutes",
                                 "startDate",
                                 "dueDate",
-                                "where"
+                                "where",
+                                "anyOrder"
                             ],
                             "additionalProperties": false
                         }
