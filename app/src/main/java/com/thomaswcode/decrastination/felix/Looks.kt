@@ -230,6 +230,12 @@ class Looks(
             val steps = known[candidate.taskId]?.let { Rebalance.steps(it, candidate, given) } ?: return@mapNotNull null
             Proposal(UUID.randomUUID().toString(), changes = listOf(Change(ChangeType.Steps, taskId = candidate.taskId, steps = steps)), lines = listOf(Rebalance.line(candidate, given)), instant = true)
         }.distinctBy { it.changes.single().taskId }
+        // One he gave that isn't made, his message would still say it was: the day's list in the app's words
+        // instead ([Briefing]), what he remembered kept all the same.
+        if (proposals.size < result.rebalances.size) {
+            answer.memories.takeIf { it.isNotEmpty() }?.let { remember(it) }
+            return@withLock false
+        }
         // His message whole, with no list of the day beside it (D-65): the room is his.
         val message = ChatMessage(UUID.randomUUID().toString(), Speaker.Felix, answer.message, now, kind = MessageKind.Morning, suggestedReplies = answer.replies, proposals = proposals)
         outbox.send(message)

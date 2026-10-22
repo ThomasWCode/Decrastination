@@ -15,14 +15,14 @@ class RebalanceTest {
     private fun step(title: String, minutes: Int, origin: StepOrigin = StepOrigin.Felix, done: Boolean = false, anyOrder: Boolean = false, where: String? = "anywhere") =
         SubStep(title, minutes, done = done, where = where, id = title.filter { it.isLetterOrDigit() }.take(8), origin = origin, anyOrder = anyOrder)
 
-    private fun task(vararg steps: SubStep, workedMin: Int = 0) = TaskItem(
-        id = "teams:sheet", source = Source.Teams, sourceId = "sheet", title = "Worksheet", kind = Kind.Homework,
+    private fun task(vararg steps: SubStep, workedMin: Int = 0, id: String = "teams:sheet") = TaskItem(
+        id = id, source = Source.Teams, sourceId = id.substringAfter(':'), title = "Worksheet", kind = Kind.Homework,
         firstSeenAt = now, lastSeenAt = now, subSteps = steps.toList(), workedMin = workedMin,
     )
 
-    /** Step [index] of the worksheet as a piece of today's. */
-    private fun piece(index: Int = 0) = Chunk(
-        taskId = "teams:sheet", source = Source.Teams, kind = Kind.Homework, title = "Worksheet", step = "Questions 1 and 2", minutes = 40,
+    /** Step [index] of the worksheet (or task [taskId]) as a piece of today's. */
+    private fun piece(index: Int = 0, taskId: String = "teams:sheet") = Chunk(
+        taskId = taskId, source = Source.Teams, kind = Kind.Homework, title = "Worksheet", step = "Questions 1 and 2", minutes = 40,
         dueAt = null, deadline = Fixtures.at("2026-10-20T09:00"), soft = false, overdue = false, dueToday = false, behind = false,
         part = index + 1, parts = 2, taskMinutes = 60, stepIndex = index, why = Why.Spread,
     )
@@ -55,9 +55,25 @@ class RebalanceTest {
         // Two steps unlike in their dates or place: what moved would take the second's.
         assertEquals(emptyList(), Rebalance.candidates(plan(), listOf(task(step("Questions 1 and 2", 40), step("Question 3", 20).copy(dueAt = Fixtures.at("2026-10-20T09:00")))), emptySet(), now))
         assertEquals(emptyList(), Rebalance.candidates(plan(), listOf(task(step("Questions 1 and 2", 40), step("Question 3", 20, where = "home"))), emptySet(), now))
+        // A piece not open till after the free time, or due that day before it ends: it couldn't go there.
+        assertEquals(emptyList(), Rebalance.candidates(plan(chunks = listOf(piece().copy(availableAt = Fixtures.at("2026-10-13T16:00")), piece(1))), listOf(task(*pair)), emptySet(), now))
+        assertEquals(emptyList(), Rebalance.candidates(plan(chunks = listOf(piece().copy(hard = true, deadline = Fixtures.at("2026-10-13T10:50")), piece(1))), listOf(task(*pair)), emptySet(), now))
+        // Laid at other minutes than the step's own (shared out to a total you gave, or shortened by work): his wouldn't be the ones laid.
+        assertEquals(emptyList(), Rebalance.candidates(plan(chunks = listOf(piece().copy(minutes = 30), piece(1))), listOf(task(*pair)), emptySet(), now))
         // Its slot today before the free time: nothing to gain.
         val early = Slot(SlotKind.Work, piece(), Fixtures.at("2026-10-13T08:50"), Fixtures.at("2026-10-13T09:30"), WindowKind.Study, pinned = false)
         assertEquals(emptyList(), Rebalance.candidates(plan(slots = listOf(early)), listOf(task(*pair)), emptySet(), now))
+    }
+
+    @Test
+    fun `each free time is one task's, two not rebalanced for the same`() {
+        val other = task(*pair, id = "teams:other")
+        val both = listOf(piece(), piece(1), piece(0, "teams:other"), piece(1, "teams:other"))
+        assertEquals(listOf("teams:sheet"), Rebalance.candidates(plan(chunks = both), listOf(task(*pair), other), emptySet(), now).map { it.taskId })
+        // With lunch free too, the second has it.
+        val lunch = Gap(Fixtures.at("2026-10-13T13:15"), 25)
+        val two = Rebalance.candidates(plan(gaps = listOf(breakTime, lunch), chunks = both), listOf(task(*pair), other), emptySet(), now)
+        assertEquals(listOf("teams:sheet" to breakTime, "teams:other" to lunch), two.map { it.taskId to it.gap })
     }
 
     @Test
