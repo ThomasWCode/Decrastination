@@ -259,13 +259,27 @@ object Slotter {
 
     /**
      * The free times at school on [date] that [slots] leave, from [now] on (D-110): its school windows less
-     * [busy] and each work slot with `slotBreakMin` either side, those of at least `minSchoolSlotMin`.
+     * [busy] and each work slot with its breaks as [lay] keeps them (`slotBreakMin` before it, and after it
+     * that or `slotLongBreakMin` once its run reaches `slotLongBreakAfterMin`), those of at least `minSchoolSlotMin`.
      */
     fun schoolGaps(date: LocalDate, windows: List<DayWindow>, busy: List<Busy>, slots: List<Slot>, now: Long, zone: ZoneId, settings: Settings): List<Gap> {
         val free = intervals(date, windows.filter { it.kind.atSchool }, busy, now, zone, settings.minSchoolSlotMin)
+        val work = slots.filter { it.kind == SlotKind.Work }.sortedBy { it.start }
         for (slot in slots) {
-            val gap = if (slot.kind == SlotKind.Work) settings.slotBreakMin * MINUTE else 0
-            carve(free, slot.start - gap, slot.end + gap)
+            if (slot.kind != SlotKind.Work) {
+                carve(free, slot.start, slot.end)
+                continue
+            }
+            // Its run: it, and the work before it in its kind of window with no long break between, as [lay] counts it.
+            var run = ((slot.end - slot.start) / MINUTE).toInt()
+            var from = slot.start
+            for (before in work.filter { it.end <= slot.start && it.window == slot.window }.asReversed()) {
+                if (from - before.end >= settings.slotLongBreakMin * MINUTE) break
+                run += ((before.end - before.start) / MINUTE).toInt()
+                from = before.start
+            }
+            val rest = if (run >= settings.slotLongBreakAfterMin) settings.slotLongBreakMin else settings.slotBreakMin
+            carve(free, slot.start - settings.slotBreakMin * MINUTE, slot.end + rest * MINUTE)
         }
         return free.filter { it.minutes >= settings.minSchoolSlotMin }.map { Gap(it.start, it.minutes) }
     }
