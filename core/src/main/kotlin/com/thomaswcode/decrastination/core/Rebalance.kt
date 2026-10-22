@@ -78,6 +78,9 @@ object Rebalance {
             // The reading's become his once rebalanced, and his are never cut into sittings (D-34): none still to do
             // over an hour as planned, so none is laid otherwise than it was.
             if (!task.yourSteps && task.subSteps.indices.any { !task.subSteps[it].done && planned[it] > Sittings.MAX_MIN }) continue
+            // A step whose sections an Anki deck holds is the deck's work, which the plan leaves out: as his step it would lose
+            // them and be planned twice, so none of such a task.
+            if (task.subSteps.any { it.ankiSections.isNotEmpty() }) continue
             // Work for home only never goes in a free time at school (PL-15), however it's cut.
             val where = Where.of(first.where) ?: Planner.whereOf(task)
             if (where == Where.Home) continue
@@ -127,11 +130,21 @@ object Rebalance {
         }
     }
 
-    /** [candidate]'s rebalance into [steps] as his Steps change, at [at]: to try a plan with ([laidAsOffered]) before it's made. */
-    fun instruction(candidate: Candidate, steps: List<OwnStep>, at: Long): Instruction = Instruction(
-        "rebalance:${candidate.taskId}", "", at = at, state = InstructionStatus.Applied,
-        changes = listOf(Change(ChangeType.Steps, taskId = candidate.taskId, steps = steps)), appliedAt = at, by = By.Felix,
-    )
+    /**
+     * [candidate]'s rebalance into [steps] as his Steps change on [task], at [at]: to try a plan with ([laidAsOffered]) before
+     * it's made. The reading's, where the steps then add up to other than the task's total in force (by the pace, or a reading
+     * whose total isn't its steps'), with his Minutes change too: their sum, the app's own estimate at your pace
+     * ([Change.pacedFrom]), so the steps add up to the task's total (AI-19) and what's finished teaches the pace as before.
+     */
+    fun instruction(task: TaskItem, candidate: Candidate, steps: List<OwnStep>, at: Long): Instruction {
+        val total = steps.sumOf { it.minutes }
+        val minutes = Change(ChangeType.Minutes, taskId = candidate.taskId, minutes = total, pacedFrom = task.appEffortMin, pacedHash = Enrichments.inputHash(task))
+            .takeIf { candidate.first.origin == StepOrigin.Reading && total != task.effortMin }
+        return Instruction(
+            "rebalance:${candidate.taskId}", "", at = at, state = InstructionStatus.Applied,
+            changes = listOfNotNull(Change(ChangeType.Steps, taskId = candidate.taskId, steps = steps), minutes), appliedAt = at, by = By.Felix,
+        )
+    }
 
     /**
      * Whether [plan], tried with [candidate]'s rebalance, lays its first step in the free time it was offered,
