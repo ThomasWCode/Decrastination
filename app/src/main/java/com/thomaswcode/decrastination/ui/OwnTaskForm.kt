@@ -155,8 +155,8 @@ fun OwnTaskForm(graph: AppGraph, editing: TaskItem?, initial: OwnTask? = null, o
                                 row,
                                 first = i == 0,
                                 last = i == rows.lastIndex,
-                                onChange = { changed -> setRows(rows.mapIndexed { j, r -> if (j == i) changed else r }) },
-                                onMove = { by -> setRows(rows.toMutableList().also { list -> list.add(i + by, list.removeAt(i)) }) },
+                                onChange = { changed -> setRows(changedRow(rows, i, changed)) },
+                                onMove = { by -> setRows(movedRow(rows, i, by)) },
                                 onDelete = { setRows(rows.filterIndexed { j, _ -> j != i }) },
                             )
                         }
@@ -257,6 +257,17 @@ internal data class StepRow(
 /** [start]'s steps as the form's rows, each knowing the step it was where you're [editing] a task of yours. */
 internal fun rowsOf(start: OwnTask, editing: Boolean): List<StepRow> =
     start.steps.mapIndexed { i, st -> StepRow(st.title, st.minutes.toString(), st.where, wasIndex = i.takeIf { editing }, anyOrder = st.anyOrder, from = st.from, dueAt = st.dueAt) }
+
+/**
+ * [rows] with row [i] as [changed]: retitled, it loses its mark (D-109), as what it's for may have changed with
+ * its words, so it needs the steps before it again; the form doesn't show the mark.
+ */
+internal fun changedRow(rows: List<StepRow>, i: Int, changed: StepRow): List<StepRow> =
+    rows.mapIndexed { j, r -> if (j != i) r else if (changed.title != r.title) changed.copy(anyOrder = false) else changed }
+
+/** [rows] with row [i] moved [by] one place: it and the row it changes places with lose their marks (D-109), their order changed. */
+internal fun movedRow(rows: List<StepRow>, i: Int, by: Int): List<StepRow> =
+    rows.toMutableList().also { it.add(i + by, it.removeAt(i)) }.mapIndexed { j, r -> if (j == i || j == i + by) r.copy(anyOrder = false) else r }
 
 /** The form's [rows] as the task's steps, as listed: each with its own dates and mark as its row had them, and its id where it was one of [start]'s. */
 internal fun stepsOf(rows: List<StepRow>, start: OwnTask): List<OwnStep> = rows.map { r ->
