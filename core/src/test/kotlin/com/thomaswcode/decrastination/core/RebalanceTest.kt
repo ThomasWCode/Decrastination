@@ -52,8 +52,13 @@ class RebalanceTest {
         assertEquals(emptyList(), Rebalance.candidates(plan(), listOf(task(step("Questions 1 and 2", 40, where = null), step("Question 3", 20))), emptySet(), now))
         // Not today's work: a task for another day isn't rewritten for today's free time.
         assertEquals(emptyList(), Rebalance.candidates(plan(chunks = emptyList()), listOf(task(*pair)), emptySet(), now))
-        // Two steps unlike in their dates or place: what moved would take the second's.
-        assertEquals(emptyList(), Rebalance.candidates(plan(), listOf(task(step("Questions 1 and 2", 40), step("Question 3", 20).copy(dueAt = Fixtures.at("2026-10-20T09:00")))), emptySet(), now))
+        // What moved would be planned later: past the first's own date still to come (the second's later, none,
+        // or gone by and dropped), or waiting for the second to open; or done where it couldn't.
+        val wednesday = Fixtures.at("2026-10-14T23:59")
+        assertEquals(emptyList(), Rebalance.candidates(plan(), listOf(task(step("Questions 1 and 2", 40).copy(dueAt = wednesday), step("Question 3", 20).copy(dueAt = Fixtures.at("2026-10-16T23:59")))), emptySet(), now))
+        assertEquals(emptyList(), Rebalance.candidates(plan(), listOf(task(step("Questions 1 and 2", 40).copy(dueAt = wednesday), step("Question 3", 20))), emptySet(), now))
+        assertEquals(emptyList(), Rebalance.candidates(plan(), listOf(task(step("Questions 1 and 2", 40).copy(dueAt = wednesday), step("Question 3", 20).copy(dueAt = Fixtures.at("2026-10-12T23:59")))), emptySet(), now))
+        assertEquals(emptyList(), Rebalance.candidates(plan(), listOf(task(step("Questions 1 and 2", 40), step("Question 3", 20).copy(from = Fixtures.at("2026-10-14T00:00")))), emptySet(), now))
         assertEquals(emptyList(), Rebalance.candidates(plan(), listOf(task(step("Questions 1 and 2", 40), step("Question 3", 20, where = "home"))), emptySet(), now))
         // A piece not open till after the free time, or due that day before it ends: it couldn't go there.
         assertEquals(emptyList(), Rebalance.candidates(plan(chunks = listOf(piece().copy(availableAt = Fixtures.at("2026-10-13T16:00")), piece(1))), listOf(task(*pair)), emptySet(), now))
@@ -67,6 +72,21 @@ class RebalanceTest {
         // Its slot today before the free time: nothing to gain.
         val early = Slot(SlotKind.Work, piece(), Fixtures.at("2026-10-13T08:50"), Fixtures.at("2026-10-13T09:30"), WindowKind.Study, pinned = false)
         assertEquals(emptyList(), Rebalance.candidates(plan(slots = listOf(early)), listOf(task(*pair)), emptySet(), now))
+    }
+
+    @Test
+    fun `steps with dates of their own are asked about where the work moved is planned no later`() {
+        val friday = Fixtures.at("2026-10-16T23:59")
+        fun asked(first: SubStep, second: SubStep) = Rebalance.candidates(plan(), listOf(task(first, second)), emptySet(), now).size
+        // The first's own date gone by: a plan's, dropped (PL-14), so its work was held to the second's already.
+        assertEquals(1, asked(step("Questions 1 and 2", 40).copy(dueAt = Fixtures.at("2026-10-12T23:59")), step("Question 3", 20).copy(dueAt = friday)))
+        // None of its own: done by the second's, as the steps go in order.
+        assertEquals(1, asked(step("Questions 1 and 2", 40), step("Question 3", 20).copy(dueAt = friday)))
+        // Both by the same day still to come, the second open already though it opened a day after the first.
+        assertEquals(1, asked(
+            step("Questions 1 and 2", 40).copy(from = Fixtures.at("2026-10-11T00:00"), dueAt = friday),
+            step("Question 3", 20).copy(from = Fixtures.at("2026-10-12T00:00"), dueAt = friday),
+        ))
     }
 
     @Test
