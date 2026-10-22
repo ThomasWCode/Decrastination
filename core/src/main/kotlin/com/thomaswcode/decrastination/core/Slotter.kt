@@ -265,15 +265,18 @@ object Slotter {
     fun schoolGaps(date: LocalDate, windows: List<DayWindow>, busy: List<Busy>, slots: List<Slot>, now: Long, zone: ZoneId, settings: Settings): List<Gap> {
         val free = intervals(date, windows.filter { it.kind.atSchool }, busy, now, zone, settings.minSchoolSlotMin)
         val work = slots.filter { it.kind == SlotKind.Work }.sortedBy { it.start }
+        // Each slot's window by its times, as a run goes on only within one ([lay]'s, not its kind's).
+        fun windowOf(slot: Slot): DayWindow? = windows.firstOrNull { at(date, it.startMin, zone) <= slot.start && slot.end <= at(date, it.endMin, zone) }
         for (slot in slots) {
             if (slot.kind != SlotKind.Work) {
                 carve(free, slot.start, slot.end)
                 continue
             }
-            // Its run: it, and the work before it in its kind of window with no long break between, as [lay] counts it.
+            // Its run: it, and the work before it in its window with no long break between, as [lay] counts it.
             var run = ((slot.end - slot.start) / MINUTE).toInt()
             var from = slot.start
-            for (before in work.filter { it.end <= slot.start && it.window == slot.window }.asReversed()) {
+            val window = windowOf(slot)
+            for (before in work.filter { it.end <= slot.start && windowOf(it) == window }.asReversed()) {
                 if (from - before.end >= settings.slotLongBreakMin * MINUTE) break
                 run += ((before.end - before.start) / MINUTE).toInt()
                 from = before.start

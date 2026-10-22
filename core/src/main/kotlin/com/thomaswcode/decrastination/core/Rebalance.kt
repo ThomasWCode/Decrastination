@@ -64,6 +64,8 @@ object Rebalance {
             // What moves to the second keeps its dates and place: no later deadline for it, nowhere it couldn't be done.
             if (first.from != second.from || first.dueAt != second.dueAt || (Where.of(second.where) ?: Planner.whereOf(task)) != where) continue
             val slot = today.slots.firstOrNull { it.kind == SlotKind.Work && it.chunk?.taskId == task.id && it.chunk?.stepIndex == index }
+            // Held at a time you gave (PL-04): the pin keeps it there, however it's cut.
+            if (slot?.pinned == true || (slot == null && piece.why == Why.Pinned)) continue
             // One its piece can be done in: before its slot, once its task opens, over before a deadline that day.
             val gap = gaps.firstOrNull { g ->
                 g.start !in taken && g.minutes < first.minutes && (slot == null || g.start < slot.start) &&
