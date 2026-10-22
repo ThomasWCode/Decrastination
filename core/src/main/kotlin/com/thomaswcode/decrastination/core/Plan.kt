@@ -100,6 +100,8 @@ data class Chunk(
      * null for a step in one piece, a box, or a whole task.
      */
     val sitting: Sitting? = null,
+    /** Its step doesn't need the steps before it done first (D-109): a day's slots may lay it ahead of them. */
+    val anyOrder: Boolean = false,
 ) {
     /**
      * Which piece it is, across replans (PL-12): its task and its step's place (a sitting before its

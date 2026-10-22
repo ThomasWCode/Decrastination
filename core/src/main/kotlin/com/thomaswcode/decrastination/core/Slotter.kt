@@ -32,7 +32,8 @@ object Slotter {
      * over ([GRACE_MS]) included;
      * the rest, in order, at the first free time each fits whole. A task's steps keep their order
      * (D-108): one not yet begun goes no earlier than the end of the steps before it, and waits
-     * unslotted while one of them has no time; one pinned or under way stays where it is. A piece has a break of
+     * unslotted while one of them has no time; one pinned or under way stays where it is, and one that
+     * doesn't need the steps before it (D-109) follows only its own sittings. A piece has a break of
      * `slotBreakMin` before it and after it in its window, or after it `slotLongBreakMin` once
      * `slotLongBreakAfterMin` of work has gone without a long one. What fits nowhere is unslotted, in order.
      */
@@ -112,9 +113,10 @@ object Slotter {
         val work = mutableListOf<Pair<Slot, DayWindow>>()
         val left = ordered.toMutableList()
         // Tasks whose steps' times from the last plan aren't in the steps' order (a plan before D-108): laid afresh.
-        // Steps pinned today or begun are left out: they stay where they are, ahead of the steps before them or not.
+        // Steps pinned today or begun are left out: they stay where they are, ahead of the steps before them or not;
+        // so are those that don't need the steps before them (D-109).
         val shuffled = ordered.filter { it.stepIndex != null }.groupBy { it.taskId }.filterValues { steps ->
-            val times = steps.filter { step -> pins[step.key]?.takeIf { it in day } == null }.mapNotNull { step -> previous[step.key]?.takeIf { it in day && it > now } }
+            val times = steps.filter { step -> !step.anyOrder && pins[step.key]?.takeIf { it in day } == null }.mapNotNull { step -> previous[step.key]?.takeIf { it in day && it > now } }
             times != times.sorted()
         }.keys
 
@@ -163,12 +165,14 @@ object Slotter {
             left.remove(chunk)
         }
         // The earliest a step can start (D-108): the end of the last of its task's steps before it today,
-        // once each of them is laid; null while one isn't. A piece with no step of its own, any time.
+        // once each of them is laid; null while one isn't. A piece with no step of its own, any time; a step
+        // that doesn't need the steps before it (D-109), after its own sittings before it alone.
         fun follows(chunk: Chunk): Long? {
             if (chunk.stepIndex == null) return Long.MIN_VALUE
             var from = Long.MIN_VALUE
             for (before in ordered) {
                 if (before.taskId != chunk.taskId || before.stepIndex == null || before.part >= chunk.part) continue
+                if (chunk.anyOrder && before.stepIndex != chunk.stepIndex) continue
                 from = maxOf(from, work.firstOrNull { it.first.chunk == before }?.first?.end ?: return null)
             }
             return from

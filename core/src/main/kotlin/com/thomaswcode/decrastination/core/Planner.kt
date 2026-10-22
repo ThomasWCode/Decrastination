@@ -400,6 +400,7 @@ object Planner {
                 availableAt = item.notBefore?.takeIf { it > input.now },
                 box = piece.box,
                 stepIndex = piece.index,
+                anyOrder = piece.index?.let { item.task.subSteps.getOrNull(it)?.anyOrder } == true,
                 why = when {
                     piece.pinned && !overdue -> Why.Pinned
                     behind && !overdue && why != Why.Soft && noRoom -> Why.NoRoom
