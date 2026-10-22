@@ -37,6 +37,9 @@ class OwnTaskFormTest {
         val rows = rowsOf(task, editing = true)
         assertEquals(listOf(false, true), changedRow(rows, 1, rows[1].copy(title = "Ask for two references")).map { it.anyOrder })
         assertEquals(listOf("Ask for a reference" to true, "First draft" to false), movedRow(rows, 1, -1).map { it.title to it.anyOrder })
+        // Saved, the first step has none: it has no steps before it, and its row shows no chip to clear it.
+        assertEquals(listOf(false, false), stepsOf(movedRow(rows, 1, -1), task).map { it.anyOrder })
+        assertEquals(listOf(false), stepsOf(rows.drop(1), task).map { it.anyOrder })
         // Its chip: cleared, then set again.
         val cleared = changedRow(rows, 1, rows[1].copy(anyOrder = false))
         assertEquals(listOf(false, false), cleared.map { it.anyOrder })
