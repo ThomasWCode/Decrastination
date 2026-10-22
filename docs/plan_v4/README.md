@@ -106,7 +106,7 @@ Every PR is a release ([development.md](../development.md)): cleanup-only releas
 | — | Felix marks the steps that don't depend on the one before, which can then fill a gap as before (your call, 22 Oct) | 4.3.5, done (#109) | feature, data | 4.3.4 | ½ |
 | — | In a school day's 07:00 briefing call, Felix may rebalance two adjacent steps of his own, not yet begun, so the next fits a gap: still two steps, their minutes adding up as before, neither under 15, shown with Undo (your call, 22 Oct) | 4.3.6, done (#110) | feature | 4.3.5 | 1 |
 | — | Found in 4.3.5's review: a task Felix proposed, opened in its form before it was added, lost its steps' own dates there (your call, 22 Oct) | 4.3.7, done (#111) | fix | 4.3.6 | ¼ |
-| — | Felix may rebalance the reading's steps too (a Teams assignment's, an email's), every step of the task written at its minutes as planned, so it takes what it was laid at; yours never (your call, 22 Oct) | 4.3.8 | feature | 4.3.7 | ¼ |
+| — | Felix may rebalance the reading's steps too (a Teams assignment's, an email's), every step of the task written at its minutes as planned, so it takes what it was laid at; yours never (your call, 22 Oct) | 4.3.8 (#112) | feature | 4.3.7 | ¼ |
 
 About twenty-eight days in 39 PRs (38 releases), 3.3.4 to 3.3.6, 4.0.3, 4.0.4, 4.0.10, 4.1.2, 4.1.3, 4.2.1, 4.3.1 and 4.3.3 to 4.3.8 among them, evenings and weekends. After it, the conversation digest as 4.4.0 ([13](13-summaries.md)). You've said you won't use the app until the whole of it is in (Q21): each release is still built and checked on the phone, but nothing between releases has to serve a day's use.
 
