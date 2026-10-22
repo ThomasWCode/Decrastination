@@ -133,6 +133,9 @@ class OwnTaskRulesTest {
         assertEquals(was.steps, OwnTaskRules.restored(now, was, listOf(split)).steps)
         val since = now.copy(steps = listOf(OwnStep("Plan", 20), OwnStep("Draft", 70)), minutes = 90)
         assertEquals(since.steps, OwnTaskRules.restored(since, was, listOf(split)).steps)
+        // A later card that changed only a step's mark (D-109) is a change since too: undoing the split leaves it.
+        val marked = now.copy(steps = now.steps.mapIndexed { i, s -> if (i == 2) s.copy(anyOrder = true) else s })
+        assertEquals(marked.steps, OwnTaskRules.restored(marked, was, listOf(split)).steps)
         // A later card that replaced the split: undoing the split first leaves it what the split replaced.
         assertEquals(was.steps, OwnTaskRules.relayered(now, listOf(split), was).steps)
     }
