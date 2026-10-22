@@ -258,16 +258,11 @@ internal data class StepRow(
 internal fun rowsOf(start: OwnTask, editing: Boolean): List<StepRow> =
     start.steps.mapIndexed { i, st -> StepRow(st.title, st.minutes.toString(), st.where, wasIndex = i.takeIf { editing }, anyOrder = st.anyOrder, from = st.from, dueAt = st.dueAt) }
 
-/**
- * [rows] with row [i] as [changed]: retitled, it loses its mark (D-109), as what it's for may have changed with
- * its words, so it needs the steps before it again; the form doesn't show the mark.
- */
-internal fun changedRow(rows: List<StepRow>, i: Int, changed: StepRow): List<StepRow> =
-    rows.mapIndexed { j, r -> if (j != i) r else if (changed.title != r.title) changed.copy(anyOrder = false) else changed }
+/** [rows] with row [i] as [changed]: its mark (D-109) as its chip has it, through a new title too. */
+internal fun changedRow(rows: List<StepRow>, i: Int, changed: StepRow): List<StepRow> = rows.mapIndexed { j, r -> if (j == i) changed else r }
 
-/** [rows] with row [i] moved [by] one place: it and the row it changes places with lose their marks (D-109), their order changed. */
-internal fun movedRow(rows: List<StepRow>, i: Int, by: Int): List<StepRow> =
-    rows.toMutableList().also { it.add(i + by, it.removeAt(i)) }.mapIndexed { j, r -> if (j == i || j == i + by) r.copy(anyOrder = false) else r }
+/** [rows] with row [i] moved [by] one place, its mark (D-109) going with it: its chip shows it there. */
+internal fun movedRow(rows: List<StepRow>, i: Int, by: Int): List<StepRow> = rows.toMutableList().also { it.add(i + by, it.removeAt(i)) }
 
 /** The form's [rows] as the task's steps, as listed: each with its own dates and mark as its row had them, and its id where it was one of [start]'s. */
 internal fun stepsOf(rows: List<StepRow>, start: OwnTask): List<OwnStep> = rows.map { r ->
@@ -299,10 +294,15 @@ private fun StepEditor(row: StepRow, first: Boolean, last: Boolean, onChange: (S
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.weight(1f),
                 )
-                FilterChip(selected = row.where == "home", onClick = { onChange(row.copy(where = if (row.where == "home") "anywhere" else "home")) }, label = { Text("Home only") })
                 IconButton(enabled = !first, onClick = { onMove(-1) }) { Icon(painterResource(R.drawable.ic_expand_more), contentDescription = "Up", modifier = Modifier.rotate(180f)) }
                 IconButton(enabled = !last, onClick = { onMove(1) }) { Icon(painterResource(R.drawable.ic_expand_more), contentDescription = "Down") }
                 IconButton(onClick = onDelete) { Icon(painterResource(R.drawable.ic_close), contentDescription = "Delete the step") }
+            }
+            // Where it can be done, and after the first whether it needs the steps before it (D-109): a line of
+            // their own, as a second chip beside the minutes would leave them no room.
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(selected = row.where == "home", onClick = { onChange(row.copy(where = if (row.where == "home") "anywhere" else "home")) }, label = { Text("Home only") })
+                if (!first) FilterChip(selected = row.anyOrder, onClick = { onChange(row.copy(anyOrder = !row.anyOrder)) }, label = { Text("Any order") })
             }
         }
     }
