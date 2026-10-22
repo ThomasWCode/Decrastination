@@ -34,8 +34,8 @@ object Rebalance {
     /**
      * Today's in [plan], from [tasks]: a task's next step, today's work, not begun and one that can be done
      * at school, too long for a free time there before its slot today (or with none), and the step after it
-     * needing it, alike in its dates and place, so the work moved between them keeps them; both Felix's, as
-     * D-4 keeps yours and the reading's as they were given. None of a task whose rebalance you took back
+     * needing it, alike in place, its dates planning the work moved to it no later than the first's did; both
+     * Felix's, as D-4 keeps yours and the reading's as they were given. None of a task whose rebalance you took back
      * ([declined]). Each its own free time, the earliest its piece can be done in, taken in the day's order
      * of their pieces (the more urgent first), at most [MAX_ASKED].
      */
@@ -63,8 +63,13 @@ object Rebalance {
             // Work for home only never goes in a free time at school (PL-15), however it's cut.
             val where = Where.of(first.where) ?: Planner.whereOf(task)
             if (where == Where.Home) continue
-            // What moves to the second keeps its dates and place: no later deadline for it, nowhere it couldn't be done.
-            if (first.from != second.from || first.dueAt != second.dueAt || (Where.of(second.where) ?: Planner.whereOf(task)) != where) continue
+            // What moves to the second is planned no later, nowhere it couldn't be done: a date of the first's own
+            // still to come holds the second's to it (one gone by is dropped, PL-14, and a step is done by the
+            // dates after it already, as the steps go in order), and the second is open by now or with the first.
+            val due = first.dueAt?.takeIf { it > now }
+            if (due != null && (second.dueAt?.takeIf { it > now } ?: Long.MAX_VALUE) > due) continue
+            if ((second.from ?: Long.MIN_VALUE) > maxOf(first.from ?: Long.MIN_VALUE, now)) continue
+            if ((Where.of(second.where) ?: Planner.whereOf(task)) != where) continue
             val slot = today.slots.firstOrNull { it.kind == SlotKind.Work && it.chunk?.taskId == task.id && it.chunk?.stepIndex == index }
             // Held at a time you gave (PL-04): the pin keeps it there, however it's cut.
             if (slot?.pinned == true || (slot == null && piece.why == Why.Pinned)) continue
