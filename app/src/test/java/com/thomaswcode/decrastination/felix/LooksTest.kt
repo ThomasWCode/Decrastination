@@ -18,6 +18,7 @@ import java.time.Instant
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.delay
@@ -143,17 +144,27 @@ class LooksTest {
     }
 
     @Test
-    fun `a rebalance isn't made for a task finished while the morning's call was out`() = runBlocking {
+    fun `a rebalance isn't made for a task finished while the morning's call was out, nor his words for it sent`() = runBlocking {
         worksheetInSteps()
         felix.answers(REBALANCED, delayMs = 1_000)
         val finished = launch {
             delay(300)
             stores.tasks.update { s -> s.copy(tasks = s.tasks.map { it.copy(status = Status.Done, doneAt = felix.clock.now()) }) }
         }
-        assertTrue(felix.looks.morning())
+        // The task he was asked about is done: nothing made, and his message, which says it was, not sent.
+        assertFalse(felix.looks.morning())
         finished.join()
-        // His message, with nothing made under it: the task he was asked about is done.
-        assertEquals(emptyList(), stores.chat.value.messages.single().proposals)
+        assertEquals(emptyList(), stores.chat.value.messages)
+        assertEquals(emptyList(), stores.instructions.value.instructions)
+    }
+
+    @Test
+    fun `a morning whose rebalance can't be made isn't his, as his words would say it was`() = runBlocking {
+        worksheetInSteps()
+        // 35 minutes for break's 30: not one, so not made.
+        felix.answers(REBALANCED.replace("\"firstMinutes\":25", "\"firstMinutes\":35").replace("\"secondMinutes\":40", "\"secondMinutes\":30"))
+        assertFalse(felix.looks.morning())
+        assertEquals(emptyList(), stores.chat.value.messages)
         assertEquals(emptyList(), stores.instructions.value.instructions)
     }
 
