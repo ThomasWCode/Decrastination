@@ -20,7 +20,15 @@ class RebalanceTest {
         firstSeenAt = now, lastSeenAt = now, subSteps = steps.toList(), workedMin = workedMin,
     )
 
-    private fun plan(gaps: List<Gap> = listOf(breakTime), slots: List<Slot> = emptyList()) = Plan(now, today, listOf(DayBucket(today, 300, emptyList(), slots, gaps = gaps)), emptyList())
+    /** Step [index] of the worksheet as a piece of today's. */
+    private fun piece(index: Int = 0) = Chunk(
+        taskId = "teams:sheet", source = Source.Teams, kind = Kind.Homework, title = "Worksheet", step = "Questions 1 and 2", minutes = 40,
+        dueAt = null, deadline = Fixtures.at("2026-10-20T09:00"), soft = false, overdue = false, dueToday = false, behind = false,
+        part = index + 1, parts = 2, taskMinutes = 60, stepIndex = index, why = Why.Spread,
+    )
+
+    private fun plan(gaps: List<Gap> = listOf(breakTime), slots: List<Slot> = emptyList(), chunks: List<Chunk> = listOf(piece(), piece(1))) =
+        Plan(now, today, listOf(DayBucket(today, 300, chunks, slots, gaps = gaps)), emptyList())
 
     private val pair = arrayOf(step("Questions 1 and 2", 40), step("Question 3", 20))
 
@@ -42,20 +50,20 @@ class RebalanceTest {
         // For home only, its own or its task's (Teams homework's): no free time at school takes it, however it's cut.
         assertEquals(emptyList(), Rebalance.candidates(plan(), listOf(task(step("Questions 1 and 2", 40, where = "home"), step("Question 3", 20))), emptySet(), now))
         assertEquals(emptyList(), Rebalance.candidates(plan(), listOf(task(step("Questions 1 and 2", 40, where = null), step("Question 3", 20))), emptySet(), now))
+        // Not today's work: a task for another day isn't rewritten for today's free time.
+        assertEquals(emptyList(), Rebalance.candidates(plan(chunks = emptyList()), listOf(task(*pair)), emptySet(), now))
+        // Two steps unlike in their dates or place: what moved would take the second's.
+        assertEquals(emptyList(), Rebalance.candidates(plan(), listOf(task(step("Questions 1 and 2", 40), step("Question 3", 20).copy(dueAt = Fixtures.at("2026-10-20T09:00")))), emptySet(), now))
+        assertEquals(emptyList(), Rebalance.candidates(plan(), listOf(task(step("Questions 1 and 2", 40), step("Question 3", 20, where = "home"))), emptySet(), now))
         // Its slot today before the free time: nothing to gain.
-        val chunk = Chunk(
-            taskId = "teams:sheet", source = Source.Teams, kind = Kind.Homework, title = "Worksheet", step = "Questions 1 and 2", minutes = 40,
-            dueAt = null, deadline = Fixtures.at("2026-10-20T09:00"), soft = false, overdue = false, dueToday = false, behind = false,
-            part = 1, parts = 2, taskMinutes = 60, stepIndex = 0, why = Why.Spread,
-        )
-        val early = Slot(SlotKind.Work, chunk, Fixtures.at("2026-10-13T08:50"), Fixtures.at("2026-10-13T09:30"), WindowKind.Study, pinned = false)
+        val early = Slot(SlotKind.Work, piece(), Fixtures.at("2026-10-13T08:50"), Fixtures.at("2026-10-13T09:30"), WindowKind.Study, pinned = false)
         assertEquals(emptyList(), Rebalance.candidates(plan(slots = listOf(early)), listOf(task(*pair)), emptySet(), now))
     }
 
     @Test
     fun `his answer becomes the task's steps with the two moved, or nothing where it isn't one`() {
         val t = task(step("Read the brief", 15, done = true), *pair)
-        val c = Rebalance.candidates(plan(), listOf(t), emptySet(), now).single()
+        val c = Rebalance.candidates(plan(chunks = listOf(piece(1), piece(2))), listOf(t), emptySet(), now).single()
         assertEquals(1, c.index)
         val given = Rebalance.Given("teams:sheet", 1, "Question 1", 20, "Questions 2 and 3", 40)
         val steps = Rebalance.steps(t, c, given)!!
