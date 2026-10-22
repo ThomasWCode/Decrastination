@@ -209,8 +209,9 @@ class Looks(
         val caller = gateway.client(ModelEffort.Job.Felix)?.let { FelixCaller(it) } ?: return@withLock false
         val settings = this.settings.value
         val profile = this.profile(now)
-        // Two of his steps he may rebalance to fit a free time at school today (D-110), none of a task he's had one taken back on.
-        val rebalance = Rebalance.candidates(plan, tasks.value.tasks, Rebalance.declined(chat.value.messages), now)
+        // Two steps, his or the reading's, he may rebalance to fit a free time at school today (D-110), at their minutes as
+        // planned, none of a task he's had one taken back on.
+        val rebalance = Rebalance.candidates(plan, tasks.value.tasks, Rebalance.declined(chat.value.messages), now, planning.calibration())
         val user = FelixPrompts.describe(FelixPrompts.Reason.Morning, plan, null, null, today(now), chat.value.messages, null, settings, now, clock.zone(), reminders = remindersToday(plan, now), rebalance = rebalance)
         // Asked in the app's scope, not the briefing's: past [MORNING_MS] the briefing goes without
         // it, and the call, paid for, comes back and is counted all the same.
@@ -225,7 +226,7 @@ class Looks(
         val back = clock.now()
         // The settings as they are now, for the plans tried and the rests checked alike: they may have changed in the call.
         val settingsBack = this.settings.value
-        val current = Rebalance.candidates(planning.plan(now = back, settings = settingsBack), tasks.value.tasks, Rebalance.declined(chat.value.messages), back)
+        val current = Rebalance.candidates(planning.plan(now = back, settings = settingsBack), tasks.value.tasks, Rebalance.declined(chat.value.messages), back, planning.calibration())
         val known = tasks.value.tasks.associateBy { it.id }
         // Each tried on the plan with those made before it, made only where its first step is laid in the free
         // time he was shown, its rests kept: one he leaves out can leave an earlier one free for another's.
