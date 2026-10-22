@@ -101,6 +101,22 @@ class RebalanceTest {
     }
 
     @Test
+    fun `a plan tried with a rebalance is as offered where its first step is laid in the free time, its rest kept`() {
+        val c = Rebalance.candidates(plan(), listOf(task(*pair)), emptySet(), now).single()
+        val settings = Settings()
+        fun laid(start: String, end: String, step: Int = 0, kind: WindowKind = WindowKind.Break) = Slot(SlotKind.Work, piece(step), Fixtures.at("2026-10-13T$start"), Fixtures.at("2026-10-13T$end"), kind, pinned = false)
+        fun tried(vararg slots: Slot) = Plan(now, today, listOf(DayBucket(today, 300, emptyList(), slots.toList())), emptyList())
+        assertEquals(true, Rebalance.laidAsOffered(tried(laid("10:45", "11:05")), c, settings))
+        // Laid at lunch, or not laid: not the time his message names.
+        assertEquals(false, Rebalance.laidAsOffered(tried(laid("13:15", "13:35")), c, settings))
+        assertEquals(false, Rebalance.laidAsOffered(tried(), c, settings))
+        // After 80 minutes' work it makes a run long enough for a long rest: five minutes before the next is too few, fifteen enough.
+        val before = laid("09:20", "10:40", step = 1, kind = WindowKind.Study)
+        assertEquals(false, Rebalance.laidAsOffered(tried(before, laid("10:45", "11:05"), laid("11:10", "11:30", step = 1)), c, settings))
+        assertEquals(true, Rebalance.laidAsOffered(tried(before, laid("10:45", "11:05"), laid("11:20", "11:40", step = 1)), c, settings))
+    }
+
+    @Test
     fun `a rebalance taken back, or never made, isn't asked about again`() {
         val change = Change(ChangeType.Steps, taskId = "teams:sheet", steps = listOf(OwnStep("Question 1", 20)))
         fun morning(state: ProposalState) = ChatMessage("m", Speaker.Felix, "morning.", now, kind = MessageKind.Morning, proposals = listOf(Proposal("p", changes = listOf(change), state = state, instant = true)))
