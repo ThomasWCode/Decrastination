@@ -34,6 +34,12 @@ class SlotStateTest {
     }
 
     @Test
+    fun `a task's new steps let go of its starts still to come, one begun kept (D-110)`() {
+        val kept = SlotState("2026-10-13", previous = mapOf("teams:a#0" to 30L, "teams:a#1" to 5L, "teams:a#1#1" to 40L, "teams:ab#0" to 50L))
+        assertEquals(mapOf("teams:a#1" to 5L, "teams:ab#0" to 50L), kept.released("teams:a", now = 10L).previous)
+    }
+
+    @Test
     fun `a missed piece in none of today's slots went to another day`() {
         // Today's one slot is b's: a's piece, missed, is on Wednesday.
         val reconciled = state.missed("teams:a#-1#1", "teams:a", 10L).missed("teams:b#-1#1", "teams:b", 11L).reconciled(plan(chunk("teams:b"), later = chunk("teams:a")))

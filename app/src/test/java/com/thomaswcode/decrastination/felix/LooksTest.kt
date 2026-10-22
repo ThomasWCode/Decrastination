@@ -10,6 +10,7 @@ import com.thomaswcode.decrastination.core.SlotKind
 import com.thomaswcode.decrastination.core.SlotState
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Speaker
+import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.core.StepOrigin
 import com.thomaswcode.decrastination.core.SubStep
 import com.thomaswcode.decrastination.core.TaskItem
@@ -19,6 +20,8 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 
 /**
@@ -117,27 +120,8 @@ class LooksTest {
 
     @Test
     fun `the morning's call may rebalance two of his steps to fit a free time at school, made at once with an Undo, and not asked about once taken back`() = runBlocking {
-        // A school day's 07:00: the worksheet, due tomorrow morning, in two of his steps; 45 minutes is
-        // longer than break (30), either lunch (25 and 40), so its first is tonight's.
-        felix.clock.time = Fixtures.at("2026-10-20T07:00")
-        stores.tasks.update {
-            it.copy(
-                tasks = listOf(
-                    TaskItem(
-                        id = "teams:sheet", source = Source.Teams, sourceId = "sheet", title = "Forces worksheet", dueAt = Fixtures.at("2026-10-21T08:30"),
-                        kind = Kind.Homework, sourceEffortMin = 65, firstSeenAt = now, lastSeenAt = now,
-                        subSteps = listOf(
-                            SubStep("Questions 1 and 2", 45, where = "anywhere", id = "q12", origin = StepOrigin.Felix),
-                            SubStep("Question 3", 20, where = "anywhere", id = "q3", origin = StepOrigin.Felix),
-                        ),
-                    ),
-                ),
-            )
-        }
-        felix.answers(
-            """{"message":"morning. question 1 at break, the rest tonight.","replies":[],"nextCheckMin":null,"memories":[],
-              "rebalances":[{"taskId":"teams:sheet","stepIndex":0,"firstTitle":"Question 1","firstMinutes":25,"secondTitle":"Questions 2 and 3","secondMinutes":40}]}""",
-        )
+        worksheetInSteps()
+        felix.answers(REBALANCED)
         assertTrue(felix.looks.morning())
         val asked = felix.server.takeRequest().body.readUtf8()
         assertTrue("Steps you may rebalance" in asked && "teams:sheet | Forces worksheet | 0" in asked && "10:45, 30 min" in asked, asked)
@@ -156,5 +140,48 @@ class LooksTest {
         assertTrue(stores.instructions.value.instructions.none { it.id == proposal.made })
         assertEquals(setOf("teams:sheet"), Rebalance.declined(stores.chat.value.messages))
         assertEquals(emptyList(), Rebalance.candidates(felix.planning.plan(), stores.tasks.value.tasks, Rebalance.declined(stores.chat.value.messages), felix.clock.now()))
+    }
+
+    @Test
+    fun `a rebalance isn't made for a task finished while the morning's call was out`() = runBlocking {
+        worksheetInSteps()
+        felix.answers(REBALANCED, delayMs = 1_000)
+        val finished = launch {
+            delay(300)
+            stores.tasks.update { s -> s.copy(tasks = s.tasks.map { it.copy(status = Status.Done, doneAt = felix.clock.now()) }) }
+        }
+        assertTrue(felix.looks.morning())
+        finished.join()
+        // His message, with nothing made under it: the task he was asked about is done.
+        assertEquals(emptyList(), stores.chat.value.messages.single().proposals)
+        assertEquals(emptyList(), stores.instructions.value.instructions)
+    }
+
+    /**
+     * A school day's 07:00: the worksheet, due tomorrow morning, in two of his steps; 45 minutes is longer
+     * than break (30) or either lunch (25 and 40), so its first is tonight's.
+     */
+    private suspend fun worksheetInSteps() {
+        felix.clock.time = Fixtures.at("2026-10-20T07:00")
+        stores.tasks.update {
+            it.copy(
+                tasks = listOf(
+                    TaskItem(
+                        id = "teams:sheet", source = Source.Teams, sourceId = "sheet", title = "Forces worksheet", dueAt = Fixtures.at("2026-10-21T08:30"),
+                        kind = Kind.Homework, sourceEffortMin = 65, firstSeenAt = now, lastSeenAt = now,
+                        subSteps = listOf(
+                            SubStep("Questions 1 and 2", 45, where = "anywhere", id = "q12", origin = StepOrigin.Felix),
+                            SubStep("Question 3", 20, where = "anywhere", id = "q3", origin = StepOrigin.Felix),
+                        ),
+                    ),
+                ),
+            )
+        }
+    }
+
+    private companion object {
+        /** His morning's answer, the worksheet's first two steps rebalanced. */
+        const val REBALANCED = """{"message":"morning. question 1 at break, the rest tonight.","replies":[],"nextCheckMin":null,"memories":[],
+            "rebalances":[{"taskId":"teams:sheet","stepIndex":0,"firstTitle":"Question 1","firstMinutes":25,"secondTitle":"Questions 2 and 3","secondMinutes":40}]}"""
     }
 }
