@@ -46,6 +46,7 @@ object FelixPrompts {
     private val CLOCK = DateTimeFormatter.ofPattern("HH:mm", Locale.UK)
     private val NOW = DateTimeFormatter.ofPattern("EEEE d MMMM yyyy, HH:mm", Locale.UK)
     private val WHEN = DateTimeFormatter.ofPattern("EEE HH:mm", Locale.UK)
+    private val DUE = DateTimeFormatter.ofPattern("EEE d MMM, HH:mm", Locale.UK)
 
     /** His instructions, as [settings] name and describe him, for a student in Year [year]. */
     fun system(settings: Settings, year: Int): String = """
@@ -126,6 +127,8 @@ object FelixPrompts {
         } else if (task != null) {
             appendLine("Task: ${task.title}")
         }
+        // When its task's due, as the app plans by it (yours where you gave one, D-4): what he says of it, not a date in its text.
+        if (reason != Reason.Reminder) task?.dueAt?.let { appendLine("Its task's due: ${Instant.ofEpochMilli(it).atZone(zone).format(DUE)}") }
         // Its task's own text, cut short (D-93): what the work asks of them, to be concrete about; a
         // worksheet or link alone is the work too.
         if (task != null && TaskText.has(task)) {
