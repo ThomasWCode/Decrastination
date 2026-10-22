@@ -23,6 +23,9 @@ data class SlotState(val date: String = "", val previous: Map<String, Long> = em
     /** [taskId] moved on purpose (a time, a day or a start you gave): its missed slots forgotten. */
     fun moved(taskId: String): SlotState = copy(missed = missed.filterNot { it.taskId == taskId })
 
+    /** [taskId]'s starts kept from the last plan let go of where they're still to come at [now]: its new steps laid afresh (D-110), one begun left where it is. */
+    fun released(taskId: String, now: Long): SlotState = copy(previous = previous.filter { (key, start) -> start <= now || !key.startsWith("$taskId#") })
+
     /**
      * As [plan] leaves today: a missed piece in none of today's slots, its task still in the plan, went to
      * another day ([MissedSlot.spilled]). One whose task the plan no longer holds (finished since, or

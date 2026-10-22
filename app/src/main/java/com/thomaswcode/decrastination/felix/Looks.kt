@@ -219,10 +219,14 @@ class Looks(
         val called = withTimeoutOrNull(MORNING_MS) { call.await() }
         val result = (called as? Called.Answered)?.value
         val answer = result?.answer?.takeIf { it.message.isNotBlank() } ?: return@withLock false
-        // Each rebalance he gave for steps he was asked about, as his Steps change on its task, under his message (D-110).
+        // Each rebalance he gave for steps he was asked about, as his Steps change on its task, under his message (D-110);
+        // only where they're one still, the call back: in it a task can be finished or begun, or its free time gone.
+        val back = clock.now()
+        val current = Rebalance.candidates(planning.plan(now = back), tasks.value.tasks, Rebalance.declined(chat.value.messages), back)
         val known = tasks.value.tasks.associateBy { it.id }
         val proposals = result.rebalances.mapNotNull { given ->
-            val candidate = rebalance.firstOrNull { it.taskId == given.taskId && it.index == given.stepIndex } ?: return@mapNotNull null
+            val asked = rebalance.firstOrNull { it.taskId == given.taskId && it.index == given.stepIndex } ?: return@mapNotNull null
+            val candidate = current.firstOrNull { it.taskId == asked.taskId && it.index == asked.index && it.first == asked.first && it.second == asked.second } ?: return@mapNotNull null
             val steps = known[candidate.taskId]?.let { Rebalance.steps(it, candidate, given) } ?: return@mapNotNull null
             Proposal(UUID.randomUUID().toString(), changes = listOf(Change(ChangeType.Steps, taskId = candidate.taskId, steps = steps)), lines = listOf(Rebalance.line(candidate, given)), instant = true)
         }.distinctBy { it.changes.single().taskId }

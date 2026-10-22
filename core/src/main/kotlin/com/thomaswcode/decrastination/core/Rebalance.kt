@@ -30,10 +30,11 @@ object Rebalance {
     )
 
     /**
-     * Today's in [plan], from [tasks]: a task's next step, not begun and one that can be done at school,
-     * too long for a free time there before its slot today (or with none), and the step after it needing
-     * it; both Felix's, as D-4 keeps yours and the reading's as they were given. None of a task whose
-     * rebalance you took back ([declined]). The earliest such time each, at most [MAX_ASKED].
+     * Today's in [plan], from [tasks]: a task's next step, today's work, not begun and one that can be done
+     * at school, too long for a free time there before its slot today (or with none), and the step after it
+     * needing it, alike in its dates and place, so the work moved between them keeps them; both Felix's, as
+     * D-4 keeps yours and the reading's as they were given. None of a task whose rebalance you took back
+     * ([declined]). The earliest such time each, at most [MAX_ASKED].
      */
     fun candidates(plan: Plan, tasks: List<TaskItem>, declined: Set<String>, now: Long): List<Candidate> {
         val today = plan.todayBucket ?: return emptyList()
@@ -44,9 +45,14 @@ object Rebalance {
             val first = task.subSteps[index]
             val second = task.subSteps.getOrNull(index + 1) ?: return@mapNotNull null
             if (first.origin != StepOrigin.Felix || second.origin != StepOrigin.Felix || second.done || second.anyOrder) return@mapNotNull null
+            // Today's work: a task for another day isn't rewritten for today's free time.
+            if (today.chunks.none { it.taskId == task.id && it.stepIndex == index }) return@mapNotNull null
             if (worked(task) > 0) return@mapNotNull null
             // Work for home only never goes in a free time at school (PL-15), however it's cut.
-            if ((Where.of(first.where) ?: Planner.whereOf(task)) == Where.Home) return@mapNotNull null
+            val where = Where.of(first.where) ?: Planner.whereOf(task)
+            if (where == Where.Home) return@mapNotNull null
+            // What moves to the second keeps its dates and place: no later deadline for it, nowhere it couldn't be done.
+            if (first.from != second.from || first.dueAt != second.dueAt || (Where.of(second.where) ?: Planner.whereOf(task)) != where) return@mapNotNull null
             val slot = today.slots.firstOrNull { it.kind == SlotKind.Work && it.chunk?.taskId == task.id && it.chunk?.stepIndex == index }
             val gap = gaps.firstOrNull { it.minutes < first.minutes && (slot == null || it.start < slot.start) } ?: return@mapNotNull null
             Candidate(task.id, task.title, index, first, second, gap)
