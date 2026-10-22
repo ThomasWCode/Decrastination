@@ -182,9 +182,9 @@ object OwnTaskRules {
         return d
     }
 
-    /** Whether [steps] are the ones [given] (a Steps change's) made: the same names and minutes, in order. */
+    /** Whether [steps] are the ones [given] (a Steps change's) made: the same names, minutes and marks (D-109), in order. */
     private fun sameSteps(steps: List<OwnStep>, given: List<OwnStep>?): Boolean =
-        given != null && steps.map { it.title.trim() to it.minutes } == given.map { it.title.trim() to it.minutes }
+        given != null && steps.map { Triple(it.title.trim(), it.minutes, it.anyOrder) } == given.map { Triple(it.title.trim(), it.minutes, it.anyOrder) }
 
     /** The changes an instruction makes to one of your own that are made on it, not laid over it. */
     val MADE_ON_IT = setOf(ChangeType.DueBy, ChangeType.StartFrom, ChangeType.Minutes, ChangeType.Steps, ChangeType.Rename)
