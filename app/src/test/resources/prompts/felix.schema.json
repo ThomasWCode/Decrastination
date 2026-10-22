@@ -54,13 +54,49 @@
                 ],
                 "additionalProperties": false
             }
+        },
+        "rebalances": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "taskId": {
+                        "type": "string"
+                    },
+                    "stepIndex": {
+                        "type": "integer"
+                    },
+                    "firstTitle": {
+                        "type": "string"
+                    },
+                    "firstMinutes": {
+                        "type": "integer"
+                    },
+                    "secondTitle": {
+                        "type": "string"
+                    },
+                    "secondMinutes": {
+                        "type": "integer"
+                    }
+                },
+                "required": [
+                    "taskId",
+                    "stepIndex",
+                    "firstTitle",
+                    "firstMinutes",
+                    "secondTitle",
+                    "secondMinutes"
+                ],
+                "additionalProperties": false
+            }
         }
     },
     "required": [
         "message",
         "replies",
         "nextCheckMin",
-        "memories"
+        "memories",
+        "rebalances"
     ],
     "additionalProperties": false
 }
