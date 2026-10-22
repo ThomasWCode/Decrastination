@@ -90,6 +90,11 @@ class RebalanceTest {
         // the task takes what it was laid at, and the minutes worked still cover the ticked step.
         val given = Rebalance.Given("teams:sheet", 1, "Question 1", 20, "Questions 2 and 3", 55)
         assertEquals(listOf(15, 20, 55), Rebalance.steps(t, c, given)!!.map { it.minutes })
+        // With his total beside them, the app's own estimate at your pace: the steps add up to the task's total (AI-19),
+        // and what's finished still teaches the pace, measured against the app's estimate as before.
+        val made = Rebalance.instruction(t, c, Rebalance.steps(t, c, given)!!, now).changes
+        assertEquals(listOf(ChangeType.Steps, ChangeType.Minutes), made.map { it.type })
+        assertEquals(listOf<Any?>(90, t.appEffortMin, Enrichments.inputHash(t)), made[1].let { listOf(it.minutes, it.pacedFrom, it.pacedHash) })
         // His two adding up to the steps as read, not as laid: not the work's time.
         assertNull(Rebalance.steps(t, c, given.copy(secondMinutes = 30)))
         // Without the pace its pieces aren't laid at the steps' minutes as planned, and the ticked one's 15 worked
@@ -98,6 +103,9 @@ class RebalanceTest {
         // One of its steps still to do over an hour as planned: laid in sittings, which his never are, so not asked about.
         val long = task(step("Questions 1 and 2", 30, StepOrigin.Reading), step("Question 3", 20, StepOrigin.Reading), step("Write it up", 50, StepOrigin.Reading))
         assertEquals(emptyList(), Rebalance.candidates(plan(chunks = listOf(piece().copy(minutes = 45), piece(1).copy(minutes = 30))), listOf(long), emptySet(), now, paced))
+        // A step whose sections an Anki deck holds is the deck's work: as his step it would be planned twice, so not asked about.
+        val vocab = task(step("Questions 1 and 2", 30, StepOrigin.Reading), step("Question 3", 20, StepOrigin.Reading), step("Vocabulary", 15, StepOrigin.Rules).copy(ankiSections = listOf("1.1")))
+        assertEquals(emptyList(), Rebalance.candidates(plan(chunks = listOf(piece().copy(minutes = 45), piece(1).copy(minutes = 30))), listOf(vocab), emptySet(), now, paced))
         // Shared out to a total you gave for the task (D-4): not asked about, even laid at the minutes it's shared out to.
         val yours = task(*pair).copy(mine = Mine(minutes = SetMinutes(90, By.You)))
         val shared = yours.plannedStepMinutes(1.0)
@@ -143,6 +151,8 @@ class RebalanceTest {
         assertEquals(listOf("Read the brief" to 15, "Question 1" to 20, "Questions 2 and 3" to 40), steps.map { it.title to it.minutes })
         // Their ids kept, so a slot's key and a tick follow them.
         assertEquals(t.subSteps.map { it.id }, steps.map { it.id })
+        // His own add up as they did: his Steps change alone.
+        assertEquals(listOf(ChangeType.Steps), Rebalance.instruction(t, c, steps, now).changes.map { it.type })
         assertEquals("“Worksheet”: “Question 1” (20 min), then “Questions 2 and 3” (40 min)", Rebalance.line(c, given))
         // A title longer than a step's can be is cut, on its card as on its step.
         val long = given.copy(firstTitle = "Question 1 " + "x".repeat(OwnTaskRules.MAX_TITLE))

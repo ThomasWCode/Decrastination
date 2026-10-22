@@ -236,9 +236,10 @@ class Looks(
             // The same free time too, by its end (one under way starts later as the clock moves on): his
             // message names the one he was shown, and his minutes are checked against what's left of it.
             val candidate = current.firstOrNull { it.taskId == asked.taskId && it.index == asked.index && it.first == asked.first && it.second == asked.second && it.gap.end == asked.gap.end } ?: return@mapNotNull null
-            if (made.any { it.changes.single().taskId == candidate.taskId }) return@mapNotNull null
-            val steps = known[candidate.taskId]?.let { Rebalance.steps(it, candidate, given) } ?: return@mapNotNull null
-            val tried = Rebalance.instruction(candidate, steps, back)
+            if (made.any { it.changes.any { c -> c.taskId == candidate.taskId } }) return@mapNotNull null
+            val task = known[candidate.taskId] ?: return@mapNotNull null
+            val steps = Rebalance.steps(task, candidate, given) ?: return@mapNotNull null
+            val tried = Rebalance.instruction(task, candidate, steps, back)
             if (!Rebalance.laidAsOffered(planning.plan(now = back, trying = made + tried, settings = settingsBack), candidate, settingsBack)) return@mapNotNull null
             made += tried
             Proposal(UUID.randomUUID().toString(), changes = tried.changes, lines = listOf(Rebalance.line(candidate, given)), instant = true)
