@@ -114,6 +114,11 @@ class RebalanceTest {
         // Their ids kept, so a slot's key and a tick follow them.
         assertEquals(t.subSteps.map { it.id }, steps.map { it.id })
         assertEquals("“Worksheet”: “Question 1” (20 min), then “Questions 2 and 3” (40 min)", Rebalance.line(c, given))
+        // A title longer than a step's can be is cut, on its card as on its step.
+        val long = given.copy(firstTitle = "Question 1 " + "x".repeat(OwnTaskRules.MAX_TITLE))
+        val cut = Rebalance.steps(t, c, long)!![1].title
+        assertEquals(OwnTaskRules.MAX_TITLE, cut.length)
+        assertEquals("“Worksheet”: “$cut” (20 min), then “Questions 2 and 3” (40 min)", Rebalance.line(c, long))
         // Longer than the free time, under 15, not adding up, another step, a title missing, or the steps changed since.
         assertNull(Rebalance.steps(t, c, given.copy(firstMinutes = 25, secondMinutes = 35)))
         assertNull(Rebalance.steps(t, c, given.copy(firstMinutes = 10, secondMinutes = 50)))

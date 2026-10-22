@@ -185,6 +185,36 @@ class LooksTest {
         assertEquals(emptyList(), stores.instructions.value.instructions)
     }
 
+    @Test
+    fun `a rebalance is tried by the settings as they are once the call is back, a rest changed while it was out among them`() = runBlocking {
+        // A reading kept at break and vocabulary at the second lunch's start: the first lunch is the free time
+        // shown, its end 15 minutes before the vocabulary.
+        worksheetInSteps()
+        stores.tasks.update { s -> s.copy(tasks = s.tasks + atSchool("teams:reading", "Reading", 25) + atSchool("teams:vocab", "Vocabulary", 20)) }
+        val chunks = felix.planning.plan().todayBucket!!.chunks
+        val starts = mapOf("teams:reading" to "2026-10-20T10:45", "teams:vocab" to "2026-10-20T13:55")
+        stores.session.update { it.copy(slots = SlotState("2026-10-20", previous = starts.entries.associate { (id, at) -> chunks.first { c -> c.taskId == id }.key to Fixtures.at(at) })) }
+        felix.answers(REBALANCED, delayMs = 1_000)
+        // A long rest after a run of 20 minutes, and of 20, set while the call is out: 15 are too few after the 25 he'd put there.
+        val changed = launch {
+            delay(300)
+            stores.settings.update { it.copy(slotLongBreakAfterMin = 20, slotLongBreakMin = 20) }
+        }
+        assertFalse(felix.looks.morning())
+        changed.join()
+        val asked = felix.server.takeRequest().body.readUtf8()
+        assertTrue("13:15, 25 min" in asked, asked)
+        assertEquals(emptyList(), stores.chat.value.messages)
+        assertEquals(emptyList(), stores.instructions.value.instructions)
+    }
+
+    /** Due tomorrow morning, in one step that can be done at school: today's work, a start kept at school its own. */
+    private fun atSchool(id: String, title: String, minutes: Int) = TaskItem(
+        id = id, source = Source.Teams, sourceId = id.substringAfter(':'), title = title, dueAt = Fixtures.at("2026-10-21T08:30"),
+        kind = Kind.Homework, sourceEffortMin = minutes, firstSeenAt = now, lastSeenAt = now,
+        subSteps = listOf(SubStep(title, minutes, where = "anywhere", id = id.substringAfter(':'), origin = StepOrigin.Reading)),
+    )
+
     /**
      * A school day's 07:00: the worksheet, due tomorrow morning, in two of his steps; 45 minutes is longer
      * than break (30) or either lunch (25 and 40), so its first is tonight's.
