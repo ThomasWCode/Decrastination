@@ -36,7 +36,8 @@ object Rebalance {
      * at school, too long for a free time there before its slot today (or with none), and the step after it
      * needing it, alike in its dates and place, so the work moved between them keeps them; both Felix's, as
      * D-4 keeps yours and the reading's as they were given. None of a task whose rebalance you took back
-     * ([declined]). Each its own free time, the earliest its piece can be done in, at most [MAX_ASKED].
+     * ([declined]). Each its own free time, the earliest its piece can be done in, taken in the day's order
+     * of their pieces (the more urgent first), at most [MAX_ASKED].
      */
     fun candidates(plan: Plan, tasks: List<TaskItem>, declined: Set<String>, now: Long): List<Candidate> {
         val today = plan.todayBucket ?: return emptyList()
@@ -45,7 +46,8 @@ object Rebalance {
         // Each free time for one rebalance: two made for the same one, only one would fit it.
         val taken = HashSet<Long>()
         val out = mutableListOf<Candidate>()
-        for (task in tasks) {
+        val byId = tasks.associateBy { it.id }
+        for (task in today.chunks.map { it.taskId }.distinct().mapNotNull { byId[it] }) {
             if (out.size == MAX_ASKED) break
             if (!task.isOpen || task.source == Source.Anki || task.id in declined) continue
             val index = task.subSteps.indexOfFirst { !it.done }.takeIf { it >= 0 } ?: continue
