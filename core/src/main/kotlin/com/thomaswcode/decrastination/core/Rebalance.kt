@@ -92,8 +92,8 @@ object Rebalance {
      */
     fun steps(task: TaskItem, candidate: Candidate, given: Given): List<OwnStep>? {
         if (given.taskId != candidate.taskId || given.stepIndex != candidate.index) return null
-        val first = given.firstTitle.trim().take(OwnTaskRules.MAX_TITLE)
-        val second = given.secondTitle.trim().take(OwnTaskRules.MAX_TITLE)
+        val first = title(given.firstTitle)
+        val second = title(given.secondTitle)
         if (first.isEmpty() || second.isEmpty()) return null
         if (given.firstMinutes !in MIN_STEP_MIN..candidate.gap.minutes || given.secondMinutes < MIN_STEP_MIN) return null
         if (given.firstMinutes + given.secondMinutes != candidate.first.minutes + candidate.second.minutes) return null
@@ -136,9 +136,12 @@ object Rebalance {
         return next.start - slot.end >= rest * MINUTE
     }
 
-    /** What a rebalance made, as its card under his message says it. */
+    /** What a rebalance made, as its card under his message says it: his titles as its steps have them. */
     fun line(candidate: Candidate, given: Given): String =
-        "“${candidate.title}”: “${given.firstTitle.trim()}” (${given.firstMinutes} min), then “${given.secondTitle.trim()}” (${given.secondMinutes} min)"
+        "“${candidate.title}”: “${title(given.firstTitle)}” (${given.firstMinutes} min), then “${title(given.secondTitle)}” (${given.secondMinutes} min)"
+
+    /** A title he gives, as a step has it: trimmed, and cut where a step's is ([OwnTaskRules.MAX_TITLE]). */
+    private fun title(text: String) = text.trim().take(OwnTaskRules.MAX_TITLE)
 
     /** The tasks whose rebalance in a morning's message isn't in use, taken back or never made: not asked about again. */
     fun declined(messages: List<ChatMessage>): Set<String> = messages.asSequence()
