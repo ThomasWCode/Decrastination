@@ -45,10 +45,13 @@ Stage by stage, what each PR needs from your phone and from you, for what and fo
 | — | 4.3.1 | **needed**: install and the script; two `chat-ask`s (paid) with Gmail's finish switch off (`gmail-finishes --ez on false`, then `true` again) | no |
 | 12 | 4.3.2 | **needed**: install and the script; the baselines | **helpful**: the done-when list read together, by message |
 | — | 4.3.3 | **needed**: install and the script (a reset, a reviews-only day and a missed slot's block screen aren't made for a check: the tests hold them) | no |
+| — | 4.3.4 | **needed**: install and the script; the day's slots read back (`calendar.json`), each task's steps in their order | no |
+| — | 4.3.5 | **needed**: install and the script; the version bump re-reads the open tasks (about 40 calls, 60 cents, online) | no |
+| — | 4.3.6 | **needed**: install and the script; a school day's briefing, its rebalance seen in the chat with its Undo | **helpful**: the eval's splits read, by message |
 
 ## In sum
 
-- **The phone** is needed for 32 of the 33 PRs, for the install and its check: a plugged-in, unlocked phone on the desk for an evening does several PRs if their reviews are done by then. Two stages want it free of use for an hour (6b, on a weekend) or online for a minute's write (11).
+- **The phone** is needed for 36 of the 37 PRs, for the install and its check: a plugged-in, unlocked phone on the desk for an evening does several PRs if their reviews are done by then. Two stages want it free of use for an hour (6b, on a weekend) or online for a minute's write (11).
 - **You** are needed for nine moments, about an hour and a half at the phone in all: 5a, 5b, 5c (ten, ten and five minutes; done, in one evening with the three PRs stacked), 4.0.10 (five minutes, 19 Oct), 8a (fifteen minutes spread over an evening), 8b (five minutes: your classes' subjects), 11 (twenty minutes with Gmail), and 10b twice by message (a read before, a read after): with Stage 5's, 4.0.10's, 8a's, 8b's, 11's and 10b's read before done (11's on 21 Oct, an hour with its two finds), 10b's read after is left. Four more are helpful but not needed (3, 6b, 7, 12): five minutes each, or slower guarded taps.
 - **No decision waits on you** during the work: every question a stage needs is answered, and the four things that could go wrong mid-PR have their fallback chosen.
 
