@@ -550,19 +550,27 @@ class ConversationTest {
         assertTrue(asking.answer)
         assertEquals(emptyList(), answers())
         assertEquals(0, felix.ports.readAgain)
-        // Read as no answer, changing nothing: a turn of the chat, answered there, and his question waits again.
+        // Its reading is shown his question in his words, from the message you replied to.
+        assertEquals("is it questions 1 to 6 or all of it?", felix.looks.questionFor(asking))
+        // Read as no answer, changing nothing: a turn of the chat, answered there, no longer his question's reply, and his question waits again.
         felix.looks.answerRead(asking, answers = false, changed = false)
         assertEquals("is the plan ticked in teams?", stores.chat.value.unanswered?.text)
         assertEquals(MessageKind.Chat, stores.chat.value.unanswered?.kind)
+        assertNull(stores.chat.value.unanswered?.replyTo)
         assertNull(stores.chat.value.messages.single { it.id == "q1" }.answeredAt)
+        assertTrue("q1" in Replies.awaitingIds(stores.chat.value.messages, checkInUnderWay = false, now, Fixtures.LONDON))
         assertEquals(1, felix.ports.later)
         assertEquals(emptyList(), answers())
         // Your turn answered in the chat, and his question answered after all: read as its answer, kept with its task, which is read again.
         stores.chat.update { s -> s.copy(messages = s.messages.map { if (it.from == Speaker.You) it.copy(answeredAt = it.answeredAt ?: now) else it }) }
         assertEquals(Conversation.Asked.Answer, conversation.send("all of it", replyTo = "q1"))
-        felix.looks.answerRead(stores.instructions.value.instructions.last(), answers = true, changed = false)
+        val answer = stores.instructions.value.instructions.last()
+        felix.looks.answerRead(answer, answers = true, changed = false)
         assertEquals(listOf("all of it"), answers())
         assertEquals(1, felix.ports.readAgain)
+        // The same answer read again (one kept by an older build as you replied): kept once.
+        felix.looks.answerRead(answer, answers = true, changed = false)
+        assertEquals(listOf("all of it"), answers())
         // To another question, an instruction that isn't its answer, made as one: not kept with the task, nor taken on in the chat.
         felix.outbox.send(ChatMessage("q2", Speaker.Felix, "is it handed in on teams?", now, About(taskId = sheet.id, taskTitle = sheet.title), kind = MessageKind.Question))
         assertEquals(Conversation.Asked.Answer, conversation.send("move it to friday", replyTo = "q2"))
