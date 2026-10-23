@@ -57,13 +57,15 @@ class Outbox(
     /**
      * What's past the live window and read moved to the archive ([past]): the archive's update first,
      * then the window's trim, so a stop between leaves a copy (dropped by id at the next move), never a hole.
+     * Only as it was copied: one changed meanwhile (a question answered as the archive was written) stays,
+     * to move as it now is at the next move, so the archive's copy never stands for a newer one.
      */
     suspend fun moveWindow(now: Long): Unit = moving.withLock {
         val past = past(chat.value, now)
         if (past.isEmpty()) return@withLock
         archive.add(past)
-        val moved = past.mapTo(HashSet()) { it.id }
-        chat.update { s -> s.copy(messages = s.messages.filterNot { it.id in moved }) }
+        val moved = past.associateBy { it.id }
+        chat.update { s -> s.copy(messages = s.messages.filterNot { moved[it.id] == it }) }
     }
 
     /** The chat emptied, its archive too ("Clear the chat"): his state stays, and so does what its cards made. */
