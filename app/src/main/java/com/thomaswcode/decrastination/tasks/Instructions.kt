@@ -284,7 +284,9 @@ class Instructions(
     }
 
     private suspend fun setApplied(id: String) {
-        // What its new steps leave of each task's as they were, read before your own task takes them.
+        // The tasks it gives new steps, and what those leave of each one's as they were, read before your own task takes
+        // them: its change is then made on it and gone from the instruction.
+        val restepped = instructions.value.instructions.firstOrNull { it.id == id }?.changes.orEmpty().filter { it.type == ChangeType.Steps }.mapNotNull { it.taskId }
         val unchanged = unchangedSteps(id)
         makeOnSchool(id)
         makeOnOwnTasks(id)
@@ -300,7 +302,6 @@ class Instructions(
         // New steps on a task, a rebalance's among them (D-110), are laid afresh: its starts kept today were its
         // old steps', and a step kept at one would stay there, shorter or longer. One begun stays where it is, and
         // one as it was keeps its start, so the times said of it still hold.
-        val restepped = instructions.value.instructions.firstOrNull { it.id == id }?.changes.orEmpty().filter { it.type == ChangeType.Steps }.mapNotNull { it.taskId }
         if (restepped.isNotEmpty()) {
             val now = clock.now()
             session.update { state -> state.copy(slots = restepped.fold(state.slots) { s, taskId -> s.released(taskId, now, unchanged[taskId].orEmpty()) }) }

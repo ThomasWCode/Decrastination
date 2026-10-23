@@ -33,13 +33,17 @@ data class SlotState(val date: String = "", val previous: Map<String, Long> = em
 
     companion object {
         /**
-         * The places where a Steps change's [steps] leave [task]'s as they were: the same step (its id) and title, at its
-         * minutes as planned ([planned]), so a start kept for it still holds it (D-110).
+         * The places where a Steps change's [steps] leave [task]'s as they were: the same title at its minutes as planned
+         * ([planned]), and the same step, by its id or with one given afresh as it's stored (a change Felix or a reading
+         * of your words writes comes without its steps' ids), not another step's: a start kept for it still holds it (D-110).
          */
-        fun unchanged(task: TaskItem, steps: List<OwnStep>, planned: List<Int>): Set<Int> = steps.indices.filter { i ->
-            val was = task.subSteps.getOrNull(i)
-            was != null && was.id.isNotEmpty() && was.id == steps[i].id && was.title == steps[i].title && planned.getOrNull(i) == steps[i].minutes
-        }.toSet()
+        fun unchanged(task: TaskItem, steps: List<OwnStep>, planned: List<Int>): Set<Int> {
+            val ids = task.subSteps.map { it.id }.filter { it.isNotEmpty() }.toSet()
+            return steps.indices.filter { i ->
+                val was = task.subSteps.getOrNull(i)
+                was != null && was.title == steps[i].title && planned.getOrNull(i) == steps[i].minutes && (was.id == steps[i].id || steps[i].id !in ids)
+            }.toSet()
+        }
     }
 
     /**

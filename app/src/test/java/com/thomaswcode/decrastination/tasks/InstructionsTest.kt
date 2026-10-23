@@ -109,6 +109,22 @@ class InstructionsTest {
     }
 
     @Test
+    fun `your own task given new steps lets go of the starts of those it changes too, its change made on it first`() = runBlocking {
+        val steps = listOf(OwnStep("Read chapter 3", 30, id = "ch3"), OwnStep("Notes on chapter 3", 20, id = "notes"), OwnStep("Flashcards", 15, id = "cards"))
+        h.ownTasks.saveOwnTask("mine", OwnTask(title = "Revise", dueAt = Fixtures.at("2026-10-23T18:00"), minutes = 65, steps = steps))
+        val now = h.clock.now()
+        val today = Instant.ofEpochMilli(now).atZone(Fixtures.LONDON).toLocalDate().toString()
+        val kept = mapOf("own:mine#0" to now + 3_600_000L, "own:mine#1" to now + 7_200_000L, "own:mine#2" to now + 10_800_000L)
+        h.stores.session.update { it.copy(slots = SlotState(today, previous = kept)) }
+        // Felix's change, given without ids as his are: the first two rewritten, the third as it was.
+        val given = listOf(OwnStep("Read chapter 3, part 1", 15), OwnStep("Read chapter 3, part 2, then notes", 35), OwnStep("Flashcards", 15))
+        write(understood("steps", Change(ChangeType.Steps, taskId = "own:mine", steps = given)))
+        h.instructions.applyInstruction("steps")
+        assertEquals(listOf("Read chapter 3, part 1", "Read chapter 3, part 2, then notes", "Flashcards"), task("own:mine").subSteps.map { it.title })
+        assertEquals(mapOf("own:mine#2" to now + 10_800_000L), h.stores.session.value.slots.previous)
+    }
+
+    @Test
     fun `one is refused, saying why, past a real deadline, or leaving one of your own as the form wouldn't take it`() = runBlocking {
         h.stores.tasks.update { it.copy(tasks = listOf(h.teams("essay", due = Fixtures.at("2026-10-20T09:00")))) }
         write(understood("late", Change(ChangeType.AtTime, taskId = "teams:essay", date = "2026-10-20", startMin = 10 * 60, time = Fixtures.at("2026-10-20T10:00"))))
