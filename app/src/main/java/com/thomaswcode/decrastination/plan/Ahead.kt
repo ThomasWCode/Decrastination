@@ -45,7 +45,7 @@ class Ahead(
     private var missed = false
 
     suspend fun run(plan: Plan, now: Long) {
-        // The piece of his next message first, so what he writes ahead can say its first action.
+        // The piece of his next message first, so what he writes ahead knows its first action (he names the piece, not how to do it).
         FelixRules.upcoming(plan, settings.value, now)?.first?.slot?.chunk?.key?.let { microPlans(plan, now, only = it) }
         draftAhead(plan, now)
         microPlans(plan, now)
