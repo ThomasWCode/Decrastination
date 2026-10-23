@@ -75,7 +75,7 @@ What today's slots earn is at most today's plan's share at the ratio: the pieces
 
 **A day with nothing to do** starts with an hour (`freeAllowanceMin`, BL-07), given once: nothing planned today or overdue, no slot of today's kept, missed or moved, the morning's record planning nothing, and every source read that day, but one never read (`Focus.grantAllowanceIfDue`).
 
-**Taken back**: a keep undone (UI-03, `Focus.unkeepSlot`) gives back the free time it earned, as its record says (`SlotRecord.earnedMin`: its share within the day's plan at the rate then, 4.3.18), as far as it's unspent (`Credit.takeBack`). One kept on another day gives back none of this day's, as that day's went at midnight; one kept before 4.3.18 is taken back at the rate now. The day's room left to earn counts what kept slots earned the same way.
+**Taken back**: a keep undone (UI-03, `Focus.unkeepSlot`) gives back the free time it earned, as its record says (`SlotRecord.earnedMin`: its share within the day's plan at the rate then, whether it earned as it was kept, by its photo, or by its task's completion, 4.3.18), as far as it's unspent (`Credit.takeBack`). One kept on another day gives back none of this day's, as that day's went at midnight; one kept before 4.3.18 is taken back at the rate now. The day's room left to earn counts what kept slots earned the same way.
 
 **The reward in sight** (BL-04): `Focus.rewardLine` says what finishing today earns, on the block screen, Day's *Do now* card and the widget: "Finish today's 3 slots (1 h) → 10 min free, 10 min more with a photo of …".
 Once today's done, it's "Today's plan is done. 25 min free."; on an empty day, "Nothing planned today: 1 h free."
