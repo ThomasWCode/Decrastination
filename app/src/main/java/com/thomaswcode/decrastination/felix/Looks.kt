@@ -212,7 +212,7 @@ class Looks(
         // Two steps, his or the reading's, he may rebalance to fit a free time at school today (D-110), at their minutes as
         // planned, none of a task he's had one taken back on.
         val rebalance = Rebalance.candidates(plan, tasks.value.tasks, Rebalance.declined(chat.value.messages), now, planning.calibration())
-        val user = FelixPrompts.describe(FelixPrompts.Reason.Morning, plan, null, null, today(now), chat.value.messages, null, settings, now, clock.zone(), reminders = remindersToday(plan, now), rebalance = rebalance)
+        val user = FelixPrompts.describe(FelixPrompts.Reason.Morning, plan, null, null, today(now), chat.value.messages, null, settings, now, clock.zone(), reminders = remindersToday(plan, now), rebalance = rebalance, tasks = planning.asPlanned())
         // Asked in the app's scope, not the briefing's: past [MORNING_MS] the briefing goes without
         // it, and the call, paid for, comes back and is counted all the same.
         val call = scope.async {
@@ -417,7 +417,7 @@ class Looks(
         val settings = this.settings.value
         val profile = this.profile(at)
         val free = (focus.creditLeftMs(at) / 60_000L).toInt().takeIf { trigger.reason == FelixPrompts.Reason.DayDone || trigger.reason == FelixPrompts.Reason.SlotKept }
-        val user = FelixPrompts.describe(trigger.reason, planning.plan(), trigger.slot, task, today(at), chat.value.messages, trigger.question?.question, settings, at, clock.zone(), free, trigger.record, trigger.asks.map { it.title }, firstAction = trigger.slot?.chunk?.key?.let { model.value.microPlans[it] }?.first?.takeIf { it.isNotEmpty() }, reminder = reminder, notes = notes)
+        val user = FelixPrompts.describe(trigger.reason, planning.plan(), trigger.slot, task, today(at), chat.value.messages, trigger.question?.question, settings, at, clock.zone(), free, trigger.record, trigger.asks.map { it.title }, firstAction = trigger.slot?.chunk?.key?.let { model.value.microPlans[it] }?.first?.takeIf { it.isNotEmpty() }, reminder = reminder, notes = notes, tasks = planning.asPlanned())
         val called = gateway.call(interactive = interactive, record = ModelCalls.OnRecord(ModelEffort.Job.Felix, trigger.reason.name) { r: FelixCaller.Result -> r.usage to ModelCalls.outcome(r.refused, r.answer == null) }, cost = { r: FelixCaller.Result -> r.costUsd to r.refused }) { caller.say(FelixPrompts.system(settings, profile.year), profile.text, user) }
         if (called is Called.Failed) Log.w(AppGraph.TAG, "Felix's message failed", called.error)
         return called

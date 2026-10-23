@@ -214,7 +214,9 @@ class FelixInputsDocTest {
         val kept = record(SlotOutcome.Kept, true)
         out["felix SlotKept"] = FelixPrompts.describe(FelixPrompts.Reason.SlotKept, p, null, worksheet, listOf(kept), recent, null, settings, slot.end + 60_000L, LONDON, freeMin = 15, record = kept)
         out["felix DayDone"] = FelixPrompts.describe(FelixPrompts.Reason.DayDone, p, null, worksheet, listOf(kept), recent, null, settings, Fixtures.at("2026-10-13T21:40"), LONDON, freeMin = 25, record = kept)
-        out["felix Morning"] = FelixPrompts.describe(FelixPrompts.Reason.Morning, plan("2026-10-13T07:00"), null, null, emptyList(), recent, null, settings, Fixtures.at("2026-10-13T07:00"), LONDON, reminders = listOf("17:00 Ask about question 7"))
+        // The vectors' first questions ticked the night before, on their sheet: said as done.
+        val ticked = vectors.copy(subSteps = vectors.subSteps.mapIndexed { i, step -> step.copy(done = i == 0) })
+        out["felix Morning"] = FelixPrompts.describe(FelixPrompts.Reason.Morning, plan("2026-10-13T07:00"), null, null, emptyList(), recent, null, settings, Fixtures.at("2026-10-13T07:00"), LONDON, reminders = listOf("17:00 Ask about question 7"), tasks = listOf(worksheet, ticked))
         out["felix Question"] = FelixPrompts.describe(FelixPrompts.Reason.Question, p, null, worksheet, emptyList(), recent, "Does question 5 need Monday's results, or can it be done from the textbook?", settings, at, LONDON)
         out["felix Completions"] = FelixPrompts.describe(FelixPrompts.Reason.Completions, p, null, null, emptyList(), recent, null, settings, Fixtures.at("2026-10-13T19:10"), LONDON, done = listOf(worksheet.title, vectors.title))
         // A reminder, written ten minutes before its moment, as of it: the slot then and its task, your words.

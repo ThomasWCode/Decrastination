@@ -2,6 +2,8 @@ package com.thomaswcode.decrastination.felix
 
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
+import com.thomaswcode.decrastination.core.About
+import com.thomaswcode.decrastination.core.By
 import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.core.DayWindow
 import com.thomaswcode.decrastination.core.Enrichment
@@ -9,11 +11,15 @@ import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.FelixAnswer
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.MessageKind
+import com.thomaswcode.decrastination.core.Mine
 import com.thomaswcode.decrastination.core.Planner
 import com.thomaswcode.decrastination.core.Rebalance
+import com.thomaswcode.decrastination.core.SetBy
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Speaker
+import com.thomaswcode.decrastination.core.Status
+import com.thomaswcode.decrastination.core.SubStep
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.WindowKind
 import com.thomaswcode.decrastination.data.SlotOutcome
@@ -105,6 +111,54 @@ class FelixTest {
         val linked = task("Statics", 30).copy(extra = mapOf(TeamsRows.EXTRA_LINKS to "https://example.org/sheet"))
         val bare = FelixPrompts.describe(FelixPrompts.Reason.Question, plan, null, linked, emptyList(), emptyList(), "Which?", settings, now, LONDON)
         assertTrue("Its task's own text (Teams; links: https://example.org/sheet):\n  (no text of its own)" in bare, bare)
+    }
+
+    @Test
+    fun `his first message after three quiet hours opens with a greeting, and only that one (D-57)`() {
+        val slot = plan.todaySlots.first { it.chunk?.title == "Statics" }
+        fun his(text: String, ago: Long) = ChatMessage("f$ago", Speaker.Felix, text, now - ago, kind = MessageKind.SlotStart)
+        fun greets(vararg said: ChatMessage) = "Your first message in a while: open with a quick greeting" in
+            FelixPrompts.describe(FelixPrompts.Reason.SlotStart, plan, slot, null, emptyList(), said.toList(), null, settings, now, LONDON)
+        // Nothing said at all, or nothing for three hours: a greeting.
+        assertTrue(greets())
+        assertTrue(greets(his("statics at 17:00", FelixPrompts.GREET_AFTER_MIN * 60_000L)))
+        // His message an hour ago, or yours ten minutes ago after his of four hours ago: none.
+        assertTrue(!greets(his("statics at 17:00", 3_600_000L)))
+        assertTrue(!greets(his("statics at 17:00", 4 * 3_600_000L), ChatMessage("y1", Speaker.You, "what's next?", now - 600_000L)))
+        // His silence, an empty message, isn't something said.
+        assertTrue(greets(his("", 600_000L)))
+        assertTrue("Where you're told it's your first message in a while, start with a quick greeting" in FelixPrompts.system(settings, 12))
+    }
+
+    @Test
+    fun `he's told what's done of today's tasks and of his messages', so a step ticked isn't asked for again (D-57)`() {
+        val essay = task("Essay", 60).copy(subSteps = listOf(SubStep("Pick a question", 15, done = true), SubStep("Research", 25), SubStep("Write", 20)))
+        val handedIn = task("Lab write-up", 30).copy(status = Status.Done, doneAt = now - 3_600_000L)
+        val dropped = task("Old form", 10).copy(mine = Mine(notATask = SetBy(true, By.You)))
+        val notToday = task("Vectors", 30).copy(subSteps = listOf(SubStep("Questions 1 to 6", 15, done = true), SubStep("Questions 7 to 12", 15)))
+        val day = Planner.plan(
+            Planner.Input(listOf(essay, task("Statics", 30)), Fixtures.at("2026-10-12T16:00"), LONDON, settings, windows = mapOf(monday to listOf(DayWindow(17 * 60, 22 * 60, WindowKind.Evening)))),
+        ).copy(now = now)
+        // His messages about the lab write-up and the old form; the vectors in neither today's pieces nor his messages.
+        val recent = listOf(
+            ChatMessage("f1", Speaker.Felix, "lab write-up's due tomorrow", now - 7_200_000L, about = About(taskId = handedIn.id), kind = MessageKind.SlotEnd),
+            ChatMessage("f2", Speaker.Felix, "old form still not in", now - 5_400_000L, about = About(taskId = dropped.id), kind = MessageKind.Question),
+        )
+        val tasks = listOf(essay, task("Statics", 30), handedIn, dropped, notToday)
+        val text = FelixPrompts.describe(FelixPrompts.Reason.Morning, day, null, null, emptyList(), recent, null, settings, now, LONDON, tasks = tasks)
+        val line = text.lines().single { it.startsWith("Done so far") }
+        assertEquals(
+            "Done so far, of today's tasks and the ones your messages below are about: “Essay”: 1 of 3 steps ticked, “Pick a question”; " +
+                "“Lab write-up”: finished Mon 16:10; “Old form”: not a task, as they said, so off the list",
+            line,
+        )
+        // Before his messages, which it answers; with nothing done, no line.
+        assertTrue(text.indexOf(line) < text.indexOf("Recent, oldest first:"), text)
+        assertTrue("Done so far" !in FelixPrompts.describe(FelixPrompts.Reason.Morning, day, null, null, emptyList(), recent, null, settings, now, LONDON, tasks = listOf(task("Statics", 30))))
+        // Of many ticked, the last three named.
+        val long = essay.copy(subSteps = (1..5).map { SubStep("Part $it", 10, done = it <= 4) })
+        assertTrue("“Essay”: 4 of 5 steps ticked, “Part 2”, “Part 3”, “Part 4”" in FelixPrompts.describe(FelixPrompts.Reason.SlotStart, day, null, long, emptyList(), emptyList(), null, settings, now, LONDON, tasks = listOf(long)))
+        assertTrue("What you're told is done is done: don't ask for it, even where your recent messages did." in FelixPrompts.system(settings, 12))
     }
 
     @Test
