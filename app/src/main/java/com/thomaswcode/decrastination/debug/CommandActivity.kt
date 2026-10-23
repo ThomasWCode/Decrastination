@@ -340,7 +340,7 @@ class CommandActivity : Activity() {
             "briefing" -> Briefing.run(this).also { Log.i(TAG, "Briefing posted") }
             "check-in" -> graph.conversation.remindCheckIn().also { Log.i(TAG, "Check-in reminder posted") }
             // The nightly backup's work, once (AR-07).
-            "backup-now" -> Log.i(TAG, "Backup: ${if (graph.backups.backupNow()) "written" else "not written"}; last ${graph.runtime.value.lastBackupAt}")
+            "backup-now" -> Log.i(TAG, "Backup: ${graph.backups.backupNow().name}; last ${graph.runtime.value.lastBackupAt}")
             "review" -> {
                 graph.learning.review(ifDue = false)
                 Log.i(TAG, "Review: ${graph.log.value.reviews.lastOrNull()?.lines}; calibration ${graph.stores.learning.value.calibration}")
@@ -396,15 +396,15 @@ class CommandActivity : Activity() {
             "chat-ask" -> {
                 // --es text "<words>": sent to the chat as on the phone (a paid call); Claude's reply logged.
                 // --es replyTo <message id>: a reply to that message, routed as a swipe's or his notification's
-                // is: a question of his answered with no call, logged as what follows it.
+                // is: a question of his answered as one, not a turn of the chat (a reading's read by Claude, a call), logged as what follows it.
                 val text = intent.getStringExtra("text")
                 val asked = if (text.isNullOrBlank()) Conversation.Asked.Nothing else graph.conversation.send(text, replyTo = intent.getStringExtra("replyTo"))
                 if (asked == Conversation.Asked.Nothing) {
                     Log.w(TAG, "chat-ask needs --es text <words>")
                 } else if (asked == Conversation.Asked.Answer) {
-                    // Answered with no call: what followed it, no answer of his waited for.
+                    // Taken as an answer: what followed it, no answer of his waited for.
                     val last = graph.chat.value.messages.last()
-                    Log.i(TAG, "chat-ask: answered with no call; then ${last.from}: ${last.text}")
+                    Log.i(TAG, "chat-ask: taken as an answer; then ${last.from}: ${last.text}")
                 } else {
                     // Waits its turn behind the answer ask started, or answers it itself.
                     graph.conversation.answerChat()

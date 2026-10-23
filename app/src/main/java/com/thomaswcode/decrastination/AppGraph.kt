@@ -282,7 +282,7 @@ class AppGraph private constructor(context: Context) {
         calendarTime = { sync.calendarTime },
         profile = { conversation.profile(it) },
         remember = { conversation.remember(it) },
-        addInstruction = { text, about, answer -> instructions.addInstruction(text, about, answer) },
+        addInstruction = { text, about, answer, question -> instructions.addInstruction(text, about, answer, question) },
         assess = { taskId, doneAt, answer -> learning.recordAssessment(taskId, doneAt, answer) },
         applyProposal = { messageId, proposalId -> conversation.applyProposal(messageId, proposalId) },
     )

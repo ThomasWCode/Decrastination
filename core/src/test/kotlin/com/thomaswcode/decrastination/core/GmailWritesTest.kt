@@ -59,10 +59,11 @@ class GmailWritesTest {
         assertEquals("w1" to now + 2 * min, undo.reverseOf to undo.notBefore)
         assertEquals(GmailWrites.State.TakenBack, GmailWrites.state(undone, "gmail:1"))
         assertEquals("w1", GmailWrites.next(undone, now + 2 * min)?.id)
-        // The finish given up with its star taken off: the Undo goes next, putting back the star alone.
+        // The finish given up with its star taken off: the Undo goes next. The archive's answer may have been lost, so
+        // the inbox is in what it may put back too: the write puts back only what isn't as it was.
         val gaveUp = GmailWrites.with(undone, "w1") { it.copy(doneAt = now + 3 * min, gaveUp = true) }
         assertEquals("u1", GmailWrites.next(gaveUp, now + 3 * min)?.id)
-        assertEquals(listOf("101") to emptyList<String>(), GmailWrites.toRestore(gaveUp, undo))
+        assertEquals(listOf("101") to listOf("101", "102"), GmailWrites.toRestore(gaveUp, undo))
         // Made whole: both put back.
         val made = GmailWrites.with(undone, "w1") { it.copy(archived = true, doneAt = now + 3 * min) }
         assertEquals(listOf("101") to listOf("101", "102"), GmailWrites.toRestore(made, undo))
@@ -200,14 +201,14 @@ class GmailWritesTest {
     }
 
     @Test
-    fun `an Undo of a finish waiting a retry stops it as it is, and puts back only what it made`() {
+    fun `an Undo of a finish waiting a retry stops it as it is, and puts back what it may have made`() {
         val read = GmailWrites.with(GmailWrites.finish(emptyList(), finish(), confirmed = true)!!, "w1") { it.copy(flagged = listOf("101"), inbox = listOf("101", "102"), unstarred = true) }
         val waiting = GmailWrites.failed(read, "w1", "no connection", now + min)
         val undone = GmailWrites.undo(waiting, "gmail:1", now + 2 * min, "u1")!!
         val stopped = undone.first { it.id == "w1" }
         assertTrue(stopped.doneAt == now + 2 * min && stopped.unstarred && !stopped.archived)
         assertEquals("u1", GmailWrites.next(undone, now + 2 * min)?.id)
-        assertEquals(listOf("101") to emptyList<String>(), GmailWrites.toRestore(undone, undone.last()))
+        assertEquals(listOf("101") to listOf("101", "102"), GmailWrites.toRestore(undone, undone.last()))
         // One due now (being made) isn't stopped: its Undo waits behind it.
         assertTrue(GmailWrites.pending(GmailWrites.undo(waiting, "gmail:1", now + 31 * min, "u1")!!.first { it.id == "w1" }))
     }

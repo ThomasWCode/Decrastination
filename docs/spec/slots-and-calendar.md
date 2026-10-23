@@ -128,7 +128,7 @@ An event of yours is deleted only if it has both the app's words and the very ti
 
 ## A calendar no longer written to
 
-Picking another calendar, or none, puts the old one on `CalendarState.calendarsToClear`. `CalendarWriter.clearOldCalendars` deletes the app's events there (by its package) and copies of them (by their fingerprints).
+Picking another calendar, or none, puts the old one on `CalendarState.calendarsToClear`. `CalendarWriter.clearOldCalendars` deletes the app's events there (by its package) and copies of them (by their fingerprints). The switch waits for a write under way, which may be for the old one, so that write's events go in before it's cleared, never after (4.3.15).
 It's tried again at each write till it works (the permission back, the provider well). A backup restored keeps this phone's calendar choices, as their ids are this phone's.
 
 ## Your calendar as busy time
