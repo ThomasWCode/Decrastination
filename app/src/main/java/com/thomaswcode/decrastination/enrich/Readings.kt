@@ -16,6 +16,8 @@ import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 /**
@@ -41,6 +43,13 @@ class Readings(
 ) {
     /** The rules' enrichment: always there, and the fallback for the model. */
     private val rules = RuleEnricher()
+
+    /**
+     * Held while a task is read and its reading laid: two runs at once (a sync's and a rest's retry, the sheet's
+     * *Read again*, a photo's) read one task at a time, the second finding it read once the first's answer is laid,
+     * so an unchanged task isn't paid for twice. A read asked for again on purpose ([readAgain]) still is.
+     */
+    private val readingOne = Mutex()
 
     /**
      * Enriches every task that's new or changed since it was last enriched, and, while the model is
@@ -70,8 +79,9 @@ class Readings(
             .filter { (task, _) -> due(task) }
             // Never read first, then the oldest prompts' readings (AC-06), soonest due first.
             .sortedWith(compareBy(Enrichments.NEED) { it.first })
-        for ((snapshot, _) in candidates) {
-            // Read afresh: a sync since the run began may have closed or changed it.
+        for ((snapshot, _) in candidates) readingOne.withLock {
+            // Read afresh, once no other run is reading one: a sync since the run began may have closed or changed it,
+            // and another run may have read it meanwhile.
             val task = tasks.value.tasks.firstOrNull { it.id == snapshot.id } ?: continue
             val job = Enrichments.jobFor(task, GmailThreads::textRead) ?: continue
             if (!due(task)) continue
