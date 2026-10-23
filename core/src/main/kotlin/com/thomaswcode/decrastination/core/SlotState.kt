@@ -23,8 +23,30 @@ data class SlotState(val date: String = "", val previous: Map<String, Long> = em
     /** [taskId] moved on purpose (a time, a day or a start you gave): its missed slots forgotten. */
     fun moved(taskId: String): SlotState = copy(missed = missed.filterNot { it.taskId == taskId })
 
-    /** [taskId]'s starts kept from the last plan let go of where they're still to come at [now]: its new steps laid afresh (D-110), one begun left where it is. */
-    fun released(taskId: String, now: Long): SlotState = copy(previous = previous.filter { (key, start) -> start <= now || !key.startsWith("$taskId#") })
+    /**
+     * [taskId]'s starts kept from the last plan let go of where they're still to come at [now]: its new steps laid afresh
+     * (D-110), one begun left where it is, and the steps at the places in [keep], as they were ([unchanged]), kept too.
+     */
+    fun released(taskId: String, now: Long, keep: Set<Int> = emptySet()): SlotState = copy(previous = previous.filter { (key, start) ->
+        start <= now || !key.startsWith("$taskId#") || key.removePrefix("$taskId#").substringBefore('#').toIntOrNull() in keep
+    })
+
+    companion object {
+        /**
+         * The places where a Steps change's [steps] leave [task]'s as they were: the same title, the same minutes as planned
+         * before the change and after it ([before], [after]: a total you gave shares them out), and the same step, by its id
+         * or with one given afresh as it's stored (a change Felix or a reading of your words writes comes without its steps'
+         * ids), not another step's: a start kept for it still holds it (D-110).
+         */
+        fun unchanged(task: TaskItem, steps: List<OwnStep>, before: List<Int>, after: List<Int>): Set<Int> {
+            val ids = task.subSteps.map { it.id }.filter { it.isNotEmpty() }.toSet()
+            return steps.indices.filter { i ->
+                val was = task.subSteps.getOrNull(i)
+                was != null && was.title == steps[i].title && before.getOrNull(i) != null && before.getOrNull(i) == after.getOrNull(i) &&
+                    (was.id == steps[i].id || steps[i].id !in ids)
+            }.toSet()
+        }
+    }
 
     /**
      * As [plan] leaves today: a missed piece in none of today's slots, its task still in the plan, went to

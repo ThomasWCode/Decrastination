@@ -21,6 +21,7 @@ import com.thomaswcode.decrastination.core.ProposalState
 import com.thomaswcode.decrastination.core.SchoolCalendar
 import com.thomaswcode.decrastination.core.SchoolDays
 import com.thomaswcode.decrastination.core.Settings
+import com.thomaswcode.decrastination.core.SlotState
 import com.thomaswcode.decrastination.core.Slotter
 import com.thomaswcode.decrastination.core.WallClock
 import com.thomaswcode.decrastination.core.withMine
@@ -283,6 +284,10 @@ class Instructions(
     }
 
     private suspend fun setApplied(id: String) {
+        // The tasks it gives new steps, and what those leave of each one's as they were, read before your own task takes
+        // them: its change is then made on it and gone from the instruction.
+        val restepped = instructions.value.instructions.firstOrNull { it.id == id }?.changes.orEmpty().filter { it.type == ChangeType.Steps }.mapNotNull { it.taskId }
+        val unchanged = unchangedSteps(id)
         makeOnSchool(id)
         makeOnOwnTasks(id)
         // A time, a day or a start you gave a task moves it on purpose: its slots today are recorded
@@ -295,11 +300,11 @@ class Instructions(
             session.update { state -> state.copy(slots = moved.fold(state.slots) { s, taskId -> s.moved(taskId) }) }
         }
         // New steps on a task, a rebalance's among them (D-110), are laid afresh: its starts kept today were its
-        // old steps', and a step kept at one would stay there, shorter or longer. One begun stays where it is.
-        val restepped = instructions.value.instructions.firstOrNull { it.id == id }?.changes.orEmpty().filter { it.type == ChangeType.Steps }.mapNotNull { it.taskId }
+        // old steps', and a step kept at one would stay there, shorter or longer. One begun stays where it is, and
+        // one as it was keeps its start, so the times said of it still hold.
         if (restepped.isNotEmpty()) {
             val now = clock.now()
-            session.update { state -> state.copy(slots = restepped.fold(state.slots) { s, taskId -> s.released(taskId, now) }) }
+            session.update { state -> state.copy(slots = restepped.fold(state.slots) { s, taskId -> s.released(taskId, now, unchanged[taskId].orEmpty()) }) }
         }
         instructions.update { state ->
             state.copy(instructions = state.instructions.map { if (it.id == id && it.state == InstructionStatus.Understood) it.copy(state = InstructionStatus.Applied, appliedAt = clock.now()) else it })
@@ -325,6 +330,22 @@ class Instructions(
     /** A half-day taken out of the school calendar, as Settings → School deletes one. */
     suspend fun deleteSchoolDays(entry: HalfDay) {
         school.update { it.without(entry) }
+    }
+
+    /** For each task [id] gives new steps, the places where they're its steps as they were ([SlotState.unchanged]), as the plan takes it now. */
+    private fun unchangedSteps(id: String): Map<String, Set<Int>> {
+        val instruction = instructions.value.instructions.firstOrNull { it.id == id } ?: return emptyMap()
+        val changes = instruction.changes.filter { it.type == ChangeType.Steps }
+        if (changes.isEmpty()) return emptyMap()
+        val calibration = planning.calibration()
+        // Each task as it is, and as it will be with [instruction]: a total you gave shares its steps' minutes out.
+        val before = planning.asPlanned().associateBy { it.id }
+        val after = planning.asPlanned(applied = instructions.value.applied + instruction).associateBy { it.id }
+        return changes.mapNotNull { c ->
+            val was = c.taskId?.let(before::get) ?: return@mapNotNull null
+            val will = after[was.id] ?: return@mapNotNull null
+            was.id to SlotState.unchanged(was, c.steps.orEmpty(), was.plannedStepMinutes(calibration.multiplierFor(was)), will.plannedStepMinutes(calibration.multiplierFor(will)))
+        }.toMap()
     }
 
     /**
