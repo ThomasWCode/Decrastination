@@ -204,7 +204,7 @@ These come from the questions answered for v1 and 2.0.0; Q31 here is not Q-31 be
 - UI-06: Felix offers up to three quick replies under his last message; a tap sends one.
 - UI-07: The chat takes speech: the words go into the box to check, not sent.
 - UI-08: The Day view keeps kept slots in place, and shows what was done at its foot.
-- UI-09: A task's sheet is in three parts: Do (its next piece done, its steps, the task where it lives, a photo), About (when it's due, how long, when it can start, what it says, its next step (the first still to do where it has steps, else its reading's suggestion, 4.3.13), its steps, when and why it's planned) and Change (later today, tomorrow, a day, not a task, Felix, and editing one of the student's own).
+- UI-09: A task's sheet is in three parts: Do (its next piece done, its steps, the task where it lives, a photo), About (when it's due, how long, when it can start, what it says, its next step while it's open (the first still to do where it has steps, else its reading's suggestion, 4.3.13), its steps, when and why it's planned) and Change (later today, tomorrow, a day, not a task, Felix, and editing one of the student's own).
 - UI-10: The Work view groups by due date or by subject and filters by source; the finished, the hidden and what the plan leaves out are folded at its foot.
 - UI-11: There's no Calendar page: events live on the Day timeline, each with its sheet and answers, and Settings → Calendar picks the calendars read and the one written to.
 - UI-12: The app is dark blue (navy on paper by day, near-black with navy by night), the widget and notifications alike; the launcher icon keeps the logo's pink, and overdue keeps the standard red.

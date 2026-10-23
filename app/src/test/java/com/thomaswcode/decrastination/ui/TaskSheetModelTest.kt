@@ -17,6 +17,7 @@ import com.thomaswcode.decrastination.core.NoteScope
 import com.thomaswcode.decrastination.core.Planner
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.Source
+import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.core.SubStep
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.WindowKind
@@ -125,5 +126,8 @@ class TaskSheetModelTest {
         // With none, its reading's suggestion, as it was read.
         assertEquals("Read the four questions", TaskSheetModel.nextStep(read))
         assertNull(TaskSheetModel.nextStep(task("b", 40)))
+        // Finished (handed in with its steps not ticked here, or done as its source says): none.
+        assertNull(TaskSheetModel.nextStep(stepped.copy(status = Status.Done)))
+        assertNull(TaskSheetModel.nextStep(read.copy(status = Status.Done)))
     }
 }
