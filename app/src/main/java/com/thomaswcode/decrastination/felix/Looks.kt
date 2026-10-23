@@ -10,6 +10,7 @@ import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.core.ChatState
 import com.thomaswcode.decrastination.core.DueKind
+import com.thomaswcode.decrastination.core.FelixAnswer
 import com.thomaswcode.decrastination.core.FelixDraft
 import com.thomaswcode.decrastination.core.FelixRetry
 import com.thomaswcode.decrastination.core.Given
@@ -36,6 +37,7 @@ import com.thomaswcode.decrastination.data.ModelState
 import com.thomaswcode.decrastination.data.SlotRecord
 import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.enrich.Called
+import com.thomaswcode.decrastination.enrich.InstructionPrompts
 import com.thomaswcode.decrastination.enrich.ModelCalls
 import com.thomaswcode.decrastination.enrich.ModelEffort
 import com.thomaswcode.decrastination.enrich.ModelGateway
@@ -160,20 +162,24 @@ class Looks(
             outbox.send(ChatMessage("letgo-${r.id}", Speaker.Felix, FelixWords.back(r.text, task?.title ?: "its task", why), now, About(taskId = r.taskId, taskTitle = task?.title), kind = MessageKind.Note, byApp = true))
             felix.update { s -> s.copy(reminders = s.reminders.map { if (it == r) it.copy(letGoAt = null) else it }) }
         }
-        for ((r, moment) in Reminders.due(felix.value.reminders, plan ?: focus.plan(now), tasks, now)) deliver(r, moment, now, tasks, said)
+        val laid = plan ?: focus.plan(now)
+        for ((r, moment) in Reminders.due(felix.value.reminders, laid, tasks, now)) deliver(r, moment, now, tasks, said, laid)
     }
 
     /**
      * [r], due at [moment], sent as his message at [now]: in the chat first, under an id of its moment's,
      * so one sent again after a stop between the chat's write and its own replaces itself; then marked sent.
-     * [said]: when something was last said in the chat before this sweep.
+     * [said]: when something was last said in the chat before this sweep; [plan]: the plan it's due by.
      */
-    private suspend fun deliver(r: Reminder, moment: Long, now: Long, tasks: Map<String, TaskItem>, said: Long?) {
+    private suspend fun deliver(r: Reminder, moment: Long, now: Long, tasks: Map<String, TaskItem>, said: Long?, plan: Plan) {
         val late = now - moment > Reminders.LATE_MS
-        // Written for this moment, it's sent on time; late, the moment it was written for has gone. Something said
-        // in the chat since it was written, it would talk past (its greeting, D-57): your words go instead.
+        // His words written for this moment, with nothing said in the chat since, go as written. Otherwise (none
+        // written, none that came back, written for another moment, or something said since, which they'd talk past:
+        // their greeting, D-57) he's asked again now, as of this moment. Late, the moment's gone: your words go, as
+        // they do when he can't be asked or gives none.
         val fresh = (said ?: Long.MIN_VALUE) <= (r.draftedAt ?: Long.MIN_VALUE)
-        val draft = r.draft?.let(FelixAnswers::bounded)?.takeIf { !late && fresh && it.message.isNotBlank() && Reminders.drafted(r, moment) }
+        val written = r.draft?.let(FelixAnswers::bounded)?.takeIf { fresh && it.message.isNotBlank() && Reminders.drafted(r, moment) }
+        val draft = if (late) null else written ?: wordsNow(r, moment, plan, tasks)
         val words = draft?.message ?: FelixWords.reminder(r.text)
         val zone = clock.zone()
         val at = Instant.ofEpochMilli(moment).atZone(zone)
@@ -419,6 +425,8 @@ class Looks(
             ports.readAgain()
             return
         }
+        // Your reply gone from the live chat (read a fortnight on, Claude held that long): too late for the chat to
+        // take on, it's let go, neither kept nor answered.
         if (changed || reply == null) return
         // A turn of the chat now, no longer his question's reply, so his question waits for its answer again (D-99),
         // in the archive too where it was answered from there.
@@ -437,16 +445,28 @@ class Looks(
         ports.answerLater()
     }
 
-    /** His question that [instruction], your reply to it, answers, in his words as he put it, from the chat or the archive: for its reading (AI-10). */
+    /**
+     * His question that [instruction], your reply to it, answers, in his words as he put it, from the chat or the
+     * archive: for its reading (AI-10). Your reply not kept yet (its reading begun as it's kept), his newest
+     * question about its task by then, the one it most often answers.
+     */
     fun questionFor(instruction: Instruction): String? {
-        val reply = replyOf(instruction, chat.value.messages) ?: return null
-        return reply.replyTo?.let(outbox::find)?.text?.takeIf { it.isNotBlank() }
+        val messages = chat.value.messages
+        val asked = replyOf(instruction, messages)?.replyTo?.let(outbox::find)
+            ?: messages.lastOrNull { it.from == Speaker.Felix && it.kind == MessageKind.Question && it.about.taskId == instruction.about.taskId && it.at <= instruction.at }
+        return asked?.text?.takeIf { it.isNotBlank() }
     }
 
-    /** Your reply that [instruction] reads, as it was kept under his question as its answer: the last of yours about its task by then. */
+    /**
+     * Your reply that [instruction] reads, as it was kept under his question as its answer: the last of yours about
+     * its task by then in its words (the instruction's are them, cut as it cuts them), so an older reply isn't taken for it.
+     */
     private fun replyOf(instruction: Instruction, messages: List<ChatMessage>): ChatMessage? {
         val taskId = instruction.about.taskId ?: return null
-        return messages.lastOrNull { it.from == Speaker.You && it.kind == MessageKind.Question && it.about.taskId == taskId && it.at <= instruction.at }
+        return messages.lastOrNull {
+            it.from == Speaker.You && it.kind == MessageKind.Question && it.about.taskId == taskId && it.at <= instruction.at &&
+                it.text.trim().take(InstructionPrompts.MAX_TEXT) == instruction.text.trim()
+        }
     }
 
     /**
@@ -538,10 +558,7 @@ class Looks(
         if (due.isEmpty() || !gateway.available()) return@withLock
         val caller = gateway.client(ModelEffort.Job.Felix)?.let { FelixCaller(it) } ?: return@withLock
         for ((r, moment) in due) {
-            val task = r.taskId?.let(tasks::get)
-            val notes = task?.let { Notes.forTask(it, felix.value.notes, settings.value.classMap).map { n -> n.text } }.orEmpty()
-            val trigger = FelixRules.Trigger(FelixPrompts.Reason.Reminder, slot = plan.slotAt(moment) ?: plan.nextSlot(moment))
-            val called = ask(caller, trigger, moment, interactive = false, task = task, reminder = r.text, notes = notes) as? Called.Answered ?: continue
+            val called = askReminder(caller, r, moment, plan, tasks) as? Called.Answered ?: continue
             // Refused, or none that could be read, it's paid for all the same: its moment's kept as asked for, so the next look doesn't ask again.
             val answer = called.value.answer
             // Kept only on the reminder as it was asked for: moved, snoozed, sent or cancelled meanwhile, it's another moment's.
@@ -551,7 +568,23 @@ class Looks(
         }
     }
 
-    /** The trigger and moment his words were last asked for ahead and none came back ([draft]): not asked again. */
+    /** His call for [r] as of its [moment] (D-100): your words, the slot then under way or next by [plan], and its task's text and notes. */
+    private suspend fun askReminder(caller: FelixCaller, r: Reminder, moment: Long, plan: Plan, tasks: Map<String, TaskItem>): Called<FelixCaller.Result> {
+        val task = r.taskId?.let(tasks::get)
+        val notes = task?.let { Notes.forTask(it, felix.value.notes, settings.value.classMap).map { n -> n.text } }.orEmpty()
+        val trigger = FelixRules.Trigger(FelixPrompts.Reason.Reminder, slot = plan.slotAt(moment) ?: plan.nextSlot(moment))
+        return ask(caller, trigger, moment, interactive = false, task = task, reminder = r.text, notes = notes)
+    }
+
+    /** His words for [r] at its [moment], asked for now: none with Claude off, resting, over the cap or failing, or none that came back. */
+    private suspend fun wordsNow(r: Reminder, moment: Long, plan: Plan, tasks: Map<String, TaskItem>): FelixAnswer? {
+        if (!gateway.available()) return null
+        val caller = gateway.client(ModelEffort.Job.Felix)?.let { FelixCaller(it) } ?: return null
+        val called = askReminder(caller, r, moment, plan, tasks) as? Called.Answered ?: return null
+        return called.value.answer?.let(FelixAnswers::bounded)?.takeIf { it.message.isNotBlank() }
+    }
+
+    /** The trigger and moment his words were last asked for ahead ([draft]): not asked again ahead, whatever came back. */
     private var draftAsked: Pair<String?, Long>? = null
 
     /**

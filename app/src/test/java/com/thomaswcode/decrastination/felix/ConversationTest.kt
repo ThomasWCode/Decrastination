@@ -12,6 +12,7 @@ import com.thomaswcode.decrastination.core.Fact
 import com.thomaswcode.decrastination.core.InstructionStatus
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Given
+import com.thomaswcode.decrastination.core.Instruction
 import com.thomaswcode.decrastination.core.Memories
 import com.thomaswcode.decrastination.core.MemoryState
 import com.thomaswcode.decrastination.core.MessageKind
@@ -598,6 +599,18 @@ class ConversationTest {
         assertTrue(kept.text.length < long.trim().length)
         felix.looks.answerRead(kept, answers = true, changed = false)
         assertEquals(listOf(long.trim()), stores.tasks.value.tasks.single().answers)
+    }
+
+    @Test
+    fun `a reply read before it's kept is shown his newest question about its task, and an older reply isn't taken for it`() = runBlocking {
+        stores.tasks.update { it.copy(tasks = listOf(sheet)) }
+        // An earlier question of his, answered; then his newest.
+        felix.outbox.send(ChatMessage("q1", Speaker.Felix, "is it questions 1 to 6 or all of it?", now - 3_600_000L, About(taskId = sheet.id, taskTitle = sheet.title), kind = MessageKind.Question))
+        assertEquals(Conversation.Asked.Answer, conversation.send("all of it", replyTo = "q1"))
+        felix.outbox.send(ChatMessage("q2", Speaker.Felix, "is it handed in on teams?", now, About(taskId = sheet.id, taskTitle = sheet.title), kind = MessageKind.Question))
+        // Your reply's instruction read before the reply itself is kept: his newest question, not the one "all of it" answered.
+        val early = Instruction("early", "yes, on teams", About(taskId = sheet.id, taskTitle = sheet.title), now, answer = true)
+        assertEquals("is it handed in on teams?", felix.looks.questionFor(early))
     }
 
     @Test
