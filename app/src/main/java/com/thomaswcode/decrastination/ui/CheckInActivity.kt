@@ -27,6 +27,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -53,13 +54,14 @@ class CheckInActivity : ComponentActivity() {
     private fun Form(graph: AppGraph) {
         val log by graph.log.state.collectAsStateWithLifecycle()
         val scope = rememberCoroutineScope()
-        var feel by remember { mutableIntStateOf(0) }
-        var saving by remember { mutableStateOf(false) }
-        var avoided by remember { mutableStateOf("") }
-        var inTheWay by remember { mutableStateOf("") }
-        var change by remember { mutableStateOf("") }
-        var energy by remember { mutableStateOf("") }
         val week = Daily.checkInWeek(graph.clock.now(), graph.clock.zone(), graph.settings.value.checkInMin)
+        // What's typed kept through the screen made again (the phone turned), its week's: a new week's form starts empty.
+        var feel by rememberSaveable(week) { mutableIntStateOf(0) }
+        var saving by remember { mutableStateOf(false) }
+        var avoided by rememberSaveable(week) { mutableStateOf("") }
+        var inTheWay by rememberSaveable(week) { mutableStateOf("") }
+        var change by rememberSaveable(week) { mutableStateOf("") }
+        var energy by rememberSaveable(week) { mutableStateOf("") }
         val done = log.checkIns.any { it.weekOf == week }
 
         Scaffold(topBar = { TopAppBar(title = { Text("This week") }) }) { padding ->
