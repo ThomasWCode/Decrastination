@@ -136,9 +136,10 @@ class Looks(
      * so this makes none. Else yours as you set them, the app's ([FelixWords.reminder]). One whose task
      * closed before it came is let go first, said in a note of his in the app's words. At its alarm, at each
      * of his looks, and at a start; and with each plan, [plan] the one just made, so a slot's reminder goes
-     * by where it laid the slot. Whether one waits for his words so.
+     * by where it laid the slot. Whether one waits for his words so; [askLater] false where the caller asks for them
+     * itself ([remindNow]).
      */
-    suspend fun sweepReminders(now: Long = clock.now(), plan: Plan? = null): Boolean = sweeping.withLock {
+    suspend fun sweepReminders(now: Long = clock.now(), plan: Plan? = null, askLater: Boolean = true): Boolean = sweeping.withLock {
         if (felix.value.reminders.none { Reminders.pending(it) || it.letGoAt != null }) return@withLock false
         val tasks = this.tasks.value.tasks.associateBy { it.id }
         // What was said before this sweep: what it says itself (a let-go, another reminder) doesn't make a reminder's words out of date.
@@ -168,7 +169,7 @@ class Looks(
         val laid = plan ?: focus.plan(now)
         var asking = false
         for ((r, moment) in Reminders.due(felix.value.reminders, laid, tasks, now)) if (!deliver(r, moment, now, tasks, said)) asking = true
-        if (asking) ports.remindLater()
+        if (asking && askLater) ports.remindLater()
         asking
     }
 
@@ -242,8 +243,12 @@ class Looks(
                 val answer = caller?.let { (askReminder(it, r, moment, plan, tasks) as? Called.Answered)?.value?.answer }
                 felix.update { s -> s.copy(reminders = s.reminders.map { if (it.id == r.id && it.undrafted() == r.undrafted()) it.copy(draft = answer, draftedAt = askedAt, draftFor = moment) else it }) }
                 if (answer == null) Log.w(AppGraph.TAG, "Felix's words for a reminder at its moment came back with none: yours go")
+                // Sent as soon as its words are kept, as it now is, not after the others' calls, which could make it late;
+                // those still to ask for are this run's.
+                sweepReminders(now = clock.now(), askLater = false)
             }
         }
+        // Any come due meanwhile, asked for in a run of their own.
         sweepReminders(now = clock.now())
     }
 
