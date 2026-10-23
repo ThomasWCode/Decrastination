@@ -128,6 +128,8 @@ class NotesAndRemindersTest {
 
     @Test
     fun `a reminder whose moment has come is his message in your words, the app's, with its replies, and then it's done with`() = runBlocking {
+        // Claude off: no words of his, written ahead or asked for at its moment, so yours go.
+        stores.settings.update { it.copy(aiEnabled = false) }
         stores.felix.update { it.copy(reminders = listOf(at("call gran", now + 5 * MIN))) }
         felix.looks.sweepReminders(now)
         assertTrue(stores.chat.value.messages.none { it.kind == MessageKind.Reminder })
@@ -233,6 +235,8 @@ class NotesAndRemindersTest {
 
     @Test
     fun `a slot's reminder goes by the plan just made, not the one kept for the minute, and one on an event is let go`() = runBlocking {
+        // Claude off: which plan it goes by is what's asked here, not whose words.
+        stores.settings.update { it.copy(aiEnabled = false) }
         stores.tasks.update { it.copy(tasks = listOf(sheet)) }
         stores.felix.update { it.copy(reminders = listOf(Reminder("r-form", "bring the form", now - 10 * MIN, By.Felix, sheet.id, Due(DueKind.SlotStart, now - 10 * MIN)))) }
         val kept = felix.planning.plan(now = now)
@@ -316,7 +320,29 @@ class NotesAndRemindersTest {
     }
 
     @Test
-    fun `a reminder's words that came back with none aren't paid for again for its moment, and yours go`() = runBlocking {
+    fun `a reminder's words written ahead, with something said since, are asked for again at its moment, and with Claude off yours go (D-57)`() = runBlocking {
+        stores.felix.update { it.copy(reminders = listOf(at("call gran", now + 8 * MIN), at("stretch", now + 9 * MIN))) }
+        felix.answers(his("hey, call gran now"))
+        felix.answers(his("hey, time to stretch"))
+        felix.looks.draftReminders(now)
+        assertEquals("hey, call gran now", stores.felix.value.reminders.first().draft?.message)
+        // You write in the chat before its time: his words, written before, would talk past it, so he's asked again then.
+        stores.chat.update { it.copy(messages = it.messages + ChatMessage("y1", Speaker.You, "what's on tonight?", now + 2 * MIN, answeredAt = now + 2 * MIN)) }
+        felix.answers(his("call gran now, you're free till the next slot"))
+        felix.clock.time = now + 8 * MIN
+        felix.looks.sweepReminders(felix.clock.time)
+        assertEquals("call gran now, you're free till the next slot", stores.chat.value.messages.single { it.kind == MessageKind.Reminder }.text)
+        assertEquals(3, felix.server.requestCount)
+        // Claude off by the second's moment: yours go.
+        stores.settings.update { it.copy(aiEnabled = false) }
+        felix.clock.time = now + 9 * MIN
+        felix.looks.sweepReminders(felix.clock.time)
+        assertEquals(FelixWords.reminder("stretch"), stores.chat.value.messages.last { it.kind == MessageKind.Reminder }.text)
+        assertEquals(3, felix.server.requestCount)
+    }
+
+    @Test
+    fun `a reminder's words that came back with none aren't asked for again at each look, but once more at its moment, and with none again yours go`() = runBlocking {
         stores.felix.update { it.copy(reminders = listOf(at("call gran", now + 8 * MIN))) }
         felix.answers("not an answer")
         felix.looks.draftReminders(now)
@@ -324,14 +350,18 @@ class NotesAndRemindersTest {
         assertEquals(1, felix.server.requestCount)
         val asked = stores.felix.value.reminders.single()
         assertTrue(asked.draft == null && asked.draftFor == now + 8 * MIN, asked.toString())
+        felix.answers("not an answer")
         felix.clock.time = now + 8 * MIN
         felix.looks.sweepReminders(felix.clock.time)
+        assertEquals(2, felix.server.requestCount)
         assertEquals(FelixWords.reminder("call gran"), stores.chat.value.messages.single { it.kind == MessageKind.Reminder }.text)
     }
 
     @Test
     fun `a reminder's snooze from its chips has it come again, with no call, and its Done ends it`() = runBlocking {
-        stores.felix.update { it.copy(reminders = listOf(at("call gran", now).copy(draft = FelixAnswer("oi"), draftedAt = now - MIN))) }
+        // Claude off, his words written for its moment: no call at either moment.
+        stores.settings.update { it.copy(aiEnabled = false) }
+        stores.felix.update { it.copy(reminders = listOf(at("call gran", now).copy(draft = FelixAnswer("oi"), draftedAt = now - MIN, draftFor = now))) }
         felix.looks.sweepReminders(now)
         val sent = stores.chat.value.messages.single { it.kind == MessageKind.Reminder }
         felix.clock.time = now + MIN
