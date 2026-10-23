@@ -283,6 +283,7 @@ class AppGraph private constructor(context: Context) {
         remember = { conversation.remember(it) },
         addInstruction = { text, about, answer -> instructions.addInstruction(text, about, answer) },
         assess = { taskId, doneAt, answer -> learning.recordAssessment(taskId, doneAt, answer) },
+        applyProposal = { messageId, proposalId -> conversation.applyProposal(messageId, proposalId) },
     )
 
     /**

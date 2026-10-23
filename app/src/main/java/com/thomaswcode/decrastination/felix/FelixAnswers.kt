@@ -1,6 +1,8 @@
 package com.thomaswcode.decrastination.felix
 
 import com.thomaswcode.decrastination.core.FelixAnswer
+import com.thomaswcode.decrastination.core.Rebalance
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
 /** His answer read and kept within its bounds. Pure. */
@@ -22,6 +24,16 @@ object FelixAnswers {
         val answer = runCatching { json.decodeFromString(FelixAnswer.serializer(), text) }.getOrNull() ?: return null
         return bounded(answer, maxMessage)
     }
+
+    /**
+     * The steps he rebalanced in [text], a morning's answer (D-110), every one: each is checked against what he
+     * was asked about as it's made, and one that isn't keeps his message, which may name it, from being sent.
+     */
+    fun rebalances(text: String): List<Rebalance.Given> =
+        runCatching { json.decodeFromString(Rebalances.serializer(), text).rebalances }.getOrDefault(emptyList())
+
+    @Serializable
+    private data class Rebalances(val rebalances: List<Rebalance.Given> = emptyList())
 
     /** [answer] within the bounds his are kept to ([parse]'s): one kept from elsewhere, a restored backup's draft, held to them as it's used. */
     fun bounded(answer: FelixAnswer, maxMessage: Int = MAX_MESSAGE): FelixAnswer {
