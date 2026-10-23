@@ -37,6 +37,7 @@ import com.thomaswcode.decrastination.data.ModelState
 import com.thomaswcode.decrastination.data.SlotRecord
 import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.enrich.Called
+import com.thomaswcode.decrastination.enrich.InstructionPrompts
 import com.thomaswcode.decrastination.enrich.ModelCalls
 import com.thomaswcode.decrastination.enrich.ModelEffort
 import com.thomaswcode.decrastination.enrich.ModelGateway
@@ -424,6 +425,8 @@ class Looks(
             ports.readAgain()
             return
         }
+        // Your reply gone from the live chat (read a fortnight on, Claude held that long): too late for the chat to
+        // take on, it's let go, neither kept nor answered.
         if (changed || reply == null) return
         // A turn of the chat now, no longer his question's reply, so his question waits for its answer again (D-99),
         // in the archive too where it was answered from there.
@@ -442,16 +445,28 @@ class Looks(
         ports.answerLater()
     }
 
-    /** His question that [instruction], your reply to it, answers, in his words as he put it, from the chat or the archive: for its reading (AI-10). */
+    /**
+     * His question that [instruction], your reply to it, answers, in his words as he put it, from the chat or the
+     * archive: for its reading (AI-10). Your reply not kept yet (its reading begun as it's kept), his newest
+     * question about its task by then, the one it most often answers.
+     */
     fun questionFor(instruction: Instruction): String? {
-        val reply = replyOf(instruction, chat.value.messages) ?: return null
-        return reply.replyTo?.let(outbox::find)?.text?.takeIf { it.isNotBlank() }
+        val messages = chat.value.messages
+        val asked = replyOf(instruction, messages)?.replyTo?.let(outbox::find)
+            ?: messages.lastOrNull { it.from == Speaker.Felix && it.kind == MessageKind.Question && it.about.taskId == instruction.about.taskId && it.at <= instruction.at }
+        return asked?.text?.takeIf { it.isNotBlank() }
     }
 
-    /** Your reply that [instruction] reads, as it was kept under his question as its answer: the last of yours about its task by then. */
+    /**
+     * Your reply that [instruction] reads, as it was kept under his question as its answer: the last of yours about
+     * its task by then in its words (the instruction's are them, cut as it cuts them), so an older reply isn't taken for it.
+     */
     private fun replyOf(instruction: Instruction, messages: List<ChatMessage>): ChatMessage? {
         val taskId = instruction.about.taskId ?: return null
-        return messages.lastOrNull { it.from == Speaker.You && it.kind == MessageKind.Question && it.about.taskId == taskId && it.at <= instruction.at }
+        return messages.lastOrNull {
+            it.from == Speaker.You && it.kind == MessageKind.Question && it.about.taskId == taskId && it.at <= instruction.at &&
+                it.text.trim().take(InstructionPrompts.MAX_TEXT) == instruction.text.trim()
+        }
     }
 
     /**
