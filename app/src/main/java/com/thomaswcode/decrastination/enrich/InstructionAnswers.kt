@@ -26,14 +26,17 @@ internal fun String?.filled(): String? = this?.takeIf { it.isNotBlank() }
 object InstructionAnswers {
 
     sealed interface Reading {
-        data class Changes(val changes: List<Change>) : Reading
+        /** For your reply to Felix's question ([com.thomaswcode.decrastination.core.Instruction.answer]): whether it answers it; true for any other. */
+        val answers: Boolean
+
+        data class Changes(val changes: List<Change>, override val answers: Boolean = true) : Reading
 
         /** Nothing to apply: what Claude found unclear, or why its answer couldn't be used. */
-        data class Unclear(val why: String) : Reading
+        data class Unclear(val why: String, override val answers: Boolean = true) : Reading
     }
 
     @Serializable
-    private data class Answer(val understood: Boolean, val question: String? = null, val changes: List<Given> = emptyList())
+    private data class Answer(val understood: Boolean, val question: String? = null, val changes: List<Given> = emptyList(), val answersQuestion: Boolean = true)
 
     /** One change as Claude gives it, before it's checked ([change]). */
     @Serializable
@@ -83,19 +86,19 @@ object InstructionAnswers {
         val answer = runCatching { json.decodeFromString(Answer.serializer(), text) }.getOrNull()
             ?: return Reading.Unclear("Claude's answer couldn't be read")
         if (!answer.understood || answer.changes.isEmpty()) {
-            return Reading.Unclear(answer.question?.trim()?.takeIf { it.isNotEmpty() }?.take(300) ?: "Claude couldn't turn it into a change the app can make")
+            return Reading.Unclear(answer.question?.trim()?.takeIf { it.isNotEmpty() }?.take(300) ?: "Claude couldn't turn it into a change the app can make", answer.answersQuestion)
         }
-        if (answer.changes.size > MAX_CHANGES) return Reading.Unclear("Claude read it as ${answer.changes.size} changes, more than the $MAX_CHANGES the app takes")
+        if (answer.changes.size > MAX_CHANGES) return Reading.Unclear("Claude read it as ${answer.changes.size} changes, more than the $MAX_CHANGES the app takes", answer.answersQuestion)
         val byId = tasks.associateBy { it.id }
         // The event it's about counts even if it's past the fortnight read.
         val titles = events.associate { EventJudge.key(it) to it.title } + listOfNotNull(about.eventKey?.let { it to (about.eventTitle ?: it) })
         val changes = answer.changes.map(Given::normalised).map { g ->
-            change(g, byId, titles, now, zone) ?: return Reading.Unclear("Claude's reading couldn't be used: ${problem(g, byId, titles)}")
+            change(g, byId, titles, now, zone) ?: return Reading.Unclear("Claude's reading couldn't be used: ${problem(g, byId, titles)}", answer.answersQuestion)
         }
-        stepsProblem(changes, byId)?.let { return Reading.Unclear("Claude's reading couldn't be used: $it") }
+        stepsProblem(changes, byId)?.let { return Reading.Unclear("Claude's reading couldn't be used: $it", answer.answersQuestion) }
         // Tasks waiting on each other in a circle within this one reading: none would ever be planned.
-        if (InstructionRules.makesCircle(changes, emptyList())) return Reading.Unclear("Claude's reading would have tasks wait for each other in a circle")
-        return Reading.Changes(changes)
+        if (InstructionRules.makesCircle(changes, emptyList())) return Reading.Unclear("Claude's reading would have tasks wait for each other in a circle", answer.answersQuestion)
+        return Reading.Changes(changes, answer.answersQuestion)
     }
 
     /** [g] as a change the app can make, checked against the [tasks] and [events] there are; null if it can't be. */

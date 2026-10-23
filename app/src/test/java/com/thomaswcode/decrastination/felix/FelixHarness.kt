@@ -15,6 +15,7 @@ import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.data.SecretCipher
 import com.thomaswcode.decrastination.data.Stores
+import com.thomaswcode.decrastination.enrich.InstructionPrompts
 import com.thomaswcode.decrastination.enrich.KeyProblem
 import com.thomaswcode.decrastination.enrich.ModelGateway
 import com.thomaswcode.decrastination.learn.CheckIn
@@ -282,7 +283,7 @@ class FelixHarness(
         /** Your answer to his question, kept to be read, as `Instructions.addInstruction` keeps one. */
         suspend fun instruction(text: String, about: About, answer: Boolean): String {
             val id = UUID.randomUUID().toString()
-            stores.instructions.update { it.copy(instructions = it.instructions + Instruction(id, text, about, clock.now(), answer = answer)) }
+            stores.instructions.update { it.copy(instructions = it.instructions + Instruction(id, text.trim().take(InstructionPrompts.MAX_TEXT), about, clock.now(), answer = answer)) }
             return id
         }
     }
