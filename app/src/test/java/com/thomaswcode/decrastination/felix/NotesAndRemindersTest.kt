@@ -32,6 +32,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import okhttp3.mockwebserver.MockResponse
 
 /**
@@ -365,6 +366,22 @@ class NotesAndRemindersTest {
         felix.looks.remindNow(felix.clock.time)
         assertEquals(2, felix.server.requestCount)
         assertEquals(FelixWords.reminder("call gran"), stores.chat.value.messages.single { it.kind == MessageKind.Reminder }.text)
+    }
+
+    @Test
+    fun `of reminders whose words are asked for at their moment together, each goes as soon as its own are kept`() = runBlocking {
+        stores.felix.update { it.copy(reminders = listOf(at("stretch", now), at("water the plants", now))) }
+        assertTrue(felix.looks.sweepReminders(now))
+        felix.answers(his("stretch now"))
+        felix.answers(his("plants, now"), delayMs = 2_000)
+        val writing = async(Dispatchers.Default) { felix.looks.remindNow(now) }
+        // The first is sent while the second's words are still being written, not after them.
+        withTimeout(10_000) { while (stores.chat.value.messages.none { it.kind == MessageKind.Reminder }) delay(20) }
+        assertEquals(1, stores.chat.value.messages.count { it.kind == MessageKind.Reminder })
+        writing.await()
+        assertEquals(listOf("stretch now", "plants, now"), stores.chat.value.messages.filter { it.kind == MessageKind.Reminder }.map { it.text })
+        // None left for another run to ask for.
+        assertEquals(1, felix.ports.reminders)
     }
 
     @Test
