@@ -2,12 +2,14 @@ package com.thomaswcode.decrastination.ui
 
 import com.thomaswcode.decrastination.core.By
 import com.thomaswcode.decrastination.core.Chunk
+import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.Instruction
 import com.thomaswcode.decrastination.core.Note
 import com.thomaswcode.decrastination.core.Notes
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Planner
 import com.thomaswcode.decrastination.core.TaskItem
+import com.thomaswcode.decrastination.sources.gmail.GmailThreads
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -74,6 +76,17 @@ object TaskSheetModel {
             val every = n.scope?.let(Notes::scopeLine)
             Noted(n.id, every?.let { "Note for $it: ${n.text} (${if (n.by == By.Felix) felix else "yours"}, $at)" } ?: "$who, $at: ${n.text}", every)
         }
+
+    /**
+     * [task]'s next step as its sheet says it, while it's open: for a task with steps, the first still
+     * to do, as they're ticked (none once all are); without, its reading's suggestion, or its email's, as
+     * it was read. A task finished (handed in with steps not ticked here) has none.
+     */
+    fun nextStep(task: TaskItem): String? = when {
+        !task.isOpen -> null
+        task.subSteps.isNotEmpty() -> task.subSteps.firstOrNull { !it.done }?.title
+        else -> Enrichments.current(task)?.nextStep ?: task.extra[GmailThreads.EXTRA_NEXT_STEP]
+    }
 
     /** The words of the instructions in force on [taskId], about it or changing it: the newest first. */
     fun instructions(applied: List<Instruction>, taskId: String): List<String> =

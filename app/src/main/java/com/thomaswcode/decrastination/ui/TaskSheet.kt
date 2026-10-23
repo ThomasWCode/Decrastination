@@ -558,7 +558,7 @@ private fun Notes(task: TaskItem, now: Long, zone: ZoneId, byId: Map<String, Tas
         Enrichments.current(task)?.adjusted?.takeIf { it.isNotEmpty() && task.isOpen }?.let { lines ->
             add("Claude's dates for ${if (lines.size == 1) "one step were" else "${lines.size} steps were"} adjusted: ${lines.joinToString("; ")}" to false)
         }
-        (Enrichments.current(task)?.nextStep ?: task.extra[GmailThreads.EXTRA_NEXT_STEP])?.let { add("Next: $it" to false) }
+        TaskSheetModel.nextStep(task)?.let { add("Next: $it" to false) }
         task.enrichment?.takeIf { it.by != RuleEnricher.BY }?.let { add("Steps and estimate by Claude" to false) }
     }
     lines.forEach { (text, bad) ->
