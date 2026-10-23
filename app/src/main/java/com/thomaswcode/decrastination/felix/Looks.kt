@@ -10,6 +10,7 @@ import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.core.ChatState
 import com.thomaswcode.decrastination.core.DueKind
+import com.thomaswcode.decrastination.core.FelixAnswer
 import com.thomaswcode.decrastination.core.FelixDraft
 import com.thomaswcode.decrastination.core.FelixRetry
 import com.thomaswcode.decrastination.core.Given
@@ -160,20 +161,24 @@ class Looks(
             outbox.send(ChatMessage("letgo-${r.id}", Speaker.Felix, FelixWords.back(r.text, task?.title ?: "its task", why), now, About(taskId = r.taskId, taskTitle = task?.title), kind = MessageKind.Note, byApp = true))
             felix.update { s -> s.copy(reminders = s.reminders.map { if (it == r) it.copy(letGoAt = null) else it }) }
         }
-        for ((r, moment) in Reminders.due(felix.value.reminders, plan ?: focus.plan(now), tasks, now)) deliver(r, moment, now, tasks, said)
+        val laid = plan ?: focus.plan(now)
+        for ((r, moment) in Reminders.due(felix.value.reminders, laid, tasks, now)) deliver(r, moment, now, tasks, said, laid)
     }
 
     /**
      * [r], due at [moment], sent as his message at [now]: in the chat first, under an id of its moment's,
      * so one sent again after a stop between the chat's write and its own replaces itself; then marked sent.
-     * [said]: when something was last said in the chat before this sweep.
+     * [said]: when something was last said in the chat before this sweep; [plan]: the plan it's due by.
      */
-    private suspend fun deliver(r: Reminder, moment: Long, now: Long, tasks: Map<String, TaskItem>, said: Long?) {
+    private suspend fun deliver(r: Reminder, moment: Long, now: Long, tasks: Map<String, TaskItem>, said: Long?, plan: Plan) {
         val late = now - moment > Reminders.LATE_MS
-        // Written for this moment, it's sent on time; late, the moment it was written for has gone. Something said
-        // in the chat since it was written, it would talk past (its greeting, D-57): your words go instead.
+        // His words written for this moment, with nothing said in the chat since, go as written. Otherwise (none
+        // written, none that came back, written for another moment, or something said since, which they'd talk past:
+        // their greeting, D-57) he's asked again now, as of this moment. Late, the moment's gone: your words go, as
+        // they do when he can't be asked or gives none.
         val fresh = (said ?: Long.MIN_VALUE) <= (r.draftedAt ?: Long.MIN_VALUE)
-        val draft = r.draft?.let(FelixAnswers::bounded)?.takeIf { !late && fresh && it.message.isNotBlank() && Reminders.drafted(r, moment) }
+        val written = r.draft?.let(FelixAnswers::bounded)?.takeIf { fresh && it.message.isNotBlank() && Reminders.drafted(r, moment) }
+        val draft = if (late) null else written ?: wordsNow(r, moment, plan, tasks)
         val words = draft?.message ?: FelixWords.reminder(r.text)
         val zone = clock.zone()
         val at = Instant.ofEpochMilli(moment).atZone(zone)
@@ -538,10 +543,7 @@ class Looks(
         if (due.isEmpty() || !gateway.available()) return@withLock
         val caller = gateway.client(ModelEffort.Job.Felix)?.let { FelixCaller(it) } ?: return@withLock
         for ((r, moment) in due) {
-            val task = r.taskId?.let(tasks::get)
-            val notes = task?.let { Notes.forTask(it, felix.value.notes, settings.value.classMap).map { n -> n.text } }.orEmpty()
-            val trigger = FelixRules.Trigger(FelixPrompts.Reason.Reminder, slot = plan.slotAt(moment) ?: plan.nextSlot(moment))
-            val called = ask(caller, trigger, moment, interactive = false, task = task, reminder = r.text, notes = notes) as? Called.Answered ?: continue
+            val called = askReminder(caller, r, moment, plan, tasks) as? Called.Answered ?: continue
             // Refused, or none that could be read, it's paid for all the same: its moment's kept as asked for, so the next look doesn't ask again.
             val answer = called.value.answer
             // Kept only on the reminder as it was asked for: moved, snoozed, sent or cancelled meanwhile, it's another moment's.
@@ -551,7 +553,23 @@ class Looks(
         }
     }
 
-    /** The trigger and moment his words were last asked for ahead and none came back ([draft]): not asked again. */
+    /** His call for [r] as of its [moment] (D-100): your words, the slot then under way or next by [plan], and its task's text and notes. */
+    private suspend fun askReminder(caller: FelixCaller, r: Reminder, moment: Long, plan: Plan, tasks: Map<String, TaskItem>): Called<FelixCaller.Result> {
+        val task = r.taskId?.let(tasks::get)
+        val notes = task?.let { Notes.forTask(it, felix.value.notes, settings.value.classMap).map { n -> n.text } }.orEmpty()
+        val trigger = FelixRules.Trigger(FelixPrompts.Reason.Reminder, slot = plan.slotAt(moment) ?: plan.nextSlot(moment))
+        return ask(caller, trigger, moment, interactive = false, task = task, reminder = r.text, notes = notes)
+    }
+
+    /** His words for [r] at its [moment], asked for now: none with Claude off, resting, over the cap or failing, or none that came back. */
+    private suspend fun wordsNow(r: Reminder, moment: Long, plan: Plan, tasks: Map<String, TaskItem>): FelixAnswer? {
+        if (!gateway.available()) return null
+        val caller = gateway.client(ModelEffort.Job.Felix)?.let { FelixCaller(it) } ?: return null
+        val called = askReminder(caller, r, moment, plan, tasks) as? Called.Answered ?: return null
+        return called.value.answer?.let(FelixAnswers::bounded)?.takeIf { it.message.isNotBlank() }
+    }
+
+    /** The trigger and moment his words were last asked for ahead ([draft]): not asked again ahead, whatever came back. */
     private var draftAsked: Pair<String?, Long>? = null
 
     /**
