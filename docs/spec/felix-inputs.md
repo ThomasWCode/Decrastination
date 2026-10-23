@@ -439,7 +439,7 @@ He isn't asked in quiet hours, during a timed calendar event that takes its time
 
 Also:
 - **Morning**: at the briefing (07:00 on a school day, 08:30 on any other, a weekday off included, both in Settings, D-74), when today has work slots. He has 20 seconds; without his answer the day's list is the morning's message, in his name in the app's words.
-- **Written ahead** (AC-10): the next slot's SlotStart, up to 10 minutes before it's due, written as of that moment; sent as it is if it still fits then.
+- **Written ahead** (AC-10): the next slot's SlotStart, up to 10 minutes before it's due, written as of that moment; sent as it is if it still fits then: written for that piece, and nothing said in the chat since, by him or you (4.3.11: a greeting, or what's done, could be out of date by then).
 - **Reminder** (4.1.0): a reminder of yours due within ten minutes, written for as of its moment, once a moment (`Looks.draftReminders`); with none of his words by then, yours go ([below](#in-his-name-but-not-his-words)).
 - A call held or failed puts nothing on record: it's tried again after 5 minutes while it's still to say.
 - `felix-say` writes one now for any reason, from a PC ([storage-and-backups.md](storage-and-backups.md)).
@@ -456,7 +456,7 @@ Also:
    - `Today:` the slots kept, missed and to come, and the next; `Reminders today:` for the Morning, your reminders that come today; `Left today:` those to come;
    - `Free time now:` for SlotKept and DayDone;
    - `Done, as their sources say…`: for Completions, the tasks;
-   - `Done so far…`: what's done of today's tasks and of the ones his messages below are about, each finished, off the list as not a task by your word, or with its steps ticked, the last three named (4.3.11);
+   - `Done so far…`: what's done of today's tasks and of the ones his messages below are about, each finished, no longer due (an Anki quota gone by, not done), off the list as not a task or as the same work as another by your word, or with its steps ticked, the last three named (4.3.11);
    - `Your first message in a while…`: with nothing said in the chat for three hours, so he opens with a greeting (4.3.11);
    - `Recent, oldest first:` his last 6 messages of his own in the chat that said something, each with your reply to it (the message of yours answering it, or the next of yours within ten minutes);
    - `Question:` for a Question, the question to put.

@@ -9,6 +9,7 @@ import com.thomaswcode.decrastination.core.Rebalance
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.Slot
 import com.thomaswcode.decrastination.core.SlotKind
+import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.data.SlotOutcome
 import com.thomaswcode.decrastination.data.SlotRecord
@@ -184,8 +185,9 @@ object FelixPrompts {
 
     /**
      * What's done of the tasks of today's pieces in [plan], of [task] and of his messages [shown], in [tasks]:
-     * each finished, off the list as not a task by your word, or with its steps ticked (the last
-     * [DONE_STEPS] of them named). Those with nothing done aren't said.
+     * each finished, no longer due (an Anki quota gone by, not done), off the list as not a task or as
+     * the same work as another by your word, or with its steps ticked (the last [DONE_STEPS] of them
+     * named). Those with nothing done aren't said.
      */
     private fun doneSoFar(plan: Plan, task: TaskItem?, shown: List<ChatMessage>, tasks: List<TaskItem>, zone: ZoneId): List<String> {
         val pieces = plan.todaySlots.mapNotNull { it.chunk?.taskId } + plan.buckets.firstOrNull { it.date == plan.today }?.chunks.orEmpty().map { it.taskId }
@@ -194,8 +196,10 @@ object FelixPrompts {
             val of = byId[id] ?: return@mapNotNull null
             val ticked = of.subSteps.filter { it.done }
             when {
-                !of.isOpen -> "“${of.title}”: finished" + of.doneAt?.let { " ${Instant.ofEpochMilli(it).atZone(zone).format(WHEN)}" }.orEmpty()
+                of.status == Status.Done -> "“${of.title}”: finished" + of.doneAt?.let { " ${Instant.ofEpochMilli(it).atZone(zone).format(WHEN)}" }.orEmpty()
+                of.status == Status.Missed -> "“${of.title}”: no longer due, not done"
                 of.mine.notATask != null -> "“${of.title}”: not a task, as they said, so off the list"
+                of.mine.sameAs != null -> "“${of.title}”: the same work as " + (of.mine.sameAs?.value?.let(byId::get)?.title?.let { "“$it”" } ?: "another task") + ", as they said, so off the list"
                 ticked.isNotEmpty() -> "“${of.title}”: ${ticked.size} of ${of.subSteps.size} steps ticked, " + ticked.takeLast(DONE_STEPS).joinToString(", ") { "“${it.title}”" }
                 else -> null
             }

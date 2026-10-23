@@ -306,7 +306,7 @@ class Looks(
         val zone = clock.zone()
         // Written ahead and still fitting (AC-10): sent as it is, at once.
         val state = chat.value.felix
-        val drafted = state.draft?.takeIf { FelixRules.fits(it, trigger, now, lastSent()) }
+        val drafted = state.draft?.takeIf { FelixRules.fits(it, trigger, now, lastSaid()) }
         if (state.draft != null) chat.update { it.copy(felix = it.felix.copy(draft = null)) }
         val called = if (drafted != null) null else ask(caller, trigger, now, interactive = true)
         val answer = drafted?.answer ?: (called as? Called.Answered)?.value?.answer
@@ -350,7 +350,8 @@ class Looks(
     }
 
     /** When he last wrote something with words: a message written ahead since is out of date. */
-    private fun lastSent(): Long? = chat.value.messages.filter { it.from == Speaker.Felix && it.text.isNotBlank() }.maxOfOrNull { it.at }
+    /** When something was last said in the chat, by him or you: a message written ahead before it would talk past it (D-57). */
+    private fun lastSaid(): Long? = chat.value.messages.filter { it.text.isNotBlank() }.maxOfOrNull { it.at }
 
     private companion object {
         /** A late reminder's time, as it says it: the day's, or another day's. */
@@ -512,7 +513,7 @@ class Looks(
     private suspend fun draft(plan: Plan, now: Long) {
         val (trigger, at) = FelixRules.upcoming(plan, this.settings.value, now) ?: return
         if (at - now > FelixRules.AHEAD_MS) return
-        if (FelixRules.fits(chat.value.felix.draft, trigger, now, lastSent())) return
+        if (FelixRules.fits(chat.value.felix.draft, trigger, now, lastSaid())) return
         if (draftAsked == trigger.key to at) return
         if (!gateway.available()) return
         val caller = gateway.client(ModelEffort.Job.Felix)?.let { FelixCaller(it) } ?: return
