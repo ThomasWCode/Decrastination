@@ -62,11 +62,15 @@ class GmailFinishesTest {
     private var gmailRead: Long? = null
     private val finishes = GmailFinishes(writes, { settings }, { tasks[it] }, { 1.0 }, clock, ports, readAt = { gmailRead }) { "w${++ids}" }
 
-    /** Gmail, faked: the conversation's two messages (the first starred, both in the inbox), what was stored, and failures to make. */
+    /**
+     * Gmail, faked: the conversation's two messages (the first starred, both in the inbox), what was stored, failures to
+     * make, and a change made whose answer is lost ([lost]: the connection gone before its OK).
+     */
     private inner class FakeGmail : GmailWriter {
         val messages = mutableListOf(GmailWriter.Message(11, "101", starred = true, inbox = true), GmailWriter.Message(12, "102", starred = false, inbox = true))
         val stored = mutableListOf<Pair<List<Long>, Change>>()
         var failing: Change? = null
+        var lost: Change? = null
         var offline = false
 
         override suspend fun <T> open(block: suspend (GmailWriter.Session) -> T): T {
@@ -85,6 +89,7 @@ class GmailFinishesTest {
                             Change.Inbox -> m.copy(inbox = true)
                         }
                     }
+                    if (change == lost) throw IOException("connection reset")
                     return emptyList()
                 }
             })
@@ -195,6 +200,38 @@ class GmailFinishesTest {
         assertEquals(2, synced)
         // Taken back already: nothing more.
         assertFalse(finishes.unfinish(email.id))
+    }
+
+    @Test
+    fun `an Undo after a command Gmail made but whose answer was lost puts back what it took, all the same`() = runBlocking {
+        // The star taken off, its OK lost: the try failed, its success not kept, and Undo pressed in its wait.
+        val gmail = FakeGmail()
+        finishes.finish(email.id, explicit = true)
+        clock.time += GmailWrites.GRACE_MS
+        gmail.lost = Change.Unstar
+        assertTrue(finishes.write(gmail))
+        assertTrue(!finishes.value.single().unstarred && gmail.messages.none { it.starred })
+        gmail.lost = null
+        assertTrue(finishes.unfinish(email.id))
+        gmail.stored.clear()
+        assertFalse(finishes.write(gmail))
+        // Starred again, and nothing else changed: both are still in the inbox, as the archive was never made.
+        assertEquals(listOf(listOf(11L) to Change.Star), gmail.stored)
+        assertEquals(listOf(true, false), gmail.messages.map { it.starred })
+        assertEquals(GmailWrites.State.TakenBack, GmailWrites.state(finishes.value, email.id))
+        // The archive's OK lost instead: both back in the inbox, the star too.
+        tasks["gmail:t2"] = email.copy(id = "gmail:t2", sourceId = "t2", title = "Club email")
+        val other = FakeGmail()
+        finishes.finish("gmail:t2", explicit = true)
+        clock.time += GmailWrites.GRACE_MS
+        other.lost = Change.Archive
+        assertTrue(finishes.write(other))
+        other.lost = null
+        assertTrue(finishes.unfinish("gmail:t2"))
+        other.stored.clear()
+        assertFalse(finishes.write(other))
+        assertEquals(listOf(listOf(11L) to Change.Star, listOf(11L, 12L) to Change.Inbox), other.stored)
+        assertTrue(other.messages.all { it.inbox } && other.messages.first().starred)
     }
 
     @Test

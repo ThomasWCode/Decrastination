@@ -33,11 +33,14 @@ import java.nio.file.Files
 import java.time.Instant
 import java.time.ZoneId
 import java.util.Collections
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -47,7 +50,9 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * The plan written to the calendar (NF-07) through the writer, on temporary stores, the calendar
@@ -249,6 +254,25 @@ class CalendarWriterTest {
     }
 
     @Test
+    fun `a write under way for the calendar switched from goes in before that's cleared, so none of its events is left there`() = runBlocking {
+        pickCalendar(7)
+        val made = plan(work(chunk("teams:essay", "Essay"), "17:00"))
+        val release = CountDownLatch(1)
+        calendar.hold = release
+        writer.start()
+        val writing = async(Dispatchers.Default) { writer.writeSlots(made) }
+        assertTrue(withContext(Dispatchers.IO) { calendar.applying.await(10, TimeUnit.SECONDS) })
+        settings.update { it.copy(calendarWriteId = 8) }
+        // The switch waits for the write: the calendar switched from isn't cleared while its events are still going in.
+        assertNull(withTimeoutOrNull(500) { versions.state.first { it.calendarWrittenTo == 8L } })
+        release.countDown()
+        writing.await()
+        until("the switch is seen") { replans.get() == 1 }
+        assertEquals(emptyList(), versions.value.calendarsToClear)
+        assertTrue(calendar.events.none { it.calendarId == 7L })
+    }
+
+    @Test
     fun `the calendar is watched once it may be read, and each change it announces is passed on`() = runBlocking {
         calendar.readable = false
         writer.watchCalendar()
@@ -297,6 +321,10 @@ class CalendarWriterTest {
         @Volatile private var watching: (() -> Unit)? = null
         private var next = 100L
 
+        /** While set, an insert into calendar 7 waits for it, saying first that it's waiting ([applying]). */
+        @Volatile var hold: CountDownLatch? = null
+        val applying = CountDownLatch(1)
+
         override fun allowed(): Boolean = writable
 
         override fun existing(calendarId: Long, from: Long, to: Long, uris: List<String>): List<Existing> {
@@ -313,6 +341,10 @@ class CalendarWriterTest {
 
         override fun apply(calendarId: Long, zone: ZoneId, inserts: List<Desired>, updates: List<Pair<Long, Desired>>, deletes: List<Long>) {
             if (inserts.isEmpty() && updates.isEmpty() && deletes.isEmpty()) return
+            hold?.takeIf { calendarId == 7L && inserts.isNotEmpty() }?.let {
+                applying.countDown()
+                check(it.await(10, TimeUnit.SECONDS))
+            }
             batches++
             inserts.forEach { add(it.uri, it, calendarId) }
             updates.forEach { (id, want) -> events.replaceAll { if (it.id == id) it.copy(uri = want.uri, start = want.start, end = want.end, title = want.title, description = want.description) else it } }
