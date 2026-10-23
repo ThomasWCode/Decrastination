@@ -37,6 +37,23 @@ class SlotStateTest {
     fun `a task's new steps let go of its starts still to come, one begun kept (D-110)`() {
         val kept = SlotState("2026-10-13", previous = mapOf("teams:a#0" to 30L, "teams:a#1" to 5L, "teams:a#1#1" to 40L, "teams:ab#0" to 50L))
         assertEquals(mapOf("teams:a#1" to 5L, "teams:ab#0" to 50L), kept.released("teams:a", now = 10L).previous)
+        // A step its new steps leave as it was keeps its start, so the times said of it still hold.
+        assertEquals(mapOf("teams:a#0" to 30L, "teams:a#1" to 5L, "teams:ab#0" to 50L), kept.released("teams:a", now = 10L, keep = setOf(0)).previous)
+    }
+
+    @Test
+    fun `a step is as it was where its id, title and minutes as planned are`() {
+        val task = TaskItem(
+            id = "teams:a", source = Source.Teams, sourceId = "a", title = "Worksheet", kind = Kind.Homework, firstSeenAt = 0, lastSeenAt = 0,
+            subSteps = listOf(SubStep("Questions 1 and 2", 40, id = "q12"), SubStep("Question 3", 20, id = "q3"), SubStep("Write it up", 30, id = "up")),
+        )
+        // Two rebalanced, the third as it was; at the reading's paced minutes, the third laid at 45 and given at 45.
+        val steps = listOf(OwnStep("Question 1", 20, id = "q12"), OwnStep("Questions 2 and 3", 40, id = "q3"), OwnStep("Write it up", 45, id = "up"))
+        assertEquals(setOf(2), SlotState.unchanged(task, steps, planned = listOf(60, 30, 45)))
+        // Another step at its place, a new title or minutes, or a step with no id: not as it was.
+        assertEquals(emptySet(), SlotState.unchanged(task, steps.reversed(), planned = listOf(40, 20, 30)))
+        assertEquals(emptySet(), SlotState.unchanged(task, listOf(OwnStep("Questions 1 and 2", 40)), planned = listOf(40, 20, 30)))
+        assertEquals(emptySet(), SlotState.unchanged(task, listOf(OwnStep("Questions 1 and 2", 35, id = "q12")), planned = listOf(40, 20, 30)))
     }
 
     @Test
