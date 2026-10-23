@@ -45,6 +45,9 @@ interface FelixPorts {
     /** The answer to a reply from his notification, as work of its own ([FelixReplyWorker.enqueue]). */
     fun answerLater()
 
+    /** Your answer to his question from his notification, read by Claude as work of its own ([FelixReplyWorker.enqueue]). */
+    fun readLater()
+
     /** The reminder to open the week's check-in form, where he can't ask it himself. */
     fun remindForm()
 
@@ -69,6 +72,8 @@ class AndroidFelixPorts(private val context: Context) : FelixPorts {
     override fun review() = ReviewWorker.enqueue(context, ifDue = true)
 
     override fun answerLater() = FelixReplyWorker.enqueue(context)
+
+    override fun readLater() = FelixReplyWorker.enqueue(context, read = true)
 
     override suspend fun openSource(task: TaskItem): Pair<Boolean, String?> = TaskOpener.opened(context, task)
 

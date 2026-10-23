@@ -112,7 +112,7 @@ object GmailWrites {
         if (byWork && last.explicit) return null
         if (last.flagged == null) return writes - last
         // One that's read the conversation but waits now (a failed try's wait, or a finish going on from one given up,
-        // in its minute) stops as it is: the Undo puts back only what it's made, and Gmail isn't finished first.
+        // in its minute) stops as it is: the Undo puts back what it may have made, and Gmail isn't finished first.
         val stopped = if (pending(last) && last.notBefore != null && now < last.notBefore) with(writes, last.id) { it.copy(doneAt = now) } else writes
         return stopped + last.copy(id = id, at = now, notBefore = now, reverseOf = last.id, flagged = null, inbox = null, unstarred = false, archived = false, tries = 0, lastError = null, doneAt = null, gaveUp = false)
     }
@@ -146,10 +146,15 @@ object GmailWrites {
      */
     fun switchedOff(writes: List<GmailWrite>): List<GmailWrite> = writes.filterNot { pending(it) && it.reverseOf == null && it.flagged == null }
 
-    /** What an Undo [write] puts back, from the finish it takes back ([writes]): the starred messages where that unstarred them, and the inbox's where that archived them; none where it changed neither. */
+    /**
+     * What an Undo [write] may have to put back, from the finish it takes back ([writes]): the messages starred, and those in
+     * the inbox, before that changed anything, once it's read them. Not only those it's known to have changed: a command
+     * Gmail made whose answer was lost (the connection gone before its OK) left its success unkept, so each is put back
+     * where it isn't as it was, and left where it is (the write reads them afresh first). None where it read nothing.
+     */
     fun toRestore(writes: List<GmailWrite>, write: GmailWrite): Pair<List<String>, List<String>> {
         val finish = writes.firstOrNull { it.id == write.reverseOf } ?: return emptyList<String>() to emptyList()
-        return (if (finish.unstarred) finish.flagged.orEmpty() else emptyList()) to (if (finish.archived) finish.inbox.orEmpty() else emptyList())
+        return finish.flagged.orEmpty() to finish.inbox.orEmpty()
     }
 
     /** [id] changed by [change]. */
