@@ -1360,12 +1360,16 @@ class Conversation(
      * ([ask]). A turn of the chat is answered as work of its own ([FelixPorts.answerLater]), and an answer
      * to his question about a task, an instruction for Claude to read ([Looks.answered]), read so
      * ([FelixPorts.readLater]), as the receiver that took the reply is let go once this returns, and the
-     * app may go with it.
+     * app may go with it. Only an instruction this reply made: one left waiting before it (a call that failed) waits
+     * for its own retry, so a reply that needs no call starts none.
      */
-    suspend fun replyFromNotification(text: String, id: String): Boolean = when (send(text, replyTo = id)) {
-        Asked.Nothing -> false
-        Asked.Answer -> true.also { if (instructions.value.instructions.any { it.state == InstructionStatus.Reading }) ports.readLater() }
-        Asked.Turn -> true.also { ports.answerLater() }
+    suspend fun replyFromNotification(text: String, id: String): Boolean {
+        val before = instructions.value.instructions.mapTo(HashSet()) { it.id }
+        return when (send(text, replyTo = id)) {
+            Asked.Nothing -> false
+            Asked.Answer -> true.also { if (instructions.value.instructions.any { it.id !in before && it.state == InstructionStatus.Reading }) ports.readLater() }
+            Asked.Turn -> true.also { ports.answerLater() }
+        }
     }
 
     /**

@@ -605,6 +605,11 @@ class ConversationTest {
         assertTrue(conversation.replyFromNotification("all of it", "q1"))
         assertEquals(1, felix.ports.readLater)
         assertEquals(0, felix.ports.later)
+        // That one still waiting to be read (its call failed, say): another answer that makes none reads nothing for it.
+        assertEquals(InstructionStatus.Reading, stores.instructions.value.instructions.single().state)
+        conversation.remindCheckIn()
+        assertTrue(conversation.replyFromNotification("3", his().last().id))
+        assertEquals(1, felix.ports.readLater)
     }
 
     @Test
