@@ -445,7 +445,8 @@ class Looks(
             )
         }
         reply.replyTo?.let { outbox.waitingInArchive(it) }
-        if (!changed) ports.answerLater()
+        // A change made, nothing's to answer: his notification made again, his question back in it where it's unread.
+        if (changed) outbox.notify(clock.now()) else ports.answerLater()
     }
 
     /**

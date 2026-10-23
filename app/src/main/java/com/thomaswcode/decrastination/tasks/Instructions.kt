@@ -237,7 +237,8 @@ class Instructions(
                             },
                         )
                     }
-                    answering.remove(next.id)
+                    // Let go once it's read as it was sent; written again meanwhile, the next read still needs it.
+                    if (taken) answering.remove(next.id)
                     // Made as soon as it's read (D-67: nothing of his waits for Apply), as the
                     // chat's are; one that can't be is marked unclear, saying why. Taken back under Your changes.
                     val made = taken && reading is InstructionAnswers.Reading.Changes && applyInstruction(next.id)
@@ -448,6 +449,7 @@ class Instructions(
     }
 
     private suspend fun remove(id: String) {
+        answering.remove(id)
         val was = instructions.value.instructions.firstOrNull { it.id == id }
         instructions.update { state -> state.copy(instructions = state.instructions.filterNot { it.id == id }) }
         if (was?.state == InstructionStatus.Applied) layInstructions()
