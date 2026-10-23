@@ -7,6 +7,8 @@ import com.thomaswcode.decrastination.core.By
 import com.thomaswcode.decrastination.core.Change
 import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.DayWindow
+import com.thomaswcode.decrastination.core.Enrichment
+import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.Instruction
 import com.thomaswcode.decrastination.core.InstructionStatus
 import com.thomaswcode.decrastination.core.Kind
@@ -22,6 +24,7 @@ import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /** What a task's sheet says of its pieces and its instructions (UI-09). */
@@ -110,5 +113,17 @@ class TaskSheetModelTest {
         )
         assertEquals(listOf("Do b after a", "It's due Friday"), TaskSheetModel.instructions(all, "teams:a"))
         assertEquals(listOf("Do b after a"), TaskSheetModel.instructions(all, "teams:b"))
+    }
+
+    @Test
+    fun `a task's next step on its sheet is its first still to do, its reading's suggestion only where it has no steps`() {
+        val read = task("a", 40).let { it.copy(enrichment = Enrichment(inputHash = Enrichments.inputHash(it), by = "test", at = it.firstSeenAt, nextStep = "Read the four questions")) }
+        // Its steps ticked as they're done: the first not ticked, whatever its reading said; none once all are.
+        val stepped = read.copy(subSteps = listOf(SubStep("Read the four questions", 15, done = true), SubStep("Research", 25)))
+        assertEquals("Research", TaskSheetModel.nextStep(stepped))
+        assertNull(TaskSheetModel.nextStep(stepped.copy(subSteps = stepped.subSteps.map { it.copy(done = true) })))
+        // With none, its reading's suggestion, as it was read.
+        assertEquals("Read the four questions", TaskSheetModel.nextStep(read))
+        assertNull(TaskSheetModel.nextStep(task("b", 40)))
     }
 }
