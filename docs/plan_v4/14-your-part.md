@@ -53,6 +53,7 @@ Stage by stage, what each PR needs from your phone and from you, for what and fo
 | — | 4.3.9 | **needed**: install and the script; his next messages in the new voice, checked against the day's slots | **helpful**: a day of his messages read again, by message |
 | — | 4.3.10 | **needed**: install and the script; a school day's morning with a rebalance, its task's later steps kept at the times his message names (a dry run on a copy of the phone's data stood in on 23 Oct, your call) | no |
 | — | 4.3.11 | **needed**: install and the script; his next messages, a greeting only on the first after three hours with nothing said, and nothing asked for that's ticked (23 Oct's 07:00 replayed on a copy of the phone's data: neither said the question wasn't picked) | no |
+| — | 4.3.12 | **needed**: install and the script; a reply to his question that isn't an answer, answered in the chat and not kept with the task (the reader's part probed on a copy of the phone's data, a reply of each kind) | no |
 
 ## In sum
 
