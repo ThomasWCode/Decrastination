@@ -74,7 +74,7 @@ fun OwnTaskForm(graph: AppGraph, editing: TaskItem?, initial: OwnTask? = null, o
     var hours by rememberSaveable { mutableStateOf((start.minutes / 60).toString()) }
     var minutes by rememberSaveable { mutableStateOf((start.minutes % 60).toString()) }
     // Its steps as you change them (UI-15), kept through a turn of the phone as their words.
-    var stepsText by rememberSaveable { mutableStateOf(STEPS.encodeToString(ListSerializer(StepRow.serializer()), start.steps.mapIndexed { i, st -> StepRow(st.title, st.minutes.toString(), st.where, wasIndex = i.takeIf { editing != null }, anyOrder = st.anyOrder) })) }
+    var stepsText by rememberSaveable { mutableStateOf(STEPS.encodeToString(ListSerializer(StepRow.serializer()), rowsOf(start, editing != null))) }
     val rows = STEPS.decodeFromString(ListSerializer(StepRow.serializer()), stepsText)
     fun setRows(next: List<StepRow>) { stepsText = STEPS.encodeToString(ListSerializer(StepRow.serializer()), next) }
     var picking by rememberSaveable { mutableStateOf<String?>(null) }
@@ -93,11 +93,7 @@ fun OwnTaskForm(graph: AppGraph, editing: TaskItem?, initial: OwnTask? = null, o
         startFrom = from.takeUnless { event },
         // With steps, its minutes are theirs together.
         minutes = if (rows.isEmpty()) (hours.toIntOrNull() ?: 0) * 60 + (minutes.toIntOrNull() ?: 0) else rows.sumOf { it.min },
-        // The steps as listed, each with its own dates as it had them.
-        steps = rows.map { r ->
-            val was = r.wasIndex?.let { start.steps.getOrNull(it) }
-            OwnStep(r.title.trim(), r.min, was?.from, was?.dueAt, r.where, id = was?.id.orEmpty(), wasIndex = r.wasIndex, anyOrder = r.anyOrder)
-        },
+        steps = stepsOf(rows, start),
         fromForm = true,
     )
 
@@ -159,8 +155,8 @@ fun OwnTaskForm(graph: AppGraph, editing: TaskItem?, initial: OwnTask? = null, o
                                 row,
                                 first = i == 0,
                                 last = i == rows.lastIndex,
-                                onChange = { changed -> setRows(rows.mapIndexed { j, r -> if (j == i) changed else r }) },
-                                onMove = { by -> setRows(rows.toMutableList().also { list -> list.add(i + by, list.removeAt(i)) }) },
+                                onChange = { changed -> setRows(changedRow(rows, i, changed)) },
+                                onMove = { by -> setRows(movedRow(rows, i, by)) },
                                 onDelete = { setRows(rows.filterIndexed { j, _ -> j != i }) },
                             )
                         }
@@ -242,12 +238,40 @@ fun OwnTaskForm(graph: AppGraph, editing: TaskItem?, initial: OwnTask? = null, o
 }
 
 /**
- * A step as the form has it (UI-15): its words as typed, where it can be done, and the step it was; and
- * whether it needs the steps before it (D-109), as Felix marked it, kept with the row, a task he proposed's too.
+ * A step as the form has it (UI-15): its words as typed, where it can be done, and the step it was; and its
+ * own dates and whether it needs the steps before it (D-109), kept with the row, a task Felix proposed's too.
  */
 @Serializable
-private data class StepRow(val title: String, val minutes: String, val where: String? = null, val wasIndex: Int? = null, val anyOrder: Boolean = false) {
+internal data class StepRow(
+    val title: String,
+    val minutes: String,
+    val where: String? = null,
+    val wasIndex: Int? = null,
+    val anyOrder: Boolean = false,
+    val from: Long? = null,
+    val dueAt: Long? = null,
+) {
     val min: Int get() = minutes.toIntOrNull() ?: 0
+}
+
+/** [start]'s steps as the form's rows, each knowing the step it was where you're [editing] a task of yours. */
+internal fun rowsOf(start: OwnTask, editing: Boolean): List<StepRow> =
+    start.steps.mapIndexed { i, st -> StepRow(st.title, st.minutes.toString(), st.where, wasIndex = i.takeIf { editing }, anyOrder = st.anyOrder, from = st.from, dueAt = st.dueAt) }
+
+/** [rows] with row [i] as [changed]: its mark (D-109) as its chip has it, through a new title too. */
+internal fun changedRow(rows: List<StepRow>, i: Int, changed: StepRow): List<StepRow> = rows.mapIndexed { j, r -> if (j == i) changed else r }
+
+/** [rows] with row [i] moved [by] one place, its mark (D-109) going with it: its chip shows it there. */
+internal fun movedRow(rows: List<StepRow>, i: Int, by: Int): List<StepRow> = rows.toMutableList().also { it.add(i + by, it.removeAt(i)) }
+
+/**
+ * The form's [rows] as the task's steps, as listed: each with its own dates and mark as its row had them, and
+ * its id where it was one of [start]'s. The first step's mark is false, having none before it (D-109): a row
+ * moved to the top, or left there, keeps none its chip, not shown there, couldn't clear.
+ */
+internal fun stepsOf(rows: List<StepRow>, start: OwnTask): List<OwnStep> = rows.mapIndexed { i, r ->
+    val was = r.wasIndex?.let { start.steps.getOrNull(it) }
+    OwnStep(r.title.trim(), r.min, r.from, r.dueAt, r.where, id = was?.id.orEmpty(), wasIndex = r.wasIndex, anyOrder = r.anyOrder && i > 0)
 }
 
 private val STEPS = Json { ignoreUnknownKeys = true }
@@ -274,10 +298,15 @@ private fun StepEditor(row: StepRow, first: Boolean, last: Boolean, onChange: (S
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.weight(1f),
                 )
-                FilterChip(selected = row.where == "home", onClick = { onChange(row.copy(where = if (row.where == "home") "anywhere" else "home")) }, label = { Text("Home only") })
                 IconButton(enabled = !first, onClick = { onMove(-1) }) { Icon(painterResource(R.drawable.ic_expand_more), contentDescription = "Up", modifier = Modifier.rotate(180f)) }
                 IconButton(enabled = !last, onClick = { onMove(1) }) { Icon(painterResource(R.drawable.ic_expand_more), contentDescription = "Down") }
                 IconButton(onClick = onDelete) { Icon(painterResource(R.drawable.ic_close), contentDescription = "Delete the step") }
+            }
+            // Where it can be done, and after the first whether it needs the steps before it (D-109): a line of
+            // their own, as a second chip beside the minutes would leave them no room.
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(selected = row.where == "home", onClick = { onChange(row.copy(where = if (row.where == "home") "anywhere" else "home")) }, label = { Text("Home only") })
+                if (!first) FilterChip(selected = row.anyOrder, onClick = { onChange(row.copy(anyOrder = !row.anyOrder)) }, label = { Text("Any order") })
             }
         }
     }
