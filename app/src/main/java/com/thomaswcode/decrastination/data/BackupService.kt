@@ -122,23 +122,34 @@ class BackupService(
             versions = stores.shapes.mapValues { it.value.version },
         )
 
+    /** What became of a nightly backup ([backupNow]). */
+    enum class Nightly {
+        Written,
+
+        /** More than Import reads even without the chat's earlier messages: not written, as it couldn't be restored. */
+        TooBig,
+
+        /** Below Android 10, or where it can't be written. */
+        NotWritten,
+    }
+
     /**
      * The nightly backup (AR-07): all the app keeps, as `decrastination-<date>.json` in
      * Documents/Decrastination, replacing the day's if it's run again; those past the newest
-     * fortnight let go; its time kept for Settings. False below Android 10, or where it can't be written.
+     * fortnight let go; its time kept for Settings.
      */
-    suspend fun backupNow(): Boolean = withContext(NonCancellable + Dispatchers.IO) {
-        if (!folder.available) return@withContext false
+    suspend fun backupNow(): Nightly = withContext(NonCancellable + Dispatchers.IO) {
+        if (!folder.available) return@withContext Nightly.NotWritten
         val now = clock.now()
         val name = BackupFolder.nightlyName(Instant.ofEpochMilli(now).atZone(clock.zone()).toLocalDate().toString())
         val text = exportBackup()
         // More than Import reads even without the chat's earlier messages, it couldn't be restored: not written,
         // and the older ones, which can be, not let go of for it (Settings → Backup says so).
-        if (tooBig(text)) return@withContext false
-        if (!folder.write(name, text)) return@withContext false
+        if (tooBig(text)) return@withContext Nightly.TooBig
+        if (!folder.write(name, text)) return@withContext Nightly.NotWritten
         BackupFolder.toPrune(folder.names()).forEach { folder.delete(it) }
         stores.replace(stores.runtime) { it.copy(lastBackupAt = now) }
-        true
+        Nightly.Written
     }
 
     /**
@@ -163,14 +174,17 @@ class BackupService(
         // The backup's days off and half-days beside those here (PL-16).
         stores.replace(stores.school) { it.withAll(backup.school) }
         // The chat where this phone's is empty (a reset's copy brings it back, LR-08), with its earlier
-        // messages: not a message of yours still waiting for its answer, which would be sent, words
-        // from then, as it opens; nor any that waited with it, each of which would be sent next, or go
-        // with your next words. Felix's state with it, or where this phone has none of its own. Into a
+        // messages, a message of yours still waiting for its answer kept as answered then, saying so: waiting,
+        // it would be sent, words from then, as the chat opens, or go with your next words, as one waiting for
+        // its Try again would. Felix's state with it, or where this phone has none of its own. Into a
         // chat that isn't empty, his own messages it hasn't, with your replies to them, by id, as the
         // log's records of them were merged before 4.0.0: none of his is lost. Those read there are read
         // here, as far as that goes without passing one of his unread here, so his notification doesn't
         // bring them back as new.
-        val backedChat = backup.chat.let { c -> c.copy(messages = c.messages.filterNot { it.from == Speaker.You && it.answeredAt == null }) }
+        val restoredAt = clock.now()
+        val backedChat = backup.chat.let { c ->
+            c.copy(messages = c.messages.map { if (it.from == Speaker.You && it.answeredAt == null) it.copy(answeredAt = restoredAt, note = UNANSWERED, stuck = false) else it })
+        }
         var chatBack = 0
         var hisBack = 0
         stores.replace(stores.chat) { s ->
@@ -353,5 +367,10 @@ class BackupService(
         if (name !in resetCopies()) return "That copy isn't there."
         val bytes = withContext(Dispatchers.IO) { File(copies, name).inputStream().use { Backups.read(it) } } ?: return "That copy is too big to be a backup."
         return importBackup(bytes.decodeToString())
+    }
+
+    companion object {
+        /** Said on a message of yours a restore brought back still waiting for its answer: kept, but not to be sent. */
+        const val UNANSWERED = "Not answered: restored from a backup"
     }
 }

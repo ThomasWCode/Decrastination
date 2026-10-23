@@ -96,8 +96,8 @@ class BackupServiceTest {
         assertEquals(was.tasks.value.tasks.filter { it.source == Source.Own }.map { it.id }, now.tasks.value.tasks.map { it.id })
         assertEquals(was.school.value, now.school.value)
         assertEquals(was.memory.value, now.memory.value)
-        // The chat but the message of yours still waiting, which would be sent with words from then.
-        assertEquals(was.chat.value.messages.dropLast(1), now.chat.value.messages)
+        // The chat, the message of yours still waiting kept as answered, so it isn't sent with words from then.
+        assertEquals(was.chat.value.messages.map { if (it.from == Speaker.You && it.answeredAt == null) it.copy(answeredAt = clock.time, note = BackupService.UNANSWERED, stuck = false) else it }, now.chat.value.messages)
         assertEquals(was.chat.value.felix, now.chat.value.felix)
         assertEquals(was.chatArchive.value, now.chatArchive.value)
         assertEquals(was.felix.value, now.felix.value)
@@ -327,14 +327,14 @@ class BackupServiceTest {
         val phone = Phone(full = true)
         (1..15).forEach { phone.folder.files["decrastination-2026-09-%02d.json".format(it)] = "{}" }
         phone.folder.files["reset-2026-09-01-120000.json"] = "{}"
-        assertTrue(phone.service.backupNow())
+        assertEquals(BackupService.Nightly.Written, phone.service.backupNow())
         val nightly = phone.folder.files.keys.filter { it.startsWith("decrastination-") }
         assertEquals(BackupFolder.KEEP, nightly.size)
         assertTrue("decrastination-2026-10-18.json" in nightly && "decrastination-2026-09-01.json" !in nightly && "decrastination-2026-09-02.json" !in nightly)
         assertTrue("reset-2026-09-01-120000.json" in phone.folder.files)
         assertEquals(clock.time, phone.stores.runtime.value.lastBackupAt)
         phone.folder.available = false
-        assertFalse(phone.service.backupNow())
+        assertEquals(BackupService.Nightly.NotWritten, phone.service.backupNow())
     }
 
     @Test
@@ -344,31 +344,33 @@ class BackupServiceTest {
         val before = phone.folder.files.toMap()
         val last = phone.stores.runtime.value.lastBackupAt
         assertTrue(phone.service.tooBig(phone.service.exportBackup()))
-        assertFalse(phone.service.backupNow())
+        assertEquals(BackupService.Nightly.TooBig, phone.service.backupNow())
         assertEquals(before, phone.folder.files)
         assertEquals(last, phone.stores.runtime.value.lastBackupAt)
     }
 
     @Test
-    fun `a restore brings back none of yours waiting for an answer, however many waited together`() = runTest {
+    fun `a restore keeps every one of yours that waited for an answer, but as answered, so none is sent`() = runTest {
         val from = Phone(full = false)
         val nudge = ChatMessage("n1", Speaker.Felix, "Ten minutes in: starting?", 100, kind = MessageKind.SlotStart)
-        val first = ChatMessage("w1", Speaker.You, "move maths to tomorrow", 110)
+        val first = ChatMessage("w1", Speaker.You, "move maths to tomorrow", 110, note = "Cancelled", stuck = true)
         val second = ChatMessage("w2", Speaker.You, "and remind me at six", 120, replyTo = "n1")
         from.stores.replace(from.stores.chat, ChatState(listOf(nudge, first, second)))
         val backup = from.service.exportBackup()
-        // Into an empty chat: his message back, neither of yours, so nothing's sent as it opens.
+        fun kept(m: ChatMessage) = m.copy(answeredAt = clock.time, note = BackupService.UNANSWERED, stuck = false)
+        // Into an empty chat: every message back, yours as answered then, so nothing's sent as it opens, nor with your next words.
         val empty = Phone(full = false)
         empty.service.importBackup(backup)
         settle()
-        assertEquals(listOf("n1"), empty.stores.chat.value.messages.map { it.id })
+        assertEquals(listOf(nudge, kept(first), kept(second)), empty.stores.chat.value.messages)
         assertEquals(null, empty.stores.chat.value.unanswered)
-        // Into one that isn't: his message back, not your reply to it still waiting.
+        // Into one that isn't: his message back, with your reply to it as answered.
         val other = Phone(full = false)
         other.stores.replace(other.stores.chat, ChatState(listOf(ChatMessage("h1", Speaker.You, "hello", 200, answeredAt = 210))))
         other.service.importBackup(backup)
         settle()
-        assertEquals(listOf("n1", "h1"), other.stores.chat.value.messages.map { it.id })
+        assertEquals(listOf("n1", "w2", "h1"), other.stores.chat.value.messages.map { it.id })
+        assertEquals(kept(second), other.stores.chat.value.messages.single { it.id == "w2" })
         assertEquals(null, other.stores.chat.value.unanswered)
     }
 
