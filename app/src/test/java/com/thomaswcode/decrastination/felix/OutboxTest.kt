@@ -2,6 +2,7 @@ package com.thomaswcode.decrastination.felix
 
 import android.app.Notification
 import com.thomaswcode.decrastination.Fixtures
+import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.ChatArchive
 import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.core.ChatState
@@ -28,7 +29,10 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.sync.Mutex
 
 /**
  * Felix's outbox (docs/plan_v4/05-the-chat.md §2): every message in the chat before his notification
@@ -57,6 +61,31 @@ class OutboxTest {
     @AfterTest
     fun clean() {
         dir.deleteRecursively()
+    }
+
+    @Test
+    fun `a question answered as the window's move writes the archive moves as it now is, not as it was copied`() = runBlocking {
+        val now = clock.now()
+        val question = ChatMessage("q", Speaker.Felix, "Which exercise is due?", now - Outbox.WINDOW_MS - 60_000L, About(taskId = "teams:sheet"), kind = MessageKind.Question)
+        val newer = (1..Outbox.WINDOW).map { ChatMessage("new-$it", Speaker.You, "a message", now - it, answeredAt = now) }
+        chat.update { ChatState(listOf(question) + newer, readAt = now) }
+        // The archive's writer held, so the move has copied the question and waits to write it.
+        val writing = ChatArchiveStore::class.java.getDeclaredField("writing").apply { isAccessible = true }.get(archive) as Mutex
+        writing.lock()
+        val move = launch(start = CoroutineStart.UNDISPATCHED) { outbox.moveWindow(now) }
+        try {
+            // Answered meanwhile, as a reply keeps it: in the live window, as it still is there.
+            chat.update { s -> s.copy(messages = s.messages.map { if (it.id == question.id) it.copy(answeredAt = now) else it }) }
+            outbox.answeredInArchive(question.id, now)
+        } finally {
+            writing.unlock()
+        }
+        move.join()
+        // Changed since it was copied, it stays, answered, to move as it is at the next move.
+        assertEquals(now, chat.value.messages.single { it.id == question.id }.answeredAt)
+        outbox.moveWindow(now)
+        assertTrue(chat.value.messages.none { it.id == question.id })
+        assertEquals(now, archive.find(question.id)?.answeredAt)
     }
 
     private inner class Channel : Notices {

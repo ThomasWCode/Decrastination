@@ -143,7 +143,7 @@ On a debug build the menu's *Debug* page (AR-03) has a button for each command t
 - `ai-check --es base <url>` (every job's reader once, through the real client, to a stand-in server with a dummy key: `scripts/claude_stub.py` on the PC, `adb reverse tcp:8089 tcp:8089`); `ai-endpoint --es base <url>` and `ai-effort --es job <job> --es level <low|medium|high|none>`, both till the app restarts.
 
 **The chat, Felix and instructions**
-- `chat-ask --es text "<words>"` (a paid call; with `--es replyTo <message id>`, a reply to that message, routed as any reply is: a question of his answered with no call); `chat-context` (writes `files/chat-context.txt`, and the turns your newest message was sent with, a reply's quote among them, to `files/chat-turns.txt`); `chat-card --es do <apply|undo>`; `chat-clear`.
+- `chat-ask --es text "<words>"` (a paid call; with `--es replyTo <message id>`, a reply to that message, routed as any reply is: a question of his answered as one, with no call but a reading's question's, an instruction Claude reads, a paid call too); `chat-context` (writes `files/chat-context.txt`, and the turns your newest message was sent with, a reply's quote among them, to `files/chat-turns.txt`); `chat-card --es do <apply|undo>`; `chat-clear`.
 - `felix` (his state, his last messages, and his notes and reminders); `felix-check`; `felix-say --es reason <reason>` (a paid call); `memory`; `memory-tidy` (a paid call).
 - `instruction --es text "<words>"` [`--es task <id>`, `--es event <key>` or `--es day <YYYY-MM-DD>`]; `instructions`; `instruction-discard --es id <id|all>`; `instruction-delete --es id <id>` (one applied taken back, as *Take back* does; one not applied discarded).
 

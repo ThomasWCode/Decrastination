@@ -72,7 +72,8 @@ object ChatPrompts {
      * waiting for his answer, which are what's being answered.
      */
     fun history(messages: List<ChatMessage>): List<ChatMessage> {
-        val said = messages.filter { it.from == Speaker.You || it.text.isNotBlank() }
+        // Yours, but one done with as said (a reply to his question made as another instruction): it'd go with your next words.
+        val said = messages.filter { if (it.from == Speaker.You) !ChatHistory.doneWith(it) else it.text.isNotBlank() }
         val nudges = said.filter { it.from == Speaker.Felix && it.kind != MessageKind.Chat }
         val nudged = nudges.mapTo(HashSet()) { it.id }
         // Yours to a nudge, answered by him: his answer comes before another message of yours.
