@@ -233,6 +233,22 @@ class InstructionsTest {
     }
 
     @Test
+    fun `your reply written again while it's read is read again shown the question it was given`() = runBlocking {
+        TasksHarness(claude = true).use { c ->
+            c.stores.tasks.update { it.copy(tasks = listOf(c.teams("sheet"))) }
+            c.answers("""{"understood":false,"question":null,"changes":[],"answersQuestion":true}""", delayMs = 1_000)
+            c.answers("""{"understood":false,"question":null,"changes":[],"answersQuestion":true}""")
+            val id = c.instructions.addInstruction("yes", About(taskId = "teams:sheet", taskTitle = "sheet"), answer = true, question = "is the extension part of it?")
+            c.until("its reading asked") { c.server.requestCount == 1 }
+            c.instructions.rereadInstruction(id, "yes, all of it")
+            c.until("read again") { c.server.requestCount == 2 }
+            c.server.takeRequest()
+            val again = c.server.takeRequest().body.readUtf8()
+            assertTrue("is the extension part of it?" in again && TasksHarness.QUESTION !in again, again.take(400))
+        }
+    }
+
+    @Test
     fun `your reply to his question is read shown his words, and handed to Felix with whether it answers it and whether a change of it was made`() = runBlocking {
         TasksHarness(claude = true).use { c ->
             c.stores.tasks.update { it.copy(tasks = listOf(c.teams("sheet"))) }

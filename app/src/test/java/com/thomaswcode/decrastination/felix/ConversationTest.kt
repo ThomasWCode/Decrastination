@@ -588,6 +588,8 @@ class ConversationTest {
         assertNull(stores.chat.value.messages.single { it.id == "q2" }.answeredAt)
         assertTrue("q2" in Replies.awaitingIds(stores.chat.value.messages, checkInUnderWay = false, now, Fixtures.LONDON))
         assertTrue(ChatPrompts.history(stores.chat.value.messages).none { it.id == moved.id })
+        // Unread, and no longer replied to, it's back in his notification.
+        assertTrue(felix.ports.showing!!.lines.any { it.id == "q2" })
         assertNull(ChatHistory.replyOf(stores.chat.value.messages.single { it.id == "q2" }, stores.chat.value.messages))
     }
 
