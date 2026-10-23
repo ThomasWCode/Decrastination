@@ -5,6 +5,7 @@ import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.core.EarnsBy
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Plan
+import com.thomaswcode.decrastination.core.Rebalance
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.Slot
 import com.thomaswcode.decrastination.core.SlotKind
@@ -56,6 +57,8 @@ object FelixPrompts {
 
         The student's standing instructions on how you behave (with what you're told about them) come before all of this: where one means you shouldn't write now, give an empty message. Remember (memories) a fact about them or a standing instruction only when their replies give one that isn't remembered yet; a reply that's just talk ("ugh", "lol ok") gets nothing remembered; most messages need none. One that only matters for a while gets until, a date (YYYY-MM-DD, through that day) or a date and time (YYYY-MM-DDTHH:MM): a reply like "leave me alone tonight" is a rule until 07:00 tomorrow, and your next message till then is empty.
 
+        In the morning you may be shown steps too long for a free time at school today, each with the step after it that needs it. Where one is made of separate parts (questions, sources, sections), rebalance the two at a boundary between its parts: their new titles, each saying what's in it, and minutes, the first's no more than that free time, neither under 15, adding up to what the two did, the work and its order kept; say so in your message in a few words. Never cut one piece of work by time (the first half of a video, of a chapter or of an essay's writing), never for steps not shown; most mornings need none, and rebalances is then empty.
+
         Examples (made up, to show the voice and the form of a message):
         - SlotStart, 10 minutes in, nothing ticked; the piece the Forces worksheet, 17:30–18:00, its first action "q1, underline what it asks": "forces worksheet started 10 min ago and nothing's happened yet, you starting? q1 first: underline what it asks.", with replies "starting now", "give me 5" and "can't today", nextCheckMin 10.
         - Morning; today German vocab, 20 min at 16:50, then the essay's first hour at 19:00, the essay due Mon 26 Oct: "morning. german vocab at 16:50 (20 min), then the essay's first hour at 19:00. it's due mon 26 oct, so tonight's the one that matters."
@@ -72,7 +75,7 @@ object FelixPrompts {
      * The task's [notes] (its own, and the standing ones it matches); for a Reminder, its
      * words as you set them ([reminder]), the slot then under way or next its piece, and [now] the moment
      * it's for; for a SlotStart, your reminder that came at the slot's start ([reminder]), so it isn't said
-     * twice; for the Morning, today's [reminders].
+     * twice; for the Morning, today's [reminders], and the steps he may rebalance to fit a free time at school ([rebalance], D-110).
      */
     fun describe(
         reason: Reason,
@@ -92,6 +95,7 @@ object FelixPrompts {
         reminder: String? = null,
         notes: List<String> = emptyList(),
         reminders: List<String> = emptyList(),
+        rebalance: List<Rebalance.Candidate> = emptyList(),
     ): String = buildString {
         fun clock(at: Long) = Instant.ofEpochMilli(at).atZone(zone).format(CLOCK)
         appendLine("Reason: $reason")
@@ -138,6 +142,10 @@ object FelixPrompts {
         appendLine("Today: $kept kept, $missed missed, ${toCome.size} to come$next")
         if (reminders.isNotEmpty()) appendLine("Reminders today: " + reminders.joinToString("; "))
         if (toCome.isNotEmpty()) appendLine("Left today: " + toCome.joinToString("; ") { "${it.chunk?.label} ${clock(it.start)}–${clock(it.end)}" })
+        if (rebalance.isNotEmpty()) {
+            appendLine("Steps you may rebalance (task id | task | step | the two steps | the free time at school):")
+            for (c in rebalance) appendLine("- ${c.taskId} | ${c.title} | ${c.index} | “${c.first.title}” (${c.first.minutes} min), then “${c.second.title}” (${c.second.minutes} min) | ${clock(c.gap.start)}, ${c.gap.minutes} min")
+        }
         freeMin?.let { appendLine("Free time now: $it min") }
         if (done.isNotEmpty()) appendLine("Done, as their sources say, with none of it timed in a slot: " + done.joinToString("; "))
         // His own messages, written unasked: his silences (he chose not to write) aren't messages.
@@ -157,5 +165,16 @@ object FelixPrompts {
         "replies" to mapOf("type" to "array", "items" to InstructionPrompts.STRING),
         "nextCheckMin" to InstructionPrompts.nullable(mapOf("type" to "integer")),
         "memories" to mapOf("type" to "array", "items" to ChatPrompts.MEMORY),
+        "rebalances" to mapOf(
+            "type" to "array",
+            "items" to InstructionPrompts.obj(
+                "taskId" to InstructionPrompts.STRING,
+                "stepIndex" to mapOf("type" to "integer"),
+                "firstTitle" to InstructionPrompts.STRING,
+                "firstMinutes" to mapOf("type" to "integer"),
+                "secondTitle" to InstructionPrompts.STRING,
+                "secondMinutes" to mapOf("type" to "integer"),
+            ),
+        ),
     )
 }

@@ -2,6 +2,7 @@ package com.thomaswcode.decrastination.plan
 
 import android.util.Log
 import com.thomaswcode.decrastination.AppGraph
+import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.Duplicates
 import com.thomaswcode.decrastination.core.Instruction
 import com.thomaswcode.decrastination.core.InstructionRules
@@ -84,19 +85,24 @@ class Planning(
         }.let(Duplicates::linksPresent).let(Duplicates::credited)
     }
 
-    /** The plan at [now], of [state] with [applied] instructions and the calendar's [time]: as they are, or a snapshot of them taken once ([chatContext]). */
+    /**
+     * The plan at [now], of [state] with [applied] instructions and the calendar's [time]: as they are, or a
+     * snapshot of them taken once ([chatContext]). With [trying], as if those were applied too, a task they
+     * give new steps letting go of its starts kept today, as applying them does: a rebalance tried (D-110).
+     */
     fun plan(
         state: TaskState = tasks.value,
         settings: Settings = this.settings.value,
         now: Long = clock.now(),
         applied: List<Instruction> = instructions.value.applied,
         time: EventJudge.Time = calendarTime(),
+        trying: List<Instruction> = emptyList(),
     ): Plan {
         val zone = clock.zone()
         // Your instructions' days and times, over as far as the plan can reach.
         val today = Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
         val reach = today.plusDays(PLAN_REACH_DAYS)
-        val tasks = asPlanned(state, applied)
+        val tasks = asPlanned(state, applied + trying)
         // Each day's windows, from the timetable's study periods and the school calendar (PL-15).
         val days = generateSequence(today) { it.plusDays(1) }.takeWhile { it <= reach }.toList()
         val calendar = school.value
@@ -118,7 +124,8 @@ class Planning(
                 dayKinds = dayKinds,
                 // Today's pieces where the last plan laid them, where that's still free, and those whose
                 // slots went by undone (PL-13).
-                previousSlots = session.value.slots.on(today).previous,
+                previousSlots = trying.flatMap { it.changes }.filter { it.type == ChangeType.Steps }.mapNotNull { it.taskId }
+                    .fold(session.value.slots.on(today)) { s, taskId -> s.released(taskId, now) }.previous,
                 missedSlots = session.value.slots.on(today).missed.map { it.key }.toSet(),
             ),
         )

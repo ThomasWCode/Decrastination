@@ -10,7 +10,7 @@ After each plan: today's slots are saved (`Planning.keepSlots`), the slot alarms
 
 ## The slotter (PL-12)
 
-`Slotter.slot` lays each day's pieces, in the day's order ([planner.md](planner.md)), into its windows (`DayBucket.slots`). A piece no free time holds whole is `unslotted`: still the day's work, with no time.
+`Slotter.slot` lays each day's pieces, in the day's order ([planner.md](planner.md)), into its windows (`DayBucket.slots`). A piece no free time holds whole is `unslotted`: still the day's work, with no time. Today's free times at school its slots leave, from now on, are its `gaps` (`Slotter.schoolGaps`: its school windows less busy time and each work slot with its breaks as they're laid, within its window, `slotBreakMin` before it and after it that or `slotLongBreakMin` once its run in that window reaches `slotLongBreakAfterMin`, those of at least `minSchoolSlotMin`), for Felix's rebalance (D-110, felix.md).
 
 A day's free time is its windows less busy time (the calendar's and yours); today's starts from now, rounded up to five minutes. A school stretch under `minSchoolSlotMin` (15) is dropped, an evening one under 5.
 A piece goes at the first free time it fits whole, where it may be done:
@@ -24,7 +24,7 @@ Breaks are kept around each piece within its window: `slotBreakMin` (5) before a
 What's laid, in turn:
 1. Outside breaks, on a weekend or a day off school.
 2. Pins: pieces at a time you gave (PL-04).
-3. Today's starts kept from the last plan (PL-13): a step's only where it follows the steps before it; a task whose kept starts aren't in its steps' order (as a plan before D-108 could lay them) is laid afresh, its steps pinned today or begun aside, as they may stand ahead of the steps before them, and those in one piece that don't need the steps before them.
+3. Today's starts kept from the last plan (PL-13), but a task's still to come once it's given new steps (a Steps change, a rebalance's among them: `SlotState.released`), so they're laid afresh: a step's only where it follows the steps before it; a task whose kept starts aren't in its steps' order (as a plan before D-108 could lay them) is laid afresh, its steps pinned today or begun aside, as they may stand ahead of the steps before them, and those in one piece that don't need the steps before them.
 4. The rest, in order, each task's steps in theirs whatever the day's order between tasks: a step at its kept start where that's still free and follows the steps before it (one of them moved, a missed one say), else at the first free time after them.
 
 ## Outside breaks

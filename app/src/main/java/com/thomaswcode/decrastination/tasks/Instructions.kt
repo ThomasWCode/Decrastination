@@ -294,6 +294,13 @@ class Instructions(
             InstructionRules.movedSlots(changes, focus.plan()).forEach { slot -> focus.moveSlot(slot.key, Focus.Laid(slot.start, slot.end, slot.window)) }
             session.update { state -> state.copy(slots = moved.fold(state.slots) { s, taskId -> s.moved(taskId) }) }
         }
+        // New steps on a task, a rebalance's among them (D-110), are laid afresh: its starts kept today were its
+        // old steps', and a step kept at one would stay there, shorter or longer. One begun stays where it is.
+        val restepped = instructions.value.instructions.firstOrNull { it.id == id }?.changes.orEmpty().filter { it.type == ChangeType.Steps }.mapNotNull { it.taskId }
+        if (restepped.isNotEmpty()) {
+            val now = clock.now()
+            session.update { state -> state.copy(slots = restepped.fold(state.slots) { s, taskId -> s.released(taskId, now) }) }
+        }
         instructions.update { state ->
             state.copy(instructions = state.instructions.map { if (it.id == id && it.state == InstructionStatus.Understood) it.copy(state = InstructionStatus.Applied, appliedAt = clock.now()) else it })
         }

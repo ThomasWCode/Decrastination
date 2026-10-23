@@ -9,11 +9,14 @@ import com.thomaswcode.decrastination.core.HalfDay
 import com.thomaswcode.decrastination.core.Instruction
 import com.thomaswcode.decrastination.core.InstructionStatus
 import com.thomaswcode.decrastination.core.NoSchool
+import com.thomaswcode.decrastination.core.OwnStep
 import com.thomaswcode.decrastination.core.OwnTask
 import com.thomaswcode.decrastination.core.Proposal
 import com.thomaswcode.decrastination.core.ProposalState
 import com.thomaswcode.decrastination.core.SchoolCalendar
+import com.thomaswcode.decrastination.core.SlotState
 import com.thomaswcode.decrastination.core.Speaker
+import java.time.Instant
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -72,6 +75,20 @@ class InstructionsTest {
         assertEquals(emptyList(), h.instructions.value.instructions)
         assertNull(task("teams:essay").mine.minutes?.minutes)
         assertFalse(h.instructions.quickInForce("teams:essay", ChangeType.Minutes))
+    }
+
+    @Test
+    fun `new steps on a task let go of its starts kept today still to come, so they're laid afresh (D-110)`() = runBlocking {
+        h.stores.tasks.update { it.copy(tasks = listOf(h.teams("sheet", minutes = 65))) }
+        val now = h.clock.now()
+        val today = Instant.ofEpochMilli(now).atZone(Fixtures.LONDON).toLocalDate().toString()
+        val kept = mapOf("teams:sheet#0" to now + 3_600_000L, "teams:sheet#1" to now - 60_000L, "teams:other#-1#1" to now + 7_200_000L)
+        h.stores.session.update { it.copy(slots = SlotState(today, previous = kept)) }
+        write(understood("steps", Change(ChangeType.Steps, taskId = "teams:sheet", steps = listOf(OwnStep("Question 1", 25), OwnStep("Questions 2 and 3", 40)))))
+        h.instructions.applyInstruction("steps")
+        assertEquals(InstructionStatus.Applied, state("steps")!!.state)
+        // Its start to come let go of; its step begun, and another task's, kept.
+        assertEquals(kept - "teams:sheet#0", h.stores.session.value.slots.previous)
     }
 
     @Test

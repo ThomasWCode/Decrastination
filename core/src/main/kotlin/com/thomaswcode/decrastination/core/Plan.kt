@@ -180,6 +180,12 @@ data class Chunk(
  */
 data class Sitting(val after: Int, val title: String)
 
+/** Free time at school today, from [start], [minutes] long ([DayBucket.gaps]). */
+data class Gap(val start: Long, val minutes: Int) {
+    /** When it ends: what stays the same of one under way as the clock moves on. */
+    val end: Long get() = start + minutes * 60_000L
+}
+
 /** What lets a kept slot earn (BL-08). */
 enum class EarnsBy {
     /** Short: its tick. */
@@ -203,6 +209,8 @@ data class DayBucket(
     val slots: List<Slot> = emptyList(),
     /** Its pieces no free time holds whole, in order. */
     val unslotted: List<Chunk> = emptyList(),
+    /** Today's free times at school its slots leave, from now on ([Slotter.schoolGaps]): where two of Felix's steps may be rebalanced to fit one (D-110). */
+    val gaps: List<Gap> = emptyList(),
 ) {
     val plannedMin: Int get() = chunks.sumOf { it.minutes }
 

@@ -109,6 +109,7 @@ class FelixHarness(
         remember = { conversation.remember(it) },
         addInstruction = { text, about, answer -> owners.instruction(text, about, answer) },
         assess = { taskId, doneAt, answer -> assessed += Triple(taskId, doneAt, answer) },
+        applyProposal = { messageId, proposalId -> conversation.applyProposal(messageId, proposalId) },
     )
 
     /** [key]'s piece kept as Day's Done keeps it ([Focus.keepSlot]), with [extraMin] more and a [photo]. */

@@ -1398,8 +1398,9 @@ class Conversation(
         val messages = chat.value.messages
         val message = messages.firstOrNull { it.id == messageId } ?: return
         val proposal = message.proposals.firstOrNull { it.id == proposalId && it.state != ProposalState.Applied } ?: return
-        // The message of yours it answered: its words name the instruction.
-        val asked = messages.take(messages.indexOf(message)).lastOrNull { it.from == Speaker.You }
+        // The message of yours it answered: its words name the instruction. One of his own, a morning's
+        // rebalance (D-110), answered none: what it made names it.
+        val asked = messages.take(messages.indexOf(message)).lastOrNull { it.from == Speaker.You }?.takeIf { message.kind == MessageKind.Chat }
         var made: String? = null
         var note: String? = null
         var before = emptyMap<String, OwnTask>()
@@ -1416,7 +1417,7 @@ class Conversation(
             val own = tasks.value.tasks.filter { it.source == Source.Own }.associateBy { it.id }
             before = proposal.changes.filter { it.type in OwnTaskRules.MADE_ON_IT }.mapNotNull { it.taskId }.distinct()
                 .mapNotNull { tid -> own[tid]?.let { tid to OwnTaskRules.draftOf(it) } }.toMap()
-            val instruction = Instruction(id, asked?.text ?: message.text, asked?.about ?: About(), clock.now(), state = InstructionStatus.Understood, changes = proposal.changes, by = By.Felix)
+            val instruction = Instruction(id, asked?.text ?: proposal.lines.firstOrNull() ?: message.text, asked?.about ?: About(), clock.now(), state = InstructionStatus.Understood, changes = proposal.changes, by = By.Felix)
             instructions.update { it.copy(instructions = it.instructions + instruction) }
             val calendar = school.value
             owners.applyInstruction(id)

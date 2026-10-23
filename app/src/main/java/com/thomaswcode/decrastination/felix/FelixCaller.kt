@@ -7,6 +7,7 @@ import com.anthropic.models.messages.MessageCreateParams
 import com.anthropic.models.messages.OutputConfig
 import com.anthropic.models.messages.StopReason
 import com.thomaswcode.decrastination.core.FelixAnswer
+import com.thomaswcode.decrastination.core.Rebalance
 import com.thomaswcode.decrastination.enrich.ClaudeEnricher
 import com.thomaswcode.decrastination.enrich.ModelCalls
 import com.thomaswcode.decrastination.enrich.ModelEffort
@@ -18,7 +19,8 @@ import kotlinx.coroutines.withContext
 class FelixCaller(private val client: AnthropicClient, val model: String = ClaudeEnricher.MODEL) {
 
     /** [model]: the model that answered, a fallback's if one did. */
-    data class Result(val answer: FelixAnswer?, val costUsd: Double, val refused: Boolean = false, val model: String? = null, val usage: ModelCalls.Usage = ModelCalls.Usage.NONE)
+    /** [rebalances]: his steps rebalanced in a morning's answer (D-110), read beside [answer], which is kept, and never kept themselves. */
+    data class Result(val answer: FelixAnswer?, val costUsd: Double, val refused: Boolean = false, val model: String? = null, val usage: ModelCalls.Usage = ModelCalls.Usage.NONE, val rebalances: List<Rebalance.Given> = emptyList())
 
 
     /** His message for [user] (from [FelixPrompts.describe]), with his [system] and the student's [profile]. */
@@ -42,6 +44,6 @@ class FelixCaller(private val client: AnthropicClient, val model: String = Claud
             else -> Unit
         }
         val text = message.content().mapNotNull { it.text().orElse(null)?.text() }.joinToString("")
-        return Result(FelixAnswers.parse(text, maxMessage), cost, model = message.model().asString().ifBlank { null }, usage = usage)
+        return Result(FelixAnswers.parse(text, maxMessage), cost, model = message.model().asString().ifBlank { null }, usage = usage, rebalances = FelixAnswers.rebalances(text))
     }
 }

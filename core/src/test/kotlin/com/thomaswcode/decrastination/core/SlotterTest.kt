@@ -349,6 +349,31 @@ class SlotterTest {
     }
 
     @Test
+    fun `today's free times at school are what its slots and their breaks leave of its school windows, from now`() {
+        val windows = listOf(w("10:45", "11:15", WindowKind.Break), w("13:15", "14:05", WindowKind.Lunch), w("17:00", "22:00"))
+        val lunch = Slot(SlotKind.Work, chunk("a", 25), Fixtures.at("2026-10-13T13:15"), Fixtures.at("2026-10-13T13:40"), WindowKind.Lunch, pinned = false)
+        fun gaps(now: String) = Slotter.schoolGaps(LocalDate.parse(tuesday), windows, emptyList(), listOf(lunch), Fixtures.at(now), LONDON, settings).map { hm(it.start) to it.minutes }
+        // The evening isn't school; lunch keeps five minutes after its slot.
+        assertEquals(listOf("10:45" to 30, "13:45" to 20), gaps("2026-10-13T07:00"))
+        assertEquals(listOf("10:50" to 25, "13:45" to 20), gaps("2026-10-13T10:50"))
+        // A run long enough for a long break keeps it after its slot, as the slots are laid.
+        val study = listOf(w("09:00", "10:30", WindowKind.Study))
+        val first = Slot(SlotKind.Work, chunk("b", 30), Fixtures.at("2026-10-13T09:00"), Fixtures.at("2026-10-13T09:30"), WindowKind.Study, pinned = false)
+        val long = settings.copy(slotLongBreakAfterMin = 30)
+        assertEquals(listOf("09:45" to 45), Slotter.schoolGaps(LocalDate.parse(tuesday), study, emptyList(), listOf(first), Fixtures.at("2026-10-13T07:00"), LONDON, long).map { hm(it.start) to it.minutes })
+        assertEquals(listOf("09:35" to 55), Slotter.schoolGaps(LocalDate.parse(tuesday), study, emptyList(), listOf(first), Fixtures.at("2026-10-13T07:00"), LONDON, settings).map { hm(it.start) to it.minutes })
+        // A slot that ends where break begins keeps none of break: past its window's edge there's nothing to keep apart.
+        val edge = listOf(w("10:15", "10:45", WindowKind.Study), w("10:45", "11:15", WindowKind.Break))
+        val study1 = Slot(SlotKind.Work, chunk("d", 25), Fixtures.at("2026-10-13T10:20"), Fixtures.at("2026-10-13T10:45"), WindowKind.Study, pinned = false)
+        assertEquals(listOf("10:45" to 30), Slotter.schoolGaps(LocalDate.parse(tuesday), edge, emptyList(), listOf(study1), Fixtures.at("2026-10-13T07:00"), LONDON, settings).map { hm(it.start) to it.minutes })
+        // Two study periods five minutes apart are two runs, as they're laid: the second's slot keeps a short break.
+        val two = listOf(w("09:00", "09:30", WindowKind.Study), w("09:35", "10:30", WindowKind.Study))
+        val second = Slot(SlotKind.Work, chunk("c", 20), Fixtures.at("2026-10-13T09:35"), Fixtures.at("2026-10-13T09:55"), WindowKind.Study, pinned = false)
+        val longer = settings.copy(slotLongBreakAfterMin = 45)
+        assertEquals(listOf("10:00" to 30), Slotter.schoolGaps(LocalDate.parse(tuesday), two, emptyList(), listOf(first, second), Fixtures.at("2026-10-13T07:00"), LONDON, longer).map { hm(it.start) to it.minutes })
+    }
+
+    @Test
     fun `steps the day lists out of their order are laid in it`() {
         val (slots, _) = slot(tuesday, listOf(step("revise", 1, 25), step("plan", 0, 30)), listOf(w("17:00", "22:00")))
         assertEquals(listOf("plan 17:00–17:30", "revise 17:35–18:00"), slots.described())
