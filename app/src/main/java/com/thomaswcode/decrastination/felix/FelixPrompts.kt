@@ -40,6 +40,15 @@ object FelixPrompts {
     /** His messages, and the replies to them, that he's shown: the last few. */
     const val RECENT = 6
 
+    /**
+     * Nothing said in the chat, by him or the student, for this long: his message is the first in a while,
+     * and opens with a greeting (D-57). The app says when, as each message is written on its own.
+     */
+    const val GREET_AFTER_MIN = 180
+
+    /** A task's ticked steps he's told, at most: the last of them. */
+    const val DONE_STEPS = 3
+
     /** A piece's task's own text, as he's told it, at most (D-93): as much as a piece's first steps are read from. */
     const val TEXT = 1_500
 
@@ -50,9 +59,9 @@ object FelixPrompts {
 
     /** His instructions, as [settings] name and describe him, for a student in Year [year]. */
     fun system(settings: Settings, year: Int): String = """
-        You are ${settings.felixName}: ${settings.felixLine}. You write the short messages the planner app sends a UK sixth-form student (Year $year) about their work. You get the reason for the message, the piece of work it's about with its first action and its task's own text (an assignment's instructions, an email; cut short), today's plan and what's been kept or missed, your recent messages and the student's replies, and the time.
+        You are ${settings.felixName}: ${settings.felixLine}. You write the short messages the planner app sends a UK sixth-form student (Year $year) about their work. You get the reason for the message, the piece of work it's about with its first action and its task's own text (an assignment's instructions, an email; cut short), today's plan and what's been kept or missed, what's done of today's tasks and of the ones your messages are about, your recent messages and the student's replies, and the time.
 
-        Be concrete: name the piece, with what's worth knowing about it (when it's due, what's left, what's next). Don't tell them how to do their work (no first steps or instructions like "open the email" or "write it at the top"), as they know it, unless they ask; a reminder they set still says what they asked, in their words. Now and then, not every time, start with a quick greeting the way a mate would ("hey", "yo"). Two sentences at most, under 240 characters (the morning's under 480). Don't repeat what you said last time. When you want a reply, offer up to three short replies you'd accept, in the student's words. Say when you'll check again as nextCheckMin, and mean it: sooner for a piece just started, later in a long slot, never under 5. Reasons: SlotStart (the slot began and nothing's happened: ask if they're starting); SlotEnd (the slot ended with no tick: ask what happened, or for the photo if the piece needs one); SlotKept (a slot was kept: one line, and only sometimes); DayDone (today's last slot kept: say what's earned, briefly); Morning (the day's shape in a sentence or two: it's the whole briefing, with no list of the day beside it); Question (put the question given, in your words); Completions (a source says work is done: ask harder, about right or easier); Summary (Sunday: say the week's summary is ready to send); Reply (you're answering what they said); Reminder (a reminder they asked you for comes at this moment: say it, their words in yours, with what's going on then where it helps).
+        Be concrete: name the piece, with what's worth knowing about it (when it's due, what's left, what's next). Don't tell them how to do their work (no first steps or instructions like "open the email" or "write it at the top"), as they know it, unless they ask; a reminder they set still says what they asked, in their words. Where you're told it's your first message in a while, start with a quick greeting the way a mate would ("hey", "yo"), and not otherwise. Two sentences at most, under 240 characters (the morning's under 480). Don't repeat what you said last time. What you're told is done is done: don't ask for it, even where your recent messages did. When you want a reply, offer up to three short replies you'd accept, in the student's words. Say when you'll check again as nextCheckMin, and mean it: sooner for a piece just started, later in a long slot, never under 5. Reasons: SlotStart (the slot began and nothing's happened: ask if they're starting); SlotEnd (the slot ended with no tick: ask what happened, or for the photo if the piece needs one); SlotKept (a slot was kept: one line, and only sometimes); DayDone (today's last slot kept: say what's earned, briefly); Morning (the day's shape in a sentence or two: it's the whole briefing, with no list of the day beside it); Question (put the question given, in your words); Completions (a source says work is done: ask harder, about right or easier); Summary (Sunday: say the week's summary is ready to send); Reply (you're answering what they said); Reminder (a reminder they asked you for comes at this moment: say it, their words in yours, with what's going on then where it helps).
 
         ${REGISTER}
 
@@ -61,7 +70,7 @@ object FelixPrompts {
         In the morning you may be shown steps too long for a free time at school today, each with the step after it that needs it. Where one is made of separate parts (questions, sources, sections), rebalance the two at a boundary between its parts: their new titles, each saying what's in it, and minutes, the first's no more than that free time, neither under 15, adding up to what the two did, the work and its order kept; say so in your message in a few words. Never cut one piece of work by time (the first half of a video, of a chapter or of an essay's writing), never for steps not shown; most mornings need none, and rebalances is then empty.
 
         Examples (made up, to show the voice and the form of a message):
-        - SlotStart, 10 minutes in, nothing ticked; the piece the Forces worksheet, 17:30–18:00, its first action "q1, underline what it asks": "yo, forces worksheet started 10 min ago and nothing's happened yet. you starting?", with replies "starting now", "give me 5" and "can't today", nextCheckMin 10.
+        - SlotStart, 10 minutes in, nothing ticked, your first message in a while; the piece the Forces worksheet, 17:30–18:00, its first action "q1, underline what it asks": "yo, forces worksheet started 10 min ago and nothing's happened yet. you starting?", with replies "starting now", "give me 5" and "can't today", nextCheckMin 10.
         - Morning; today German vocab, 20 min at 16:50, then the essay's first hour at 19:00, the essay due Mon 26 Oct: "morning. german vocab at 16:50 (20 min), then the essay's first hour at 19:00. it's due mon 26 oct, so tonight's the one that matters."
         - Reminder, set as "return the library book", due now, nothing on till 17:30: "remember you asked me to remind you to return the library book. you're free till 17:30, so now's good."
         - DayDone, 25 minutes of free time earned: "that's today done. 25 min of free time's yours."
@@ -77,6 +86,9 @@ object FelixPrompts {
      * words as you set them ([reminder]), the slot then under way or next its piece, and [now] the moment
      * it's for; for a SlotStart, your reminder that came at the slot's start ([reminder]), so it isn't said
      * twice; for the Morning, today's [reminders], and the steps he may rebalance to fit a free time at school ([rebalance], D-110).
+     * What's done of [tasks], those of today's pieces, [task] and his messages shown (D-57), so his own
+     * messages don't outweigh a tick; and, where nothing's been said for [GREET_AFTER_MIN], that it's his
+     * first message in a while.
      */
     fun describe(
         reason: Reason,
@@ -97,6 +109,7 @@ object FelixPrompts {
         notes: List<String> = emptyList(),
         reminders: List<String> = emptyList(),
         rebalance: List<Rebalance.Candidate> = emptyList(),
+        tasks: List<TaskItem> = emptyList(),
     ): String = buildString {
         fun clock(at: Long) = Instant.ofEpochMilli(at).atZone(zone).format(CLOCK)
         appendLine("Reason: $reason")
@@ -153,6 +166,12 @@ object FelixPrompts {
         if (done.isNotEmpty()) appendLine("Done, as their sources say, with none of it timed in a slot: " + done.joinToString("; "))
         // His own messages, written unasked: his silences (he chose not to write) aren't messages.
         val shown = ChatHistory.his(recent).filter { it.text.isNotBlank() }.sortedBy { it.at }.takeLast(RECENT)
+        // What's done of the work today's pieces and his messages are about, said as such (D-57): a step ticked
+        // quietly on its sheet isn't in his messages, which may still ask for it.
+        doneSoFar(plan, task, shown, tasks, zone).takeIf { it.isNotEmpty() }?.let { appendLine("Done so far, of today's tasks and the ones your messages below are about: " + it.joinToString("; ")) }
+        // Nothing said by either of you for a while: a greeting, now and then as the app says (D-57).
+        val lastSaid = recent.filter { it.text.isNotBlank() }.maxOfOrNull { it.at }
+        if (lastSaid == null || now - lastSaid >= GREET_AFTER_MIN * 60_000L) appendLine("Your first message in a while: open with a quick greeting")
         if (shown.isNotEmpty()) {
             appendLine("Recent, oldest first:")
             for (m in shown) {
@@ -162,6 +181,26 @@ object FelixPrompts {
         }
         question?.let { appendLine("Question: $it") }
     }.trimEnd()
+
+    /**
+     * What's done of the tasks of today's pieces in [plan], of [task] and of his messages [shown], in [tasks]:
+     * each finished, off the list as not a task by your word, or with its steps ticked (the last
+     * [DONE_STEPS] of them named). Those with nothing done aren't said.
+     */
+    private fun doneSoFar(plan: Plan, task: TaskItem?, shown: List<ChatMessage>, tasks: List<TaskItem>, zone: ZoneId): List<String> {
+        val pieces = plan.todaySlots.mapNotNull { it.chunk?.taskId } + plan.buckets.firstOrNull { it.date == plan.today }?.chunks.orEmpty().map { it.taskId }
+        val byId = tasks.associateBy { it.id }
+        return (pieces + listOfNotNull(task?.id) + shown.mapNotNull { it.about.taskId }).distinct().mapNotNull { id ->
+            val of = byId[id] ?: return@mapNotNull null
+            val ticked = of.subSteps.filter { it.done }
+            when {
+                !of.isOpen -> "“${of.title}”: finished" + of.doneAt?.let { " ${Instant.ofEpochMilli(it).atZone(zone).format(WHEN)}" }.orEmpty()
+                of.mine.notATask != null -> "“${of.title}”: not a task, as they said, so off the list"
+                ticked.isNotEmpty() -> "“${of.title}”: ${ticked.size} of ${of.subSteps.size} steps ticked, " + ticked.takeLast(DONE_STEPS).joinToString(", ") { "“${it.title}”" }
+                else -> null
+            }
+        }
+    }
 
     val SCHEMA: Map<String, Any> = InstructionPrompts.obj(
         "message" to InstructionPrompts.STRING,
