@@ -19,6 +19,7 @@ import kotlin.test.assertTrue
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 
 /**
@@ -112,12 +113,12 @@ class ChatMigrationTest {
         assertEquals(4, felix.checkInDraft?.step)
         // The log and the runtime in their new shapes, without them.
         val log = json(File(dir, "log.json"))
-        assertEquals(3, Migration.versionOf(log))
+        assertEquals(4, Migration.versionOf(log))
         assertFalse("felix" in log)
         val written = json(File(dir, "runtime.json"))
         assertTrue(listOf("felix", "assessLater", "checkInDraft").none { it in written })
-        // The rest of them as they were.
-        assertEquals(json(File(before, "log.json")).getValue("slots"), log.getValue("slots"))
+        // The rest of them as they were, but for the field a later shape added at its default (4.3.18's earnedMin).
+        assertEquals(json(File(before, "log.json")).getValue("slots"), JsonArray(log.getValue("slots").jsonArray.map { JsonObject(it.jsonObject - "earnedMin") }))
         // The calibration in its own file since the runtime's split (4.0.13), as it was.
         assertEquals(runtime.getValue("calibration"), json(File(dir, "learning.json")).getValue("calibration"))
     }

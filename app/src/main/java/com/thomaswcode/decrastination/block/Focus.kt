@@ -407,14 +407,17 @@ class Focus(
             session.update { it.copy(keeping = it.keeping - k) }
             return null
         }
+        // What it puts in the day's ledger, on its record, so taking it back gives back that: only on its own day, as the ledger's is.
+        val earning = if (k.earningMin > 0 && today(record.at) == today(now)) k.earningMin else 0.0
+        val kept = if (record.earned) record.copy(earnedMin = earning) else record
         // A slot of it missed today and kept after all is one slot, kept late: that miss gives way.
         // Earning only, the record it was is marked; gone since (marked by another photo, trimmed), nothing's given.
         var recorded = true
         log.update { state ->
             when {
                 recovering && state.slots.any { it.key == record.key && it.at == record.at && it.outcome.kept && (!k.earnOnly || it.earned) } -> state
-                k.earnOnly -> if (k.replaces != null && k.replaces in state.slots) state.copy(slots = state.slots.map { if (it == k.replaces) record else it }) else state.also { recorded = false }
-                else -> state.copy(slots = state.slots.filterNot { it == k.replaces } + record).trimmed(now)
+                k.earnOnly -> if (k.replaces != null && k.replaces in state.slots) state.copy(slots = state.slots.map { if (it == k.replaces) kept else it }) else state.also { recorded = false }
+                else -> state.copy(slots = state.slots.filterNot { it == k.replaces } + kept).trimmed(now)
             }
         }
         if (!recorded) {
@@ -502,7 +505,9 @@ class Focus(
         val today = today(now)
         session.update { state ->
             state.copy(
-                credit = if (record.earned) state.credit.takeBack(today, Credit.forSlot(record.plannedMin, settings.value.workMinPerFreeMin)) else state.credit,
+                // What its keep put in the ledger (one kept before that was on record, its minutes at the rate now), and only
+                // on its own day: yesterday's went at midnight, and today's wasn't its.
+                credit = if (record.earned && today(record.at) == today) state.credit.takeBack(today, record.earnedMin ?: Credit.forSlot(record.plannedMin, settings.value.workMinPerFreeMin)) else state.credit,
                 slots = when {
                     missed != null && missed.date == today.toString() -> state.slots.on(today).missed(record.key, record.taskId, missed.at)
                     // Kept in its slot: its start back, so the next plan keeps it where it was while that's
@@ -527,7 +532,8 @@ class Focus(
         val planned = plan(now).todayBucket
         val keepingMin = keeping?.takeIf { k -> k.date == today && planned?.chunks.orEmpty().none { it.key == k.key } }?.plannedMin ?: 0
         val share = Credit.forSlot((planned?.plannedMin ?: 0) + kept.sumOf { it.plannedMin } + keepingMin, ratio)
-        val earned = kept.filter { it.earned }.sumOf { Credit.forSlot(it.plannedMin, ratio) }
+        // As each keep put it in the ledger (one before that was on record, at the rate now).
+        val earned = kept.filter { it.earned }.sumOf { it.earnedMin ?: Credit.forSlot(it.plannedMin, ratio) }
         return (share - earned).coerceAtLeast(0.0)
     }
 

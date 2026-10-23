@@ -86,7 +86,7 @@ data class ActivityLog(
     /** Each reviewed week's totals (PL-10), kept [WEEKS_KEPT] weeks, past the [KEEP_DAYS] the rest is kept: Stats' longer periods read them. */
     val weeks: List<WeekRollup> = emptyList(),
     /** The shape this is in ([Migration]): raised with each change of it, a migration bringing older files to it. */
-    val version: Int = 3,
+    val version: Int = 4,
 ) {
     fun trimmed(now: Long): ActivityLog {
         val since = now - KEEP_DAYS * 24 * 3_600_000L
@@ -147,6 +147,12 @@ data class SlotRecord(
     val workedMin: Int,
     val photo: Boolean = false,
     val earned: Boolean = false,
+    /**
+     * What its keep put in the day's ledger of free time, its cap within the day's plan and its rate then: what taking
+     * it back gives back (BL-08). Nothing on another day (yesterday's free time went at midnight); null for one kept
+     * before this was kept.
+     */
+    val earnedMin: Double? = null,
     val at: Long,
 )
 
