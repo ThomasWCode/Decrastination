@@ -177,7 +177,7 @@ class BackupService(
         // messages: not a message of yours still waiting for its answer, which would be sent, words from then, as
         // it opens; nor one that waited with it, or for its Try again, either of which would go with your next
         // words, as his turn takes yours that come one after another together. Those are left out, and said:
-        // they're still in the backup. Felix's state with it, or where this phone has none of its own. Into a
+        // the backup file still holds them. Felix's state with it, or where this phone has none of its own. Into a
         // chat that isn't empty, his own messages it hasn't, with your replies to them, by id, as the
         // log's records of them were merged before 4.0.0: none of his is lost. Those read there are read
         // here, as far as that goes without passing one of his unread here, so his notification doesn't
@@ -226,7 +226,7 @@ class BackupService(
             if (own > 0) add("$own task${if (own == 1) "" else "s"} of your own")
             if (chatBack > 0) add("the chat ($chatBack message${if (chatBack == 1) "" else "s"})")
             if (hisBack > 0) add("$hisBack message${if (hisBack == 1) "" else "s"} of Felix's into the chat")
-            if (yoursLeft > 0) add("$yoursLeft of yours that waited for an answer left out, as ${if (yoursLeft == 1) "it" else "they"}'d be sent with words from then (still in the backup)")
+            if (yoursLeft > 0) add("$yoursLeft of yours that waited for an answer left out, as ${if (yoursLeft == 1) "it" else "they"}'d be sent with words from then (the backup file still holds them)")
             if (felixBack > 0) add("$felixBack of Felix's notes and reminders")
             if (felixLeft > 0) add("$felixLeft of the backup's notes and reminders left out, past what the app keeps")
             if (restored > 0) add("$restored instruction${if (restored == 1) "" else "s"} restored")
