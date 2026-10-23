@@ -54,6 +54,7 @@ import kotlinx.coroutines.sync.withLock
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -229,8 +230,11 @@ class Looks(
      */
     private val reminding = Mutex()
 
-    /** The reminders whose words are being written ahead now ([writeReminders]): not asked for again at their moment meanwhile. */
-    private val askingAhead: MutableSet<String> = ConcurrentHashMap.newKeySet()
+    /**
+     * The reminders whose words are being written ahead now ([writeReminders]), each with its call's end: not asked for
+     * again at their moment meanwhile, but waited for ([remindNow]).
+     */
+    private val askingAhead = ConcurrentHashMap<String, CompletableDeferred<Unit>>()
 
     /** Whether a run of [remindNow] is queued and not yet begun ([FelixPorts.remindLater]): a sweep doesn't queue another. */
     private val remindQueued = AtomicBoolean(false)
@@ -255,12 +259,17 @@ class Looks(
             if (due.isEmpty()) return@withLock
             val caller = gateway.client(ModelEffort.Job.Felix)?.takeIf { gateway.available() }?.let { FelixCaller(it) }
             for ((r, moment) in due) {
+                // Its words being written ahead still, its moment come during that call: that call's waited for, not made
+                // again, so it isn't paid for twice; what it kept is looked at as it then is.
+                askingAhead[r.id]?.await()
                 // As it now is: one sent, let go or late since (by the sweep after an earlier one's words), or cancelled,
-                // moved or snoozed meanwhile, isn't paid for.
+                // moved or snoozed meanwhile, isn't paid for; nor one whose words its call ahead kept, which go with the sweep.
                 val current = felix.value.reminders.firstOrNull { it.id == r.id }
                 if (current == null || !Reminders.pending(current) || current.undrafted() != r.undrafted() || clock.now() - moment > Reminders.LATE_MS) continue
-                // Its words being written ahead still, its moment come during that call: those, once kept, go, so it isn't paid for twice.
-                if (r.id in askingAhead) continue
+                if (!toAsk(current, moment, said)) {
+                    sweepReminders(now = clock.now(), askLater = false)
+                    continue
+                }
                 val askedAt = clock.now()
                 val answer = caller?.let { (askReminder(it, r, moment, plan, tasks) as? Called.Answered)?.value?.answer }
                 felix.update { s -> s.copy(reminders = s.reminders.map { if (it.id == r.id && it.undrafted() == r.undrafted()) it.copy(draft = answer, draftedAt = askedAt, draftFor = moment) else it }) }
@@ -641,11 +650,13 @@ class Looks(
         if (due.isEmpty() || !gateway.available()) return@withLock
         val caller = gateway.client(ModelEffort.Job.Felix)?.let { FelixCaller(it) } ?: return@withLock
         for ((r, moment) in due) {
-            // Its moment come by now (a batch's later one): it's asked for at its moment ([remindNow]), not ahead.
-            if (clock.now() >= moment) continue
             // While its call's out, it's this one's ([askingAhead]): its moment coming meanwhile, it isn't asked for twice.
-            askingAhead += r.id
+            // Marked before the clock's looked at, so the work at its moment either waits for this call or is asked for alone.
+            val call = CompletableDeferred<Unit>()
+            askingAhead[r.id] = call
             try {
+                // Its moment come by now (a batch's later one): it's asked for at its moment ([remindNow]), not ahead.
+                if (clock.now() >= moment) continue
                 val called = askReminder(caller, r, moment, plan, tasks) as? Called.Answered ?: continue
                 // Refused, or none that could be read, it's paid for all the same: its moment's kept as asked for, so the next look doesn't ask again.
                 val answer = called.value.answer
@@ -654,7 +665,8 @@ class Looks(
                 if (answer == null) Log.w(AppGraph.TAG, "Felix's words for a reminder came back with none: yours go")
                 else Log.i(AppGraph.TAG, "Felix wrote ahead for a reminder, due at ${Instant.ofEpochMilli(moment).atZone(clock.zone()).toLocalTime()}")
             } finally {
-                askingAhead -= r.id
+                askingAhead.remove(r.id)
+                call.complete(Unit)
             }
         }
     }
