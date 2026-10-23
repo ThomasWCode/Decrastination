@@ -19,13 +19,13 @@ class InstructionReader(private val client: AnthropicClient, private val zone: Z
     data class Result(val reading: InstructionAnswers.Reading?, val costUsd: Double, val refused: Boolean = false, val usage: ModelCalls.Usage = ModelCalls.Usage.NONE)
 
 
-    suspend fun read(instruction: Instruction, tasks: List<TaskItem>, events: List<CalendarEvent>, now: Long): Result {
+    suspend fun read(instruction: Instruction, tasks: List<TaskItem>, events: List<CalendarEvent>, now: Long, question: String? = null): Result {
         val schema = JsonOutputFormat.Schema.builder().apply { InstructionPrompts.SCHEMA.forEach { (k, v) -> putAdditionalProperty(k, JsonValue.from(v)) } }.build()
         val params = MessageCreateParams.builder()
             .model(model)
             .maxTokens(ClaudeEnricher.MAX_TOKENS)
             .systemOfTextBlockParams(ModelCalls.systemBlocks(InstructionPrompts.system(profile.year), profile.text))
-            .addUserMessage(InstructionPrompts.describe(instruction, tasks, events, now, zone).take(Pricing.MAX_INPUT_CHARS))
+            .addUserMessage(InstructionPrompts.describe(instruction, tasks, events, now, zone, question).take(Pricing.MAX_INPUT_CHARS))
             .outputConfig(OutputConfig.builder().effort(ModelEffort.of(ModelEffort.Job.Instruction)).format(JsonOutputFormat.builder().schema(schema).build()).build())
             .putAdditionalHeader("anthropic-beta", ClaudeEnricher.FALLBACK_BETA)
             .putAdditionalBodyProperty("fallbacks", JsonValue.from("default"))

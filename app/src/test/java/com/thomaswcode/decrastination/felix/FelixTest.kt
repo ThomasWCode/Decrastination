@@ -135,6 +135,9 @@ class FelixTest {
         val essay = task("Essay", 60).copy(subSteps = listOf(SubStep("Pick a question", 15, done = true), SubStep("Research", 25), SubStep("Write", 20)))
         val handedIn = task("Lab write-up", 30).copy(status = Status.Done, doneAt = now - 3_600_000L)
         val dropped = task("Old form", 10).copy(mine = Mine(notATask = SetBy(true, By.You)))
+        // An Anki quota gone by undone isn't finished; a task you said is the same work as another is off the list.
+        val gone = task("Cards", 20).copy(status = Status.Missed)
+        val same = task("Copy", 30).copy(mine = Mine(sameAs = SetBy(essay.id, By.You)))
         val notToday = task("Vectors", 30).copy(subSteps = listOf(SubStep("Questions 1 to 6", 15, done = true), SubStep("Questions 7 to 12", 15)))
         val day = Planner.plan(
             Planner.Input(listOf(essay, task("Statics", 30)), Fixtures.at("2026-10-12T16:00"), LONDON, settings, windows = mapOf(monday to listOf(DayWindow(17 * 60, 22 * 60, WindowKind.Evening)))),
@@ -143,13 +146,16 @@ class FelixTest {
         val recent = listOf(
             ChatMessage("f1", Speaker.Felix, "lab write-up's due tomorrow", now - 7_200_000L, about = About(taskId = handedIn.id), kind = MessageKind.SlotEnd),
             ChatMessage("f2", Speaker.Felix, "old form still not in", now - 5_400_000L, about = About(taskId = dropped.id), kind = MessageKind.Question),
+            ChatMessage("f3", Speaker.Felix, "cards still to do", now - 3_600_000L, about = About(taskId = gone.id), kind = MessageKind.SlotEnd),
+            ChatMessage("f4", Speaker.Felix, "the copy's still open", now - 1_800_000L, about = About(taskId = same.id), kind = MessageKind.SlotEnd),
         )
-        val tasks = listOf(essay, task("Statics", 30), handedIn, dropped, notToday)
+        val tasks = listOf(essay, task("Statics", 30), handedIn, dropped, gone, same, notToday)
         val text = FelixPrompts.describe(FelixPrompts.Reason.Morning, day, null, null, emptyList(), recent, null, settings, now, LONDON, tasks = tasks)
         val line = text.lines().single { it.startsWith("Done so far") }
         assertEquals(
             "Done so far, of today's tasks and the ones your messages below are about: “Essay”: 1 of 3 steps ticked, “Pick a question”; " +
-                "“Lab write-up”: finished Mon 16:10; “Old form”: not a task, as they said, so off the list",
+                "“Lab write-up”: finished Mon 16:10; “Old form”: not a task, as they said, so off the list; “Cards”: no longer due, not done; " +
+                "“Copy”: the same work as “Essay”, as they said, so off the list",
             line,
         )
         // Before his messages, which it answers; with nothing done, no line.

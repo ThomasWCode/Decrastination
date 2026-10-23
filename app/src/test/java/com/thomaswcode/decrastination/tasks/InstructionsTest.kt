@@ -26,6 +26,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 
 /**
@@ -214,5 +215,40 @@ class InstructionsTest {
         assertNotNull(waiting)
         assertEquals(InstructionStatus.Reading, waiting.state)
         assertEquals("Waiting for Claude, which is off (Settings)", waiting.note)
+    }
+
+    @Test
+    fun `your reply to his question is read shown his words, and handed to Felix with whether it answers it and whether a change of it was made`() = runBlocking {
+        TasksHarness(claude = true).use { c ->
+            c.stores.tasks.update { it.copy(tasks = listOf(c.teams("sheet"))) }
+            suspend fun reply(id: String, text: String) =
+                c.stores.instructions.update { it.copy(instructions = it.instructions + Instruction(id, text, About(taskId = "teams:sheet", taskTitle = "sheet"), c.clock.now(), answer = true)) }
+            // No answer, nothing to change: gone, handed on as such, and read shown his words.
+            reply("a", "is the plan ticked in teams?")
+            c.answers("""{"understood":false,"question":null,"changes":[],"answersQuestion":false}""")
+            c.instructions.readInstructions()
+            assertEquals(listOf(Triple("is the plan ticked in teams?", false, false)), c.answersRead.toList())
+            assertNull(c.stores.instructions.value.instructions.firstOrNull { it.id == "a" })
+            val sent = c.server.takeRequest().body.readUtf8()
+            assertTrue("their reply to the question asked about it" in sent && TasksHarness.QUESTION in sent, sent.take(400))
+            // No answer but a change, made: handed on as made; refused (after its real deadline), as none made.
+            fun due(date: String) = """{"understood":true,"question":null,"answersQuestion":false,"changes":[{"type":"DueBy","taskId":"teams:sheet","afterTaskId":"","eventKey":"","eventTime":"","minutes":-1,"date":"$date","endDate":"","weekday":"","time":"","endTime":"","title":"","steps":[]}]}"""
+            reply("b", "it's due thursday")
+            c.answers(due("2026-10-22"))
+            c.instructions.readInstructions()
+            assertEquals(Triple("it's due thursday", false, true), c.answersRead.last())
+            reply("c", "make it next month")
+            c.answers("""{"understood":true,"question":null,"answersQuestion":false,"changes":[{"type":"AtTime","taskId":"teams:sheet","afterTaskId":"","eventKey":"","eventTime":"","minutes":-1,"date":"2026-11-20","endDate":"","weekday":"","time":"17:00","endTime":"","title":"","steps":[]}]}""")
+            c.instructions.readInstructions()
+            assertEquals(Triple("make it next month", false, false), c.answersRead.last())
+            // Discarded while its reading was out: nothing handed on.
+            reply("d", "all of it")
+            c.answers("""{"understood":false,"question":null,"changes":[],"answersQuestion":true}""", delayMs = 1_000)
+            val reading = c.scope.launch { c.instructions.readInstructions() }
+            c.until("its reading asked") { c.server.requestCount == 4 }
+            c.instructions.deleteInstruction("d")
+            reading.join()
+            assertEquals(3, c.answersRead.size)
+        }
     }
 }
