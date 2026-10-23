@@ -28,6 +28,7 @@ import com.thomaswcode.decrastination.core.SubStep
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.data.ActivityLog
 import com.thomaswcode.decrastination.data.ChatMigration
+import com.thomaswcode.decrastination.data.CreditMigration
 import com.thomaswcode.decrastination.data.MemoryMigration
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.SettingsMigration
@@ -61,9 +62,9 @@ class FocusTest {
     private val tasks = JsonStore(File(dir, "tasks.json"), TaskState.serializer(), ::TaskState, migrations = listOf(TasksMigration.TASKS, StepOrderMigration.TASKS))
     private val settings = JsonStore(File(dir, "settings.json"), Settings.serializer(), ::Settings, migrations = listOf(SettingsMigration.SETTINGS))
     private val protection = JsonStore(File(dir, "protection.json"), ProtectionState.serializer(), ::ProtectionState)
-    private val session = JsonStore(File(dir, "session.json"), SessionState.serializer(), ::SessionState)
+    private val session = JsonStore(File(dir, "session.json"), SessionState.serializer(), ::SessionState, migrations = listOf(CreditMigration.SESSION))
     private val learning = JsonStore(File(dir, "learning.json"), LearningState.serializer(), ::LearningState)
-    private val log = JsonStore(File(dir, "log.json"), ActivityLog.serializer(), ::ActivityLog, migrations = listOf(ChatMigration.LOG, MemoryMigration.LOG))
+    private val log = JsonStore(File(dir, "log.json"), ActivityLog.serializer(), ::ActivityLog, migrations = listOf(ChatMigration.LOG, MemoryMigration.LOG, CreditMigration.LOG))
     private val focus = Focus(tasks, settings, session, learning, protection, log, clock) { state, s, now -> Planner.plan(Planner.Input(state.tasks, now, LONDON, s)) }
 
     private fun task(id: String, kind: Kind = Kind.Homework, due: String? = "2026-10-20T09:00", steps: List<SubStep> = emptyList(), effort: Int = 45) = TaskItem(
@@ -804,7 +805,8 @@ class FocusTest {
         session.update { it.copy(keeping = listOf(Keeping(record(first), 0, "Q1", workedBefore = 0, earningMin = 5.0))) }
         repeat(2) { slotted.finishKeeps() }
         assertEquals(15, tasks.value.tasks.single().workedMin)
-        assertEquals(listOf(record(first)), log.value.slots)
+        // On record with the free time it put in the ledger.
+        assertEquals(listOf(record(first).copy(earnedMin = 5.0)), log.value.slots)
         assertEquals(5 * 60_000L, slotted.creditLeftMs())
         assertEquals(emptyList(), session.value.keeping)
         assertFalse(first.chunk!!.key in session.value.slots.previous)
@@ -1010,6 +1012,29 @@ class FocusTest {
         tasks.update { it.copy(tasks = listOf(feedback)) }
         assertTrue(focus.untickBlock("teams:fb", 1, "Redraft", reopen = true))
         assertTrue(tasks.value.tasks.single().isOpen)
+    }
+
+    @Test
+    fun `free time taken back with a keep is what it earned, whatever the rate since, and on another day none of that day's`() = runTest {
+        val (first, second) = laid(task("t", due = "2026-10-12T23:59", steps = listOf(SubStep("Q1", 15), SubStep("Q2", 15)), effort = 30)).take(2)
+        clock.time = first.end
+        val since = clock.time
+        assertTrue(slotted.keepSlot(first.chunk!!.key))
+        clock.time = second.end
+        assertTrue(slotted.keepSlot(second.chunk!!.key))
+        // Five minutes each at a minute for three, on record as they were put in the ledger.
+        assertEquals(10 * 60_000L, slotted.creditLeftMs())
+        assertEquals(listOf(5.0, 5.0), log.value.slots.map { it.earnedMin })
+        // A minute for two since: the first taken back gives back its five, not seven and a half.
+        settings.update { it.copy(workMinPerFreeMin = 2) }
+        assertTrue(slotted.unkeepSlot(first.chunk!!.key, since))
+        assertEquals(5 * 60_000L, slotted.creditLeftMs())
+        // The next day, the second taken back: its day's free time went at midnight, and this day's isn't touched.
+        clock.time = Fixtures.at("2026-10-13T12:00")
+        session.update { it.copy(credit = it.credit.earn(LocalDate.parse("2026-10-13"), 20.0)) }
+        val today = slotted.creditLeftMs()
+        assertTrue(slotted.unkeepSlot(second.chunk!!.key, since))
+        assertEquals(today, slotted.creditLeftMs())
     }
 
     @Test

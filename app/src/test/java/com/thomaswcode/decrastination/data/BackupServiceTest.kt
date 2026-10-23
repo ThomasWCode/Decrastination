@@ -125,7 +125,7 @@ class BackupServiceTest {
         val full = Phone(full = true)
         val backup = Backups.decode(full.service.exportBackup(), full.stores.shapes)!!
         assertEquals(full.stores.shapes.mapValues { it.value.version }, backup.versions)
-        assertEquals(setOf("calendar.json", "chat.json", "chat-archive.json", "instructions.json", "log.json", "memory.json", "runtime.json", "settings.json", "tasks.json"), backup.versions.filterValues { it > 1 }.keys)
+        assertEquals(setOf("calendar.json", "chat.json", "chat-archive.json", "instructions.json", "log.json", "memory.json", "runtime.json", "session.json", "settings.json", "tasks.json"), backup.versions.filterValues { it > 1 }.keys)
     }
 
     @Test
