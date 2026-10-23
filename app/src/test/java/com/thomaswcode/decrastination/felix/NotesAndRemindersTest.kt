@@ -27,13 +27,17 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withContext
+import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
+import okhttp3.mockwebserver.RecordedRequest
 
 /**
  * Notes and reminders through the Conversation (docs/plan_v4/07-notes-and-reminders.md), on
@@ -399,15 +403,55 @@ class NotesAndRemindersTest {
 
     @Test
     fun `a reminder due is written for at its moment while words are still being written ahead for another`() = runBlocking {
-        // One due now with no words, one in his window ahead: the ahead call held, the due one's goes first.
+        // One due now with no words, one in his window ahead: the ahead call held till the due one's has been sent.
         stores.felix.update { it.copy(reminders = listOf(at("stretch", now), at("call gran", now + 8 * MIN))) }
-        felix.answers(his("call gran soon"), delayMs = 3_000)
-        felix.answers(his("stretch now"))
+        val aheadAsked = CountDownLatch(1)
+        val dueSent = CountDownLatch(1)
+        felix.server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                if ("call gran" !in request.body.readUtf8()) return felix.answer(his("stretch now"))
+                aheadAsked.countDown()
+                dueSent.await(10, TimeUnit.SECONDS)
+                return felix.answer(his("call gran soon"))
+            }
+        }
+        val ahead = async(Dispatchers.Default) { felix.looks.draftReminders(now) }
+        assertTrue(withContext(Dispatchers.IO) { aheadAsked.await(10, TimeUnit.SECONDS) })
+        // Waiting on the ahead call, this would never end before it's let go.
+        withTimeout(5_000) { felix.looks.remindNow(now) }
+        assertEquals("stretch now", stores.chat.value.messages.single { it.kind == MessageKind.Reminder }.text)
+        dueSent.countDown()
+        ahead.await()
+    }
+
+    @Test
+    fun `a reminder whose moment comes while its words are written ahead isn't asked for again, and goes with those`() = runBlocking {
+        stores.felix.update { it.copy(reminders = listOf(at("stretch", now + 2 * MIN))) }
+        felix.answers(his("stretch time"), delayMs = 1_500)
         val ahead = async(Dispatchers.Default) { felix.looks.draftReminders(now) }
         assertNotNull(felix.server.takeRequest(10, TimeUnit.SECONDS))
-        withTimeout(2_000) { felix.looks.remindNow(now) }
-        assertEquals("stretch now", stores.chat.value.messages.single { it.kind == MessageKind.Reminder }.text)
+        // Its moment comes during that call: the sweep leaves it to work, and the work leaves it to that call.
+        felix.clock.time = now + 2 * MIN
+        assertTrue(felix.looks.sweepReminders(felix.clock.time))
+        felix.looks.remindNow(felix.clock.time)
         ahead.await()
+        felix.looks.sweepReminders(felix.clock.time)
+        assertEquals("stretch time", stores.chat.value.messages.single { it.kind == MessageKind.Reminder }.text)
+        assertEquals(1, felix.server.requestCount)
+    }
+
+    @Test
+    fun `each sweep while a reminder waits for its words queues no more work than one run`() = runBlocking {
+        stores.felix.update { it.copy(reminders = listOf(at("stretch", now))) }
+        repeat(3) { assertTrue(felix.looks.sweepReminders(now)) }
+        assertEquals(1, felix.ports.reminders)
+        // Once a run's begun, a sweep finding one still to ask for queues the next.
+        stores.settings.update { it.copy(aiEnabled = false) }
+        felix.looks.remindNow(now)
+        stores.felix.update { it.copy(reminders = it.reminders + at("water the plants", now)) }
+        stores.settings.update { it.copy(aiEnabled = true) }
+        assertTrue(felix.looks.sweepReminders(now))
+        assertEquals(2, felix.ports.reminders)
     }
 
     @Test

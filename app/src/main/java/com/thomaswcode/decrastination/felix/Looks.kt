@@ -52,6 +52,8 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -169,7 +171,7 @@ class Looks(
         val laid = plan ?: focus.plan(now)
         var asking = false
         for ((r, moment) in Reminders.due(felix.value.reminders, laid, tasks, now)) if (!deliver(r, moment, now, tasks, said)) asking = true
-        if (asking && askLater) ports.remindLater()
+        if (asking && askLater && remindQueued.compareAndSet(false, true)) ports.remindLater()
         asking
     }
 
@@ -227,6 +229,12 @@ class Looks(
      */
     private val reminding = Mutex()
 
+    /** The reminders whose words are being written ahead now ([writeReminders]): not asked for again at their moment meanwhile. */
+    private val askingAhead: MutableSet<String> = ConcurrentHashMap.newKeySet()
+
+    /** Whether a run of [remindNow] is queued and not yet begun ([FelixPorts.remindLater]): a sweep doesn't queue another. */
+    private val remindQueued = AtomicBoolean(false)
+
     /**
      * Your reminders whose moment has come and whose words are to be asked for afresh ([sweepReminders] leaves them
      * to this, as work of its own: [ReminderWorker]): his asked for each as of its moment, outside the sweep's lock,
@@ -235,6 +243,8 @@ class Looks(
      * are. One whose call is held or fails, or comes back with none, goes in your words.
      */
     suspend fun remindNow(now: Long = clock.now()) {
+        // Begun: a sweep from now on that finds one still to ask for queues the next run.
+        remindQueued.set(false)
         reminding.withLock {
             val tasks = this.tasks.value.tasks.associateBy { it.id }
             val plan = focus.plan(now)
@@ -249,6 +259,8 @@ class Looks(
                 // moved or snoozed meanwhile, isn't paid for.
                 val current = felix.value.reminders.firstOrNull { it.id == r.id }
                 if (current == null || !Reminders.pending(current) || current.undrafted() != r.undrafted() || clock.now() - moment > Reminders.LATE_MS) continue
+                // Its words being written ahead still, its moment come during that call: those, once kept, go, so it isn't paid for twice.
+                if (r.id in askingAhead) continue
                 val askedAt = clock.now()
                 val answer = caller?.let { (askReminder(it, r, moment, plan, tasks) as? Called.Answered)?.value?.answer }
                 felix.update { s -> s.copy(reminders = s.reminders.map { if (it.id == r.id && it.undrafted() == r.undrafted()) it.copy(draft = answer, draftedAt = askedAt, draftFor = moment) else it }) }
@@ -625,13 +637,21 @@ class Looks(
         if (due.isEmpty() || !gateway.available()) return@withLock
         val caller = gateway.client(ModelEffort.Job.Felix)?.let { FelixCaller(it) } ?: return@withLock
         for ((r, moment) in due) {
-            val called = askReminder(caller, r, moment, plan, tasks) as? Called.Answered ?: continue
-            // Refused, or none that could be read, it's paid for all the same: its moment's kept as asked for, so the next look doesn't ask again.
-            val answer = called.value.answer
-            // Kept only on the reminder as it was asked for: moved, snoozed, sent or cancelled meanwhile, it's another moment's.
-            felix.update { s -> s.copy(reminders = s.reminders.map { if (it.id == r.id && it.undrafted() == r.undrafted()) it.copy(draft = answer, draftedAt = now, draftFor = moment) else it }) }
-            if (answer == null) Log.w(AppGraph.TAG, "Felix's words for a reminder came back with none: yours go")
-            else Log.i(AppGraph.TAG, "Felix wrote ahead for a reminder, due at ${Instant.ofEpochMilli(moment).atZone(clock.zone()).toLocalTime()}")
+            // Its moment come by now (a batch's later one): it's asked for at its moment ([remindNow]), not ahead.
+            if (clock.now() >= moment) continue
+            // While its call's out, it's this one's ([askingAhead]): its moment coming meanwhile, it isn't asked for twice.
+            askingAhead += r.id
+            try {
+                val called = askReminder(caller, r, moment, plan, tasks) as? Called.Answered ?: continue
+                // Refused, or none that could be read, it's paid for all the same: its moment's kept as asked for, so the next look doesn't ask again.
+                val answer = called.value.answer
+                // Kept only on the reminder as it was asked for: moved, snoozed, sent or cancelled meanwhile, it's another moment's.
+                felix.update { s -> s.copy(reminders = s.reminders.map { if (it.id == r.id && it.undrafted() == r.undrafted()) it.copy(draft = answer, draftedAt = now, draftFor = moment) else it }) }
+                if (answer == null) Log.w(AppGraph.TAG, "Felix's words for a reminder came back with none: yours go")
+                else Log.i(AppGraph.TAG, "Felix wrote ahead for a reminder, due at ${Instant.ofEpochMilli(moment).atZone(clock.zone()).toLocalTime()}")
+            } finally {
+                askingAhead -= r.id
+            }
         }
     }
 

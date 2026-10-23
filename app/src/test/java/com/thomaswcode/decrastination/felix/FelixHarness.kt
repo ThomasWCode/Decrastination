@@ -129,6 +129,11 @@ class FelixHarness(
 
     /** Claude's next answer from the stand-in: a message whose text is [text], the JSON a reader parses, sent [delayMs] late. */
     fun answers(text: String, delayMs: Long = 0) {
+        server.enqueue(answer(text).setHeadersDelay(delayMs, TimeUnit.MILLISECONDS))
+    }
+
+    /** Claude's answer whose text is [text], as the stand-in sends it: for a test's own dispatcher. */
+    fun answer(text: String): MockResponse {
         val body = JsonObject(
             mapOf(
                 "id" to JsonPrimitive("msg_test"),
@@ -141,7 +146,7 @@ class FelixHarness(
                 "usage" to JsonObject(mapOf("input_tokens" to JsonPrimitive(1_200), "output_tokens" to JsonPrimitive(80))),
             ),
         )
-        server.enqueue(MockResponse().setHeader("Content-Type", "application/json").setBody(body.toString()).setHeadersDelay(delayMs, TimeUnit.MILLISECONDS))
+        return MockResponse().setHeader("Content-Type", "application/json").setBody(body.toString())
     }
 
     /** The chat's answer [reply], with the tasks and changes it offers (the schema's JSON for them), what it names [answered], the actions it takes ([actions]), and nothing else. */
