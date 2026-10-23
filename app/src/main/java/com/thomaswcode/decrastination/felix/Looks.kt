@@ -239,6 +239,10 @@ class Looks(
             if (due.isEmpty()) return@withLock
             val caller = gateway.client(ModelEffort.Job.Felix)?.takeIf { gateway.available() }?.let { FelixCaller(it) }
             for ((r, moment) in due) {
+                // As it now is: one sent, let go or late since (by the sweep after an earlier one's words), or cancelled,
+                // moved or snoozed meanwhile, isn't paid for.
+                val current = felix.value.reminders.firstOrNull { it.id == r.id }
+                if (current == null || !Reminders.pending(current) || current.undrafted() != r.undrafted() || clock.now() - moment > Reminders.LATE_MS) continue
                 val askedAt = clock.now()
                 val answer = caller?.let { (askReminder(it, r, moment, plan, tasks) as? Called.Answered)?.value?.answer }
                 felix.update { s -> s.copy(reminders = s.reminders.map { if (it.id == r.id && it.undrafted() == r.undrafted()) it.copy(draft = answer, draftedAt = askedAt, draftFor = moment) else it }) }
@@ -638,7 +642,7 @@ class Looks(
 
     /**
      * What the draft written when (its [FelixDraft.at]) was written from of the plan ([FelixRules.laid]): one from before a
-     * start isn't known, so it's written again at its moment rather than sent as it is.
+     * start isn't known, so it's written again (ahead where there's still time, else at its moment) rather than sent as it is.
      */
     private var draftLaid: Pair<Long, String>? = null
 

@@ -385,6 +385,19 @@ class NotesAndRemindersTest {
     }
 
     @Test
+    fun `of reminders asked for together, one cancelled during an earlier one's call isn't paid for`() = runBlocking {
+        stores.felix.update { it.copy(reminders = listOf(at("stretch", now), at("water the plants", now))) }
+        assertTrue(felix.looks.sweepReminders(now))
+        felix.answers(his("stretch now"), delayMs = 1_000)
+        val writing = async(Dispatchers.Default) { felix.looks.remindNow(now) }
+        assertNotNull(felix.server.takeRequest(10, TimeUnit.SECONDS))
+        stores.felix.update { it.copy(reminders = it.reminders.map { r -> if (r.id == "r-water the plants") r.copy(cancelledAt = now).undrafted() else r }) }
+        writing.await()
+        assertEquals(1, felix.server.requestCount)
+        assertEquals(listOf("stretch now"), stores.chat.value.messages.filter { it.kind == MessageKind.Reminder }.map { it.text })
+    }
+
+    @Test
     fun `a reminder cancelled while his words for its moment are asked for isn't sent`() = runBlocking {
         stores.felix.update { it.copy(reminders = listOf(at("stretch", now))) }
         assertTrue(felix.looks.sweepReminders(now))
