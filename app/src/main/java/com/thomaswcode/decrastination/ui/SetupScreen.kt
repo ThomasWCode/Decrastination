@@ -119,6 +119,8 @@ fun SetupScreen(graph: AppGraph, activity: Activity, parts: Set<SetupPart> = Set
                 // The chat's archive read whole for it: off the main thread.
                 withContext(Dispatchers.IO) {
                     val text = graph.backups.exportBackup()
+                    // One Import couldn't read back isn't saved as a backup.
+                    check(!graph.backups.tooBig(text)) { "it's more than Import reads (8 MB), so it couldn't be restored" }
                     val out = requireNotNull(activity.contentResolver.openOutputStream(uri, "wt")) { "no file to write" }
                     out.use { it.write(text.toByteArray()) }
                 }

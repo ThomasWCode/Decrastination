@@ -90,6 +90,12 @@ class BackupService(
     /** [exportBackup], and how many of the chat's earliest messages it leaves out for room: said in Settings → Backup. */
     fun encoded(): Pair<String, Int> = backupOf().let { Backups.fitted(it, backupCap) }
 
+    /**
+     * Whether [text], a backup ([exportBackup]), is more than Import reads even with the chat's earlier messages
+     * left out: one that couldn't be restored, so it isn't kept as a backup.
+     */
+    fun tooBig(text: String): Boolean = text.toByteArray(Charsets.UTF_8).size > backupCap
+
     /** All the app keeps, as a backup holds it, the chat's earlier messages whole. */
     private fun backupOf(every: Boolean = false): Backup =
         Backup(
@@ -125,7 +131,11 @@ class BackupService(
         if (!folder.available) return@withContext false
         val now = clock.now()
         val name = BackupFolder.nightlyName(Instant.ofEpochMilli(now).atZone(clock.zone()).toLocalDate().toString())
-        if (!folder.write(name, exportBackup())) return@withContext false
+        val text = exportBackup()
+        // More than Import reads even without the chat's earlier messages, it couldn't be restored: not written,
+        // and the older ones, which can be, not let go of for it (Settings → Backup says so).
+        if (tooBig(text)) return@withContext false
+        if (!folder.write(name, text)) return@withContext false
         BackupFolder.toPrune(folder.names()).forEach { folder.delete(it) }
         stores.replace(stores.runtime) { it.copy(lastBackupAt = now) }
         true
@@ -154,12 +164,13 @@ class BackupService(
         stores.replace(stores.school) { it.withAll(backup.school) }
         // The chat where this phone's is empty (a reset's copy brings it back, LR-08), with its earlier
         // messages: not a message of yours still waiting for its answer, which would be sent, words
-        // from then, as it opens. Felix's state with it, or where this phone has none of its own. Into a
+        // from then, as it opens; nor any that waited with it, each of which would be sent next, or go
+        // with your next words. Felix's state with it, or where this phone has none of its own. Into a
         // chat that isn't empty, his own messages it hasn't, with your replies to them, by id, as the
         // log's records of them were merged before 4.0.0: none of his is lost. Those read there are read
         // here, as far as that goes without passing one of his unread here, so his notification doesn't
         // bring them back as new.
-        val backedChat = backup.chat.let { c -> c.unanswered?.let { w -> c.copy(messages = c.messages.filterNot { it.id == w.id }) } ?: c }
+        val backedChat = backup.chat.let { c -> c.copy(messages = c.messages.filterNot { it.from == Speaker.You && it.answeredAt == null }) }
         var chatBack = 0
         var hisBack = 0
         stores.replace(stores.chat) { s ->
@@ -268,7 +279,7 @@ class BackupService(
             val fitted = Backups.fitted(whole, backupCap)
             val refused = when {
                 // Over the cap even without the chat's earlier messages, it couldn't be read back: nothing's reset.
-                fitted.first.toByteArray(Charsets.UTF_8).size > backupCap -> "Nothing was reset: a copy of it would be too big to restore."
+                tooBig(fitted.first) -> "Nothing was reset: a copy of it would be too big to restore."
                 // Nor where Import would refuse it (a part it can't read, something the app never writes): checked as Import checks.
                 else -> Backups.decode(fitted.first, stores.shapes).let { decoded -> if (decoded == null) "it couldn't be read back" else Backups.problem(decoded) }
                     ?.let { "Nothing was reset: a copy of it couldn't be restored ($it)." }
