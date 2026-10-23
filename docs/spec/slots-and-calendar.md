@@ -19,7 +19,7 @@ A piece goes at the first free time it fits whole, where it may be done:
 - not before its task opens (a deck's next cards at 04:00), on five minutes;
 - a step not yet begun after its task's steps before it that day (D-108): no earlier than the end of the last of them, and not at all while one of them has no time, a gap only it would fit going to other work. A pinned step is where you put it, and one under way stays where it is. A step in one piece that doesn't need the steps before it (D-109) may take a gap ahead of them, a step after it still following it; one in sittings follows them, as a sitting kept is counted on the task's steps in their order (planner.md).
 
-Breaks are kept around each piece within its window: `slotBreakMin` (5) before and after it, or after it `slotLongBreakMin` (15) once `slotLongBreakAfterMin` (90) of work has run without a long one. Past a window's edges there's nothing to keep apart.
+Breaks are kept around each piece within its window: `slotBreakMin` (5) before and after it, or after it `slotLongBreakMin` (15) once `slotLongBreakAfterMin` (90) of work has run without a long one. Past a window's edges there's nothing to keep apart. The runs are the day's as they end up laid: a piece laid before work already laid in its window (a kept start, a pin) gives the run that work ends its long break after its last piece, and isn't laid where that break couldn't come, another piece already in its place (4.3.18).
 
 What's laid, in turn:
 1. Outside breaks, on a weekend or a day off school.

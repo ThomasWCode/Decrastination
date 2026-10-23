@@ -146,6 +146,28 @@ object Slotter {
             val window = windows.firstOrNull { at(date, it.startMin, zone) <= start && end <= at(date, it.endMin, zone) } ?: return null
             return Interval(start, end, window)
         }
+        // The run [slot] is in among the work laid in [window]: it, and the work either side of it there with no long
+        // break between, by their start.
+        fun runOf(slot: Slot, window: DayWindow): List<Slot> {
+            val slots = (work.filter { it.second == window }.map { it.first } + slot).distinct().sortedBy { it.start }
+            val i = slots.indexOf(slot)
+            var from = i
+            while (from > 0 && slots[from].start - slots[from - 1].end < settings.slotLongBreakMin * MINUTE) from--
+            var to = i
+            while (to < slots.lastIndex && slots[to + 1].start - slots[to].end < settings.slotLongBreakMin * MINUTE) to++
+            return slots.subList(from, to + 1)
+        }
+        // Whether laid at [start] in [interval]'s window, [chunk] would leave work going on past `slotLongBreakAfterMin`
+        // with no long break (D-40): a run's long break is laid after its last piece, so laid before work there already
+        // (a kept start, a pin), no piece of its run but the last may reach it.
+        fun overruns(chunk: Chunk, start: Long, interval: Interval): Boolean {
+            var minutes = 0
+            for (laid in runOf(Slot(SlotKind.Work, chunk, start, start + chunk.minutes * MINUTE, interval.window.kind, pinned = false), interval.window).dropLast(1)) {
+                minutes += ((laid.end - laid.start) / MINUTE).toInt()
+                if (minutes >= settings.slotLongBreakAfterMin) return true
+            }
+            return false
+        }
         fun place(chunk: Chunk, start: Long, interval: Interval, pinned: Boolean) {
             val end = start + chunk.minutes * MINUTE
             // Its run: it, and the work before it in its window with no long break between.
@@ -158,10 +180,18 @@ object Slotter {
                 from = before.start
             }
             val rest = if (run >= settings.slotLongBreakAfterMin) settings.slotLongBreakMin else settings.slotBreakMin
-            work += Slot(SlotKind.Work, chunk, start, end, interval.window.kind, pinned) to interval.window
+            val laid = Slot(SlotKind.Work, chunk, start, end, interval.window.kind, pinned)
+            work += laid to interval.window
             // Its breaks, within its window (over a busy time too short to be one): past the window's
             // edges there's nothing to keep apart.
             carve(free, maxOf(start - settings.slotBreakMin * MINUTE, at(date, interval.window.startMin, zone)), minOf(end + rest * MINUTE, at(date, interval.window.endMin, zone)))
+            // Laid before work there already (a kept start, a pin): the run that work ends may now need its long break
+            // after its last piece, carved there too.
+            val around = runOf(laid, interval.window)
+            val last = around.last()
+            if (last != laid && around.sumOf { ((it.end - it.start) / MINUTE).toInt() } >= settings.slotLongBreakAfterMin) {
+                carve(free, last.end, minOf(last.end + settings.slotLongBreakMin * MINUTE, at(date, interval.window.endMin, zone)))
+            }
             left.remove(chunk)
         }
         // The earliest a step can start (D-108): the end of the last of its task's steps before it today,
@@ -206,15 +236,15 @@ object Slotter {
             val start = previous[chunk.key]?.takeIf { it in day } ?: continue
             val interval = holding(chunk, start) ?: continue
             if (start > now && (chunk.taskId in shuffled || start < (follows(chunk) ?: continue))) continue
-            if (allowed(chunk, interval) && beforeDeadline(chunk, start) && start >= opens(chunk)) place(chunk, start, interval, pinned = false)
+            if (allowed(chunk, interval) && beforeDeadline(chunk, start) && start >= opens(chunk) && (start <= now || !overruns(chunk, start, interval))) place(chunk, start, interval, pinned = false)
         }
         // The rest, in order, at the first free time each fits whole: a step after the steps before it, at
         // its start from the last plan where that's still free and follows them (one before it moved, say).
         for (chunk in left.toList()) {
             val after = follows(chunk) ?: continue
             val kept = previous[chunk.key]?.takeIf { chunk.stepIndex != null && chunk.taskId !in shuffled && it in day && it >= after }
-                ?.let { start -> holding(chunk, start)?.takeIf { allowed(chunk, it) && beforeDeadline(chunk, start) && start >= opens(chunk) }?.let { it to start } }
-            val (interval, start) = kept ?: free.firstNotNullOfOrNull { iv -> startIn(chunk, iv, after)?.let { iv to it } } ?: continue
+                ?.let { start -> holding(chunk, start)?.takeIf { allowed(chunk, it) && beforeDeadline(chunk, start) && start >= opens(chunk) && (start <= now || !overruns(chunk, start, it)) }?.let { it to start } }
+            val (interval, start) = kept ?: free.firstNotNullOfOrNull { iv -> startIn(chunk, iv, after)?.takeIf { !overruns(chunk, it, iv) }?.let { iv to it } } ?: continue
             place(chunk, start, interval, pinned = false)
         }
         return (work.map { it.first } + breaks).sortedBy { it.start } to ordered.filter { it in left }

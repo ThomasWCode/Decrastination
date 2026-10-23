@@ -51,6 +51,24 @@ class SlotterTest {
     }
 
     @Test
+    fun `work laid before a kept slot gives it a long break after it where the run it ends now needs one`() {
+        val kept = chunk("kept", 60)
+        val (slots, _) = slot(tuesday, listOf(kept, chunk("first", 50), chunk("last", 25)), listOf(w("09:00", "12:00", WindowKind.Study)), now = "2026-10-13T07:00", previous = mapOf(kept.key to Fixtures.at("2026-10-13T10:00")))
+        // An hour and fifty minutes of work by eleven: a quarter of an hour's break before the next.
+        assertEquals(listOf("first 09:00–09:50", "kept 10:00–11:00", "last 11:15–11:40"), slots.described())
+    }
+
+    @Test
+    fun `work isn't laid before kept slots where their run would go past an hour and a half with no long break`() {
+        val kept = chunk("kept", 60)
+        val next = chunk("next", 25)
+        val previous = mapOf(kept.key to Fixtures.at("2026-10-13T10:00"), next.key to Fixtures.at("2026-10-13T11:05"))
+        val (slots, _) = slot(tuesday, listOf(kept, next, chunk("first", 50)), listOf(w("09:00", "13:00", WindowKind.Study)), now = "2026-10-13T07:00", previous = previous)
+        // Before them, the kept slot's long break would have to come where the next already is: after them instead.
+        assertEquals(listOf("kept 10:00–11:00", "next 11:05–11:30", "first 11:35–12:25"), slots.described())
+    }
+
+    @Test
     fun `work for home skips a study period, work done anywhere takes it`() {
         val windows = listOf(w("14:35", "15:30", WindowKind.Study), w("16:45", "22:00"))
         val (slots, _) = slot(tuesday, listOf(chunk("essay", where = Where.Home), chunk("reading")), windows)
