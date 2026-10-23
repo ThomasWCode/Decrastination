@@ -41,6 +41,7 @@ import com.thomaswcode.decrastination.learn.EventJudge
 import com.thomaswcode.decrastination.plan.Planning
 import java.time.Instant
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.StateFlow
@@ -99,11 +100,18 @@ class Instructions(
     private val readingInstructions = Mutex()
 
     /**
-     * Writes down a new instruction about [about] and has Claude read it: applied once it's read
-     * (D-67), and taken back under Your changes.
+     * His question as he put it that a reply of yours, by its instruction's id, answers ([addInstruction]): given its
+     * first read, which begins as the reply's kept and may come before the chat has it. Let go once read.
      */
-    suspend fun addInstruction(text: String, about: About, answer: Boolean = false): String {
+    private val answering = ConcurrentHashMap<String, String>()
+
+    /**
+     * Writes down a new instruction about [about] and has Claude read it: applied once it's read
+     * (D-67), and taken back under Your changes. Your [answer] to his [question], it's read shown that.
+     */
+    suspend fun addInstruction(text: String, about: About, answer: Boolean = false, question: String? = null): String {
         val id = UUID.randomUUID().toString()
+        if (answer && question != null) answering[id] = question
         instructions.update { it.copy(instructions = it.instructions + Instruction(id, text.trim().take(InstructionPrompts.MAX_TEXT), about, clock.now(), answer = answer)) }
         scope.launch { readInstructions(interactive = true) }
         return id
@@ -196,7 +204,7 @@ class Instructions(
             val waiting = run call@{
                 val reader = gateway.client(ModelEffort.Job.Instruction)?.let { InstructionReader(it, clock.zone(), profile = profile()) } ?: return@call gateway.because(ModelHold.Off)
                 // Through a rest only for you waiting on it (AC-04): after a sync or an enrichment it waits.
-                val result = when (val called = gateway.call(interactive = interactive, record = ModelCalls.OnRecord(ModelEffort.Job.Instruction, next.text) { r: InstructionReader.Result -> r.usage to ModelCalls.outcome(r.refused, r.reading == null) }, cost = { r: InstructionReader.Result -> r.costUsd to r.refused }) { at -> reader.read(next, tasks.value.tasks, calendarTime().events, at, question = if (next.answer) question(next) else null) }) {
+                val result = when (val called = gateway.call(interactive = interactive, record = ModelCalls.OnRecord(ModelEffort.Job.Instruction, next.text) { r: InstructionReader.Result -> r.usage to ModelCalls.outcome(r.refused, r.reading == null) }, cost = { r: InstructionReader.Result -> r.costUsd to r.refused }) { at -> reader.read(next, tasks.value.tasks, calendarTime().events, at, question = if (next.answer) answering[next.id] ?: question(next) else null) }) {
                     is Called.Held -> return@call gateway.because(called.hold)
                     is Called.Failed -> {
                         Log.w(AppGraph.TAG, "Reading an instruction failed", called.error)
@@ -229,6 +237,7 @@ class Instructions(
                             },
                         )
                     }
+                    answering.remove(next.id)
                     // Made as soon as it's read (D-67: nothing of his waits for Apply), as the
                     // chat's are; one that can't be is marked unclear, saying why. Taken back under Your changes.
                     val made = taken && reading is InstructionAnswers.Reading.Changes && applyInstruction(next.id)
