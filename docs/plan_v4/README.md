@@ -108,7 +108,7 @@ Every PR is a release ([development.md](../development.md)): cleanup-only releas
 | — | Found in 4.3.5's review: a task Felix proposed, opened in its form before it was added, lost its steps' own dates there (your call, 22 Oct) | 4.3.7, done (#111) | fix | 4.3.6 | ¼ |
 | — | Felix may rebalance the reading's steps too (a Teams assignment's, an email's), every step of the task written at its minutes as planned, so it takes what it was laid at; yours never (your call, 22 Oct) | 4.3.8 (#112) | feature | 4.3.7 | ¼ |
 | — | From 10b's read after, of a day of his messages: more like a teenager, never like a teacher or a coach, a quick greeting now and then, and his nudges leaving out how to do the work, a due date kept (your call, 22 Oct) | 4.3.9 (#113) | fix | 4.3.8 | ¼ |
-| — | Found at 4.3.6's check: a rebalance let go of all its task's kept starts, so the times his message named for its later steps moved; now only the changed steps' (your call, 23 Oct) | 4.3.10 | fix | 4.3.9 | ¼ |
+| — | Found at 4.3.6's check: a rebalance let go of all its task's kept starts, so the times his message named for its later steps moved; now only the changed steps' (your call, 23 Oct) | 4.3.10 (#114) | fix | 4.3.9 | ¼ |
 
 About twenty-eight days in 41 PRs (40 releases), 3.3.4 to 3.3.6, 4.0.3, 4.0.4, 4.0.10, 4.1.2, 4.1.3, 4.2.1, 4.3.1 and 4.3.3 to 4.3.10 among them, evenings and weekends. After it, the conversation digest as 4.4.0 ([13](13-summaries.md)). You've said you won't use the app until the whole of it is in (Q21): each release is still built and checked on the phone, but nothing between releases has to serve a day's use.
 
