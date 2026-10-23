@@ -19,7 +19,7 @@ object Replies {
         /** A check-in's question's answer: kept, and the next asked, with no call. */
         data object CheckIn : Route
 
-        /** A reading's question's answer: an instruction on its task, the task read again, with no call. */
+        /** A reading's question's answer: an instruction on its task, read by Claude to judge whether it answers it, kept with the task, read again, where it does. */
         data object Question : Route
 
         /** One of how work went's three answers, as it's kept ([answer]): on each completion asked about, with no call. */
@@ -52,7 +52,7 @@ object Replies {
 
     /**
      * The ids of his [messages] waiting for your answer, shown so under their time (D-99), none answered
-     * (with no call, or marked so) nor replied to by a message of yours: his questions still waiting
+     * (as answers are, or marked so) nor replied to by a message of yours: his questions still waiting
      * ([waiting]), a calendar event's only till its event begins; and his nudges with replies of their own
      * (his answers in the chat aren't asks of his), each till a newer message of his is about the same
      * task (or, about none, of the same kind) or its day is over at [now] in [zone]: by then it's had its moment.
@@ -84,8 +84,8 @@ object Replies {
     /**
      * The message of his the box and his chips answer (D-98): his newest still waiting for your answer
      * ([awaitingIds]) since your last turn of the chat, a question or a nudge, so a nudge newer than his
-     * question takes them, its replies yours to tap and your words its reply. An answer to one taken with
-     * no call isn't a turn, so with several asked together (how work went, a calendar's questions), the
+     * question takes them, its replies yours to tap and your words its reply. An answer to one isn't a
+     * turn of the chat, so with several asked together (how work went, a calendar's questions), the
      * one before it is next: they're answered one by one. Once you've talked to him, one from before that
      * doesn't take your words: it waits, shown so, for its line or a swipe.
      */
@@ -97,8 +97,8 @@ object Replies {
 
     /**
      * Where [words], your reply to [message], go: a question of his still waiting ([waiting]) takes its
-     * answer with no call (a check-in's, any words; a reading's, any words; how work went or a calendar
-     * event's, one of its three, whatever their case); a reminder of yours not yet answered, *Done* or a
+     * answer (a check-in's, any words; a reading's, any words, read by Claude as an instruction; how work went
+     * or a calendar event's, one of its three, whatever their case), with no call but a reading's; a reminder of yours not yet answered, *Done* or a
      * snooze; anything else, and any other words, is a turn of the chat, the message it answers told
      * to him.
      */
