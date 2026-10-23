@@ -137,11 +137,11 @@ class FelixRulesTest {
         assertEquals(first.start + grace, due)
         val draft = FelixDraft(Reason.SlotStart.name, first.chunk!!.key, FelixAnswer("Ten minutes in: starting?"), at("17:02"))
         val now = first.start + grace
-        assertEquals(true, FelixRules.fits(draft, trigger, now, lastSentAt = at("16:00")))
-        // Another piece's, too old, or with a message of his since: written again.
+        assertEquals(true, FelixRules.fits(draft, trigger, now, lastSaidAt = at("16:00")))
+        // Another piece's, too old, or with something said since, his or yours: written again.
         assertEquals(false, FelixRules.fits(draft.copy(key = "teams:b#-1#1"), trigger, now, null))
         assertEquals(false, FelixRules.fits(draft.copy(at = now - FelixRules.DRAFT_FRESH_MS - 1), trigger, now, null))
-        assertEquals(false, FelixRules.fits(draft, trigger, now, lastSentAt = at("17:05")))
+        assertEquals(false, FelixRules.fits(draft, trigger, now, lastSaidAt = at("17:05")))
     }
 
     @Test
