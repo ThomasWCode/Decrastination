@@ -111,8 +111,9 @@ Every PR is a release ([development.md](../development.md)): cleanup-only releas
 | — | Found at 4.3.6's check: a rebalance let go of all its task's kept starts, so the times his message named for its later steps moved; now only the changed steps' (your call, 23 Oct) | 4.3.10, done (#114) | fix | 4.3.9 | ¼ |
 | — | Found at 4.3.9's check and in a side agent's note: no greeting in a day of his messages, so the app says when (his first after three hours with nothing said); the morning's briefing asked again for a step ticked the night before, so he's told what's done of today's tasks and of those his messages were about (your calls, 23 Oct) | 4.3.11 (#115) | fix | 4.3.10 | ¼ |
 | — | Found at 4.3.9's check: a question of yours, replied to one of his, was kept as his question's answer; now the reply is read shown his question, kept only as an answer, and one that isn't is answered in the chat (your call, 23 Oct) | 4.3.12 (#116) | fix | 4.3.11 | ¼ |
+| — | Found at 4.3.9's check: a task's sheet named as its next step the one its reading suggested, though that step was ticked; now its first step still to do (your call, 23 Oct) | 4.3.13 (#117) | fix | 4.3.12 | ¼ |
 
-About twenty-nine days in 43 PRs (42 releases), 3.3.4 to 3.3.6, 4.0.3, 4.0.4, 4.0.10, 4.1.2, 4.1.3, 4.2.1, 4.3.1 and 4.3.3 to 4.3.12 among them, evenings and weekends. After it, the conversation digest as 4.4.0 ([13](13-summaries.md)). You've said you won't use the app until the whole of it is in (Q21): each release is still built and checked on the phone, but nothing between releases has to serve a day's use.
+About twenty-nine days in 44 PRs (43 releases), 3.3.4 to 3.3.6, 4.0.3, 4.0.4, 4.0.10, 4.1.2, 4.1.3, 4.2.1, 4.3.1 and 4.3.3 to 4.3.13 among them, evenings and weekends. After it, the conversation digest as 4.4.0 ([13](13-summaries.md)). You've said you won't use the app until the whole of it is in (Q21): each release is still built and checked on the phone, but nothing between releases has to serve a day's use.
 
 ## What changes substantially
 
