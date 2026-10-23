@@ -316,6 +316,20 @@ class NotesAndRemindersTest {
     }
 
     @Test
+    fun `a reminder's words written ahead don't go once something's been said since, and yours go instead (D-57)`() = runBlocking {
+        stores.felix.update { it.copy(reminders = listOf(at("call gran", now + 8 * MIN))) }
+        felix.answers(his("hey, call gran now"))
+        felix.looks.draftReminders(now)
+        assertEquals("hey, call gran now", stores.felix.value.reminders.single().draft?.message)
+        // You write in the chat before its time: his words, written before, would talk past it.
+        stores.chat.update { it.copy(messages = it.messages + ChatMessage("y1", Speaker.You, "what's on tonight?", now + 2 * MIN, answeredAt = now + 2 * MIN)) }
+        felix.clock.time = now + 8 * MIN
+        felix.looks.sweepReminders(felix.clock.time)
+        assertEquals(FelixWords.reminder("call gran"), stores.chat.value.messages.single { it.kind == MessageKind.Reminder }.text)
+        assertEquals(1, felix.server.requestCount)
+    }
+
+    @Test
     fun `a reminder's words that came back with none aren't paid for again for its moment, and yours go`() = runBlocking {
         stores.felix.update { it.copy(reminders = listOf(at("call gran", now + 8 * MIN))) }
         felix.answers("not an answer")
