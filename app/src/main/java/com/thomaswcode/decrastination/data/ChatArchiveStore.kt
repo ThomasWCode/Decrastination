@@ -142,6 +142,21 @@ class ChatArchiveStore(private val dir: File, private val clock: () -> Long = Sy
         }
     }
 
+    /** Message [id] waiting for its answer again, where it's there and marked answered ([answered]'s undoing): found as it is. */
+    suspend fun unanswered(id: String): Unit = writing.withLock {
+        withContext(Dispatchers.IO) {
+            for (file in files().asReversed()) {
+                val store = month(file)
+                if (store.value.messages.none { it.id == id }) continue
+                if (store.value.messages.any { it.id == id && it.answeredAt != null }) {
+                    store.update { a -> a.copy(messages = a.messages.map { if (it.id == id) it.copy(answeredAt = null) else it }) }
+                    _changes.update { it + 1 }
+                }
+                break
+            }
+        }
+    }
+
     /**
      * All of it let go (*Clear the chat*, a reset): every month's file deleted, none read, and the copies kept of
      * it with them ([isCopy]: its months' older shapes, and its files that couldn't be read), so what's cleared

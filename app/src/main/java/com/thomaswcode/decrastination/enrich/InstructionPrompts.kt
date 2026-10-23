@@ -67,6 +67,8 @@ object InstructionPrompts {
         When the instruction is about the given task, event or day, the change is to it unless the instruction clearly names another.
 
         If the instruction can't be turned into these changes, or it's unclear which task, event or date it means, set understood to false, give no changes, and in question say in one short sentence what's unclear or what the app can't do. Otherwise understood is true and question is null.
+
+        Some instructions are the student's reply to a question the app asked them about the task, given with it. Set answersQuestion to whether the reply answers that question, even in part; false where it's about something else (a question of their own, a remark, another task), which is then answered in the chat instead. For any other instruction, answersQuestion is true. A reply that answers it tells you about the work: give changes only for what it asks for (a day, a time, a total), none for what it only says of the work (what it is, its parts, how it's handed in), which is kept with the task and read with it again.
     """
         ).trimIndent()
 
@@ -114,6 +116,7 @@ object InstructionPrompts {
         "understood" to mapOf("type" to "boolean"),
         "question" to nullable(STRING),
         "changes" to mapOf("type" to "array", "items" to CHANGE),
+        "answersQuestion" to mapOf("type" to "boolean"),
     )
 
     private val TODAY = DateTimeFormatter.ofPattern("EEEE d MMMM yyyy, HH:mm", Locale.UK)
@@ -122,9 +125,9 @@ object InstructionPrompts {
 
     /**
      * The instruction as Claude reads it: today, what it's about, and the open tasks and the
-     * fortnight's events to choose from.
+     * fortnight's events to choose from; for your reply to Felix's question, the [question] it replies to.
      */
-    fun describe(instruction: Instruction, tasks: List<TaskItem>, events: List<CalendarEvent>, now: Long, zone: ZoneId): String = buildString {
+    fun describe(instruction: Instruction, tasks: List<TaskItem>, events: List<CalendarEvent>, now: Long, zone: ZoneId, question: String? = null): String = buildString {
         fun at(time: Long) = Instant.ofEpochMilli(time).atZone(zone).format(WHEN)
         // The deadline in force (PL-14), as the chat and the Tasks list have it: a plan's gone by, the real one behind it.
         fun due(t: TaskItem) = (t.deadlineAt(now) ?: t.dueAt)?.let { at(it) + if (t.hardAt(now)) "" else " (a plan)" } ?: "no date"
@@ -151,6 +154,9 @@ object InstructionPrompts {
             about.day != null -> appendLine("About the day: " + (runCatching { LocalDate.parse(about.day).format(DAY) }.getOrNull() ?: about.day))
             else -> appendLine("About: nothing in particular")
         }
+        // Your reply to his question (AI-10), as he put it, else as its reading asked it, whatever has changed of
+        // the task since: whether the reply answers it is Claude's to say.
+        if (instruction.answer) appendLine("It's their reply to the question asked about it" + ((question ?: task?.enrichment?.question)?.trim()?.takeIf { it.isNotEmpty() }?.let { ": \"${it.take(MAX_TEXT)}\"" } ?: ""))
         appendLine()
         appendLine("Open tasks (id | title | from | due):")
         tasks.filter { it.isOpen }.sortedBy { it.deadlineAt(now) ?: it.dueAt ?: Long.MAX_VALUE }.take(MAX_TASKS).forEach { t ->

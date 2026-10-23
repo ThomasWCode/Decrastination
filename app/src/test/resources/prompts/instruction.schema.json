@@ -150,12 +150,16 @@
                 ],
                 "additionalProperties": false
             }
+        },
+        "answersQuestion": {
+            "type": "boolean"
         }
     },
     "required": [
         "understood",
         "question",
-        "changes"
+        "changes",
+        "answersQuestion"
     ],
     "additionalProperties": false
 }

@@ -12,6 +12,7 @@ import com.thomaswcode.decrastination.core.Fact
 import com.thomaswcode.decrastination.core.InstructionStatus
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Given
+import com.thomaswcode.decrastination.core.Instruction
 import com.thomaswcode.decrastination.core.Memories
 import com.thomaswcode.decrastination.core.MemoryState
 import com.thomaswcode.decrastination.core.MessageKind
@@ -537,6 +538,80 @@ class ConversationTest {
         val sent = felix.server.takeRequest().body.readUtf8()
         assertTrue("What's due tomorrow?" in sent && "on it" in sent)
         assertEquals(1, felix.server.requestCount)
+    }
+
+    @Test
+    fun `a reply to his question is kept with its task once it's read as its answer, and one that isn't is answered in the chat`() = runBlocking {
+        stores.tasks.update { it.copy(tasks = listOf(sheet)) }
+        felix.outbox.send(ChatMessage("q1", Speaker.Felix, "is it questions 1 to 6 or all of it?", now, About(taskId = sheet.id, taskTitle = sheet.title), kind = MessageKind.Question))
+        fun answers() = stores.tasks.value.tasks.single().answers
+        assertEquals(Conversation.Asked.Answer, conversation.send("is the plan ticked in teams?", replyTo = "q1"))
+        // To be read as an instruction on its task, shown his question: not yet its answer, nor read again.
+        val asking = stores.instructions.value.instructions.single()
+        assertTrue(asking.answer)
+        assertEquals(emptyList(), answers())
+        assertEquals(0, felix.ports.readAgain)
+        // Its reading is shown his question in his words, from the message you replied to.
+        assertEquals("is it questions 1 to 6 or all of it?", felix.looks.questionFor(asking))
+        // Read as no answer, changing nothing: a turn of the chat, answered there, no longer his question's reply, and his question waits again.
+        felix.looks.answerRead(asking, answers = false, changed = false)
+        assertEquals("is the plan ticked in teams?", stores.chat.value.unanswered?.text)
+        assertEquals(MessageKind.Chat, stores.chat.value.unanswered?.kind)
+        assertNull(stores.chat.value.unanswered?.replyTo)
+        assertNull(stores.chat.value.messages.single { it.id == "q1" }.answeredAt)
+        assertTrue("q1" in Replies.awaitingIds(stores.chat.value.messages, checkInUnderWay = false, now, Fixtures.LONDON))
+        assertEquals(1, felix.ports.later)
+        assertEquals(emptyList(), answers())
+        // Your turn answered in the chat, and his question answered after all: read as its answer, kept with its task, which is read again.
+        stores.chat.update { s -> s.copy(messages = s.messages.map { if (it.from == Speaker.You) it.copy(answeredAt = it.answeredAt ?: now) else it }) }
+        assertEquals(Conversation.Asked.Answer, conversation.send("all of it", replyTo = "q1"))
+        val answer = stores.instructions.value.instructions.last()
+        felix.looks.answerRead(answer, answers = true, changed = false)
+        assertEquals(listOf("all of it"), answers())
+        assertEquals(1, felix.ports.readAgain)
+        // The same answer read again (one kept by an older build as you replied): kept once.
+        felix.looks.answerRead(answer, answers = true, changed = false)
+        assertEquals(listOf("all of it"), answers())
+        // To another question, an instruction that isn't its answer, made as one: not kept with the task, nor taken on in the chat.
+        felix.outbox.send(ChatMessage("q2", Speaker.Felix, "is it handed in on teams?", now, About(taskId = sheet.id, taskTitle = sheet.title), kind = MessageKind.Question))
+        assertEquals(Conversation.Asked.Answer, conversation.send("move it to friday", replyTo = "q2"))
+        felix.looks.answerRead(stores.instructions.value.instructions.last(), answers = false, changed = true)
+        assertEquals(listOf("all of it"), answers())
+        assertEquals(1, felix.ports.later)
+    }
+
+    @Test
+    fun `a reply to his question in the archive is read shown it and, no answer, has it wait there again, and a long answer is kept whole`() = runBlocking {
+        stores.tasks.update { it.copy(tasks = listOf(sheet)) }
+        val old = ChatMessage("q0", Speaker.Felix, "is it handed in on teams?", now - 70 * 86_400_000L, About(taskId = sheet.id, taskTitle = sheet.title), kind = MessageKind.Question)
+        stores.chatArchive.update { it.copy(messages = listOf(old)) }
+        assertEquals(Conversation.Asked.Answer, conversation.send("what's due friday?", replyTo = "q0"))
+        val asking = stores.instructions.value.instructions.single()
+        assertEquals("is it handed in on teams?", felix.looks.questionFor(asking))
+        assertNotNull(stores.chatArchive.value.messages.single().answeredAt)
+        felix.looks.answerRead(asking, answers = false, changed = false)
+        assertNull(stores.chatArchive.value.messages.single().answeredAt)
+        // A long answer is kept whole, as the chat kept it, not cut short as its instruction is: cut at a space, its
+        // instruction ends in one, and it's still the reply found.
+        felix.outbox.send(ChatMessage("q1", Speaker.Felix, "what's in it?", now, About(taskId = sheet.id, taskTitle = sheet.title), kind = MessageKind.Question))
+        val long = "all of it: " + "x".repeat(988) + " and the extension questions too, " + "the extension ".repeat(30)
+        assertEquals(Conversation.Asked.Answer, conversation.send(long, replyTo = "q1"))
+        val kept = stores.instructions.value.instructions.last()
+        assertTrue(kept.text.length < long.trim().length)
+        felix.looks.answerRead(kept, answers = true, changed = false)
+        assertEquals(listOf(long.trim()), stores.tasks.value.tasks.single().answers)
+    }
+
+    @Test
+    fun `a reply read before it's kept is shown his newest question about its task, and an older reply isn't taken for it`() = runBlocking {
+        stores.tasks.update { it.copy(tasks = listOf(sheet)) }
+        // An earlier question of his, answered; then his newest.
+        felix.outbox.send(ChatMessage("q1", Speaker.Felix, "is it questions 1 to 6 or all of it?", now - 3_600_000L, About(taskId = sheet.id, taskTitle = sheet.title), kind = MessageKind.Question))
+        assertEquals(Conversation.Asked.Answer, conversation.send("all of it", replyTo = "q1"))
+        felix.outbox.send(ChatMessage("q2", Speaker.Felix, "is it handed in on teams?", now, About(taskId = sheet.id, taskTitle = sheet.title), kind = MessageKind.Question))
+        // Your reply's instruction read before the reply itself is kept: his newest question, not the one "all of it" answered.
+        val early = Instruction("early", "yes, on teams", About(taskId = sheet.id, taskTitle = sheet.title), now, answer = true)
+        assertEquals("is it handed in on teams?", felix.looks.questionFor(early))
     }
 
     @Test

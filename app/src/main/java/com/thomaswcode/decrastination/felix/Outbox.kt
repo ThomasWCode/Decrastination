@@ -86,6 +86,12 @@ class Outbox(
         archive.answered(id, at)
     }
 
+    /** Message [id] in the archive waiting for its answer again (a reply under it that wasn't one); one in the live window is the chat's. */
+    suspend fun waitingInArchive(id: String) {
+        if (chat.value.messages.any { it.id == id }) return
+        archive.unanswered(id)
+    }
+
     /** Message [id], from the live window or, past it, the archive (a reply to one scrolled back to). */
     fun find(id: String): ChatMessage? = chat.value.messages.firstOrNull { it.id == id } ?: archive.find(id)
 
