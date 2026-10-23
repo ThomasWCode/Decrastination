@@ -27,8 +27,12 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
+import okhttp3.mockwebserver.MockResponse
 
 /**
  * Notes and reminders through the Conversation (docs/plan_v4/07-notes-and-reminders.md), on
@@ -330,7 +334,12 @@ class NotesAndRemindersTest {
         stores.chat.update { it.copy(messages = it.messages + ChatMessage("y1", Speaker.You, "what's on tonight?", now + 2 * MIN, answeredAt = now + 2 * MIN)) }
         felix.answers(his("call gran now, you're free till the next slot"))
         felix.clock.time = now + 8 * MIN
-        felix.looks.sweepReminders(felix.clock.time)
+        // The sweep makes no call: it leaves it to work of its own, which asks and then sends it.
+        assertTrue(felix.looks.sweepReminders(felix.clock.time))
+        assertEquals(1, felix.ports.reminders)
+        assertTrue(stores.chat.value.messages.none { it.kind == MessageKind.Reminder })
+        assertEquals(2, felix.server.requestCount)
+        felix.looks.remindNow(felix.clock.time)
         assertEquals("call gran now, you're free till the next slot", stores.chat.value.messages.single { it.kind == MessageKind.Reminder }.text)
         assertEquals(3, felix.server.requestCount)
         // Claude off by the second's moment: yours go.
@@ -352,9 +361,51 @@ class NotesAndRemindersTest {
         assertTrue(asked.draft == null && asked.draftFor == now + 8 * MIN, asked.toString())
         felix.answers("not an answer")
         felix.clock.time = now + 8 * MIN
-        felix.looks.sweepReminders(felix.clock.time)
+        assertTrue(felix.looks.sweepReminders(felix.clock.time))
+        felix.looks.remindNow(felix.clock.time)
         assertEquals(2, felix.server.requestCount)
         assertEquals(FelixWords.reminder("call gran"), stores.chat.value.messages.single { it.kind == MessageKind.Reminder }.text)
+    }
+
+    @Test
+    fun `a reminder cancelled while his words for its moment are asked for isn't sent`() = runBlocking {
+        stores.felix.update { it.copy(reminders = listOf(at("stretch", now))) }
+        assertTrue(felix.looks.sweepReminders(now))
+        felix.answers(his("time to stretch"), delayMs = 1_000)
+        val writing = async(Dispatchers.Default) { felix.looks.remindNow(now) }
+        assertNotNull(felix.server.takeRequest(10, TimeUnit.SECONDS))
+        stores.felix.update { it.copy(reminders = it.reminders.map { r -> r.copy(cancelledAt = now).undrafted() }) }
+        writing.await()
+        // Cancelled as he wrote: his words aren't kept on it, and it isn't sent.
+        assertTrue(stores.chat.value.messages.none { it.kind == MessageKind.Reminder })
+        assertNull(stores.felix.value.reminders.single().sentAt)
+        assertNull(stores.felix.value.reminders.single().draft)
+    }
+
+    @Test
+    fun `a reminder whose task finishes while his words for its moment are asked for is let go, not sent`() = runBlocking {
+        val task = sheet.copy(dueAt = now + 60 * MIN)
+        stores.tasks.update { it.copy(tasks = listOf(task)) }
+        stores.felix.update { it.copy(reminders = listOf(Reminder("r-sheet", "finish the worksheet", now - MIN, By.Felix, task.id, Due(DueKind.BeforeDue, minutesBefore = 60)))) }
+        assertTrue(felix.looks.sweepReminders(now))
+        felix.answers(his("worksheet's due in an hour"), delayMs = 1_000)
+        val writing = async(Dispatchers.Default) { felix.looks.remindNow(now) }
+        assertNotNull(felix.server.takeRequest(10, TimeUnit.SECONDS))
+        stores.tasks.update { it.copy(tasks = listOf(task.copy(status = Status.Done, doneAt = now))) }
+        writing.await()
+        assertTrue(stores.chat.value.messages.none { it.kind == MessageKind.Reminder })
+        assertNotNull(stores.felix.value.reminders.single().letGoAt)
+        assertEquals(FelixWords.letGo("finish the worksheet", "Forces worksheet", "is done"), stores.chat.value.messages.single { it.kind == MessageKind.Note }.text)
+    }
+
+    @Test
+    fun `a reminder whose words can't be asked for at its moment, the call failing, goes in yours`() = runBlocking {
+        stores.felix.update { it.copy(reminders = listOf(at("stretch", now))) }
+        assertTrue(felix.looks.sweepReminders(now))
+        felix.server.enqueue(MockResponse().setResponseCode(500))
+        felix.looks.remindNow(now)
+        assertEquals(FelixWords.reminder("stretch"), stores.chat.value.messages.single { it.kind == MessageKind.Reminder }.text)
+        assertEquals(now, stores.felix.value.reminders.single().sentAt)
     }
 
     @Test

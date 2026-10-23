@@ -186,6 +186,13 @@ class FelixHarness(
             looks += at
         }
 
+        /** Your reminders' words asked for as work of their own ([Looks.remindNow]). */
+        @Volatile var reminders = 0
+
+        override fun remindLater() {
+            reminders++
+        }
+
         override fun readAgain() {
             readAgain++
         }

@@ -189,12 +189,14 @@ class SlotReceiver : BroadcastReceiver() {
                         runCatching { graph.slots.onEnd(key!!, if (window != null && start >= 0 && end >= start) Focus.Laid(start, end, window) else null) }
                             .onFailure { Log.w(AppGraph.TAG, "A slot's end failed", it) }
                     }
-                    // Your reminder's moment: sent now, with no call, so the receiver's time is enough; or the start of
-                    // his window to write one, which the look after this writes. Either way the alarm's set for the next.
+                    // Your reminder's moment: sent now in his words written for it, or yours, with no call, so the receiver's
+                    // time is enough; one whose words are to be asked for afresh is left to work of its own ([Looks.remindNow]).
+                    // Or the start of his window to write one, which the look after this writes. Either way the alarm's set for the next.
                     SlotAlarms.ACTION_REMINDER -> {
-                        // A failure sending them is logged, so the alarm's still set again, a while on, and the look queued.
-                        val sent = runCatching { graph.looks.sweepReminders() }.onFailure { Log.w(AppGraph.TAG, "Sending reminders failed", it) }.isSuccess
-                        graph.armReminder(after = if (sent) null else graph.clock.now() + SlotAlarms.REMINDER_RETRY_MS)
+                        // A failure sending them is logged, so the alarm's still set again, a while on, and the look queued; so
+                        // is one waiting for his words, as its moment's gone by and the alarm would ring again at once.
+                        val asking = runCatching { graph.looks.sweepReminders() }.onFailure { Log.w(AppGraph.TAG, "Sending reminders failed", it) }.getOrNull()
+                        graph.armReminder(after = if (asking == false) null else graph.clock.now() + SlotAlarms.REMINDER_RETRY_MS)
                     }
                 }
                 // Each is a moment Felix may have something to say (LR-03): his look is work of its own,
