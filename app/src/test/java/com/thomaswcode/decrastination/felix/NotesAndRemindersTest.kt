@@ -398,6 +398,19 @@ class NotesAndRemindersTest {
     }
 
     @Test
+    fun `a reminder due is written for at its moment while words are still being written ahead for another`() = runBlocking {
+        // One due now with no words, one in his window ahead: the ahead call held, the due one's goes first.
+        stores.felix.update { it.copy(reminders = listOf(at("stretch", now), at("call gran", now + 8 * MIN))) }
+        felix.answers(his("call gran soon"), delayMs = 3_000)
+        felix.answers(his("stretch now"))
+        val ahead = async(Dispatchers.Default) { felix.looks.draftReminders(now) }
+        assertNotNull(felix.server.takeRequest(10, TimeUnit.SECONDS))
+        withTimeout(2_000) { felix.looks.remindNow(now) }
+        assertEquals("stretch now", stores.chat.value.messages.single { it.kind == MessageKind.Reminder }.text)
+        ahead.await()
+    }
+
+    @Test
     fun `a reminder cancelled while his words for its moment are asked for isn't sent`() = runBlocking {
         stores.felix.update { it.copy(reminders = listOf(at("stretch", now))) }
         assertTrue(felix.looks.sweepReminders(now))

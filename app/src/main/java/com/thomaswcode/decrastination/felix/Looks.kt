@@ -222,6 +222,12 @@ class Looks(
     }
 
     /**
+     * Held while reminders due are written for at their moment ([remindNow]), so each is asked for once: apart from
+     * [drafting], which words written ahead hold across their batch, so one due doesn't wait on calls for others.
+     */
+    private val reminding = Mutex()
+
+    /**
      * Your reminders whose moment has come and whose words are to be asked for afresh ([sweepReminders] leaves them
      * to this, as work of its own: [ReminderWorker]): his asked for each as of its moment, outside the sweep's lock,
      * so a sweep from an alarm or a plan never waits on a call; kept on the reminder as asked for that moment, words
@@ -229,7 +235,7 @@ class Looks(
      * are. One whose call is held or fails, or comes back with none, goes in your words.
      */
     suspend fun remindNow(now: Long = clock.now()) {
-        drafting.withLock {
+        reminding.withLock {
             val tasks = this.tasks.value.tasks.associateBy { it.id }
             val plan = focus.plan(now)
             val said = lastSaid()
