@@ -591,9 +591,10 @@ class ConversationTest {
         assertNotNull(stores.chatArchive.value.messages.single().answeredAt)
         felix.looks.answerRead(asking, answers = false, changed = false)
         assertNull(stores.chatArchive.value.messages.single().answeredAt)
-        // A long answer is kept whole, as the chat kept it, not cut short as its instruction is.
+        // A long answer is kept whole, as the chat kept it, not cut short as its instruction is: cut at a space, its
+        // instruction ends in one, and it's still the reply found.
         felix.outbox.send(ChatMessage("q1", Speaker.Felix, "what's in it?", now, About(taskId = sheet.id, taskTitle = sheet.title), kind = MessageKind.Question))
-        val long = "questions 1 to 6, then " + "the extension ".repeat(100)
+        val long = "all of it: " + "x".repeat(988) + " and the extension questions too, " + "the extension ".repeat(30)
         assertEquals(Conversation.Asked.Answer, conversation.send(long, replyTo = "q1"))
         val kept = stores.instructions.value.instructions.last()
         assertTrue(kept.text.length < long.trim().length)

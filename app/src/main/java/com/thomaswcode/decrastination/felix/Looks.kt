@@ -465,7 +465,7 @@ class Looks(
         val taskId = instruction.about.taskId ?: return null
         return messages.lastOrNull {
             it.from == Speaker.You && it.kind == MessageKind.Question && it.about.taskId == taskId && it.at <= instruction.at &&
-                it.text.trim().take(InstructionPrompts.MAX_TEXT) == instruction.text.trim()
+                it.text.trim().take(InstructionPrompts.MAX_TEXT) == instruction.text
         }
     }
 
