@@ -911,6 +911,8 @@ class FocusTest {
         repeat(2) { focus.onCompleted(listOf(done)) }
         assertEquals(10 * 60_000L, focus.creditLeftMs())
         assertTrue(log.value.slots.single().earned)
+        // On its record with what it earned, for its Undo.
+        assertEquals(10.0, log.value.slots.single().earnedMin)
         // AnkiDroid's cards counted are a deck piece's evidence: kept by them, it earns at once.
         tasks.update { it.copy(tasks = listOf(task("vocab", kind = Kind.Revision, due = "2026-10-12T23:59", effort = 30))) }
         assertTrue(focus.keepSlot("teams:vocab#-1#1", verified = true))
