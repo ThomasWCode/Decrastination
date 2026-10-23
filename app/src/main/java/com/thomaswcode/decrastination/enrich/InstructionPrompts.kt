@@ -1,7 +1,6 @@
 package com.thomaswcode.decrastination.enrich
 
 import com.thomaswcode.decrastination.core.ChangeType
-import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.Instruction
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.learn.CalendarEvent
@@ -126,9 +125,9 @@ object InstructionPrompts {
 
     /**
      * The instruction as Claude reads it: today, what it's about, and the open tasks and the
-     * fortnight's events to choose from.
+     * fortnight's events to choose from; for your reply to Felix's question, the [question] it replies to.
      */
-    fun describe(instruction: Instruction, tasks: List<TaskItem>, events: List<CalendarEvent>, now: Long, zone: ZoneId): String = buildString {
+    fun describe(instruction: Instruction, tasks: List<TaskItem>, events: List<CalendarEvent>, now: Long, zone: ZoneId, question: String? = null): String = buildString {
         fun at(time: Long) = Instant.ofEpochMilli(time).atZone(zone).format(WHEN)
         // The deadline in force (PL-14), as the chat and the Tasks list have it: a plan's gone by, the real one behind it.
         fun due(t: TaskItem) = (t.deadlineAt(now) ?: t.dueAt)?.let { at(it) + if (t.hardAt(now)) "" else " (a plan)" } ?: "no date"
@@ -155,8 +154,9 @@ object InstructionPrompts {
             about.day != null -> appendLine("About the day: " + (runCatching { LocalDate.parse(about.day).format(DAY) }.getOrNull() ?: about.day))
             else -> appendLine("About: nothing in particular")
         }
-        // Your reply to the question its reading asked (AI-10): whether it answers it is Claude's to say.
-        if (instruction.answer) appendLine("It's their reply to the question asked about it" + (task?.let { Enrichments.current(it)?.question }?.trim()?.takeIf { it.isNotEmpty() }?.let { ": \"${it.take(MAX_TEXT)}\"" } ?: ""))
+        // Your reply to his question (AI-10), as he put it, else as its reading asked it, whatever has changed of
+        // the task since: whether the reply answers it is Claude's to say.
+        if (instruction.answer) appendLine("It's their reply to the question asked about it" + ((question ?: task?.enrichment?.question)?.trim()?.takeIf { it.isNotEmpty() }?.let { ": \"${it.take(MAX_TEXT)}\"" } ?: ""))
         appendLine()
         appendLine("Open tasks (id | title | from | due):")
         tasks.filter { it.isOpen }.sortedBy { it.deadlineAt(now) ?: it.dueAt ?: Long.MAX_VALUE }.take(MAX_TASKS).forEach { t ->

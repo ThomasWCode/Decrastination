@@ -537,6 +537,10 @@ class InstructionRulesTest {
         val reply = Instruction("i", "is the essay ticked in teams?", About(taskId = asked.id, taskTitle = asked.title), now, answer = true)
         val text = InstructionPrompts.describe(reply, listOf(essay, asked), emptyList(), now, LONDON)
         assertTrue("It's their reply to the question asked about it: \"Is it questions 1 to 6, or all of them?\"\n" in text, text)
+        // The task changed since it was read: still the question its reading asked; given his words as he put it, those.
+        val changed = asked.copy(detail = "Questions 1 to 6, then 7 to 12 for extension.")
+        assertTrue("about it: \"Is it questions 1 to 6, or all of them?\"\n" in InstructionPrompts.describe(reply, listOf(essay, changed), emptyList(), now, LONDON))
+        assertTrue("about it: \"is it 1 to 6 or all of them?\"\n" in InstructionPrompts.describe(reply, listOf(essay, changed), emptyList(), now, LONDON, question = "is it 1 to 6 or all of them?"))
         // One that isn't a reply is told of none.
         assertTrue("their reply" !in InstructionPrompts.describe(reply.copy(answer = false), listOf(essay, asked), emptyList(), now, LONDON))
         // Read back: no answer, with nothing to change; an answer, with a change; one read without the field, an answer.
