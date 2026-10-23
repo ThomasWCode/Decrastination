@@ -532,6 +532,22 @@ class InstructionRulesTest {
     }
 
     @Test
+    fun `a reply to Felix's question is read shown the question, and Claude says whether it answers it`() {
+        val asked = prep.copy(enrichment = Enrichment(inputHash = Enrichments.inputHash(prep), by = "test", at = now, question = "Is it questions 1 to 6, or all of them?"))
+        val reply = Instruction("i", "is the essay ticked in teams?", About(taskId = asked.id, taskTitle = asked.title), now, answer = true)
+        val text = InstructionPrompts.describe(reply, listOf(essay, asked), emptyList(), now, LONDON)
+        assertTrue("It's their reply to the question asked about it: \"Is it questions 1 to 6, or all of them?\"\n" in text, text)
+        // One that isn't a reply is told of none.
+        assertTrue("their reply" !in InstructionPrompts.describe(reply.copy(answer = false), listOf(essay, asked), emptyList(), now, LONDON))
+        // Read back: no answer, with nothing to change; an answer, with a change; one read without the field, an answer.
+        assertEquals(InstructionAnswers.Reading.Unclear("Claude couldn't turn it into a change the app can make", answers = false), parse("""{"understood":false,"question":null,"changes":[],"answersQuestion":false}"""))
+        val due = """{"type":"DueBy","taskId":"teams:essay","afterTaskId":"","eventKey":"","eventTime":"","minutes":-1,"date":"2026-10-16","endDate":"","weekday":"","time":"","endTime":"","title":"","steps":[]}"""
+        assertTrue(assertIs<InstructionAnswers.Reading.Changes>(parse("""{"understood":true,"question":null,"changes":[$due],"answersQuestion":true}""")).answers)
+        assertTrue(parse("""{"understood":false,"question":"Which task?","changes":[]}""").answers)
+        assertTrue("Set answersQuestion to whether the reply answers that question" in InstructionPrompts.system())
+    }
+
+    @Test
     fun `Claude is shown the instruction, what it's about, and what it can name`() {
         val instruction = Instruction("i", "this can't be done until the essay is", About(taskId = prep.id, taskTitle = prep.title), now)
         val text = InstructionPrompts.describe(instruction, listOf(essay, prep), listOf(drums), now, LONDON)

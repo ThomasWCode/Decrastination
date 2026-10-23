@@ -540,6 +540,38 @@ class ConversationTest {
     }
 
     @Test
+    fun `a reply to his question is kept with its task once it's read as its answer, and one that isn't is answered in the chat`() = runBlocking {
+        stores.tasks.update { it.copy(tasks = listOf(sheet)) }
+        felix.outbox.send(ChatMessage("q1", Speaker.Felix, "is it questions 1 to 6 or all of it?", now, About(taskId = sheet.id, taskTitle = sheet.title), kind = MessageKind.Question))
+        fun answers() = stores.tasks.value.tasks.single().answers
+        assertEquals(Conversation.Asked.Answer, conversation.send("is the plan ticked in teams?", replyTo = "q1"))
+        // To be read as an instruction on its task, shown his question: not yet its answer, nor read again.
+        val asking = stores.instructions.value.instructions.single()
+        assertTrue(asking.answer)
+        assertEquals(emptyList(), answers())
+        assertEquals(0, felix.ports.readAgain)
+        // Read as no answer, changing nothing: a turn of the chat, answered there, and his question waits again.
+        felix.looks.answerRead(asking, answers = false, changed = false)
+        assertEquals("is the plan ticked in teams?", stores.chat.value.unanswered?.text)
+        assertEquals(MessageKind.Chat, stores.chat.value.unanswered?.kind)
+        assertNull(stores.chat.value.messages.single { it.id == "q1" }.answeredAt)
+        assertEquals(1, felix.ports.later)
+        assertEquals(emptyList(), answers())
+        // Your turn answered in the chat, and his question answered after all: read as its answer, kept with its task, which is read again.
+        stores.chat.update { s -> s.copy(messages = s.messages.map { if (it.from == Speaker.You) it.copy(answeredAt = it.answeredAt ?: now) else it }) }
+        assertEquals(Conversation.Asked.Answer, conversation.send("all of it", replyTo = "q1"))
+        felix.looks.answerRead(stores.instructions.value.instructions.last(), answers = true, changed = false)
+        assertEquals(listOf("all of it"), answers())
+        assertEquals(1, felix.ports.readAgain)
+        // To another question, an instruction that isn't its answer, made as one: not kept with the task, nor taken on in the chat.
+        felix.outbox.send(ChatMessage("q2", Speaker.Felix, "is it handed in on teams?", now, About(taskId = sheet.id, taskTitle = sheet.title), kind = MessageKind.Question))
+        assertEquals(Conversation.Asked.Answer, conversation.send("move it to friday", replyTo = "q2"))
+        felix.looks.answerRead(stores.instructions.value.instructions.last(), answers = false, changed = true)
+        assertEquals(listOf("all of it"), answers())
+        assertEquals(1, felix.ports.later)
+    }
+
+    @Test
     fun `a reply to a question scrolled back to in the archive is answered as it, with no call`() = runBlocking {
         val question = ChatMessage("e1", Speaker.Felix, "Is the open day all day?", now - 70 * 86_400_000L, About(eventKey = "open day", eventTitle = "Open day"), kind = MessageKind.EventQuestion, byApp = true, suggestedReplies = CalendarTime.ANSWERS.map { it.first })
         felix.stores.chatArchive.update { it.copy(messages = listOf(question)) }
