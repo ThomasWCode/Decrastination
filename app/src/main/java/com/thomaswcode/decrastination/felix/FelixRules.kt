@@ -143,12 +143,25 @@ object FelixRules {
     }
 
     /**
-     * Whether [draft] is the message for [trigger] now (AC-10): written for its reason and piece, not
-     * longer ago than [DRAFT_FRESH_MS], and with nothing said in the chat since ([lastSaidAt]): a message of his it
-     * would repeat or contradict, or one of yours it would talk past (its greeting, D-57).
+     * Whether [draft] is the message for [trigger] now (AC-10): written for its reason and piece, from the plan as it
+     * now is ([laid], what it was written from, null where that isn't known, against [laidNow]: a slot moved, or a
+     * piece kept, missed or gone since, and it would say what isn't so), not longer ago than [DRAFT_FRESH_MS], and
+     * with nothing said in the chat since ([lastSaidAt]): a message of his it would repeat or contradict, or one of
+     * yours it would talk past (its greeting, D-57).
      */
-    fun fits(draft: FelixDraft?, trigger: Trigger, now: Long, lastSaidAt: Long?): Boolean =
-        draft != null && draft.reason == trigger.reason.name && draft.key == trigger.key && now - draft.at <= DRAFT_FRESH_MS && (lastSaidAt == null || lastSaidAt < draft.at)
+    fun fits(draft: FelixDraft?, trigger: Trigger, now: Long, lastSaidAt: Long?, laid: String? = null, laidNow: String? = laid): Boolean =
+        draft != null && draft.reason == trigger.reason.name && draft.key == trigger.key && now - draft.at <= DRAFT_FRESH_MS && (lastSaidAt == null || lastSaidAt < draft.at) &&
+            laid == laidNow
+
+    /**
+     * What a message for [trigger] is written from of [plan] and [today]'s slots on record (AC-10): its slot and today's
+     * work from its start on, each piece's key and times, and what's been kept or missed today ([fits]).
+     */
+    fun laid(plan: Plan, trigger: Trigger, today: List<SlotRecord>): String {
+        val slot = trigger.slot ?: return ""
+        val work = plan.todaySlots.filter { it.kind == SlotKind.Work && it.chunk != null && it.end > slot.start }.joinToString(";") { "${it.chunk!!.key}@${it.start}-${it.end}" }
+        return "${slot.chunk?.key}@${slot.start}-${slot.end}|$work|" + today.joinToString(";") { "${it.key}:${it.outcome}" }
+    }
 
     /**
      * When to look again (LR-03, AC-10): the earliest of a slot's grace into it, a slot's end and

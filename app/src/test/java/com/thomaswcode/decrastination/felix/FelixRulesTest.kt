@@ -142,6 +142,11 @@ class FelixRulesTest {
         assertEquals(false, FelixRules.fits(draft.copy(key = "teams:b#-1#1"), trigger, now, null))
         assertEquals(false, FelixRules.fits(draft.copy(at = now - FelixRules.DRAFT_FRESH_MS - 1), trigger, now, null))
         assertEquals(false, FelixRules.fits(draft, trigger, now, lastSaidAt = at("17:05")))
+        // Written from another plan (its slot moved, a piece kept since), or one not known (from before a start): written again.
+        val laid = FelixRules.laid(plan, trigger, emptyList())
+        assertEquals(true, FelixRules.fits(draft, trigger, now, null, laid, laid))
+        assertEquals(false, FelixRules.fits(draft, trigger, now, null, laid, FelixRules.laid(plan, trigger.copy(slot = first.copy(start = first.start + 300_000L)), emptyList())))
+        assertEquals(false, FelixRules.fits(draft, trigger, now, null, null, laid))
     }
 
     @Test
