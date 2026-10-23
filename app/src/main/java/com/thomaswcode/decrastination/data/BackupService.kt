@@ -174,22 +174,23 @@ class BackupService(
         // The backup's days off and half-days beside those here (PL-16).
         stores.replace(stores.school) { it.withAll(backup.school) }
         // The chat where this phone's is empty (a reset's copy brings it back, LR-08), with its earlier
-        // messages, a message of yours still waiting for its answer kept as answered then, saying so: waiting,
-        // it would be sent, words from then, as the chat opens, or go with your next words, as one waiting for
-        // its Try again would. Felix's state with it, or where this phone has none of its own. Into a
+        // messages: not a message of yours still waiting for its answer, which would be sent, words from then, as
+        // it opens; nor one that waited with it, or for its Try again, either of which would go with your next
+        // words, as his turn takes yours that come one after another together. Those are left out, and said:
+        // they're still in the backup. Felix's state with it, or where this phone has none of its own. Into a
         // chat that isn't empty, his own messages it hasn't, with your replies to them, by id, as the
         // log's records of them were merged before 4.0.0: none of his is lost. Those read there are read
         // here, as far as that goes without passing one of his unread here, so his notification doesn't
         // bring them back as new.
-        val restoredAt = clock.now()
-        val backedChat = backup.chat.let { c ->
-            c.copy(messages = c.messages.map { if (it.from == Speaker.You && it.answeredAt == null) it.copy(answeredAt = restoredAt, note = UNANSWERED, stuck = false) else it })
-        }
+        val unanswered = backup.chat.messages.filter { it.from == Speaker.You && it.answeredAt == null }.mapTo(HashSet()) { it.id }
+        val backedChat = backup.chat.let { c -> c.copy(messages = c.messages.filterNot { it.id in unanswered }) }
         var chatBack = 0
         var hisBack = 0
+        var yoursLeft = 0
         stores.replace(stores.chat) { s ->
             // This phone's state of his, where it has one, wins: a chat cleared here keeps it.
             val felix = if (s.felix == FelixState()) backedChat.felix else s.felix
+            if (s.messages.isEmpty()) yoursLeft = unanswered.size
             if (s.messages.isEmpty() && backedChat.messages.isNotEmpty()) {
                 backedChat.copy(felix = felix).also { chatBack = it.messages.size }
             } else {
@@ -197,6 +198,7 @@ class BackupService(
                 val his = ChatHistory.his(backedChat.messages).filter { it.id !in here }
                 val ids = his.mapTo(HashSet()) { it.id }
                 val replies = backedChat.messages.filter { it.from == Speaker.You && it.replyTo in ids && it.id !in here }
+                if (s.messages.isNotEmpty()) yoursLeft = backup.chat.messages.count { it.id in unanswered && it.replyTo in ids && it.id !in here }
                 hisBack = his.size
                 val unreadHere = s.messages.filter { it.from != Speaker.You && it.at > s.readAt }.minOfOrNull { it.at }
                 val readAt = maxOf(s.readAt, minOf(backedChat.readAt, (unreadHere ?: Long.MAX_VALUE) - 1))
@@ -224,6 +226,7 @@ class BackupService(
             if (own > 0) add("$own task${if (own == 1) "" else "s"} of your own")
             if (chatBack > 0) add("the chat ($chatBack message${if (chatBack == 1) "" else "s"})")
             if (hisBack > 0) add("$hisBack message${if (hisBack == 1) "" else "s"} of Felix's into the chat")
+            if (yoursLeft > 0) add("$yoursLeft of yours that waited for an answer left out, as ${if (yoursLeft == 1) "it" else "they"}'d be sent with words from then (still in the backup)")
             if (felixBack > 0) add("$felixBack of Felix's notes and reminders")
             if (felixLeft > 0) add("$felixLeft of the backup's notes and reminders left out, past what the app keeps")
             if (restored > 0) add("$restored instruction${if (restored == 1) "" else "s"} restored")
@@ -367,10 +370,5 @@ class BackupService(
         if (name !in resetCopies()) return "That copy isn't there."
         val bytes = withContext(Dispatchers.IO) { File(copies, name).inputStream().use { Backups.read(it) } } ?: return "That copy is too big to be a backup."
         return importBackup(bytes.decodeToString())
-    }
-
-    companion object {
-        /** Said on a message of yours a restore brought back still waiting for its answer: kept, but not to be sent. */
-        const val UNANSWERED = "Not answered: restored from a backup"
     }
 }
