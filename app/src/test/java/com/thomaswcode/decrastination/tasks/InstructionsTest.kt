@@ -16,6 +16,8 @@ import com.thomaswcode.decrastination.core.ProposalState
 import com.thomaswcode.decrastination.core.SchoolCalendar
 import com.thomaswcode.decrastination.core.SlotState
 import com.thomaswcode.decrastination.core.Speaker
+import com.thomaswcode.decrastination.core.StepOrigin
+import com.thomaswcode.decrastination.core.SubStep
 import java.time.Instant
 import kotlin.test.AfterTest
 import kotlin.test.Test
@@ -89,6 +91,21 @@ class InstructionsTest {
         assertEquals(InstructionStatus.Applied, state("steps")!!.state)
         // Its start to come let go of; its step begun, and another task's, kept.
         assertEquals(kept - "teams:sheet#0", h.stores.session.value.slots.previous)
+    }
+
+    @Test
+    fun `a step new steps leave as it was keeps its start kept today, so the times said of it hold (D-110)`() = runBlocking {
+        val steps = listOf(SubStep("Questions 1 and 2", 40, id = "q12", origin = StepOrigin.Felix), SubStep("Question 3", 20, id = "q3", origin = StepOrigin.Felix), SubStep("Write it up", 30, id = "up", origin = StepOrigin.Felix))
+        h.stores.tasks.update { it.copy(tasks = listOf(h.teams("sheet", minutes = 90).copy(subSteps = steps))) }
+        val now = h.clock.now()
+        val today = Instant.ofEpochMilli(now).atZone(Fixtures.LONDON).toLocalDate().toString()
+        val kept = mapOf("teams:sheet#0" to now + 3_600_000L, "teams:sheet#1" to now + 7_200_000L, "teams:sheet#2" to now + 10_800_000L)
+        h.stores.session.update { it.copy(slots = SlotState(today, previous = kept)) }
+        // The first two rebalanced, the third as it was.
+        val given = listOf(OwnStep("Question 1", 20, id = "q12"), OwnStep("Questions 2 and 3", 40, id = "q3"), OwnStep("Write it up", 30, id = "up"))
+        write(understood("steps", Change(ChangeType.Steps, taskId = "teams:sheet", steps = given)))
+        h.instructions.applyInstruction("steps")
+        assertEquals(mapOf("teams:sheet#2" to now + 10_800_000L), h.stores.session.value.slots.previous)
     }
 
     @Test

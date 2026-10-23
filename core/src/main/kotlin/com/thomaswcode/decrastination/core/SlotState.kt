@@ -23,8 +23,24 @@ data class SlotState(val date: String = "", val previous: Map<String, Long> = em
     /** [taskId] moved on purpose (a time, a day or a start you gave): its missed slots forgotten. */
     fun moved(taskId: String): SlotState = copy(missed = missed.filterNot { it.taskId == taskId })
 
-    /** [taskId]'s starts kept from the last plan let go of where they're still to come at [now]: its new steps laid afresh (D-110), one begun left where it is. */
-    fun released(taskId: String, now: Long): SlotState = copy(previous = previous.filter { (key, start) -> start <= now || !key.startsWith("$taskId#") })
+    /**
+     * [taskId]'s starts kept from the last plan let go of where they're still to come at [now]: its new steps laid afresh
+     * (D-110), one begun left where it is, and the steps at the places in [keep], as they were ([unchanged]), kept too.
+     */
+    fun released(taskId: String, now: Long, keep: Set<Int> = emptySet()): SlotState = copy(previous = previous.filter { (key, start) ->
+        start <= now || !key.startsWith("$taskId#") || key.removePrefix("$taskId#").substringBefore('#').toIntOrNull() in keep
+    })
+
+    companion object {
+        /**
+         * The places where a Steps change's [steps] leave [task]'s as they were: the same step (its id) and title, at its
+         * minutes as planned ([planned]), so a start kept for it still holds it (D-110).
+         */
+        fun unchanged(task: TaskItem, steps: List<OwnStep>, planned: List<Int>): Set<Int> = steps.indices.filter { i ->
+            val was = task.subSteps.getOrNull(i)
+            was != null && was.id.isNotEmpty() && was.id == steps[i].id && was.title == steps[i].title && planned.getOrNull(i) == steps[i].minutes
+        }.toSet()
+    }
 
     /**
      * As [plan] leaves today: a missed piece in none of today's slots, its task still in the plan, went to

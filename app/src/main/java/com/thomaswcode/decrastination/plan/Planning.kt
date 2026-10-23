@@ -3,6 +3,7 @@ package com.thomaswcode.decrastination.plan
 import android.util.Log
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.core.Calibration
+import com.thomaswcode.decrastination.core.Change
 import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.Duplicates
 import com.thomaswcode.decrastination.core.Instruction
@@ -15,6 +16,7 @@ import com.thomaswcode.decrastination.core.SchoolCalendar
 import com.thomaswcode.decrastination.core.SchoolDays
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.SlotKind
+import com.thomaswcode.decrastination.core.SlotState
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.WallClock
 import com.thomaswcode.decrastination.core.withMine
@@ -89,6 +91,12 @@ class Planning(
     /** What's been learned of the app's estimates, the plans made by it: a task's steps' minutes as planned ([TaskItem.plannedStepMinutes]). */
     fun calibration(): Calibration = learning.value.calibration
 
+    /** The places where [change]'s steps are its task's in [before] as they were ([SlotState.unchanged]). */
+    private fun unchangedBy(change: Change, before: List<TaskItem>): Set<Int> {
+        val task = before.firstOrNull { it.id == change.taskId } ?: return emptySet()
+        return SlotState.unchanged(task, change.steps.orEmpty(), task.plannedStepMinutes(calibration().multiplierFor(task)))
+    }
+
     /**
      * The plan at [now], of [state] with [applied] instructions and the calendar's [time]: as they are, or a
      * snapshot of them taken once ([chatContext]). With [trying], as if those were applied too, a task they
@@ -107,6 +115,8 @@ class Planning(
         val today = Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
         val reach = today.plusDays(PLAN_REACH_DAYS)
         val tasks = asPlanned(state, applied + trying)
+        // The tasks as they are, where [trying] gives some new steps: those it leaves as they were keep their starts.
+        val before = if (trying.isEmpty()) emptyList() else asPlanned(state, applied)
         // Each day's windows, from the timetable's study periods and the school calendar (PL-15).
         val days = generateSequence(today) { it.plusDays(1) }.takeWhile { it <= reach }.toList()
         val calendar = school.value
@@ -128,8 +138,8 @@ class Planning(
                 dayKinds = dayKinds,
                 // Today's pieces where the last plan laid them, where that's still free, and those whose
                 // slots went by undone (PL-13).
-                previousSlots = trying.flatMap { it.changes }.filter { it.type == ChangeType.Steps }.mapNotNull { it.taskId }
-                    .fold(session.value.slots.on(today)) { s, taskId -> s.released(taskId, now) }.previous,
+                previousSlots = trying.flatMap { it.changes }.filter { it.type == ChangeType.Steps }
+                    .fold(session.value.slots.on(today)) { s, c -> c.taskId?.let { s.released(it, now, unchangedBy(c, before)) } ?: s }.previous,
                 missedSlots = session.value.slots.on(today).missed.map { it.key }.toSet(),
             ),
         )
