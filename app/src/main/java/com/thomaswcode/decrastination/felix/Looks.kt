@@ -85,8 +85,8 @@ class Looks(
     private val profile: (Long) -> Profile.Block,
     /** What he remembered, kept ([Conversation.remember]). */
     private val remember: suspend (List<Given>) -> List<MemoryEdit>,
-    /** Your answer to his question about a task, as an instruction on it, read by Claude ([com.thomaswcode.decrastination.tasks.Instructions.addInstruction]). */
-    private val addInstruction: suspend (text: String, about: About, answer: Boolean) -> String,
+    /** Your answer to his question about a task, as an instruction on it, read by Claude shown the question ([com.thomaswcode.decrastination.tasks.Instructions.addInstruction]). */
+    private val addInstruction: suspend (text: String, about: About, answer: Boolean, question: String?) -> String,
     /** How a completion went, on record ([com.thomaswcode.decrastination.learn.Learning.recordAssessment]). */
     private val assess: suspend (taskId: String, doneAt: Long, answer: String) -> Unit,
     /** A change of his under a message of his made at once, as the chat's are ([Conversation.applyProposal]). */
@@ -398,7 +398,8 @@ class Looks(
         val about = message.about.taskId
         if (message.kind == MessageKind.Question && about != null) {
             val task = this.tasks.value.tasks.firstOrNull { it.id == about } ?: return false
-            addInstruction(text, About(taskId = task.id, taskTitle = task.title), true)
+            // Its read shown the question you replied to, not one found by its task: your reply isn't kept yet as it begins.
+            addInstruction(text, About(taskId = task.id, taskTitle = task.title), true, message.text.takeIf { it.isNotBlank() })
             return true
         }
         if (message.kind != MessageKind.Completions || message.asks.isEmpty()) return false
@@ -410,8 +411,8 @@ class Looks(
     /**
      * Your reply to his question about [instruction]'s task, read (AI-10): one that [answers] it is
      * kept with the task, which is read again with it now, as it's what settles the reading. One that
-     * doesn't (a question of yours, or about something else) isn't kept; where it [changed] nothing,
-     * it's a turn of the chat, answered there, and his question waits for its answer again.
+     * doesn't (a question of yours, or about something else) isn't kept, and his question waits for its
+     * answer again (D-19); where it [changed] nothing, it's a turn of the chat, answered there.
      */
     suspend fun answerRead(instruction: Instruction, answers: Boolean, changed: Boolean) {
         val taskId = instruction.about.taskId ?: return
@@ -427,14 +428,16 @@ class Looks(
         }
         // Your reply gone from the live chat (read a fortnight on, Claude held that long): too late for the chat to
         // take on, it's let go, neither kept nor answered.
-        if (changed || reply == null) return
-        // A turn of the chat now, no longer his question's reply, so his question waits for its answer again (D-99),
-        // in the archive too where it was answered from there.
+        if (reply == null) return
+        // No longer his question's reply, so his question waits for its answer again (D-19, D-99), in the archive too
+        // where it was answered from there. A change of it made is what it was for, shown in Your changes: it stays as
+        // said and done, its question's kind kept, so it's no turn of the chat, nor sent to him as one
+        // ([com.thomaswcode.decrastination.core.ChatHistory.doneWith]); one that made none is a turn of the chat now, answered there.
         chat.update { s ->
             s.copy(
                 messages = s.messages.map {
                     when (it.id) {
-                        reply.id -> it.copy(kind = MessageKind.Chat, answeredAt = null, replyTo = null)
+                        reply.id -> if (changed) it.copy(replyTo = null) else it.copy(kind = MessageKind.Chat, answeredAt = null, replyTo = null)
                         reply.replyTo -> it.copy(answeredAt = null)
                         else -> it
                     }
@@ -442,7 +445,7 @@ class Looks(
             )
         }
         reply.replyTo?.let { outbox.waitingInArchive(it) }
-        ports.answerLater()
+        if (!changed) ports.answerLater()
     }
 
     /**
