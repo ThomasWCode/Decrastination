@@ -54,7 +54,8 @@ class CheckInActivity : ComponentActivity() {
     private fun Form(graph: AppGraph) {
         val log by graph.log.state.collectAsStateWithLifecycle()
         val scope = rememberCoroutineScope()
-        val week = Daily.checkInWeek(graph.clock.now(), graph.clock.zone(), graph.settings.value.checkInMin)
+        // Worked out once a screen, kept through it made again: one open across the week's turn stays the week it began.
+        val week = rememberSaveable { Daily.checkInWeek(graph.clock.now(), graph.clock.zone(), graph.settings.value.checkInMin) }
         // What's typed kept through the screen made again (the phone turned), its week's: a new week's form starts empty.
         var feel by rememberSaveable(week) { mutableIntStateOf(0) }
         var saving by remember { mutableStateOf(false) }

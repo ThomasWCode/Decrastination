@@ -761,6 +761,8 @@ class Focus(
                 }
             }
         val room = slotRoomMin(now, ratio)
+        // What each slot it lets earn earned, its share of what the day's room gave them: on its record, for its Undo.
+        var shares: Map<SlotRecord, Double> = emptyMap()
         session.update { state ->
             val fresh = completed.filter { key(it) !in state.rewarded }
             // Reading or archiving an email, or an event passing, isn't work that earns time. Free
@@ -807,14 +809,18 @@ class Focus(
                 Credit.forCompletion(remaining.roundToInt().coerceAtLeast(0), ratio)
             }
             // Its slots kept without earning: given with it, once, within today's plan.
-            val slotEarning = minOf(confirming.filter { slot -> fresh.any { it.id == slot.taskId } }.sumOf { Credit.forSlot(it.plannedMin, ratio) }, room)
+            val earning = confirming.filter { slot -> fresh.any { it.id == slot.taskId } }
+            val whole = earning.sumOf { Credit.forSlot(it.plannedMin, ratio) }
+            val slotEarning = minOf(whole, room)
+            shares = if (whole > 0) earning.associateWith { Credit.forSlot(it.plannedMin, ratio) * slotEarning / whole } else emptyMap()
             state.copy(
                 credit = state.credit.earn(today, earned + slotEarning),
                 rewarded = (state.rewarded + fresh.map(::key)).distinct().filter { it.doneAt > now - REWARDED_KEPT_MS },
             )
         }
-        // Marked so on their records: those of one given before a stop again, no more.
-        if (confirming.isNotEmpty()) log.update { state -> state.copy(slots = state.slots.map { if (it in confirming) it.copy(earned = true) else it }) }
+        // Marked so on their records, each with what it earned: those of one given before a stop again, no more (what
+        // they earned then isn't known, so they're taken back as one from before was).
+        if (confirming.isNotEmpty()) log.update { state -> state.copy(slots = state.slots.map { if (it in confirming) it.copy(earned = true, earnedMin = shares[it]) else it }) }
         log.update { state ->
             val unrecorded = completed.filter { it.status == Status.Done }
                 .filter { task -> state.completions.none { it.taskId == task.id && it.doneAt == (task.doneAt ?: now) } }
