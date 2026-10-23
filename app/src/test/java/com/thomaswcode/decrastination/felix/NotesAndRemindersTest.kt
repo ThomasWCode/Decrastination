@@ -430,14 +430,15 @@ class NotesAndRemindersTest {
         felix.answers(his("stretch time"), delayMs = 1_500)
         val ahead = async(Dispatchers.Default) { felix.looks.draftReminders(now) }
         assertNotNull(felix.server.takeRequest(10, TimeUnit.SECONDS))
-        // Its moment comes during that call: the sweep leaves it to work, and the work leaves it to that call.
+        // Its moment comes during that call: the sweep leaves it to work, and the work waits for that call and sends its words.
         felix.clock.time = now + 2 * MIN
         assertTrue(felix.looks.sweepReminders(felix.clock.time))
         felix.looks.remindNow(felix.clock.time)
-        ahead.await()
-        felix.looks.sweepReminders(felix.clock.time)
         assertEquals("stretch time", stores.chat.value.messages.single { it.kind == MessageKind.Reminder }.text)
         assertEquals(1, felix.server.requestCount)
+        // The one run the sweep queued, no more: the work queues none for a reminder whose words come from a call ahead.
+        assertEquals(1, felix.ports.reminders)
+        ahead.await()
     }
 
     @Test
