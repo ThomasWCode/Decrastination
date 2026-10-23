@@ -51,6 +51,7 @@ Stage by stage, what each PR needs from your phone and from you, for what and fo
 | — | 4.3.7 | **needed**: install and the script; a task's form with its steps' "Any order" chips, the row's layout seen on the phone (a proposed task opened in its form isn't made for a check: the tests hold it) | no |
 | — | 4.3.8 | **needed**: install and the script; a school day's briefing that asks about a task of the reading's, its rebalance seen in the chat with its Undo, the task's minutes as they were laid | no |
 | — | 4.3.9 | **needed**: install and the script; his next messages in the new voice, checked against the day's slots | **helpful**: a day of his messages read again, by message |
+| — | 4.3.10 | **needed**: install and the script; a school day's morning with a rebalance, its task's later steps kept at the times his message names (a dry run on a copy of the phone's data stood in on 23 Oct, your call) | no |
 
 ## In sum
 
