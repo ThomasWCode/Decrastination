@@ -255,6 +255,8 @@ The design is [05](05-the-chat.md); the stores' change is [04](04-data-and-migra
 
 The conversation digest, 4.4.0 ([13](13-summaries.md), Q28): planned on its own once you've lived with the chat a few weeks. The cache mark on the chat's context, and the tasks' text asked for instead of sent ([15](15-sent-or-asked-for.md) §After the plan), each decided by real use: the mark made only if the record of calls, after a few weeks of use, shows more than about one message in four taking a round, and with it the newest turn built so a round only adds, and a round let run past `MAX_INPUT_CHARS` by its own blocks, the cap holding back its worst case uncached (`AiUsage.allows` given each call's own), so no first call is cut for it (your calls, 19 Oct); the text's block dropped only if a sample of your real messages, run through the chat's eval with it and without, shows fewer than about one in four would need a round, at answers as good.
 
+What only this phone knows of the sources' tasks, kept in a backup (the 23 Oct review's P01; your call, 23 Oct: planned, built when it's wanted): their steps' ticks, the minutes worked and found done by a photo, the photo, and your answers to Felix's questions, each by its task's id; restored into a store of its own, each laid on its task once its source lists it again (its steps matched by id, then by title), and let go after a while where it never does. Never the task whole: the next sync would close as done one its source no longer lists, and give free time for it. A data release: a backup format and a store with their migrations, tested from every shape, and a rehearsal.
+
 ## Size
 
 | Stage | PRs | Days |
