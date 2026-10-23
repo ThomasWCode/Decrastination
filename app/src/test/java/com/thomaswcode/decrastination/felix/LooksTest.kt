@@ -3,6 +3,7 @@ package com.thomaswcode.decrastination.felix
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.core.By
 import com.thomaswcode.decrastination.core.ChangeType
+import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.MessageKind
 import com.thomaswcode.decrastination.core.ProposalState
@@ -20,6 +21,7 @@ import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.delay
@@ -97,6 +99,26 @@ class LooksTest {
         felix.clock.time += 30_000L
         felix.looks.check()
         assertEquals(asked, felix.server.requestCount)
+    }
+
+    @Test
+    fun `his words written ahead aren't sent once something's been said since, yours too, but written again (D-57)`() = runBlocking {
+        underWay()
+        val slot = felix.planning.plan().todaySlots.first { it.kind == SlotKind.Work }
+        val grace = stores.settings.value.felixGraceMin * 60_000L
+        // Five minutes before its moment: written ahead, opening with a greeting.
+        felix.clock.time = slot.start + grace - 5 * 60_000L
+        felix.answers("""{"message":"hey, the worksheet's on. starting?","replies":[],"nextCheckMin":15,"memories":[]}""")
+        felix.looks.check()
+        assertNotNull(stores.chat.value.felix.draft)
+        // You say something in the chat meanwhile: at its moment it's written again, not sent as it was.
+        val said = felix.clock.time + 60_000L
+        stores.chat.update { it.copy(messages = it.messages + ChatMessage("y1", Speaker.You, "what's left tonight?", said, answeredAt = said)) }
+        felix.clock.time = slot.start + grace + 60_000L
+        felix.answers("""{"message":"worksheet's 10 min in and nothing yet. starting?","replies":[],"nextCheckMin":15,"memories":[]}""")
+        felix.looks.check()
+        assertEquals("worksheet's 10 min in and nothing yet. starting?", stores.chat.value.messages.last { it.from == Speaker.Felix }.text)
+        assertEquals(2, felix.server.requestCount)
     }
 
     @Test

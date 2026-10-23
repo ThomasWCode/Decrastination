@@ -144,11 +144,11 @@ object FelixRules {
 
     /**
      * Whether [draft] is the message for [trigger] now (AC-10): written for its reason and piece, not
-     * longer ago than [DRAFT_FRESH_MS], and with no message of his since ([lastSentAt]), which it
-     * would repeat or contradict.
+     * longer ago than [DRAFT_FRESH_MS], and with nothing said in the chat since ([lastSaidAt]): a message of his it
+     * would repeat or contradict, or one of yours it would talk past (its greeting, D-57).
      */
-    fun fits(draft: FelixDraft?, trigger: Trigger, now: Long, lastSentAt: Long?): Boolean =
-        draft != null && draft.reason == trigger.reason.name && draft.key == trigger.key && now - draft.at <= DRAFT_FRESH_MS && (lastSentAt == null || lastSentAt < draft.at)
+    fun fits(draft: FelixDraft?, trigger: Trigger, now: Long, lastSaidAt: Long?): Boolean =
+        draft != null && draft.reason == trigger.reason.name && draft.key == trigger.key && now - draft.at <= DRAFT_FRESH_MS && (lastSaidAt == null || lastSaidAt < draft.at)
 
     /**
      * When to look again (LR-03, AC-10): the earliest of a slot's grace into it, a slot's end and

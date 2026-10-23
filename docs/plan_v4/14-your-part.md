@@ -57,7 +57,7 @@ Stage by stage, what each PR needs from your phone and from you, for what and fo
 
 ## In sum
 
-- **The phone** is needed for 37 of the 38 PRs, for the install and its check: a plugged-in, unlocked phone on the desk for an evening does several PRs if their reviews are done by then. Two stages want it free of use for an hour (6b, on a weekend) or online for a minute's write (11).
+- **The phone** is needed for 41 of the 42 PRs, for the install and its check: a plugged-in, unlocked phone on the desk for an evening does several PRs if their reviews are done by then. Two stages want it free of use for an hour (6b, on a weekend) or online for a minute's write (11).
 - **You** are needed for nine moments, about an hour and a half at the phone in all: 5a, 5b, 5c (ten, ten and five minutes; done, in one evening with the three PRs stacked), 4.0.10 (five minutes, 19 Oct), 8a (fifteen minutes spread over an evening), 8b (five minutes: your classes' subjects), 11 (twenty minutes with Gmail), and 10b twice by message (a read before, a read after): with Stage 5's, 4.0.10's, 8a's, 8b's, 11's and 10b's read before done (11's on 21 Oct, an hour with its two finds), 10b's read after is left. Four more are helpful but not needed (3, 6b, 7, 12): five minutes each, or slower guarded taps.
 - **No decision waits on you** during the work: every question a stage needs is answered, and the four things that could go wrong mid-PR have their fallback chosen.
 
