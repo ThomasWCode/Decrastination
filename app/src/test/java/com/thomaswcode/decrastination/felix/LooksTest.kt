@@ -2,6 +2,7 @@ package com.thomaswcode.decrastination.felix
 
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.core.By
+import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.MessageKind
 import com.thomaswcode.decrastination.core.ProposalState
@@ -141,6 +142,32 @@ class LooksTest {
         assertTrue(stores.instructions.value.instructions.none { it.id == proposal.made })
         assertEquals(setOf("teams:sheet"), Rebalance.declined(stores.chat.value.messages))
         assertEquals(emptyList(), Rebalance.candidates(felix.planning.plan(), stores.tasks.value.tasks, Rebalance.declined(stores.chat.value.messages), felix.clock.now()))
+    }
+
+    @Test
+    fun `the reading's steps at a learned pace are rebalanced with his total at that pace beside them, both taken back by its Undo`() = runBlocking {
+        // The worksheet's two steps the reading's, homework's pace learned at 1.1: laid at 50 and 22 minutes, 72 in all.
+        worksheetInSteps()
+        stores.tasks.update { s -> s.copy(tasks = s.tasks.map { t -> t.copy(subSteps = t.subSteps.map { it.copy(origin = StepOrigin.Reading) }) }) }
+        stores.learning.update { it.copy(calibration = it.calibration.copy(multipliers = mapOf("Homework|" to 1.1))) }
+        felix.answers(REBALANCED.replace("\"secondMinutes\":40", "\"secondMinutes\":47"))
+        assertTrue(felix.looks.morning())
+        val asked = felix.server.takeRequest().body.readUtf8()
+        assertTrue("“Questions 1 and 2” (50 min), then “Question 3” (22 min)" in asked, asked)
+        val message = stores.chat.value.messages.single()
+        val proposal = message.proposals.single()
+        val made = stores.instructions.value.instructions.single { it.id == proposal.made }
+        assertEquals(listOf(ChangeType.Steps, ChangeType.Minutes), made.changes.map { it.type })
+        assertEquals(listOf(25, 47), made.changes[0].steps!!.map { it.minutes })
+        // As the plan takes the task: his total at your pace, which still teaches the pace against the reading's 65.
+        val planned = felix.planning.asPlanned().single()
+        assertEquals(listOf(72, 65), listOf(planned.effortMin, planned.mine.minutes?.paced?.from))
+        assertTrue(planned.pacedTeaches)
+        // Taken back: the reading's steps and its total as they were.
+        felix.conversation.undoProposal(message.id, proposal.id)
+        assertTrue(stores.instructions.value.instructions.none { it.id == proposal.made })
+        val back = felix.planning.asPlanned().single()
+        assertEquals(65 to listOf(45, 20), back.effortMin to back.subSteps.map { it.minutes })
     }
 
     @Test
