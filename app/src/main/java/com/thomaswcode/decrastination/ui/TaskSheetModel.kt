@@ -78,12 +78,15 @@ object TaskSheetModel {
         }
 
     /**
-     * [task]'s next step as its sheet says it: for a task with steps, the first still to do, as they're
-     * ticked (none once all are); without, its reading's suggestion, or its email's, as it was read.
+     * [task]'s next step as its sheet says it, while it's open: for a task with steps, the first still
+     * to do, as they're ticked (none once all are); without, its reading's suggestion, or its email's, as
+     * it was read. A task finished (handed in with steps not ticked here) has none.
      */
-    fun nextStep(task: TaskItem): String? =
-        if (task.subSteps.isNotEmpty()) task.subSteps.firstOrNull { !it.done }?.title
-        else Enrichments.current(task)?.nextStep ?: task.extra[GmailThreads.EXTRA_NEXT_STEP]
+    fun nextStep(task: TaskItem): String? = when {
+        !task.isOpen -> null
+        task.subSteps.isNotEmpty() -> task.subSteps.firstOrNull { !it.done }?.title
+        else -> Enrichments.current(task)?.nextStep ?: task.extra[GmailThreads.EXTRA_NEXT_STEP]
+    }
 
     /** The words of the instructions in force on [taskId], about it or changing it: the newest first. */
     fun instructions(applied: List<Instruction>, taskId: String): List<String> =
