@@ -580,6 +580,27 @@ class ConversationTest {
     }
 
     @Test
+    fun `a reply to his question in the archive is read shown it and, no answer, has it wait there again, and a long answer is kept whole`() = runBlocking {
+        stores.tasks.update { it.copy(tasks = listOf(sheet)) }
+        val old = ChatMessage("q0", Speaker.Felix, "is it handed in on teams?", now - 70 * 86_400_000L, About(taskId = sheet.id, taskTitle = sheet.title), kind = MessageKind.Question)
+        stores.chatArchive.update { it.copy(messages = listOf(old)) }
+        assertEquals(Conversation.Asked.Answer, conversation.send("what's due friday?", replyTo = "q0"))
+        val asking = stores.instructions.value.instructions.single()
+        assertEquals("is it handed in on teams?", felix.looks.questionFor(asking))
+        assertNotNull(stores.chatArchive.value.messages.single().answeredAt)
+        felix.looks.answerRead(asking, answers = false, changed = false)
+        assertNull(stores.chatArchive.value.messages.single().answeredAt)
+        // A long answer is kept whole, as the chat kept it, not cut short as its instruction is.
+        felix.outbox.send(ChatMessage("q1", Speaker.Felix, "what's in it?", now, About(taskId = sheet.id, taskTitle = sheet.title), kind = MessageKind.Question))
+        val long = "questions 1 to 6, then " + "the extension ".repeat(100)
+        assertEquals(Conversation.Asked.Answer, conversation.send(long, replyTo = "q1"))
+        val kept = stores.instructions.value.instructions.last()
+        assertTrue(kept.text.length < long.trim().length)
+        felix.looks.answerRead(kept, answers = true, changed = false)
+        assertEquals(listOf(long.trim()), stores.tasks.value.tasks.single().answers)
+    }
+
+    @Test
     fun `a reply to a question scrolled back to in the archive is answered as it, with no call`() = runBlocking {
         val question = ChatMessage("e1", Speaker.Felix, "Is the open day all day?", now - 70 * 86_400_000L, About(eventKey = "open day", eventTitle = "Open day"), kind = MessageKind.EventQuestion, byApp = true, suggestedReplies = CalendarTime.ANSWERS.map { it.first })
         felix.stores.chatArchive.update { it.copy(messages = listOf(question)) }

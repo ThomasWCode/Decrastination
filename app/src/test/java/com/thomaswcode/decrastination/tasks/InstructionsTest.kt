@@ -238,14 +238,22 @@ class InstructionsTest {
             c.instructions.readInstructions()
             assertEquals(Triple("it's due thursday", false, true), c.answersRead.last())
             reply("c", "make it next month")
-            c.answers("""{"understood":true,"question":null,"answersQuestion":false,"changes":[{"type":"AtTime","taskId":"teams:sheet","afterTaskId":"","eventKey":"","eventTime":"","minutes":-1,"date":"2026-11-20","endDate":"","weekday":"","time":"17:00","endTime":"","title":"","steps":[]}]}""")
+            val late = """{"understood":true,"question":null,"answersQuestion":false,"changes":[{"type":"AtTime","taskId":"teams:sheet","afterTaskId":"","eventKey":"","eventTime":"","minutes":-1,"date":"2026-11-20","endDate":"","weekday":"","time":"17:00","endTime":"","title":"","steps":[]}]}"""
+            c.answers(late)
             c.instructions.readInstructions()
             assertEquals(Triple("make it next month", false, false), c.answersRead.last())
+            // That one written again (Write again): read as an instruction of yours, no longer a reply, so not handed on again.
+            c.instructions.rereadInstruction("c", "make it next month")
+            c.answers(late)
+            c.instructions.readInstructions()
+            assertEquals(3, c.answersRead.size)
+            repeat(2) { c.server.takeRequest() }
+            assertTrue("their reply" !in c.server.takeRequest().body.readUtf8())
             // Discarded while its reading was out: nothing handed on.
             reply("d", "all of it")
             c.answers("""{"understood":false,"question":null,"changes":[],"answersQuestion":true}""", delayMs = 1_000)
             val reading = c.scope.launch { c.instructions.readInstructions() }
-            c.until("its reading asked") { c.server.requestCount == 4 }
+            c.until("its reading asked") { c.server.requestCount == 5 }
             c.instructions.deleteInstruction("d")
             reading.join()
             assertEquals(3, c.answersRead.size)
