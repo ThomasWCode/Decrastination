@@ -70,6 +70,8 @@ Everything else in Stage 5 was checked on the phone with you on 18 Oct, or by th
 2. Once the chat has messages past its window (a fortnight old and past the newest 200, days away), scroll back past them: the older rows show under *Earlier messages* with no Undo or buttons of their own, read a month at a time (4.0.4).
 3. The week's check-in answered on a Sunday (in the chat or on its form): kept once in the log, and the week's review asked for, now through `Learning` (6e). 6e's check couldn't answer one from the PC on 19 Oct, as that week had its check-in already.
 4. A slot missed today, then its task finished: blocking as the day's other slots have it (4.1.3; not seen live, as blocking applies only within the day's hours).
+5. His first message after three hours with nothing said opens with a greeting (4.3.11). The eight he sent on 23 Oct's evening came within the hour of each other, so rightly had none; a quiet morning's first shows it.
+6. A reply of yours to his question that isn't its answer (4.3.12): answered in the chat, not kept with its task, and his question waiting for its answer again. It comes with his next question.
 
 ## When the phone is away
 
@@ -83,7 +85,7 @@ So it went for Stage 6: `main`'s 4.0.4 went on first, then Stage 6's five PRs (#
 2. **Stage 5** (the chat; done, in one evening with you): three short sessions with you, or one evening for all three.
 3. **Stages 6, 9 and 7** (eight PRs, the services, the names and the data release; done): three or four phone evenings; a five-minute look after 7.
 4. **Stage 8** (reminders, the gaps and what he's sent; done): one evening with you for 8a's fifteen minutes, a glance the next day for the SlotStart reminder; 8b your classes' subjects first, five minutes; 8c only the phone.
-5. **Stage 10** (done; 10b's session with 4.2.1 and 11's on 21 Oct): 10a needed only the phone; the voice's text was read by you before 10b started. Left: your read of a day of his messages (§Still to check); 10b's briefing and 10a's rule gone the next morning were checked on 22 Oct.
+5. **Stage 10** (done; 10b's session with 4.2.1 and 11's on 21 Oct): 10a needed only the phone; the voice's text was read by you before 10b started. Your read of a day of his messages was done on 22 Oct (4.3.9), and 4.3.9's check on 23 Oct, with its three fixes (4.3.11 to 4.3.13); 10b's briefing and 10a's rule gone the next morning were checked on 22 Oct.
 6. **Stage 11** (done, 21 Oct): an evening with Gmail open, about an hour with its two finds (a star's kind that Gmail's website still draws, and a lost connection's first retry).
 7. **Stage 12** (done, 22 Oct): only the phone; the done-when list ([README](README.md)), ticked by 4.3.2 with what holds, is yours to read together whenever you like.
 
