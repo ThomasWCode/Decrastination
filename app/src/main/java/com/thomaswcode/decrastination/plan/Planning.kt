@@ -2,6 +2,7 @@ package com.thomaswcode.decrastination.plan
 
 import android.util.Log
 import com.thomaswcode.decrastination.AppGraph
+import com.thomaswcode.decrastination.core.Calibration
 import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.Duplicates
 import com.thomaswcode.decrastination.core.Instruction
@@ -84,6 +85,9 @@ class Planning(
             if (o == task.mine) task else task.withMine(o)
         }.let(Duplicates::linksPresent).let(Duplicates::credited)
     }
+
+    /** What's been learned of the app's estimates, the plans made by it: a task's steps' minutes as planned ([TaskItem.plannedStepMinutes]). */
+    fun calibration(): Calibration = learning.value.calibration
 
     /**
      * The plan at [now], of [state] with [applied] instructions and the calendar's [time]: as they are, or a

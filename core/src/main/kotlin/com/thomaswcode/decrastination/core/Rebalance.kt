@@ -3,10 +3,10 @@ package com.thomaswcode.decrastination.core
 import kotlinx.serialization.Serializable
 
 /**
- * Two of Felix's steps rebalanced to fit a free time at school (D-110): where a task's next step is too
- * long for one today and the step after it needs it first, he may move the boundary between them in the
- * morning's call, so the first fits that time, the work and its order kept. Still two steps, with their
- * ids, so a slot's key and a tick follow them. Pure.
+ * Two of a task's steps, Felix's or the reading's, rebalanced to fit a free time at school (D-110): where its
+ * next step is too long for one today and the step after it needs it first, he may move the boundary between
+ * them in the morning's call, so the first fits that time, the work and its order kept. Still two steps, with
+ * their ids, so a slot's key and a tick follow them. Pure.
  */
 object Rebalance {
     /** The shortest step a rebalance makes: the shortest free time at school there is (`minSchoolSlotMin`'s). */
@@ -15,10 +15,23 @@ object Rebalance {
     /** The most he's asked about in a morning. */
     const val MAX_ASKED = 3
 
+    /** Whose steps he may rebalance: his own and the reading's, never yours (D-4). */
+    private val REBALANCED = setOf(StepOrigin.Felix, StepOrigin.Reading)
+
     private const val MINUTE = 60_000L
 
-    /** Task [taskId]'s step [index] ([first]) and the one after it ([second]), the first too long for [gap]. */
-    data class Candidate(val taskId: String, val title: String, val index: Int, val first: SubStep, val second: SubStep, val gap: Gap)
+    /**
+     * Task [taskId]'s step [index] ([first]) and the one after it ([second]), the first too long for [gap]; [planned],
+     * each of its steps' minutes as the plan takes them (the reading's by the pace learned), which he's shown and a
+     * rebalance writes.
+     */
+    data class Candidate(val taskId: String, val title: String, val index: Int, val first: SubStep, val second: SubStep, val gap: Gap, val planned: List<Int>) {
+        /** The first's minutes as planned. */
+        val firstMinutes: Int get() = planned[index]
+
+        /** The second's minutes as planned. */
+        val secondMinutes: Int get() = planned[index + 1]
+    }
 
     /** His answer for one: the two steps' new titles and minutes, in their order. */
     @Serializable
@@ -35,11 +48,11 @@ object Rebalance {
      * Today's in [plan], from [tasks]: a task's next step, today's work, not begun and one that can be done
      * at school, too long for a free time there before its slot today (or with none), and the step after it
      * needing it, alike in place, its dates planning the work moved to it no later than the first's did; both
-     * Felix's, as D-4 keeps yours and the reading's as they were given. None of a task whose rebalance you took back
-     * ([declined]). Each its own free time, the earliest its piece can be done in, taken in the day's order
-     * of their pieces (the more urgent first), at most [MAX_ASKED].
+     * Felix's or both the reading's, never yours (D-4), each at its minutes as planned by [calibration]'s pace. None
+     * of a task whose rebalance you took back ([declined]). Each its own free time, the earliest its piece can be done
+     * in, taken in the day's order of their pieces (the more urgent first), at most [MAX_ASKED].
      */
-    fun candidates(plan: Plan, tasks: List<TaskItem>, declined: Set<String>, now: Long): List<Candidate> {
+    fun candidates(plan: Plan, tasks: List<TaskItem>, declined: Set<String>, now: Long, calibration: Calibration = Calibration()): List<Candidate> {
         val today = plan.todayBucket ?: return emptyList()
         val gaps = today.gaps.filter { it.start >= now && it.minutes >= MIN_STEP_MIN }
         if (gaps.isEmpty()) return emptyList()
@@ -53,13 +66,24 @@ object Rebalance {
             val index = task.subSteps.indexOfFirst { !it.done }.takeIf { it >= 0 } ?: continue
             val first = task.subSteps[index]
             val second = task.subSteps.getOrNull(index + 1) ?: continue
-            if (first.origin != StepOrigin.Felix || second.origin != StepOrigin.Felix || second.done || second.anyOrder) continue
+            if (first.origin !in REBALANCED || second.origin != first.origin || second.done || second.anyOrder) continue
             // Today's work: a task for another day isn't rewritten for today's free time.
             val piece = today.chunks.firstOrNull { it.taskId == task.id && it.stepIndex == index } ?: continue
-            if (worked(task) > 0) continue
-            // Its piece laid at the step's own minutes: not shared out to a total you gave, nor shortened by work
-            // or its source's progress, so the minutes he gives are the ones laid.
-            if (piece.minutes != first.minutes) continue
+            // Each step's minutes as the plan takes them: the reading's by the pace, his as he gave them.
+            val planned = task.plannedStepMinutes(calibration.multiplierFor(task))
+            if (worked(task, planned) > 0) continue
+            // Its piece laid at the step's minutes as planned, not shortened by work or its source's progress, so the
+            // minutes he gives are the ones laid; and none shared out to a total you gave (D-4).
+            if (piece.minutes != planned[index] || (task.yourMinutes && planned != task.subSteps.map { it.minutes })) continue
+            // The reading's become his once rebalanced, and his are never cut into sittings (D-34): none still to do
+            // over an hour as planned, so none is laid otherwise than it was.
+            if (!task.yourSteps && task.subSteps.indices.any { !task.subSteps[it].done && planned[it] > Sittings.MAX_MIN }) continue
+            // A step whose sections an Anki deck holds is the deck's work, which the plan leaves out: as his step it would lose
+            // them and be planned twice, so none of such a task.
+            if (task.subSteps.any { it.ankiSections.isNotEmpty() }) continue
+            // Nor the second over an hour once he's split them, however he does: two of the reading's only where their sum
+            // less the shortest first he may make stays within an hour.
+            if (first.origin == StepOrigin.Reading && planned[index] + planned[index + 1] - MIN_STEP_MIN > Sittings.MAX_MIN) continue
             // Work for home only never goes in a free time at school (PL-15), however it's cut.
             val where = Where.of(first.where) ?: Planner.whereOf(task)
             if (where == Where.Home) continue
@@ -75,20 +99,21 @@ object Rebalance {
             if (slot?.pinned == true || (slot == null && piece.why == Why.Pinned)) continue
             // One its piece can be done in: before its slot, once its task opens, over before a deadline that day.
             val gap = gaps.firstOrNull { g ->
-                g.start !in taken && g.minutes < first.minutes && (slot == null || g.start < slot.start) &&
+                g.start !in taken && g.minutes < planned[index] && (slot == null || g.start < slot.start) &&
                     (piece.availableAt ?: Long.MIN_VALUE) <= g.start && !(piece.hard && piece.deadline < g.start + g.minutes * MINUTE)
             } ?: continue
             taken += gap.start
-            out += Candidate(task.id, task.title, index, first, second, gap)
+            out += Candidate(task.id, task.title, index, first, second, gap, planned)
         }
         return out
     }
 
     /**
      * [task]'s steps with [given] made on [candidate], as the steps he gives in a Steps change, each with
-     * its id so a tick follows it; null where [given] isn't one: another task or step, a title missing, a
-     * step under [MIN_STEP_MIN], the first longer than the free time, the two not adding up to what they
-     * did, or the task's steps no longer as they were asked about.
+     * its id so a tick follows it and at its minutes as planned, so the task takes what it was laid at (the
+     * reading's, his from then on, aren't paced again); null where [given] isn't one: another task or step, a
+     * title missing, a step under [MIN_STEP_MIN], the first longer than the free time, the two not adding up to
+     * what they did, or the task's steps no longer as they were asked about.
      */
     fun steps(task: TaskItem, candidate: Candidate, given: Given): List<OwnStep>? {
         if (given.taskId != candidate.taskId || given.stepIndex != candidate.index) return null
@@ -96,10 +121,10 @@ object Rebalance {
         val second = title(given.secondTitle)
         if (first.isEmpty() || second.isEmpty()) return null
         if (given.firstMinutes !in MIN_STEP_MIN..candidate.gap.minutes || given.secondMinutes < MIN_STEP_MIN) return null
-        if (given.firstMinutes + given.secondMinutes != candidate.first.minutes + candidate.second.minutes) return null
-        if (task.subSteps.getOrNull(candidate.index) != candidate.first || task.subSteps.getOrNull(candidate.index + 1) != candidate.second) return null
+        if (given.firstMinutes + given.secondMinutes != candidate.firstMinutes + candidate.secondMinutes) return null
+        if (task.subSteps.size != candidate.planned.size || task.subSteps.getOrNull(candidate.index) != candidate.first || task.subSteps.getOrNull(candidate.index + 1) != candidate.second) return null
         return task.subSteps.mapIndexed { i, s ->
-            val own = OwnStep(s.title, s.minutes, s.from, s.dueAt, s.where, id = s.id, anyOrder = s.anyOrder)
+            val own = OwnStep(s.title, candidate.planned[i], s.from, s.dueAt, s.where, id = s.id, anyOrder = s.anyOrder)
             when (i) {
                 candidate.index -> own.copy(title = first, minutes = given.firstMinutes)
                 candidate.index + 1 -> own.copy(title = second, minutes = given.secondMinutes)
@@ -108,11 +133,21 @@ object Rebalance {
         }
     }
 
-    /** [candidate]'s rebalance into [steps] as his Steps change, at [at]: to try a plan with ([laidAsOffered]) before it's made. */
-    fun instruction(candidate: Candidate, steps: List<OwnStep>, at: Long): Instruction = Instruction(
-        "rebalance:${candidate.taskId}", "", at = at, state = InstructionStatus.Applied,
-        changes = listOf(Change(ChangeType.Steps, taskId = candidate.taskId, steps = steps)), appliedAt = at, by = By.Felix,
-    )
+    /**
+     * [candidate]'s rebalance into [steps] as his Steps change on [task], at [at]: to try a plan with ([laidAsOffered]) before
+     * it's made. The reading's, where the steps then add up to other than the task's total in force (by the pace, or a reading
+     * whose total isn't its steps'), with his Minutes change too: their sum, the app's own estimate at your pace
+     * ([Change.pacedFrom]), so the steps add up to the task's total (AI-19) and what's finished teaches the pace as before.
+     */
+    fun instruction(task: TaskItem, candidate: Candidate, steps: List<OwnStep>, at: Long): Instruction {
+        val total = steps.sumOf { it.minutes }
+        val minutes = Change(ChangeType.Minutes, taskId = candidate.taskId, minutes = total, pacedFrom = task.appEffortMin, pacedHash = Enrichments.inputHash(task))
+            .takeIf { candidate.first.origin == StepOrigin.Reading && total != task.effortMin }
+        return Instruction(
+            "rebalance:${candidate.taskId}", "", at = at, state = InstructionStatus.Applied,
+            changes = listOfNotNull(Change(ChangeType.Steps, taskId = candidate.taskId, steps = steps), minutes), appliedAt = at, by = By.Felix,
+        )
+    }
 
     /**
      * Whether [plan], tried with [candidate]'s rebalance, lays its first step in the free time it was offered,
@@ -153,7 +188,7 @@ object Rebalance {
         .mapNotNull { it.taskId }
         .toSet()
 
-    /** Minutes worked on [task] past its ticked steps, which the plan takes off its next: that step begun. */
-    private fun worked(task: TaskItem): Int =
-        task.workedMin + task.photoMin - task.stepsWorkedMin - task.subSteps.filter { it.done }.sumOf { if (it.byHand) it.timedMin else it.minutes }
+    /** Minutes worked on [task] past its ticked steps, each at its minutes as [planned], which the plan takes off its next: that step begun. */
+    private fun worked(task: TaskItem, planned: List<Int>): Int =
+        task.workedMin + task.photoMin - task.stepsWorkedMin - task.subSteps.withIndex().filter { it.value.done }.sumOf { (i, s) -> if (s.byHand) s.timedMin else planned[i] }
 }

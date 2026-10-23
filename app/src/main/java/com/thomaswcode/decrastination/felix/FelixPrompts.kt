@@ -144,7 +144,7 @@ object FelixPrompts {
         if (toCome.isNotEmpty()) appendLine("Left today: " + toCome.joinToString("; ") { "${it.chunk?.label} ${clock(it.start)}–${clock(it.end)}" })
         if (rebalance.isNotEmpty()) {
             appendLine("Steps you may rebalance (task id | task | step | the two steps | the free time at school):")
-            for (c in rebalance) appendLine("- ${c.taskId} | ${c.title} | ${c.index} | “${c.first.title}” (${c.first.minutes} min), then “${c.second.title}” (${c.second.minutes} min) | ${clock(c.gap.start)}, ${c.gap.minutes} min")
+            for (c in rebalance) appendLine("- ${c.taskId} | ${c.title} | ${c.index} | “${c.first.title}” (${c.firstMinutes} min), then “${c.second.title}” (${c.secondMinutes} min) | ${clock(c.gap.start)}, ${c.gap.minutes} min")
         }
         freeMin?.let { appendLine("Free time now: $it min") }
         if (done.isNotEmpty()) appendLine("Done, as their sources say, with none of it timed in a slot: " + done.joinToString("; "))
