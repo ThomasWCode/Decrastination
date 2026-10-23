@@ -111,9 +111,15 @@ class LooksTest {
         felix.answers("""{"message":"hey, the worksheet's on. starting?","replies":[],"nextCheckMin":15,"memories":[]}""")
         felix.looks.check()
         assertNotNull(stores.chat.value.felix.draft)
-        // You say something in the chat meanwhile: at its moment it's written again, not sent as it was.
-        val said = felix.clock.time + 60_000L
-        stores.chat.update { it.copy(messages = it.messages + ChatMessage("y1", Speaker.You, "what's left tonight?", said, answeredAt = said)) }
+        // You say something in the chat meanwhile, twice, with a look after each: not written again ahead, so no call an exchange.
+        for (i in 1..2) {
+            val said = felix.clock.time + 60_000L
+            stores.chat.update { it.copy(messages = it.messages + ChatMessage("y$i", Speaker.You, "what's left tonight?", said, answeredAt = said)) }
+            felix.clock.time = said + 30_000L
+            felix.looks.check()
+        }
+        assertEquals(1, felix.server.requestCount)
+        // At its moment it's written again, not sent as it was.
         felix.clock.time = slot.start + grace + 60_000L
         felix.answers("""{"message":"worksheet's 10 min in and nothing yet. starting?","replies":[],"nextCheckMin":15,"memories":[]}""")
         felix.looks.check()
