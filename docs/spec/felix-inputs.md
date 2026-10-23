@@ -440,7 +440,7 @@ He isn't asked in quiet hours, during a timed calendar event that takes its time
 Also:
 - **Morning**: at the briefing (07:00 on a school day, 08:30 on any other, a weekday off included, both in Settings, D-74), when today has work slots. He has 20 seconds; without his answer the day's list is the morning's message, in his name in the app's words.
 - **Written ahead** (AC-10): the next slot's SlotStart, up to 10 minutes before it's due, written as of that moment; sent as it is if it still fits then: written for that piece, and nothing said in the chat since, by him or you (4.3.11: a greeting, or what's done, could be out of date by then).
-- **Reminder** (4.1.0): a reminder of yours due within ten minutes, written for as of its moment, once a moment (`Looks.draftReminders`); with none of his words by then, or something said in the chat since they were written, yours go ([below](#in-his-name-but-not-his-words)).
+- **Reminder** (4.1.0): a reminder of yours due within ten minutes, written for as of its moment, once a moment (`Looks.draftReminders`); with none of his words for that moment, or something said in the chat since they were written, he's asked again at its moment, and with none then either (Claude off, resting, none), yours go ([below](#in-his-name-but-not-his-words)).
 - A call held or failed puts nothing on record: it's tried again after 5 minutes while it's still to say.
 - `felix-say` writes one now for any reason, from a PC ([storage-and-backups.md](storage-and-backups.md)).
 
