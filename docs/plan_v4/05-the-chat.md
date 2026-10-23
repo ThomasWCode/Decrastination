@@ -135,11 +135,11 @@ His channel (`Channels.FELIX`) for all of it, the morning included: one notifica
 
 **One entrance for replies.** `Conversation.ask(text, about, id, replyTo)` takes over `replyToFelix`'s routing, by the kind of the message replied to (`Replies.route`, pure), so the chat and the notification behave alike:
 
-| Replying to | Done with no call | Else |
+| Replying to | Taken as its answer, not a turn of the chat | Else |
 |---|---|---|
 | `CheckIn` | the answer kept and the next question asked (`checkInReply`) | |
 | `Completions`, and the words are Harder / As expected / Easier | recorded on each completion (`Assessment.record`) | any other words: a chat turn |
-| `Question` | the task's answer: an instruction, the task read again (`Looks.answered`) | |
+| `Question` | an instruction on its task, read by Claude shown the question (a call, 4.3.12): kept with the task, which is read again, where it answers it, else answered in the chat or, a change of it made, done with as that, the question waiting again (`Looks.answered`, `Looks.answerRead`, D-19) | |
 | `EventQuestion`, and the words are one of its three | `CalendarTime.answer` | any other words: a chat turn (he can make an EventTime change) |
 | `Reminder` | Done, Snooze ([07](07-notes-and-reminders.md)) | a chat turn |
 | anything else | | a chat turn, the quoted message told to the model |

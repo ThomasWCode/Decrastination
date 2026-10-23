@@ -25,6 +25,7 @@ import com.thomaswcode.decrastination.notify.NoticeId
 import com.thomaswcode.decrastination.notify.Notices
 import com.thomaswcode.decrastination.plan.Planning
 import com.thomaswcode.decrastination.sync.GmailFinishes
+import com.thomaswcode.decrastination.tasks.Instructions
 import java.io.File
 import java.nio.file.Files
 import java.util.Collections
@@ -57,6 +58,8 @@ class FelixHarness(
     seed: (File) -> Unit = {},
     private val key: String? = null,
     private val calendar: (Stores) -> EventJudge.Time = { NO_CALENDAR },
+    /** Your answers to his questions read by the real instructions' service ([instructions]), as AppGraph's are, not only kept. */
+    private val readInstructions: Boolean = false,
 ) : AutoCloseable {
     private val dir = Files.createTempDirectory("felix").toFile().also(seed)
     val clock = FixedClock(Fixtures.at(start), LONDON)
@@ -108,9 +111,23 @@ class FelixHarness(
         calendarTime = { calendar(stores) },
         profile = { conversation.profile(it) },
         remember = { conversation.remember(it) },
-        addInstruction = { text, about, answer -> owners.instruction(text, about, answer) },
+        addInstruction = { text, about, answer, question -> if (readInstructions) instructions.addInstruction(text, about, answer, question) else owners.instruction(text, about, answer) },
         assess = { taskId, doneAt, answer -> assessed += Triple(taskId, doneAt, answer) },
         applyProposal = { messageId, proposalId -> conversation.applyProposal(messageId, proposalId) },
+    )
+
+    /**
+     * Your instructions as AppGraph keeps them ([Instructions]), read through the real reader to the stand-in, your
+     * answers to his questions handed to [looks] once read: what [readInstructions] has his flows use.
+     */
+    val instructions: Instructions = Instructions(
+        stores.instructions, stores.tasks, stores.settings, stores.session, stores.school, stores.chat, clock, scope, gateway, focus, planning,
+        calendarTime = { calendar(stores) },
+        profile = { conversation.profile() },
+        reread = {},
+        redraw = {},
+        answerRead = { instruction, answers, changed -> looks.answerRead(instruction, answers, changed) },
+        question = { looks.questionFor(it) },
     )
 
     /** [key]'s piece kept as Day's Done keeps it ([Focus.keepSlot]), with [extraMin] more and a [photo]. */
@@ -200,6 +217,13 @@ class FelixHarness(
 
         override fun answerLater() {
             later++
+        }
+
+        /** Your answers to his questions read as work of their own. */
+        @Volatile var readLater = 0
+
+        override fun readLater() {
+            readLater++
         }
 
         override fun remindForm() {

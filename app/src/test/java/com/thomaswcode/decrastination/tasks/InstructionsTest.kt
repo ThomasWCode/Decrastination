@@ -218,6 +218,37 @@ class InstructionsTest {
     }
 
     @Test
+    fun `your reply to his question is read shown the question it was given, before the chat has your reply to find it by`() = runBlocking {
+        TasksHarness(claude = true).use { c ->
+            c.stores.tasks.update { it.copy(tasks = listOf(c.teams("sheet"))) }
+            c.answers("""{"understood":false,"question":null,"changes":[],"answersQuestion":true}""")
+            c.instructions.addInstruction("yes", About(taskId = "teams:sheet", taskTitle = "sheet"), answer = true, question = "is the extension part of it?")
+            c.until("its reading asked") { c.server.requestCount == 1 }
+            val sent = c.server.takeRequest().body.readUtf8()
+            // The question given, not the one found by its task (the harness's stands for his newest about it).
+            assertTrue("is the extension part of it?" in sent && TasksHarness.QUESTION !in sent, sent.take(400))
+            c.until("handed to Felix") { c.answersRead.isNotEmpty() }
+            assertEquals(Triple("yes", true, false), c.answersRead.single())
+        }
+    }
+
+    @Test
+    fun `your reply written again while it's read is read again shown the question it was given`() = runBlocking {
+        TasksHarness(claude = true).use { c ->
+            c.stores.tasks.update { it.copy(tasks = listOf(c.teams("sheet"))) }
+            c.answers("""{"understood":false,"question":null,"changes":[],"answersQuestion":true}""", delayMs = 1_000)
+            c.answers("""{"understood":false,"question":null,"changes":[],"answersQuestion":true}""")
+            val id = c.instructions.addInstruction("yes", About(taskId = "teams:sheet", taskTitle = "sheet"), answer = true, question = "is the extension part of it?")
+            c.until("its reading asked") { c.server.requestCount == 1 }
+            c.instructions.rereadInstruction(id, "yes, all of it")
+            c.until("read again") { c.server.requestCount == 2 }
+            c.server.takeRequest()
+            val again = c.server.takeRequest().body.readUtf8()
+            assertTrue("is the extension part of it?" in again && TasksHarness.QUESTION !in again, again.take(400))
+        }
+    }
+
+    @Test
     fun `your reply to his question is read shown his words, and handed to Felix with whether it answers it and whether a change of it was made`() = runBlocking {
         TasksHarness(claude = true).use { c ->
             c.stores.tasks.update { it.copy(tasks = listOf(c.teams("sheet"))) }
