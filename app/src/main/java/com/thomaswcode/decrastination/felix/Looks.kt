@@ -380,23 +380,51 @@ class Looks(
     /**
      * [text] in reply to his [message], if it's a Completions one and [text] one of its three
      * answers (LR-05): put on each completion it asked about, as the old notification's buttons
-     * did; or, a Question's (AI-10), an instruction on its task and kept with it, so the model reads
-     * it again with your answer. False for anything else, which goes on in the chat.
+     * did; or, a Question's (AI-10), an instruction on its task, read shown his question, and kept
+     * with it once it's read as its answer ([answerRead]). False for anything else, which goes on in the chat.
      */
     suspend fun answered(message: ChatMessage, text: String): Boolean {
         val about = message.about.taskId
         if (message.kind == MessageKind.Question && about != null) {
             val task = this.tasks.value.tasks.firstOrNull { it.id == about } ?: return false
             addInstruction(text, About(taskId = task.id, taskTitle = task.title), true)
-            tasks.update { s -> s.copy(tasks = s.tasks.map { if (it.id == task.id) it.copy(answers = (it.answers + text.trim()).takeLast(MAX_ANSWERS)) else it }) }
-            // Read again with it now, not at the next sync: it's what settles the reading.
-            ports.readAgain()
             return true
         }
         if (message.kind != MessageKind.Completions || message.asks.isEmpty()) return false
         val answer = Assessment.ANSWERS.firstOrNull { it.first.equals(FelixWords.chip(text), ignoreCase = true) }?.second ?: return false
         message.asks.forEach { assess(it.taskId, it.doneAt ?: 0L, answer) }
         return true
+    }
+
+    /**
+     * Your reply to his question about [instruction]'s task, read (AI-10): one that [answers] it is
+     * kept with the task, which is read again with it now, as it's what settles the reading. One that
+     * doesn't (a question of yours, or about something else) isn't kept; where it [changed] nothing,
+     * it's a turn of the chat, answered there, and his question waits for its answer again.
+     */
+    suspend fun answerRead(instruction: Instruction, answers: Boolean, changed: Boolean) {
+        val taskId = instruction.about.taskId ?: return
+        if (answers) {
+            tasks.update { s -> s.copy(tasks = s.tasks.map { if (it.id == taskId) it.copy(answers = (it.answers + instruction.text.trim()).takeLast(MAX_ANSWERS)) else it }) }
+            // Read again with it now, not at the next sync: it's what settles the reading.
+            ports.readAgain()
+            return
+        }
+        if (changed) return
+        // Your reply as it was kept under his question, as its answer: the last of yours about its task by then.
+        val reply = chat.value.messages.lastOrNull { it.from == Speaker.You && it.kind == MessageKind.Question && it.about.taskId == taskId && it.at <= instruction.at } ?: return
+        chat.update { s ->
+            s.copy(
+                messages = s.messages.map {
+                    when (it.id) {
+                        reply.id -> it.copy(kind = MessageKind.Chat, answeredAt = null)
+                        reply.replyTo -> it.copy(answeredAt = null)
+                        else -> it
+                    }
+                },
+            )
+        }
+        ports.answerLater()
     }
 
     /**

@@ -81,6 +81,11 @@ class Instructions(
     private val reread: suspend () -> Unit,
     /** The widget drawn again. */
     private val redraw: suspend () -> Unit,
+    /**
+     * Your reply to Felix's question about a task (AI-10), read: whether it answers the question, and
+     * whether it made a change, for him to keep it as the task's answer or take it on in the chat.
+     */
+    private val answerRead: suspend (Instruction, Boolean, Boolean) -> Unit = { _, _, _ -> },
 ) {
     /** Your instructions as they are now. */
     val value: InstructionState get() = instructions.value
@@ -198,6 +203,7 @@ class Instructions(
                     is Called.Answered -> called.value
                 }
                 val reading = result.reading ?: InstructionAnswers.Reading.Unclear(if (result.refused) "Claude declined to read it" else "Claude's answer couldn't be used")
+                val asSent = instructions.value.instructions.any { it.id == next.id && it.state == InstructionStatus.Reading && it.text == next.text }
                 instructions.update { state ->
                     state.copy(
                         instructions = state.instructions.mapNotNull { i ->
@@ -207,7 +213,7 @@ class Instructions(
                             } else {
                                 when (reading) {
                                     is InstructionAnswers.Reading.Changes -> i.copy(state = InstructionStatus.Understood, changes = reading.changes, note = null)
-                                    // An answer to his question that changes nothing: it's with its task, and goes.
+                                    // A reply to his question that changes nothing goes: kept with its task, or taken on in the chat ([answerRead]).
                                     is InstructionAnswers.Reading.Unclear -> if (i.answer) null else i.copy(state = InstructionStatus.Unclear, changes = emptyList(), note = reading.why)
                                 }
                             }
@@ -217,6 +223,8 @@ class Instructions(
                 // Made as soon as it's read (D-67: nothing of his waits for Apply), as the
                 // chat's are; one that can't be is marked unclear, saying why. Taken back under Your changes.
                 if (reading is InstructionAnswers.Reading.Changes) applyInstruction(next.id)
+                // Your reply to his question: his to keep as the task's answer, or, one that isn't, to answer in the chat.
+                if (next.answer && asSent) answerRead(next, reading.answers, reading is InstructionAnswers.Reading.Changes)
                 null
             }
             if (waiting != null) {

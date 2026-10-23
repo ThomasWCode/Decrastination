@@ -329,6 +329,7 @@ class AppGraph private constructor(context: Context) {
             Briefing.replanToday(app)
         },
         redraw = { WidgetUpdater.update(app) },
+        answerRead = { instruction, answers, changed -> looks.answerRead(instruction, answers, changed) },
     )
 
     /** Your own tasks ([OwnTasks]): kept, finished, opened again, deleted, and trimmed to their record once long done. */
