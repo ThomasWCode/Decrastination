@@ -334,13 +334,17 @@ class Instructions(
 
     /** For each task [id] gives new steps, the places where they're its steps as they were ([SlotState.unchanged]), as the plan takes it now. */
     private fun unchangedSteps(id: String): Map<String, Set<Int>> {
-        val changes = instructions.value.instructions.firstOrNull { it.id == id }?.changes.orEmpty().filter { it.type == ChangeType.Steps }
+        val instruction = instructions.value.instructions.firstOrNull { it.id == id } ?: return emptyMap()
+        val changes = instruction.changes.filter { it.type == ChangeType.Steps }
         if (changes.isEmpty()) return emptyMap()
         val calibration = planning.calibration()
-        val byId = planning.asPlanned().associateBy { it.id }
+        // Each task as it is, and as it will be with [instruction]: a total you gave shares its steps' minutes out.
+        val before = planning.asPlanned().associateBy { it.id }
+        val after = planning.asPlanned(applied = instructions.value.applied + instruction).associateBy { it.id }
         return changes.mapNotNull { c ->
-            val task = c.taskId?.let(byId::get) ?: return@mapNotNull null
-            task.id to SlotState.unchanged(task, c.steps.orEmpty(), task.plannedStepMinutes(calibration.multiplierFor(task)))
+            val was = c.taskId?.let(before::get) ?: return@mapNotNull null
+            val will = after[was.id] ?: return@mapNotNull null
+            was.id to SlotState.unchanged(was, c.steps.orEmpty(), was.plannedStepMinutes(calibration.multiplierFor(was)), will.plannedStepMinutes(calibration.multiplierFor(will)))
         }.toMap()
     }
 

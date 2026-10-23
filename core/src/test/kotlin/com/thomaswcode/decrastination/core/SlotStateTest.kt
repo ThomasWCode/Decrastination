@@ -49,15 +49,19 @@ class SlotStateTest {
         )
         // Two rebalanced, the third as it was; at the reading's paced minutes, the third laid at 45 and given at 45.
         val steps = listOf(OwnStep("Question 1", 20, id = "q12"), OwnStep("Questions 2 and 3", 40, id = "q3"), OwnStep("Write it up", 45, id = "up"))
-        assertEquals(setOf(2), SlotState.unchanged(task, steps, planned = listOf(60, 30, 45)))
+        assertEquals(setOf(2), SlotState.unchanged(task, steps, before = listOf(60, 30, 45), after = listOf(20, 40, 45)))
         // Given afresh (a change Felix writes comes without ids, and gets new ones as it's stored), the same title and minutes at its place: as it was.
-        assertEquals(setOf(0), SlotState.unchanged(task, listOf(OwnStep("Questions 1 and 2", 40)), planned = listOf(40, 20, 30)))
-        assertEquals(setOf(0), SlotState.unchanged(task, listOf(OwnStep("Questions 1 and 2", 40, id = "fresh123")), planned = listOf(40, 20, 30)))
+        assertEquals(setOf(0), SlotState.unchanged(task, listOf(OwnStep("Questions 1 and 2", 40)), before = listOf(40, 20, 30), after = listOf(40)))
+        assertEquals(setOf(0), SlotState.unchanged(task, listOf(OwnStep("Questions 1 and 2", 40, id = "fresh123")), before = listOf(40, 20, 30), after = listOf(40)))
         // Another step at its place (another's id), a new title or new minutes: not as it was.
-        assertEquals(emptySet(), SlotState.unchanged(task, steps.reversed(), planned = listOf(40, 20, 30)))
-        assertEquals(emptySet(), SlotState.unchanged(task, listOf(OwnStep("Questions 1 and 2", 40, id = "q3")), planned = listOf(40, 20, 30)))
-        assertEquals(emptySet(), SlotState.unchanged(task, listOf(OwnStep("Questions 1 and 2", 35, id = "q12")), planned = listOf(40, 20, 30)))
-        assertEquals(emptySet(), SlotState.unchanged(task, listOf(OwnStep("Questions 1 to 3", 40, id = "q12")), planned = listOf(40, 20, 30)))
+        assertEquals(emptySet(), SlotState.unchanged(task, steps.reversed(), before = listOf(40, 20, 30), after = listOf(45, 40, 20)))
+        assertEquals(emptySet(), SlotState.unchanged(task, listOf(OwnStep("Questions 1 and 2", 40, id = "q3")), before = listOf(40, 20, 30), after = listOf(40)))
+        assertEquals(emptySet(), SlotState.unchanged(task, listOf(OwnStep("Questions 1 and 2", 35, id = "q12")), before = listOf(40, 20, 30), after = listOf(35)))
+        assertEquals(emptySet(), SlotState.unchanged(task, listOf(OwnStep("Questions 1 to 3", 40, id = "q12")), before = listOf(40, 20, 30), after = listOf(40)))
+        // Under a total you gave (90), 30, 30 and 30 made 20, 30 and 30 share out as 22, 34 and 34: the two "as they were" aren't laid so.
+        val shared = listOf(OwnStep("Questions 1 and 2", 20, id = "q12"), OwnStep("Question 3", 30, id = "q3"), OwnStep("Write it up", 30, id = "up"))
+        val even = task.copy(subSteps = task.subSteps.map { it.copy(minutes = 30) })
+        assertEquals(emptySet(), SlotState.unchanged(even, shared, before = listOf(30, 30, 30), after = listOf(22, 34, 34)))
     }
 
     @Test

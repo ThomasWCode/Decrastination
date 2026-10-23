@@ -91,10 +91,12 @@ class Planning(
     /** What's been learned of the app's estimates, the plans made by it: a task's steps' minutes as planned ([TaskItem.plannedStepMinutes]). */
     fun calibration(): Calibration = learning.value.calibration
 
-    /** The places where [change]'s steps are its task's in [before] as they were ([SlotState.unchanged]). */
-    private fun unchangedBy(change: Change, before: List<TaskItem>): Set<Int> {
-        val task = before.firstOrNull { it.id == change.taskId } ?: return emptySet()
-        return SlotState.unchanged(task, change.steps.orEmpty(), task.plannedStepMinutes(calibration().multiplierFor(task)))
+    /** The places where [change]'s steps are its task's in [before] as they were, as [after] plans them ([SlotState.unchanged]). */
+    private fun unchangedBy(change: Change, before: List<TaskItem>, after: List<TaskItem>): Set<Int> {
+        val was = before.firstOrNull { it.id == change.taskId } ?: return emptySet()
+        val will = after.firstOrNull { it.id == change.taskId } ?: return emptySet()
+        val calibration = calibration()
+        return SlotState.unchanged(was, change.steps.orEmpty(), was.plannedStepMinutes(calibration.multiplierFor(was)), will.plannedStepMinutes(calibration.multiplierFor(will)))
     }
 
     /**
@@ -139,7 +141,7 @@ class Planning(
                 // Today's pieces where the last plan laid them, where that's still free, and those whose
                 // slots went by undone (PL-13).
                 previousSlots = trying.flatMap { it.changes }.filter { it.type == ChangeType.Steps }
-                    .fold(session.value.slots.on(today)) { s, c -> c.taskId?.let { s.released(it, now, unchangedBy(c, before)) } ?: s }.previous,
+                    .fold(session.value.slots.on(today)) { s, c -> c.taskId?.let { s.released(it, now, unchangedBy(c, before, tasks)) } ?: s }.previous,
                 missedSlots = session.value.slots.on(today).missed.map { it.key }.toSet(),
             ),
         )
