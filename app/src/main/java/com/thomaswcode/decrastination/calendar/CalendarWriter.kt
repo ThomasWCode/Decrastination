@@ -28,6 +28,8 @@ import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 /**
@@ -82,9 +84,9 @@ class CalendarWriter(
      * [made]'s next seven days written to the calendar you picked (NF-07). A slot you've moved there
      * is taken as your time for its task's next piece, where its deadline allows; else it's put back,
      * and you're told. Only [start]'s write, once plans are quiet, calls it (and its tests): two at
-     * once could insert a slot twice.
+     * once could insert a slot twice. Under [writing], so a switch of calendar waits for it.
      */
-    internal suspend fun writeSlots(made: Plan) {
+    internal suspend fun writeSlots(made: Plan): Unit = writing.withLock {
         clearOldCalendars()
         val calendarId = settings.value.calendarWriteId ?: return
         if (!provider.allowed()) return
@@ -136,7 +138,14 @@ class CalendarWriter(
         }
     }
 
-    /** The app's events taken out of calendars no longer written to, each kept on the list till that's done. */
+    /**
+     * Held while the calendar's written ([writeSlots]) and while a calendar no longer written to is cleared ([start]): a
+     * write under way for the calendar just switched from goes in before that's cleared, so none of its events is left
+     * there with nothing on the list to clear it.
+     */
+    private val writing = Mutex()
+
+    /** The app's events taken out of calendars no longer written to, each kept on the list till that's done; under [writing]. */
     private suspend fun clearOldCalendars() {
         val waiting = calendar.value.calendarsToClear
         if (waiting.isEmpty()) return
@@ -235,14 +244,17 @@ class CalendarWriter(
         // is goes from it, and the plan's made again for the new one.
         scope.launch {
             settings.state.map { it.calendarWriteId }.distinctUntilChanged().collect { id ->
-                val was = calendar.value.calendarWrittenTo
-                if (was == id) return@collect
-                // The old one kept on the list to clear till it is: without the permission now, or
-                // should the provider fail, it's tried again at the next replan.
-                calendar.update { state ->
-                    state.copy(calendarWrittenTo = id, calendarWritten = emptyMap(), calendarsToClear = (state.calendarsToClear + listOfNotNull(was)).distinct() - listOfNotNull(id).toSet())
+                // After a write under way, which may be for the one switched from.
+                writing.withLock {
+                    val was = calendar.value.calendarWrittenTo
+                    if (was == id) return@collect
+                    // The old one kept on the list to clear till it is: without the permission now, or
+                    // should the provider fail, it's tried again at the next replan.
+                    calendar.update { state ->
+                        state.copy(calendarWrittenTo = id, calendarWritten = emptyMap(), calendarsToClear = (state.calendarsToClear + listOfNotNull(was)).distinct() - listOfNotNull(id).toSet())
+                    }
+                    clearOldCalendars()
                 }
-                clearOldCalendars()
                 replan()
             }
         }
