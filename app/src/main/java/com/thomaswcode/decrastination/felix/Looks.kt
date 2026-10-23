@@ -409,17 +409,19 @@ class Looks(
      */
     suspend fun answerRead(instruction: Instruction, answers: Boolean, changed: Boolean) {
         val taskId = instruction.about.taskId ?: return
+        val reply = replyOf(instruction, chat.value.messages)
         if (answers) {
-            // Kept once: the same words again are the newest, not a second answer.
-            val text = instruction.text.trim()
+            // Your words as the chat kept them, whole (the instruction's are cut shorter), and kept once: the same
+            // words again are the newest, not a second answer.
+            val text = (reply?.text ?: instruction.text).trim()
             tasks.update { s -> s.copy(tasks = s.tasks.map { if (it.id == taskId) it.copy(answers = (it.answers.filterNot { a -> a == text } + text).takeLast(MAX_ANSWERS)) else it }) }
             // Read again with it now, not at the next sync: it's what settles the reading.
             ports.readAgain()
             return
         }
-        if (changed) return
-        val reply = replyOf(instruction, chat.value.messages) ?: return
-        // A turn of the chat now, no longer his question's reply, so his question waits for its answer again (D-99).
+        if (changed || reply == null) return
+        // A turn of the chat now, no longer his question's reply, so his question waits for its answer again (D-99),
+        // in the archive too where it was answered from there.
         chat.update { s ->
             s.copy(
                 messages = s.messages.map {
@@ -431,14 +433,14 @@ class Looks(
                 },
             )
         }
+        reply.replyTo?.let { outbox.waitingInArchive(it) }
         ports.answerLater()
     }
 
-    /** His question that [instruction], your reply to it, answers, in his words as he put it: for its reading (AI-10). */
+    /** His question that [instruction], your reply to it, answers, in his words as he put it, from the chat or the archive: for its reading (AI-10). */
     fun questionFor(instruction: Instruction): String? {
-        val messages = chat.value.messages
-        val reply = replyOf(instruction, messages) ?: return null
-        return messages.firstOrNull { it.id == reply.replyTo }?.text?.takeIf { it.isNotBlank() }
+        val reply = replyOf(instruction, chat.value.messages) ?: return null
+        return reply.replyTo?.let(outbox::find)?.text?.takeIf { it.isNotBlank() }
     }
 
     /** Your reply that [instruction] reads, as it was kept under his question as its answer: the last of yours about its task by then. */
