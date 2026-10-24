@@ -302,7 +302,7 @@ object ReadingAnswers {
 
     /**
      * An email's or planner item's blocks ([checked]), if they can be planned: some, no more than
-     * [ReadingPrompts.MAX_BLOCKS] as [given] (before a long one was cut into parts that fit a session),
+     * [ReadingPrompts.MAX_BLOCKS] as [given] (before a long one was cut into parts that fit a sitting),
      * within the most a task in blocks is taken to be ([MAX_BLOCKS_EFFORT]), and adding up to its
      * [total] (within a tenth, or ten minutes), which has to be within it too. Otherwise none, and
      * why: its estimate is planned whole. None given, there's nothing to drop.

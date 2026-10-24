@@ -139,7 +139,7 @@ fun InstructionContent(graph: AppGraph, instruction: Instruction, tasks: Map<Str
 
 /**
  * Your words about [about] said to Claude, in the chat (Q29), which opens: Claude answers
- * there, with cards to apply. One of yours still waiting is answered with them (D-98).
+ * there, with cards of what he's made. One of yours still waiting is answered with them (D-98).
  */
 fun sendInstruction(activity: Activity, text: String, about: About) {
     activity.startActivity(AskActivity.intent(activity, about, text))

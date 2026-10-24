@@ -43,7 +43,7 @@ import okhttp3.mockwebserver.MockWebServer
 import okhttp3.mockwebserver.RecordedRequest
 
 /**
- * The readings' service on temporary stores (docs/plan_v4), Claude's API a stand-in that
+ * The readings' service on temporary stores (docs/plan_v4/architecture.md §The rules), Claude's API a stand-in that
  * counts what it's sent: a reading due while Claude can't be asked is the rules', one read again
  * isn't sent then, and a task whose call the API refused as asked is read by the rules without
  * asking Claude again. The rules and the prompts themselves are `RuleEnricherTest`'s, `ReadingPromptsTest`'s and `ReadingAnswersTest`'s.

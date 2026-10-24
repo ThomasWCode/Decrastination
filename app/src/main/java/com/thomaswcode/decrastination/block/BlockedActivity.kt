@@ -54,9 +54,10 @@ import kotlinx.coroutines.delay
 
 /**
  * What a blocked app shows instead (docs/spec/blocking-and-protection.md): why, the next thing to do, and the ways
- * to get on with it. **Open** goes to the task; **Done** keeps its slot; **Check it's done**
- * asks its source; **Refresh Teams** asks the Teams widget to sync. There's no way
- * through (docs/spec/blocking-and-protection.md, layer 1). Back, and **Go home**, go to the home screen.
+ * to get on with it. **Open** goes to the task; **Done** keeps its slot; **All of it done**, for one
+ * of your own, finishes it; **Check it's done** asks its source; **Refresh Teams** asks the Teams widget
+ * to sync; **Photo check** sends a photo of written work. There's no way
+ * through (docs/spec/blocking-and-protection.md, layer 1). Back, and **Go to the home screen**, go there.
  *
  * Its own task (manifest), so neither Back nor Recents can reveal the app behind.
  */
@@ -124,7 +125,7 @@ class BlockedActivity : ComponentActivity() {
             if (!targetBlocked || verdict !is BlockPolicy.Verdict.Block) finish()
         }
         val next = plan.next
-        // Shared with the Plan (IMP-P1-001): the same actions, the same rules.
+        // Shared with Day (IMP-P1-001): the same actions, the same rules.
         val photo = rememberPhotoCheck(graph, this, plan) { _, text -> message = text }
 
         // Felix here too (UI-16), about the next piece's task.

@@ -13,7 +13,8 @@ only), then asks the app to move them into its encrypted store and delete the fi
 (`.debug.Command`, `import-credentials`). Nothing is written to this PC's disk or printed: only
 the names of the credentials sent.
 
-Run:  python scripts/load_credentials.py --gmail-address you@gmail.com [--serial SERIAL]
+Run:  python scripts/load_credentials.py [--gmail-address you@example.com] [--serial SERIAL]
+      (--gmail-address goes with a Gmail app password in the environment)
 """
 
 import argparse

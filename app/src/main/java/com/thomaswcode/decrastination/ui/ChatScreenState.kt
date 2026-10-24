@@ -17,7 +17,7 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 /**
- * What the chat's screen holds beside the chat (docs/plan_v4/05-the-chat.md §4 to §6): the first of his
+ * What the chat's screen holds beside the chat (docs/spec/felix.md §The chat): the first of his
  * messages unread when it was opened, for the divider, and where it opens; how many of the archive's
  * messages are shown, scrolled back to; the message your next one replies to; and which of his messages
  * have what's under them open, and which get the label that slides out. A plain class, tested without

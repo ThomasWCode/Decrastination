@@ -37,7 +37,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 /**
- * What the reading of the sources and the calendar asks of Android (docs/plan_v4/02-target-architecture.md
+ * What the reading of the sources and the calendar asks of Android (docs/plan_v4/architecture.md
  * §Ports), so it's tested without it: a sync as a job, the Teams widget asked and watched, the calendar
  * read, the widget drawn. [AndroidSyncPorts] on the phone.
  */
@@ -89,7 +89,7 @@ class AndroidSyncPorts(private val context: Context) : SyncPorts {
 }
 
 /**
- * What the app reads (docs/spec/sources.md; docs/plan_v4): the sources, through the syncer ([sync],
+ * What the app reads (docs/spec/sources.md): the sources, through the syncer ([sync],
  * [refreshAll]); the Teams widget asked to
  * sync ([requestTeamsSync]) and watched ([start]); and the phone's calendar as busy time
  * ([refreshCalendar], [calendarTime]), what it can't judge asked about in Felix's name. Built like

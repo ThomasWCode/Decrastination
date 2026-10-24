@@ -286,7 +286,7 @@ class OwnTaskRulesTest {
         assertEquals("“essay”: takes 1 h 30 min in all (the app's estimate: 1 h)", InstructionRules.describe(change, mapOf(essay.id to inUse), LONDON))
     }
 
-    // --- How Tasks and the Plan group them ---
+    // --- How Work and the widget's list group them ---
 
     @Test
     fun `tasks are grouped by when they're due, soonest first, this week running to Sunday`() {

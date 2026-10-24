@@ -7,7 +7,7 @@ import java.util.Locale
 import kotlinx.serialization.Serializable
 
 /**
- * A reminder Felix keeps at your asking (docs/plan_v4/07-notes-and-reminders.md): your
+ * A reminder Felix keeps at your asking (docs/spec/felix.md §His messages): your
  * [text], delivered as his message when it's [due], in his words for that moment written just before
  * ([draft], D-100), or yours as you set them where he can't write. Set from the chat ([by]);
  * [sentAt] once delivered, [snoozedTo] by a snooze (it comes again then), [doneAt] by its *Done*.
@@ -50,7 +50,7 @@ data class Due(val kind: DueKind, val at: Long? = null, val minutesBefore: Int? 
 @Serializable
 enum class DueKind { At, SlotStart, BeforeDue }
 
-/** The reminders (docs/plan_v4/07-notes-and-reminders.md): when each comes, which are due, which are kept. Pure. */
+/** The reminders (docs/spec/felix.md §His messages): when each comes, which are due, which are kept. Pure. */
 object Reminders {
     /** A reminder's words, at most. */
     const val MAX_TEXT = 300

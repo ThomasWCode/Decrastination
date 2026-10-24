@@ -46,7 +46,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
 
 /**
- * The photos' service on temporary stores (docs/plan_v4): a photo of a task's work kept
+ * The photos' service on temporary stores (docs/plan_v4/architecture.md §The rules): a photo of a task's work kept
  * with it and read with it, the photos no task holds let go, and a photo check's early answers, its
  * pages let go whatever happens. Claude is off; the image's own handling is `PhotoTurnTest`'s.
  */

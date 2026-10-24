@@ -44,7 +44,7 @@ import kotlinx.coroutines.sync.withLock
  * The blocker's state and decisions, apart from Android: what a blocked app or site meets now
  * (the plan, the policy, earned time), and the bookkeeping that follows from work being done:
  * slots kept, missed and moved (LR-09), photo checks, completions. The focus service asks it on
- * every app change; the Plan and the block screen keep slots through it.
+ * every app change; Day and the block screen keep slots through it.
  */
 class Focus(
     private val tasks: JsonStore<TaskState>,
@@ -444,7 +444,7 @@ class Focus(
         return Kept(record.taskId, task?.takeIf { (it.source == Source.Own || it.tickDone) && it.isOpen && it.subSteps.isEmpty() && Planner.remaining(it, learning.value.calibration.multiplierFor(it)) <= 0 }?.id)
     }
 
-    /** Carries through the slots a stop left part-way kept ([RuntimeState.keeping]): at start-up, before the photo checks. */
+    /** Carries through the slots a stop left part-way kept ([SessionState.keeping]): at start-up, before the photo checks. */
     suspend fun finishKeeps() {
         val now = clock.now()
         for (k in session.value.keeping) {
@@ -567,7 +567,7 @@ class Focus(
 
     /**
      * The piece [key] of [taskId] the photo check found done (BL-08): its slot kept, or a
-     * kept one's free time earned. Saved first ([RuntimeState.photosDone]), so a stop part-way is
+     * kept one's free time earned. Saved first ([SessionState.photosDone]), so a stop part-way is
      * finished at start-up.
      */
     suspend fun photoChecked(taskId: String, step: String?, minutes: Int, stepIndex: Int? = null, key: String, takenAt: Long? = null): Boolean {
@@ -649,7 +649,7 @@ class Focus(
         return unticked
     }
 
-    /** Gives the photo checks a stop left part-way ([RuntimeState.photosDone]) what they're owed: at start-up. */
+    /** Gives the photo checks a stop left part-way ([SessionState.photosDone]) what they're owed: at start-up. */
     suspend fun finishPhotos() {
         session.value.photosDone.forEach { finishPhoto(it) }
     }
@@ -724,7 +724,7 @@ class Focus(
     /**
      * Work a source confirmed done: free time for what was left of it, and a record in the log.
      * Each is given once per completion however often it's offered: the free time with a ledger of
-     * what's had it ([RuntimeState.rewarded]), written in the same step; the record only if the log
+     * what's had it ([SessionState.rewarded]), written in the same step; the record only if the log
      * hasn't got it.
      */
     suspend fun onCompleted(completed: List<TaskItem>) {

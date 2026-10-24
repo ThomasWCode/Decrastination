@@ -192,8 +192,8 @@ class AppGraph private constructor(context: Context) {
 
     /**
      * The plan ([Planning]): made from the stores as they are, made again as they change, today's slot
-     * starts kept, and the work done ahead after each. A new plan's hooks are the app's: the slot
-     * alarms, the calendar, the widget.
+     * starts kept, and the work done ahead after each. A new plan's hooks are the app's: the blocker's
+     * plan let go, the slot alarms, your reminders and their alarm, the calendar, the widget.
      */
     val planning: Planning = Planning(
         tasks, settings, stores.session, stores.learning, stores.model, log, stores.instructions, school, clock, scope, gateway,
@@ -524,10 +524,6 @@ class AppGraph private constructor(context: Context) {
         const val TAG = "Decrastination"
 
         private const val WIDGET_DEBOUNCE_MS = 1_000L
-
-        /** After a failed call, the model is left alone this long. */
-
-        /** Unreadable files Setup lists at most: the latest. */
 
         // It holds only the application context, which lives as long as the process anyway.
         @SuppressLint("StaticFieldLeak")

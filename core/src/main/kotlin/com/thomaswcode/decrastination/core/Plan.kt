@@ -176,7 +176,7 @@ data class Chunk(
  * One of a step's sittings ([Chunk.sitting]), as the planner cuts a step over an hour as planned
  * ([Sittings]): [after], how many of its step's come after it, so keeping one
  * renumbers none of the rest; and its [title]. Its last is the step's, keeping it ticks the step;
- * keeping one before it counts its minutes as worked on the step, as a session stopped early does.
+ * keeping one before it counts its minutes as worked on the step, as a slot kept short of its step does.
  */
 data class Sitting(val after: Int, val title: String)
 

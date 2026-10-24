@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
-"""Phase 0 check: can we read your Power Planner agenda through the web API?
+"""A check from the PC: can we read your Power Planner agenda through the web API?
 
 Prompts for your powerplanner.net username and password, logs in, fetches the
-selected semester and its agenda, and prints the items. Credentials are held in
-memory for the duration of the run only.
+selected semester (the years and semesters first, where no semester id is known),
+its classes and their timetables, and its agenda, and prints them. Credentials are
+held in memory for the duration of the run only. Exits 2 when the read isn't proven.
 
-With --save, the semester and agenda responses are also written to
-private/powerplanner_agenda.json (git-ignored), with anything that looks like a
-login or session removed, so they can be read back without pasting them.
+With --save, those responses are also written to private/powerplanner_agenda.json
+(git-ignored), with anything that looks like a login or session removed, so they
+can be read back without pasting them.
 
 The username and password are read from DECRASTINATION_PP_USERNAME and
 DECRASTINATION_PP_PASSWORD when set, and asked for otherwise.

@@ -6,7 +6,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/** What's folded under a message of his, and the label that says it (docs/plan_v4/05-the-chat.md §6). */
+/** What's folded under a message of his, and the label that says it (docs/spec/felix.md §The chat). */
 class ChatSummaryTest {
     private val now = Fixtures.at("2026-10-18T18:00")
 

@@ -28,8 +28,8 @@ import com.thomaswcode.decrastination.protect.Protection
 import java.time.LocalDate
 
 /**
- * What the app learns from the log (docs/spec/learning.md; docs/plan_v4), moved out of
- * `Review`, `AppGraph` and `Assessment`: the week's review ([review]: the calibration learned afresh,
+ * What the app learns from the log (docs/spec/learning.md):
+ * the week's review ([review]: the calibration learned afresh,
  * the capacity checked, Claude's note and bounded changes, what's remembered tidied); a figure
  * forgotten ([forgetCalibration]); a review's change or tidy put back ([undoReviewChange],
  * [undoTidy]); the week's summary for home ([writeSummary]); and the week's check-in and a

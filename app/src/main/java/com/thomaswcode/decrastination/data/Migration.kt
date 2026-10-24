@@ -6,7 +6,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.intOrNull
 
 /**
- * One step in a store's shape (docs/plan_v4/04-data-and-migrations.md §Versions and migrations): its
+ * One step in a store's shape (docs/plan_v4/data-and-migrations.md §Versions and migrations): its
  * JSON at version [from] made its JSON at [from] + 1, before it's decoded, so a field the new class no
  * longer has can be renamed, moved or dropped. [JsonStore] runs a store's in order as it loads, and a
  * backup's parts go through the same ([Backups.decode]).
@@ -50,7 +50,7 @@ class Migration(val from: Int, private val migrate: (JsonObject) -> JsonObject) 
 class Shape(val version: Int, val migrations: List<Migration>)
 
 /**
- * Fields moved from one store's file to another's (docs/plan_v4/04-data-and-migrations.md, item 4): run by
+ * Fields moved from one store's file to another's (docs/plan_v4/data-and-migrations.md §Versions and migrations, item 4): run by
  * [Stores] at start, before any store is read, on the files in its folder. The new file written first,
  * then the old one trimmed, so a stop between leaves the fields in both, never in neither; made so a
  * second run changes nothing.

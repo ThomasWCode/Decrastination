@@ -23,7 +23,7 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 
 /**
- * The chat's second shape (docs/plan_v4/04-data-and-migrations.md §The chat (v2)), from the
+ * The chat's second shape (docs/plan_v4/data-and-migrations.md §The shapes, release by release), from the
  * first shape's made-up fixtures (`fixtures/stores/2026-10-18/`), as a phone meets it at its
  * first start: Felix's records from the log and his state from the runtime moved into the chat, merged
  * by id, nothing doubled or lost; run twice, the same; the files they came from kept; a backup from

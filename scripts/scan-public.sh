@@ -1,16 +1,18 @@
 #!/bin/sh
 # The privacy scan before a push or a commit (docs/development.md §The repository is public; D-79):
-# the lines a diff adds, searched for email addresses, phone numbers and the words listed, one a
+# the lines a diff adds, searched for email addresses, UK phone numbers and the words listed, one a
 # line, in the git-ignored private/scan-words.txt (names, places and identifiers from your data,
-# which this public script can't hold). Prints each hit with its file; exits 1 if there's one.
+# which this public script can't hold; matched case aside, anywhere in a line; a line starting #
+# is a comment). Prints each hit with its file; exits 1 if there's one.
 #
 #   scripts/scan-public.sh            # what this branch adds beyond origin/main
 #   scripts/scan-public.sh --cached   # what's staged
 #   scripts/scan-public.sh <range>    # any range git diff takes
 #
 # Made-up addresses at example.com, example.org and example.net, and GitHub's no-reply ones, pass;
-# so do the two Kotlin labels the code holds, in a .kt file (this@AppGraph and this@AnkiSource, then
-# a member), which read as addresses there. Any other is a hit, a new label too, till it's listed below.
+# so does the Kotlin label the code holds, in a .kt or .kts file (this@AnkiSource, then a member;
+# this@AppGraph, once held, passes too), which reads as an address there. Any other is a hit, a new
+# label too, till it's listed below.
 # Only the lines a diff adds are read: a commit's message, a PR's text and a branch's name aren't.
 # A range git can't read exits 2, as a scan that didn't happen, never as a clean one.
 ROOT=$(git rev-parse --show-toplevel)
@@ -43,7 +45,7 @@ HITS=$(awk -v words="$WORDS" '
     rest = text
     while (match(rest, /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z][A-Za-z]+/)) {
       a = substr(rest, RSTART, RLENGTH); rest = substr(rest, RSTART + RLENGTH)
-      # The two Kotlin labels the code holds, in Kotlin files alone: any other reads as an address, a new label too until it is listed here.
+      # The Kotlin labels the code holds or held, in Kotlin files alone: any other reads as an address, a new label too until it is listed here.
       if (file ~ /\.kts?$/ && a ~ /^this@(AppGraph|AnkiSource)\./) continue
       if (tolower(a) !~ /@(example\.(com|org|net)|users\.noreply\.github\.com)$/) print "  an email address: " file ": " a
     }

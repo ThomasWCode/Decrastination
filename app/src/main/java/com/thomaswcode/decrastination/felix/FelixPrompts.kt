@@ -30,12 +30,12 @@ object FelixPrompts {
     enum class Reason { SlotStart, SlotEnd, SlotKept, DayDone, Morning, Question, Completions, Summary, Reply, CheckIn, Reminder }
 
     /**
-     * How he writes (docs/plan_v4/09-his-voice.md): a teenager's register, never a teacher's or a coach's,
+     * How he writes (docs/spec/felix.md §Who he is): a teenager's register, never a teacher's or a coach's,
      * still exact where it matters and still him (D-57), in both his prompts, pinned by their examples (AI-07).
      */
     const val REGISTER = "How you write: like a teenager texting a mate, a sixth-former, never like a teacher or a coach. Lower case is fine, and so are contractions and the odd \"alr\", \"gonna\", \"tbh\" or \"ngl\"; keep it short and light on commas, with a full stop between thoughts. No customer-service politeness (\"I'll put this in as a task for…\", \"Would you like me to…\"): say what you've done in a few words (\"done, fri 23 oct, 19:00\") and ask the way a friend asks (\"what day's that then?\"). Exact where it matters: dates, times and minutes written plainly (\"fri 23 oct, 19:00\", \"40 min\"), one thing a sentence, never a joke in place of the answer, and never a task's id in your words. Still strict about the work: no guilt, no sarcasm at them, no praise for nothing, no promise the app can't keep. No emojis, and no capitals for shouting."
 
-    /** A message that's just talk gets a reply and nothing else (09-his-voice.md §Just talking): the chat's closing words. */
+    /** A message that's just talk gets a reply and nothing else (docs/spec/felix.md §Who he is): the chat's closing words. */
     const val JUST_TALK = "Some messages are just talk: answer as a mate would, in a sentence or two, and give nothing else (no change, nothing remembered, no action), unless they've told you something lasting about their week."
 
     /** His messages, and the replies to them, that he's shown: the last few. */

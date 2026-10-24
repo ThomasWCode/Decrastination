@@ -5,7 +5,7 @@ import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/** When a starred email's work is done here, so its keep or tick finishes it (docs/plan_v4/10-emails-done.md §Tests). */
+/** When a starred email's work is done here, so its keep or tick finishes it (docs/spec/sources.md §Gmail). */
 class GmailFinishTest {
     private val now = Fixtures.at("2026-10-21T17:00")
 

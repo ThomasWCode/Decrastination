@@ -10,7 +10,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** When a reminder comes, which are due, let go and kept (docs/plan_v4/07-notes-and-reminders.md §Tests). */
+/** When a reminder comes, which are due, let go and kept (docs/spec/felix.md §His messages). */
 class RemindersTest {
     private val now = Fixtures.at("2026-10-20T17:00")
     private val min = 60_000L

@@ -6,8 +6,8 @@ import kotlin.math.roundToLong
 
 /**
  * Earned free time for one day (docs/spec/blocking-and-protection.md; about a minute per three of work, Q22).
- * Earned whenever work is done; spendable only when nothing is planned for today, and only
- * while a blocked app is in front. What's left at midnight is gone.
+ * Earned whenever work is done; spendable once today's work is done, or between today's slots once
+ * the one before is kept (BL-10), and only while a blocked app is in front. What's left at midnight is gone.
  */
 @Serializable
 data class Credit(

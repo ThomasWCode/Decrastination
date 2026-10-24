@@ -31,7 +31,7 @@ import kotlinx.serialization.json.contentOrNull
 import org.junit.Assume.assumeTrue
 
 /**
- * The rehearsal of a release's migrations on the phone's own data (docs/plan_v4), before
+ * The rehearsal of a release's migrations on the phone's own data (docs/plan_v4/data-and-migrations.md §On the real data), before
  * it's installed: every store in a phone backup, unpacked by `scripts/rehearse.sh` into the git-ignored
  * `private/rehearsal/<name>/` (its `files/`, and the nightly backup beside them where there is one),
  * read as each file is, then as the app will read it, through [Stores] with the migrations there are,
@@ -213,7 +213,7 @@ class RehearsalTest {
         assertTrue(migrated.none { it.problem != null } && migrated.all { it.roundTrip }, "A store didn't read whole, or changed read and written again: see rehearsal.txt")
         assertTrue(migrated.all { it.dropped.isEmpty() }, "A store holds what the app doesn't keep: see rehearsal.txt")
         assertTrue(nightly.problem == null, "The nightly backup wouldn't be restored (${nightly.problem}): see rehearsal.txt")
-        // And any difference in the counts, before and after (docs/plan_v4/04-data-and-migrations.md §On the real
+        // And any difference in the counts, before and after (docs/plan_v4/data-and-migrations.md §On the real
         // data): a migration that moves, renames or merges data teaches this rehearsal where it goes, so the counts
         // are compared through the move; the check is never loosened to let one through.
         assertTrue(was == now && lists.isEmpty() && gone.isEmpty(), "The counts differ before and after: see rehearsal.txt")
@@ -256,7 +256,7 @@ class RehearsalTest {
 
     /**
      * The conversation and Felix's state in counts that hold through 4.0.0's move of his records and state
-     * into the chat (docs/plan_v4/04-data-and-migrations.md §On the real data): his messages, his records
+     * into the chat (docs/plan_v4/data-and-migrations.md §On the real data): his messages, his records
      * not in the chat among them (by id), with and without words; your replies to him (a record's, or
      * a message of yours answering one); the replies he offered and the completions he asked about; the
      * lines under his answers, whatever list they're in; and his state, the runtime's or the chat's.

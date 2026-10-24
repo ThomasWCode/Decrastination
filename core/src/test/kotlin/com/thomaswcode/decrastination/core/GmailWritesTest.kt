@@ -7,7 +7,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** The journal of writes to Gmail: the grace, the first finish's OK, Undo, tries and receipts (docs/plan_v4/10-emails-done.md §Tests). */
+/** The journal of writes to Gmail: the grace, the first finish's OK, Undo, tries and receipts (docs/spec/sources.md §Gmail). */
 class GmailWritesTest {
     private val now = Fixtures.at("2026-10-21T17:00")
     private val min = 60_000L

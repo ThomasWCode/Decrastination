@@ -22,7 +22,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
 /**
- * The stores' versions and migrations (docs/plan_v4/04-data-and-migrations.md), on a made-up store whose
+ * The stores' versions and migrations (docs/plan_v4/data-and-migrations.md §Versions and migrations), on a made-up store whose
  * shape has changed once: its name became a title. Each is run as the app runs it, by a [JsonStore] as
  * it loads, on files in a temporary folder.
  */

@@ -30,7 +30,7 @@ enum class Secret {
     GmailAppPassword,
     AnthropicApiKey,
 
-    /** The parent override's authenticator secret (Phase 3). */
+    /** The parent override's authenticator secret (Q17). */
     TotpSecret,
 }
 

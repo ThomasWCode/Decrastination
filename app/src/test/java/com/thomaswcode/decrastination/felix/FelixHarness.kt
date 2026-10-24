@@ -45,7 +45,7 @@ import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 
 /**
- * Felix's service on temporary stores (docs/plan_v4), for the flows' tests: the real stores,
+ * Felix's service on temporary stores (docs/plan_v4/architecture.md §The rules), for the flows' tests: the real stores,
  * gateway, focus, plan and outbox, and his calls through the real readers, answered by a stand-in for
  * Claude's API ([server]). Android is a list of what it was asked ([ports]); the other owners
  * ([owners]: your own tasks, your instructions and the calendar's answers) do, simply, what AppGraph's

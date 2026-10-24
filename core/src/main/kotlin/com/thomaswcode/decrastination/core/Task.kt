@@ -111,8 +111,8 @@ fun List<SubStep>.withIds(): List<SubStep> {
  *
  * The source owns [title], [detail], [className], [dueAt], [availableFrom], [sourceEffortMin] and
  * [sourceProgress], and a sync overwrites them. Everything else is this app's own bookkeeping
- * and survives syncs: when the task was first and last seen, the minutes worked on it in focus
- * sessions, the sub-steps and estimates the enrichment gave it, and your own estimate.
+ * and survives syncs: when the task was first and last seen, the minutes worked on it in kept
+ * slots, the sub-steps and estimates the enrichment gave it, and your own estimate.
  */
 @Serializable
 data class TaskItem(
@@ -144,7 +144,7 @@ data class TaskItem(
      * Anki deck's cards) ends near nothing, and its completion is for all of it.
      */
     val peakEffortMin: Int? = null,
-    /** Minutes worked on it: its kept slots' (LR-09; focus sessions' before review v2). */
+    /** Minutes worked on it: its kept slots' (LR-09). */
     val workedMin: Int = 0,
     /**
      * Minutes of it a photo check found done: they come off what's left like [workedMin], but
@@ -161,7 +161,7 @@ data class TaskItem(
     val subSteps: List<SubStep> = emptyList(),
     /**
      * Of [workedMin] and [photoMin], the minutes the source's own steps already leave out: an Anki
-     * deck's cards studied in sessions are gone from the steps its next read gives, so those
+     * deck's cards studied in its kept slots are gone from the steps its next read gives, so those
      * minutes aren't taken off what's left of them again. Set when the source's steps replace the
      * ones kept here.
      */
@@ -187,7 +187,7 @@ data class TaskItem(
     val extra: Map<String, String> = emptyMap(),
     /** What the enrichment said about it, laid over the source's values at every merge. */
     val enrichment: Enrichment? = null,
-    /** The source's own kind, deadline and start, before the enrichment's overlay; null before Phase 4. */
+    /** The source's own kind, deadline and start, before the enrichment's overlay; null in one kept from before source values were kept. */
     val sourceValues: SourceValues? = null,
     /**
      * Your instructions' say about it, each value with who set it ([Mine], [InstructionRules]), laid
@@ -228,7 +228,7 @@ data class TaskItem(
             // one, as read with them (the planner reads them through it), as its date may be a test
             // date Claude read, a plan.
             Source.Anki if extra[AnkiRules.EXTRA_FOR] != null -> extra[AnkiRules.EXTRA_REAL]?.toLongOrNull()
-            // Your own task's date is yours; a source's, its own (one kept from before Phase 4 has no source values).
+            // Your own task's date is yours; a source's, its own (one kept from before source values were kept has none).
             else -> if (sourceValues != null) sourceValues.dueAt else dueAt
         }
 

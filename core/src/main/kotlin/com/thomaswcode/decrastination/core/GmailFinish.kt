@@ -3,7 +3,7 @@ package com.thomaswcode.decrastination.core
 import kotlin.math.roundToInt
 
 /**
- * When finishing a starred email's work here unstars and archives it in Gmail (docs/plan_v4/10-emails-done.md,
+ * When finishing a starred email's work here unstars and archives it in Gmail (docs/spec/sources.md §Gmail,
  * D-7 as amended): a slot kept or a step ticked finishes it only once its work is all done ([due]); Felix's
  * `done` and the sheet's *Finish* need only an open email ([finishable]), as you've said it's finished. Pure.
  */

@@ -38,14 +38,14 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /**
- * The blocker (docs/spec/blocking-and-protection.md; proved as
- * Phase 0's spike). An accessibility service: it hears every app come to the front, and covers a blocked one
+ * The blocker (docs/spec/blocking-and-protection.md).
+ * An accessibility service: it hears every app come to the front, and covers a blocked one
  * with [BlockedActivity] when [Focus] says so:
  *
- * - **Apps and browsers**: a blocked app, or Firefox or Tor, the moment it owns the window in use
+ * - **Apps and browsers**: a blocked app, or a browser blocked outright (Firefox and Tor by default), the moment it owns the window in use
  *   (window changes as well as window states, so within about 0.2 s), or anywhere on screen in a
  *   split or pop-up window.
- * - **Sites**: in Chrome and Brave, the address bar is read as it changes.
+ * - **Sites**: in the checked browsers (Chrome and Brave by default), the address bar is read as it changes.
  * - **Picture-in-picture**: the block screen starts with NO_USER_ACTION, so covering a playing
  *   video never sends it there, and a blocked app already floating is brought back and covered.
  * - **Free time**: while a blocked app is allowed on earned time, the time is spent, and it's
@@ -124,7 +124,7 @@ class FocusService : AccessibilityService() {
         lastSite[browser] = site
     }
 
-    // The settings guard's pacing, as Phase 0 tuned it.
+    // The settings guard's pacing, as tested on the phone.
     private var lastGuardAt = 0L
     private var lastBackAt = Long.MIN_VALUE / 2
     private var lookPending: String? = null
@@ -218,7 +218,7 @@ class FocusService : AccessibilityService() {
             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
                 val pkg = event.packageName?.toString() ?: return
                 if (pkg == packageName) return
-                // A blocked app's late events can come after it has gone (Phase 0): judge what's in front.
+                // A blocked app's late events can come after it has gone: judge what's in front.
                 val front = frontPackage()
                 // A checked browser's own window changed while it's in front (brought there, a new page
                 // of it): a visit, for whether its address can be read. Not another app's window over it
@@ -390,7 +390,7 @@ class FocusService : AccessibilityService() {
         }
     }
 
-    // --- Sites in Chrome and Brave ---
+    // --- Sites in the checked browsers ---
 
     /** Address bars change with every keystroke and scroll: read at most every [URL_CHECK_MS]. */
     private fun checkAddressLater(browser: String) {
@@ -454,7 +454,7 @@ class FocusService : AccessibilityService() {
     /**
      * A blocked app in picture-in-picture is never the window in use, so the active-window check
      * misses it. One UI's floating window offers no dismiss, so the app is brought back to full
-     * screen, as tapping its icon does, where the next window change covers it (Phase 0).
+     * screen, as tapping its icon does, where the next window change covers it.
      */
     private fun closeBlockedPictureInPicture() {
         val inCorner = mutableSetOf<String>()
@@ -501,7 +501,7 @@ class FocusService : AccessibilityService() {
     }
 
     /**
-     * A blocked app, or a blocked site in Chrome or Brave, beside another app (split screen, a
+     * A blocked app, or a blocked site in a checked browser, beside another app (split screen, a
      * pop-up window). On free time it spends it, as it would in front; blocked, both are left and
      * it's covered.
      */
@@ -600,7 +600,7 @@ class FocusService : AccessibilityService() {
      * Looks at [pkg]'s window and presses Back if it's one of this app's pages. At most once per
      * [GUARD_INTERVAL_MS] and never within [BACK_COOLDOWN_MS] of pressing Back; a change that
      * arrives meanwhile is looked at once the wait is over, since the last of a burst often fills
-     * the page in. A window showing nothing yet is looked at again shortly (Phase 0's tuning).
+     * the page in. A window showing nothing yet is looked at again shortly (as tested on the phone).
      */
     private fun guard(pkg: String, firstLook: Boolean) {
         if (!graph.settings.value.armed) return
@@ -643,7 +643,7 @@ class FocusService : AccessibilityService() {
 
     /**
      * A tap on this service's name in Settings while a shortcut page is showing: putting it on an
-     * accessibility shortcut would let a key press switch it off (Phase 0's finding), so it's
+     * accessibility shortcut would let a key press switch it off (as tested on the phone), so it's
      * undone at once; the watchdog takes it off any shortcut too.
      */
     private fun onClick(event: AccessibilityEvent) {
@@ -694,7 +694,7 @@ class FocusService : AccessibilityService() {
             return
         }
         // An app already on screen when blocking or free time begins (16:45, new work due) sends no
-        // event of its own, nor does a blocked site already open in Chrome or Brave, nor one in
+        // event of its own, nor does a blocked site already open in a checked browser, nor one in
         // picture-in-picture or beside another app: look at the screen now. (While free time is
         // being spent, its own check does this.)
         if (spending == null) lookAtScreen()

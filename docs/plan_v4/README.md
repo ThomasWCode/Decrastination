@@ -1,186 +1,172 @@
-# Decrastination 4.x: the cleanup and Felix as the app's one voice, in one order
+# Decrastination 4.x: the cleanup and Felix as the app's one voice
 
-One plan for the next run of work, merged on 18 Oct 2026 from two: the targeted cleanup (written 17 Oct: the code and its stores restructured without changing what the app does) and the Felix plan (written 18 Oct: everything he says in one WhatsApp-like chat, notes and reminders, memory that expires, a teenager's voice, a starred email finished in Gmail). Written against `main` at e6cd54b (3.2.0) and measured on 18 Oct ([01](01-current-state.md)); every question either plan asked is answered and applied ([ANSWERS.md](ANSWERS.md) is the record; the "Q3: A" marks through the documents point into it); Stages 0 to 5 are in (#57 to #61: Stage 0, then 3.3.0 to 3.3.3; #69 to #71: 4.0.0 to 4.0.2), with 3.3.4 to 3.3.6 beside them (#62, the secrets' write tried again as the stores' is; #67, a piece under way kept today; #68, the open items settled) and 4.0.3 and 4.0.4 after them (#73, the Day screen's crash on a slot kept twice; #74, the chat's archive a file a month and its live window a fortnight). Stage 6's first five (4.0.5 to 4.0.9, 6a to 6e) were installed, checked and merged in order (#76 to #80); 4.0.10 after them puts his newest message in the chat's box and shows what waits for your answer (your calls on the phone, 19 Oct); 6f (4.0.11) made `core/` a module of its own, `:core`, after them, and 9 (4.0.12) gave the readings' prompts and answers and core's rules their names (`ReadingPrompts`, `ReadingAnswers`, `InstructionRules`, `OwnTaskRules`), a type a file; 7 (4.0.13) after them put your values in one place, each with who set it, and split the stores (#89); on 20 Oct 8a (4.1.0, #91) gave him notes and reminders, 8b (4.1.1, #92) closed the gaps, and 4.1.2 (#93) brought the phone session's fixes after them; 4.1.3 (#97) the docs review's fixes; 8c (4.1.4, #98) had him sent less and ask for more; 10a (4.2.0, #99) let what he remembers expire; 4.2.1 (#101) the second docs review's fixes; 10b (4.2.2, #102) gave him his voice, his summary email the third person, and his say over what your words answered; 11 (4.3.0, #103) had a starred email finished here unstarred and archived in Gmail; 4.3.1 (#105) brought 4.2.1's reviews' and 11's phone check's finds; 12 (4.3.2, #106) swept the code and the docs; and 4.3.3 (#107) brought the sweep's finds. [14](14-your-part.md) says which stages need your phone and which need you.
+The plan for the run of work from 3.3.0 to 4.3.19 (17 to 24 Oct 2026), kept as its record now that it's done. It merged two plans on 18 Oct: the targeted cleanup (the code and its stores restructured without changing what the app does) and the Felix plan (everything he says in one WhatsApp-like chat, notes and reminders, memory that expires, a teenager's voice, a starred email finished in Gmail), in one order, a stage a PR, every PR a release checked on the phone before it merged. Fifty PRs (49 releases) merged between 18 and 24 Oct, against the plan's estimate of about thirty-one days of evenings and weekends; every question it raised is answered ([answers.md](answers.md)).
 
-The order is the merge's one real decision: the cleanup comes first where a feature would otherwise be built on the mess, and between features where it only has to be done at all. [03](03-stages.md) lays out every stage and PR in order, with what each needs from the ones before it and what it leaves for the ones after; nothing in it relies on anything later.
+This folder holds what of the plan still serves:
+
+- this file: why, what was built, release by release, what's left to check, and what comes after;
+- [architecture.md](architecture.md): the structure the code now has and the conventions every change keeps to, as `CLAUDE.md` and [development.md](../development.md) cite them;
+- [data-and-migrations.md](data-and-migrations.md): the stores, how a change to a stored shape is made and rehearsed, and how a release is undone;
+- [answers.md](answers.md): every question the plan or its building put to you, with your answer and where it's recorded, so a "(Q31: A)" in the specs or the decisions can be followed.
+
+How the app works now is in [spec/](../spec/), your decisions in [decisions.md](../decisions.md), how work is done in [development.md](../development.md). The plan's design documents (the chat, what Felix can do, notes and reminders, memory, his voice, emails done, what he's sent) were deleted once what they described was built and in the spec; git holds them (`git log -- docs/plan_v4`).
 
 ## Why
 
-At 3.2.0, when this was written ([01](01-current-state.md)): the planner, the slotter, the sources and the learning were in good shape: pure where they could be, behind clear interfaces, covered by 874 tests. Two things weren't.
+At 3.2.0 the planner, the slotter, the sources and the learning were in good shape: pure where they could be, behind clear interfaces, covered by 874 tests. Two things weren't.
 
-**The structure, where this fortnight's changes met** ([01](01-current-state.md) has the evidence):
+**The structure, where every change met:**
 
-- `AppGraph.kt` did everything else: 2,628 lines, 117 functions, ten stores, thirteen concerns, no tests of its own; 51 other files reached into it, most straight into its stores. (Since 3.3.3: 1,446 lines, 64 functions; at 4.0.2, 1,443 and 65; at 4.0.9, 464, its members the services.)
-- Felix had two homes: what he said unprompted was a record in the log and a notification; the chat had only his answers. Seven places produced messages in his name, each building its own notification, and most shared one id, so each new one replaced the last. (One since 4.0.0: every message of his is in the chat first, and his one notification is made from it.)
-- "Who set this?" was spread over twelve `user…` fields, mirrored by position; a step's origin was told from its title.
-- Eleven classes built their own Claude client; 18 notification ids lived in 17 files. (One gateway, `enrich/ModelGateway.kt`, since 3.3.1; one id registry, `notify/NoticeId.kt`, since 3.3.0.)
-- `tasks.json` was 590 KB, most of it finished tasks, rewritten whole at every tick; `runtime.json` mixed the half-minute state with logs; no store had a version. (A version on every store since 3.3.2, D-94.)
+- `AppGraph.kt` did everything else: 2,628 lines, 117 functions, ten stores, thirteen concerns, no tests of its own; 51 other files reached into it, most straight into its stores.
+- Felix had two homes: what he said unprompted was a record in the log and a notification; the chat had only his answers. Seven places produced messages in his name, each building its own notification, most sharing one id, so each new one replaced the last.
+- "Who set this?" was spread over twelve `user…` fields on a task; a step's origin was told from its title.
+- Eleven classes built their own Claude client; 18 notification ids lived in 17 files.
+- `tasks.json` was 590 KB, most of it finished tasks, rewritten whole at every tick; `runtime.json` mixed the half-minute state with logs; no store had a version.
 
-**What Felix can be asked, and how he reaches you**:
+**What Felix could be asked, and how he reached you:**
 
-- His messages are lost: tap a notification and the chat opens without it. His notifications replace each other. (Since 4.0.0, every one is kept in the chat, and his one notification opens it at the message.)
-- The chat buries what he did under cards and lines; a message that does three things is a screen long. (Folded under a chevron since 4.0.2.)
-- He can't be asked what a friend with his access could do: no reminder at a time, no "ping me when I sit down to the physics", no note on a task. "Remind me to buy mum a present before Sunday" is one of the empty chat's own examples, and today it makes a task. (Since 4.1.0 he keeps reminders and notes, and since 4.1.1 most of the other gaps are closed.)
-- He remembers for ever or not at all: "don't message me tonight" is a standing instruction until you delete it. (Since 4.2.0 a fact or a rule can hold till a date, a fact go with its task, and what's run out is forgotten.)
-- He sounds like a planner app: "I'll put this in as a task for: Friday" rather than "alr cool, let's do that then".
-- An email finished in the app stays starred in Gmail until you unstar it by hand, which is also when the app counts it finished.
+- His messages were lost: tap a notification and the chat opened without it; his notifications replaced each other.
+- He couldn't be asked what a friend with his access could do: no reminder at a time, no note on a task; "remind me to buy a present before Sunday" made a task.
+- He remembered for ever or not at all: "don't message me tonight" was a standing instruction until you deleted it.
+- He sounded like a planner app.
+- An email finished in the app stayed starred in Gmail until you unstarred it by hand, which was also when the app counted it finished.
 
-## Goals
+## Goals, and how each came out
 
-1. **Felix's work is built on clean ground**: one notifier, one gateway, stores with versions and migrations, and a service of his own with tests, before his features are written.
-2. **`AppGraph` is only the composition root**: services own their stores and expose narrow functions; screens and workers call services, not stores.
-3. **One record of who set what**: your and Felix's values in one value on the task, each with who set it; steps with an id and an origin. The app's limits and its learned pace apply to its own values, never to yours or Felix's (D-4).
-4. **Stores sized to how they're used**, each with a version, every migration rehearsed on your data first.
-5. **The chat is his one visible voice**: every word in his name is a message there; a notification is the chat reaching you; a reply from either is the same turn.
-6. **He does what a friend with his access could**: notes, reminders, memory that lasts as long as it matters, a voice that sounds like someone your age, and the one write outside the phone: a finished email unstarred and archived.
-7. **Consistent names and conventions, comments that say what and why, docs kept with the code.**
+1. **Felix's work built on clean ground**: one notifier (3.3.0), one gateway (3.3.1), stores with versions and migrations (3.3.2), his own service with tests (3.3.3), before his features were written.
+2. **`AppGraph` only the composition root**: services own their stores and expose narrow functions; screens and workers call services, not stores. 537 lines at 4.3.2, the stores and services made and the flows that join them, accepted as wiring (D-107).
+3. **One record of who set what**: your and Felix's values in one value on the task (`TaskItem.mine`), each with who set it; steps with an id and an origin (4.0.13). The app's limits and its learned pace apply to its own values, never to yours or Felix's (D-4).
+4. **Stores sized to how they're used**, each with a version, every migration rehearsed on a copy of your data first (4.0.13 split `runtime.json` by owner; a finished task's text goes a fortnight after it's finished, its record kept).
+5. **The chat is his one visible voice** (4.0.0 to 4.0.2): every word in his name is a message there; his one notification is made from the chat's unread; a reply from either is the same turn (D-95 to D-99).
+6. **He does what a friend with his access could**: notes and reminders (4.1.0), the gaps closed (4.1.1), memory that lasts as long as it matters (4.2.0), a voice that sounds like someone your age (4.2.2), and the one write outside the phone, a finished email unstarred and archived (4.3.0) (D-100 to D-106).
+7. **Consistent names and conventions, comments that say what and why, docs kept with the code** (4.0.12, 4.3.2; [architecture.md](architecture.md) §Conventions).
+
+## What the plan held to
+
+- **Move first, then improve.** A move is its own commit, unchanged but for imports and visibility, so its review is "nothing changed"; improvements follow in their own commits. No feature inside a cleanup PR, no restructuring inside a feature PR; a bug found inside a move is fixed in a PR of its own.
+- **One concern a PR**, small enough for its review rounds, with the phone check before merging; cleanup-only releases before the chat were 3.3.x, every release from the chat on 4.x in the order it landed, cleanup or feature.
+- **The pattern that already worked.** `block/Focus.kt` takes its stores, its clock and small callbacks in its constructor, and `FocusTest` drives it on temporary files. Every service was built that way, so each became testable as it left `AppGraph`, and every feature was written inside its service from its first commit.
+- **Data never lost.** Every migration was rehearsed on a copy of your phone's data in `private/` before it was installed; the app keeps the file it migrated from until a week after its next successful start, and the backup taken before every install keeps it for good.
+- **Your values are yours** (D-4); **the chat is the record** (D-95); **one entrance for replies** (D-98); **he acts at once, with an Undo** (D-60); **free where it can be** (notes, the email's finish and a reminder's chips make no model call; a reminder's words are one small call, written ahead and asked for again at its moment where they're out of date; what he asks for comes in a round of the chat's own call, two at most); **the public repository stays clean** (D-79).
+- **The order**: the chat work was the largest feature and lived in the most tangled code, so the notifier, the gateway, the stores and Felix's service came before it (Stages 1 to 4) and the chat was written inside a tested service; the other services (6) and the data model (7) came after the chat and before reminders, the gaps and the email's finish, which needed them; names were settled (9) as soon as the services were in, so the data release, the features and the prompts' rewrite were written on them; the write outside the phone came last (11); the sweep (12) left the code as the conventions want it.
 
 ## Not in scope
 
-- New features inside a cleanup PR, and restructuring inside a feature PR: each PR is one or the other, and says which.
-- Rewriting the planner, the slotter, the calibration or the sources: their code moves at most.
-- A database (Room): JSON files stay, small once split, written atomically, readable in a backup.
-- Merging the Teams widget app into this one (17 Oct: not now).
-- Bug hunting inside a move: what turns up is noted and fixed in its own PR.
-- Photos in the chat, voice notes, a second chat, group messages, read receipts; a tone setting (D-57: his name and line are the knobs).
-- Writing to Teams, Power Planner or AnkiDroid: none has a write API the app uses.
-- The chat as the app's home screen: asked on 18 Oct, then dropped the same day (Q26); the app opens on Day.
-- Summaries standing in for the raw data he reads: evaluated in [13](13-summaries.md); the one worth building, a conversation digest, is a later 4.4.0 (Q28).
+Rewriting the planner, the slotter, the calibration or the sources (their code moved at most); a database (JSON files stay, small once split, written atomically, readable in a backup); merging the Teams widget app into this one (D-6); photos in the chat, voice notes, a second chat, read receipts, a tone setting (D-57: his name and line are the knobs); writing to Teams, Power Planner or AnkiDroid (none has a write API the app uses); the chat as the app's home screen (Q26: dropped; the app opens on Day); summaries standing in for the raw data he reads, but for the conversation digest below (Q28); the API's own tool use in place of his `details` requests (a new caller, schema and goldens for little gain over `details`).
 
-## Principles
+## The releases
 
-- **Move first, then improve.** A move is its own commit, unchanged but for imports and visibility, so its review is "nothing changed"; improvements follow in their own commits.
-- **One concern a PR**, small enough for its review rounds, with the phone check before merging.
-- **The pattern that already works.** `block/Focus.kt` takes its stores, its clock and small callbacks in its constructor, and `FocusTest` drives it on temporary files. Every service is built that way, so each becomes testable as it moves out of `AppGraph`; every feature is written inside its service, so it's tested the same way from its first commit.
-- **Data never lost.** Every migration is rehearsed on a copy of your phone's data in `private/` (never committed) before it's installed; the installed app keeps the file it migrated from until a week after its next successful start, and the backup taken before every install keeps it for good.
-- **Your values are yours.** Nothing in the restructuring reworks a value you or Felix set; a reminder's time and words are yours as he set them (D-4).
-- **The chat is the record.** Every word in his name is a message in `chat.json` first; a notification is made from the chat, never beside it; nothing he says exists only as a notification or only in the log.
-- **One entrance for replies.** A reply from a notification and one in the chat are the same turn, routed the same way.
-- **He acts at once, with an Undo** (D-60), for the new things too: a reminder set, a note kept, an email finished.
-- **Free where it can be.** Notes, the email's finish and a reminder's chips make no model call; a reminder's message is one small call, drafted ahead (asked again at its moment where what was written is out of date, your rule of 23 Oct) and sent as you set it when he can't write; what he asks for in 8c comes in a round of the chat's own call, two at most, as a task read in full does today; no other new paid call.
-- **The public repository stays clean** (D-79): examples are made up; the private evaluation sets and your backups stay in `private/`.
+| # | Stage | Version (PR) | Kind | What |
+|---|---|---|---|---|
+| 0 | Safety net | none (#57) | cleanup | store fixtures (`fixtures/stores/<date>/`, `StoresDecodeTest`), the plan snapshot (`PlanSnapshotTest`), the rehearsal (`scripts/rehearse.sh`), `scripts/phone-check.sh`, `scripts/scan-public.sh`, the baselines |
+| 1 | One notifier | 3.3.0 (#58) | cleanup | `NoticeId`, `Notifier`, every caller switched; `ArchitectureTest`'s first rule |
+| 2 | One model gateway | 3.3.1 (#59) | cleanup | `ModelGateway`: every call to Claude, one client a key; the second rule |
+| 3 | Stores and backups | 3.3.2 (#60) | cleanup | `Stores`, a version and migrations on every store (D-94), `BackupService` |
+| 4 | Felix's code in one place | 3.3.3 (#61) | cleanup | `felix/Conversation` and `plan/Planning`, moved verbatim; his files split; the first tests of flows that had none |
+| — | | 3.3.4 (#62) | fix | the secrets' write tried again as the stores' is (a test that failed now and then on Windows) |
+| — | | 3.3.5 (#67) | fix | a piece under way stays today's when the plan is made again |
+| — | | 3.3.6 (#68) | fix | the chat names the tabs that exist; the briefing's quiet-hours rule written down |
+| 5a | The chat as his one voice | 4.0.0 (#69) | feature, data | every message in the chat (`chat.json` v2, the log's records migrated in), the outbox, his one `MessagingStyle` notification, the archive (D-95 to D-97) |
+| 5b | WhatsApp-like | 4.0.1 (#70) | feature | read state, dates, earlier messages, swipe to reply, one entrance for replies (`Replies.route`, D-98), `ChatScreenState` |
+| 5c | The extras folded | 4.0.2 (#71) | feature | `ChatSummary`: the tail under a chevron, the label that slides out |
+| — | | 4.0.3 (#73) | fix | the Day screen's crash on a slot kept twice; a Done tapped again keeps nothing more |
+| — | | 4.0.4 (#74) | fix, data | the chat's archive a file a month (`ChatArchiveStore`), each read only when wanted; the live window a fortnight (D-96 amended) |
+| 6a | | 4.0.5 (#76) | cleanup | `CalendarWriter` |
+| 6b | | 4.0.6 (#77) | cleanup | `Protection`; `SettingsScreenState` |
+| 6c | | 4.0.7 (#78) | cleanup | `Instructions` and `OwnTasks` (`tasks/`); `TaskSheetState`; the `instruction-delete` debug command |
+| 6d | | 4.0.8 (#79) | cleanup | `Readings`, `Sync` and `Photos` |
+| 6e | | 4.0.9 (#80) | cleanup | `Learning`, the log's one writer |
+| — | | 4.0.10 (#82) | fix, feature | the chat's box answers his newest nudge; his messages waiting for your answer shown so, with *Mark answered* (D-98 amended, D-99) |
+| 6f | The `:core` module | 4.0.11 (#86) | cleanup | `core/` a plain Kotlin module, its dependencies on the app turned round first; the third rule held by the compiler |
+| 9 | Names | 4.0.12 (#87) | cleanup | `ReadingPrompts`/`ReadingAnswers`, `InstructionRules`/`OwnTaskRules`, a type a file, a test class a file |
+| 7 | Who set what, the stores split | 4.0.13 (#89) | cleanup, data | `TaskItem.mine` with `By`, steps with an id and an origin, `runtime.json` split into `session.json`, `protection.json`, `model.json`, `anki.json`, `learning.json` and `calendar.json`'s new fields, finished tasks trimmed after a fortnight |
+| 8a | Notes and reminders | 4.1.0 (#91) | feature, data | `felix.json`; notes on a task or standing (Q31); reminders at a time, a slot's start or before a due date, in his words written ahead (D-100) |
+| 8b | The gaps | 4.1.1 (#92) | feature | keep or unkeep a piece, check a source, open a task where it lives, blocking and free time in his context, each class's next lessons (G8) (D-101) |
+| — | | 4.1.2 (#93) | fix | from the 20 Oct phone session: a notification reply isn't new in the chat; a slot's words asked for once a moment; a tick's Undo for its own tick |
+| — | | 4.1.3 (#97) | fix | from the 20 Oct docs review: a missed slot whose task finished keeps blocking strict; hour-cached writes priced; the briefing by the school calendar (D-74, Q34) |
+| 8c | Less sent, more asked for | 4.1.4 (#98) | feature | the week's numbers and the calendar further out asked for in a round; each task's line says what its text holds; the text kept at 600 characters by the eval (D-102) |
+| 10a | Memory that expires | 4.2.0 (#99) | feature, data | a fact or rule with an until, a fact with its task; `memory.json` v2 (D-103) |
+| — | | 4.2.1 (#101) | fix | from the 21 Oct docs review: the archive months' copies let go of after a week and by a clear (D-94); Teams' automatic syncs by the school calendar (D-105) |
+| 10b | His voice | 4.2.2 (#102) | feature | the register pinned by examples; just talk; the summary email in the third person; his say over what your words answered (D-57, D-99) |
+| 11 | Emails done | 4.3.0 (#103) | feature, data | a starred email finished here unstarred and archived in Gmail: `gmail-writes.json`, `GmailWriteWorker`, `ImapWriter`, the grace, Undo, the first-time sheet, the switch (D-106; D-7, D-10, D-54 amended) |
+| — | | 4.3.1 (#105) | fix | from 4.2.1's reviews and 11's phone check: an archive month read during a clear; Setup's list of unreadable files; Felix with the Gmail switch off offers *not a task* |
+| 12 | The sweep | 4.3.2 (#106) | cleanup | imports, comments, the architecture test complete (each store's writers named, no screen among them), the baselines compared (D-107) |
+| — | | 4.3.3 (#107) | fix | from Stage 12's read of the spec: a reset keeps every instruction in its copy (D-72); a studied quota with no new cards of its own is done; the block screen's wording |
+| — | | 4.3.4 (#108) | fix | a task's steps keep their order within a day (D-108, Q56) |
+| — | | 4.3.5 (#109) | feature, data | a step can say it doesn't need the steps before it (`anyOrder`, D-109, Q57); `ReadingPrompts.VERSION` 9 |
+| — | | 4.3.6 (#110) | feature | in a school day's 07:00 briefing call Felix may rebalance two adjacent steps of his own so the next fits a free time at school (D-110, Q58) |
+| — | | 4.3.7 (#111) | fix | a proposed task opened in its form keeps its steps' own dates (Q59); the form's "Any order" chip (Q60) |
+| — | | 4.3.8 (#112) | feature | the rebalance covers the reading's steps too, every step written at its minutes as planned (D-110) |
+| — | | 4.3.9 (#113) | fix | from 10b's read of a day of his messages: more like a teenager, a greeting now and then, no how-to in nudges (D-57) |
+| — | | 4.3.10 (#114) | fix | a rebalance lets go of only the changed steps' kept starts (D-110) |
+| — | | 4.3.11 (#115) | fix | the greeting on the app's word (his first message after three hours with nothing said); he's told what's done of today's tasks (D-57) |
+| — | | 4.3.12 (#116) | fix | your reply to his reading question is read shown his question and kept only as an answer; one that isn't is answered in the chat (D-19, Q64) |
+| — | | 4.3.13 (#117) | fix | a task's sheet's "Next:" is its first step still to do (Q65) |
+| — | | 4.3.14 (#120) | fix | from the review of 4.3.13 ([astra-review-4.3.13](../astra-review-4.3.13/README.md)): a backup too big for Import isn't written nor older ones pruned for it; a restore leaves out your messages still waiting for an answer (D-111) |
+| — | | 4.3.15 (#121) | fix | Gmail's Undo puts back everything starred or in the inbox before the finish; one task read once at a time; the calendar's switch can't race a write |
+| — | | 4.3.16 (#122) | fix | a reply to his reading question from his notification is read as work and shown its own question; the archive's move keeps an answer; a non-answer that changed something leaves his question waiting (D-19) |
+| — | | 4.3.17 (#123) | fix | a reminder's fresh words asked for in its work, not the alarm's receiver; one cancelled meanwhile isn't sent; a slot's words written ahead go only if its slot hasn't moved |
+| — | | 4.3.18 (#124) | fix, data | a long break kept after work laid before a kept slot; free time taken back as earned (`log.json` 4, `session.json` 2); the check-in form keeps its draft through a turn of the phone; D-49's words |
+| — | | 4.3.19 (#126) | fix | D-19 as answered in Q66; the instruction reader told that a reply that isn't an answer but asks for a change has it made |
 
-## The order
+Beside them: #56 (this plan), #63 (the Claude reviewer's workflow and the `CLAUDE.md` it reviews by), #65 (the fixtures made up in their shapes, D-79), and the docs-only PRs #64, #66, #72, #75, #81, #83, #84, #85, #88, #90, #94, #95, #96, #100, #104, #118, #119, #125 and #127: the time rules, the plan's rows marked done, the review rules, and the docs read against the code after each run of releases.
 
-Why it's this order, in short ([03](03-stages.md) §Why this order has it in full): the chat work is the largest feature and lives in the most tangled code, so the notifier, the gateway, the stores with migrations and Felix's own service come before it (Stages 1–4), and the chat is then written inside a tested service rather than moved into one afterwards. The other services and the data model don't touch the chat, so they wait until it's in (6, 7), but they do touch reminders, the gaps and the email's finish, so they come before those. Names are settled (9) as soon as the services are in, so the data release, the features and the prompts' rewrite (7 to 10) are written on them, not renamed after; the write outside the phone comes last (11); the sweep leaves the code as [11](11-conventions-and-docs.md) wants it (12).
+## What changed, in sum
 
-Every PR is a release ([development.md](../development.md)): cleanup-only releases before the chat are 3.3.x; from the chat on, every release is 4.x in the order it lands, cleanup or feature. The number says when, not what.
+- **Felix's code lives in `felix/`**, a service built like `Focus` with tests on temporary stores (`FelixHarness`); `AppGraph` is wiring, its members the services.
+- **`chat.json` is the conversation**: every message of his with a kind, what it's about, the replies it offered and his next check; your read position; his state. Every message is kept for you, the older ones in an archive a file a month, shown on scrolling back; what he's sent of it is the recent window (D-96, D-97).
+- **One notification for him**, in Android's messaging style, rebuilt from the chat's unread, cleared when the chat opens; tapped, it opens the chat at the first unread. Every notification is named in one place and none replaces another.
+- **The chat screen** has dates, times, a read divider, swipe to reply with a quote, a folded tail under his bubbles with a chevron, a label that slides out saying what a new message did, and the box answering his newest message still waiting for your answer.
+- **Two new things he keeps**: notes on tasks (or standing, for every task of a class, subject or source) and reminders, in `felix.json`, each set from the chat with an Undo, shown on the task's sheet and in his context; a reminder comes in his words for the moment, written ahead or asked for at its moment where those are out of date.
+- **Memory with a shelf life**: a fact or a rule can carry an until, a fact belong to a task, and each goes when that passes.
+- **His prompts say how he talks**, the register pinned by examples; the fixed lines in his name follow; a message that's just talk gets a reply and nothing else; the week's summary email is about you in the third person.
+- **He's sent less, and asks for the rest**: the week's numbers and the calendar past the fortnight come when he asks, in a round; each task's line says what its text holds; the next lessons by class are in his context.
+- **Gmail gets one write**: finishing a starred email's work unstars and archives its conversation, journaled and retried, undone within a grace (D-106).
+- **Tasks keep your values in one place** (`TaskItem.mine`), each with who set it; steps carry an id and an origin, and ticks follow the id; a step can be marked as needing nothing before it, and two adjacent steps of his or the reading's can be rebalanced for a free time at school.
+- **The stores split**: `runtime.json` into files by how often they change; a finished task's text dropped a fortnight on, its record kept; every store versioned, its migrations tested from every shape ([data-and-migrations.md](data-and-migrations.md)).
+- **One class builds Claude clients; one object names every notification; one test holds the architecture's rules** ([architecture.md](architecture.md)).
 
-| # | Stage | Version | Kind | Needs | Days |
-|---|---|---|---|---|---|
-| 0 | Safety net: store fixtures, the plan snapshot, the rehearsal, the phone-check script, baselines | none (tests and scripts), done (#57) | cleanup | — | ½ |
-| 1 | One notifier: `NoticeId`, `Notifier`, every caller switched | 3.3.0, done (#58) | cleanup | 0 | ½ |
-| 2 | One model gateway | 3.3.1, done (#59) | cleanup | 0 | ½–1 |
-| 3 | Stores and backups, with versions and migrations | 3.3.2, done (#60) | cleanup | 0 | 1 |
-| 4 | Felix's code in one place: the Conversation and Planning services, moved; his files split | 3.3.3, done (#61) | cleanup | 1, 2, 3 | 1 |
-| — | The secrets' write tried again as the stores' is (a test that failed now and then on Windows) | 3.3.4, done (#62) | fix | — | — |
-| — | A piece under way stays today's when the plan is made again (found writing Stage 4's tests) | 3.3.5, done (#67) | fix | — | — |
-| — | The open items settled: the chat names the tabs that exist; the briefing's quiet-hours rule and 6c's check written down | 3.3.6, done (#68) | fix | — | — |
-| 5a | The chat as his one voice: every message in it, the outbox, one notification, the archive | 4.0.0, done (#69) | feature, data | 0, 1, 3, 4 | 2 |
-| 5b | WhatsApp-like: read state, dates, earlier messages, swipe to reply, one entrance for replies | 4.0.1, done (#70) | feature | 5a | 1½ |
-| 5c | The extras folded; the label that slides out | 4.0.2, done (#71) | feature | 5b | ½ |
-| — | The Day screen's crash on a slot kept twice; a Done tapped again keeps nothing more; a Done that leaves only the source's word says so | 4.0.3, done (#73) | fix | — | — |
-| — | The chat's archive a file a month, each read only when it's wanted, none at a start (your call, 19 Oct) | 4.0.4, done (#74) | fix, data | 5a | — |
-| 6a | `CalendarWriter` | 4.0.5, done (#76) | cleanup | 3 | ½ |
-| 6b | `Protection`, and the Settings screen's state holder | 4.0.6, done (#77) | cleanup | 3 | 1 |
-| 6c | `Instructions` and `OwnTasks`, and the task sheet's state holder | 4.0.7, done (#78) | cleanup | 3 | 1 |
-| 6d | `Readings`, `Sync` and `Photos` | 4.0.8, done (#79) | cleanup | 2, 3 | ½ |
-| 6e | `Learning` | 4.0.9, done (#80) | cleanup | 3, 5a | ½ |
-| — | The chat's box answers his newest nudge; his messages waiting for your answer shown so, with *Mark answered* and *Mark all answered* (your calls, 19 Oct) | 4.0.10, done (#82) | fix, feature | 5b | — |
-| 6f | The `:core` module, its dependencies on the app turned round first | 4.0.11, done (#86) | cleanup | 6a–6e | 1 |
-| 9 | Names: the readings' prompts renamed, core's rules apart from the services, files and tests split | 4.0.12, done (#87) | cleanup | 6 | ½ |
-| 7 | Who set what (`Mine`, `By`, steps with ids) and the stores split, trimmed: one data release | 4.0.13, done (#89) | cleanup, data | 0, 3, 6, 9 | 2½ |
-| 8a | Notes, standing notes and reminders | 4.1.0, done (#91) | feature, data | 2, 3, 4, 5, 7 | 3 |
-| 8b | The gaps: keep a piece, check a source, open where it lives, free time and the next lessons in his context | 4.1.1, done (#92) | feature | 5, 6d, 6f, 8a | 1½ |
-| — | From the 20 Oct phone session: a message you've replied to from his notification isn't new in the chat; his words for a slot asked for once a moment; a slot's alarm that fails logged, not a crash; a tick's Undo for its own tick | 4.1.2, done (#93) | fix | 8b | ¼ |
-| — | Found in the 20 Oct docs review, each checked first and fixed with its test: a slot missed today whose task has since finished, taken as gone to another day (`SlotState`), so `Focus.missedKeepsPressure` keeps blocking strict till the day's hours end; the cost records' writes of system prompts cached for an hour, `Pricing` charging the five-minute rates (checked against the current price list before it's changed); the briefing at 07:00 on a school day by the school calendar and 08:30 on any other, a weekday off included (Q34: B) | 4.1.3, done (#97) | fix | 4.1.2 | ¼ |
-| 8c | Less sent, more asked for: the week's numbers and the calendar further out asked for; each task's line saying what its text holds, the text kept at 600 by the eval's rule (D-102) | 4.1.4, done (#98) | feature | 6e, 8b | 1½ |
-| 10a | Memory that expires | 4.2.0, done (#99) | feature, data | 3, 4, 7, 8a, 9 | 1 |
-| — | Found in the 21 Oct docs review: the copies of the chat archive's months that a version raise keeps, let go of after a week as the other stores' are and taken by a clear or a chat reset (D-94); Teams' automatic syncs by the school calendar, a weekday off as a weekend day (D-105) | 4.2.1, done (#101) | fix | 10a | ¼ |
-| 10b | His voice; just talk; the summary email in the third person | 4.2.2, done (#102) | feature | 5, 6e, 9 | ½ |
-| 11 | Emails done | 4.3.0, done (#103) | feature, data | 1, 3, 6d, 7 | 1½ |
-| — | Found in 4.2.1's reviews and 11's phone check: a month of the chat archive read for the first time just as a clear runs could come back; Setup's list of the files that couldn't be read could name a copy a clear has since deleted; Felix, asked to mark an email done with the Gmail switch off, says he can't finish it in Gmail and offers *not a task*, rather than calling that done (your calls, 21 Oct) | 4.3.1, done (#105) | fix | 11 | ¼ |
-| 12 | The sweep: imports, comments, the architecture test complete, baselines compared | 4.3.2, done (#106) | cleanup | all | ½ |
-| — | Found in Stage 12's read of the spec: a reset of your changes kept only those in use in its copy, so one being read or left unclear was lost; a quota with no new cards of its own, studied to nothing due, was taken as missed; the block screen said a missed slot went to tomorrow, where it has no time left today (your calls, 21 Oct) | 4.3.3, done (#107) | fix | 12 | ¼ |
-| — | Found at the morning check of 22 Oct: a task's steps laid out of their order within a day, a short later one in an earlier gap (your call, 22 Oct) | 4.3.4, done (#108) | fix | 12 | ¼ |
-| — | Felix marks the steps that don't depend on the one before, which can then fill a gap as before (your call, 22 Oct) | 4.3.5, done (#109) | feature, data | 4.3.4 | ½ |
-| — | In a school day's 07:00 briefing call, Felix may rebalance two adjacent steps of his own, not yet begun, so the next fits a gap: still two steps, their minutes adding up as before, neither under 15, shown with Undo (your call, 22 Oct) | 4.3.6, done (#110) | feature | 4.3.5 | 1 |
-| — | Found in 4.3.5's review: a task Felix proposed, opened in its form before it was added, lost its steps' own dates there (your call, 22 Oct) | 4.3.7, done (#111) | fix | 4.3.6 | ¼ |
-| — | Felix may rebalance the reading's steps too (a Teams assignment's, an email's), every step of the task written at its minutes as planned, so it takes what it was laid at; yours never (your call, 22 Oct) | 4.3.8, done (#112) | feature | 4.3.7 | ¼ |
-| — | From 10b's read after, of a day of his messages: more like a teenager, never like a teacher or a coach, a quick greeting now and then, and his nudges leaving out how to do the work, a due date kept (your call, 22 Oct) | 4.3.9, done (#113) | fix | 4.3.8 | ¼ |
-| — | Found at 4.3.6's check: a rebalance let go of all its task's kept starts, so the times his message named for its later steps moved; now only the changed steps' (your call, 23 Oct) | 4.3.10, done (#114) | fix | 4.3.9 | ¼ |
-| — | Found at 4.3.9's check and in a side agent's note: no greeting in a day of his messages, so the app says when (his first after three hours with nothing said); the morning's briefing asked again for a step ticked the night before, so he's told what's done of today's tasks and of those his messages were about (your calls, 23 Oct) | 4.3.11, done (#115) | fix | 4.3.10 | ¼ |
-| — | Found at 4.3.9's check: a question of yours, replied to one of his, was kept as his question's answer; now the reply is read shown his question, kept only as an answer, and one that isn't is answered in the chat (your call, 23 Oct) | 4.3.12, done (#116) | fix | 4.3.11 | ¼ |
-| — | Found at 4.3.9's check: a task's sheet named as its next step the one its reading suggested, though that step was ticked; now its first step still to do (your call, 23 Oct) | 4.3.13, done (#117) | fix | 4.3.12 | ¼ |
-| — | Found in the review of 4.3.13 (23 Oct): a backup too big for Import was still written, older ones pruned for it; a restore sent your messages still waiting for an answer with words from then, now left out and said (your call, 23 Oct); the source tasks' own state in backups planned for after (P01, your call) | 4.3.14, done (#120) | fix | 4.3.13 | ¼ |
-| — | Found in the same review: Gmail's Undo didn't put back what a command whose OK was lost had changed, now everything starred or in the inbox before the finish; one task read twice at once; the calendar's switch could race a write | 4.3.15, done (#121) | fix | 4.3.14 | ¼ |
-| — | Found in the same review: a reply to his reading question from his notification wasn't read as work, and could be read shown another question; the archive's move could drop an answer; a non-answer that changed something left his question done with, now it waits again (D-19, your call, 23 Oct) | 4.3.16, done (#122) | fix | 4.3.15 | ¼ |
-| — | Found in the same review: a reminder's fresh words were asked for in the alarm's receiver and the plan's hooks; one cancelled meanwhile was still sent; a slot's message written ahead went after its slot moved | 4.3.17, done (#123) | fix | 4.3.16 | ¼ |
-| — | Found in the same review: no long break after work laid before a kept slot; free time taken back at the rate now, not as earned; the check-in form lost what was typed when the phone turned; D-49's never-blocked apps, its words only (your call, 23 Oct) | 4.3.18, done (#124) | fix, data | 4.3.17 | ¼ |
-| — | From the docs after the same review (Q66): D-19 says a reply Claude can't read is kept as the answer, as built since 4.3.12 (your call, 24 Oct); the instruction reader is told a reply that isn't an answer but asks for a change has it made, as since 4.3.16, not answered in the chat | 4.3.19, done (#126) | fix | 4.3.18 | ¼ |
+## Decisions it added
 
-About thirty-one days in 50 PRs (49 releases), 3.3.4 to 3.3.6, 4.0.3, 4.0.4, 4.0.10, 4.1.2, 4.1.3, 4.2.1, 4.3.1 and 4.3.3 to 4.3.19 among them, evenings and weekends. After it, the conversation digest as 4.4.0 ([13](13-summaries.md)). You've said you won't use the app until the whole of it is in (Q21): each release is still built and checked on the phone, but nothing between releases has to serve a day's use.
-
-## What changes substantially
-
-- **Felix's code lives in `felix/`**, a service built like `Focus`, with tests on temporary stores; `AppGraph` shrinks to wiring, under 400 lines, its members the services.
-- **`chat.json` is the conversation**: every message of his with a kind, what it's about, the replies it offered and his next check; your read position; his state. The log stops keeping his records. Every message is kept for you; the older ones in an archive, shown on scrolling back; what he's sent of it is the recent window. [05](05-the-chat.md).
-- **One notification for him**, in Android's messaging style, holding his unread messages, rebuilt from the chat, cleared when the chat opens, tapped, opening the chat at the first unread. Notifications are named in one place and never replace each other.
-- **The chat screen** gains dates, times, a read divider, swipe to reply with a quote, a folded tail under his bubbles with a chevron, and a label that slides out for five seconds saying what a new message did.
-- **Two new things he keeps**: notes on tasks (or on every task of a class, subject or source) and reminders, in a store of their own, each set from the chat with an Undo, shown on the task's sheet and in his context; a reminder delivered in his words for the moment, written ahead, or at its moment where those are out of date (4.3.11). [07](07-notes-and-reminders.md).
-- **Memory with a shelf life**: a fact or a rule can carry an until, a fact belong to a task, and each goes when that passes. [08](08-memory-that-expires.md).
-- **His prompts say how he talks**, with the register pinned by examples; the fixed lines in his name follow; a message that's just talk gets a reply and nothing else; the week's summary email is about you in the third person. [09](09-his-voice.md).
-- **He's sent less, and asks for the rest**: the week's numbers and the calendar past the fortnight come when he asks for them, in a round, as a task read in full does today; each task's line says what its text holds, and the text sent is cut shorter where the chat's eval, before and after, shows no loss; what he needs for most messages stays in, the next lessons by class added. The tasks' text asked for instead of sent is left to real use, after the plan. [15](15-sent-or-asked-for.md).
-- **Gmail gets one write**: finishing a starred email's work unstars and archives its conversation, journaled and retried, undone within a grace. D-7's "only ever read" is amended. [10](10-emails-done.md).
-- **Tasks keep your values in one place** (`TaskItem.mine`), each with who set it; steps carry an id and an origin, and ticks follow the id.
-- **The stores split**: `runtime.json` into files by how often they change; a finished task's text dropped a fortnight after it's finished, its record kept; every store versioned, its migrations tested. [04](04-data-and-migrations.md).
-- **One class builds Claude clients; one object names every notification; one test holds the architecture's rules.**
-
-## Decisions it adds
-
-Numbered in `docs/decisions.md` by the PRs that apply them (the next free number is D-112; D-94 is 3.3.2's, D-95 to D-97 4.0.0's, D-98 4.0.1's, amended by 4.0.10, D-99 4.0.10's, D-100 4.1.0's, D-101 4.1.1's, D-102 4.1.4's, D-103 4.2.0's, D-104 Q36's, D-105 4.2.1's, D-106 4.3.0's, D-107 4.3.2's, D-108 4.3.4's, D-109 4.3.5's, D-110 4.3.6's and D-111 4.3.14's):
-
-- The chat is Felix's one visible voice; a notification is made from it and never beside it (5a). A reply from a notification and one in the chat are the same turn, routed by the message it answers (5b).
-- The chat keeps every message for you; what he's sent of it is the recent window (5a).
-- He keeps notes and reminders at your asking, made at once with an Undo; a note can stand for every task of a class, subject or source; a reminder is delivered in his words for the moment, written ahead (or at its moment where those are out of date, 4.3.11), or as you set it when he can't write (8a).
-- What he remembers can expire: by a date, or with a task; nothing of it is yours to prune (10a).
-- His voice is a sixth-former's, set by his prompts and pinned by examples; his name and line stay the knobs (D-57). A message that's just talk gets a reply and nothing else. The week's summary email is about you in the third person, never in his voice (10b).
-- Finishing a starred email's work in the app unstars and archives it in Gmail (amending D-7, D-10 and D-54), behind a switch; a write that can't be made is the app's own notification, not his (11).
-- What he's sent always and what he asks for: small and needed by most messages always, the rest asked for and named in his prompt; the tasks' own text kept at 600 characters: cut to 250 (amending D-93) only where the chat's eval shows no loss, which in 4.1.4 it didn't (one case took a round more), so 600 stays (D-102); asked for instead only if real use shows it can be, after the plan; the week's numbers and the calendar further out taken as things he asks for (G6, G7: your call, 19 Oct, in place of Q17's "not now"); each class's next lessons in his context, a Power Planner class tied to its Teams code by the subject you give both (G8) (8b, 8c).
-- A finished task's text is kept a fortnight, its record for good (7). Every store has a version and a migration (3: D-94).
-- One `@claude review` on every PR that gets Codex rounds (a move's one round aside), after its last, answered point by point and closed with "Resolved" (in [development.md](../development.md), C-Q2; the rounds stop at the first with at most one P2 and no P1, D-83 as amended 21 Oct).
+Numbered in [decisions.md](../decisions.md) by the PRs that applied them: D-94 (3.3.2, every store versioned), D-95 to D-97 (4.0.0, the chat his one voice, every message kept, what he's sent of it), D-98 (4.0.1, one entrance for replies; amended by 4.0.10), D-99 (4.0.10, his messages waiting for your answer), D-100 (4.1.0, notes and reminders), D-101 (4.1.1, the gaps), D-102 (4.1.4, what he's sent always and what he asks for), D-103 (4.2.0, memory that expires), D-104 (Q36, a briefing whose time moves to one gone by), D-105 (4.2.1, Teams' syncs by the school calendar), D-106 (4.3.0, a finished email unstarred and archived), D-107 (4.3.2, the structure as Stage 12 left it), D-108 (4.3.4, steps in order within a day), D-109 (4.3.5, a step that needs nothing before it), D-110 (4.3.6, two steps rebalanced), D-111 (4.3.14, a restore leaves out messages waiting for an answer). D-7, D-10, D-11, D-19, D-49, D-54, D-57, D-72, D-74, D-83 and D-90 were amended along the way. The next free number is D-112.
 
 ## Done when
 
-- [x] `AppGraph.kt` is under 400 lines and holds no feature logic; each service has tests of its own; one class builds Claude clients; one object names every notification id; the architecture test holds all four rules. *(Settled by D-107 at 4.3.2: `AppGraph.kt` is 537 lines, the stores and services made and the flows that join them, accepted as wiring; every service has tests of its own, Planning's through `PlanSnapshotTest`, which plans through it on temporary stores; `ModelGateway` alone builds a client and `NoticeId` names every notification, both held by `ArchitectureTest`; its fourth rule holds each store's writers named and no screen among them, not one writer a store.)*
-- [x] Every message in his name since 4.0.0 is in the chat, and `felix-say` twice gives one notification with both. A tapped notification opens the chat at that message; a reply from it and a reply swiped in the chat answer the same message the same way. *(5a and 5b, on the phone with you on 18 Oct.)*
-- [x] His bubble shows a chevron and nothing under it until opened; a new message's label slides out and back; a message that's just talk has neither. *(5c on 18 Oct; just talk with 10b on 21 Oct.)*
-- [ ] Scrolling up past the chat's oldest message loads the earlier ones; `chat-context` shows only the window. *(Built and tested, the archive a month a file since 4.0.4; not yet seen on the phone, whose chat has no month past its window yet: [14](14-your-part.md) §Still to check, 2.)*
-- [x] "Remind me at 7 to…" sets a reminder (not a task) that arrives at 7 as his message written for that moment (your words, when he couldn't write); "remind me when I next sit down to…" arrives at that slot's start. *(8a, on the phone on 20 and 21 Oct.)*
-- [x] "Tell me to do her assignments on sheets" lands on every task of that class: on each sheet, under each in his context, in his slot message for each. *(8a's standing notes, Q31: A.)*
-- [x] "Don't message me tonight" is gone by morning without your deleting it. *(10a: set on 21 Oct at 19:05 till 07:00, and gone at 07:00 on 22 Oct; the night's three nudges were stored empty, none sent.)*
-- [x] The private chat and Felix evals pass at the rate they pass today after the voice change. *(10b: 23 of 23, from 0.957 before the voice.)*
-- [x] "It's due next lesson" dates a task to that class's next lesson; "how did last week go?" and "what's on in December?" are answered after a round; the chat's eval scores at least what it did before 8c. *(8b and 8c, on the phone on 20 and 21 Oct; the text kept at 600 by the eval's rule, D-102.)*
-- [x] Ticking the last piece of a starred email unstars and archives it within a minute online, and after reconnecting offline; Undo within the grace leaves Gmail untouched. *(11, with you and Gmail on 21 Oct; a star's kind stays drawn on Gmail's website, Gmail's limit, D-106.)*
-- [x] A new override of yours is a field in one place, not six; no store is rewritten for a change that isn't its own: the half-minute state has a file of its own, under 10 KB. *(7: `TaskItem.mine`; `session.json` 7,202 bytes on the phone.)*
-- [x] All tests pass, more of them than the 874 the plan began with; every release checked on the phone; the baselines of Stage 0 compared and bettered. *(1,372 tests pass at 4.3.19, the app's 1,251 and core's 121; every release was checked on the phone; the baselines are compared in [01](01-current-state.md), `AppGraph` and the runtime's file far smaller. At 4.3.13 the tests took 71 s where they took 13, and a full build 109 s where it took 90: slower, which you accepted on 23 Oct.)*
+- [x] `AppGraph.kt` holds no feature logic; each service has tests of its own; one class builds Claude clients; one object names every notification id; the architecture test holds all four rules. *(Settled by D-107 at 4.3.2: 537 lines, not the plan's 400, the stores and services made and the flows that join them; every service has tests, Planning's through `PlanSnapshotTest`; `ModelGateway` alone builds a client and `NoticeId` names every notification, both held by `ArchitectureTest`, whose fourth rule names each store's writers, with no screen among them.)*
+- [x] Every message in his name is in the chat, and `felix-say` twice gives one notification with both; a tapped notification opens the chat at that message; a reply from it and a reply swiped in the chat answer the same message the same way. *(On the phone with you, 18 Oct.)*
+- [x] His bubble shows a chevron and nothing under it until opened; a new message's label slides out and back; a message that's just talk has neither. *(18 and 21 Oct.)*
+- [ ] Scrolling up past the chat's oldest message loads the earlier ones; `chat-context` shows only the window. *(Built and tested, the archive a month a file since 4.0.4; not yet seen on the phone, whose chat has no month past its window yet: §Still to check.)*
+- [x] "Remind me at 7 to…" sets a reminder that arrives at 7 as his message written for that moment; "remind me when I next sit down to…" arrives at that slot's start. *(20 and 21 Oct.)*
+- [x] "Tell me to do her assignments on sheets" lands on every task of that class: on each sheet, under each in his context, in his slot message for each. *(Standing notes, Q31.)*
+- [x] "Don't message me tonight" is gone by morning without your deleting it. *(Set on 21 Oct at 19:05 till 07:00, gone at 07:00 on 22 Oct; the night's three nudges were stored empty, none sent.)*
+- [x] The private chat and Felix evals pass at the rate they passed before the voice change. *(23 of 23, from 0.957 before the voice.)*
+- [x] "It's due next lesson" dates a task to that class's next lesson; "how did last week go?" and "what's on in December?" are answered after a round; the chat's eval scores at least what it did before 8c. *(20 and 21 Oct; the text kept at 600 by the eval's rule, D-102.)*
+- [x] Ticking the last piece of a starred email unstars and archives it within a minute online, and after reconnecting offline; Undo within the grace leaves Gmail untouched. *(With you and Gmail on 21 Oct; a star's kind stays drawn on Gmail's website, Gmail's limit, D-106.)*
+- [x] A new override of yours is a field in one place; no store is rewritten for a change that isn't its own: the half-minute state has a file of its own, under 10 KB. *(`TaskItem.mine`; `session.json` 7,202 bytes on the phone.)*
+- [x] All tests pass, more than the 874 the plan began with; every release checked on the phone; the baselines compared. *(1,372 tests at 4.3.19, the app's 1,251 and core's 121, from 874; `AppGraph.kt` 537 lines from 2,628; `runtime.json` 493 bytes from 94,904; the tests take 71 s where they took 13 and a full build 109 s where it took 90, slower as the services' flows run on temporary stores with a stand-in for Claude's API, which you accepted on 23 Oct.)*
 
-## The documents
+## Still to check
 
-- [01-current-state.md](01-current-state.md): measurements and findings, with evidence; the baseline.
-- [02-target-architecture.md](02-target-architecture.md): the structure aimed at: the services, the platform, the rules.
-- [03-stages.md](03-stages.md): the order: every stage and PR, its needs, steps, tests and phone check.
-- [04-data-and-migrations.md](04-data-and-migrations.md): the stores now and after, the types, how each data change is made and rehearsed.
-- [05-the-chat.md](05-the-chat.md): the conversation, the outbox, the notifier; the chat as his one visible voice; opening at a message; WhatsApp-like; the folded extras.
-- [06-what-felix-can-do.md](06-what-felix-can-do.md): what you can ask him today and after; the gaps closed; the chat as the control surface.
-- [07-notes-and-reminders.md](07-notes-and-reminders.md): notes on tasks and reminders at a time or a slot, written ahead.
-- [08-memory-that-expires.md](08-memory-that-expires.md): facts and rules that last as long as they matter.
-- [09-his-voice.md](09-his-voice.md): the register, the prompts, the fixed lines, just talking, the summary email, the evals.
-- [10-emails-done.md](10-emails-done.md): unstar and archive on the last tick.
-- [11-conventions-and-docs.md](11-conventions-and-docs.md): names, files, code, comments, tests and docs, from Stage 1 on.
-- [12-verification-and-risks.md](12-verification-and-risks.md): how each PR is shown to work; tests, phone checks, reviews, risks, rolling back.
-- [13-summaries.md](13-summaries.md): the summaries evaluation; the conversation digest as 4.4.0.
-- [14-your-part.md](14-your-part.md): which stages need your phone and which need you, for what and for how long; how to batch them.
-- [15-sent-or-asked-for.md](15-sent-or-asked-for.md): everything he's sent, call by call, always or asked for, now and after; the next lessons; the eval; the cache mark after the plan.
-- [ANSWERS.md](ANSWERS.md): every call either plan needed, with your answers, and the merge's own calls; closed. Questions raised during implementation go in a separate `QUESTIONS.md`.
-- `QUESTIONS.md`, made when implementing a stage needs something from you: questions with a recommendation each, and actions only you can take. Once each is settled it's recorded where it belongs (its PR, [decisions.md](../decisions.md), [14](14-your-part.md)) and the file goes; none is open (Q35 to Q39 settled on 21 Oct: D-102, D-104, D-105, 4.2.1, [14](14-your-part.md)).
+These want your taps, or a day of their own, whenever they come up; none needs a session of its own. Everything else every release asked for was checked on the phone as it was installed.
+
+1. With more of his messages unread than a screen holds, open the chat from his button (not his notification): it opens at the *New messages* line, not at its foot.
+2. Once the chat has messages past its window (a fortnight old and past the newest 200), scroll back past them: the older rows show under *Earlier messages* with no Undo or buttons of their own, read a month at a time (4.0.4).
+3. The week's check-in answered on a Sunday, in the chat or on its form: kept once in the log, and the week's review asked for through `Learning`.
+4. A slot missed today, then its task finished: blocking as the day's other slots have it (4.1.3; seen only within the day's blocking hours).
+5. His first message after three hours with nothing said opens with a greeting (4.3.11); a quiet morning's first shows it.
+6. A reply of yours to his question that isn't its answer (4.3.12): answered in the chat, not kept with its task, his question waiting for its answer again.
+7. A reply from his notification to one of his reading questions (4.3.16): read by Claude as work of its own, shown that question; the task changed or his question waiting again.
+8. A kept slot undone (4.3.18): the free time it earned given back, as far as it's unspent, and none of today's for one kept another day.
+
+Also not yet tried on the phone, from before the plan: a photo check of written homework and photographing homework into a task; re-arming with the authenticator kept, and the *Arm now?* list (needs the parent); the free-time countdown; the widget's red ! at its smallest size ([decisions.md](../decisions.md) §Open).
+
+## After the plan
+
+Each of these is decided by real use of the app, which began only once the whole plan was in (Q21), and is built as a release of its own when wanted.
+
+- **A conversation digest, 4.4.0** (Q28). Felix sees the conversation's last 12 messages and his last two nudges with your replies (D-97); what was agreed, asked or put off before that is gone from his view, and memory holds facts about you, not the thread of the talk. The one summary worth building: `ChatState.digest` (at most 600 characters) and `digestedTo` (the id of the last message it covers) in `chat.json`, in the backup, shown on the debug page; rewritten by a small call through the gateway (`ModelEffort.Job.Digest`, the cheapest model, under the cap and the rests) once a day at the nightly run when ten or more messages are new, or sooner when the window is about to move a message it doesn't cover to the archive ("rewrite the digest in 600 characters: what they've agreed, asked for, put off and said about their week; drop what's done"), about a cent a day; sent before the history in the chat's call ("Earlier in the chat: …") and in his own messages' context ("Lately in the chat: …"), with a line saying the messages after it win. About a day's work in the Conversation service: the pure parts, the call, a golden, the two prompts' lines, the doc page, the tests. Build it once it's clear whether what he forgets is the thread of the talk (the digest's job) or facts about you (memory's). Everything else he reads is condensed already (D-93) or isn't worth a call.
+- **The cache mark on the chat's context**, only if the record of calls shows more than about one message in four taking a round (your call, 19 Oct). With it, the newest turn is built so a round only adds: the context and the plan go as a text block before your words, byte for byte the same in the round as in the first call; a round may run past `Pricing.MAX_INPUT_CHARS` by its own blocks alone (at most about 60,000 characters), the cap holding back its worst case uncached (`AiUsage.allows` given each call's own, not the flat `Pricing.WORST_CALL_USD`), so no first call is cut for it. If fewer messages take a round, the mark costs more than it saves and isn't made.
+- **The tasks' text asked for instead of sent**, only if a sample of your real messages (kept in `private/`, never committed), run through the chat's eval with the 600 characters sent and with none, shows fewer than about one in four would need a round, at answers as good (D-102).
+- **What only this phone knows of the sources' tasks, kept in a backup** (the review of 4.3.13's P01; your call, 23 Oct: planned, built when wanted): their steps' ticks, the minutes worked and found done by a photo, the photo, and your answers to Felix's questions, each by its task's id; restored into a store of its own, each laid on its task once its source lists it again (its steps matched by id, then by title), and let go after a while where it never does. Never the task whole: the next sync would close as done one its source no longer lists, and give free time for it. A data release: a backup format and a store with their migrations, tested from every shape, and a rehearsal.
+- **A week of use, then a read** of how the app did. The phone keeps enough to go through a week, as long as no Reset or clear-data wipes it: the chat and its archive, 120 days of the log, your changes, crash records, and 14 nightly backups. The gaps: only the last 100 calls are kept (`CallRecord.MAX`); the Android log rolls over within about a day; Felix's inputs aren't stored; ticks keep no time. Offered, not built: a fortnight of calls kept instead of the last 100.
+- **Source data typed** (optional): `TaskItem.extra`'s keys as a small typed value per source (`GmailData`, `TeamsData`, `AnkiData`), read where they're used, with the map kept only for what nothing reads.

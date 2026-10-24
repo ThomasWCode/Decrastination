@@ -155,14 +155,10 @@ private fun TaskItem.enrichedOnly(): TaskItem {
     )
 }
 
-/**
- * The task with a fresh enrichment: steps an earlier enrichment gave are replaced by the new ones,
- * keeping those already done; steps of the source's own are kept.
- */
-/** Whether the task's steps are the ones its enrichment gave, not the source's own. */
 /** This task with its enrichment forgotten, and the steps it gave with it (the source's own stay): to be asked about afresh. */
 fun TaskItem.withoutEnrichment(): TaskItem = copy(enrichment = null, subSteps = if (stepsFromEnrichment()) emptyList() else subSteps)
 
+/** Whether the task's steps are the ones its enrichment gave, not the source's own. */
 private fun TaskItem.stepsFromEnrichment(): Boolean = subSteps.isNotEmpty() && subSteps.all { it.origin == StepOrigin.Reading || it.origin == StepOrigin.Rules }
 
 /**
@@ -173,6 +169,10 @@ private fun TaskItem.stepsFromEnrichment(): Boolean = subSteps.isNotEmpty() && s
  */
 private fun TaskItem.partDone(): Boolean = stepsFromEnrichment() && subSteps.any { it.done }
 
+/**
+ * The task with a fresh enrichment: steps an earlier enrichment gave are replaced by the new ones,
+ * keeping those already done; steps of the source's own are kept.
+ */
 fun TaskItem.withEnrichment(new: Enrichment): TaskItem {
     val fromEnrichment = stepsFromEnrichment()
     // The steps as they were, by name: each new step takes the marks of the old one ([carryMarks]).
@@ -224,7 +224,7 @@ object Enrichments {
             task.detail,
             task.className.orEmpty(),
             // A source with no deadline has none here, whatever the overlay says; only a task kept
-            // from before Phase 4 has no source values to read.
+            // from before source values were kept has none to read.
             (if (task.sourceValues != null) task.sourceValues.dueAt else task.dueAt)?.toString().orEmpty(),
             task.extra["from"].orEmpty(),
             task.extra["received"].orEmpty(),

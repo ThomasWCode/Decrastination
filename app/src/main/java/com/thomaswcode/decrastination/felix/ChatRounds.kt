@@ -40,6 +40,6 @@ object ChatRounds {
     fun asking(reading: ChatAnswers.Reading, searched: Boolean, searches: Boolean, read: List<String>, stats: Boolean, calendar: List<String>): Boolean =
         (reading.research != null && !searched && searches) || reading.details.any { it !in read } || (reading.stats && !stats) || (reading.calendar != null && reading.calendar !in calendar)
 
-    /** The most rounds a message takes after his first answer: a search and the texts, or each after the other. */
+    /** The most rounds a message takes after his first answer: what it asks for (a search, texts, the week's numbers, the calendar), together or one after another. */
     const val MAX_ROUNDS = 2
 }

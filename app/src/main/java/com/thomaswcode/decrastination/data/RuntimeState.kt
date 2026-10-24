@@ -57,6 +57,7 @@ data class RuntimeState(
     fun withNotSame(a: String, b: String): RuntimeState = copy(notSame = (notSame + Duplicates.key(a, b)).distinct().takeLast(MAX_NOT_SAME))
 
     companion object {
+        /** Unreadable files Setup lists at most: the latest. */
         const val MAX_UNREADABLE = 10
 
         /** The most pairs said to be different kept: far more than there are. */
@@ -165,7 +166,7 @@ data class CompletionRecord(
     val className: String? = null,
     /** The estimate it was planned with, before calibration. */
     val estimateMin: Int,
-    /** Minutes worked on it: its kept slots' (focus sessions' before review v2). */
+    /** Minutes worked on it: its kept slots'. */
     val workedMin: Int,
     val dueAt: Long? = null,
     val firstSeenAt: Long,
@@ -180,7 +181,7 @@ data class CompletionRecord(
     val photo: Boolean = false,
     /**
      * Planned with your own minutes (an instruction's, or a task of your own): not the app's
-     * estimate, so it teaches nothing about how far off the app's estimates are (2.0.0).
+     * estimate, so it teaches nothing about how far off the app's estimates are.
      */
     val yourEstimate: Boolean = false,
     /** [dueAt] was a real deadline, not a date the app or Claude set (PL-14): only these count as on time or late. Records from before were. */

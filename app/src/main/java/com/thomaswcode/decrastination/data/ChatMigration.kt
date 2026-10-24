@@ -10,7 +10,7 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.longOrNull
 
 /**
- * The chat's second shape (docs/plan_v4/04-data-and-migrations.md §The chat (v2)): every
+ * The chat's second shape (docs/plan_v4/data-and-migrations.md §The shapes, release by release): every
  * message of Felix's in the chat, with why he wrote it, and his state between looks beside them. His
  * records move in from the log and his state from the runtime, merged by id so nothing's doubled; what
  * a message kept its own way before (why he wrote it, the lines under it) is in the fields the chat
@@ -171,7 +171,7 @@ object ChatMigration {
 
     /**
      * A message of the first shape in the second: why he wrote it its kind; what it remembered, as lines
-     * before 16 Oct, made the edits it did where [memory] still holds them (their Undo forgets them);
+     * in a message from before memory edits were kept, made the edits it did where [memory] still holds them (their Undo forgets them);
      * the lines under it with nothing to undo among its acts, after the acts, a problem where something
      * wasn't made or looked up.
      */

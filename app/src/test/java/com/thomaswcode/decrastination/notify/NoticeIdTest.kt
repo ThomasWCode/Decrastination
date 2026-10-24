@@ -5,7 +5,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
-/** Every notification named once (docs/plan_v4/05-the-chat.md §3): no two ids, nor two ranges of request codes, alike. */
+/** Every notification named once (docs/plan_v4/architecture.md §`Notifier`): no two ids, nor two ranges of request codes, alike. */
 class NoticeIdTest {
     @Test
     fun `no two notifications share an id`() {
