@@ -170,7 +170,7 @@ A settings file that can't be read never disarms (IMP-P1-003): unreadable settin
 
 ## Never break the phone
 
-- Nothing off the blocklist is ever covered: calls, messages, WhatsApp, Slack, Teams, school and study apps, maps and travel, banking, authenticators, AI assistants, health and support apps, Settings, and this app itself.
+- Nothing off the blocklist is ever covered. Calls, messages, WhatsApp, Slack, Teams, school and study apps, maps and travel, banking, authenticators, AI assistants, health and support apps and Settings are never on it but where you add them (D-49), and this app itself can't be.
 - The guard acts only on the pages above, never on Settings as a whole or another app's pages, and only once armed.
 - The block screen always has **Go to the home screen**. A browser hiding its address is given Back once a connection, never again and again; whatever can't be judged counts as not blocked.
 - A failure in one piece of the service's work is logged, never allowed to bring the blocker down; one bad file never stops the app.

@@ -2,7 +2,7 @@
 
 An Android app that gathers everything outstanding (Teams assignments, Power Planner, starred Gmail conversations, AnkiDroid decks and tasks of your own), plans it into the days before each is due as timed slots, writes them to your calendar, shows the next thing to do on a home-screen widget, and, while work is due, replaces distracting apps with that next thing until it's done. Claude reads the work into steps and estimates, and Felix, a persona you chat with, makes changes and messages you about the day.
 
-A personal, sideloaded app for one phone, version 4.3.13.
+A personal, sideloaded app for one phone, version 4.3.18.
 
 ## Documents
 
@@ -59,7 +59,7 @@ adb shell am start -n com.thomaswcode.decrastination/.debug.Command --es cmd enr
 
 ## Backups
 
-Every night the app saves all it keeps to `Documents/Decrastination` on the phone as `decrastination-<date>.json`, the newest fortnight kept; Settings → Backup says when it last did, and Import reads one back. A Reset saves `reset-<date>-<time>.json` there first, never pruned (and, where the chat goes and that copy has no room for its earliest messages, `chat-archive-<date>-<time>.json` beside it). Keeping a copy off the phone is yours to do.
+Every night the app saves all it keeps to `Documents/Decrastination` on the phone as `decrastination-<date>.json`, the newest fortnight kept (one too big for Import to read back isn't written, nor older ones let go for it); Settings → Backup says when it last did, and Import reads one back. A Reset saves `reset-<date>-<time>.json` there first, never pruned (and, where the chat goes and that copy has no room for its earliest messages, `chat-archive-<date>-<time>.json` beside it). Keeping a copy off the phone is yours to do.
 
 ## Setting up the blocker
 
