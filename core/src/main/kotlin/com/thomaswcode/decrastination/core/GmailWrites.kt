@@ -6,8 +6,8 @@ import kotlinx.serialization.Serializable
  * A write to Gmail, journaled before it's made (docs/plan_v4/10-emails-done.md, D-7 as amended): a finish
  * of [taskId]'s conversation [threadId], every starred message of it unstarred and the conversation
  * archived; or, where [reverseOf] names a finish, its Undo past the grace, which stars again and puts back
- * in the inbox only what that finish took: the messages it found starred and in the inbox before it changed
- * anything ([GmailWrites.toRestore]). Once [doneAt] (made, or [gaveUp]) it's a receipt, kept while
+ * in the inbox only what that finish took: the messages it found starred, and those it found in the inbox,
+ * before it changed anything ([GmailWrites.toRestore]). Once [doneAt] (made, or [gaveUp]) it's a receipt, kept while
  * its Undo can stand ([GmailWrites.prune]).
  */
 @Serializable
