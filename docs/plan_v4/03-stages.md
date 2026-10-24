@@ -278,6 +278,7 @@ What only this phone knows of the sources' tasks, kept in a backup (the 23 Oct r
 | 11 | 1 | 1½ |
 | 12 | 1 | ½ |
 | 4.3.5 (Felix's mark on the steps that don't depend on the one before), 4.3.6 (his steps rebalanced for a gap), 4.3.8 (the reading's too) | 3 | 1¾ |
-| | 44 (43 releases) | about 29¼ |
+| 4.3.14 to 4.3.18 (the review of 4.3.13's finds) | 5 | 1¼ |
+| | 49 (48 releases) | about 30½ |
 
 Evenings and weekends, as every release ([12](12-verification-and-risks.md) §Risks: the phone's away on school days).

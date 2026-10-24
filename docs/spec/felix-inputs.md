@@ -58,7 +58,7 @@ Remembered:
 ### When it's called
 
 - You send a message on the chat's tab.
-- You reply to a message, from his notification (AI-24), his chips, or a swipe or *Reply* in the chat, all one way in (D-98): your reply goes into the chat under the message it answers, but for an answer the app takes with no call ([below](#in-his-name-but-not-his-words)).
+- You reply to a message, from his notification (AI-24), his chips, or a swipe or *Reply* in the chat, all one way in (D-98): your reply goes into the chat under the message it answers, but for an answer the app takes without his turn: with no call, or, to his question about a reading, read by Claude as an instruction ([below](#in-his-name-but-not-his-words)).
 - A message waiting is asked again: *Try again*, the chat opened again, the model back from a rest, after each sync, or at a start.
 
 One answer at a time: a message sent while he answers another of yours lets that answer go, and he answers both together (D-98). While the model can't be asked (Claude off, resting, the cap), your message says why and waits.
@@ -439,7 +439,7 @@ He isn't asked in quiet hours, during a timed calendar event that takes its time
 
 Also:
 - **Morning**: at the briefing (07:00 on a school day, 08:30 on any other, a weekday off included, both in Settings, D-74), when today has work slots. He has 20 seconds; without his answer the day's list is the morning's message, in his name in the app's words.
-- **Written ahead** (AC-10): the next slot's SlotStart, up to 10 minutes before it's due, written as of that moment; sent as it is if it still fits then: written for that piece, and nothing said in the chat since, by him or you (4.3.11: a greeting, or what's done, could be out of date by then).
+- **Written ahead** (AC-10): the next slot's SlotStart, up to 10 minutes before it's due, written as of that moment; sent as it is if it still fits then: written for that piece, nothing said in the chat since, by him or you (4.3.11: a greeting, or what's done, could be out of date by then), and written from the plan as it now is, its slot and the day's work after it where they were and nothing kept or missed since (`FelixRules.laid`, 4.3.17); one written before the app's last start is written again.
 - **Reminder** (4.1.0): a reminder of yours due within ten minutes, written for as of its moment, once a moment (`Looks.draftReminders`); with none of his words for that moment, or something said in the chat since they were written, he's asked again at its moment, and with none then either (Claude off, resting, none), yours go ([below](#in-his-name-but-not-his-words)).
 - A call held or failed puts nothing on record: it's tried again after 5 minutes while it's still to say.
 - `felix-say` writes one now for any reason, from a PC ([storage-and-backups.md](storage-and-backups.md)).
@@ -685,7 +685,7 @@ It names Summary and Reply among its reasons, but no message of his is asked for
 - **A calendar event's question** (Q7): the app's own text, its answers (*All of it*, *A few hours*, *None*) kept for every event of its name, with no call.
 - **How work went, with Claude off** (LR-05): a message for each completion, its answers kept as below.
 - **The week's summary**: written in a call of its own, about you in the third person (D-66); "the week's summary's ready. send it?" is the app's own text, with *Send it*.
-- **Your answer to his Question**: read by the instructions reader, as an instruction on that task, and the task read again (AI-10); not by him.
+- **Your reply to his Question**: read by the instructions reader, shown his question, as an instruction on that task (AI-10); not by him. Kept as its answer, the task read again, where it answers it, or where Claude declined it or gave nothing usable; one that doesn't is answered in the chat, or, where it made a change, done with as that, and either way his question waits again (D-19, 4.3.16).
 - **An answer to Completions** (*harder*, *about right*, *easier*, or the app's *Harder*, *As expected*, *Easier*): kept on each of those completions (LR-05), with no call.
 - **A reminder he has no words for** (4.1.0): yours as you set it ("reminder: …"), marked late where it is; its *done*, *snooze 15 min* and *snooze 1 h* kept on it, with no call.
 - **A reminder let go, or back** (4.1.0), and **what a read he asked for changed** (4.1.1: "Teams says “…” is handed in."): notes in the app's words.

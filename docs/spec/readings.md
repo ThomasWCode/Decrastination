@@ -135,7 +135,7 @@ It runs again once Claude can be asked again (its rest over, `EnrichWorker.retry
 
 - An Email or Assignment reading may carry the one question that would settle what its text can't (which Friday; whether the test is on the 12th or the 19th), rarely.
 - Felix puts it to you when he can (felix.md), and not again within a day for that task (`Looks.queueQuestion`). A newer reading's question takes the place of one waiting; a reading with none takes it away.
-- Your answer is an instruction on the task, and kept with it (`TaskItem.answers`, the latest five). It's in the input hash, so the task is read again at once, Claude told "The student says: …".
+- Your reply is read as an instruction on the task, shown the question, and kept with it as its answer (`TaskItem.answers`, the latest five) where it answers it, or where Claude declined it or gave nothing usable, as most replies do answer: one that doesn't is answered in the chat, or, where it made a change, done with as that, and the question waits again (D-19). It's in the input hash, so the task is read again at once, Claude told "The student says: …".
 
 ## Quoted deadlines (AI-12)
 

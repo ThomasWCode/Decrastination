@@ -3,9 +3,9 @@ package com.thomaswcode.decrastination.core
 /**
  * What is blocked (Q8): video and social apps; in Chrome and Brave, the
  * same services' sites, read from the address bar; Firefox and Tor outright, since their address
- * bars aren't read. Never blocked: calls, messages, WhatsApp, Slack, Teams, school and study apps,
- * maps and travel, banking, authenticators, AI assistants, health and support apps, none of
- * which is on any list here.
+ * bars aren't read. Never on these lists: calls, messages, WhatsApp, Slack, Teams, school and study
+ * apps, maps and travel, banking, authenticators, AI assistants, health and support apps, though any
+ * app is yours to add in Settings (D-49).
  */
 object Blocklist {
     val APPS = listOf(
