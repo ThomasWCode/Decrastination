@@ -204,7 +204,7 @@ fun OwnTaskForm(graph: AppGraph, editing: TaskItem?, initial: OwnTask? = null, o
                     )
                     problem?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
                     Text(
-                        "It's planned and blocks like any task. Done, on its page, finishes it but earns no free time; focus sessions on it earn theirs.",
+                        "It's planned and blocks like any task. Done, on its page, finishes it but earns no free time; its slots kept earn theirs.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

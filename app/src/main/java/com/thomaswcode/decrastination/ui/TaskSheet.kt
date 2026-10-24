@@ -494,7 +494,7 @@ fun TaskSheet(
         "delete" -> AlertDialog(
             onDismissRequest = { confirming = null },
             title = { Text("Delete “${task.title}”?") },
-            text = { Text("It goes from the plan and the list. Its finished focus sessions stay in the log.") },
+            text = { Text("It goes from the plan and the list. Its kept slots stay in the log.") },
             confirmButton = {
                 TextButton(onClick = {
                     confirming = null

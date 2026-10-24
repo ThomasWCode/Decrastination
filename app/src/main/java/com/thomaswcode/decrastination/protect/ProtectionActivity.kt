@@ -225,7 +225,7 @@ fun ProtectionPanel(graph: AppGraph, activity: ComponentActivity) {
             SetupItem(
                 title = "Notifications",
                 done = alerts,
-                detail = if (notifications && !alerts) "Allowed, but the Protection channel is off: its alerts wouldn't show." else "For focus sessions and protection alerts.",
+                detail = if (notifications && !alerts) "Allowed, but the Protection channel is off: its alerts wouldn't show." else "For protection's alerts: blocking off, or weakened.",
                 action = if (alerts) null else "Allow" to {
                     if (notifications) {
                         // Allowed, its channel off: that channel's own page.
