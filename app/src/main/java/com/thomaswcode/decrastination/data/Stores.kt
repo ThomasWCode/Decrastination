@@ -41,7 +41,7 @@ class Stores(
     val runtime = store("runtime.json", RuntimeState.serializer(), ::RuntimeState, migrations = listOf(ChatMigration.RUNTIME, RuntimeSplit.RUNTIME))
 
     /** What the blocker keeps from moment to moment, changing every half minute (Focus's). */
-    val session = store("session.json", SessionState.serializer(), ::SessionState)
+    val session = store("session.json", SessionState.serializer(), ::SessionState, migrations = listOf(CreditMigration.SESSION))
 
     /** Protection's own state: changes waiting, the override, what's armed, the watchdog's finding. */
     val protection = store("protection.json", ProtectionState.serializer(), ::ProtectionState)
@@ -54,7 +54,7 @@ class Stores(
 
     /** What the app has learned about how long things take you: the calibration. */
     val learning = store("learning.json", LearningState.serializer(), ::LearningState)
-    val log = store("log.json", ActivityLog.serializer(), ::ActivityLog, migrations = listOf(ChatMigration.LOG, MemoryMigration.LOG))
+    val log = store("log.json", ActivityLog.serializer(), ::ActivityLog, migrations = listOf(ChatMigration.LOG, MemoryMigration.LOG, CreditMigration.LOG))
 
     /** Your instructions about tasks, events and days, and what Claude read them as. */
     val instructions = store("instructions.json", InstructionState.serializer(), ::InstructionState, migrations = listOf(TasksMigration.INSTRUCTIONS, StepOrderMigration.INSTRUCTIONS), onWrite = InstructionState::withStepIds)

@@ -17,7 +17,7 @@ data class SessionState(
     /** Completions whose free time has been given, so each is given once (`Focus.onCompleted`); kept a fortnight. */
     val rewarded: List<Rewarded> = emptyList(),
     /** The shape this is in ([Migration]): raised with each change of it, a migration bringing older files to it. */
-    val version: Int = 1,
+    val version: Int = 2,
 )
 
 /** A completion that has had its free time: the task, and when it was confirmed done. */

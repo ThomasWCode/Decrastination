@@ -171,7 +171,7 @@ These come from the questions answered for v1 and 2.0.0; Q31 here is not Q-31 be
 - Q6: Work is planned in set working hours, a school-day evening window and a longer weekend window (Settings); sleep hours are never blocked.
 - Q6b: On school days blocking starts at a set time after school, leaving school hours alone; sleep hours are unchanged.
 - Q7: The phone's calendar counts as busy time, judged event by event; an event the rules can't judge is asked about, taking all its time until it's answered, and the answer holds for every event of that name; the app writes only to the one calendar picked for its slots (NF-07).
-- Q8: What's blocked: video and social apps; in browsers whose address bar is read, the same services' sites; the browsers listed as blocked outright, while blocking applies; calls, messages, school and study apps, maps, banking, authenticators and health apps never.
+- Q8: What's blocked: video and social apps; in browsers whose address bar is read, the same services' sites; the browsers listed as blocked outright, while blocking applies; calls, messages, school and study apps, maps, banking, authenticators and health apps never on the default list, though any installed app can be added (D-49).
 - Q12: Claude may split any task (an email, a planner item, an assignment) into blocks of work, each with its own dates where it has them and each planned in its own window.
 - Q13: The morning briefing comes at set times (Settings), earlier on a school day, by the school calendar, than on any other day, a weekday off included (D-74).
 - Q16: Written work can be shown done by a photo check, made by Claude when it's on.
