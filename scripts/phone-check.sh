@@ -1,5 +1,5 @@
 #!/bin/sh
-# The phone check after every install (docs/plan_v4/12-verification-and-risks.md §The phone check),
+# The phone check after every install (docs/development.md §The phone),
 # read-only: nothing on the phone is changed, nothing is tapped, and nothing it prints is a task's,
 # an event's or a person's words.
 #
@@ -12,8 +12,8 @@
 # ANDROID_SERIAL's. Exits 1 if the focus service isn't enabled, a service enabled isn't bound or one
 # has gone from the list since the last run (kept in private/phone-check-services.txt), the app crashed
 # since its install (in the crash log or its own records), the calendar holds stray copies, a store has
-# gone since the last run, or the crash log, the calendar or the stores couldn't be read: a check that
-# didn't happen isn't a clean one.
+# gone since the last run, or the crash log, the bound services, the calendar or the stores couldn't be
+# read: a check that didn't happen isn't a clean one. Exits 2 if adb sees no phone.
 export MSYS_NO_PATHCONV=1
 PKG=com.thomaswcode.decrastination
 ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)

@@ -18,8 +18,8 @@ each of their whole conversations (X-GM-THRID), unstarred messages and your repl
 drafts left out; one block per conversation, with how many of its messages are starred. It also
 counts the Starred folder (\\Flagged), which should hold the same starred messages.
 
-With --save, the same goes to private/gmail_probe.json (git-ignored), so the results can be read
-back without pasting them. The password is never written anywhere.
+With --save, the same goes to private/gmail_probe.json (with --starred, gmail_probe_starred.json),
+git-ignored, so the results can be read back without pasting them. The password is never written anywhere.
 
 The app password is read from DECRASTINATION_GMAIL_APP_PASSWORD when set, and asked for
 otherwise; --address picks the account (default: the one below).

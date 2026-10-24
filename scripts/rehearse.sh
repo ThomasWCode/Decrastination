@@ -1,5 +1,5 @@
 #!/bin/sh
-# The migration rehearsal (docs/plan_v4, Stage 0): a phone backup's stores read, and migrated, by the
+# The migration rehearsal (docs/plan_v4/data-and-migrations.md §On the real data): a phone backup's stores read, and migrated, by the
 # code as it is, before a release is installed. Prints only counts and invariants, never what the
 # stores hold.
 #
@@ -7,7 +7,8 @@
 #
 # <backup> is a folder of the git-ignored private/backup/ (by name, or a path) holding a data.tar, as
 # private/tools/keep_before.sh and keep_data.sh make them: the app's files/ is unpacked into
-# private/rehearsal/<name>/, git-ignored too, with the newest nightly backup (decrastination-*.json)
+# private/rehearsal/<name>/files/ (that folder emptied first: an earlier rehearsal.txt of the same name
+# goes), git-ignored too, with the newest nightly backup (decrastination-*.json)
 # copied beside it where the folder has one; then RehearsalTest reads it all and writes
 # private/rehearsal/<name>/rehearsal.txt, which is printed.
 set -e
