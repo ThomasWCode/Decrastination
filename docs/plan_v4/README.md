@@ -1,6 +1,6 @@
 # Decrastination 4.x: the cleanup and Felix as the app's one voice
 
-The plan for the run of work from 3.3.0 to 4.3.19 (17 to 24 Oct 2026), kept as its record now that it's done. It merged two plans on 18 Oct: the targeted cleanup (the code and its stores restructured without changing what the app does) and the Felix plan (everything he says in one WhatsApp-like chat, notes and reminders, memory that expires, a teenager's voice, a starred email finished in Gmail), in one order, a stage a PR, every PR a release checked on the phone before it merged. Fifty PRs (49 releases) over about thirty-one days of evenings and weekends; every question it raised is answered ([answers.md](answers.md)).
+The plan for the run of work from 3.3.0 to 4.3.19 (17 to 24 Oct 2026), kept as its record now that it's done. It merged two plans on 18 Oct: the targeted cleanup (the code and its stores restructured without changing what the app does) and the Felix plan (everything he says in one WhatsApp-like chat, notes and reminders, memory that expires, a teenager's voice, a starred email finished in Gmail), in one order, a stage a PR, every PR a release checked on the phone before it merged. Fifty PRs (49 releases) merged between 18 and 24 Oct, against the plan's estimate of about thirty-one days of evenings and weekends; every question it raised is answered ([answers.md](answers.md)).
 
 This folder holds what of the plan still serves:
 

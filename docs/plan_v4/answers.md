@@ -1,6 +1,6 @@
 # The questions, and your answers
 
-Every question the 4.x plan put to you, and every one raised while it was built, in a line each: what was asked, what you answered, and where it's recorded. A "(Q31: A)" in [decisions.md](../decisions.md) or [spec/](../spec/) points here; "C-Q" is the cleanup plan's, "M" a call the merge of the two plans made on its own (18 Oct 2026), and Q32 on were asked while building, each with a recommendation and your answer. Where a line gives only the letter, you took the recommendation. Questions without a hyphen below Q31, and the hyphenated Q-31 to Q-52, are older requirement ids, not these ([spec/requirement-ids.md](../spec/requirement-ids.md) §Q).
+Every question the 4.x plan put to you, and every one raised while it was built, in a line each: what was asked, what you answered, and where it's recorded. A "(Q31: A)" in [decisions.md](../decisions.md) or [spec/](../spec/) points here; "C-Q" is the cleanup plan's, "M" a call the merge of the two plans made on its own (18 Oct 2026), and Q32 on were asked while building, each with a recommendation and your answer. Where a line gives only the letter, you took the recommendation. A Q id written without its answer's letter, as "(Q13)", and the hyphenated ones, as "(Q-31)", are older requirement ids, not these ([spec/requirement-ids.md](../spec/requirement-ids.md) §Q).
 
 ## The cleanup's questions (17 and 18 Oct)
 
@@ -73,6 +73,7 @@ Every question the 4.x plan put to you, and every one raised while it was built,
 - **Q40** (21 Oct): older personal data found in code and tests: C, left as it is and named in D-80.
 - **Q42** (4.2.1): a clear or a reset takes every copy kept of what it clears, the unreadable ones too (D-94).
 - **Q43, Q44** (4.2.2): Felix marks only his nudges as answered, with a "Taken as answered" line and no Undo: A, A (D-99).
+- **Q45** (4.3.0): the calls made while building Stage 11, the Gmail write journal's rules (listed under *Decided while building it* in #103's description): A, kept as built.
 - **Q46** (21 Oct): Codex rounds stop at the first round with at most one P2 and no P1: A (D-83).
 - **Q47** (4.3.0): a tick saved just before the app stops is left as it is: A.
 - **Q48, Q49, Q50** (4.3.2): each store's writers named, not one writer a store; `AppGraph`'s 537 lines accepted as wiring; the plan's folder kept to be cleaned later: A, A, kept (D-107; cleaned on 24 Oct into this folder's four files).
@@ -93,4 +94,4 @@ Every question the 4.x plan put to you, and every one raised while it was built,
 - **Q65** (23 Oct): a task's sheet named as "Next:" a step already ticked: fixed in 4.3.13.
 - **Q66** (24 Oct): a reply Claude can't read is kept as the question's answer, as built since 4.3.12: A, D-19 says so (4.3.19).
 
-Q41 and Q45 were answered A on 21 Oct; their subjects were in the questions file alone. Of the review of 4.3.13's findings, your calls on I01, I04, P01 and B08 are in [astra-review-4.3.13](../astra-review-4.3.13/README.md).
+Q41 was answered A on 21 Oct; its subject was only in that day's questions file, which is gone, so it can't be followed. Of the review of 4.3.13's findings, your calls on I01, I04, P01 and B08 are in [astra-review-4.3.13](../astra-review-4.3.13/README.md).
