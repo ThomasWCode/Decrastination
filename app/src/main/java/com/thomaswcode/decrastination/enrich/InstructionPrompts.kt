@@ -68,7 +68,7 @@ object InstructionPrompts {
 
         If the instruction can't be turned into these changes, or it's unclear which task, event or date it means, set understood to false, give no changes, and in question say in one short sentence what's unclear or what the app can't do. Otherwise understood is true and question is null.
 
-        Some instructions are the student's reply to a question the app asked them about the task, given with it. Set answersQuestion to whether the reply answers that question, even in part; false where it's about something else (a question of their own, a remark, another task), which is then answered in the chat instead. For any other instruction, answersQuestion is true. A reply that answers it tells you about the work: give changes only for what it asks for (a day, a time, a total), none for what it only says of the work (what it is, its parts, how it's handed in), which is kept with the task and read with it again.
+        Some instructions are the student's reply to a question the app asked them about the task, given with it. Set answersQuestion to whether the reply answers that question, even in part; false where it's about something else (a question of their own, a remark, another task), which is then answered in the chat instead, unless it asks for a change, made as for any instruction. For any other instruction, answersQuestion is true. A reply that answers it tells you about the work: give changes only for what it asks for (a day, a time, a total), none for what it only says of the work (what it is, its parts, how it's handed in), which is kept with the task and read with it again.
     """
         ).trimIndent()
 
