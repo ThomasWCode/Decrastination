@@ -20,7 +20,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
 /**
- * What a service needs of notifications (docs/plan_v4/02-target-architecture.md §Ports): one posted
+ * What a service needs of notifications (docs/plan_v4/architecture.md §Ports): one posted
  * or cancelled by its [NoticeId], one of many of a kind told apart by a tag; whether a channel's reach
  * the screen; and what was held back posted. [Notifier] is the app's; a test's keeps a list.
  */

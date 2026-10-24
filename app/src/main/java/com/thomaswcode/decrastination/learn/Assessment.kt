@@ -9,8 +9,8 @@ import com.thomaswcode.decrastination.data.ActivityLog
 
 /**
  * The quick self-assessment after each verified completion (docs/spec/learning.md, item 5): harder,
- * as expected or easier. It feeds the effort multipliers and the weekly review. Since review v2
- * (LR-05) it's Felix's question, once an evening, about the day's work done outside the app's
+ * as expected or easier. It feeds the effort multipliers and the weekly review. It's
+ * Felix's question (LR-05), once an evening, about the day's work done outside the app's
  * knowledge; with Claude off, a message of his in the app's words for each completion, its three
  * answers his chips.
  */

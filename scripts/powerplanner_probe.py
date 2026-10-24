@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Phase 0 check: can we read your Power Planner agenda through the web API?
+"""A check from the PC: can we read your Power Planner agenda through the web API?
 
 Prompts for your powerplanner.net username and password, logs in, fetches the
 selected semester (the years and semesters first, where no semester id is known),

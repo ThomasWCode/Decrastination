@@ -174,7 +174,7 @@ import kotlinx.coroutines.withTimeoutOrNull
  * back there) and any still to check. A message about a task, an event or a day comes from its page,
  * with what it's about shown over the box. Each day's date over its first message, the time under each,
  * and a divider over what's new; scrolled back, the earlier messages; a message swiped or held to reply
- * to it ([ChatScreenState], docs/plan_v4/05-the-chat.md §4, §5). Opened from his notification, it opens
+ * to it ([ChatScreenState], docs/spec/felix.md §The chat). Opened from his notification, it opens
  * at the message it was for; left, what's in it is read ([Conversation.read]).
  */
 class AskActivity : ComponentActivity() {
@@ -592,7 +592,7 @@ private val EXAMPLES = listOf(
 
 /**
  * The conversation, newest at the foot, kept in view as it grows; each day's date over its first
- * message, and the divider over the first unread, for this visit (docs/plan_v4/05-the-chat.md §4, §5).
+ * message, and the divider over the first unread, for this visit (docs/spec/felix.md §The chat).
  * Opened at his notification's message, else at the first unread, else at the foot; scrolled back to
  * the top, the archive's earlier messages, a page at a time ([unread]: it holds some, none read yet), and
  * what replies on screen quote from it ([quotes], asked for by [onQuoted]). A message swiped right, or held
@@ -756,7 +756,7 @@ private fun NewMessages() {
 }
 
 /**
- * A message's row, swiped right to reply to it (docs/plan_v4/05-the-chat.md §5): the reply arrow shown
+ * A message's row, swiped right to reply to it (docs/spec/felix.md §The chat): the reply arrow shown
  * as it's dragged, a haptic tick past a third of the width, and let go there, [onReply]; it springs back
  * either way. A drag more down than across scrolls the list instead.
  */
@@ -952,7 +952,7 @@ private const val DOT_STEP_MS = 200
 /**
  * A message of Felix's, on the left: his words and their time; what he did under them folded behind a
  * chevron at the bubble's corner, red where something went wrong, and unfolded as it always was, with
- * every Undo (docs/plan_v4/05-the-chat.md §6); the label that says it in a line ([Labelled]); and
+ * every Undo (docs/spec/felix.md §The chat); the label that says it in a line ([Labelled]); and
  * outside the fold, a task he shows you and a button in the app's words. Held, [onReply] is Reply, and
  * Mark answered ([onMarkAnswered]) while it's [waiting] for your answer, which its time line says (D-99).
  */
@@ -1208,8 +1208,8 @@ private fun Acts(graph: AppGraph, message: ChatMessage, live: Boolean) {
 }
 
 /**
- * One thing Felix did, made as it came (D-60, 16 Oct), with what you can do about it: undo it,
- * change a task it added, or make it again once undone. One from before then still waits to be added
+ * One thing Felix did, made as it came (D-60), with what you can do about it: undo it,
+ * change a task it added, or make it again once undone. One from before everything was made as it came still waits to be added
  * or applied, changed first, or set aside.
  */
 @Composable
@@ -1301,7 +1301,7 @@ private fun ProposalCard(graph: AppGraph, messageId: String, proposal: Proposal,
                         TextButton(onClick = { scope.launch { graph.conversation.applyProposal(messageId, proposal.id) } }) { Text(if (proposal.note == null) "Redo" else "Try again") }
                         if (proposal.task != null) TextButton(onClick = { onEdit(messageId, proposal.id) }) { Text("Change first") }
                     }
-                    // From before everything was made as it came (16 Oct): still to add or apply.
+                    // From before everything was made as it came (D-60): still to add or apply.
                     else -> {
                         Button(onClick = { scope.launch { graph.conversation.applyProposal(messageId, proposal.id) } }) { Text(if (task != null) "Add" else "Apply") }
                         if (task != null) OutlinedButton(onClick = { onEdit(messageId, proposal.id) }) { Text("Change first") }

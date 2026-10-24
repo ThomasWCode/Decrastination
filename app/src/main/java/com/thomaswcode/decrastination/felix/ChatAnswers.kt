@@ -128,7 +128,7 @@ object ChatAnswers {
     /**
      * A reminder as his answer gives it: from a change of type Remind (Q13: B), its words its
      * title, when it comes its eventKey, a listed reminder's id to move its afterTaskId, a BeforeDue's
-     * minutes its minutes ([fromChange]).
+     * minutes its minutes ([reminderOf]).
      */
     private data class GivenReminder(
         val id: String = "",
@@ -140,7 +140,7 @@ object ChatAnswers {
         val minutesBefore: Int = -1,
     )
 
-    /** A note as his answer gives it: from a change of type Note, its words its title; on a task, or for every task its scope matches (D-100), read from its eventKey ([fromChange]). */
+    /** A note as his answer gives it: from a change of type Note, its words its title; on a task, or for every task its scope matches (D-100), read from its eventKey ([noteOf]). */
     private data class GivenNote(val taskId: String = "", val text: String = "", val subject: String = "", val className: String = "", val source: String = "", val titleContains: String = "")
 
     /** [c], a Remind change, as a reminder. */
@@ -165,7 +165,7 @@ object ChatAnswers {
     /** An open's value that opens the task where it lives (G3), not its page here. */
     const val OPEN_SOURCE = "source"
 
-    /** The most actions one answer takes: a few at most is what's meant (ten since there are more kinds). */
+    /** The most actions one answer takes: a few at most is what's meant (ten: there are several kinds). */
     private const val MAX_ACTIONS = 10
 
     @Serializable
@@ -196,14 +196,14 @@ object ChatAnswers {
     const val MAX_CHANGES = 40
     private const val DAY_MS = 24 * 3_600_000L
 
+    /** The most memories one answer gives: a few at most is what's meant. */
+    private const val MAX_MEMORIES = 5
+
     /**
      * [text] as Claude's answer, checked against what there is: each task as the form would take it
      * ([OwnTaskRules.problem]) with plausible dates, each change as an instruction's is; what can't be
      * used is left out and said ([Reading.leftOut]), the rest kept. Null if it can't be read at all.
      */
-    /** The most memories one answer gives: a few at most is what's meant. */
-    private const val MAX_MEMORIES = 5
-
     fun parse(text: String, tasks: List<TaskItem>, events: List<CalendarEvent>, about: About, now: Long, zone: ZoneId, settings: Settings? = null, felix: FelixStore = FelixStore(), context: ChatPrompts.Context? = null): Reading? {
         val answer = runCatching { json.decodeFromString(Answer.serializer(), text) }.getOrNull() ?: return null
         val reply = answer.reply.trim().takeIf { it.isNotEmpty() } ?: return null

@@ -1,7 +1,7 @@
 package com.thomaswcode.decrastination.sources.gmail
 
 /**
- * The writes a finished email needs (docs/plan_v4/10-emails-done.md, D-7 as amended), over [imap]'s
+ * The writes a finished email needs (docs/spec/sources.md §Gmail, D-7 as amended), over [imap]'s
  * connection and tags: a mailbox opened for writing (SELECT), and flags or Gmail's labels stored on
  * UIDs, silently. Nothing is deleted, moved, sent or marked read: [ImapClient] keeps every other
  * command, and its own only read. Each command is logged as [ImapClient]'s are, by name and UIDs,

@@ -28,7 +28,7 @@ sealed interface Called<out T> {
 }
 
 /**
- * Every call to Claude (docs/plan_v4/02-target-architecture.md §ModelGateway): whether it can be asked
+ * Every call to Claude (docs/plan_v4/architecture.md §`ModelGateway`): whether it can be asked
  * now ([hold]); each call made under the monthly cap and through its rests (AC-04, AC-05), counted,
  * put on record (AC-07) and, failed, classed, with the key's alert; and the dropped plans' alerts.
  * Its state is `model.json`'s `ModelState`.

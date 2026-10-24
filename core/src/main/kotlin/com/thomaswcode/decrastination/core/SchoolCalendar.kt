@@ -54,8 +54,8 @@ data class SchoolCalendar(
     fun without(entry: HalfDay): SchoolCalendar = copy(halfDays = halfDays - entry)
 
     /**
-     * This calendar with what a change took [before] to [after] taken back (a chat card's Undo, 16
-     * Oct): the stretches and half-days it added gone, and those it merged into them back. Null if
+     * This calendar with what a change took [before] to [after] taken back (a chat card's Undo):
+     * the stretches and half-days it added gone, and those it merged into them back. Null if
      * one it added has gone since (deleted in Settings → School): taking it back would then bring
      * back what you took out.
      */

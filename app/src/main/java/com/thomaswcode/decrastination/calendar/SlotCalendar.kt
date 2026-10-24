@@ -24,7 +24,7 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 /**
- * What [CalendarWriter] asks of the calendar provider (docs/plan_v4/02-target-architecture.md §Ports),
+ * What [CalendarWriter] asks of the calendar provider (docs/plan_v4/architecture.md §Ports),
  * so its rules are tested without it: the app's events read, and those worded like them; a write's
  * inserts, updates and deletes made in one batch; the app's events in a calendar deleted; and the
  * calendar's changes watched. [SlotCalendar] on the phone, events in memory in a test.

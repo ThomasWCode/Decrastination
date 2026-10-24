@@ -8,7 +8,7 @@ import java.time.ZoneId
 data class LessonAt(val className: String, val start: Long, val end: Long)
 
 /**
- * The next lessons by class (G8, docs/plan_v4/15-sent-or-asked-for.md §G8): what "next lesson" and "when's
+ * The next lessons by class (G8, docs/spec/felix.md §What he's told): what "next lesson" and "when's
  * my next chemistry?" are answered from, a Power Planner class tied to a Teams code by the subject the
  * class map gives both. Pure.
  */

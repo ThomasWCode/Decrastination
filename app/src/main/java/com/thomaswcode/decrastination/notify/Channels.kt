@@ -7,16 +7,16 @@ import android.content.Context
 /** The app's notification channels, created at start-up (creating one that exists changes nothing). */
 object Channels {
     const val SYNC = "sync"
-    /** The focus sessions' channel, gone with them (review v2, AR-09). */
+    /** The focus sessions' channel, gone with them (AR-09). */
     private const val SESSION = "session"
     const val PROTECTION = "protection"
     /** The one channel the next four were (before 1.8.0): taken over by them, then deleted once nothing's left on it. */
     private const val DAILY = "daily"
 
     // Each its own purpose (IMP-P2-019), so a routine one can be silenced and a question kept.
-    /** The morning's list, Felix's message since 4.0.0, on his channel: deleted once nothing's left on it. */
+    /** The morning's list, now Felix's message, on his channel: deleted once nothing's left on it. */
     const val BRIEFING = "briefing"
-    /** "How was it?" after each completion, Felix's question since review v2 (LR-05): deleted once nothing's left on it. */
+    /** "How was it?" after each completion, now Felix's question (LR-05): deleted once nothing's left on it. */
     private const val HOW_IT_WENT = "how-it-went"
     /** A move of yours in the calendar put back; its questions were here before they were Felix's. */
     const val CALENDAR = "calendar-questions"
@@ -32,7 +32,7 @@ object Channels {
 
     fun create(context: Context) {
         val manager = context.getSystemService(NotificationManager::class.java) ?: return
-        // The four that were one start as you'd set it (silenced, say): Android keeps a channel's
+        // The two of the four that were one still made start as you'd set it (silenced, say): Android keeps a channel's
         // settings once it's made, so this is their one chance.
         val old = manager.getNotificationChannel(DAILY)
         val was = old?.importance ?: NotificationManager.IMPORTANCE_DEFAULT
@@ -68,7 +68,7 @@ object Channels {
         if (manager.getNotificationChannel(HOW_IT_WENT) != null && manager.activeNotifications.none { it.notification.channelId == HOW_IT_WENT }) {
             manager.deleteNotificationChannel(HOW_IT_WENT)
         }
-        // The morning is Felix's message, on his channel (4.0.0): the briefing's goes likewise.
+        // The morning is Felix's message, on his channel: the briefing's goes likewise.
         if (manager.getNotificationChannel(BRIEFING) != null && manager.activeNotifications.none { it.notification.channelId == BRIEFING }) {
             manager.deleteNotificationChannel(BRIEFING)
         }

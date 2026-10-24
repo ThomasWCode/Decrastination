@@ -42,7 +42,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
 /**
- * Every store's shapes as they've been, read with the app's own serializers (docs/plan_v4).
+ * Every store's shapes as they've been, read with the app's own serializers (docs/plan_v4/data-and-migrations.md §Testing a migration).
  * Each folder of `fixtures/stores/` is a shape a phone's files may be in, made up, never taken from
  * the phone: every later migration is tested from every one of them, each read as the app reads it at
  * a start, through [Stores] (its moves, then each store's migrations). The newest is the shape now:

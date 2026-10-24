@@ -25,7 +25,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 
 /**
- * The gaps closed in the chat (docs/plan_v4/06-what-felix-can-do.md §3), through the Conversation on
+ * The gaps closed in the chat (docs/spec/felix.md §What he can do), through the Conversation on
  * temporary stores, his answers from a stand-in for Claude's API ([FelixHarness]): a piece kept as Day's Done
  * keeps it, and taken back (G1).
  */

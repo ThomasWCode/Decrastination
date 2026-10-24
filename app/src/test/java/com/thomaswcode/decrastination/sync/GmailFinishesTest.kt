@@ -29,7 +29,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 
 /**
- * A finished email's writes to Gmail through [GmailFinishes] (docs/plan_v4/10-emails-done.md §Tests): journaled on a
+ * A finished email's writes to Gmail through [GmailFinishes] (docs/spec/sources.md §Gmail): journaled on a
  * temporary store, made through a fake Gmail, the grace, the first finish's OK, Undo before and after, tries and giving up.
  */
 class GmailFinishesTest {

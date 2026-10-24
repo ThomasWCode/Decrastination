@@ -40,7 +40,7 @@ import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.RecordedRequest
 
 /**
- * Notes and reminders through the Conversation (docs/plan_v4/07-notes-and-reminders.md), on
+ * Notes and reminders through the Conversation (docs/spec/felix.md §What he can do), on
  * temporary stores, his answers from a stand-in for Claude's API ([FelixHarness]): made at once from his
  * answer, each with its Undo, undone only while it's as he left it.
  */

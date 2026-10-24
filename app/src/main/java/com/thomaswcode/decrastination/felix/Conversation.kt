@@ -91,10 +91,11 @@ import kotlinx.coroutines.withContext
  * ([remember]); a reply to one of his messages, from the chat, his chips or his notification, routed
  * by what it answers ([ask], [Replies]); the week's
  * check-in as he asks it ([remindCheckIn]); and what the app says in his name, each through his
- * [outbox] (docs/plan_v4/05-the-chat.md): the morning's list, a calendar event's question, how work
+ * [outbox] (docs/spec/felix.md §His messages): the morning's list, a calendar event's question, how work
  * went, the week's review and summary. Built like [com.thomaswcode.decrastination.block.Focus]: its
  * stores, the clock and small interfaces in its constructor, for what others own ([Owners]: your own
- * tasks, your instructions, the settings, the calendar's answers) and what Android does
+ * tasks, your instructions, the settings, the calendar's answers, the week's check-in on record, and
+ * Gmail's finishes) and what Android does
  * ([FelixPorts]), so it's tested on temporary stores.
  */
 class Conversation(
@@ -138,7 +139,7 @@ class Conversation(
 ) {
     /**
      * What the chat changes through those who own it: your own tasks,
-     * your instructions, and the settings.
+     * your instructions, the settings, the calendar's answers, the week's check-in on record, and Gmail's finishes.
      */
     interface Owners {
         suspend fun saveOwnTask(sourceId: String, task: OwnTask): Boolean
@@ -1340,7 +1341,7 @@ class Conversation(
     var chatInFront = false
 
     /**
-     * What's in the chat read up to [now] (docs/plan_v4/05-the-chat.md §4): you've left the chat, or
+     * What's in the chat read up to [now] (docs/spec/felix.md §The chat): you've left the chat, or
      * opened it from his notification. His notification made again, with nothing older in it.
      */
     suspend fun read(now: Long = clock.now()) {
@@ -1349,7 +1350,7 @@ class Conversation(
     }
 
     /**
-     * How many of his messages wait unread (docs/plan_v4/05-the-chat.md §4), the badge on his button:
+     * How many of his messages wait unread (docs/spec/felix.md §Who he is), the badge on his button:
      * those he's written since you last left the chat, but a question you've answered, or a message you've replied to,
      * from his notification.
      */

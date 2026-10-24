@@ -19,7 +19,7 @@ import java.time.ZoneId
 import java.util.UUID
 
 /**
- * What a task's sheet holds (docs/plan_v4; C-Q11), beside what it says ([TaskSheetModel]):
+ * What a task's sheet holds (docs/plan_v4/architecture.md §The rules; C-Q11), beside what it says ([TaskSheetModel]):
  * the picker or the question open over it ([picking], [confirming]), its last words ([message], what
  * went wrong; [said], what an action did), and whether the instructions on it are shown; and its
  * changes, through your instructions and your own tasks ([make], [undo], [later], [tomorrow],

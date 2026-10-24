@@ -40,7 +40,7 @@ interface WallClock {
 
     /**
      * The uptime clock, for waits that setting the date forward mustn't shorten (a loosening's 24
-     * hours, a session's minutes). Null where there's none.
+     * hours). Null where there's none.
      */
     fun uptime(): Uptime? = null
 

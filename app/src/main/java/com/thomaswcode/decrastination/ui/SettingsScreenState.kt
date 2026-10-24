@@ -15,7 +15,7 @@ import com.thomaswcode.decrastination.protect.Protection
 import com.thomaswcode.decrastination.protect.SettingsChanges
 
 /**
- * What the Settings screen holds (docs/plan_v4; C-Q11): your edits ([draft]) over what the
+ * What the Settings screen holds (docs/plan_v4/architecture.md §The rules; C-Q11): your edits ([draft]) over what the
  * screen showed as you began ([base]), each field as typed ([raw], so one that doesn't parse keeps its
  * words and its error however far it scrolls), and which don't parse ([invalid]); the page open
  * ([section], UI-18), the apps list's search ([find], IMP-P2-009) and what the last save said

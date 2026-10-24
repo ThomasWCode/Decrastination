@@ -14,7 +14,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/** Where a reply goes, by the kind of message it answers (docs/plan_v4/05-the-chat.md §5). */
+/** Where a reply goes, by the kind of message it answers (docs/spec/felix.md §Notifications and replies). */
 class RepliesTest {
     private fun his(kind: MessageKind, about: About = About(), asks: List<AssessLater> = emptyList(), answeredAt: Long? = null) =
         ChatMessage("h", Speaker.Felix, "A question", 1, about, kind = kind, byApp = true, asks = asks, answeredAt = answeredAt)

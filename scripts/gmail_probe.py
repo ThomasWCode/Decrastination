@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Phase 0 check: can Decrastination read your Gmail inbox over IMAP with an app password?
+"""A check from the PC: can Decrastination read your Gmail inbox over IMAP with an app password?
 
 Read-only by construction. Every folder is opened with EXAMINE, so the server refuses any change
 to flags or messages, and headers are fetched with BODY.PEEK, so nothing is marked as read. IMAP
@@ -12,7 +12,7 @@ Prompts for the address and a Google app password (myaccount.google.com/apppassw
     snoozed mail can be seen over IMAP,
   - one line per inbox message: date, Gmail labels, sender, subject.
 
-With --starred, instead of the inbox it reads what the app reads since review v2 (DX-03): All
+With --starred, instead of the inbox it reads what the app reads (DX-03): All
 Mail (found by its \\All special-use attribute), the starred messages in it (SEARCH FLAGGED), and
 each of their whole conversations (X-GM-THRID), unstarred messages and your replies included,
 drafts left out; one block per conversation, with how many of its messages are starred. It also
@@ -93,7 +93,7 @@ def any_of(keys: list[str]) -> list[str]:
 
 
 def starred_conversations(imap: imaplib.IMAP4_SSL, folders: list[dict]) -> dict:
-    """The starred messages' whole conversations, as the app reads them since review v2 (DX-03)."""
+    """The starred messages' whole conversations, as the app reads them (DX-03)."""
     def special(attribute: str) -> str | None:
         return next((f["name"] for f in folders if attribute in [a.lower() for a in f.get("flags", [])]), None)
 

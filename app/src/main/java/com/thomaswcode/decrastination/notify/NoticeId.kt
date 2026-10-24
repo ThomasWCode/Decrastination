@@ -1,9 +1,9 @@
 package com.thomaswcode.decrastination.notify
 
 /**
- * Every notification the app makes, named in one place (docs/plan_v4/05-the-chat.md §3): its [id],
+ * Every notification the app makes, named in one place (docs/plan_v4/architecture.md §`Notifier`): its [id],
  * and the request codes its tap and buttons take ([codes]), a range of its own, so no two pending
- * intents can collide. Those named ahead of the stage that uses them are said to be. Ids that stay
+ * intents can collide. Ids that stay
  * keep a notification already showing where it is through an update; those retired ([RETIRED]) are
  * named still, so one left showing from before is taken away.
  */
@@ -60,7 +60,7 @@ enum class NoticeId(val id: Int, val codes: IntRange = IntRange.EMPTY) {
     }
 
     companion object {
-        /** No longer made, as each is Felix's message in the chat now (4.0.0): taken away at start where one's left ([Notifier.retire]). */
+        /** No longer made, as each is Felix's message in the chat now: taken away at start where one's left ([Notifier.retire]). */
         val RETIRED: Set<NoticeId> = setOf(Briefing, Review, Summary, Assessment, FelixMessage, CalendarQuestion)
     }
 }

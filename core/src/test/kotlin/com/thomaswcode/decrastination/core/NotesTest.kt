@@ -5,7 +5,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-/** A task's notes, its own and standing ones (D-100), and which are kept (docs/plan_v4/07-notes-and-reminders.md §Tests). */
+/** A task's notes, its own and standing ones (D-100), and which are kept (docs/spec/felix.md §What he can do). */
 class NotesTest {
     private val now = Fixtures.at("2026-10-20T17:00")
     private val classMap = mapOf("12X/Ch1" to "Chemistry", "12X/Ph1" to "Physics")

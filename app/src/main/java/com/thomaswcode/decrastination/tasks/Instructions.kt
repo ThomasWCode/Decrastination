@@ -51,7 +51,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 /**
- * Your instructions (docs/plan_v4): written and read by Claude
+ * Your instructions (docs/plan_v4/architecture.md §The rules): written and read by Claude
  * ([addInstruction], [readInstructions]), or made yourself as quick changes ([addOwnChange],
  * [laterToday], [takeBackQuick]); applied at once once read, or refused saying why ([applyInstruction]);
  * deleted or taken back ([deleteInstruction]); and laid over everything they change ([layInstructions],
@@ -260,7 +260,7 @@ class Instructions(
     val applying = Mutex()
 
     /**
-     * Applies [id], read and checked by you, at once, armed or not: what an instruction changes is
+     * Applies [id], once read (D-67), at once, armed or not: what an instruction changes is
      * the work, yours to change, never the blocker. Whether it was: one refused is marked unclear, saying why.
      */
     suspend fun applyInstruction(id: String): Boolean = applying.withLock {

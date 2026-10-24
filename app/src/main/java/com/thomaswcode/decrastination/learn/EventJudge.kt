@@ -92,12 +92,12 @@ object EventJudge {
 
     /**
      * What the planner takes: the busy intervals, and the minutes of each day taken at no set time;
-     * and the events as read, for the calendar's page and your instructions about them. One to ask
+     * and the events as read, for the Day timeline and your instructions about them. One to ask
      * about takes all its time until you answer (D-44), so the plan counts on no time it may not
      * have; one that would be asked about but starts after [askUntil] (DX-14: questions keep to the
      * week ahead) counts as a few hours of its day meanwhile, so the plan beyond it leaves it room.
+     * [events] as last read, judged; [read] from when to when that read ran (null where the calendar's never been read), as a failed read keeps the one before.
      */
-    /** [events] as last read, judged; [read] from when to when that read ran (null where the calendar's never been read), as a failed read keeps the one before. */
     data class Time(val busy: List<Busy>, val dayLoads: Map<LocalDate, Int>, val toAsk: List<CalendarEvent>, val events: List<CalendarEvent> = emptyList(), val read: Pair<Long, Long>? = null)
 
     fun time(events: List<CalendarEvent>, answers: Map<String, String>, zone: ZoneId, askUntil: Long): Time {

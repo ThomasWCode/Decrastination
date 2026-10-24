@@ -42,7 +42,7 @@ object Duplicates {
 
     /**
      * [tasks] for the plan, each one kept as another's same work credited with that one's minutes
-     * worked (its sessions' and its photos'), so work done under either comes off what's left. The
+     * worked (its kept slots' and its photos'), so work done under either comes off what's left. The
      * stored tasks keep their own: taking the change back takes the credit with it.
      */
     fun credited(tasks: List<TaskItem>): List<TaskItem> {

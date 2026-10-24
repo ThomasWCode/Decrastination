@@ -35,7 +35,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 
 /**
- * Felix's outbox (docs/plan_v4/05-the-chat.md §2): every message in the chat before his notification
+ * Felix's outbox (docs/spec/felix.md §Notifications and replies): every message in the chat before his notification
  * is made from it; his one notification rebuilt from the chat's unread, not added to; nothing while the
  * chat's on screen or his channel's off; the kinds that wait for the morning left out in quiet hours;
  * the live window moved to the archive, never an unread message, nothing doubled or lost.

@@ -14,7 +14,7 @@ import kotlin.test.assertTrue
  * more and every call with it fails, as the chat's did once the school calendar's change added its
  * end date (PL-16). Beyond that the grammar's size is the API's own: unions inside a list's items
  * weigh most, and the chat's 15 there made it too large to compile. The rules here are a tripwire,
- * not a guarantee: the grammar's size depends on the whole schema (3.1.3's chat schema, under them
+ * not a guarantee: the grammar's size depends on the whole schema (a chat schema, under them
  * both, was refused with one more list added), so whether a schema compiles is only known from
  * the API ([SchemaCompileTest], asked for by hand, before any schema change is merged).
  */
