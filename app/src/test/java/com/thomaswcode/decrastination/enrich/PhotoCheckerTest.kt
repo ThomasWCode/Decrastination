@@ -58,7 +58,7 @@ class PhotoCheckerTest {
     @Test
     fun `the readings the plan is made from think hard, the answers someone waits for less`() {
         val high = ModelEffort.Job.entries.filter { ModelEffort.of(it) == OutputConfig.Effort.HIGH }
-        assertEquals(listOf("Email", "Assignment", "Effort", "Instruction", "Review", "PhotoToTask", "PhotoContext"), high.map { it.name })
+        assertEquals(listOf("Email", "Assignment", "Effort", "Instruction", "Review", "PhotoToTask"), high.map { it.name })
         assertEquals(OutputConfig.Effort.MEDIUM, ModelEffort.of(ModelEffort.Job.Chat))
         assertEquals(OutputConfig.Effort.HIGH, ModelEffort.of(Enrichments.Job.Assignment))
     }
