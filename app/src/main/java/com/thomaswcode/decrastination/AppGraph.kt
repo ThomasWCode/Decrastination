@@ -205,11 +205,12 @@ class AppGraph private constructor(context: Context) {
             // session, the school calendar, your instructions), so his looks and a reminder's alarm don't go by the last.
             { _ -> focus.forgetPlan() },
             { made -> SlotAlarms.arm(app, made, clock.now()) },
-            // Your reminders: any this plan lets go (its task closed) or brings due said and sent, then their alarm
-            // set by it, as a slot's or a deadline's moment moves with it.
+            // Your reminders: any this plan lets go (its task closed) or brings due said and sent, with no call (one
+            // whose words are to be asked for afresh is left to work of its own), then their alarm set by it, as a
+            // slot's or a deadline's moment moves with it: not at once for one waiting for his words, as its moment's gone by.
             { made ->
-                runCatching { looks.sweepReminders(plan = made) }.onFailure { Log.w(TAG, "Sending the reminders due failed", it) }
-                armReminder(made)
+                val asking = runCatching { looks.sweepReminders(plan = made) }.onFailure { Log.w(TAG, "Sending the reminders due failed", it) }.getOrNull() == true
+                armReminder(made, after = if (asking) clock.now() + SlotAlarms.REMINDER_RETRY_MS else null)
             },
             // The calendar once plans have been quiet a while ([CalendarWriter.planned]).
             { made -> calendarWriter.planned(made) },
@@ -281,7 +282,7 @@ class AppGraph private constructor(context: Context) {
         calendarTime = { sync.calendarTime },
         profile = { conversation.profile(it) },
         remember = { conversation.remember(it) },
-        addInstruction = { text, about, answer -> instructions.addInstruction(text, about, answer) },
+        addInstruction = { text, about, answer, question -> instructions.addInstruction(text, about, answer, question) },
         assess = { taskId, doneAt, answer -> learning.recordAssessment(taskId, doneAt, answer) },
         applyProposal = { messageId, proposalId -> conversation.applyProposal(messageId, proposalId) },
     )

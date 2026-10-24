@@ -6,6 +6,7 @@ import com.thomaswcode.decrastination.core.AssessLater
 import com.thomaswcode.decrastination.core.Change
 import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.ChatActs
+import com.thomaswcode.decrastination.core.ChatHistory
 import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.core.ChatState
 import com.thomaswcode.decrastination.core.Fact
@@ -22,6 +23,7 @@ import com.thomaswcode.decrastination.core.Rule
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.core.TaskItem
+import java.util.concurrent.TimeUnit
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -572,12 +574,65 @@ class ConversationTest {
         // The same answer read again (one kept by an older build as you replied): kept once.
         felix.looks.answerRead(answer, answers = true, changed = false)
         assertEquals(listOf("all of it"), answers())
-        // To another question, an instruction that isn't its answer, made as one: not kept with the task, nor taken on in the chat.
+        // To another question, an instruction that isn't its answer, made as one: not kept with the task, nor taken on in the chat,
+        // but no longer its reply, so his question waits for its answer again (D-19); done with as said, it's never sent to him
+        // in a turn, where it would go with your next words.
         felix.outbox.send(ChatMessage("q2", Speaker.Felix, "is it handed in on teams?", now, About(taskId = sheet.id, taskTitle = sheet.title), kind = MessageKind.Question))
         assertEquals(Conversation.Asked.Answer, conversation.send("move it to friday", replyTo = "q2"))
         felix.looks.answerRead(stores.instructions.value.instructions.last(), answers = false, changed = true)
         assertEquals(listOf("all of it"), answers())
         assertEquals(1, felix.ports.later)
+        val moved = stores.chat.value.messages.single { it.text == "move it to friday" }
+        assertEquals(MessageKind.Question to null, moved.kind to moved.replyTo)
+        assertNotNull(moved.answeredAt)
+        assertNull(stores.chat.value.messages.single { it.id == "q2" }.answeredAt)
+        assertTrue("q2" in Replies.awaitingIds(stores.chat.value.messages, checkInUnderWay = false, now, Fixtures.LONDON))
+        assertTrue(ChatPrompts.history(stores.chat.value.messages).none { it.id == moved.id })
+        // Unread, and no longer replied to, it's back in his notification.
+        assertTrue(felix.ports.showing!!.lines.any { it.id == "q2" })
+        assertNull(ChatHistory.replyOf(stores.chat.value.messages.single { it.id == "q2" }, stores.chat.value.messages))
+    }
+
+    @Test
+    fun `your answer to his reading question from his notification is read as work of its own`() = runBlocking {
+        // Claude off, so nothing's asked of the stand-in.
+        stores.settings.update { it.copy(aiEnabled = false) }
+        stores.tasks.update { it.copy(tasks = listOf(sheet)) }
+        // A check-in's answer is no instruction: nothing to read.
+        conversation.remindCheckIn()
+        assertTrue(conversation.replyFromNotification("4", his().last().id))
+        assertEquals(0, felix.ports.readLater)
+        // His question's: an instruction for Claude to read, as work of its own, as the receiver that took it goes once this returns.
+        felix.outbox.send(ChatMessage("q1", Speaker.Felix, "is it questions 1 to 6 or all of it?", now, About(taskId = sheet.id, taskTitle = sheet.title), kind = MessageKind.Question))
+        assertTrue(conversation.replyFromNotification("all of it", "q1"))
+        assertEquals(1, felix.ports.readLater)
+        assertEquals(0, felix.ports.later)
+        // That one still waiting to be read (its call failed, say): another answer that makes none reads nothing for it.
+        assertEquals(InstructionStatus.Reading, stores.instructions.value.instructions.single().state)
+        conversation.remindCheckIn()
+        assertTrue(conversation.replyFromNotification("3", his().last().id))
+        assertEquals(1, felix.ports.readLater)
+    }
+
+    @Test
+    fun `a reply to his older question is read by the instructions' service shown that question, and kept with its task as its answer`() = runBlocking {
+        FelixHarness(readInstructions = true).use { h ->
+            h.stores.tasks.update { it.copy(tasks = listOf(sheet)) }
+            val about = About(taskId = sheet.id, taskTitle = sheet.title)
+            h.outbox.send(ChatMessage("q1", Speaker.Felix, "is the extension part of it?", now - 120_000L, about, kind = MessageKind.Question))
+            h.outbox.send(ChatMessage("q2", Speaker.Felix, "is it handed in on teams?", now - 60_000L, about, kind = MessageKind.Question))
+            h.answers("""{"understood":false,"question":null,"changes":[],"answersQuestion":true}""")
+            assertEquals(Conversation.Asked.Answer, h.conversation.send("yes, all of it", replyTo = "q1"))
+            val sent = h.server.takeRequest(10, TimeUnit.SECONDS)!!.body.readUtf8()
+            assertTrue("is the extension part of it?" in sent && "is it handed in on teams?" !in sent, sent.take(400))
+            h.settle()
+            // Read as its answer: kept with its task, which is read again; his newer question still waits.
+            assertEquals(listOf("yes, all of it"), h.stores.tasks.value.tasks.single().answers)
+            assertEquals(1, h.ports.readAgain)
+            assertNotNull(h.stores.chat.value.messages.single { it.id == "q1" }.answeredAt)
+            assertNull(h.stores.chat.value.messages.single { it.id == "q2" }.answeredAt)
+            assertTrue(h.stores.instructions.value.instructions.isEmpty())
+        }
     }
 
     @Test

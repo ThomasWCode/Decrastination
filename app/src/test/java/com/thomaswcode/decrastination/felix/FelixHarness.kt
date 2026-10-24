@@ -25,6 +25,7 @@ import com.thomaswcode.decrastination.notify.NoticeId
 import com.thomaswcode.decrastination.notify.Notices
 import com.thomaswcode.decrastination.plan.Planning
 import com.thomaswcode.decrastination.sync.GmailFinishes
+import com.thomaswcode.decrastination.tasks.Instructions
 import java.io.File
 import java.nio.file.Files
 import java.util.Collections
@@ -57,6 +58,8 @@ class FelixHarness(
     seed: (File) -> Unit = {},
     private val key: String? = null,
     private val calendar: (Stores) -> EventJudge.Time = { NO_CALENDAR },
+    /** Your answers to his questions read by the real instructions' service ([instructions]), as AppGraph's are, not only kept. */
+    private val readInstructions: Boolean = false,
 ) : AutoCloseable {
     private val dir = Files.createTempDirectory("felix").toFile().also(seed)
     val clock = FixedClock(Fixtures.at(start), LONDON)
@@ -108,9 +111,23 @@ class FelixHarness(
         calendarTime = { calendar(stores) },
         profile = { conversation.profile(it) },
         remember = { conversation.remember(it) },
-        addInstruction = { text, about, answer -> owners.instruction(text, about, answer) },
+        addInstruction = { text, about, answer, question -> if (readInstructions) instructions.addInstruction(text, about, answer, question) else owners.instruction(text, about, answer) },
         assess = { taskId, doneAt, answer -> assessed += Triple(taskId, doneAt, answer) },
         applyProposal = { messageId, proposalId -> conversation.applyProposal(messageId, proposalId) },
+    )
+
+    /**
+     * Your instructions as AppGraph keeps them ([Instructions]), read through the real reader to the stand-in, your
+     * answers to his questions handed to [looks] once read: what [readInstructions] has his flows use.
+     */
+    val instructions: Instructions = Instructions(
+        stores.instructions, stores.tasks, stores.settings, stores.session, stores.school, stores.chat, clock, scope, gateway, focus, planning,
+        calendarTime = { calendar(stores) },
+        profile = { conversation.profile() },
+        reread = {},
+        redraw = {},
+        answerRead = { instruction, answers, changed -> looks.answerRead(instruction, answers, changed) },
+        question = { looks.questionFor(it) },
     )
 
     /** [key]'s piece kept as Day's Done keeps it ([Focus.keepSlot]), with [extraMin] more and a [photo]. */
@@ -129,6 +146,11 @@ class FelixHarness(
 
     /** Claude's next answer from the stand-in: a message whose text is [text], the JSON a reader parses, sent [delayMs] late. */
     fun answers(text: String, delayMs: Long = 0) {
+        server.enqueue(answer(text).setHeadersDelay(delayMs, TimeUnit.MILLISECONDS))
+    }
+
+    /** Claude's answer whose text is [text], as the stand-in sends it: for a test's own dispatcher. */
+    fun answer(text: String): MockResponse {
         val body = JsonObject(
             mapOf(
                 "id" to JsonPrimitive("msg_test"),
@@ -141,7 +163,7 @@ class FelixHarness(
                 "usage" to JsonObject(mapOf("input_tokens" to JsonPrimitive(1_200), "output_tokens" to JsonPrimitive(80))),
             ),
         )
-        server.enqueue(MockResponse().setHeader("Content-Type", "application/json").setBody(body.toString()).setHeadersDelay(delayMs, TimeUnit.MILLISECONDS))
+        return MockResponse().setHeader("Content-Type", "application/json").setBody(body.toString())
     }
 
     /** The chat's answer [reply], with the tasks and changes it offers (the schema's JSON for them), what it names [answered], the actions it takes ([actions]), and nothing else. */
@@ -186,6 +208,13 @@ class FelixHarness(
             looks += at
         }
 
+        /** Your reminders' words asked for as work of their own ([Looks.remindNow]). */
+        @Volatile var reminders = 0
+
+        override fun remindLater() {
+            reminders++
+        }
+
         override fun readAgain() {
             readAgain++
         }
@@ -200,6 +229,13 @@ class FelixHarness(
 
         override fun answerLater() {
             later++
+        }
+
+        /** Your answers to his questions read as work of their own. */
+        @Volatile var readLater = 0
+
+        override fun readLater() {
+            readLater++
         }
 
         override fun remindForm() {

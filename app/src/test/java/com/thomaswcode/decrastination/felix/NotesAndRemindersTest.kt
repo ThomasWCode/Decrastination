@@ -27,8 +27,17 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withContext
+import okhttp3.mockwebserver.Dispatcher
+import okhttp3.mockwebserver.MockResponse
+import okhttp3.mockwebserver.RecordedRequest
 
 /**
  * Notes and reminders through the Conversation (docs/plan_v4/07-notes-and-reminders.md), on
@@ -330,7 +339,12 @@ class NotesAndRemindersTest {
         stores.chat.update { it.copy(messages = it.messages + ChatMessage("y1", Speaker.You, "what's on tonight?", now + 2 * MIN, answeredAt = now + 2 * MIN)) }
         felix.answers(his("call gran now, you're free till the next slot"))
         felix.clock.time = now + 8 * MIN
-        felix.looks.sweepReminders(felix.clock.time)
+        // The sweep makes no call: it leaves it to work of its own, which asks and then sends it.
+        assertTrue(felix.looks.sweepReminders(felix.clock.time))
+        assertEquals(1, felix.ports.reminders)
+        assertTrue(stores.chat.value.messages.none { it.kind == MessageKind.Reminder })
+        assertEquals(2, felix.server.requestCount)
+        felix.looks.remindNow(felix.clock.time)
         assertEquals("call gran now, you're free till the next slot", stores.chat.value.messages.single { it.kind == MessageKind.Reminder }.text)
         assertEquals(3, felix.server.requestCount)
         // Claude off by the second's moment: yours go.
@@ -352,9 +366,134 @@ class NotesAndRemindersTest {
         assertTrue(asked.draft == null && asked.draftFor == now + 8 * MIN, asked.toString())
         felix.answers("not an answer")
         felix.clock.time = now + 8 * MIN
-        felix.looks.sweepReminders(felix.clock.time)
+        assertTrue(felix.looks.sweepReminders(felix.clock.time))
+        felix.looks.remindNow(felix.clock.time)
         assertEquals(2, felix.server.requestCount)
         assertEquals(FelixWords.reminder("call gran"), stores.chat.value.messages.single { it.kind == MessageKind.Reminder }.text)
+    }
+
+    @Test
+    fun `of reminders whose words are asked for at their moment together, each goes as soon as its own are kept`() = runBlocking {
+        stores.felix.update { it.copy(reminders = listOf(at("stretch", now), at("water the plants", now))) }
+        assertTrue(felix.looks.sweepReminders(now))
+        felix.answers(his("stretch now"))
+        felix.answers(his("plants, now"), delayMs = 2_000)
+        val writing = async(Dispatchers.Default) { felix.looks.remindNow(now) }
+        // The first is sent while the second's words are still being written, not after them.
+        withTimeout(10_000) { while (stores.chat.value.messages.none { it.kind == MessageKind.Reminder }) delay(20) }
+        assertEquals(1, stores.chat.value.messages.count { it.kind == MessageKind.Reminder })
+        writing.await()
+        assertEquals(listOf("stretch now", "plants, now"), stores.chat.value.messages.filter { it.kind == MessageKind.Reminder }.map { it.text })
+        // None left for another run to ask for.
+        assertEquals(1, felix.ports.reminders)
+    }
+
+    @Test
+    fun `of reminders asked for together, one cancelled during an earlier one's call isn't paid for`() = runBlocking {
+        stores.felix.update { it.copy(reminders = listOf(at("stretch", now), at("water the plants", now))) }
+        assertTrue(felix.looks.sweepReminders(now))
+        felix.answers(his("stretch now"), delayMs = 1_000)
+        val writing = async(Dispatchers.Default) { felix.looks.remindNow(now) }
+        assertNotNull(felix.server.takeRequest(10, TimeUnit.SECONDS))
+        stores.felix.update { it.copy(reminders = it.reminders.map { r -> if (r.id == "r-water the plants") r.copy(cancelledAt = now).undrafted() else r }) }
+        writing.await()
+        assertEquals(1, felix.server.requestCount)
+        assertEquals(listOf("stretch now"), stores.chat.value.messages.filter { it.kind == MessageKind.Reminder }.map { it.text })
+    }
+
+    @Test
+    fun `a reminder due is written for at its moment while words are still being written ahead for another`() = runBlocking {
+        // One due now with no words, one in his window ahead: the ahead call held till the due one's has been sent.
+        stores.felix.update { it.copy(reminders = listOf(at("stretch", now), at("call gran", now + 8 * MIN))) }
+        val aheadAsked = CountDownLatch(1)
+        val dueSent = CountDownLatch(1)
+        felix.server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                if ("call gran" !in request.body.readUtf8()) return felix.answer(his("stretch now"))
+                aheadAsked.countDown()
+                dueSent.await(10, TimeUnit.SECONDS)
+                return felix.answer(his("call gran soon"))
+            }
+        }
+        val ahead = async(Dispatchers.Default) { felix.looks.draftReminders(now) }
+        assertTrue(withContext(Dispatchers.IO) { aheadAsked.await(10, TimeUnit.SECONDS) })
+        // Waiting on the ahead call, this would never end before it's let go.
+        withTimeout(5_000) { felix.looks.remindNow(now) }
+        assertEquals("stretch now", stores.chat.value.messages.single { it.kind == MessageKind.Reminder }.text)
+        dueSent.countDown()
+        ahead.await()
+    }
+
+    @Test
+    fun `a reminder whose moment comes while its words are written ahead isn't asked for again, and goes with those`() = runBlocking {
+        stores.felix.update { it.copy(reminders = listOf(at("stretch", now + 2 * MIN))) }
+        felix.answers(his("stretch time"), delayMs = 1_500)
+        val ahead = async(Dispatchers.Default) { felix.looks.draftReminders(now) }
+        assertNotNull(felix.server.takeRequest(10, TimeUnit.SECONDS))
+        // Its moment comes during that call: the sweep leaves it to work, and the work waits for that call and sends its words.
+        felix.clock.time = now + 2 * MIN
+        assertTrue(felix.looks.sweepReminders(felix.clock.time))
+        felix.looks.remindNow(felix.clock.time)
+        assertEquals("stretch time", stores.chat.value.messages.single { it.kind == MessageKind.Reminder }.text)
+        assertEquals(1, felix.server.requestCount)
+        // The one run the sweep queued, no more: the work queues none for a reminder whose words come from a call ahead.
+        assertEquals(1, felix.ports.reminders)
+        ahead.await()
+    }
+
+    @Test
+    fun `each sweep while a reminder waits for its words queues no more work than one run`() = runBlocking {
+        stores.felix.update { it.copy(reminders = listOf(at("stretch", now))) }
+        repeat(3) { assertTrue(felix.looks.sweepReminders(now)) }
+        assertEquals(1, felix.ports.reminders)
+        // Once a run's begun, a sweep finding one still to ask for queues the next.
+        stores.settings.update { it.copy(aiEnabled = false) }
+        felix.looks.remindNow(now)
+        stores.felix.update { it.copy(reminders = it.reminders + at("water the plants", now)) }
+        stores.settings.update { it.copy(aiEnabled = true) }
+        assertTrue(felix.looks.sweepReminders(now))
+        assertEquals(2, felix.ports.reminders)
+    }
+
+    @Test
+    fun `a reminder cancelled while his words for its moment are asked for isn't sent`() = runBlocking {
+        stores.felix.update { it.copy(reminders = listOf(at("stretch", now))) }
+        assertTrue(felix.looks.sweepReminders(now))
+        felix.answers(his("time to stretch"), delayMs = 1_000)
+        val writing = async(Dispatchers.Default) { felix.looks.remindNow(now) }
+        assertNotNull(felix.server.takeRequest(10, TimeUnit.SECONDS))
+        stores.felix.update { it.copy(reminders = it.reminders.map { r -> r.copy(cancelledAt = now).undrafted() }) }
+        writing.await()
+        // Cancelled as he wrote: his words aren't kept on it, and it isn't sent.
+        assertTrue(stores.chat.value.messages.none { it.kind == MessageKind.Reminder })
+        assertNull(stores.felix.value.reminders.single().sentAt)
+        assertNull(stores.felix.value.reminders.single().draft)
+    }
+
+    @Test
+    fun `a reminder whose task finishes while his words for its moment are asked for is let go, not sent`() = runBlocking {
+        val task = sheet.copy(dueAt = now + 60 * MIN)
+        stores.tasks.update { it.copy(tasks = listOf(task)) }
+        stores.felix.update { it.copy(reminders = listOf(Reminder("r-sheet", "finish the worksheet", now - MIN, By.Felix, task.id, Due(DueKind.BeforeDue, minutesBefore = 60)))) }
+        assertTrue(felix.looks.sweepReminders(now))
+        felix.answers(his("worksheet's due in an hour"), delayMs = 1_000)
+        val writing = async(Dispatchers.Default) { felix.looks.remindNow(now) }
+        assertNotNull(felix.server.takeRequest(10, TimeUnit.SECONDS))
+        stores.tasks.update { it.copy(tasks = listOf(task.copy(status = Status.Done, doneAt = now))) }
+        writing.await()
+        assertTrue(stores.chat.value.messages.none { it.kind == MessageKind.Reminder })
+        assertNotNull(stores.felix.value.reminders.single().letGoAt)
+        assertEquals(FelixWords.letGo("finish the worksheet", "Forces worksheet", "is done"), stores.chat.value.messages.single { it.kind == MessageKind.Note }.text)
+    }
+
+    @Test
+    fun `a reminder whose words can't be asked for at its moment, the call failing, goes in yours`() = runBlocking {
+        stores.felix.update { it.copy(reminders = listOf(at("stretch", now))) }
+        assertTrue(felix.looks.sweepReminders(now))
+        felix.server.enqueue(MockResponse().setResponseCode(500))
+        felix.looks.remindNow(now)
+        assertEquals(FelixWords.reminder("stretch"), stores.chat.value.messages.single { it.kind == MessageKind.Reminder }.text)
+        assertEquals(now, stores.felix.value.reminders.single().sentAt)
     }
 
     @Test

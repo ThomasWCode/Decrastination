@@ -128,6 +128,41 @@ class LooksTest {
     }
 
     @Test
+    fun `his words written ahead go at their moment as written while the plan they were written from stands`() = runBlocking {
+        underWay()
+        val slot = felix.planning.plan().todaySlots.first { it.kind == SlotKind.Work }
+        val grace = stores.settings.value.felixGraceMin * 60_000L
+        felix.clock.time = slot.start + grace - 5 * 60_000L
+        felix.answers("""{"message":"worksheet's on till its end. starting?","replies":[],"nextCheckMin":15,"memories":[]}""")
+        felix.looks.check()
+        assertNotNull(stores.chat.value.felix.draft)
+        felix.clock.time = slot.start + grace + 60_000L
+        felix.looks.check()
+        assertEquals("worksheet's on till its end. starting?", stores.chat.value.messages.last { it.from == Speaker.Felix }.text)
+        assertEquals(1, felix.server.requestCount)
+    }
+
+    @Test
+    fun `his words written ahead aren't sent once their slot has moved, but written again at its moment`() = runBlocking {
+        val key = underWay()
+        val slot = felix.planning.plan().todaySlots.first { it.kind == SlotKind.Work }
+        val grace = stores.settings.value.felixGraceMin * 60_000L
+        felix.clock.time = slot.start + grace - 5 * 60_000L
+        felix.answers("""{"message":"worksheet's on till its old end. starting?","replies":[],"nextCheckMin":15,"memories":[]}""")
+        felix.looks.check()
+        assertNotNull(stores.chat.value.felix.draft)
+        // Its slot moved five minutes, its piece the same: what was written for its old times would say what isn't so.
+        val today = Instant.ofEpochMilli(now).atZone(Fixtures.LONDON).toLocalDate().toString()
+        stores.session.update { it.copy(slots = SlotState(today, previous = mapOf(key to slot.start + 5 * 60_000L))) }
+        felix.clock.time = slot.start + 5 * 60_000L + grace + 60_000L
+        assertEquals(slot.start + 5 * 60_000L, felix.planning.plan().todaySlots.first { it.chunk?.key == key }.start)
+        felix.answers("""{"message":"worksheet's on, five later. starting?","replies":[],"nextCheckMin":15,"memories":[]}""")
+        felix.looks.check()
+        assertEquals("worksheet's on, five later. starting?", stores.chat.value.messages.last { it.from == Speaker.Felix }.text)
+        assertEquals(2, felix.server.requestCount)
+    }
+
+    @Test
     fun `his notifications off silence only them, and he still writes in the chat`() = runBlocking {
         underWay()
         felix.shown = false

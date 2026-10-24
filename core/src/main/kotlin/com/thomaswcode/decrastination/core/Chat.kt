@@ -53,7 +53,7 @@ data class ChatMessage(
     val at: Long,
     /** What your message was written about: a task, an event or a day (from its page), or nothing in particular. His: what he wrote about. */
     val about: About = About(),
-    /** Why it was written: a message of his written unasked has a kind of its own; yours answering his question with no call, its question's. */
+    /** Why it was written: a message of his written unasked has a kind of its own; yours answering his question (not a turn of the chat), its question's. */
     val kind: MessageKind = MessageKind.Chat,
     /** His, in the app's own words, with no call made (a check-in's question, the morning's list, a calendar event's question). */
     val byApp: Boolean = false,
@@ -125,14 +125,21 @@ object ChatHistory {
     /**
      * Your reply to [message], his, in [messages]: the message of yours that says it answers it
      * ([ChatMessage.replyTo]); or else the next of yours within [REPLY_WITHIN_MS] that answers nothing
-     * else, where his [message] is the last of his with words before it.
+     * else, where his [message] is the last of his with words before it. Never one [doneWith].
      */
     fun replyOf(message: ChatMessage, messages: List<ChatMessage>): ChatMessage? {
         messages.firstOrNull { it.from == Speaker.You && it.replyTo == message.id }?.let { return it }
-        val next = messages.filter { it.from == Speaker.You && it.replyTo == null && it.at > message.at && it.at - message.at <= REPLY_WITHIN_MS }.minByOrNull { it.at } ?: return null
+        val next = messages.filter { it.from == Speaker.You && it.replyTo == null && !doneWith(it) && it.at > message.at && it.at - message.at <= REPLY_WITHIN_MS }.minByOrNull { it.at } ?: return null
         val lastOfHis = messages.filter { it.from == Speaker.Felix && it.text.isNotBlank() && it.at <= next.at }.maxByOrNull { it.at }
         return next.takeIf { lastOfHis?.id == message.id }
     }
+
+    /**
+     * Whether [message] is a reply of yours to his question read since as another instruction, and made (D-19): its
+     * question's kind kept, no longer its reply, so his question waits for its answer again. Done with as said: neither
+     * that question's answer nor a turn of the chat, so never sent to him as one.
+     */
+    fun doneWith(message: ChatMessage): Boolean = message.from == Speaker.You && message.kind != MessageKind.Chat && message.replyTo == null
 }
 
 /**

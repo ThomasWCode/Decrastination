@@ -97,8 +97,9 @@ object Reminders {
     /**
      * When the app is to wake for [reminders]: the earliest of each still to come's [moment] and, for one not
      * asked for its moment yet ([asked]), the start of the window [ahead] of it while that's still to come,
-     * so it's written for with the phone asleep; not before [notBefore] (a while on, after a failed sweep). Null
-     * with none to come.
+     * so it's written for with the phone asleep; not before [notBefore] (a while on, after a failed sweep, or
+     * one waiting for his words). A moment gone by rings at once: one brought back due (an Undo, a restore) is
+     * swept then. Null with none to come.
      */
     fun nextWake(reminders: List<Reminder>, plan: Plan, tasks: Map<String, TaskItem>, now: Long, ahead: Long, notBefore: Long? = null): Long? =
         reminders.filter(::pending).flatMap { r ->
