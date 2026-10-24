@@ -13,7 +13,7 @@ import com.thomaswcode.decrastination.notify.Notify
 import com.thomaswcode.decrastination.ui.AskActivity
 
 /**
- * Felix's one notification (docs/plan_v4/05-the-chat.md §3), as the outbox makes it from the chat
+ * Felix's one notification (docs/spec/felix.md §Notifications and replies), as the outbox makes it from the chat
  * ([Outbox.Notice]): his unread messages and your replies to them, in Android's messaging style, from
  * him by his name; a reply box answering the newest, his replies its choices (shown as chips). Tapped,
  * the chat opens at the first unread.

@@ -3,7 +3,7 @@ package com.thomaswcode.decrastination.core
 import kotlinx.serialization.Serializable
 
 /**
- * A note Felix keeps at your asking (docs/plan_v4/07-notes-and-reminders.md): on one task
+ * A note Felix keeps at your asking (docs/spec/felix.md §What he can do): on one task
  * ([taskId]), or standing, for every task its [scope] matches (D-100), never both; told to him
  * whenever the task comes up, and shown on its sheet. Yours from the sheet, his from the chat ([by]).
  * Deleted, it's marked so ([deletedAt]), shown nowhere and kept whole for the delete's Undo, till
@@ -32,7 +32,7 @@ data class NoteScope(val subject: String? = null, val className: String? = null,
     val isEmpty: Boolean get() = subject.isNullOrBlank() && className.isNullOrBlank() && source == null && titleContains.isNullOrBlank()
 }
 
-/** The notes (docs/plan_v4/07-notes-and-reminders.md): which a task has, and which are kept. Pure. */
+/** The notes (docs/spec/felix.md §What he can do): which a task has, and which are kept. Pure. */
 object Notes {
     /** A note's words, at most. */
     const val MAX_TEXT = 300

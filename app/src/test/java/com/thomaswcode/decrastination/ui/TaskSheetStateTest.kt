@@ -24,7 +24,7 @@ import kotlin.test.assertTrue
 import kotlinx.coroutines.runBlocking
 
 /**
- * The task sheet's state and changes without Compose (docs/plan_v4), through the real
+ * The task sheet's state and changes without Compose (docs/plan_v4/architecture.md §The rules), through the real
  * instructions' and own tasks' services on temporary stores: one of your own changed on it or refused,
  * a source's given a quick change and its Undo, tomorrow, not a task and later today, yours done, not
  * done, for home and deleted, and the state kept through a turn of the phone.

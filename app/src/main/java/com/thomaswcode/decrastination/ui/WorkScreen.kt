@@ -88,7 +88,7 @@ fun WorkScreen(graph: AppGraph, activity: Activity, opening: String? = null, onO
     // The task open in its sheet, by id, and the form for a new one: kept through a turn of the phone.
     var sheetFor by rememberSaveable { mutableStateOf<String?>(null) }
     var making by rememberSaveable { mutableStateOf(false) }
-    // A task asked for from elsewhere (its Open on the Plan or the block screen).
+    // A task asked for from elsewhere (its Open on Day or the block screen).
     LaunchedEffect(opening) {
         if (opening != null) {
             sheetFor = opening

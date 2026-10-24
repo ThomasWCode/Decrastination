@@ -1,8 +1,8 @@
 package com.thomaswcode.decrastination.felix
 
 /**
- * The lines the app says in Felix's name with no call made (docs/plan_v4/05-the-chat.md §1: a message
- * of his `byApp`), in one place, in his register (docs/plan_v4/09-his-voice.md, D-57), so the app's
+ * The lines the app says in Felix's name with no call made (docs/spec/felix-inputs.md §In his name, but not his words: a message
+ * of his `byApp`), in one place, in his register (docs/spec/felix.md §Who he is, D-57), so the app's
  * words in his bubble don't jar against his own. Pure.
  */
 object FelixWords {

@@ -6,7 +6,7 @@ package com.thomaswcode.decrastination.protect
  * It only ever matches this app's own pages and the reset pages, so the rest of Settings, other
  * apps' pages included, stays usable:
  *
- * - the focus service's accessibility page, where it would be switched off (proved in Phase 0);
+ * - the focus service's accessibility page, where it would be switched off (as tested on the phone);
  * - this app's App info (Force stop, Uninstall) and its Storage page (Clear data);
  * - the device-admin page for this app, where the admin would be deactivated;
  * - Device Care's page for this app, which can force-stop it;
@@ -58,7 +58,7 @@ object GuardRules {
                     return Verdict.Back("this app's device admin page")
                 }
                 // The date and time: set forward, it would hurry what protection times (a parent's
-                // hour, a session's end). On the phone the page shows the guard its title
+                // hour). On the phone the page shows the guard its title
                 // and "Use 24-hour format", not its automatic switches; its entry in General
                 // management has neither of those beside it.
                 if (trimmed.any { it == "Date and time" } && trimmed.any { it == "Use 24-hour format" || it == "Automatic date and time" }) {

@@ -117,7 +117,7 @@ class MainActivity : ComponentActivity() {
         // The very first email finished here waits for your OK: asked over whichever tab is open.
         GmailOkSheet(graph)
         Scaffold(
-            // Felix on every screen (UI-16): the Tasks tab has him above its New task.
+            // Felix on every screen (UI-16): Work has him above its New task.
             floatingActionButton = { if (tab != 1) FelixFab(this@MainActivity) },
             topBar = {
                 TopAppBar(

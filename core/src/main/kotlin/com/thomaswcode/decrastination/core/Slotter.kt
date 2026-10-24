@@ -275,7 +275,7 @@ object Slotter {
     /**
      * The first start at or after [from] on [date] with [minutes] free for work done [where], around
      * [slots] already laid (a work slot with [breakMin] either side) and [busy]: for "later today"
-     * (phase 6) and a missed slot (PL-13).
+     * (UI-03) and a missed slot (PL-13).
      */
     fun firstFreeAfter(
         slots: List<Slot>,

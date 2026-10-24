@@ -16,7 +16,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** The chat screen's state beside the chat (docs/plan_v4/05-the-chat.md §4 to §6), without Compose. */
+/** The chat screen's state beside the chat (docs/spec/felix.md §The chat), without Compose. */
 class ChatScreenStateTest {
     private fun his(id: String, at: String, text: String = "Up at 17:00.") = ChatMessage(id, Speaker.Felix, text, Fixtures.at(at), kind = MessageKind.SlotStart)
 

@@ -30,8 +30,9 @@ jobs:
         with:
           fetch-depth: 0 # Full history so Claude can diff against the base branch and use git log/blame
 
-      # Install the project's toolchain so Claude can run tests/linters during review.
-      # Each step only runs if the repo contains the matching dependency file.
+      # The template's Python and R set-ups, each run only where the repository has the matching
+      # dependency file: it has neither requirements.txt nor DESCRIPTION, so neither runs. The reviewer
+      # doesn't build or test (no JDK or Gradle here); CI's build check does.
       - name: Set up Python
         if: hashFiles('requirements.txt') != ''
         uses: actions/setup-python@v5

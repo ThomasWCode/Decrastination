@@ -63,7 +63,7 @@ What your message is about comes with it in full, before your words (D-93): a ta
 ## What he can do
 
 Everything he gives is made as his answer comes, each with its Undo (next section).
-- **New tasks of your own** (`newTasks`, at most ten): title, kind (Homework, Revision, Admin or Event), subject, due date and time (with no time, an event's is 09:00, anything else's the end of the day), start, minutes, notes, and steps for a big one, each saying whether it needs the steps before it done first (`anyOrder`, D-109). Each is checked as the form checks one (`OwnTaskRules.problem`), its dates from a month back to just over a year ahead.
+- **New tasks of your own** (`newTasks`, at most ten): title, kind (Homework, Revision, Admin or Event), subject, due date and time (with no time, an event's is 09:00, anything else's the end of the day), start, minutes, notes, and steps for a big one, each saying whether it needs the steps before it done first (`anyOrder`, D-109). Each is checked as the form checks one (`OwnTaskRules.problem`), after the chat's own check that every date in it, its steps' too, is within a month back and 400 days ahead (`ChatAnswers`).
 - **Changes** (`changes`, at most 40), of an instruction's types (`InstructionPrompts.CHANGE_TYPES`): a task isn't one, can't start until a date, waits for another, is due by a date, takes N minutes, goes on one day, has its next piece at a time, is another's work, has these steps or this name;
 - and for days and events: how long an event takes, a day's limit, busy times, days off and half-days (into the school calendar, PL-16).
 - **Steps** for any task but Anki's, whose steps are its cards (AI-19): laid over the source's and the reading's (`TaskItem.mine.steps`, set by him), ticks kept by id, each saying whether it needs the steps before it done first (`anyOrder`, D-109). They must add up to the task's minutes, or come with a Minutes change for the new total, or they're left out.
@@ -113,6 +113,8 @@ When a message needs facts neither you nor the app have given him (a competition
 ## His messages
 
 `felix/Looks.kt` looks for a reason to write (`felix/FelixRules.kt`, `FelixRules.due`, pure) at each slot's start and end alarm, at the check he set (`SlotAlarms.armFelix`, `FelixWorker`), and on the focus service's half-minute tick. The model is asked only when there's a reason.
+
+Every message in the chat has a kind (`MessageKind`): `Chat` for yours and his answers to you; his own `Morning`, `SlotStart`, `SlotEnd`, `SlotKept`, `DayDone`, `Question`, `Completions`, `CheckIn`, `Review`, `Summary`, `EventQuestion`, `Reminder` and `Note`. One the app wrote in his name (`ChatMessage.byApp`: the check-in's questions and its thanks, a reminder in your words where he couldn't write, a calendar event's question, the morning's list when he can't write; `FelixWords` holds the lines, [felix-inputs.md](felix-inputs.md) §In his name, but not his words) is shown to him as the app's words.
 - **Never** in quiet hours or during a timed calendar event that takes its time (an all-day one doesn't stop him). His notifications off silence only them: what he writes is in the chat all the same.
 - **SlotEnd**: a slot gone by undone, or a long piece of written work ticked without the photo it needs to earn; once a slot.
 - **DayDone**: today's last slot kept, once a day, with the free time there is.

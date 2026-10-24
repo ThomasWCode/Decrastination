@@ -17,7 +17,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 /**
- * Protection (docs/spec/blocking-and-protection.md; docs/plan_v4):
+ * Protection (docs/spec/blocking-and-protection.md):
  * a settings change applied at once, or, once armed, pending if it loosens blocking ([changeSettings]);
  * the weekly review's bounded changes at once ([applyReviewChanges]); the waits counted and what's due
  * applied ([applyDueChanges]); a parent code used ([useParentCode]), and a waiting change cancelled or

@@ -19,7 +19,7 @@ A piece goes at the first free time it fits whole, where it may be done:
 - not before its task opens (a deck's next cards at 04:00), on five minutes;
 - a step not yet begun after its task's steps before it that day (D-108): no earlier than the end of the last of them, and not at all while one of them has no time, a gap only it would fit going to other work. A pinned step is where you put it, and one under way stays where it is. A step in one piece that doesn't need the steps before it (D-109) may take a gap ahead of them, a step after it still following it; one in sittings follows them, as a sitting kept is counted on the task's steps in their order (planner.md).
 
-Breaks are kept around each piece within its window: `slotBreakMin` (5) before and after it, or after it `slotLongBreakMin` (15) once `slotLongBreakAfterMin` (90) of work has run without a long one. Past a window's edges there's nothing to keep apart. The runs are the day's as they end up laid: a piece laid before work already laid in its window (a kept start, a pin) gives the run that work ends its long break after its last piece, and isn't laid where that break couldn't come, another piece already in its place: it starts a long break after the work before it where that keeps the rule and it still fits, else at the next free time that does (4.3.18).
+Breaks are kept around each piece within its window: `slotBreakMin` (5) before and after it, or after it `slotLongBreakMin` (15) once `slotLongBreakAfterMin` (90) of work has run without a long one. Past a window's edges there's nothing to keep apart. The runs are the day's as they end up laid: a piece laid before work already laid in its window (a kept start, a pin) gives the run that work ends its long break after its last piece, and isn't laid where that break couldn't come, another piece already in its place: it starts a long break after the work before it where that keeps the rule and it still fits, else at the next free time that does.
 
 What's laid, in turn:
 1. Outside breaks, on a weekend or a day off school.
@@ -128,7 +128,7 @@ An event of yours is deleted only if it has both the app's words and the very ti
 
 ## A calendar no longer written to
 
-Picking another calendar, or none, puts the old one on `CalendarState.calendarsToClear`. `CalendarWriter.clearOldCalendars` deletes the app's events there (by its package) and copies of them (by their fingerprints). The switch waits for a write under way, which may be for the old one, so that write's events go in before it's cleared, never after (4.3.15).
+Picking another calendar, or none, puts the old one on `CalendarState.calendarsToClear`. `CalendarWriter.clearOldCalendars` deletes the app's events there (by its package) and copies of them (by their fingerprints). The switch waits for a write under way, which may be for the old one, so that write's events go in before it's cleared, never after.
 It's tried again at each write till it works (the permission back, the provider well). A backup restored keeps this phone's calendar choices, as their ids are this phone's.
 
 ## Your calendar as busy time

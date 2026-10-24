@@ -17,7 +17,8 @@ import kotlinx.coroutines.launch
  * calibration), once they've been quiet [quietMs]; or when [poke]d (a slot's alarm). Each new plan's
  * slots are kept first ([keep]: today's starts, so the next plan lays the day's pieces where they
  * were, which changes nothing it watches when they're as they were), then [hooks] run on it in order:
- * the slot alarms, the calendar write, the widget (PL-13). Android-free but for what it's given.
+ * the blocker's plan let go, the slot alarms, your reminders and their alarm, the calendar write, the
+ * widget, and the work done ahead (PL-13). Android-free but for what it's given.
  */
 @OptIn(FlowPreview::class)
 class PlanWatcher(

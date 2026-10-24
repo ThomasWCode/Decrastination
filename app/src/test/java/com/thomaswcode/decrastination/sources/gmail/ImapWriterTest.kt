@@ -8,7 +8,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 
-/** A finished email's writes over a scripted server (docs/plan_v4/10-emails-done.md §Tests), and the reader with none of them. */
+/** A finished email's writes over a scripted server (docs/spec/sources.md §Gmail), and the reader with none of them. */
 class ImapWriterTest {
     /** A scripted server: what it answers, and what was sent. */
     private class Script(answers: String) {

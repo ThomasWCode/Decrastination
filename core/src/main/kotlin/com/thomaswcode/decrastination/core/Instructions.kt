@@ -12,8 +12,8 @@ import kotlinx.serialization.Serializable
 /**
  * One instruction you've written, in your words, about a task, a calendar event, a day, or
  * nothing in particular ("I can't do anything on Saturday", "this email is just an email"). Claude
- * reads it into [changes] (enrich/InstructionReader.kt), which you see and apply or discard; once
- * applied they're laid over the plan until you delete it.
+ * reads it into [changes] (enrich/InstructionReader.kt), applied as soon as they're read (D-67) or
+ * refused saying why, and laid over the plan until you take it back.
  */
 @Serializable
 data class Instruction(
@@ -49,7 +49,7 @@ enum class InstructionStatus {
     /** Waiting for Claude to read it (it may be off, resting, or capped: [Instruction.note] says). */
     Reading,
 
-    /** Read: its changes wait for you to apply or discard them. */
+    /** Read: applied at once (D-67); one left here (a stop between, say) waits for Apply or Discard. */
     Understood,
 
     /** Claude couldn't turn it into changes: [Instruction.note] says why. */

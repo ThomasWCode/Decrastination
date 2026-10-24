@@ -25,7 +25,7 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v6
 
-      - name: Check the probe scripts compile
+      - name: Check the Python scripts compile
         run: python3 -m py_compile scripts/*.py
 
       - name: Unit tests

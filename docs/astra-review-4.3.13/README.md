@@ -1,0 +1,43 @@
+# The review of 4.3.13, and what became of it
+
+On 23 Oct 2026 a separate review agent (Astra) read `main` at 713e347, version 4.3.13, in an isolated copy of the repository: a broad source review in a requested order (replies to Felix's questions and their routing; his drafts and reminders; the rebalance and kept starts; storage and restores; the sources and readings; the Gmail finish and its Undo; focus and protection; learning and the check-in; the calendar's writing; some screens' state), with 16 throwaway probe tests on temporary stores and local fakes. It made no paid call, touched no real mailbox, and read the phone only (`scripts/phone-check.sh` before and after, all well). It found 14 bugs, 4 inconsistencies and 2 improvements. Each was checked against the code and fixed, or left by your call, in 4.3.14 to 4.3.19 (#120 to #126, merged 23 and 24 Oct); the plan's rows and D-111 record them ([plan_v4/README.md](../plan_v4/README.md) §The releases). This file keeps the findings and what became of each; the reviewer's working notes, logs, probe sources and its copy of the repository were deleted.
+
+## The findings, and their outcomes
+
+Severity is the reviewer's; "reproduced" means a probe showed it on temporary stores, "traced" that the code path was shown without the phone's consequence.
+
+| Id | Severity | Finding | Outcome |
+|---|---|---|---|
+| B10 | Major, reproduced | Gmail's Undo could report success without restoring a change: Gmail applied the unstar, the connection dropped before its acknowledgement, the journal still said nothing had happened, and Undo during the backoff restored nothing | Fixed, 4.3.15 (#121): Undo puts back everything that was starred or in the inbox before the finish, whatever the journal recorded of the write |
+| B08 | Major, reproduced | Import dropped only the newest of your messages still waiting for an answer; an older one restored into an empty chat was sent to Claude on opening, with words from then | Your call, 4.3.14 (#120): a restore leaves out every message of yours still waiting for an answer and says how many; the backup file still holds them (D-111) |
+| B14 | Major, reproduced | Two reading runs (a sync's and a retry's, under different work names) could both read the same unchanged task and pay twice | Fixed, 4.3.15: one reading of a task at a time |
+| B09 | Major, reproduced | The nightly backup could write a file too big for Import to read back, prune a good older one, and record success | Fixed, 4.3.14: a backup too big to restore isn't written, nor older ones pruned for it; Settings → Backup says so |
+| B06 | Major, traced | A reminder's fresh words (asked for at its moment since 4.3.11) were fetched inside the alarm receiver's broadcast time limit | Fixed, 4.3.17 (#123): asked for in the reminder's own work, never in the receiver, which finishes at once |
+| B03 | Minor, reproduced | A slot's words written ahead were still sent after the slot moved, as its key hadn't changed | Fixed, 4.3.17: words written ahead go only if their slot hasn't moved; otherwise asked for again |
+| B02 | Minor, reproduced | A reminder cancelled, or its task finished, while its words were being written was still sent | Fixed, 4.3.17: checked again just before it's sent |
+| B07 | Minor, reproduced | Work laid before a kept slot didn't recount the slot's rest, so a run over an hour and a half went without its long break | Fixed, 4.3.18 (#124) |
+| B11 | Minor, reproduced | A keep's Undo took back free time at the rate now, not what the keep had earned | Fixed, 4.3.18: a keep's record carries what it earned (`log.json` 4, `session.json` 2) and Undo gives back that |
+| B12 | Minor, reproduced | Switching the calendar during a write could leave the app's events in the old one with no cleanup queued | Fixed, 4.3.15: the switch waits for a write under way |
+| B01 | Minor, reproduced | The chat's move to the archive could discard an answer marked on a message while the move was under way | Fixed, 4.3.16 (#122): the move keeps the answer |
+| B13 | Minor, traced | The weekly check-in's form lost its unsubmitted answers when the phone turned | Fixed, 4.3.18: the draft is kept through a turn of the phone (checked on the phone) |
+| B05 | Minor, traced | A reply to an older question of his could be judged against a newer question on the same task, as the reading started before the reply was saved | Fixed, 4.3.16: the reply is read shown its own question |
+| B04 | Minor, traced | A reply to his reading question from his notification ran its paid judgment in the app's scope, with no durable work behind it | Fixed, 4.3.16: read as work of its own |
+| I01 | Minor | D-19 said a non-answer leaves his question waiting; the code and the spec kept the question answered where the non-answer had made a change | Your call: the question waits again where a non-answer made a change (4.3.16, D-19 amended); then Q66 (4.3.19, #126): a reply Claude can't read is kept as the answer, as built since 4.3.12, and D-19 says so |
+| I02 | Minor | Several docs still called a reply to a reading question "no call", though it takes a paid instruction read since 4.3.12 | Fixed in 4.3.16's docs (AI-24, `storage-and-backups.md`, D-98) |
+| I03 | Minor | The plan still said a reminder with no draft at its time went as the app's plain line | Fixed in the docs after 4.3.18 (#125); that plan document has since been deleted, the spec saying it: a fresh call first, your plain line only where he can't be reached |
+| I04 | Minor | D-49's "never blocked" categories weren't enforced: Settings lets any launchable app be added to the list | Your call, docs only: D-49 reworded (4.3.18): never on the default list, any installed app yours to add, and taking it off once armed waits as any loosening does (D-46) |
+| P01 | Improvement | What only this phone knows of a source's task (its steps' ticks, worked minutes, photo, your answers to his questions) isn't in a backup, so a restore into a fresh install and a sync lose it | Your call: planned, built when wanted ([plan_v4/README.md](../plan_v4/README.md) §After the plan) |
+| P02 | Improvement | The Felix test harness's stand-in for the instructions' owner stored an instruction without running the production reader, so the reply flow's hand-off wasn't exercised end to end | Taken up in 4.3.16 (#122) with its reply-flow tests |
+
+## What the review checked, and didn't
+
+- **Checked**: the areas above, by reading, with the probes for B01, B02, B03, B05, B07 to B12 and B14; CI's command passed in the isolated copy (1,230 tests in the app and core's, 0 failures; lint 6 warnings and 2 hints, no errors).
+- **Left out as settled** (your earlier calls, not reported again): the forecast across days and the rebalance refused for an earlier free time (Q61, Q62); a refused non-answer shown twice; an email's own suggestion not shown beside its steps; a process death between two stores' writes; replies to messages past the live window; the build's time and `AppGraph`'s size (D-107); the last 100 calls kept; a source's finished task forgotten a fortnight on (Q32).
+- **Not checked**: prompt quality or schema compiles (no paid call); real Gmail, Teams, Power Planner or Anki accounts; an install, an import, a reset or any input on the phone; a slow-network broadcast, a background process death, a real calendar-provider race, a full disk, the backup's growth past 8 MiB in real use; a whole-repository security scan or the dependencies.
+
+## What it taught
+
+- **A review of many findings is fixed one release an area** (backups; Gmail, readings and the calendar; replies; reminders and drafts; the planner's breaks, credit and a form), each with its own reviews and phone check, rather than one PR for all.
+- **A fix that skips an item still "waiting" can make the work re-queue itself**: 4.3.17's first attempt looped on a reminder whose words were being asked for; waiting on that call bounded it. Check what a skip leaves for the next sweep.
+- **Races are shown with barriers on temporary stores**: a fake that pauses at the point the race turns on (the archive's writer, the calendar provider, the model's reply) reproduces an interleaving deterministically, and the same test shows the fix. Such probes stay out of the test tree unless they become regression tests.
+- **A reviewer's "no call" claim is a code-path claim**: the docs' routing table had grouped a reading question's reply with the deterministic replies; the spec's one place that described the paid judgment was right, the summaries elsewhere weren't. A behaviour change wants every doc that summarises the area read, not only its own section.

@@ -11,7 +11,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * One connection's writes to Gmail for a finished email (docs/plan_v4/10-emails-done.md): the port the
+ * One connection's writes to Gmail for a finished email (docs/spec/sources.md §Gmail): the port the
  * journal's writes go through ([com.thomaswcode.decrastination.sync.GmailFinishes]), so they're tested
  * without a server.
  */

@@ -16,7 +16,7 @@ import com.thomaswcode.decrastination.ui.CheckInActivity
 import com.thomaswcode.decrastination.ui.TaskOpener
 
 /**
- * What Felix's service asks of Android (docs/plan_v4/02 §Ports), so it's tested without it: his one
+ * What Felix's service asks of Android (docs/plan_v4/architecture.md §Ports), so it's tested without it: his one
  * notification, and the work and alarms that outlive what asked for them. [AndroidFelixPorts] on the
  * phone.
  */

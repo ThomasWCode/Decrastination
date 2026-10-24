@@ -7,7 +7,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** Each class's next lessons, and a class tied to a code by its subject (docs/plan_v4/15-sent-or-asked-for.md §Tests, G8). */
+/** Each class's next lessons, and a class tied to a code by its subject (docs/spec/felix.md §What he's told, G8). */
 class LessonsTest {
     // Tuesday 20 Oct 2026, 09:00: week 1 of the timetable's two, its week one from Monday 7 Sep.
     private val now = Fixtures.at("2026-10-20T09:00")

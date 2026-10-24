@@ -56,7 +56,7 @@ data class Invite(val summary: String, val start: Long, val end: Long, val locat
             if (parts.size != 4 && parts.size != 5) return null
             val start = parts[1].toLongOrNull() ?: return null
             val end = parts[2].toLongOrNull() ?: return null
-            // Its days, kept since #41 (none in one kept before, nor in a timed one).
+            // Its days (none in one kept before days were, nor in a timed one).
             val days = parts.getOrNull(4)?.takeIf { it.isNotEmpty() }?.split('/')?.takeIf { it.size == 2 }?.let { (a, b) -> runCatching { LocalDate.parse(a) to LocalDate.parse(b) }.getOrNull() }
             return Invite(parts[0], start, maxOf(start, end), parts[3].ifEmpty { null }, days = days)
         }

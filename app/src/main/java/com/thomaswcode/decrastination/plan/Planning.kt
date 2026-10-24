@@ -41,11 +41,11 @@ import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.launch
 
 /**
- * The plan (docs/plan_v4): made from the stores as they are
+ * The plan (docs/plan_v4/architecture.md §The rules): made from the stores as they are
  * ([plan]; cheap, dozens of tasks), made again as what it depends on changes ([watcher]), today's
  * slot starts kept for the next ([keepSlots]), and the work done ahead after each ([Ahead]). Built
  * like [com.thomaswcode.decrastination.block.Focus]: its stores, the clock and small callbacks in
- * its constructor, the calendar as `AppGraph` last read it among them.
+ * its constructor, the calendar as the sync last read it among them.
  */
 class Planning(
     private val tasks: JsonStore<TaskState>,
@@ -65,7 +65,7 @@ class Planning(
     calendarChanges: Flow<*>,
     /** Today's slots whose grace has gone by, missed ([com.thomaswcode.decrastination.block.Slots.sweep]). */
     private val sweep: suspend () -> Unit,
-    /** What's done with each new plan, in order, once its slots are kept: the slot alarms, the calendar, the widget. */
+    /** What's done with each new plan, in order, once its slots are kept: the blocker's plan let go, the slot alarms, your reminders and their alarm, the calendar, the widget. */
     hooks: List<suspend (Plan) -> Unit>,
     /** Who the student is, as each call sends it (AI-05). */
     profile: (Long) -> Profile.Block,

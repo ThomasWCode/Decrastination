@@ -23,7 +23,8 @@ import java.time.Instant
 /**
  * Alarms at the next slot's start and at the next slot's end, its grace after it (PL-13): a start
  * makes the plan again; an end with its piece undone is a missed slot ([Slots.onEnd]), which moves.
- * Set again with every plan ([arm]), so they follow the slots wherever a replan puts them.
+ * Set again with every plan ([arm]), so they follow the slots wherever a replan puts them. Also
+ * Felix's next look ([armFelix]) and your reminders' next moment ([armReminder]).
  */
 object SlotAlarms {
     const val ACTION_SLOT_START = "com.thomaswcode.decrastination.SLOT_START"

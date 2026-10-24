@@ -32,7 +32,7 @@ import kotlin.math.roundToInt
  *    free time falls, in order, within a week of the one before over a window of a week or more,
  *    revision a day apart, a single piece on the day with most room, and never on a day past which
  *    the pieces after it can't follow. What its window can't hold in order is placed backwards from
- *    its last usable day, as all dated work once was; a chunk that fits nowhere before its deadline
+ *    its last usable day; a chunk that fits nowhere before its deadline
  *    goes into today, flagged behind.
  * 5. Undated work gets a soft deadline a week after it was first seen, and is placed after
  *    everything with a real deadline, so it fills spare time rather than displacing homework; at
@@ -436,16 +436,16 @@ object Planner {
             val spill = if (earlier.isEmpty()) 0 else maxOf(0, earlier.sumOf { it.second } - (capacityFrom(day, earlier.minOf { it.first }, item.home) - after))
             return after - later - spill
         }
-        /**
-         * The time [day] has for [item]'s [piece] (PL-15): a piece only for home, the evening's left; any
-         * other, all the day's. With no piece named, the item's: the evening's where all its pieces are home's.
-         */
         // Each day's time before a deadline on it, and each item's minutes put on its real deadline's own
         // day: all of them, and those of the evening's (a piece for home has only the evening's time, which
         // its school work leaves it).
         val beforeDeadline = HashMap<Pair<LocalDate, Long>, Capacity>()
         val onDueDay = HashMap<Item, Int>()
         val onDueDayHome = HashMap<Item, Int>()
+        /**
+         * The time [day] has for [item]'s [piece] (PL-15): a piece only for home, the evening's left; any
+         * other, all the day's. With no piece named, the item's: the evening's where all its pieces are home's.
+         */
         fun room(item: Item, day: LocalDate, piece: Int? = null): Int {
             val home = piece?.let { item.chunks[it].where == Where.Home } ?: item.home
             val left = (if (home) freeHome else free).getValue(day)
@@ -963,7 +963,7 @@ object Planner {
     /**
      * What's left of [task], in minutes of its calibrated estimate: the plan's pieces and a photo
      * check's cap both go by it. Two measures, and the smaller: the source's progress, which may
-     * already show the sessions' work (Power Planner's percentage, updated), and the sessions'
+     * already show the kept slots' work (Power Planner's percentage, updated), and the kept slots'
      * minutes since the task was first seen. Taking both off would count the same work twice.
      */
     fun remaining(task: TaskItem, multiplier: Double): Double {
@@ -990,9 +990,9 @@ object Planner {
             val own = task.subSteps.withIndex().filterNot { (_, step) -> step.ankiSections.isNotEmpty() && held.containsAll(step.ankiSections) }
             val left = own.filterNot { it.value.done }
             // All done: an assignment is still to hand in; an email's blocks done, nothing is left of it.
-            // One of your own is finished when its steps are (AppGraph sees to it).
+            // One of your own is finished when its steps are (the own tasks' service sees to it).
             if (left.isEmpty()) return if (task.source == Source.Gmail || task.source == Source.Own) emptyList() else listOf(Piece("finish and hand in", MIN_CHUNK, where = where))
-            // Minutes worked beyond the steps ticked off (a session stopped early) come off the
+            // Minutes worked beyond the steps ticked off (a slot kept short of its step) come off the
             // next steps in order, each kept to at least a last few minutes, as it isn't done.
             // Steps ticked by hand take back only the timed minutes they kept when ticked (work on them
             // before the tick), the rest none: what's left goes to the next steps. Minutes the
@@ -1044,8 +1044,8 @@ object Planner {
      * before sittings), as Claude's are cut when read ([Sittings]). What's left of
      * it in even sittings of an hour at most, each named for its place among the whole step's, so
      * keeping one leaves the rest called and keyed as they were ([Sitting.after]). Its last is the
-     * step's; the others' minutes, kept, are worked on it, so they come off it as a session stopped
-     * early's do. Not a step you gave ([TaskItem.yourSteps]): that's planned as you gave it, however
+     * step's; the others' minutes, kept, are worked on it, so they come off it as those of a slot kept short
+     * of its step do. Not a step you gave ([TaskItem.yourSteps]): that's planned as you gave it, however
      * long (D-34).
      */
     private fun sittings(piece: Piece, task: TaskItem, planned: List<Int>): List<Piece> {

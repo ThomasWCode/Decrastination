@@ -6,9 +6,11 @@ import java.time.Instant
 import java.time.ZoneId
 
 /**
- * When the app asks the Teams widget to sync on its own (Q21): on the first unlock
- * after 16:45, and every three hours, never while asleep (22:30–07:00) and, on school days by the
- * school calendar, not before 16:45 (a weekday off as a weekend day, D-105). Only while the phone is
+ * When the app asks the Teams widget to sync on its own (Q21): on the first unlock after the
+ * first-unlock time (16:45 by default), and every three hours (a setting), never while asleep
+ * (22:30–07:00) and, on school days by the school calendar, not before the school day's blocking
+ * time (a weekday off as a weekend day, D-105); and at an unlock in the hour and a half after the
+ * morning briefing, school day or not. Only while the phone is
  * unlocked and in use, which the focus service knows; every one is announced first by a banner
  * counting down 10 s, with Cancel and Delay 5 min. Pure.
  */

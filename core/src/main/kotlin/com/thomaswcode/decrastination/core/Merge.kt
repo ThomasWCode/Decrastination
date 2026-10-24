@@ -94,7 +94,7 @@ object Merge {
                 continue
             }
             // The source's steps, unless they're the same as before: then the ones kept here, with
-            // what a session ticked off, until the source's counts catch up (Anki's cards).
+            // what's ticked off here, until the source's counts catch up (Anki's cards).
             val sourceSteps = f.subSteps?.takeIf { new -> new.map { it.title } != old.subSteps.map { it.title } }
             val updated = old.copy(
                 title = f.title,
@@ -125,7 +125,7 @@ object Merge {
                 f.done -> updated.copy(status = Status.Done)
                 // A new round of it: the last round's minutes count towards neither this one's
                 // completion record nor what's left of it.
-                // Its steps too: none of the new round is done yet, by a session, a photo or by hand.
+                // Its steps too: none of the new round is done yet, by a slot kept, a photo or by hand.
                 // Laid again as open: one whose reading was let go ([trimmed]) as one seen for the first time.
                 else -> updated.copy(
                     status = Status.Open,

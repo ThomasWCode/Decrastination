@@ -156,7 +156,7 @@ class SlotCalendarDiffTest {
 
     @Test
     fun `an event of yours at a slot's title and times before it's written is never remembered, so never taken for a copy`() {
-        // #48's third review: yours there first, in the app's words, under a slot's title at its times.
+        // Yours there first, in the app's words, under a slot's title at its times.
         val end = five + 30 * 60_000L
         val slot = want("a")
         val mine = Existing(9, "", five, end, "Essay", "Gmail. Mine, worded so.", marked = false)

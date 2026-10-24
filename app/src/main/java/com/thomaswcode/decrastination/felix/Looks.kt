@@ -63,7 +63,8 @@ import kotlinx.coroutines.withTimeoutOrNull
  * and on the focus service's half-minute tick; writes through the model (AI-22) when there is one,
  * and sends it with its replies (AI-24) through his [outbox], so it's in the chat first and his
  * notification after. Cheap when there's none: the rules are pure, and the model is asked only for a
- * message. Silent while Claude is off. Built like [Focus]: its stores, the clock and small callbacks
+ * message. Its looks write nothing while Claude is off; your reminders still go, in your words
+ * ([sweepReminders]). Built like [Focus]: its stores, the clock and small callbacks
  * in its constructor, so it's tested on temporary stores.
  */
 class Looks(
@@ -129,7 +130,7 @@ class Looks(
     private val sweeping = Mutex()
 
     /**
-     * Your reminders as they come (docs/plan_v4/07-notes-and-reminders.md §Delivery): each one
+     * Your reminders as they come (docs/spec/felix.md §His messages): each one
      * whose moment has come by [now] delivered as his message, kind Reminder, about its task, with its
      * replies (*Done* and two snoozes), through his outbox, so it's in the chat and on his notification,
      * whatever the hour (D-100); one gone by more than [Reminders.LATE_MS] (the phone off) marked late.
@@ -478,8 +479,8 @@ class Looks(
 
     /**
      * [text] in reply to his [message], if it's a Completions one and [text] one of its three
-     * answers (LR-05): put on each completion it asked about, as the old notification's buttons
-     * did; or, a Question's (AI-10), an instruction on its task, read shown his question, and kept
+     * answers (LR-05): put on each completion it asked about;
+     * or, a Question's (AI-10), an instruction on its task, read shown his question, and kept
      * with it once it's read as its answer ([answerRead]). False for anything else, which goes on in the chat.
      */
     suspend fun answered(message: ChatMessage, text: String): Boolean {

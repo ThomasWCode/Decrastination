@@ -80,6 +80,9 @@ import java.util.Locale
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
+/** How soon a second Done of the same row is the same swipe seen again (UI-03). */
+private const val SWIPE_AGAIN_MS = 3_000L
+
 /**
  * The Day (UI-17): the week ahead in a strip, each day with its load (UI-02) and a mark where work
  * is behind; today's DO NOW card; and the chosen day as it runs (a [DayModel]): its windows, its
@@ -87,9 +90,6 @@ import kotlinx.coroutines.launch
  * between them, the moment it is, the pieces it has no time for, and what's been done (UI-08).
  * What the plan leaves out, and the sources, are on Work.
  */
-/** How soon a second Done of the same row is the same swipe seen again (UI-03). */
-private const val SWIPE_AGAIN_MS = 3_000L
-
 @Composable
 fun DayScreen(graph: AppGraph, activity: Activity) {
     val tasks by graph.tasks.state.collectAsStateWithLifecycle()
@@ -112,7 +112,7 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
     val plan = remember(tasks, settings, now, instructions, calendar, session.slots) { graph.planning.plan(tasks, settings, now) }
     val zone = graph.clock.zone()
     val scope = rememberCoroutineScope()
-    // How the last action went, and the task it's about, as the old Plan had it.
+    // How the last action went, and the task it's about.
     var message by rememberSaveable { mutableStateOf<String?>(null) }
     var messageFor by rememberSaveable { mutableStateOf<String?>(null) }
     LaunchedEffect(message) {
@@ -176,7 +176,7 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
                 ).joinToString(" · "),
             )
         }
-        // Your instructions about the day, its limit and busy times, and one more (the Calendar page's, UI-11).
+        // Your instructions about the day, its limit and busy times, and one more (UI-11).
         item(key = "said-$day") {
             val rules = instructions.applied.flatMap { it.changes }.filter { c ->
                 (c.type == ChangeType.DayLimit || c.type == ChangeType.BusyTime) &&
@@ -528,7 +528,7 @@ private fun NowRow(at: Long, zone: ZoneId) {
 }
 
 /**
- * An event's sheet (UI-17, UI-11, moved from the Calendar page): when and where, what it says, how
+ * An event's sheet (UI-17, UI-11): when and where, what it says, how
  * the plan counts it, its answers (for every event of that name), and an instruction about it.
  */
 @OptIn(ExperimentalMaterial3Api::class)

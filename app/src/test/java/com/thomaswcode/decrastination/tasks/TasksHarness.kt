@@ -32,7 +32,7 @@ import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 
 /**
- * Your instructions' and your own tasks' services on temporary stores (docs/plan_v4), as
+ * Your instructions' and your own tasks' services on temporary stores (docs/plan_v4/architecture.md §The rules), as
  * AppGraph makes them, with the real focus and plan; Claude is off (no key), or, with [claude], answered
  * by a stand-in for Claude's API ([answers]); and what Android does (the calendar read again, the widget,
  * a finish's completions) and what's handed to Felix are counted.

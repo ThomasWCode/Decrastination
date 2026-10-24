@@ -17,7 +17,7 @@ data class SlotState(val date: String = "", val previous: Map<String, Long> = em
     fun missed(key: String, taskId: String, at: Long): SlotState =
         copy(previous = previous - key, missed = if (missed.any { it.key == key }) missed else missed + MissedSlot(key, taskId, at))
 
-    /** [key]'s piece kept to its slot after all (phase 4): off both. */
+    /** [key]'s piece kept to its slot after all: off both. */
     fun kept(key: String): SlotState = copy(previous = previous - key, missed = missed.filterNot { it.key == key })
 
     /** [taskId] moved on purpose (a time, a day or a start you gave): its missed slots forgotten. */

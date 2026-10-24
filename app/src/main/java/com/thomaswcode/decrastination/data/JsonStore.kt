@@ -36,7 +36,7 @@ import kotlinx.serialization.json.jsonObject
  * few of those kept, and [problem] says so. One bad write never stops the app.
  *
  * Its state has a version ([version], its own default's), and a file of an older one is brought to it
- * by [migrations] as it loads, on its JSON, before it's decoded (docs/plan_v4/04-data-and-migrations.md):
+ * by [migrations] as it loads, on its JSON, before it's decoded (docs/plan_v4/data-and-migrations.md §Versions and migrations):
  * written again in the new shape, the file it came from kept beside it as `<name>.v<from>` for
  * [Stores.letGoOfOldShapes]. A file of a newer version, which this build can't read, is set aside as one
  * that can't be.

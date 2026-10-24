@@ -3,7 +3,7 @@ package com.thomaswcode.decrastination.core
 import kotlinx.serialization.Serializable
 
 /**
- * A write to Gmail, journaled before it's made (docs/plan_v4/10-emails-done.md, D-7 as amended): a finish
+ * A write to Gmail, journaled before it's made (docs/spec/sources.md §Gmail, D-7 as amended): a finish
  * of [taskId]'s conversation [threadId], every starred message of it unstarred and the conversation
  * archived; or, where [reverseOf] names a finish, its Undo past the grace, which stars again and puts back
  * in the inbox only what that finish took: the messages it found starred, and those it found in the inbox,
@@ -43,7 +43,7 @@ data class GmailWrite(
     val gaveUp: Boolean = false,
 )
 
-/** The journal's rules (docs/plan_v4/10-emails-done.md): the grace, the first finish's OK, Undo, tries and receipts. Pure. */
+/** The journal's rules (docs/spec/sources.md §Gmail): the grace, the first finish's OK, Undo, tries and receipts. Pure. */
 object GmailWrites {
     /** How long a finish waits before it's made: an Undo within it leaves Gmail untouched (D-106). */
     const val GRACE_MS = 60_000L

@@ -30,7 +30,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 
 /**
- * Your instructions' service on temporary stores (docs/plan_v4): a quick change applied and
+ * Your instructions' service on temporary stores (docs/plan_v4/architecture.md §The rules): a quick change applied and
  * taken back; one refused, past a real deadline, on your own task as the form wouldn't take it, or in
  * a circle; one deleted, discarded or taken back, its card told; what one makes on the school calendar
  * and on your own tasks; and those waiting for Claude while it can't be asked. The rules themselves are
