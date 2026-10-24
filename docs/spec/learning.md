@@ -103,7 +103,7 @@ Each is asked first, with no parent code, and a copy of all the app keeps is sav
 At `Settings.checkInMin` (19:30) on Sundays, Felix asks the week's five questions in the chat, one at a time, in fixed words with no model call (LR-02, `felix/CheckInFlow.kt`, `felix/FelixWords.kt`; the answers so far in `ChatState.felix.checkInDraft`), each answered from his notification or his chips:
 - how the week felt, 1 to 5; what you avoided and why; what got in the way; what you'd change; when you had most energy.
 
-In quiet hours a reminder opens the form instead (`Conversation.remindCheckIn`), which takes all five at once, keeping what's typed through a turn of the phone till it's saved, a new week's starting empty (4.3.18); where his notifications can't be shown, he asks in the chat all the same (D-95) and the form's reminder goes too, so it's seen. A week before's questions never finished are settled as a new check-in starts, so an answer to one can't be taken as this week's. The answers are kept by the week's Monday (`CheckIn`).
+In quiet hours a reminder opens the form instead (`Conversation.remindCheckIn`), which takes all five at once, keeping what's typed through a turn of the phone till it's saved, a new week's starting empty; where his notifications can't be shown, he asks in the chat all the same (D-95) and the form's reminder goes too, so it's seen. A week before's questions never finished are settled as a new check-in starts, so an answer to one can't be taken as this week's. The answers are kept by the week's Monday (`CheckIn`).
 
 ## The weekly review
 

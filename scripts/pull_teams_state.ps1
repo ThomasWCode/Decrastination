@@ -4,7 +4,8 @@
 #
 # It never writes the tracked fixture (fixtures/teams_widget_state.json): a failed pull can't damage
 # it, and what's copied there is chosen by hand. Exits non-zero if adb, apksigner or keytool fail,
-# the store isn't the widget's JSON, or the certificates differ.
+# the store isn't the widget's JSON, or the certificates differ. The widget's APK is pulled to
+# $env:TEMP\teams_widget_installed.apk for the check, and left there.
 #
 # Run from the project root:  .\scripts\pull_teams_state.ps1
 

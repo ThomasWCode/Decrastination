@@ -64,7 +64,7 @@ Nothing else: no analytics, no crash reports (crashes are written down on the ph
 | Days off school and half-days | `school.json` | Till you take them away |
 | The record exported from Stats | the app's cache | The day's copy, till Android clears the cache |
 
-A backup is plain JSON in the phone's shared `Documents` folder, holding the chat and its earlier messages, what Felix remembers, his notes and your reminders, your changes, your own tasks, the school calendar's days off, your answers about calendar events (by the events' names), the receipts of writes to Gmail (each with its email's subject), the log, what's learned, Claude's month and the settings (the summary's address among them).
+A backup is plain JSON in the phone's shared `Documents` folder, holding the chat and its earlier messages, what Felix remembers, his notes and your reminders, your changes, your own tasks, the school calendar's days off and half-days, today's slots, your answers about calendar events (by the events' names), the receipts of writes to Gmail (each with its email's subject), the log, what's learned, Claude's month and the settings (the summary's address among them).
 Apps with access to all files (a file manager, a sync app) can read it, and so can a PC over USB.
 
 ## Secrets
@@ -93,5 +93,5 @@ The repository is public: code, tests, docs, commit messages and pull requests a
 - No personal data in anything committed: no email addresses, names of people, calendar event names, real task or email titles, addresses, phone numbers, personal dates, school details or device identifiers. Such things are described generically.
 - Test fixtures are made up. A test that needs the shape of real data uses a copy in `private/`, never committed.
 - `private/` is git-ignored and holds the real data: the evaluation set (`private/eval/`), the phone's data copied ahead of each install, the probes' output, the debug commands' files, earlier APKs, and the phone's helper scripts.
-- The diff is scanned for addresses, names, event names and dates ahead of every push.
+- Ahead of every push, `scripts/scan-public.sh` scans the lines a diff adds for email addresses, phone numbers, and the names, places and identifiers listed in the git-ignored `private/scan-words.txt`; names and dates in prose still want a read.
 - Credentials for the PC's tools live in the user environment, never in the repository.
