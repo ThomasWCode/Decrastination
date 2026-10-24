@@ -685,7 +685,7 @@ It names Summary and Reply among its reasons, but no message of his is asked for
 - **A calendar event's question** (Q7): the app's own text, its answers (*All of it*, *A few hours*, *None*) kept for every event of its name, with no call.
 - **How work went, with Claude off** (LR-05): a message for each completion, its answers kept as below.
 - **The week's summary**: written in a call of its own, about you in the third person (D-66); "the week's summary's ready. send it?" is the app's own text, with *Send it*.
-- **Your reply to his Question**: read by the instructions reader, shown his question, as an instruction on that task (AI-10); not by him. Kept as its answer, the task read again, only where it answers it; one that doesn't is answered in the chat, or, where it made a change, done with as that, and either way his question waits again (D-19, 4.3.16).
+- **Your reply to his Question**: read by the instructions reader, shown his question, as an instruction on that task (AI-10); not by him. Kept as its answer, the task read again, where it answers it, or where Claude declined it or gave nothing usable; one that doesn't is answered in the chat, or, where it made a change, done with as that, and either way his question waits again (D-19, 4.3.16).
 - **An answer to Completions** (*harder*, *about right*, *easier*, or the app's *Harder*, *As expected*, *Easier*): kept on each of those completions (LR-05), with no call.
 - **A reminder he has no words for** (4.1.0): yours as you set it ("reminder: …"), marked late where it is; its *done*, *snooze 15 min* and *snooze 1 h* kept on it, with no call.
 - **A reminder let go, or back** (4.1.0), and **what a read he asked for changed** (4.1.1: "Teams says “…” is handed in."): notes in the app's words.
