@@ -168,6 +168,15 @@ object Slotter {
             }
             return false
         }
+        // Where in [interval] [chunk] can start from [start] on with the long break kept (D-40): [start], or, where that
+        // joins it to the run before and the run's work goes past the rule, the first start a long break after that run,
+        // where it still fits. No other later start helps: each brings it nearer the work after.
+        fun withBreaks(chunk: Chunk, start: Long, interval: Interval): Long? {
+            if (!overruns(chunk, start, interval)) return start
+            val before = work.filter { it.second == interval.window && it.first.end <= start }.maxOfOrNull { it.first.end } ?: return null
+            val later = startIn(chunk, interval, after = before + settings.slotLongBreakMin * MINUTE) ?: return null
+            return later.takeIf { it > start && !overruns(chunk, it, interval) }
+        }
         fun place(chunk: Chunk, start: Long, interval: Interval, pinned: Boolean) {
             val end = start + chunk.minutes * MINUTE
             // Its run: it, and the work before it in its window with no long break between.
@@ -244,7 +253,7 @@ object Slotter {
             val after = follows(chunk) ?: continue
             val kept = previous[chunk.key]?.takeIf { chunk.stepIndex != null && chunk.taskId !in shuffled && it in day && it >= after }
                 ?.let { start -> holding(chunk, start)?.takeIf { allowed(chunk, it) && beforeDeadline(chunk, start) && start >= opens(chunk) && (start <= now || !overruns(chunk, start, it)) }?.let { it to start } }
-            val (interval, start) = kept ?: free.firstNotNullOfOrNull { iv -> startIn(chunk, iv, after)?.takeIf { !overruns(chunk, it, iv) }?.let { iv to it } } ?: continue
+            val (interval, start) = kept ?: free.firstNotNullOfOrNull { iv -> startIn(chunk, iv, after)?.let { withBreaks(chunk, it, iv) }?.let { iv to it } } ?: continue
             place(chunk, start, interval, pinned = false)
         }
         return (work.map { it.first } + breaks).sortedBy { it.start } to ordered.filter { it in left }

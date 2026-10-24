@@ -69,6 +69,17 @@ class SlotterTest {
     }
 
     @Test
+    fun `a piece whose earliest start would join two runs past an hour and a half starts a long break after the first`() {
+        val first = chunk("first", 50)
+        val second = chunk("second", 60)
+        val pins = mapOf(first.key to Fixtures.at("2026-10-13T09:00"), second.key to Fixtures.at("2026-10-13T10:55"))
+        val late = chunk("late", 45, availableAt = Fixtures.at("2026-10-13T10:00"))
+        val (slots, _) = slot(tuesday, listOf(first, second, late), listOf(w("09:00", "12:00", WindowKind.Study)), now = "2026-10-13T07:00", pins = pins)
+        // At 10:00, as it opens, the three would be one run of two and a half hours: at 10:05 it's a run of its own with the second.
+        assertEquals(listOf("first 09:00–09:50", "late 10:05–10:50", "second 10:55–11:55"), slots.described())
+    }
+
+    @Test
     fun `work for home skips a study period, work done anywhere takes it`() {
         val windows = listOf(w("14:35", "15:30", WindowKind.Study), w("16:45", "22:00"))
         val (slots, _) = slot(tuesday, listOf(chunk("essay", where = Where.Home), chunk("reading")), windows)
