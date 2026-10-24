@@ -2,7 +2,7 @@
 
 An Android app that gathers everything outstanding (Teams assignments, Power Planner, starred Gmail conversations, AnkiDroid decks and tasks of your own), plans it into the days before each is due as timed slots, writes them to your calendar, shows the next thing to do on a home-screen widget, and, while work is due, replaces distracting apps with that next thing until it's done. Claude reads the work into steps and estimates, and Felix, a persona you chat with, makes changes and messages you about the day.
 
-A personal, sideloaded app for one phone, version 4.3.18.
+A personal, sideloaded app for one phone, version 4.3.19.
 
 ## Documents
 
