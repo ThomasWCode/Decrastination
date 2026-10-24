@@ -156,7 +156,8 @@ object Reminders {
 
     /**
      * Whether his words for [r]'s [moment] have been asked for: written ([drafted]), or asked for and none came
-     * (refused, or none that could be read), so that moment isn't paid for again and yours go.
+     * (refused, or none that could be read), so they aren't asked for ahead again. Asked ahead and none came,
+     * they're asked once more at the moment itself, and yours go where none comes then.
      */
     fun asked(r: Reminder, moment: Long): Boolean = r.draftFor == moment
 
