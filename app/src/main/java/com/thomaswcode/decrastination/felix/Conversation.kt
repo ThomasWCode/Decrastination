@@ -282,7 +282,7 @@ class Conversation(
     }
 
     /**
-     * [words], your reply to his [message] that's an answer with no call (a check-in's, a reading's
+     * [words], your reply to his [message] that's an answer, not a turn of the chat (a check-in's, a reading's
      * question's, how work went, a calendar event's), kept under it, answered as it came; and his
      * question, answered, out of his notification. Shown there by the outbox after.
      */
@@ -452,7 +452,8 @@ class Conversation(
     /**
      * Your [text] to Felix about [about] (Q29), answering the message [replyTo] if it does: one
      * entrance for replies (D-98), from the chat, his chips or his notification. A reply to a question of
-     * his that's an answer is kept under it with no call ([routed]); anything else is a turn of the
+     * his that's an answer is kept under it, not a turn of the chat ([routed]: with no call, but a reading's,
+     * which Claude reads as an instruction to judge whether it answers it); anything else is a turn of the
      * chat, kept as message [id] (about what it replies to, where it's about nothing else, unless not
      * [takeItsSubject]: the box's words to his nudge just above it, told him as your words alone, D-99)
      * and answered ([answerChat]). One sent while he answers another of yours lets that answer go, paid
@@ -462,7 +463,7 @@ class Conversation(
     suspend fun ask(text: String, about: About = About(), id: String = UUID.randomUUID().toString(), replyTo: String? = null, takeItsSubject: Boolean = true): Boolean =
         send(text, about, id, replyTo, takeItsSubject) != Asked.Nothing
 
-    /** What became of words sent ([send]): nothing (there were none), an answer taken with no call, or a turn of the chat waiting for his answer. */
+    /** What became of words sent ([send]): nothing (there were none), an answer taken as one (with no call, but a reading's question's, read by Claude), or a turn of the chat waiting for his answer. */
     enum class Asked { Nothing, Answer, Turn }
 
     /**
@@ -489,9 +490,9 @@ class Conversation(
     }
 
     /**
-     * [words], your reply to [message], answered with no call where it's the answer to a question of his
-     * ([Replies.route]): a check-in's question, its next asked ([checkInReply]); a reading's question, or
-     * how work went with one of its three ([answered]); a calendar event's question, one of its three
+     * [words], your reply to [message], taken as its answer where it's the answer to a question of his
+     * ([Replies.route]), with no call but the first: a reading's question, an instruction read by Claude, or
+     * how work went with one of its three ([answered]); a check-in's question, its next asked ([checkInReply]); a calendar event's question, one of its three
      * kept ([Owners.answerEvent]); a reminder's Done or snooze ([replyToReminder]); each kept under it.
      * False for a turn of the chat.
      */
@@ -1356,13 +1357,19 @@ class Conversation(
 
     /**
      * Your [text] in reply to his message [id] from his notification (AI-24): asked as any reply is
-     * ([ask]). A turn of the chat is answered as work of its own ([FelixPorts.answerLater]), as the
-     * receiver that took the reply is let go once this returns, and the app may go with it.
+     * ([ask]). A turn of the chat is answered as work of its own ([FelixPorts.answerLater]), and an answer
+     * to his question about a task, an instruction for Claude to read ([Looks.answered]), read so
+     * ([FelixPorts.readLater]), as the receiver that took the reply is let go once this returns, and the
+     * app may go with it. Only an instruction this reply made: one left waiting before it (a call that failed) waits
+     * for its own retry, so a reply that needs no call starts none.
      */
-    suspend fun replyFromNotification(text: String, id: String): Boolean = when (send(text, replyTo = id)) {
-        Asked.Nothing -> false
-        Asked.Answer -> true
-        Asked.Turn -> true.also { ports.answerLater() }
+    suspend fun replyFromNotification(text: String, id: String): Boolean {
+        val before = instructions.value.instructions.mapTo(HashSet()) { it.id }
+        return when (send(text, replyTo = id)) {
+            Asked.Nothing -> false
+            Asked.Answer -> true.also { if (instructions.value.instructions.any { it.id !in before && it.state == InstructionStatus.Reading }) ports.readLater() }
+            Asked.Turn -> true.also { ports.answerLater() }
+        }
     }
 
     /**

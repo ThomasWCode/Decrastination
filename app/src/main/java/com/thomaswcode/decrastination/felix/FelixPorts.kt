@@ -30,6 +30,9 @@ interface FelixPorts {
     /** His next look at [at], or none, by alarm ([SlotAlarms.armFelix]): the phone may be asleep through the service's ticks. */
     fun armLook(at: Long?)
 
+    /** Your reminders whose moment has come, his words for them asked for and then sent, as work of its own ([ReminderWorker.enqueue]). */
+    fun remindLater()
+
     /** The tasks read again now, as a job ([EnrichWorker.enqueue]). */
     fun readAgain()
 
@@ -41,6 +44,9 @@ interface FelixPorts {
 
     /** The answer to a reply from his notification, as work of its own ([FelixReplyWorker.enqueue]). */
     fun answerLater()
+
+    /** Your answer to his question from his notification, read by Claude as work of its own ([FelixReplyWorker.enqueue]). */
+    fun readLater()
 
     /** The reminder to open the week's check-in form, where he can't ask it himself. */
     fun remindForm()
@@ -57,6 +63,8 @@ class AndroidFelixPorts(private val context: Context) : FelixPorts {
 
     override fun armLook(at: Long?) = SlotAlarms.armFelix(context, at)
 
+    override fun remindLater() = ReminderWorker.enqueue(context)
+
     override fun readAgain() = EnrichWorker.enqueue(context)
 
     override fun scheduleReminders() = Daily.schedule(context)
@@ -64,6 +72,8 @@ class AndroidFelixPorts(private val context: Context) : FelixPorts {
     override fun review() = ReviewWorker.enqueue(context, ifDue = true)
 
     override fun answerLater() = FelixReplyWorker.enqueue(context)
+
+    override fun readLater() = FelixReplyWorker.enqueue(context, read = true)
 
     override suspend fun openSource(task: TaskItem): Pair<Boolean, String?> = TaskOpener.opened(context, task)
 

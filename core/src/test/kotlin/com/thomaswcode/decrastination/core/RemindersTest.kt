@@ -67,6 +67,8 @@ class RemindersTest {
         assertEquals(Fixtures.at("2026-10-20T19:00"), Reminders.nextWake(listOf(r.copy(draftFor = Fixtures.at("2026-10-20T19:00"))), plan(), emptyMap(), now, ahead))
         // After a failed sweep, its moment gone by: not before the retry.
         assertEquals(Fixtures.at("2026-10-20T19:06"), Reminders.nextWake(listOf(r), plan(), emptyMap(), Fixtures.at("2026-10-20T19:01"), ahead, notBefore = Fixtures.at("2026-10-20T19:06")))
+        // Its moment gone by, with no wait given (brought back by an Undo, say): at once, so it's swept then.
+        assertEquals(Fixtures.at("2026-10-20T19:00"), Reminders.nextWake(listOf(r), plan(), emptyMap(), Fixtures.at("2026-10-20T19:01"), ahead))
     }
 
     @Test
