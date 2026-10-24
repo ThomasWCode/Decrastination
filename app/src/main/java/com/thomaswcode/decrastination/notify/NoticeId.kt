@@ -8,12 +8,13 @@ package com.thomaswcode.decrastination.notify
  * named still, so one left showing from before is taken away.
  */
 enum class NoticeId(val id: Int, val codes: IntRange = IntRange.EMPTY) {
-    /** Work under way, shown by WorkManager (on older Android versions): a sync, readings, the review, a reply answered, Felix's look. */
+    /** Work under way, shown by WorkManager (on older Android versions): a sync, readings, the review, a reply answered, Felix's look, your reminder's words. */
     Sync(1001),
     Readings(1002),
     ReviewWork(1003),
     ReplyWork(1004),
     FelixWork(1005),
+    ReminderWork(1006),
 
     /** Free time being spent, and its last minute (IMP-P2-011): each one's *Back to work*. */
     FreeTime(2003, 2003..2003),
