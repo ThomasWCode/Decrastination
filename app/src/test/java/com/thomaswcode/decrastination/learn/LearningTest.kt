@@ -47,7 +47,7 @@ import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 
 /**
- * What's learned from the log, through the Learning service on temporary stores (docs/plan_v4):
+ * What's learned from the log, through the Learning service on temporary stores (docs/plan_v4/architecture.md §The rules):
  * the week's review from a fixed log, its change and its tidy put back, the week's summary from
  * its input (Claude's API a stand-in), and the week's check-in and a completion's answer on record.
  * The pure rules are `LearnTest`'s, `StatsTest`'s and `SummaryTest`'s.

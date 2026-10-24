@@ -25,7 +25,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * Your own tasks (Q28; docs/plan_v4): kept ([saveOwnTask]),
+ * Your own tasks (Q28; docs/plan_v4/architecture.md §The rules): kept ([saveOwnTask]),
  * finished as you say or once their steps are done ([finishOwnTask], [start]), opened again
  * ([reopenOwnTask]), deleted ([deleteOwnTask]), and trimmed to their record a fortnight after
  * they're done ([pruneOwn]). Built like [com.thomaswcode.decrastination.block.Focus]: its stores, the clock and a

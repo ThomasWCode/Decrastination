@@ -411,7 +411,7 @@ object ChatPrompts {
                 ?: p.lines.takeIf { it.size == p.changes.size }?.joinToString("; ")
                 ?: p.changes.joinToString("; ") { InstructionRules.describe(it, tasks, zone) }
             val became = when (p.state) {
-                // Made at once since 16 Oct: one not made says why; one the student took back, so.
+                // Made at once (D-60): one not made says why; one the student took back, so.
                 ProposalState.Proposed -> when {
                     p.note != null -> "not made: ${p.note}"
                     p.instant -> "undone by the student"

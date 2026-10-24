@@ -18,8 +18,7 @@ import kotlinx.coroutines.withContext
 /** Felix's call to the model (AI-22), made as the chat's is, at the effort of the answers someone waits for (AC-02). */
 class FelixCaller(private val client: AnthropicClient, val model: String = ClaudeEnricher.MODEL) {
 
-    /** [model]: the model that answered, a fallback's if one did. */
-    /** [rebalances]: his steps rebalanced in a morning's answer (D-110), read beside [answer], which is kept, and never kept themselves. */
+    /** [model]: the model that answered, a fallback's if one did; [rebalances]: his steps rebalanced in a morning's answer (D-110), read beside [answer], which is kept, and never kept themselves. */
     data class Result(val answer: FelixAnswer?, val costUsd: Double, val refused: Boolean = false, val model: String? = null, val usage: ModelCalls.Usage = ModelCalls.Usage.NONE, val rebalances: List<Rebalance.Given> = emptyList())
 
 

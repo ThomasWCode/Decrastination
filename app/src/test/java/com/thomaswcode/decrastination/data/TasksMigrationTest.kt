@@ -22,7 +22,7 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 
 /**
- * Tasks and instructions in their second shape (docs/plan_v4/04-data-and-migrations.md §Tasks v2): every
+ * Tasks and instructions in their second shape (docs/plan_v4/data-and-migrations.md §The shapes, release by release): every
  * earlier shape of the fixtures through the move and the migrations, as at a start, twice; the chat's kept
  * tasks; a backup from before.
  */

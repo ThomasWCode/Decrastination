@@ -11,7 +11,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.KSerializer
 
 /**
- * Every store the app keeps, made in one place (docs/plan_v4/02-target-architecture.md §Stores): each
+ * Every store the app keeps, made in one place (docs/plan_v4/architecture.md §`Stores`): each
  * JSON file with its state's type, its version and its migrations, and the secrets beside them. What
  * couldn't be read whole at this start is said ([problems]); each store says what a backup keeps of it
  * and which resets change it ([all]), so none can be added and left out of either; and [replace] is the

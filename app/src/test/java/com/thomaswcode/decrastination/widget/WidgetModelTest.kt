@@ -84,7 +84,7 @@ class WidgetModelTest {
         )
         // Work due later today before the overdue Statics: those deadlines can still be met.
         assertEquals("Do: Essay", model.headline)
-        // Its first step comes with phase 7's micro-plans.
+        // No micro-plan written for it (AI-15), so no first step.
         assertNull(model.label)
         assertEquals("teams:Essay#-1#1", model.key)
         assertEquals("Due 21:00", model.badge)

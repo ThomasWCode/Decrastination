@@ -44,10 +44,11 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 
 /**
- * What a backup keeps (docs/spec/storage-and-backups.md): the settings, the activity log, what the app has learned,
- * your answers about calendar events and, since 1.7.0, your instructions in use: what the sources
- * can't give back. Never the passwords or keys, which stay in this phone's encrypted store, nor the
- * tasks, which the next sync reads again.
+ * What a backup keeps (docs/spec/storage-and-backups.md): what the sources can't give back. The settings,
+ * the activity log, what the app has learned, your answers about calendar events, your instructions in
+ * use and your own tasks, the school calendar, what Felix remembers, today's slots, the chat and its
+ * archive, his notes and reminders, the month's Claude cost and Gmail's receipts. Never the passwords
+ * or keys, which stay in this phone's encrypted store, nor a source's tasks, which the next sync reads again.
  */
 @Serializable
 data class Backup(
@@ -64,7 +65,7 @@ data class Backup(
     val aiUsage: AiUsage = AiUsage(),
     /** Your instructions in use (applied), in the order they were: none in a backup from before 1.7.0. */
     val instructions: List<Instruction> = emptyList(),
-    /** Your own tasks (2.0.0), open or lately done: no source can give them back. */
+    /** Your own tasks, open or lately done: no source can give them back; none in a backup from before them. */
     val ownTasks: List<TaskItem> = emptyList(),
     /** The school calendar (PL-16): days off and half-days, none in a backup from before. */
     val school: SchoolCalendar = SchoolCalendar(),
@@ -84,7 +85,7 @@ data class Backup(
     /** The receipts of writes made to Gmail (4.3.0), while their Undo can stand, as the chat restored may undo them: none in a backup from before. */
     val gmailWrites: List<GmailWrite> = emptyList(),
     /**
-     * The version of each store its parts come from, by file (docs/plan_v4/04-data-and-migrations.md): an
+     * The version of each store its parts come from, by file (docs/plan_v4/data-and-migrations.md §Versions and migrations): an
      * older one's parts are brought to this build's shapes as it's read ([Backups.decode]). None in a
      * backup from before: version 1.
      */
@@ -93,11 +94,10 @@ data class Backup(
     companion object {
         const val APP = "Decrastination"
         /**
-         * 2 since 2.0.0, which keeps your own tasks; 3 since review v2's school calendar (PL-16). An
+         * 2 with your own tasks, 3 with the school calendar (PL-16). An
          * older version, which would restore the rest and quietly lose them, refuses it whole as from
          * a newer one; an older backup is read here with none.
-         */
-        /**
+         *
          * 4 since slots replaced sessions in the log (LR-09, AR-09), 5 with what's remembered
          * (AI-21), 6 with Felix's state, today's slots and the chat (AR-07), 7 with the chat's earlier
          * messages (4.0.0), 8 with Felix's notes and reminders (4.1.0), 9 with the receipts of writes to
@@ -164,8 +164,8 @@ object Backups {
 
     /**
      * Where each of a backup's parts comes from: its store's file, and its field there (null: the part is
-     * the store whole). A store kept in part (tasks.json's own tasks, runtime.json's few fields,
-     * instructions.json's) is migrated as an object holding only those fields, so its migrations must
+     * the store whole). A store kept in part (tasks.json's own tasks, instructions.json's, and one field
+     * each of learning.json, calendar.json, model.json, session.json and gmail-writes.json) is migrated as an object holding only those fields, so its migrations must
      * leave alone what isn't there. `instructions` is the state's applied ones under its `instructions`
      * field: the same type, so a migration of that field is one of these too.
      */

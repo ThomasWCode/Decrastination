@@ -1,4 +1,4 @@
-// The app's pure rules and domain types (docs/plan_v4/02-target-architecture.md §The rules): plain
+// The app's pure rules and domain types (docs/plan_v4/architecture.md §The rules): plain
 // Kotlin, with no Android and nothing of the app, so the compiler keeps core pure. Its tests run with
 // the app's (the app's testDebugUnitTest depends on this module's test); one alone:
 // ./gradlew :core:test --tests '*SlotterTest*'

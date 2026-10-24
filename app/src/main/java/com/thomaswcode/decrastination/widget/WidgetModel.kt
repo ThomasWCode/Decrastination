@@ -151,7 +151,7 @@ data class WidgetModel(
             return teamsWarning(state, now)
         }
 
-        /** What's wrong with Teams' data, if anything: also the Plan's (IMP-P1-007). */
+        /** What's wrong with Teams' data, if anything: also Work's (IMP-P1-007). */
         fun teamsWarning(state: TaskState, now: Long): String? {
             // The Teams widget's own trouble (its sync service off, its last sync failed), which
             // also explains a ↻ that didn't sync Teams.

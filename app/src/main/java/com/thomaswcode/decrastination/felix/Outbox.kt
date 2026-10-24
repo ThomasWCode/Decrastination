@@ -19,7 +19,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 /**
- * Felix's outbox (docs/plan_v4/05-the-chat.md §2): every message in his name is put in the chat first,
+ * Felix's outbox (docs/spec/felix.md §Notifications and replies): every message in his name is put in the chat first,
  * so a notification can't point at one that isn't there; what's past the chat's live window then moves
  * to its archive; then his one notification is made again from the chat's unread ([notify]), rebuilt,
  * not added to. Built like [com.thomaswcode.decrastination.block.Focus]: its stores, the clock and his
@@ -111,7 +111,7 @@ class Outbox(
     }
 
     /**
-     * His one notification as the chat makes it (docs/plan_v4/05-the-chat.md §3): his [name]; its [lines],
+     * His one notification as the chat makes it (docs/spec/felix.md §Notifications and replies): his [name]; its [lines],
      * oldest first, his unread and your replies to them; a reply answers [replyTo] (the newest of his),
      * offering its [replies]; a tap opens the chat at [openAt] (the first unread); it sounds where [alert].
      */

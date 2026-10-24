@@ -9,7 +9,7 @@ import java.time.Instant
 import java.time.ZoneId
 
 /**
- * One entrance for replies (docs/plan_v4/05-the-chat.md §5): where your reply to a message goes, by the
+ * One entrance for replies (docs/spec/felix.md §Notifications and replies): where your reply to a message goes, by the
  * kind of message it answers, the same whether it came from his notification, one of his chips, a swipe
  * or Reply in the chat, or the box answering his question ([Conversation.ask] with `replyTo`). Pure.
  */

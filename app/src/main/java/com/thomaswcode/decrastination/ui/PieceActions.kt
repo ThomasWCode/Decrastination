@@ -188,7 +188,7 @@ internal fun worked(task: TaskItem, multiplier: Double): Boolean =
     if (task.subSteps.isNotEmpty()) task.subSteps.all { it.done } else Planner.remaining(task, multiplier).roundToInt() <= 0
 
 /**
- * What can be done with [piece], wherever it's shown (the Plan, the block screen): **Open** goes to
+ * What can be done with [piece], wherever it's shown (Day, the block screen): **Open** goes to
  * the task; **Done** keeps its slot (LR-09); **Check it's done** asks its source (**All of it done**,
  * for one of your own, is your say); **Refresh Teams** asks the Teams widget to sync; **Photo check** sends a photo
  * of written work. [say] gives how each went.

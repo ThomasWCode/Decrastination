@@ -16,7 +16,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-/** The next lessons in the chat (G8, docs/plan_v4/15-sent-or-asked-for.md §Tests): each task's class, the lessons' line, and a due date at the next lesson. */
+/** The next lessons in the chat (G8, docs/spec/felix.md §What he's told): each task's class, the lessons' line, and a due date at the next lesson. */
 class ChatLessonsTest {
     // Tuesday 20 Oct 2026, 09:00.
     private val now = Fixtures.at("2026-10-20T09:00")

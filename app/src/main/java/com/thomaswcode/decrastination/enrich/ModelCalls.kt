@@ -4,7 +4,7 @@ import com.anthropic.models.messages.CacheControlEphemeral
 import com.anthropic.models.messages.Message
 import com.anthropic.models.messages.TextBlockParam
 
-/** What every model call sends before its question (AC-01, AI-05). */
+/** What every model call sends before its question (AC-01, AI-05), and how each call goes on record (AC-07). */
 object ModelCalls {
     /**
      * The job's system prompt, marked to be cached for an hour (AC-01: its instructions and limits

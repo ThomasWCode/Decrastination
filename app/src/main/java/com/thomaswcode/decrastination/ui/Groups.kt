@@ -7,7 +7,7 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.temporal.TemporalAdjusters
 
-/** The Tasks tab's sections, by when each task is due (Q30), in the order they're shown. */
+/** Work's sections, by when each task is due (Q30), in the order they're shown. */
 enum class DueGroup(val title: String) {
     Overdue("Overdue"),
     Today("Today"),
@@ -19,7 +19,7 @@ enum class DueGroup(val title: String) {
     NoDate("No due date"),
 }
 
-/** How the Tasks tab and the Plan group what they show. Pure, for the tests. */
+/** How Work and the widget's list group what they show. Pure, for the tests. */
 object Groups {
 
     /**
@@ -51,7 +51,7 @@ object Groups {
     }
 
     /**
-     * A day's pieces on the Plan as rows, one a task (Q31): each task where its first piece that day
+     * A day's pieces on the widget's list as rows, one a task (Q31): each task where its first piece that day
      * comes, with all its pieces that day under it, in their order.
      */
     fun byTask(chunks: List<Chunk>): List<TaskRow> = chunks.groupBy { it.taskId }.map { (id, pieces) -> TaskRow(id, pieces) }
@@ -71,7 +71,7 @@ object Groups {
     const val NO_SUBJECT = "No subject"
 }
 
-/** One task's pieces on one day of the Plan: a row that opens into them. */
+/** One task's pieces on one day of the widget's list: a row that opens into them. */
 data class TaskRow(val taskId: String, val pieces: List<Chunk>) {
     val first: Chunk get() = pieces.first()
     val minutes: Int get() = pieces.sumOf { it.minutes }

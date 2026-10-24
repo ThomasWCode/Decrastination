@@ -16,7 +16,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
 
 /**
- * runtime.json split by owner (docs/plan_v4/04-data-and-migrations.md §`runtime.json` split): every
+ * runtime.json split by owner (docs/plan_v4/data-and-migrations.md §The shapes, release by release): every
  * earlier shape of the fixtures through the move and the migrations, as at a start, twice; a backup from before.
  */
 class RuntimeSplitTest {

@@ -6,7 +6,7 @@ import kotlin.test.assertTrue
 
 /**
  * The rules of the app's structure that can be checked by reading its code
- * (docs/plan_v4/02-target-architecture.md §The rules): only the notifier posts; only the gateway
+ * (docs/plan_v4/architecture.md §The rules): only the notifier posts; only the gateway
  * builds a Claude client; `core` free of Android and of the app, a module of its own; screens call
  * services, never a store's update; each store updated only by the files named for it, its owner
  * first; and the one way round a store's owner, [com.thomaswcode.decrastination.data.Stores.replace],

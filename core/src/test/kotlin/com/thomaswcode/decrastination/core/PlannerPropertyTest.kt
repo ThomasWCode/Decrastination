@@ -213,7 +213,7 @@ class PlannerPropertyTest {
      * (before today's hours or after them). Within them it can: a day full to the minute loses room
      * for its last piece, which goes to tomorrow and moves what tomorrow held (seed 1702 of 10 000:
      * Saturday 19:00, today's 75 minutes full). That's the plan having no memory of the last one,
-     * which PL-13's `previous` (phase 3) gives it; the check takes in today's hours then.
+     * which PL-13's `previous` gives it; the check takes in today's hours then.
      */
     private fun checkStability(seed: Long, plan: Plan, input: Planner.Input) {
         val later = input.copy(now = input.now + MINUTE)

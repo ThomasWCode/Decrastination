@@ -7,7 +7,7 @@ import kotlinx.serialization.Serializable
  * Asking Claude (Q29), Felix (AI-24): one chat for everything you'd say about
  * your work. You write; he answers, asks when something's missing, and puts what he does on cards
  * ([Proposal]): everything is made at once, its card's Undo taking it back (D-60). Every word in his
- * name is a message here first, what he writes unasked among them (docs/plan_v4/05-the-chat.md): this
+ * name is a message here first, what he writes unasked among them (docs/spec/felix.md §The chat): this
  * is the live window of the conversation, kept in `chat.json`, and what's past it is in [ChatArchive].
  */
 @Serializable
@@ -37,7 +37,7 @@ enum class Speaker {
 }
 
 /**
- * Why a message was written (docs/plan_v4/05-the-chat.md §1): [Chat] for yours and his answers to you;
+ * Why a message was written (docs/spec/felix.md §His messages): [Chat] for yours and his answers to you;
  * else why he wrote unasked: his looks at a slot (`SlotStart`, `SlotEnd`, `SlotKept`), the day done,
  * the morning, a reading's question, how the day's completions went, the week's check-in, review and
  * summary, a calendar event's question; a reminder and a note of the app's.
@@ -224,7 +224,7 @@ data class Act(
 
 /**
  * What's said under a message of his, folded behind a chevron at its bubble's corner, and the label that
- * says it in a line (docs/plan_v4/05-the-chat.md §6). Pure.
+ * says it in a line (docs/spec/felix.md §The chat). Pure.
  */
 object ChatSummary {
     /**

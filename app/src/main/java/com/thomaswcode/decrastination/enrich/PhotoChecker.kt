@@ -22,7 +22,7 @@ import java.util.Base64
  * The photo check (docs/spec/planner.md, chunk completion 2; Q16): photos of written work, a page
  * each (up to [MAX_PAGES], AI-17), and the piece they're for with its task's instructions (AI-16)
  * in, `{done, confidence, reason, seen}` out. A piece can't be confirmed done at its source, so
- * this stands in for the timer. Built, and offered only while Claude is on.
+ * this is what earns a longer piece of written work its free time (BL-08). Built, and offered only while Claude is on.
  */
 class PhotoChecker(private val client: AnthropicClient, val model: String = ClaudeEnricher.MODEL, private val profile: Profile.Block = Profile.Block.NONE) {
 

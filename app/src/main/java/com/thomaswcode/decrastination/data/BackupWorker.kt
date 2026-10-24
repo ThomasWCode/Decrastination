@@ -9,7 +9,7 @@ import androidx.work.WorkerParameters
 import com.thomaswcode.decrastination.AppGraph
 import java.util.concurrent.TimeUnit
 
-/** The nightly backup (AR-07): once a day, all the app keeps written to Documents/Decrastination ([AppGraph.backupNow]). */
+/** The nightly backup (AR-07): once a day, all the app keeps written to Documents/Decrastination ([BackupService.backupNow]). */
 class BackupWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
         // Too big to restore, it's said in Settings → Backup, and not tried again: it would be as big.
