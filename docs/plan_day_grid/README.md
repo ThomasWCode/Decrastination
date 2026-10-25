@@ -84,7 +84,7 @@ PL-04 now: a time given for a task's next piece that isn't free goes to the next
 - not kept, as now: its day gone; before its task can start or its piece opens (a deck's cards at 04:00); a piece not over by its real deadline still to come (refused on the Day before it's made, `Planner.pinProblem`, which now counts the piece's minutes); its time and grace gone by with the piece undone (PL-13), when it's laid as any piece is;
 - breaks: none kept around a pin outside every window, as there's no window to keep apart in; inside one, as now;
 - a pin outside every window is recorded, kept or missed, under the kind of the window nearest it in time (`Slot.window`), so its record teaches the day yields (`Calibrator`) as school's or the evening's, as the time of day says;
-- a pin outside the windows still counts against that day's free time, as one inside does now, so the day may hold a little less other work than its windows could (decided without asking, 6);
+- **the time a pin takes outside the day's free time uses none of it**: the part of its piece outside the day's windows, or over busy time within them, doesn't come off the day's free time, so the day holds as much other work as it would without it; only the part inside free time does (the owner's word, `answers.md` §Changed at the owner's word). A day you've limited still counts all of it, as the limit is the most work in the day wherever it falls (decided without asking, 26);
 - blocking is unchanged: today's work is today's pieces, wherever their times (BL-01).
 
 ## A day for only some tasks (4.5.1)
