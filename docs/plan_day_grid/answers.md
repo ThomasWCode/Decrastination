@@ -68,11 +68,43 @@ Applied: `README.md` §Moving a piece by hand (a later piece of its task); `buil
 
 Applied: `README.md` §Two releases and §A time you give, kept to the minute; `build.md` 4.5.0, all of it.
 
+### An extra point: a day for only some tasks
+
+The owner's ask, after the plan was first pushed:
+
+> An extra point: currently Felix can pin items but in order to make them the only events, must decrease available time to their exact duration, which is fragile. Increase Felix's ability so he can make 'only' certain tasks on a day as well as pinning.
+
+Checked against the code before the questions: his changes (`ChangeType`, and the chat prompt's list) put a task on a day (`OnDay`, "placed before everything else", other work still filling the day's time left) or a piece at a time (`AtTime`), and cap a day (`DayLimit`, minutes); nothing says "only these". So the only way was a `DayLimit` matched to the tasks' minutes, which stops matching when those minutes change.
+
+**Q11. When Felix makes a day "only" for some tasks, what happens to those tasks?** Offered: placed there first (as `OnDay`) and nothing else (recommended); the day reserved, the tasks planned as usual.
+
+> Keep the day reserved and tasks planned as usual as long as me telling Felix to put all of a task's work on that day would work.
+
+Applied: `README.md` §A day for only some tasks (reserved; planned as usual; `OnDay` as well works); `build.md` 4.5.1 stage 2. Said plainly, as the answer's condition rests on it: `OnDay` makes the day its task's last and places its work there first; a task with more work than the day holds has the rest on the days before, as now. On a reserved day all its time is the listed tasks', so that happens only when they truly don't fit.
+
+**Q12. What else may still be planned on an "only" day?** Offered: nothing else (recommended); Anki's daily cards too; Anki's, and work that would otherwise miss its deadline.
+
+> When Felix makes a day only some tasks, it should all whether to include nothing, anki or anki and anything that would miss it's deadline. Default to nothing.
+
+Read as: Felix should ask which of the three, and allow nothing until told. Applied: `README.md` §A day for only some tasks (what else may come in; Felix asks); `build.md` 4.5.1 stages 1 and 3 (`alsoAllow` on the change, the prompt's rule and his quick replies).
+
+**Q13. If another task is later put on an "only" day (dragged, the move sheet, Felix's pin, its event moved in Google Calendar), what should happen?** Offered: the newer move wins and it joins (recommended); refused while the "only" stands; the "only" dropped.
+
+> The newer move wins; it joins (Recommended)
+
+Applied: `README.md` §A day for only some tasks (a later move wins); `build.md` 4.5.1 stages 2 (`onlyDays`) and 3 (the join said).
+
+**Q14. If every task an "only" day was for is finished (or gone) before that day, what happens to the day?** Offered: an ordinary day again (recommended); it stays free of work.
+
+> Stays free of work
+
+Applied: `README.md` §A day for only some tasks (its tasks finished early); `build.md` 4.5.1 stage 2 (a finished task stays in the day's set) and stage 3 (Felix sees them marked done, so he can offer to free the day).
+
 ## Decided without asking
 
 Each a routine call the owner may overturn; the alternative is named so the build can switch.
 
-1. **Two releases, after the timer.** The planner's change (4.5.0) is reviewed and checked on the phone before the screen that leans on it (4.6.0); both after 4.4.0, whose plan is ready and which touches the Day only in its DO NOW card, which 4.6.0 keeps. Alternative: one release; or these before the timer, which then takes the next number.
+1. **Three releases, after the timer.** The planner's changes (4.5.0, then 4.5.1 with Felix's) are reviewed and checked on the phone before the screen that leans on them (4.6.0); all after 4.4.0, whose plan is ready and which touches the Day only in its DO NOW card, which 4.6.0 keeps. Alternative: one release; or these before the timer, which then takes the next number.
 2. **The card folds as Material's top bar does with `enterAlways`**: a scroll towards later hours folds it first, one towards earlier hours unfolds it first, a tap on the folded line unfolds it; in landscape it starts folded. Alternative: it unfolds only when the grid is back at its top, which, as the grid opens at the hour before now, would leave it folded most of the time.
 3. **Today's line has no label**: a line and a dot, as Google draws it; the hours in the gutter say the time. Alternative: keep "Now 16:12" in the gutter beside the dot.
 4. **Every block at least 24 dp tall**, so a short piece can still be read, tapped and swiped; **a ✓ on a piece's block** where it's at least 32 dp tall and 120 dp wide, doing what *Done* on the row does now. Alternative: no ✓, Done by the swipe and the sheet alone, as Google's blocks have no button.
@@ -89,6 +121,13 @@ Each a routine call the owner may overturn; the alternative is named so the buil
 15. **The drag's numbers**: five-minute steps; the grid scrolls when the finger is within 48 dp of its edge, up to 12 dp a frame; settled on the phone.
 16. **TalkBack's *Move it* opens the move sheet**, so moving a piece never needs the drag; the sheet keeps the fortnight and a time by the clock.
 17. **A new spec page, `docs/spec/day.md`**, as the Day has had none, its rules spread over the requirement ids. Alternative: the rules in `slots-and-calendar.md` and the requirement ids alone.
+18. **The "only" day is a release of its own, 4.5.1**, not part of 4.5.0: it changes goldens and schemas (compiled by the API) and raises three stores' versions, so it's reviewed apart from the exact pins. Alternative: inside 4.5.0, one review and one phone session for both.
+19. **A date, not every such weekday**: with Q14's answer, a weekday's "only" would keep every such day free of work once its tasks were done, till taken back. Alternative: a weekday too, as `DayLimit` takes one.
+20. **Felix makes the day at once, allowing nothing, and asks in the same reply**, as everything he gives is made at once (his prompt says so); the answer changes what it allows. Alternative: he asks first and makes nothing till answered, a turn later.
+21. **The instruction reader doesn't ask**: it allows nothing where your words don't say, as it can't hold a conversation. Alternative: it notes the instruction as unclear and asks, as it does what it can't read.
+22. **The latest `DayOnly` of a day says what the day allows**, whichever task it names, so Felix's answer to his own question is one change. Alternative: each task's change its own allowance, the most allowing one counting.
+23. **"Work that would miss its deadline" takes the day only where no other day before its deadline has room for it**, tried last. Alternative: any work with a real deadline before the only-day's next free day.
+24. **A move in Google Calendar that makes a task join an "only" day is said nowhere but in the day's instructions**: it's yours, made there, and the app has no screen open to say it on. Alternative: a notification, as a refused move gets.
 
 ## What the plan couldn't check
 

@@ -1,21 +1,24 @@
-# The Day as a calendar (4.5.0 and 4.6.0)
+# The Day as a calendar (4.5.0, 4.5.1 and 4.6.0)
 
 The owner's ask, 25 Oct 2026: the Day tab changed "so it looks very similar to the Google Calendar page". Planned with the owner the same day: Google Calendar's **Day view**, a time grid, with the Day's own parts kept where the owner chose to keep them (the week strip, the swipes, the DO NOW card).
+
+And, asked the same day as an extra point: Felix able to make a day **only** for certain tasks, as he can pin them, in place of cutting the day's time to their minutes, which breaks whenever their minutes change (§A day for only some tasks).
 
 This folder is what a fresh session needs to build it, without the conversation that planned it:
 
 - `README.md` (this file): what the Day becomes and how it behaves, the spec the builds implement.
-- [`build.md`](build.md): the two releases, their stages in order, each with its files, functions, rules, tests and an estimate; the docs to change in each PR; the phone sessions.
+- [`build.md`](build.md): the three releases, their stages in order, each with its files, functions, rules, tests and an estimate; the docs to change in each PR; the phone sessions.
 - [`answers.md`](answers.md): the questions the owner was asked and their answers, verbatim; and the choices made without asking, each with its alternative, for the owner to overturn.
 
 Where this folder and the code disagree once the releases are merged, the code and `docs/spec/` are right: this is the plan's record, as `docs/plan_v4/` is the 4.x plan's.
 
-## Two releases
+## Three releases
 
 - **4.5.0: a time you give is kept to the minute.** The planner alone (`core/Slotter.kt`, `core/Planner.kt`): a change to how plans are made, reviewed and checked on the phone apart from a new screen.
+- **4.5.1: a day for only some tasks.** The planner, Felix's prompts and schemas, and a stored change's new shape: reviewed and checked apart from the screen too, as it raises stored data's versions and changes goldens.
 - **4.6.0: the Day as a calendar.** The grid, its header, its blocks and the drag, on 4.5.0's rule.
 
-Both come after 4.4.0, the timer (`docs/plan_timer/`), which is planned and not yet built; neither touches what the timer changes but the Day's DO NOW card, which 4.6.0 keeps as it is. Built before the timer, the numbers swap (`answers.md`, decided without asking, 1).
+All three come after 4.4.0, the timer (`docs/plan_timer/`), which is planned and not yet built; none touches what the timer changes but the Day's DO NOW card, which 4.6.0 keeps as it is. Built before the timer, the numbers swap (`answers.md`, decided without asking, 1).
 
 ## What the Day looks like (4.6.0)
 
@@ -30,7 +33,7 @@ Top to bottom, under the app's bar and tabs, which don't change (UI-17, UI-18):
      - "2 won't fit" (today only, PL-02), in the error colour: the `WontFitTile`s, each with *What gives?* into the chat;
      - "3 with no time": the day's pieces with no slot (`DayBucket.unslotted`), the `ChunkTile`s, each opening its piece's sheet;
      - "40 min done": the day's slots kept (UI-08), each with its outcome, minutes and "earned";
-     - "Instructions · 2": the day's instructions (a day limit, busy times: UI-11) and *An instruction about this day…*; "Instruction…" where there's none.
+     - "Instructions · 2": the day's instructions (a day limit, busy times, a day only for some tasks: UI-11) and *An instruction about this day…*; "Instruction…" where there's none.
    - "Nothing planned." stays, under the chips, when the day has no slot, record or piece.
 5. **The grid**: the whole day, 00:00 to 24:00, scrolling on its own.
    - The hours down a gutter on the left, as the app writes times ("15:00"), every hour but midnight's, with a thin line across at each.
@@ -84,6 +87,22 @@ PL-04 now: a time given for a task's next piece that isn't free goes to the next
 - a pin outside the windows still counts against that day's free time, as one inside does now, so the day may hold a little less other work than its windows could (decided without asking, 6);
 - blocking is unchanged: today's work is today's pieces, wherever their times (BL-01).
 
+## A day for only some tasks (4.5.1)
+
+Felix can put all of a task on a day (`OnDay`) or its next piece at a time (`AtTime`, PL-04), but to make those the only work of the day he has had to cut the day's time to their minutes (a `DayLimit`). That breaks as soon as their minutes change (an estimate read again, a step ticked, the pace learned): other work creeps back into the time left, or theirs no longer fits. From 4.5.1 he can say it outright.
+
+- **A change of its own, `DayOnly`**: one a task, each with the date; together they're the day's tasks ("Thu 29: only Essay, Maths revision").
+- **The day is reserved**: no other task's work is planned on it, and the time its tasks don't use stays free.
+- **Its tasks are planned as usual**: placed as the planner would place them anyway, so the day may hold some of their work or none. An `OnDay` for one of them as well (Felix's, or yours by a drag or the move sheet) puts its work on that day first, and with the day reserved, all of its time is theirs. As `OnDay` already works, a task with more work than the day holds has the rest on the days before it (`docs/spec/planner.md` §Days and times you gave).
+- **What else may come in**, said on the change (`alsoAllow`): nothing, the default; Anki's cards (`anki`); or Anki's cards and work that would otherwise miss its real deadline (`anki-deadlines`), which is given the day only where no other day before its deadline has room for it. Calendar events and a weekend's outside breaks aren't work: they stay either way.
+- **Felix asks**: making a day only for some tasks without being told what else may come in, he makes it allowing nothing and asks in the same reply, with three quick replies (UI-06): "Nothing else", "Anki too", "Anki and deadlines". The answer is one more `DayOnly` for that day with its `alsoAllow`: the latest of a day's says what it allows. The instruction reader (*An instruction about this day…*) makes it too, from your words, allowing nothing where they don't say, as it can't ask.
+- **A date, not every such weekday** (decided without asking, 19).
+- **A later move wins**: a task put on that day after the day was made only for others (dragged onto it, the move sheet, Felix's `OnDay` or `AtTime`, its event moved in Google Calendar) joins the day's tasks, and the move's snackbar or Felix's reply says so ("Thu 29 was only for Essay: Maths joins it"). One put there before it is left out, its work going to other days.
+- **Its tasks finished early**: the day stays free of work, as it was set, till its changes are taken back in *Your changes*. Felix's context shows the day's tasks marked done, so he can offer to free it.
+- **Taken back** in *Your changes*, a change at a time, as any change is.
+- **Shown**: in Felix's context, on the day's line of his plan ("Thu 29: only Essay, Maths revision; Anki too") and among the changes in use; on the Day, among the instructions about the day (the list's lines; from 4.6.0, the header's chip).
+- **Untouched**: blocking (a day with no pieces blocks nothing, BL-01), the slotter (it lays what the day was given), and the day limit, which stays for a cap with no tasks named.
+
 ## What it must cope with
 
 - **Many blocks at once**: as many columns as the cluster needs, each block's words clipped to its width; a block under 40 dp wide shows its first word only.
@@ -97,6 +116,6 @@ PL-04 now: a time given for a task's next piece that isn't free goes to the next
 ## Done when
 
 - Every behaviour above holds on the phone (`build.md` §The phone, for each release), side by side with the owner's Google Calendar on the same day.
-- CI green on `./gradlew testDebugUnitTest lintDebug assembleDebug` for each; the settings' migration tested from version 2; the goldens unchanged; the plan's snapshot and the Felix inputs page unchanged, or their diff explained in the PR.
+- CI green on `./gradlew testDebugUnitTest lintDebug assembleDebug` for each; the migrations tested from every earlier shape (the instructions' and the chat's in 4.5.1, the settings' in 4.6.0) and rehearsed on a backup of the phone's; the goldens changed only in 4.5.1, on purpose, and its schemas compiled by the API; the plan's snapshot and the Felix inputs page unchanged, or their diff explained in the PR.
 - The docs moved with the code (`build.md` §Docs, for each), the new decisions numbered in `docs/decisions.md`, PL-04, UI-04, UI-08, UI-11 and UI-17 amended.
-- Merged as `4.5.0: a time you give, kept to the minute` and `4.6.0: the Day as a calendar`, tagged, at the owner's word.
+- Merged as `4.5.0: a time you give, kept to the minute`, `4.5.1: a day for only some tasks` and `4.6.0: the Day as a calendar`, tagged, at the owner's word.

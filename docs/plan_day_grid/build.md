@@ -1,17 +1,18 @@
 # Building the Day as a calendar
 
-Two releases, each on its own branch from `main` (or 4.6.0 stacked on 4.5.0 while 4.5.0's reviews run: a stack of two, no more):
+Three releases, each on its own branch from `main`, one stacked on the one before at most while that one's reviews run (a stack of two, no more):
 
 - `4.5.0: a time you give, kept to the minute`, branch `v4.5.0`, `versionCode` 79, `versionName` "4.5.0".
-- `4.6.0: the Day as a calendar`, branch `v4.6.0`, `versionCode` 80, `versionName` "4.6.0".
+- `4.5.1: a day for only some tasks`, branch `v4.5.1`, `versionCode` 80, `versionName` "4.5.1".
+- `4.6.0: the Day as a calendar`, branch `v4.6.0`, `versionCode` 81, `versionName` "4.6.0".
 
-The numbers assume 4.4.0, the timer (`docs/plan_timer/`), is merged first, at `versionCode` 78; built before it, these take 78 and 79 and the timer moves up. The rules of the house hold throughout: `CLAUDE.md`, `docs/development.md`, `docs/plan_v4/architecture.md` §The rules and §Conventions. Nothing personal in code, tests, fixtures, docs or the PRs (D-79): fixtures and examples are made up. No new library: everything here is in the Compose BOM the app already uses (`androidx.compose.foundation`'s gestures and scroll, `androidx.compose.ui`'s pointer input, haptics and semantics), so there's nothing to install.
+The numbers assume 4.4.0, the timer (`docs/plan_timer/`), is merged first, at `versionCode` 78; built before it, these take 78 to 80 and the timer moves up. The rules of the house hold throughout: `CLAUDE.md`, `docs/development.md`, `docs/plan_v4/architecture.md` §The rules and §Conventions. Nothing personal in code, tests, fixtures, docs or the PRs (D-79): fixtures and examples are made up. No new library: everything here is in the Compose BOM the app already uses (`androidx.compose.foundation`'s gestures and scroll, `androidx.compose.ui`'s pointer input, haptics and semantics), so there's nothing to install.
 
 Before the first edit of each release: `PROGRESS.md` from `private/tools/progress.py init`, one item a stage below with its estimate, kept current and deleted before the PR is called done; never staged. Estimates are from stages of this size in 4.3.x; the actuals go in `PROGRESS.md` as each stage ends.
 
 ## 4.5.0: a time you give, kept to the minute
 
-Read first, in full: `core/Slotter.kt` (`slot`, `lay`: its pin pass, `holding`, `place`, `carve`, `runOf`, `follows`), `core/Planner.kt` (`Input`, the building of `atPins`, `pinProblem`, `pinnedTime`, the call of `Slotter.slot`), `plan/Planning.kt` (where it builds `Planner.Input`), `core/Instructions.kt` (`InstructionState.applied`, `InstructionRules.latePin`), `felix/ChatAnswers.kt` (`movedPins`), `ui/MoveSheet.kt`, `tasks/Instructions.kt` (`laterToday`), `calendar/CalendarWriter.kt` (the hand moves), and their tests (`SlotterTest`, `PlannerTest`, `ChatAnswersTest`, `PlanSnapshotTest`).
+Read first, in full: `core/Slotter.kt` (`slot`, `lay`: its pin pass, `holding`, `place`, `carve`, `runOf`, `follows`), `core/Planner.kt` (`Input`, the building of `atPins`, `pinProblem`, `pinnedTime`, the call of `Slotter.slot`), `plan/Planning.kt` (where it builds `Planner.Input`), `core/Instructions.kt` (`InstructionState.applied`, `InstructionRules.latePin`), `felix/ChatAnswers.kt` (`movedPins`), `ui/MoveSheet.kt`, `tasks/Instructions.kt` (`laterToday`), `calendar/CalendarWriter.kt` (the hand moves), and their tests (`SlotterTest`, `PlannerTest`, `ChatTest`, where `ChatAnswers` is tested, and `PlanSnapshotTest`).
 
 ### 1. The pins' order (30 min)
 
@@ -47,6 +48,45 @@ In `Slotter.lay`'s pin pass, the loop after "Pinned: at their time where it's fr
 - Docs (§Docs, 4.5.0), then CI's command on the branch, the diff scanned (`scripts/scan-public.sh`), the PR, the reviews the owner asks for.
 - The phone session (§The phone, 4.5.0).
 
+## 4.5.1: a day for only some tasks
+
+Read first, in full: `core/Instructions.kt` (`ChangeType`, `Change`, `InstructionState`, `InstructionRules.dayCaps`, `describe`), `core/Chat.kt` (`Proposal`, and the two states' versions), `core/Planner.kt` (`Input`, `room`, `limited` and `capped`, `placeBack`, `freeUntilDue`), `plan/Planning.kt`, `enrich/InstructionAnswers.kt` (`Given`, `change`, `problem`), `enrich/InstructionPrompts.kt`, `felix/ChatPrompts.kt` (the system prompt and its Gmail variant, `plan`), `felix/ChatAnswers.kt`, `felix/FelixPrompts.kt` (`describe`), `data/Backup.kt` (its checks of each change's fields), `data/Stores.kt`, and the tests `InstructionRulesTest` (which tests `InstructionAnswers` too), `PlannerTest`, `ChatTest` (`ChatAnswers`), `ConversationTest`, `GoldenPromptsTest`, `SchemaLimitsTest`, `MigrationTest`, `StoresDecodeTest`.
+
+### 1. The change, and the stores that hold it (45 min)
+
+- `core/Instructions.kt`: `ChangeType.DayOnly`, KDoc "Only the tasks given a [DayOnly] for [Change.date] are planned on it, [Change.taskId] among them; [Change.alsoAllow] what else may come in." `Change.alsoAllow: String? = null`, KDoc "[ChangeType.DayOnly]'s day also takes Anki's cards (`anki`), or those and work that would otherwise miss its real deadline (`anki-deadlines`); else nothing." Its two values as constants on `InstructionRules`.
+- A new value in a stored enum and a new field: an older build must set the newer files aside (`docs/plan_v4/data-and-migrations.md` §Versions and migrations, rule 6). `Change` is held by the instructions (`InstructionState`) and by Felix's proposals in his messages (`Proposal.changes`, `core/Chat.kt`), so each store holding it raises its version, as 4.2.0 raised every store its facts were in: `instructions.json` 3 → 4, and `chat.json` and the archive's months by one each. `data/OnlyMigration.kt`: a `Migration` for each, changing nothing, added to each store's list in `data/Stores.kt`. A backup's parts of the instructions go through them too (rule 5), harmlessly.
+- `data/Backup.kt`'s checks of a restored change: a `DayOnly` stands with a task named, a date, and `alsoAllow` empty or one of the two values.
+- `InstructionRules.describe`: "Thu 29: only Essay", then "; Anki too" or "; Anki, and work that would miss its deadline, too".
+- Tests: `MigrationTest`'s chain for each store; `StoresDecodeTest` with a new `fixtures/stores/<date>-4.5.1/`, the latest folder copied with the raised versions and an instruction holding a `DayOnly`, the earlier folders read into the new versions; the backup's checks; `describe`.
+
+### 2. The planner (90 min)
+
+- `core/`: `data class OnlyDay(val taskIds: Set<String>, val anki: Boolean, val deadlines: Boolean)`, and `InstructionRules.onlyDays(applied, from, to): Map<LocalDate, OnlyDay>`, beside `dayCaps`: for each date, the tasks of its `DayOnly` changes; with them, the tasks whose `OnDay` for that date, or `AtTime` on it, was applied after the day's latest `DayOnly` (a later move wins); and what the latest `DayOnly` allows. A finished task stays in the set, so a day whose tasks are all done holds no work (Q14).
+- `Planner.Input.onlyDays: Map<LocalDate, OnlyDay> = emptyMap()`, from `Planning` beside `dayCaps`.
+- `Planner`: on such a day an item has no room (`room(item, day, i)` is 0) unless its task is in the set; or the day allows Anki and its task is an Anki deck's (`Source.Anki`); or the day allows deadlines, the item has a real deadline, and none of its other days up to the deadline has room for the piece (`placeBack`'s `latest` tries the other days first, then the only-day). Only-days count as `limited`, with no room for the tasks not on them, so overdue work doesn't pile into one but goes to the next day with time, as on a day you've limited. `freeUntilDue` counts the room as `room` gives it, so work an only-day pushes past its deadline is said in *won't fit* (PL-02).
+- Unchanged: the slotter; the listed tasks' pins (4.5.0's rule); a piece under way stays where it is.
+- Tests (`PlannerTest`, `InstructionRulesTest`): an only-day holds its tasks alone, the rest of its time free; its tasks planned as usual (one due later isn't pulled onto it); with an `OnDay` for a listed task, its work there first; a task not listed, given an `OnDay` for that day after the `DayOnly`, joins, and one given it before is left out; Anki's cards in only where allowed; with deadlines allowed, work with no other day before its deadline takes it and work with one doesn't; its tasks all done, the day empty; today an only-day, overdue work goes to tomorrow; *won't fit* said for work pushed past its deadline; the latest `DayOnly` sets what's allowed. With no `DayOnly`, plans are as they were (`PlanSnapshotTest` unchanged).
+
+### 3. Felix and the instruction reader (75 min)
+
+- The change in both prompts' lists of changes, after `OnDay` and `AtTime` (`felix/ChatPrompts.kt`'s system prompt in both its variants, `enrich/InstructionPrompts.kt`), in the prompts' own style. For Felix, in substance: "DayOnly: a day for only some tasks' work: no other task's work is planned on it, and the time they don't use stays free. They're planned as usual: add OnDay for one whose work should all go on that day. One change a task, each with taskId and date. alsoAllow: empty for nothing else, `anki` for Anki's cards too, `anki-deadlines` for those and work that would otherwise miss its deadline. Where the student hasn't said what else may come in, make it with alsoAllow empty, ask which in your reply and offer the three as quick replies; their answer is one DayOnly for that day with its alsoAllow, which sets what the day allows." For the instruction reader the same, but its last sentence: "Where the instruction doesn't say what else may come in, leave alsoAllow empty."
+- The schemas (`chat.schema.json`, `instruction.schema.json`, as their code builds them): `DayOnly` in the change's type enum; `alsoAllow` a plain string, empty for nothing, never nullable (`SchemaLimitsTest`).
+- `InstructionAnswers.Given.alsoAllow` (default empty); `change(g, …)`: a `DayOnly` needs a task listed and a date, and one with a weekday alone is left out ("a day only for some tasks takes a date"); `alsoAllow` kept where it's one of the two values, else nothing; `problem`'s words for what's left out.
+- Felix's context: each only-day on its day's line of the plan he reads (`ChatPrompts.plan`, which `FelixPrompts.describe` shares), with its tasks, those finished marked done, and what it allows; the changes in use say it through `describe`.
+- The join said: where a move makes a task join an only-day, the move sheet's and the Day's snackbar add "Thu 29 was only for Essay: Maths joins it"; Felix's answer gets a line from the app, as `ChatAnswers.movedPins` adds its own (`ChatAnswers.joined(changes, onlyDays)`). A move in Google Calendar joins without a word: it's yours, made there, and the day's instructions show it.
+- `ui/DayScreen.kt`: the instructions about the day (the `said-$day` item) list `DayOnly` beside `DayLimit` and `BusyTime`.
+- The goldens regenerated (`-PupdateGolden=true --tests '*GoldenPromptsTest*'`), their diff in the PR. No reading's prompt changes, so `ReadingPrompts.VERSION` stays. Every schema compiled by the API (`./gradlew testDebugUnitTest --tests '*SchemaCompileTest*' -PcheckSchemas=true`: about a cent a schema). `FelixInputsDocTest`: its made-up state given an only-day, the page written again with it.
+- At the owner's word only, a throwaway probe of a few chat turns ("only the essay on Saturday", then "Anki too") through the real prompt and parser (`ChatAnswers`), judged by what the parser makes of the answer: a handful of calls, a few cents.
+- Tests: `InstructionRulesTest` and `ChatTest` (a `DayOnly` with a date kept; with a weekday alone left out, said; `alsoAllow`'s two values kept, another dropped; `joined`'s words); `ConversationTest` through `FelixHarness` (free, the API a stand-in): an answer with `DayOnly` changes and three quick replies makes the changes and shows the replies, and a reply answered by a `DayOnly` with `anki` changes what the day allows.
+
+### 4. The release (45 min)
+
+- `app/build.gradle.kts`: 80, "4.5.1".
+- It migrates stored data: `scripts/rehearse.sh` on a recent backup of the phone's before the PR is called ready (`docs/development.md` §Building and testing).
+- CI's command on the branch; the diff scanned; the PR; the reviews the owner asks for.
+- The phone session (§The phone, 4.5.1).
+
 ## 4.6.0: the Day as a calendar
 
 Read first, in full: `ui/DayScreen.kt`, `ui/DayModel.kt`, `ui/MoveSheet.kt`, `ui/PlanCards.kt` (`NextCard`, `PieceSheet`, `WontFitTile`, `ChunkTile`), `ui/Components.kt` (`ListTile`, `SectionHeading`, `Pill`), `ui/Hint.kt`, `ui/Colours.kt`, `ui/Format.kt`, `ui/MainActivity.kt` (the tabs and the scaffold the Day sits in), `learn/CalendarTime.kt` (`read`), `learn/EventJudge.kt` (`CalendarEvent`), `core/Settings.kt`, `core/SettingsLimits.kt`, `data/Stores.kt` and a recent no-op migration (`git log --oneline -S CreditMigration`, and the timer's `data/TimerMigration.kt` once built), `data/Backup.kt` (the settings' part), and the tests `DayModelTest`, `MigrationTest`, `StoresDecodeTest`, `ArchitectureTest`.
@@ -76,7 +116,7 @@ Four commits: the move sheet's actions moved (stage 1, alone, as a move is); the
 - `learn/EventJudge.kt`, `CalendarEvent`: `val colour: Int? = null`, KDoc "Its colour as the calendar app shows it (ARGB): its own, else its calendar's; null where the provider gives none."
 - `learn/CalendarTime.read`: `CalendarContract.Instances.DISPLAY_COLOR` added to the projection (index 10), `colour = if (c.isNull(10)) null else c.getInt(10)`.
 - Not stored, not sent to Claude: check with `grep -rn "CalendarEvent(" app/src core/src` that nothing writes an event's fields whole to a store or a prompt; `FelixInputsDocTest` and `GoldenPromptsTest` stay unchanged.
-- `ui/Colours.kt`: `fun onEvent(argb: Int): Color`, black or white, whichever has the greater contrast on it (`Color.luminance()`); an event with no colour drawn in `secondaryContainer`. Test (`ColoursTest`): white on a dark blue, black on a yellow.
+- `ui/Colours.kt`: `fun onEvent(argb: Int): Color`, black or white, whichever has the greater contrast on it (`Color.luminance()`); an event with no colour drawn in `secondaryContainer`. Test (a new `ColoursTest`): white on a dark blue, black on a yellow.
 
 ### 4. The day's model and the grid's layout (90 min)
 
@@ -127,7 +167,8 @@ New `ui/DayGrid.kt`:
 
 ### 8. The release and the docs (45 min)
 
-- `app/build.gradle.kts`: 80, "4.6.0".
+- `app/build.gradle.kts`: 81, "4.6.0".
+- It migrates stored data (the settings): `scripts/rehearse.sh` on a recent backup of the phone's before the PR is called ready.
 - CI's command on the branch; `GoldenPromptsTest`, `PlanSnapshotTest` and `FelixInputsDocTest` unchanged (nothing here changes a prompt or a plan); the diff scanned; the PR; the reviews the owner asks for.
 - The phone session (§The phone, 4.6.0).
 
@@ -139,6 +180,15 @@ New `ui/DayGrid.kt`:
 - `docs/spec/slots-and-calendar.md`: §Pins (PL-04) rewritten from `README.md` §A time you give; §Hand moves, a move kept to the minute too.
 - `docs/spec/planner.md` §Days and times you gave (PL-04): "which the slotter keeps to the minute, wherever it is in the day".
 - `docs/decisions.md`: the next number, *A time you give is kept to the minute*, with the date, the owner's answer and where it applies (`Slotter.lay`, `Planner.pinProblem`, `Input.pinOrder`).
+
+**4.5.1**, in its PR:
+
+- `docs/spec/requirement-ids.md`, PL-04: a day can be kept for only some tasks (`DayOnly`), by Felix or an instruction, allowing nothing else, Anki's cards, or those and work that would otherwise miss its deadline; a task moved there later joins it.
+- `docs/spec/planner.md` §Days and times you gave (PL-04): a third kind, *a day for only some tasks*, from `README.md` §A day for only some tasks; §What won't fit: work an only-day pushes past its deadline is said.
+- `docs/spec/felix.md` §What he can do: the change, and his question with its quick replies.
+- `docs/spec/felix-inputs.md`, as `FelixInputsDocTest` writes it, with the only-day of its made-up state.
+- `docs/plan_v4/data-and-migrations.md` §The shapes, release by release: `instructions.json` at version 4, and `chat.json` and the archive's months raised (4.5.1, `DayOnly` and `alsoAllow`, nothing migrated).
+- `docs/decisions.md`: the next number, *A day for only some tasks*, with the date, the owner's answers (Q11 to Q14) and where it applies.
 
 **4.6.0**, in its PR:
 
@@ -159,6 +209,14 @@ Before each install: `private/tools/keep_before.sh <apk-name> <backup-name>`. Af
 3. With the move sheet, put piece A at a time, then piece B of another task over it. B is at its time; A after it.
 4. For a task with steps laid today, put its next piece after its later steps' times. They move after it.
 5. Take each back in *Your changes*; the plan is as it was.
+
+**4.5.1** (about 15 minutes of the owner's):
+
+1. In the chat, ask Felix to make a day this week only for one task. He makes it and asks what else may come in, with three quick replies.
+2. Tap "Anki too". On that day, only that task's work and Anki's cards; the rest of the day's work gone to other days; the time left free.
+3. Ask him to put all of that task's work on that day: it's there, first.
+4. With the move sheet, put another task on that day: it's there, and the snackbar says it joins.
+5. Take each change back in *Your changes*; the plan is as it was.
 
 **4.6.0** (about 40 minutes of the owner's), with Google Calendar's Day view open on the same day for comparison:
 
