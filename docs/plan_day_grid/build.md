@@ -33,7 +33,17 @@ In `Slotter.lay`'s pin pass, the loop after "Pinned: at their time where it's fr
 - The KDoc of `slot` and the comment over the pin pass say the new rule; `docs/spec/slots-and-calendar.md` §Pins with them (§Docs).
 - Tests (`SlotterTest`, `:core`): a pin outside every window kept at its minute, its slot's window kind the nearest window's; one over a busy event, and over a time you said you can't work (`hardBusy`), kept; home work pinned in a school window kept; two pins over each other, the first in the map kept and the second after it; the task's later steps after the pin (D-108); a kept start it covers laid afresh; no break carved outside the windows; a pin whose piece isn't over by its deadline, and one before its piece opens, moved as now; time and grace gone, laid as any piece. The tests that held the old rule (a pin not free going to the next free time) change on purpose: each named in the PR.
 
-### 3. The Day's refusals count the piece's minutes (30 min)
+### 3. The day's free time: a pin's time outside it uses none of it (45 min)
+
+The owner's word (`answers.md` §Changed at the owner's word): a piece pinned outside the day's windows doesn't use up the day's free time for the time it's outside them. The same for the part over busy time within the windows (decided without asking, 25), which is already off the day's free time and would otherwise come off it twice.
+
+- `core/Planner.kt`: `outsideFreeMin(day, start, minutes, input): Int`, pure: the minutes of `[start, start + minutes)` not in the day's free time: outside its windows (`input.windows[day]`, or your hours where it has none) or within `input.busy + input.hardBusy`.
+- Where the days are given their pieces: the task's next piece, where its pin's time (`pinnedTime`) is on the day it's placed on, takes from that day only its minutes less `outsideFreeMin`: in `take` and its reverse, in `room`/`fits` for that piece, and in the evening's time (`freeHome`) for home work. Its whole minutes still count against a day's limit (`dayCaps`, `capped`), kept apart from the free time for that (decided without asking, 26).
+- The day's free time as shown (`DayBucket.capacityMin`: the strip's bar, the Day's "planned, free", what Felix is told) is more by the same minutes, so a piece at 23:00 doesn't make the day look fuller than it is.
+- The pin's time as given is used, even where the slotter then moves it (a pin given later over it): a rare case, and the next plan counts it where it's laid only if it's pinned again.
+- Tests (`PlannerTest`): a piece pinned wholly outside the windows leaves the day's room for other work as it was, and its `capacityMin` more by its minutes; one half outside takes half; one over a busy event in a window takes none of the window's time for that overlap; home work pinned after the evening takes none of the evening's; on a day you've limited, its whole minutes count against the limit; `outsideFreeMin` at a window's edges and across midnight. With no pin outside the free time, plans are as they were (`PlanSnapshotTest`).
+
+### 4. The Day's refusals count the piece's minutes (30 min)
 
 - `Planner.pinProblem(task, at, now, zone, minutes: Int = 0)`: `PastDeadline` where the piece wouldn't be over by a real deadline still to come (`at + minutes * 60_000L > it`), not only where it would start at or after it. Callers: `ui/MoveSheet.kt` passes `chunk.minutes`; `Instructions.laterToday` passes `chunk.minutes` (it already finds a time the piece fits whole, so nothing it finds changes).
 - `pinnedTime` is unchanged: the slotter's `beforeDeadline` already keeps a piece from a pin it wouldn't be over by.
@@ -41,7 +51,7 @@ In `Slotter.lay`'s pin pass, the loop after "Pinned: at their time where it's fr
 - `ChatAnswers.movedPins`: its KDoc says what puts a pin elsewhere now (one given later over it; its deadline; its opening); its code doesn't change.
 - Tests (`PlannerTest`): a piece ending after its deadline is `PastDeadline` with its minutes, not without; overdue work any time from now, as now.
 
-### 4. The release (45 min)
+### 5. The release (45 min)
 
 - `app/build.gradle.kts`: 79, "4.5.0".
 - `./gradlew testDebugUnitTest --tests '*PlanSnapshotTest*'` and `--tests '*FelixInputsDocTest*'`: where the made-up state has a pin that wasn't free, the plan changes; written again (`-PupdateSnapshots=true`, `-PupdateDocs=true`) only once its diff is understood, the diff explained in the PR. `GoldenPromptsTest` must pass unchanged: no prompt or schema changes.
@@ -178,7 +188,7 @@ New `ui/DayGrid.kt`:
 
 - `docs/spec/requirement-ids.md`, PL-04: a time given is kept to the minute wherever it is in the day; one given over a pin given later goes to the first free time after it, and the chat says where; a pin past a real deadline is refused, while overdue work may go at any time from now.
 - `docs/spec/slots-and-calendar.md`: §Pins (PL-04) rewritten from `README.md` §A time you give; §Hand moves, a move kept to the minute too.
-- `docs/spec/planner.md` §Days and times you gave (PL-04): "which the slotter keeps to the minute, wherever it is in the day".
+- `docs/spec/planner.md` §Days and times you gave (PL-04): "which the slotter keeps to the minute, wherever it is in the day"; §A day's time (PL-15): the part of a pinned piece outside the day's free time (its windows, less busy time) takes none of it, but counts against a day's limit.
 - `docs/decisions.md`: the next number, *A time you give is kept to the minute*, with the date, the owner's answer and where it applies (`Slotter.lay`, `Planner.pinProblem`, `Input.pinOrder`).
 
 **4.5.1**, in its PR:
@@ -208,7 +218,8 @@ Before each install: `private/tools/keep_before.sh <apk-name> <backup-name>`. Af
 2. In Google Calendar, move a piece's event onto a busy event of yours. No "refused" notification; the Day keeps it there, and a piece of another task that was there moves.
 3. With the move sheet, put piece A at a time, then piece B of another task over it. B is at its time; A after it.
 4. For a task with steps laid today, put its next piece after its later steps' times. They move after it.
-5. Take each back in *Your changes*; the plan is as it was.
+5. Step 1's piece, outside the windows: the day's other work is as it was before it, and the strip's bar for the day shows its free time more by that piece's minutes.
+6. Take each back in *Your changes*; the plan is as it was.
 
 **4.5.1** (about 15 minutes of the owner's):
 

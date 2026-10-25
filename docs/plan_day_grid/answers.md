@@ -109,7 +109,7 @@ Each a routine call the owner may overturn; the alternative is named so the buil
 3. **Today's line has no label**: a line and a dot, as Google draws it; the hours in the gutter say the time. Alternative: keep "Now 16:12" in the gutter beside the dot.
 4. **Every block at least 24 dp tall**, so a short piece can still be read, tapped and swiped; **a ✓ on a piece's block** where it's at least 32 dp tall and 120 dp wide, doing what *Done* on the row does now. Alternative: no ✓, Done by the swipe and the sheet alone, as Google's blocks have no button.
 5. **An event's block**: outlined only where the plan counts it free (so a piece laid over it reads right), and a small "?" where the plan needs your answer about it; the verdict's words stay on its sheet. Alternative: the verdict as a pill on every event's block, as the row has it now, where there's room.
-6. **A pin outside the windows still counts against that day's free time**, as one inside does: the day may then hold a little less other work than its windows could. Alternative: its minutes added to that day's free time, a change to `Planner.capacityOf` and to what the strip's bar says.
+6. **Overturned by the owner** (§Changed at the owner's word): it said a pin outside the windows would still count against that day's free time. Alternative: its minutes added to that day's free time, a change to `Planner.capacityOf` and to what the strip's bar says.
 7. **Only the Day's and the move sheet's refusals count the piece's minutes** (a piece that wouldn't be over by its real deadline is refused before it's made). Felix's times (`InstructionRules.latePin`) and the calendar's hand moves keep "at or after the deadline", and a time of theirs whose piece can't be over by it is laid as now, at the next start that is, else with no time. Alternative: one rule everywhere, which needs the piece's minutes where `latePin` is checked, from the plan.
 8. **A pin outside every window takes the kind of the window nearest it in time**, for its record and for what it teaches the day yields: one in a lesson counts as school's, one late at night as the evening's. Alternative: always the evening's.
 9. **The zoom is kept in `settings.json`** (its version raised, nothing migrated), as Q7's answer said "remembered on this phone". Alternative: kept only while the app runs, back to 60 dp at each start, with no store change.
@@ -128,6 +128,16 @@ Each a routine call the owner may overturn; the alternative is named so the buil
 22. **The latest `DayOnly` of a day says what the day allows**, whichever task it names, so Felix's answer to his own question is one change. Alternative: each task's change its own allowance, the most allowing one counting.
 23. **"Work that would miss its deadline" takes the day only where no other day before its deadline has room for it**, tried last. Alternative: any work with a real deadline before the only-day's next free day.
 24. **A move in Google Calendar that makes a task join an "only" day is said nowhere but in the day's instructions**: it's yours, made there, and the app has no screen open to say it on. Alternative: a notification, as a refused move gets.
+25. **The part of a pin over busy time inside the windows uses none of the day's free time either**, as the owner's note says of the part outside the windows: that time is already off the day's free time, and would come off twice. Alternative: only the part outside the windows, as the note's words say.
+26. **A day you've limited still counts all of a pinned piece's minutes**, wherever in the day it is: the limit is "at most so much work that day", not a share of its windows. Alternative: the limit counts only the part inside the free time, as the free time does.
+
+## Changed at the owner's word
+
+After the plan was pushed, on decided-without-asking 6:
+
+> Another note on '(6) A piece pinned outside your windows still uses up that day's free time': that should not use up the free time for the time it is outside of the hours.
+
+Applied: `README.md` §A time you give, kept to the minute; `build.md` 4.5.0 stage 3, its docs and its phone session (step 5). Decisions 25 and 26 above are the two calls it left open.
 
 ## What the plan couldn't check
 
