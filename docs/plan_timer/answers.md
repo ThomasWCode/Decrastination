@@ -32,6 +32,17 @@ Applied: `README.md` §What it is (Where Start is); `build.md` stages 5 and 6.
 
 Applied: `README.md` §What it does to Felix and §What it must cope with; `build.md` stages 3 (the hold's alarm set on a Stop too) and 4 (`liftAt`).
 
+## Changed by the plan's review (#130, 25 Oct)
+
+Codex's and Claude's reviews of the plan, each finding checked against the code before the plan changed:
+
+- **A miss stale before the timer began stayed stale no more** (both reviews, Claude's one Major): the first plan shifted every record of the task's freshness to the hold's lift, so a slot missed hours earlier, never said (a busy event), came back as "you missed it" when a later timer's hold lifted. Now only a record still fresh when the timer began, or made after it, is held and shifted. `README.md` §What it does to Felix; `build.md` stage 4.
+- **A stopped timer whose piece is then done is cleared** (Codex): the first plan's settle looked at a running timer only, so a Stop then a tick left a record whose hold could lift. `keepSlot` already replaces a missed record with the kept-late one (`Keeping.replaces`), so the miss Codex described wouldn't have come back on that path; the clearing is right all the same, and the README's promise rests on it. `build.md` stage 2.
+- **The hold's alarm queues his look through `FelixWorker`** (Codex), as `SlotReceiver` does, rather than running `Looks.check` inside the receiver, whose window is seconds and whose look may call the model. `build.md` stage 3.
+- **A forgotten timer silences the slot-start nudge no longer than the slot-over message** (Claude, "the owner's call"): the skip now lasts while `now < liftAt`, 30 minutes past the zero, in place of "while running". Chosen without asking, for the owner to overturn: the alternative is the first plan's, a running timer holding the nudge for as long as it runs, days included.
+- **No draft paid for that the hold keeps unsent** (Claude): `Looks.draft` writes the slot-start nudge ahead from `FelixRules.upcoming` without `due`, so a timer started before the slot still cost a call; `upcoming` now takes the timer and passes such a slot over. `build.md` stage 4.
+- Two corrections to the text (Claude): a function named that doesn't exist (`finishKeep`), and a section cited from the owner's private notes rather than `docs/development.md`. Its third, the owner's school-day hours as a D-79 matter, was declined: the owner says school times aren't sensitive.
+
 ## Decided without asking
 
 Each a routine call the owner may overturn; the alternative is named so the build can switch.
