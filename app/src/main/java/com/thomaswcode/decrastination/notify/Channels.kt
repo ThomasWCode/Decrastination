@@ -24,7 +24,7 @@ object Channels {
     const val MODEL = "model"
     const val FREE_TIME = "free-time"
     const val FREE_TIME_ENDING = "free-time-ending"
-    /** A timer on a piece (docs/plan_timer): its countdown, silent; and its "time's up", popping up to be seen on silent too. */
+    /** A timer on a piece (D-112): its countdown, silent; and its "time's up", popping up to be seen on silent too. */
     const val TIMER = "timer"
     const val TIMER_OVER = "timer-up"
     /** "Time's up"'s first channel, at the middle level, which Android keeps as made: deleted for [TIMER_OVER]'s. */

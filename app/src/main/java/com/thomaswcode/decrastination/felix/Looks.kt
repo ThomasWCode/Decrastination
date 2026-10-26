@@ -389,7 +389,7 @@ class Looks(
             needsPhoto = { r -> r.kind == Kind.Homework && tasks[r.taskId]?.source != Source.Anki && r.plannedMin >= settings.photoFromMin },
             toAsk = toAsk,
             zone = zone,
-            // A timer on a piece holds his slot-start and slot-over messages about its task (docs/plan_timer).
+            // A timer on a piece holds his slot-start and slot-over messages about its task (D-112).
             timer = focus.timer,
         )
     }
@@ -411,7 +411,7 @@ class Looks(
         val drafted = state.draft?.takeIf { FelixRules.fits(it, trigger, now, lastSaid(), laidOf(it), FelixRules.laid(focus.plan(now), trigger, today(now))) }
         if (state.draft != null) chat.update { it.copy(felix = it.felix.copy(draft = null)) }
         val called = if (drafted != null) null else ask(caller, trigger, now, interactive = true)
-        // A timer started on its task while he was asked (docs/plan_timer): held now, so not sent; a slot's miss is said once
+        // A timer started on its task while he was asked (D-112): held now, so not sent; a slot's miss is said once
         // the hold lifts, asked afresh then.
         if (called != null && FelixRules.held(trigger, focus.timer, clock.now())) {
             Log.i(AppGraph.TAG, "Felix, ${trigger.reason} about ${trigger.key}: held by a timer started while he was asked")

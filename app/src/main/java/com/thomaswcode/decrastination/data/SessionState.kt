@@ -16,13 +16,13 @@ data class SessionState(
     val keeping: List<Keeping> = emptyList(),
     /** Completions whose free time has been given, so each is given once (`Focus.onCompleted`); kept a fortnight. */
     val rewarded: List<Rewarded> = emptyList(),
-    /** The timer on a piece (docs/plan_timer), running or stopped by hand; none once its piece is done. Not backed up: a running timer is this phone's moment. */
+    /** The timer on a piece (D-112), running or stopped by hand; none once its piece is done. Not backed up: a running timer is this phone's moment. */
     val timer: PieceTimer? = null,
     /** The shape this is in ([Migration]): raised with each change of it, a migration bringing older files to it. */
     val version: Int = 3,
 )
 
-/** A timer on a piece (docs/plan_timer): the owner's word they're on it, running from [startedAt] for [minutes]; stopped by hand, kept with [stoppedAt] till the next Start, so Felix's slot-over message waits its 30 minutes from the stop. */
+/** A timer on a piece (D-112): the owner's word they're on it, running from [startedAt] for [minutes]; stopped by hand, kept with [stoppedAt] till the next Start, so Felix's slot-over message waits its 30 minutes from the stop. */
 @Serializable
 data class PieceTimer(
     /** The piece it was started on ([com.thomaswcode.decrastination.core.Chunk.key]). */

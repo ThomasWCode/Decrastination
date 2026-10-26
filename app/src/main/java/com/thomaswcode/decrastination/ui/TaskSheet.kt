@@ -139,7 +139,7 @@ fun TaskSheet(
     val felix by graph.stores.felix.state.collectAsStateWithLifecycle()
     // A starred email's finish in Gmail, read as it goes.
     val gmail by graph.gmailFinishes.state.collectAsStateWithLifecycle()
-    // The timer on a piece, read as it starts and stops (docs/plan_timer).
+    // The timer on a piece, read as it starts and stops (D-112).
     val session by graph.stores.session.state.collectAsStateWithLifecycle()
     // His messages unread, worn by Ask Felix about it as by his button elsewhere (UI-16).
     val unread by graph.conversation.unread.collectAsStateWithLifecycle(0)
@@ -233,7 +233,7 @@ fun TaskSheet(
             invite?.let { Text("Invite: " + Format.invite(it, zone), style = MaterialTheme.typography.bodyLarge) }
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (!own) Button(onClick = { scope.launch { TaskOpener.open(activity, task)?.let { message = it } } }) { Text("Open in ${task.source.label}") }
-                // A task with no steps: a timer on its next piece in the plan (docs/plan_timer); none while the plan has none.
+                // A task with no steps: a timer on its next piece in the plan (D-112); none while the plan has none.
                 if (task.subSteps.isEmpty() && next != null) {
                     val timer = session.timer?.takeIf { it.running && it.key == next.key }
                     val timerNow = rememberTimerNow(graph, timer)
@@ -616,7 +616,7 @@ private fun Steps(graph: AppGraph, activity: Activity, task: TaskItem, now: Long
     val planned = task.plannedStepMinutes(1.0)
     Text("Steps", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     task.subSteps.forEachIndexed { index, step ->
-        // A timer on any step still to do of an open task (docs/plan_timer): Start, or Stop with its time on the one it's on.
+        // A timer on any step still to do of an open task (D-112): Start, or Stop with its time on the one it's on.
         val timer = session.timer?.takeIf { it.running && it.taskId == task.id && it.stepIndex == index }
         // A step's own date is a plan, never overdue (PL-14); one that doesn't need the steps before it says so (D-109).
         val dates = listOfNotNull(step.from?.let { "from " + Format.at(it, now, zone) }, step.dueAt?.let { Format.due(it, hard = false, now, zone) }).joinToString(", ")

@@ -790,7 +790,7 @@ object ChatPrompts {
      * piece of each task with no steps say their keys (G1), so he can keep one done, and the pieces [kept]
      * today (their keys and labels), which the plan no longer shows, so he can take one back; and after
      * the slot under way, [blocking]: whether blocking applies and why, and the free time (G5). A running
-     * [timer] (docs/plan_timer) is said with the slot under way or the next thing where it's on that task,
+     * [timer] (D-112) is said with the slot under way or the next thing where it's on that task,
      * else in a line of its own.
      */
     fun plan(plan: Plan, zone: ZoneId, kept: List<Pair<String, String>> = emptyList(), blocking: String? = null, timer: PieceTimer? = null): String = buildString {

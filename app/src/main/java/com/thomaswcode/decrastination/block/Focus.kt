@@ -865,11 +865,11 @@ class Focus(
         settleTimer()
     }
 
-    /** The timer on a piece (docs/plan_timer): running, or stopped by hand and kept till the next Start; none once its piece is done. */
+    /** The timer on a piece (D-112): running, or stopped by hand and kept till the next Start; none once its piece is done. */
     val timer: PieceTimer? get() = session.value.timer
 
     /**
-     * A timer started on [taskId]'s piece (docs/plan_timer): its [key] where it's shown, else its step [stepIndex]'s next
+     * A timer started on [taskId]'s piece (D-112): its [key] where it's shown, else its step [stepIndex]'s next
      * piece in the plan (the next of its sittings), else for a step the minutes its sheet shows, else the task's minutes
      * left, at least one. It replaces whatever timer there was, running or stopped; one already running on that piece
      * stands, so a second tap restarts nothing. Null where the task isn't open, or the step isn't there to do.

@@ -21,7 +21,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 /**
- * A timer on a piece (docs/plan_timer) on the phone: Start and Stop as the card, the sheet, the widget and its
+ * A timer on a piece (D-112) on the phone: Start and Stop as the card, the sheet, the widget and its
  * notification ask, and its notifications and alarms made to match what Focus holds ([sync]). The one place that
  * touches them; the timer itself is Focus's. It blocks nothing, earns nothing and teaches nothing: it's a countdown,
  * and your word you're on the piece, which holds Felix's messages about its task ([FelixRules.liftAt]).
@@ -97,7 +97,7 @@ object TimerAlarms {
     /**
      * The running timer's notification: its piece, its minutes and *Stop*, counting down to its zero by Android's own
      * chronometer, so nothing wakes the phone to keep it current; past its zero, "Over on", the same chronometer running
-     * on as −mm:ss (the owner's choice: docs/plan_timer/answers.md, Q2). Its tap opens the task's sheet.
+     * on as −mm:ss (the owner's choice: Q68). Its tap opens the task's sheet.
      */
     private fun running(context: Context, timer: PieceTimer) = Notify.builder(context, Channels.TIMER)
         .setContentTitle(if (timer.told) "Over on: ${timer.label}" else timer.label)

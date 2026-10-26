@@ -104,7 +104,7 @@ Applied: `README.md` §A day for only some tasks (its tasks finished early); `bu
 
 Each a routine call the owner may overturn; the alternative is named so the build can switch.
 
-1. **Three releases, after the timer.** The planner's changes (4.5.0, then 4.5.1 with Felix's) are reviewed and checked on the phone before the screen that leans on them (4.6.0); all after 4.4.0, whose plan is ready and which touches the Day only in its DO NOW card, which 4.6.0 keeps. Alternative: one release; or these before the timer, which then takes the next number.
+1. **Three releases, after the timer.** The planner's changes (4.5.0, then 4.5.1 with Felix's) are reviewed and checked on the phone before the screen that leans on them (4.6.0); all after 4.4.0, the timer (merged 26 Oct), which touched the Day only in its DO NOW card, which 4.6.0 keeps. Alternative: one release.
 2. **The card folds as Material's top bar does with `enterAlways`**: a scroll towards later hours folds it first, one towards earlier hours unfolds it first, a tap on the folded line unfolds it; in landscape it starts folded. Alternative: it unfolds only when the grid is back at its top, which, as the grid opens at the hour before now, would leave it folded most of the time.
 3. **Today's line has no label**: a line and a dot, as Google draws it; the hours in the gutter say the time. Alternative: keep "Now 16:12" in the gutter beside the dot.
 4. **Every block at least 24 dp tall**, so a short piece can still be read, tapped and swiped; **a ✓ on a piece's block** where it's at least 32 dp tall and 120 dp wide, doing what *Done* on the row does now. Alternative: no ✓, Done by the swipe and the sheet alone, as Google's blocks have no button.

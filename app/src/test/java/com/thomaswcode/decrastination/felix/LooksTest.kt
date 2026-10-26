@@ -338,7 +338,7 @@ class LooksTest {
 
     @Test
     fun `a nudge whose call was out when a timer was started on its task isn't sent`() = runBlocking {
-        // docs/plan_timer: the timer's hold asked again once his words are back.
+        // D-112: the timer's hold asked again once his words are back.
         val key = underWay()
         felix.server.dispatcher = object : Dispatcher() {
             override fun dispatch(request: RecordedRequest): MockResponse {
