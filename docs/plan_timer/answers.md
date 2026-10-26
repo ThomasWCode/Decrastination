@@ -47,6 +47,7 @@ Codex's and Claude's reviews of the plan, each finding checked against the code 
 
 Where the build found the plan wrong, or made a call it left open:
 
+- **"Time's up" pops up** (the owner, 26 Oct, from a side agent's note during the phone session): at the middle level it only sounded, so on silent its end showed as an icon in the shade; it's at the high level now, as free time's last minute is, on a channel of its own (`timer-up`), the first one (`timer-over`) deleted, as Android keeps a channel's level as it was made.
 - **A reset leaves the timer.** The plan had *Everything learned* clear `session.json`; no reset touches it (`Stores.all`: the store has no resets), and *Everything learned* is "all of these" (the stats, the calibration, what Felix remembers, the chat, your changes), none of which is the timer. So a reset leaves it, as it leaves today's slots and free time; **Stop** ends it. Alternative: *Everything learned* clears the timer too, its description saying so.
 - **Start pokes no plan.** The plan had it make the plan again so the Day and the widget redraw; the Day reads the timer itself, and the widget redraws at every change to `session.json` (`AppGraph`'s collector), so a replan would cost its hooks for nothing.
 - **A Start from a step on the sheet counts the step's next piece in the plan**, its next sitting where it's cut into sittings, rather than the piece keyed by the step alone, which is its last sitting.

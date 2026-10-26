@@ -32,7 +32,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -74,7 +73,6 @@ import java.time.ZoneId
 import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -238,8 +236,9 @@ fun TaskSheet(
                 // A task with no steps: a timer on its next piece in the plan (docs/plan_timer); none while the plan has none.
                 if (task.subSteps.isEmpty() && next != null) {
                     val timer = session.timer?.takeIf { it.running && it.key == next.key }
+                    val timerNow = rememberTimerNow(graph, timer)
                     if (timer != null) {
-                        FilledTonalButton(onClick = { scope.launch { said = TimerAlarms.stop(activity) } }) { Text("Stop (${timerText(timer, now).removePrefix("Timer: ")})") }
+                        FilledTonalButton(onClick = { scope.launch { said = TimerAlarms.stop(activity) } }) { Text("Stop (${timerText(timer, timerNow).removePrefix("Timer: ")})") }
                     } else {
                         OutlinedButton(onClick = { scope.launch { said = TimerAlarms.start(activity, task.id, next.stepIndex, next.key) } }) { Text("Start") }
                     }
@@ -611,13 +610,8 @@ private fun Steps(graph: AppGraph, activity: Activity, task: TaskItem, now: Long
     if (task.subSteps.isEmpty()) return
     val scope = rememberCoroutineScope()
     val session by graph.stores.session.state.collectAsStateWithLifecycle()
-    // The timer's time, kept current while the sheet is open.
-    val ticking by produceState(now) {
-        while (true) {
-            delay(60_000)
-            value = graph.clock.now()
-        }
-    }
+    // The timer's time on its task's steps, kept current while the sheet is open.
+    val ticking = rememberTimerNow(graph, session.timer?.takeIf { it.running && it.taskId == task.id })
     // As the plan shares them: your minutes over its steps add up to exactly yours.
     val planned = task.plannedStepMinutes(1.0)
     Text("Steps", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)

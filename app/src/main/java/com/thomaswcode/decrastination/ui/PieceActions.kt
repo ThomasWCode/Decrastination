@@ -16,6 +16,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.Saver
@@ -39,6 +40,7 @@ import com.thomaswcode.decrastination.data.PieceTimer
 import com.thomaswcode.decrastination.enrich.PhotoChecker
 import java.io.File
 import kotlin.math.roundToInt
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
@@ -199,6 +201,22 @@ internal fun timerText(timer: PieceTimer, now: Long): String = when {
 }
 
 /**
+ * The clock [timer]'s time is told by on screen: read afresh at each of its whole minutes from its start, as its
+ * minutes left turn then, rather than the screen's own minute, which can be from before the Start.
+ */
+@Composable
+internal fun rememberTimerNow(graph: AppGraph, timer: PieceTimer?): Long {
+    val now by produceState(graph.clock.now(), timer) {
+        while (true) {
+            value = graph.clock.now()
+            val t = timer ?: break
+            delay(60_000L - Math.floorMod(value - t.startedAt, 60_000L))
+        }
+    }
+    return now
+}
+
+/**
  * What can be done with [piece], wherever it's shown (Day, the block screen): **Open** goes to
  * the task; **Start** runs a timer on it, and **Stop** stops the one on it, its time over the buttons
  * (docs/plan_timer); **Done** keeps its slot (LR-09); **Check it's done** asks its source (**All of it done**,
@@ -212,7 +230,8 @@ fun PieceActions(graph: AppGraph, activity: Activity, piece: Chunk, now: Long, p
     val scope = rememberCoroutineScope()
     // The timer running on this piece, if it's this one's.
     val timer = session.timer?.takeIf { it.running && it.key == piece.key }
-    timer?.let { Text(timerText(it, now), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary) }
+    val timerNow = rememberTimerNow(graph, timer)
+    timer?.let { Text(timerText(it, timerNow), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary) }
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Button(onClick = {
             tasks.tasks.firstOrNull { it.id == piece.taskId }?.let { task ->

@@ -111,13 +111,14 @@ object TimerAlarms {
         .let { Notify.button(it, context, "Stop", NoticeId.Timer.code(1), Intent(context, TimerReceiver::class.java).setAction(ACTION_STOP)) }
         .build()
 
-    /** "Time's up", heard once at its zero, whatever the hour: you started it, and it isn't Felix's. */
+    /** "Time's up", once at its zero, popping up whatever the hour: you started it, and it isn't Felix's. */
     private fun over(context: Context, timer: PieceTimer) {
         AppGraph.get(context).notifier.post(
             NoticeId.TimerOver,
             Notify.builder(context, Channels.TIMER_OVER)
                 .setContentTitle("Time's up: ${timer.label}")
                 .setContentText("${Format.minutes(timer.minutes)} on it. Tick it when it's done, or stop the timer.")
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .setCategory(NotificationCompat.CATEGORY_REMINDER)
                 .setAutoCancel(true)
                 .let { Notify.opening(it, context, NoticeId.TimerOver.code(), sheet(context, timer)) }

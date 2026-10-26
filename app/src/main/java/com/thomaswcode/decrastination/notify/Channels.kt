@@ -24,9 +24,11 @@ object Channels {
     const val MODEL = "model"
     const val FREE_TIME = "free-time"
     const val FREE_TIME_ENDING = "free-time-ending"
-    /** A timer on a piece (docs/plan_timer): its countdown, silent; and its "time's up", heard. */
+    /** A timer on a piece (docs/plan_timer): its countdown, silent; and its "time's up", popping up to be seen on silent too. */
     const val TIMER = "timer"
-    const val TIMER_OVER = "timer-over"
+    const val TIMER_OVER = "timer-up"
+    /** "Time's up"'s first channel, at the middle level, which Android keeps as made: deleted for [TIMER_OVER]'s. */
+    private const val TIMER_OVER_QUIET = "timer-over"
     /** Everything Felix says (AI-24, LR-03): his one notification, made from the chat. */
     const val FELIX = "felix"
 
@@ -77,6 +79,7 @@ object Channels {
         }
         // Sessions are gone (AR-09): their channel, and a session's notification left on it, with them.
         if (manager.getNotificationChannel(SESSION) != null) manager.deleteNotificationChannel(SESSION)
+        if (manager.getNotificationChannel(TIMER_OVER_QUIET) != null) manager.deleteNotificationChannel(TIMER_OVER_QUIET)
         manager.createNotificationChannels(
             listOf(
                 NotificationChannel(SYNC, "Reading your tasks", NotificationManager.IMPORTANCE_MIN).apply {
@@ -101,11 +104,12 @@ object Channels {
                 NotificationChannel(FREE_TIME_ENDING, "Free time running out", NotificationManager.IMPORTANCE_HIGH).apply {
                     description = "A minute before your free time runs out and the app is covered"
                 },
-                // Silent while it counts down; heard once at its zero, whatever the hour, as you started it.
+                // Silent while it counts down; at its zero once, popping up as free time's last minute does, so it's seen on
+                // silent too, whatever the hour, as you started it.
                 NotificationChannel(TIMER, "Timer", NotificationManager.IMPORTANCE_LOW).apply {
                     description = "A timer you started on a piece of work, counting down"
                 },
-                NotificationChannel(TIMER_OVER, "Timer over", NotificationManager.IMPORTANCE_DEFAULT).apply {
+                NotificationChannel(TIMER_OVER, "Timer over", NotificationManager.IMPORTANCE_HIGH).apply {
                     description = "When a timer you started reaches its end"
                 },
             ),
