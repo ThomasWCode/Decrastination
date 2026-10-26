@@ -66,10 +66,11 @@ Read first, in full: `core/Slotter.kt` (`slot`, its outside pass and `choices`, 
 
 `Slotter.slot`'s outside pass, for each break (`outsideTimes`, sorted, as now), by its start kept from the last plan, `previous["outside:<minute>"]` (today's only, as for work):
 
-- **Under way** (its kept start at or before now, its end after it): laid at its kept start, whatever the free time, and never given up for work: in every one of `choices`, its time carved first and out of `room`.
+- **Under way** (its kept start at or before now, its end after it): laid at its kept start, whatever the free time and whatever the settings now say, and never given up for work: laid before `found`, the fold (`choices`) and its cap, its time carved first and out of `room`. The early return (`!outside || outsideBreaks <= 0`) covers only the breaks still to come.
 - **Completed** (its end at or before now): not laid, and never laid again that day. No grace: grace is for a piece still to tick, and a break has nothing to tick.
 - **Still to come** (its kept start after now): laid afresh as now, at or after its time. Its time doesn't move, so it doesn't drift, and busy time or the day's work may have changed since.
 - **None kept, its time gone** (no plan laid it: the phone off, the day's first plan made after its time, or given up for work then freed): laid from now as now, while it can be over by the next one's time; kept from then on.
+- **The count**: `outsideBreaks` counts the day's breaks begun, under way or completed. The fold chooses among those still to come, at most `outsideBreaks` less those begun, so a day never has more breaks than the setting says: with it at 1, the morning's completed, no afternoon one is laid.
 
 `plan/Planning.keepSlots`: the starts kept are today's slots', breaks too (`made.todaySlots.associate { it.key to it.start }`), and with them each break's start from the last `previous` that has begun and is no longer in the plan (completed), so the next plan knows it's done. A new day starts empty, as now (`SlotState.on`).
 
@@ -77,7 +78,7 @@ A break's key in `previous` is safe where it's read: `SlotState.released` (by a 
 
 ### 3. Tests (25 min)
 
-- `SlotterTest`: the 13:00 break laid at 12:58, then planned at 13:02, 13:11 and 13:19 with its kept start: 13:00–13:20 each time; at 13:20 and after, not laid, and not from now; a break under way kept though the work would give it up; one still to come laid at its time, not its kept start, once busy time moves it; none kept and its time gone, laid from now (the test that holds that now, its key changed); its key `outside:780` wherever it's laid.
+- `SlotterTest`: the 13:00 break laid at 12:58, then planned at 13:02, 13:11 and 13:19 with its kept start: 13:00–13:20 each time; at 13:20 and after, not laid, and not from now; a break under way kept though the work would give it up; one still to come laid at its time, not its kept start, once busy time moves it; none kept and its time gone, laid from now (the test that holds that now, its key changed); its key `outside:780` wherever it's laid; with `outsideBreaks` at 1, the midday break under way kept and no other laid, and the morning's completed leaving no other; with it at 0, a break under way kept.
 - The keeping: a completed break's start carried over by `keepSlots` (wherever its test reaches it: a `SlotState` function for it, if that's simpler to test); a new day empty.
 - `PlannerTest`: a Saturday planned at 12:58, 13:02, 13:11 and 13:25, each with the last plan's `previousSlots`: the break where it was, then gone, the work after it unmoved.
 - `SlotCalendarDiffTest`: a break's URI by its own time.
@@ -101,6 +102,7 @@ Read first, in full: what 4.5.1's read-first list names (`core/Instructions.kt`,
   - `NoOutside`: [Change.date]'s break of [Change.outsideMin] not laid; -1, none of the day's;
   - `OutsideAdded`: a break at [Change.startMin] on [Change.date], whatever kind of day.
 - `Change.outsideMin: Int = -1`.
+- `core/Plan.kt`: `Slot.outsideAdded: Boolean = false`, a break an `OutsideAdded` made; `Slot.key` gives it `outside+:<minute>`.
 - New enum values and a field: `instructions.json`, `chat.json` and the archive's months each raised one more, as 4.5.1 raises them (`data/OutsideMigration.kt`, migrations changing nothing, `docs/plan_v4/data-and-migrations.md` §Versions and migrations, rule 6). `data/Backup.kt`'s checks of a restored change: each with a date, `OutsideAt` and `OutsideAdded` with a minute of the day.
 - `InstructionRules.describe`: "Sat 31: the 13:00 break outside at 14:30", "Sat 31: no 13:00 break outside", "Sat 31: no breaks outside", "Tue 27: a break outside at 17:00".
 - Tests: `MigrationTest`'s chains; `StoresDecodeTest` with a new `fixtures/stores/<date>-4.5.2/`; the backup's checks; `describe`.
@@ -111,11 +113,13 @@ Read first, in full: what 4.5.1's read-first list names (`core/Instructions.kt`,
 - In the outside pass:
   - a break that's off isn't laid;
   - one moved is laid at its time to the minute, as 4.5.0 keeps pins: over busy time or outside the windows kept, the work laid around it;
-  - one added is laid so too, keyed `outside:<its startMin>`, on any day (`outside` false lays only the added ones);
+  - one added is laid so too, on any day (`outside` false lays only the added ones), keyed `outside+:<its startMin>` (`Slot.outsideAdded`), so it never shares a key or a calendar URI with a settings break; one at a minute the day's settings breaks have (`outsideTimes` restored from a backup that differs, say) isn't laid, the day already having a break then;
+  - moved and added breaks are laid before `found`, the fold and its cap, as 4.4.1 lays a break under way, and the early return covers only the settings' breaks still to come, so with `outsideBreaks` at 0 they're laid all the same;
+  - a moved break is one of the settings' breaks, so it counts towards `outsideBreaks` (the fold choosing among the rest, fewer by it); an added one is over and above them, and doesn't;
   - a break you or Felix placed is never given up for work (D-4), and the 18:00 of D-41 is the app's own rule, not his;
   - over a pin, the one given last keeps its time, as 4.5.0's pins between themselves (`Input.pinOrder` counts the breaks' changes too).
 - 4.4.1's four cases hold for every break: a moved one under way stays, one completed drops out.
-- Tests (`SlotterTest`, `PlannerTest`, `InstructionRulesTest`): each change; the latest for a break wins; a moved break kept over an event and after 18:00; never given up; an added one on a school day; one off, its time to work; each taken back, the day as it was; with none, plans as they were (`PlanSnapshotTest` unchanged).
+- Tests (`SlotterTest`, `PlannerTest`, `InstructionRulesTest`): each change; the latest for a break wins; a moved break kept over an event and after 18:00; never given up; an added one on a school day; with `outsideBreaks` at 0, a moved and an added break laid; with it at 1 and the morning's moved, no other settings break; an added one at a settings break's minute not laid; one off, its time to work; each taken back, the day as it was; with none, plans as they were (`PlanSnapshotTest` unchanged).
 
 ### 3. Felix, the instruction reader and the calendar (45 min)
 
@@ -123,9 +127,9 @@ Read first, in full: what 4.5.1's read-first list names (`core/Instructions.kt`,
 - The schemas (`chat.schema.json`, `instruction.schema.json`): the three in the change's type enum; `outsideTime` a plain "HH:MM" string, empty for none, never nullable (`SchemaLimitsTest`).
 - `InstructionAnswers.change`: a date, not a weekday (left out, said); the break `OutsideAt` or `NoOutside` names one that day has (its `outsideTimes` on a weekend's kind of day, or an added one), else left out ("there's no 13:00 break outside that day"); a time today not gone; an added one at a break's time, or a move over another of the day's breaks, left out, said.
 - What he's told: today's breaks among today's slots in `ChatPrompts.plan` ("13:00–13:20 Outside, the 13:00 break"; moved, "the 13:00 break, moved by you" or "by Felix"; completed ones not listed), and the week's later days' break times on their lines; today's in `FelixPrompts.describe` too, so a look of his knows a break is under way.
-- A break's event moved in Google Calendar: `SlotCalendarDiff.diff` takes it as a hand move and refuses it ("a break outside is moved by asking Felix"), written back, `SlotCalendar.sayRefused` saying so, as a refused piece's move is said now.
+- A break's event moved in Google Calendar, in two places: `SlotCalendarDiff.diff`, which is pure and only finds moves, loses its `want.taskId != null` guard, so a moved break comes out a `HandMove` and not an update; and the `refuses` lambda `CalendarWriter.writeSlots` hands `write` checks `move.desired.taskId == null` first, refusing it with "a break outside is moved by asking Felix" (not "its task is no longer there", which a break with no task would be told otherwise). Written back, `SlotCalendar.sayRefused` says so, as a refused piece's move is said now; the loop over the moves taken skips a break already (`taskId ?: continue`), and none is taken.
 - The goldens regenerated (`-PupdateGolden=true --tests '*GoldenPromptsTest*'`: `chat.txt`, `chat-gmail-off.txt`, `chat.schema.json`, `instruction.txt`, `instruction.schema.json`), their diff in the PR; no reading's prompt changes, so `ReadingPrompts.VERSION` stays. Every schema compiled by the API (`./gradlew testDebugUnitTest --tests '*SchemaCompileTest*' -PcheckSchemas=true`: about a cent a schema). `FelixInputsDocTest`: its made-up Saturday given a moved break, the page written again.
-- Tests: `InstructionRulesTest` and `ChatTest` (each change parsed and kept; a weekday alone, an unknown break, a time gone and an overlap left out, their words); `ConversationTest` through `FelixHarness` (free, the API a stand-in): "no midday break on Saturday" answered with a `NoOutside` makes it; `SlotCalendarDiffTest`: a break moved by hand refused.
+- Tests: `InstructionRulesTest` and `ChatTest` (each change parsed and kept; a weekday alone, an unknown break, a time gone and an overlap left out, their words); `ConversationTest` through `FelixHarness` (free, the API a stand-in): "no midday break on Saturday" answered with a `NoOutside` makes it; `SlotCalendarDiffTest`: a break moved by hand is a `HandMove`; `CalendarWriterTest`, where the lambda is: it's refused with its own words, written back, and no change made.
 - At the owner's word only, a throwaway probe of a few chat turns ("move Saturday's 13:00 break to 14:30", "no breaks on Sunday", "a break at 17:00 tomorrow") through the real prompt and `ChatAnswers`: a handful of calls, a few cents.
 
 ### 4. The release (~10 min of docs, ~5 of CI and the PR, ~80 of reviews)
