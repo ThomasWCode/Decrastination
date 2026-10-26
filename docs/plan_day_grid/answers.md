@@ -115,7 +115,7 @@ Each a routine call the owner may overturn; the alternative is named so the buil
 9. **The zoom is kept in `settings.json`** (its version raised, nothing migrated), as Q7's answer said "remembered on this phone". Alternative: kept only while the app runs, back to 60 dp at each start, with no store change.
 10. **A second first-run hint** for the drag, which nothing on the screen shows: "Hold a piece to move it: drag it to a time, or onto a day above." Alternative: none.
 11. **Let go on its own day in the strip, nothing changes**, as that's most likely a drop that missed. Alternative: all of the task pinned to that day (an `OnDay` change), as the move sheet's *All of it, any time that day* does when its own day is picked.
-12. **Events, records and outside breaks don't drag**: events are the calendar's, records history, and a break outside the app's own, put back by the calendar's hand moves already.
+12. **Overturned by the owner** (§Changed at the owner's word): it said events, records and outside breaks don't drag, a break outside being the app's own, put back by the calendar's hand moves already. Events and records still don't: events are the calendar's, records history.
 13. **The grid is the wall clock's day**: on the day the clocks go back, the repeated hour is drawn once, two things in it side by side; on the day they go forward, its missing hour is empty. Alternative: a 23- or 25-hour grid on those days, which Google doesn't draw either.
 14. **The header's chips' words**: "2 won't fit", "3 with no time", "40 min done", "Instructions · 2", or "Instruction…" where there's none; the sheets they open hold what the list held, as it was worded.
 15. **The drag's numbers**: five-minute steps; the grid scrolls when the finger is within 48 dp of its edge, up to 12 dp a frame; settled on the phone.
@@ -138,6 +138,12 @@ After the plan was pushed, on decided-without-asking 6:
 > Another note on '(6) A piece pinned outside your windows still uses up that day's free time': that should not use up the free time for the time it is outside of the hours.
 
 Applied: `README.md` §A time you give, kept to the minute; `build.md` 4.5.0 stage 3, its docs and its phone session (step 5). Decisions 25 and 26 above are the two calls it left open.
+
+On decided-without-asking 12, on 26 Oct, while the breaks outside's plan was made ([`plan_outside_breaks/`](../plan_outside_breaks/README.md), its Q2: Felix to move them, and you on the grid alone), with the ask:
+
+> you should not be able to drag outside events between days
+
+Applied: `README.md` §The blocks and §Moving a piece by hand (a break drags within its own day, by 4.5.2's `OutsideAt`; on a day of the strip it springs back); `build.md` 4.6.0 stages 1 (`Moves.outsideTo`) and 7, its docs and its phone session (step 8).
 
 ## What the plan couldn't check
 

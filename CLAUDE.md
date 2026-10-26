@@ -11,6 +11,7 @@ Every Claude session in this repository reads this file: the reviewer GitHub Act
 - `docs/spec/`: how each area works now, naming its code. A change in behaviour updates its file in the same PR.
 - `docs/plan_v4/`: the 4.x plan's record, done in Oct 2026. `README.md` says what was built, release by release, and what's left; `architecture.md` the structure the code has and the conventions it keeps to; `data-and-migrations.md` how stored data changes; `answers.md` the questions the plan asked and the owner's answers, and the timer's (4.4.0) with the choices made in building it.
 - `docs/plan_day_grid/`: the plan for the Day as a calendar (4.5.0 to 4.6.0), not yet built: what it does, its stages, and the owner's answers.
+- `docs/plan_outside_breaks/`: the plan for breaks outside kept once begun (4.4.1) and moved by Felix (4.5.2), not yet built: the bug, its stages, and the owner's answers.
 - `docs/astra-review-4.3.13/`: the review of 4.3.13 and what became of each finding.
 
 ## What matters most here
