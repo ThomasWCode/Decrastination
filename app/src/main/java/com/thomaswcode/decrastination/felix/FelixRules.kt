@@ -68,6 +68,20 @@ object FelixRules {
     /** Whether [timer] holds his messages about [taskId] at [now]: it's on that task, and its hold hasn't lifted. */
     private fun holds(timer: PieceTimer?, taskId: String, now: Long): Boolean = timer != null && timer.taskId == taskId && now < liftAt(timer)
 
+    /** Whether [timer] could have covered [record]: on its task, and the record still fresh when it began, or made after it. */
+    private fun covers(timer: PieceTimer?, record: SlotRecord): Boolean = timer != null && record.taskId == timer.taskId && record.at + FRESH_MS > timer.startedAt
+
+    /**
+     * Whether [timer] holds [trigger]'s message at [now] (docs/plan_timer): a SlotStart about its task while it runs, or a
+     * SlotEnd on a record it could have covered, till its hold lifts. [due] keeps such a message back; this is asked again
+     * once his words are back, as a Start can come while he's asked.
+     */
+    fun held(trigger: Trigger, timer: PieceTimer?, now: Long): Boolean = when (trigger.reason) {
+        Reason.SlotStart -> timer?.running == true && trigger.taskId?.let { holds(timer, it, now) } == true
+        Reason.SlotEnd -> trigger.record?.let { covers(timer, it) && holds(timer, it.taskId, now) } == true
+        else -> false
+    }
+
     /**
      * The reason to write now, if any, in this order: nothing in quiet hours or a busy event; a slot
      * gone by undone (SlotEnd), or kept without the photo it [needsPhoto] to earn, asked about once;
@@ -101,7 +115,7 @@ object FelixRules {
         // A record the timer could have covered (one still fresh when it began, or made after it): its SlotEnd waits
         // while the timer holds, and is fresh from the hold's lift, or its own time where that's later. Any other is
         // fresh from its own time, so a miss stale before the timer began isn't brought back by the lift.
-        fun covered(record: SlotRecord) = timer != null && record.taskId == timer.taskId && record.at + FRESH_MS > timer.startedAt
+        fun covered(record: SlotRecord) = covers(timer, record)
         fun freshEnd(record: SlotRecord) = if (covered(record)) !holds(timer, record.taskId, now) && now - maxOf(record.at, liftAt(timer!!)) <= FRESH_MS else fresh(record)
         // One whose call didn't come back waits to be tried again; the rest go on meanwhile.
         fun waiting(reason: Reason, key: String?) = state.retry?.let { it.reason == reason.name && it.key == key && now < it.notBefore } == true

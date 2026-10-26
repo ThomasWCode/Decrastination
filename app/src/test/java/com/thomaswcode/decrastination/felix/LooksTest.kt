@@ -27,6 +27,9 @@ import kotlin.test.assertTrue
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import okhttp3.mockwebserver.Dispatcher
+import okhttp3.mockwebserver.MockResponse
+import okhttp3.mockwebserver.RecordedRequest
 
 /**
  * His looks (LR-03) on temporary stores (docs/plan_v4/architecture.md §The rules), his message read by the real
@@ -331,5 +334,22 @@ class LooksTest {
         /** His morning's answer, the worksheet's first two steps rebalanced. */
         const val REBALANCED = """{"message":"morning. question 1 at break, the rest tonight.","replies":[],"nextCheckMin":null,"memories":[],
             "rebalances":[{"taskId":"teams:sheet","stepIndex":0,"firstTitle":"Question 1","firstMinutes":25,"secondTitle":"Questions 2 and 3","secondMinutes":40}]}"""
+    }
+
+    @Test
+    fun `a nudge whose call was out when a timer was started on its task isn't sent`() = runBlocking {
+        // docs/plan_timer: the timer's hold asked again once his words are back.
+        val key = underWay()
+        felix.server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                // Start tapped while he's asked.
+                runBlocking { felix.focus.startTimer("teams:sheet", null, key) }
+                return felix.answer("""{"message":"Ten minutes in: started the worksheet?","replies":[],"nextCheckMin":15,"memories":[]}""")
+            }
+        }
+        felix.looks.check()
+        assertEquals(1, felix.server.requestCount)
+        assertTrue(stores.chat.value.messages.none { it.kind == MessageKind.SlotStart })
+        assertNull(felix.ports.showing)
     }
 }

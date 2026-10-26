@@ -342,4 +342,25 @@ class FelixRulesTest {
         val chat = ChatPrompts.plan(plan.copy(now = now), LONDON, timer = running)
         assertTrue(", timer on it since 17:02, 20 min left" in chat.lines().first { it.startsWith("Now: ") }, chat)
     }
+
+    @Test
+    fun `a message asked for is held once a timer started meanwhile holds it`() {
+        val a = first.chunk!!.taskId
+        val start = FelixRules.Trigger(Reason.SlotStart, slot = first)
+        val now = first.start + 10 * 60_000L
+        assertFalse(FelixRules.held(start, null, now))
+        assertTrue(FelixRules.held(start, timer(a, now - 5_000L), now))
+        assertFalse(FelixRules.held(start, timer(second.chunk!!.taskId, now - 5_000L), now))
+        assertFalse(FelixRules.held(start, timer(a, now - 5_000L, stoppedAt = now - 1_000L), now))
+        // A miss: held by a timer that could have covered it, till its hold lifts; one stale before it began isn't its.
+        val missed = record(first.chunk!!.key, SlotOutcome.Missed, first.start, first.end + Slotter.GRACE_MS)
+        val end = FelixRules.Trigger(Reason.SlotEnd, record = missed)
+        val after = timer(a, missed.at + 5_000L)
+        assertTrue(FelixRules.held(end, after, missed.at + 10_000L))
+        assertFalse(FelixRules.held(end, after, FelixRules.liftAt(after)))
+        val late = timer(a, missed.at + FelixRules.FRESH_MS + 60_000L)
+        assertFalse(FelixRules.held(end, late, late.startedAt + 10_000L))
+        // His other messages are never the timer's to hold.
+        assertFalse(FelixRules.held(FelixRules.Trigger(Reason.SlotKept, record = missed), after, missed.at + 10_000L))
+    }
 }

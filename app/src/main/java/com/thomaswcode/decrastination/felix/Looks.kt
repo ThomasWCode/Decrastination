@@ -411,6 +411,12 @@ class Looks(
         val drafted = state.draft?.takeIf { FelixRules.fits(it, trigger, now, lastSaid(), laidOf(it), FelixRules.laid(focus.plan(now), trigger, today(now))) }
         if (state.draft != null) chat.update { it.copy(felix = it.felix.copy(draft = null)) }
         val called = if (drafted != null) null else ask(caller, trigger, now, interactive = true)
+        // A timer started on its task while he was asked (docs/plan_timer): held now, so not sent; a slot's miss is said once
+        // the hold lifts, asked afresh then.
+        if (called != null && FelixRules.held(trigger, focus.timer, clock.now())) {
+            Log.i(AppGraph.TAG, "Felix, ${trigger.reason} about ${trigger.key}: held by a timer started while he was asked")
+            return null
+        }
         val answer = drafted?.answer ?: (called as? Called.Answered)?.value?.answer
         val text = answer?.message.orEmpty()
         val next = now + (answer?.nextCheckMin ?: settings.felixDefaultCheckMin).coerceAtLeast(FelixAnswers.MIN_CHECK_MIN) * 60_000L
