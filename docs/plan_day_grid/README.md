@@ -18,6 +18,8 @@ Where this folder and the code disagree once the releases are merged, the code a
 - **4.5.1: a day for only some tasks.** The planner, Felix's prompts and schemas, and a stored change's new shape: reviewed and checked apart from the screen too, as it raises stored data's versions and changes goldens.
 - **4.6.0: the Day as a calendar.** The grid, its header, its blocks and the drag, on 4.5.0's rule.
 
+Two releases of the breaks outside's plan ([`plan_outside_breaks/`](../plan_outside_breaks/README.md), 26 Oct) fall among them: 4.4.1, a break kept once begun, before 4.5.0; and 4.5.2, Felix moving, skipping and adding breaks (`OutsideAt`, `NoOutside`, `OutsideAdded`), between 4.5.1 and 4.6.0, whose drag moves a break within its day by 4.5.2's `OutsideAt` (§Moving a piece by hand).
+
 All three come after 4.4.0, the timer (D-112, merged 26 Oct); none touches what the timer changed but the Day's DO NOW card, its **Start** and **Stop** among its actions, which 4.6.0 keeps as it is.
 
 ## What the Day looks like (4.6.0)
@@ -51,12 +53,12 @@ Top to bottom, under the app's bar and tabs, which don't change (UI-17, UI-18):
 | A piece ahead | navy (`primaryContainer`): its label, its times, then as its height allows its reason (`Chunk.whyLine`), its first step ("First: …", AI-15) and the last thing said about its task; urgent, a red edge on its left; a ✓ at its right where it's at least 32 dp tall and 120 dp wide | its piece's sheet (`PieceSheet`) | right to left: Done, with Undo; left to right: later today (today's only) | drag (below) |
 | The piece under way | the same in `primary`, its times followed by " · now" | as above | as above | as above |
 | A piece gone by, not yet moved | faded, " · gone by" | as above | as above | as above |
-| A break outside | a pale strip, "Outside" | none | none | none |
+| A break outside | a pale strip, "Outside" | none | none | drag within its day, not under way (below) |
 | A slot kept, or kept late | grey, its label struck through, its outcome | none | none | none |
 | A slot missed | outlined and worded in the error colour, "Missed" | none | none | none |
 | An event | its colour (the event's own, else its calendar's); its words black or white, whichever reads better on it; outlined only where the plan counts it free; a small "?" where the plan needs your answer about it (`EventJudge.Judgement.Ask`, not asked yet) | its event sheet (`EventSheet`, as now) | none | none |
 
-For TalkBack, each piece's block offers *Done*, *Later today* and *Move it* (the move sheet, `ui/MoveSheet.kt`), so nothing needs the drag or a swipe.
+For TalkBack, each piece's block offers *Done*, *Later today* and *Move it* (the move sheet, `ui/MoveSheet.kt`), so nothing needs the drag or a swipe; a break outside is moved without the drag by asking Felix (4.5.2).
 
 ### Moving a piece by hand (UI-04)
 
@@ -65,9 +67,10 @@ For TalkBack, each piece's block offers *Done*, *Later today* and *Move it* (the
 - **Refused**, the block springs back and the snackbar says why, in the move sheet's words: the time's gone; it can't be started till then; it's due before its piece would be over (a real deadline still to come; overdue work goes anywhere from now, D-30).
 - **A later piece of its task** can't take a time (PL-04): let go on the grid, it springs back, "Only its next piece takes a time: drag it onto a day above".
 - **Let go on a day of the strip**: all of its task on that day (`OnDay`), as the move sheet's *All of it, any time that day*, with its check (a time you gave in the chat holding it on that day is taken back there first). While dragging, the days it can't go to are dimmed, as the move sheet's chips are: after a real deadline still to come, before it can start. Let go on its own day, nothing changes.
+- **A break outside** drags up and down its own day only (the owner's word, `answers.md` §Changed at the owner's word): let go on the grid, it takes that time, an `OutsideAt` change of yours for that date ("Outside at Sat 31 14:30", 4.5.2), kept to the minute as a pin is, the work laid around it, undone in the chat's *Your changes*; let go on a day of the strip, it springs back, "A break outside stays on its day"; under way, it doesn't lift (`plan_outside_breaks/`: a break begun stays where it is till its end).
 - **Let go anywhere else**, nothing changes.
 - **The move sheet stays**: TalkBack's *Move it* opens it, for the fortnight and a time by the clock; the task sheet's *Change* keeps its days (UI-09).
-- **Events, records and outside breaks don't move**: events are the calendar's own, moved in Google Calendar; a break outside is the app's, as the calendar's hand moves already treat it.
+- **Events and records don't move**: events are the calendar's own, moved in Google Calendar; records are what happened.
 
 ### Colours
 
