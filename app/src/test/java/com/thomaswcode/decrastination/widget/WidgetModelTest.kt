@@ -188,6 +188,18 @@ class WidgetModelTest {
             assertNull(model.timerPill)
         }
     }
+
+    @Test
+    fun `play starts on the piece shown, or its task's next once the plan has moved on, and on nothing once the task has none`() {
+        val tasks = listOf(task("Essay", "2026-10-09T21:00", effort = 20), task("Chapter 17", "2026-10-09T23:59", effort = 30))
+        val plan = Planner.plan(Planner.Input(tasks, now, LONDON, Settings(boxMin = 45)))
+        val essay = plan.chunksOf("teams:Essay").first()
+        assertEquals(essay, WidgetModel.startPiece(plan, essay.key, essay.taskId))
+        // Drawn from an older plan: its key no longer there, its task's next.
+        assertEquals(essay, WidgetModel.startPiece(plan, "teams:Essay#4", "teams:Essay"))
+        assertNull(WidgetModel.startPiece(plan, "teams:Done#0", "teams:Done"))
+        assertNull(WidgetModel.startPiece(plan, "teams:Essay#4", ""))
+    }
 }
 
 class WidgetLayoutTest {

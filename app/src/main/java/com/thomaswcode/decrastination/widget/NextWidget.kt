@@ -218,7 +218,7 @@ class NextWidget : GlanceAppWidget() {
                             ImageProvider(if (model.timing) R.drawable.ic_stop else R.drawable.ic_play),
                             contentDescription = if (model.timing) "Stop the timer" else "Start a timer",
                             colorFilter = ColorFilter.tint(GlanceTheme.colors.primary),
-                            modifier = GlanceModifier.size(24.dp).clickable(actionRunCallback<StartAction>(actionParametersOf(StartAction.KEY to key))),
+                            modifier = GlanceModifier.size(24.dp).clickable(actionRunCallback<StartAction>(actionParametersOf(StartAction.KEY to key, StartAction.TASK to model.taskId.orEmpty()))),
                         )
                         Spacer(GlanceModifier.height(4.dp))
                         Image(ImageProvider(R.drawable.ic_check), contentDescription = "Done", colorFilter = ColorFilter.tint(GlanceTheme.colors.primary), modifier = GlanceModifier.size(24.dp).clickable(tick))
@@ -455,7 +455,10 @@ class TickAction : ActionCallback {
     }
 }
 
-/** ▶: a timer started on [KEY]'s piece, or ■: the one on it stopped (docs/plan_timer), down the app's own path, and the widget drawn again. */
+/**
+ * ▶: a timer started on [KEY]'s piece, or, the plan moved on since the widget was drawn, its [TASK]'s next
+ * ([WidgetModel.startPiece]); or ■: the one on it stopped (docs/plan_timer), down the app's own path, and the widget drawn again.
+ */
 class StartAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
         val key = parameters[KEY] ?: return
@@ -463,13 +466,14 @@ class StartAction : ActionCallback {
         if (graph.focus.timer?.let { it.running && it.key == key } == true) {
             TimerAlarms.stop(context)
         } else {
-            graph.planning.plan().ordered.firstOrNull { it.key == key }?.let { TimerAlarms.start(context, it.taskId, it.stepIndex, key) }
+            WidgetModel.startPiece(graph.planning.plan(), key, parameters[TASK])?.let { TimerAlarms.start(context, it.taskId, it.stepIndex, it.key) }
         }
         WidgetUpdater.update(context)
     }
 
     companion object {
         val KEY = ActionParameters.Key<String>("key")
+        val TASK = ActionParameters.Key<String>("task")
     }
 }
 

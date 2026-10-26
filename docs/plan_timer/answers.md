@@ -56,6 +56,15 @@ Where the build found the plan wrong, or made a call it left open:
 - **The widget's column** is ▶ over ✓ at 24 dp with a 4 dp gap, from a card 64 dp high; the phone's widget rows are about 96 dp, so its 2×1 has the column. To be looked at on the phone (§The phone, 6).
 - **No test of the notifications**: `TimerAlarms` reads the graph and Android's alarm and notification managers, with no seam a unit test can hold; its choices are checked on the phone.
 
+## Changed by the PR's reviews (#134, 26 Oct)
+
+Codex's and Claude's reviews of the build, each finding checked against the code:
+
+- **"Time's up" goes when a fresh timer replaces the one it's about** (Codex): a Start on another piece after a zero left "Time's up: …" beside the new countdown. It stays only while the timer it's about runs past its zero (`TimerAlarms.keepsTimeUp`).
+- **A zero gone by unseen hours ago isn't told late** (Claude): Android drops alarms at a reboot, so a timer whose zero passed with the phone off was "Time's up" at the next boot, the next morning perhaps. Within its 30-minute hold it's told at the start as before; past it, it's marked told without a word (`TimerAlarms.timely`). Decided without asking, for the owner to overturn: the alternative is telling it whenever the phone's next on, as D-112's "whatever the hour" could be read.
+- **▶ on a widget drawn from an older plan** starts on its task's next piece where the one it showed is gone (Claude; `WidgetModel.startPiece`), rather than doing nothing.
+- **The no-steps sheet's Stop label counting down** (Claude) was fixed already by the phone session's clock fix (`rememberTimerNow`).
+
 ## Decided without asking
 
 Each a routine call the owner may overturn; the alternative is named so the build can switch.

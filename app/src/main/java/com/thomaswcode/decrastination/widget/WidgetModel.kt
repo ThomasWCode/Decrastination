@@ -131,6 +131,13 @@ data class WidgetModel(
         fun timerPill(timer: PieceTimer, now: Long, zone: ZoneId): String = if (now < timer.endsAt) "⏱ till ${Format.time(timer.endsAt, zone)}" else "⏱ over"
 
         /**
+         * The piece ▶ starts a timer on: the one the widget showed ([key]), else, the plan having moved on since it was drawn
+         * (its step cut anew by a sync), [taskId]'s next in [plan]; none where its task has none left.
+         */
+        fun startPiece(plan: Plan, key: String, taskId: String?): Chunk? =
+            plan.ordered.firstOrNull { it.key == key } ?: taskId?.takeIf { it.isNotEmpty() }?.let { plan.chunksOf(it).firstOrNull() }
+
+        /**
          * Today's slots as the header has them (UI-05): "Today: 1 of 4 kept, 1 h 20 left", the kept,
          * missed and still to come counted (one gone by but in its grace, still to tick, among them),
          * and the minutes of those still to come from now. Null with no slot today, kept, missed or

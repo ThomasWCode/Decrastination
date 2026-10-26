@@ -61,36 +61,38 @@ object TimerAlarms {
     /**
      * The notifications and alarms made to match the timer as Focus holds it, so this can run any number of times: at
      * each change of it, at a start (a restart or a boot), at its alarms. Running, its countdown, and an alarm at its zero;
-     * its zero gone by (here, or while the app was down), "time's up" said once, the countdown retitled to run on past it,
-     * and an alarm when Felix's hold lifts; stopped by hand, both gone, and that alarm where it's still ahead; none,
-     * everything gone.
+     * its zero gone by (here, or while the app was down), "time's up" said once while it's [timely], the countdown
+     * retitled to run on past it, and an alarm when Felix's hold lifts; stopped by hand, both gone, and that alarm where
+     * it's still ahead; none, everything gone. "Time's up" stays only beside the timer it's about ([keepsTimeUp]).
      */
     suspend fun sync(context: Context) {
         val graph = AppGraph.get(context)
         val now = graph.clock.now()
-        // Its zero gone by and not yet told: told now, once.
-        graph.focus.timer?.let { t -> if (t.running && !t.told && t.endsAt <= now && graph.focus.timerOver(now)) over(context, t) }
+        // Its zero gone by and not yet told: told now, once; said only while it's timely, not hours on (a boot).
+        graph.focus.timer?.let { t -> if (t.running && !t.told && t.endsAt <= now && graph.focus.timerOver(now) && timely(t, now)) over(context, t) }
         val timer = graph.focus.timer
         val alarms = context.getSystemService(AlarmManager::class.java)
         alarms?.cancel(alarm(context, ACTION_END))
         alarms?.cancel(alarm(context, ACTION_HOLD_END))
-        when {
-            timer == null -> {
-                graph.notifier.cancel(NoticeId.Timer)
-                graph.notifier.cancel(NoticeId.TimerOver)
-            }
-            timer.running -> {
-                graph.notifier.post(NoticeId.Timer, running(context, timer))
-                if (alarms != null && !timer.told) SlotAlarms.set(alarms, timer.endsAt, alarm(context, ACTION_END))
-            }
-            else -> {
-                graph.notifier.cancel(NoticeId.Timer)
-                graph.notifier.cancel(NoticeId.TimerOver)
-            }
+        if (!keepsTimeUp(timer)) graph.notifier.cancel(NoticeId.TimerOver)
+        if (timer?.running == true) {
+            graph.notifier.post(NoticeId.Timer, running(context, timer))
+            if (alarms != null && !timer.told) SlotAlarms.set(alarms, timer.endsAt, alarm(context, ACTION_END))
+        } else {
+            graph.notifier.cancel(NoticeId.Timer)
         }
         // Past its zero or stopped: his look when the hold lifts, so a slot missed meanwhile is said then, not at his next.
         if (alarms != null && timer != null && (timer.told || !timer.running)) FelixRules.liftAt(timer).takeIf { it > now }?.let { SlotAlarms.set(alarms, it, alarm(context, ACTION_HOLD_END)) }
     }
+
+    /**
+     * Whether "Time's up" for [timer]'s zero, gone by unseen (the phone off, or its clock moved, at its alarm), is still
+     * worth saying at [now]: within Felix's hold after it, not hours on, when it's marked told without a word.
+     */
+    fun timely(timer: PieceTimer, now: Long): Boolean = now < FelixRules.liftAt(timer)
+
+    /** Whether "Time's up" may stay showing beside [timer]: only while it runs past its zero; a fresh one replacing it, a stop or its piece done takes it away. */
+    fun keepsTimeUp(timer: PieceTimer?): Boolean = timer != null && timer.running && timer.told
 
     /**
      * The running timer's notification: its piece, its minutes and *Stop*, counting down to its zero by Android's own
