@@ -12,6 +12,7 @@ import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.Slot
 import com.thomaswcode.decrastination.core.SlotKind
 import com.thomaswcode.decrastination.core.Slotter
+import com.thomaswcode.decrastination.data.PieceTimer
 import com.thomaswcode.decrastination.data.SlotOutcome
 import com.thomaswcode.decrastination.data.SlotRecord
 import com.thomaswcode.decrastination.felix.FelixPrompts.Reason
@@ -55,6 +56,32 @@ object FelixRules {
     /** How long after a slot's end and grace its miss is surely on record. */
     private const val MISS_LAG_MS = 60_000L
 
+    /** How long after a timer ends, at its zero or by a Stop, his messages about its task wait (docs/plan_timer). */
+    const val TIMER_HOLD_MS = 30 * 60_000L
+
+    /**
+     * When the hold [timer] puts on his messages about its task lifts: [TIMER_HOLD_MS] after it ended, at its zero or
+     * by a Stop by hand, whichever came first, so one forgotten and left running silences nothing past it.
+     */
+    fun liftAt(timer: PieceTimer): Long = minOf(timer.endsAt, timer.stoppedAt ?: Long.MAX_VALUE) + TIMER_HOLD_MS
+
+    /** Whether [timer] holds his messages about [taskId] at [now]: it's on that task, and its hold hasn't lifted. */
+    private fun holds(timer: PieceTimer?, taskId: String, now: Long): Boolean = timer != null && timer.taskId == taskId && now < liftAt(timer)
+
+    /** Whether [timer] could have covered [record]: on its task, and the record still fresh when it began, or made after it. */
+    private fun covers(timer: PieceTimer?, record: SlotRecord): Boolean = timer != null && record.taskId == timer.taskId && record.at + FRESH_MS > timer.startedAt
+
+    /**
+     * Whether [timer] holds [trigger]'s message at [now] (docs/plan_timer): a SlotStart about its task while it runs, or a
+     * SlotEnd on a record it could have covered, till its hold lifts. [due] keeps such a message back; this is asked again
+     * once his words are back, as a Start can come while he's asked.
+     */
+    fun held(trigger: Trigger, timer: PieceTimer?, now: Long): Boolean = when (trigger.reason) {
+        Reason.SlotStart -> timer?.running == true && trigger.taskId?.let { holds(timer, it, now) } == true
+        Reason.SlotEnd -> trigger.record?.let { covers(timer, it) && holds(timer, it.taskId, now) } == true
+        else -> false
+    }
+
     /**
      * The reason to write now, if any, in this order: nothing in quiet hours or a busy event; a slot
      * gone by undone (SlotEnd), or kept without the photo it [needsPhoto] to earn, asked about once;
@@ -65,6 +92,8 @@ object FelixRules {
      * with nothing done on its task since it began (SlotStart), at most [MAX_PER_SLOT] times; and a
      * slot just kept, every third one (SlotKept). [today]: today's slots on record; [sent]: his
      * messages today, the silent ones (he chose not to write, or the model couldn't be asked) too.
+     * [timer]: the timer on a piece (docs/plan_timer), whose task's SlotStart and SlotEnd wait while
+     * it [holds].
      */
     fun due(
         plan: Plan,
@@ -78,15 +107,21 @@ object FelixRules {
         needsPhoto: (SlotRecord) -> Boolean,
         toAsk: List<AssessLater> = emptyList(),
         zone: ZoneId = ZoneId.systemDefault(),
+        timer: PieceTimer? = null,
     ): Trigger? {
         if (quiet || busyNow) return null
         fun said(reason: Reason, key: String?, since: Long) = sent.filter { it.reason == reason.name && it.key == key && it.at >= since }
         fun fresh(record: SlotRecord) = now - record.at <= FRESH_MS
+        // A record the timer could have covered (one still fresh when it began, or made after it): its SlotEnd waits
+        // while the timer holds, and is fresh from the hold's lift, or its own time where that's later. Any other is
+        // fresh from its own time, so a miss stale before the timer began isn't brought back by the lift.
+        fun covered(record: SlotRecord) = covers(timer, record)
+        fun freshEnd(record: SlotRecord) = if (covered(record)) !holds(timer, record.taskId, now) && now - maxOf(record.at, liftAt(timer!!)) <= FRESH_MS else fresh(record)
         // One whose call didn't come back waits to be tried again; the rest go on meanwhile.
         fun waiting(reason: Reason, key: String?) = state.retry?.let { it.reason == reason.name && it.key == key && now < it.notBefore } == true
         // A slot gone by undone, or ticked without the photo it needs to earn once its time is over.
         today.firstOrNull { r ->
-            fresh(r) && said(Reason.SlotEnd, r.key, r.start).isEmpty() && !waiting(Reason.SlotEnd, r.key) &&
+            freshEnd(r) && said(Reason.SlotEnd, r.key, r.start).isEmpty() && !waiting(Reason.SlotEnd, r.key) &&
                 (r.outcome == SlotOutcome.Missed || (r.outcome.kept && !r.earned && needsPhoto(r) && now >= r.end))
         }?.let { return Trigger(Reason.SlotEnd, record = it) }
         // Today's last slot kept.
@@ -109,7 +144,9 @@ object FelixRules {
         plan.slotAt(now)?.let { slot ->
             val chunk = slot.chunk!!
             val done = (state.activity[chunk.taskId]?.let { it >= slot.start } == true) || kept.any { it.taskId == chunk.taskId && it.at >= slot.start }
-            if (!done && now >= slot.start + settings.felixGraceMin * 60_000L && said(Reason.SlotStart, chunk.key, slot.start).size < MAX_PER_SLOT && !waiting(Reason.SlotStart, chunk.key)) {
+            // A timer running on its task is your word you're on it, up to its hold's lift.
+            val timed = timer?.running == true && holds(timer, chunk.taskId, now)
+            if (!done && !timed && now >= slot.start + settings.felixGraceMin * 60_000L && said(Reason.SlotStart, chunk.key, slot.start).size < MAX_PER_SLOT && !waiting(Reason.SlotStart, chunk.key)) {
                 return Trigger(Reason.SlotStart, slot = slot)
             }
         }
@@ -134,11 +171,14 @@ object FelixRules {
     /**
      * The message he's likeliest to write next, and when (AC-10): the next slot of today's whose
      * grace into it is still to come, asked about at that moment as if nothing's done on it by then.
-     * The rest (a miss, a kept slot) depend on what happens, so aren't written ahead.
+     * The rest (a miss, a kept slot) depend on what happens, so aren't written ahead. A slot of a running
+     * [timer]'s task whose moment comes before its hold lifts is passed over for the next: its message
+     * would be held, so isn't paid for.
      */
-    fun upcoming(plan: Plan, settings: Settings, now: Long): Pair<Trigger, Long>? {
+    fun upcoming(plan: Plan, settings: Settings, now: Long, timer: PieceTimer? = null): Pair<Trigger, Long>? {
         val grace = settings.felixGraceMin * 60_000L
-        val slot = plan.todaySlots.filter { it.kind == SlotKind.Work && it.chunk != null }.firstOrNull { it.start + grace > now } ?: return null
+        val slot = plan.todaySlots.filter { it.kind == SlotKind.Work && it.chunk != null }
+            .firstOrNull { it.start + grace > now && !(timer?.running == true && holds(timer, it.chunk!!.taskId, it.start + grace)) } ?: return null
         return Trigger(Reason.SlotStart, slot = slot) to slot.start + grace
     }
 
@@ -168,14 +208,14 @@ object FelixRules {
      * grace (its miss then on record), and the check he set while there's work to come; and, with a
      * grace longer than [AHEAD_MS], when the next slot's message is to be written ahead (with one
      * shorter, its slot's start does that, with its plan); and when a message whose call didn't come
-     * back is tried again. Null with nothing ahead.
+     * back is tried again. Null with nothing ahead. A [timer]'s hold lifting has an alarm of its own.
      */
-    fun next(plan: Plan, state: FelixState, settings: Settings, now: Long): Long? {
+    fun next(plan: Plan, state: FelixState, settings: Settings, now: Long, timer: PieceTimer? = null): Long? {
         val work = plan.buckets.flatMap { it.slots }.filter { it.kind == SlotKind.Work }
         val starts = work.map { it.start + settings.felixGraceMin * 60_000L }
         val ends = work.map { it.end + Slotter.GRACE_MS + MISS_LAG_MS }
         val check = state.nextCheckAt?.takeIf { work.any { it.end + Slotter.GRACE_MS > now } }
-        val ahead = upcoming(plan, settings, now)?.second?.minus(AHEAD_MS)?.takeIf { settings.felixGraceMin * 60_000L > AHEAD_MS }
+        val ahead = upcoming(plan, settings, now, timer)?.second?.minus(AHEAD_MS)?.takeIf { settings.felixGraceMin * 60_000L > AHEAD_MS }
         return (starts + ends + listOfNotNull(check, ahead, state.retry?.notBefore)).filter { it > now }.minOrNull()
     }
 

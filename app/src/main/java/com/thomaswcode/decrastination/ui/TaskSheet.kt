@@ -47,6 +47,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.block.Focus
 import com.thomaswcode.decrastination.block.PhotoChecks
+import com.thomaswcode.decrastination.block.TimerAlarms
 import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.Change
 import com.thomaswcode.decrastination.core.ChangeType
@@ -138,6 +139,8 @@ fun TaskSheet(
     val felix by graph.stores.felix.state.collectAsStateWithLifecycle()
     // A starred email's finish in Gmail, read as it goes.
     val gmail by graph.gmailFinishes.state.collectAsStateWithLifecycle()
+    // The timer on a piece, read as it starts and stops (docs/plan_timer).
+    val session by graph.stores.session.state.collectAsStateWithLifecycle()
     // His messages unread, worn by Ask Felix about it as by his button elsewhere (UI-16).
     val unread by graph.conversation.unread.collectAsStateWithLifecycle(0)
     val task = state.tasks.firstOrNull { it.id == taskId }
@@ -224,12 +227,22 @@ fun TaskSheet(
                     FilledTonalButton(onClick = { scope.launch { said = keepPiece(graph, piece, plan.now) } }) { Text("Done") }
                 }
             }
-            if (ticksHere) Steps(graph, task, now, zone)
+            if (ticksHere) Steps(graph, activity, task, now, zone) { said = it }
             // An invite the email carries (DX-02): its time, and a tap putting it in your calendar.
             val invite = task.invite
             invite?.let { Text("Invite: " + Format.invite(it, zone), style = MaterialTheme.typography.bodyLarge) }
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (!own) Button(onClick = { scope.launch { TaskOpener.open(activity, task)?.let { message = it } } }) { Text("Open in ${task.source.label}") }
+                // A task with no steps: a timer on its next piece in the plan (docs/plan_timer); none while the plan has none.
+                if (task.subSteps.isEmpty() && next != null) {
+                    val timer = session.timer?.takeIf { it.running && it.key == next.key }
+                    val timerNow = rememberTimerNow(graph, timer)
+                    if (timer != null) {
+                        FilledTonalButton(onClick = { scope.launch { said = TimerAlarms.stop(activity) } }) { Text("Stop (${timerText(timer, timerNow).removePrefix("Timer: ")})") }
+                    } else {
+                        OutlinedButton(onClick = { scope.launch { said = TimerAlarms.start(activity, task.id, next.stepIndex, next.key) } }) { Text("Start") }
+                    }
+                }
                 invite?.let { i -> OutlinedButton(onClick = { message = addToCalendar(activity, i, task.title, zone) }) { Text("Add to calendar") } }
                 // A starred email finished by your word: unstarred and archived in Gmail, after the grace.
                 if (task.source == Source.Gmail && task.isOpen && graph.settings.value.gmailFinishes && GmailWrites.state(gmail.writes, task.id) !in FINISHING) {
@@ -354,7 +367,7 @@ fun TaskSheet(
                 }
                 TextButton(onClick = { sheet.noting = true }) { Text("Add a note") }
             }
-            if (!ticksHere) Steps(graph, task, now, zone)
+            if (!ticksHere) Steps(graph, activity, task, now, zone) { said = it }
             // Its next piece's first steps (AI-15), as written ahead.
             next?.let { model.microPlans[it.key] }?.let(MicroPlans::lines)?.takeIf { it.isNotEmpty() }?.let { lines ->
                 Text("Its next piece", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -593,13 +606,18 @@ private const val MAX_PLANNED = 6
 
 /** [task]'s steps, each with its minutes and dates; an email's or one of your own's ticked off here. */
 @Composable
-private fun Steps(graph: AppGraph, task: TaskItem, now: Long, zone: ZoneId) {
+private fun Steps(graph: AppGraph, activity: Activity, task: TaskItem, now: Long, zone: ZoneId, say: (String) -> Unit) {
     if (task.subSteps.isEmpty()) return
     val scope = rememberCoroutineScope()
+    val session by graph.stores.session.state.collectAsStateWithLifecycle()
+    // The timer's time on its task's steps, kept current while the sheet is open.
+    val ticking = rememberTimerNow(graph, session.timer?.takeIf { it.running && it.taskId == task.id })
     // As the plan shares them: your minutes over its steps add up to exactly yours.
     val planned = task.plannedStepMinutes(1.0)
     Text("Steps", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     task.subSteps.forEachIndexed { index, step ->
+        // A timer on any step still to do of an open task (docs/plan_timer): Start, or Stop with its time on the one it's on.
+        val timer = session.timer?.takeIf { it.running && it.taskId == task.id && it.stepIndex == index }
         // A step's own date is a plan, never overdue (PL-14); one that doesn't need the steps before it says so (D-109).
         val dates = listOfNotNull(step.from?.let { "from " + Format.at(it, now, zone) }, step.dueAt?.let { Format.due(it, hard = false, now, zone) }).joinToString(", ")
         val minutes = Format.minutes(planned[index])
@@ -610,6 +628,13 @@ private fun Steps(graph: AppGraph, task: TaskItem, now: Long, zone: ZoneId) {
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.weight(1f),
             )
+            if (task.isOpen && !task.hidden && !step.done) {
+                if (timer != null) {
+                    TextButton(onClick = { scope.launch { say(TimerAlarms.stop(activity)) } }) { Text("Stop (${timerText(timer, ticking).removePrefix("Timer: ")})") }
+                } else {
+                    TextButton(onClick = { scope.launch { say(TimerAlarms.start(activity, task.id, index)) } }) { Text("Start") }
+                }
+            }
             if (Focus.tickable(task) && task.isOpen && !step.done) TextButton(onClick = { scope.launch { graph.focus.tickBlock(task.id, index, step.title) } }) { Text("Done") }
         }
     }

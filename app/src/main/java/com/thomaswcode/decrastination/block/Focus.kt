@@ -19,6 +19,7 @@ import com.thomaswcode.decrastination.data.CompletionRecord
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.Keeping
 import com.thomaswcode.decrastination.data.PhotoDone
+import com.thomaswcode.decrastination.data.PieceTimer
 import com.thomaswcode.decrastination.data.Rewarded
 import com.thomaswcode.decrastination.data.LearningState
 import com.thomaswcode.decrastination.data.ProtectionState
@@ -311,6 +312,8 @@ class Focus(
      */
     suspend fun keepSlot(key: String, extraMin: Int = 0, photo: Boolean = false, verified: Boolean = false, seenAt: Long? = null, now: Long = clock.now()): Boolean {
         val kept = keeping.withLock { keep(key, extraMin, photo, verified, seenAt, now) } ?: return false
+        // The timer on it, or on another piece of its task, ended at once: its piece is done.
+        settleTimer()
         // One of your own it finished: finished as Done does, once its record is in.
         kept.ownDone?.let { onOwnTaskDone(it) }
         onWorked(kept.taskId)
@@ -573,7 +576,7 @@ class Focus(
     suspend fun photoChecked(taskId: String, step: String?, minutes: Int, stepIndex: Int? = null, key: String, takenAt: Long? = null): Boolean {
         val done = PhotoDone(UUID.randomUUID().toString(), taskId, step, minutes, clock.now(), stepIndex, key, takenAt)
         session.update { it.copy(photosDone = it.photosDone + done) }
-        return finishPhoto(done)
+        return finishPhoto(done).also { settleTimer() }
     }
 
     /**
@@ -602,7 +605,11 @@ class Focus(
                 },
             )
         }
-        if (ticked) onWorked(taskId)
+        if (ticked) {
+            // The timer on that step ended: it's done.
+            settleTimer()
+            onWorked(taskId)
+        }
         return ticked
     }
 
@@ -854,6 +861,75 @@ class Focus(
                 },
             ).trimmed(now)
         }
+        // A timer on one of them ended: its task is done.
+        settleTimer()
+    }
+
+    /** The timer on a piece (docs/plan_timer): running, or stopped by hand and kept till the next Start; none once its piece is done. */
+    val timer: PieceTimer? get() = session.value.timer
+
+    /**
+     * A timer started on [taskId]'s piece (docs/plan_timer): its [key] where it's shown, else its step [stepIndex]'s next
+     * piece in the plan (the next of its sittings), else for a step the minutes its sheet shows, else the task's minutes
+     * left, at least one. It replaces whatever timer there was, running or stopped; one already running on that piece
+     * stands, so a second tap restarts nothing. Null where the task isn't open, or the step isn't there to do.
+     */
+    suspend fun startTimer(taskId: String, stepIndex: Int?, key: String? = null, now: Long = clock.now()): PieceTimer? {
+        val task = tasks.value.tasks.firstOrNull { it.id == taskId && it.isOpen && !it.hidden } ?: return null
+        val step = stepIndex?.let { i -> task.subSteps.getOrNull(i)?.takeIf { !it.done } ?: return null }
+        val plan = plan(now)
+        val piece = key?.let { k -> plan.ordered.firstOrNull { it.key == k } } ?: plan.chunksOf(taskId).firstOrNull { it.stepIndex == stepIndex }
+        val minutes = piece?.minutes
+            ?: stepIndex?.let { task.plannedStepMinutes(1.0).getOrNull(it) }
+            ?: Planner.remaining(task, learning.value.calibration.multiplierFor(task)).roundToInt()
+        val made = PieceTimer(
+            key = piece?.key ?: key ?: Chunk.keyOf(taskId, stepIndex, 0),
+            taskId = taskId,
+            stepIndex = stepIndex,
+            step = step?.title,
+            label = piece?.label ?: step?.let { "${task.title}: ${it.title}" } ?: task.title,
+            minutes = minutes.coerceAtLeast(1),
+            startedAt = now,
+        )
+        return session.update { state ->
+            if (state.timer?.let { it.running && it.key == made.key && it.taskId == taskId } == true) state else state.copy(timer = made)
+        }.timer
+    }
+
+    /** The running timer stopped by hand at [now], kept with its stop till the next Start; false where none runs. */
+    suspend fun stopTimer(now: Long = clock.now()): Boolean {
+        var stopped = false
+        session.update { state -> state.timer?.takeIf { it.running }?.let { state.copy(timer = it.copy(stoppedAt = now)).also { stopped = true } } ?: state }
+        return stopped
+    }
+
+    /** The running timer's zero reached by [now] and not yet told: marked told, once, so its "time's up" is posted once. */
+    suspend fun timerOver(now: Long = clock.now()): Boolean {
+        var told = false
+        session.update { state -> state.timer?.takeIf { it.running && !it.told && it.endsAt <= now }?.let { state.copy(timer = it.copy(told = true)).also { told = true } } ?: state }
+        return told
+    }
+
+    /**
+     * The timer ended where its piece is done, running or stopped by hand ([timerDone]): cleared, with no record,
+     * so no hold of Felix's lifts after it (a Stop, then a tick, brings no "you missed it"). Whether it ended one.
+     */
+    suspend fun settleTimer(): Boolean {
+        var ended = false
+        session.update { state -> state.timer?.takeIf(::timerDone)?.let { state.copy(timer = null).also { ended = true } } ?: state }
+        return ended
+    }
+
+    /**
+     * Whether [t]'s piece is done: its task gone, closed or hidden (not a task, the same as another); its step gone,
+     * renamed or ticked; or a slot of its task kept since it began (Done, the widget's ✓, Felix's tick or keep, a photo
+     * check passed), which covers a box of time and a sitting before its step's last, which tick nothing.
+     */
+    private fun timerDone(t: PieceTimer): Boolean {
+        val task = tasks.value.tasks.firstOrNull { it.id == t.taskId }
+        if (task == null || !task.isOpen || task.hidden) return true
+        if (t.stepIndex != null && task.subSteps.getOrNull(t.stepIndex)?.let { it.title != t.step || it.done } != false) return true
+        return log.value.slots.any { it.taskId == t.taskId && it.outcome.kept && it.at >= t.startedAt }
     }
 
     companion object {

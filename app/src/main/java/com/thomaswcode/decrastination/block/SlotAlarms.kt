@@ -93,7 +93,8 @@ object SlotAlarms {
         return work.firstOrNull { it.start > now } to work.firstOrNull { it.end + GRACE_MS > now }
     }
 
-    private fun set(alarms: AlarmManager, at: Long, intent: PendingIntent) {
+    /** [intent] at [at], to the minute's window where exact alarms aren't allowed: the timer's too ([TimerAlarms]). */
+    internal fun set(alarms: AlarmManager, at: Long, intent: PendingIntent) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || alarms.canScheduleExactAlarms()) {
             alarms.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, intent)
         } else {

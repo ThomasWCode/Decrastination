@@ -311,7 +311,7 @@ class Looks(
         // Two steps, his or the reading's, he may rebalance to fit a free time at school today (D-110), at their minutes as
         // planned, none of a task he's had one taken back on.
         val rebalance = Rebalance.candidates(plan, tasks.value.tasks, Rebalance.declined(chat.value.messages), now, planning.calibration())
-        val user = FelixPrompts.describe(FelixPrompts.Reason.Morning, plan, null, null, today(now), chat.value.messages, null, settings, now, clock.zone(), reminders = remindersToday(plan, now), rebalance = rebalance, tasks = planning.asPlanned())
+        val user = FelixPrompts.describe(FelixPrompts.Reason.Morning, plan, null, null, today(now), chat.value.messages, null, settings, now, clock.zone(), reminders = remindersToday(plan, now), rebalance = rebalance, tasks = planning.asPlanned(), timer = focus.timer)
         // Asked in the app's scope, not the briefing's: past [MORNING_MS] the briefing goes without
         // it, and the call, paid for, comes back and is counted all the same.
         val call = scope.async {
@@ -389,6 +389,8 @@ class Looks(
             needsPhoto = { r -> r.kind == Kind.Homework && tasks[r.taskId]?.source != Source.Anki && r.plannedMin >= settings.photoFromMin },
             toAsk = toAsk,
             zone = zone,
+            // A timer on a piece holds his slot-start and slot-over messages about its task (docs/plan_timer).
+            timer = focus.timer,
         )
     }
 
@@ -409,6 +411,12 @@ class Looks(
         val drafted = state.draft?.takeIf { FelixRules.fits(it, trigger, now, lastSaid(), laidOf(it), FelixRules.laid(focus.plan(now), trigger, today(now))) }
         if (state.draft != null) chat.update { it.copy(felix = it.felix.copy(draft = null)) }
         val called = if (drafted != null) null else ask(caller, trigger, now, interactive = true)
+        // A timer started on its task while he was asked (docs/plan_timer): held now, so not sent; a slot's miss is said once
+        // the hold lifts, asked afresh then.
+        if (called != null && FelixRules.held(trigger, focus.timer, clock.now())) {
+            Log.i(AppGraph.TAG, "Felix, ${trigger.reason} about ${trigger.key}: held by a timer started while he was asked")
+            return null
+        }
         val answer = drafted?.answer ?: (called as? Called.Answered)?.value?.answer
         val text = answer?.message.orEmpty()
         val next = now + (answer?.nextCheckMin ?: settings.felixDefaultCheckMin).coerceAtLeast(FelixAnswers.MIN_CHECK_MIN) * 60_000L
@@ -580,7 +588,7 @@ class Looks(
         val settings = this.settings.value
         val profile = this.profile(at)
         val free = (focus.creditLeftMs(at) / 60_000L).toInt().takeIf { trigger.reason == FelixPrompts.Reason.DayDone || trigger.reason == FelixPrompts.Reason.SlotKept }
-        val user = FelixPrompts.describe(trigger.reason, planning.plan(), trigger.slot, task, today(at), chat.value.messages, trigger.question?.question, settings, at, clock.zone(), free, trigger.record, trigger.asks.map { it.title }, firstAction = trigger.slot?.chunk?.key?.let { model.value.microPlans[it] }?.first?.takeIf { it.isNotEmpty() }, reminder = reminder, notes = notes, tasks = planning.asPlanned())
+        val user = FelixPrompts.describe(trigger.reason, planning.plan(), trigger.slot, task, today(at), chat.value.messages, trigger.question?.question, settings, at, clock.zone(), free, trigger.record, trigger.asks.map { it.title }, firstAction = trigger.slot?.chunk?.key?.let { model.value.microPlans[it] }?.first?.takeIf { it.isNotEmpty() }, reminder = reminder, notes = notes, tasks = planning.asPlanned(), timer = focus.timer)
         val called = gateway.call(interactive = interactive, record = ModelCalls.OnRecord(ModelEffort.Job.Felix, trigger.reason.name) { r: FelixCaller.Result -> r.usage to ModelCalls.outcome(r.refused, r.answer == null) }, cost = { r: FelixCaller.Result -> r.costUsd to r.refused }) { caller.say(FelixPrompts.system(settings, profile.year), profile.text, user) }
         if (called is Called.Failed) Log.w(AppGraph.TAG, "Felix's message failed", called.error)
         return called
@@ -699,7 +707,8 @@ class Looks(
      * call an exchange.
      */
     private suspend fun draft(plan: Plan, now: Long) {
-        val (trigger, at) = FelixRules.upcoming(plan, this.settings.value, now) ?: return
+        // Not one the timer's hold would keep unsent: no call's paid for it.
+        val (trigger, at) = FelixRules.upcoming(plan, this.settings.value, now, focus.timer) ?: return
         if (at - now > FelixRules.AHEAD_MS) return
         val draft = chat.value.felix.draft
         if (FelixRules.fits(draft, trigger, now, lastSaid(), laidOf(draft), FelixRules.laid(plan, trigger, today(at)))) return
@@ -716,5 +725,5 @@ class Looks(
     }
 
     /** His next look, by alarm: the phone may be asleep through the service's ticks. */
-    private fun arm(now: Long) = ports.armLook(FelixRules.next(focus.plan(now), chat.value.felix, this.settings.value, now))
+    private fun arm(now: Long) = ports.armLook(FelixRules.next(focus.plan(now), chat.value.felix, this.settings.value, now, focus.timer))
 }

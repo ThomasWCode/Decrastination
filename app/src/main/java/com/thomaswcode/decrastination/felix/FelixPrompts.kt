@@ -11,6 +11,7 @@ import com.thomaswcode.decrastination.core.Slot
 import com.thomaswcode.decrastination.core.SlotKind
 import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.core.TaskItem
+import com.thomaswcode.decrastination.data.PieceTimer
 import com.thomaswcode.decrastination.data.SlotOutcome
 import com.thomaswcode.decrastination.data.SlotRecord
 import com.thomaswcode.decrastination.enrich.InstructionPrompts
@@ -53,6 +54,19 @@ object FelixPrompts {
     /** A piece's task's own text, as he's told it, at most (D-93): as much as a piece's first steps are read from. */
     const val TEXT = 1_500
 
+    /**
+     * A running [timer] on a piece (docs/plan_timer) as he's told it beside its piece: "timer on it since 17:02, 8 min left",
+     * "…, its time just up" or "…, 12 min over".
+     */
+    fun timerOn(timer: PieceTimer, now: Long, zone: ZoneId): String = "timer on it since ${Instant.ofEpochMilli(timer.startedAt).atZone(zone).format(CLOCK)}, " + when {
+        timer.leftMin(now) > 0 -> "${timer.leftMin(now)} min left"
+        timer.overMin(now) == 0 -> "its time just up"
+        else -> "${timer.overMin(now)} min over"
+    }
+
+    /** A running [timer] on a piece other than the one he's told of, in a line of its own: "Timer running on Essay: Plan since 17:02, 8 min left". */
+    fun timerLine(timer: PieceTimer, now: Long, zone: ZoneId): String = "Timer running on ${timer.label}" + timerOn(timer, now, zone).removePrefix("timer on it")
+
     private val CLOCK = DateTimeFormatter.ofPattern("HH:mm", Locale.UK)
     private val NOW = DateTimeFormatter.ofPattern("EEEE d MMMM yyyy, HH:mm", Locale.UK)
     private val WHEN = DateTimeFormatter.ofPattern("EEE HH:mm", Locale.UK)
@@ -89,7 +103,8 @@ object FelixPrompts {
      * twice; for the Morning, today's [reminders], and the steps he may rebalance to fit a free time at school ([rebalance], D-110).
      * What's done of [tasks], those of today's pieces, [task] and his messages shown (D-57), so his own
      * messages don't outweigh a tick; and, where nothing's been said for [GREET_AFTER_MIN], that it's his
-     * first message in a while.
+     * first message in a while. A running [timer] (docs/plan_timer): with the piece or task it's about where it's
+     * on that task, else in a line of its own.
      */
     fun describe(
         reason: Reason,
@@ -111,11 +126,16 @@ object FelixPrompts {
         reminders: List<String> = emptyList(),
         rebalance: List<Rebalance.Candidate> = emptyList(),
         tasks: List<TaskItem> = emptyList(),
+        timer: PieceTimer? = null,
     ): String = buildString {
         fun clock(at: Long) = Instant.ofEpochMilli(at).atZone(zone).format(CLOCK)
         appendLine("Reason: $reason")
         appendLine("Now: ${Instant.ofEpochMilli(now).atZone(zone).format(NOW)}")
         val piece = slot?.chunk
+        // A timer running on the task this is about, said with it; on another, in a line of its own below.
+        val running = timer?.takeIf { it.running }
+        val about = if (reason == Reason.Reminder) null else piece?.taskId ?: record?.taskId ?: task?.id
+        val on = running?.takeIf { it.taskId == about }?.let { ", " + timerOn(it, now, zone) }.orEmpty()
         if (reason == Reason.Reminder) {
             // What's going on at its moment: the slot under way or next, and the task it's about.
             if (slot != null && piece != null) appendLine("Slot then: ${piece.label}, ${clock(slot.start)}–${clock(slot.end)}, ${if (slot.start <= now) "under way" else "next"}")
@@ -127,7 +147,7 @@ object FelixPrompts {
                 EarnsBy.Source -> "once ${piece.source.label} says it's done"
                 EarnsBy.Nothing -> "nothing: nothing can check it"
             }
-            appendLine("Piece: ${piece.label}, ${piece.minutes} min, slot ${clock(slot.start)}–${clock(slot.end)}; it earns its free time $earns")
+            appendLine("Piece: ${piece.label}, ${piece.minutes} min, slot ${clock(slot.start)}–${clock(slot.end)}; it earns its free time $earns$on")
             // Its first step, written ahead (AI-15).
             appendLine("First action: ${firstAction ?: "none yet"}")
         } else if (record != null) {
@@ -137,10 +157,11 @@ object FelixPrompts {
                 record.kind == Kind.Homework && record.plannedMin >= settings.photoFromMin -> "ticked done, but it earns its free time only with a photo of it"
                 else -> "ticked done, without earning its free time yet"
             }
-            appendLine("Piece: ${record.label}, ${record.plannedMin} min, slot ${clock(record.start)}–${clock(record.end)}; $how")
+            appendLine("Piece: ${record.label}, ${record.plannedMin} min, slot ${clock(record.start)}–${clock(record.end)}; $how$on")
         } else if (task != null) {
-            appendLine("Task: ${task.title}")
+            appendLine("Task: ${task.title}$on")
         }
+        if (running != null && on.isEmpty()) appendLine(timerLine(running, now, zone))
         // When its task's due, as the app plans by it (yours where you gave one, D-4): what he says of it, not a date in its text.
         if (reason != Reason.Reminder) task?.dueAt?.let { appendLine("Its task's due: ${Instant.ofEpochMilli(it).atZone(zone).format(DUE)}") }
         // Its task's own text, cut short (D-93): what the work asks of them, to be concrete about; a

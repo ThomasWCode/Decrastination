@@ -571,7 +571,7 @@ class Conversation(
         val waiting = waiting(now, messages)
         return ChatPrompts.Context(
             known = ChatPrompts.context(state.tasks, time.events, applied, now, clock.zone(), settings.value.classMap, runtime.value.notSame, settings.value, learning.value.calibration, kept.notes, kept.reminders, moments, lessons, waiting),
-            plan = ChatPrompts.plan(plan, clock.zone(), keptToday.map { it.key to it.label }, focus.blockingLine(plan, now)),
+            plan = ChatPrompts.plan(plan, clock.zone(), keptToday.map { it.key to it.label }, focus.blockingLine(plan, now), focus.timer),
             keepable = keepable,
             kept = keptToday.associate { it.key to it.taskId },
             lessons = lessons,

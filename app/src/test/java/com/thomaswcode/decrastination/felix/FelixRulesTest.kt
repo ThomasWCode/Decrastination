@@ -19,6 +19,7 @@ import com.thomaswcode.decrastination.core.FelixDraft
 import com.thomaswcode.decrastination.core.FelixQuestion
 import com.thomaswcode.decrastination.core.FelixRetry
 import com.thomaswcode.decrastination.data.JsonStore
+import com.thomaswcode.decrastination.data.PieceTimer
 import com.thomaswcode.decrastination.core.FelixState
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.data.SlotOutcome
@@ -28,7 +29,9 @@ import com.thomaswcode.decrastination.felix.FelixPrompts.Reason
 import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -227,5 +230,137 @@ class FelixRulesTest {
         // His next look comes for it, with nothing else ahead.
         val empty = Planner.plan(Planner.Input(emptyList(), at("16:00"), LONDON, settings, windows = evening))
         assertEquals(now + FelixRules.RETRY_MS, FelixRules.next(empty, FelixState(retry = retry), settings, now))
+    }
+
+    // --- A timer on a piece (docs/plan_timer): his slot-start and slot-over messages about its task held ---
+
+    private val second = plan.todaySlots.filter { it.kind == SlotKind.Work }[1]
+
+    /** A timer on [taskId]'s piece from [startedAt], [minutes] long, stopped by hand at [stoppedAt]. */
+    private fun timer(taskId: String, startedAt: Long, minutes: Int = 30, stoppedAt: Long? = null) =
+        PieceTimer("$taskId#-1#1", taskId, null, null, taskId, minutes, startedAt, stoppedAt = stoppedAt)
+
+    private fun timed(now: Long, timer: PieceTimer?, today: List<SlotRecord> = emptyList(), sent: List<Sent> = emptyList()) =
+        FelixRules.due(plan, FelixState(), today, sent, settings, now, false, false, needsPhoto = { false }, timer = timer)
+
+    @Test
+    fun `a timer running on the slot's task holds its nudge, one started before the slot too, but not another task's or one stopped`() {
+        val a = first.chunk!!.taskId
+        val nudge = first.start + 10 * 60_000L
+        assertEquals(Reason.SlotStart, timed(nudge, null)?.reason)
+        assertNull(timed(nudge, timer(a, first.start + 2 * 60_000L)))
+        assertNull(timed(nudge, timer(a, first.start - 10 * 60_000L)))
+        assertEquals(Reason.SlotStart, timed(nudge, timer(second.chunk!!.taskId, first.start))?.reason)
+        // Stopped, with nothing done on record (Start notes it, so this is a timer started before the slot): asked as ever.
+        assertEquals(Reason.SlotStart, timed(nudge, timer(a, first.start - 10 * 60_000L, stoppedAt = first.start + 60_000L))?.reason)
+    }
+
+    @Test
+    fun `a timer left running past its hold no longer holds a later slot's nudge`() {
+        val b = second.chunk!!.taskId
+        val nudge = second.start + 10 * 60_000L
+        // Its zero 30 minutes before that slot began: its hold lifted as it began.
+        assertEquals(Reason.SlotStart, timed(nudge, timer(b, second.start - 60 * 60_000L))?.reason)
+        // Its zero at that slot's start: held till 30 minutes past it.
+        assertNull(timed(nudge, timer(b, second.start - 30 * 60_000L)))
+    }
+
+    @Test
+    fun `the slot-over message waits while a timer holds, then is said once, past its usual freshness`() {
+        val a = first.chunk!!.taskId
+        val missed = record(first.chunk!!.key, SlotOutcome.Missed, first.start, first.end + Slotter.GRACE_MS)
+        // An hour's timer from two minutes in: its zero an hour on, the hold 30 minutes after that.
+        val running = timer(a, first.start + 2 * 60_000L, minutes = 60)
+        val lift = FelixRules.liftAt(running)
+        assertEquals(running.endsAt + FelixRules.TIMER_HOLD_MS, lift)
+        fun slotEnd(now: Long, sent: List<Sent> = emptyList()) = timed(now, running, listOf(missed), sent)?.takeIf { it.reason == Reason.SlotEnd }
+        assertNull(slotEnd(missed.at + 60_000L))
+        assertNull(slotEnd(lift - 1))
+        assertEquals(missed, slotEnd(lift)?.record)
+        assertEquals(missed, slotEnd(lift + FelixRules.FRESH_MS)?.record)
+        assertNull(slotEnd(lift + FelixRules.FRESH_MS + 1))
+        // Said once.
+        assertNull(slotEnd(lift + 60_000L, listOf(sent(Reason.SlotEnd, missed.key, lift))))
+    }
+
+    @Test
+    fun `a Stop by hand holds the slot-over message 30 minutes from the stop, or from the zero where that came first`() {
+        val a = first.chunk!!.taskId
+        val missed = record(first.chunk!!.key, SlotOutcome.Missed, first.start, first.end + Slotter.GRACE_MS)
+        fun slotEnd(now: Long, timer: PieceTimer) = timed(now, timer, listOf(missed))?.takeIf { it.reason == Reason.SlotEnd }
+        // Stopped before its zero, at the slot's end, the piece undone.
+        val early = timer(a, first.start, minutes = 60, stoppedAt = first.end)
+        assertNull(slotEnd(first.end + FelixRules.TIMER_HOLD_MS - 1, early))
+        assertEquals(missed, slotEnd(first.end + FelixRules.TIMER_HOLD_MS, early)?.record)
+        // Stopped twenty minutes after its zero: lifted at its zero and 30, not later.
+        val late = timer(a, first.start, minutes = 30, stoppedAt = first.end + 20 * 60_000L)
+        assertEquals(first.end + FelixRules.TIMER_HOLD_MS, FelixRules.liftAt(late))
+        assertNull(slotEnd(first.end + FelixRules.TIMER_HOLD_MS - 1, late))
+        assertEquals(missed, slotEnd(first.end + FelixRules.TIMER_HOLD_MS, late)?.record)
+    }
+
+    @Test
+    fun `a miss after the hold lifts is judged by its own time, and one stale before the timer began stays stale`() {
+        val a = first.chunk!!.taskId
+        val missed = record(first.chunk!!.key, SlotOutcome.Missed, first.start, first.end + Slotter.GRACE_MS)
+        // A ten-minute timer an hour before: lifted long before the miss, which is said as ever.
+        val before = timer(a, first.start - 60 * 60_000L, minutes = 10)
+        assertEquals(missed, timed(missed.at + 60_000L, before, listOf(missed))?.takeIf { it.reason == Reason.SlotEnd }?.record)
+        // A timer begun once the miss was stale (a busy event kept it unsaid): its lift doesn't bring it back.
+        val after = timer(a, missed.at + FelixRules.FRESH_MS + 60_000L, minutes = 10)
+        for (now in listOf(FelixRules.liftAt(after), FelixRules.liftAt(after) + 60_000L)) {
+            assertNull(timed(now, after, listOf(missed))?.takeIf { it.reason == Reason.SlotEnd })
+        }
+        // A timer cleared by its piece done lifts nothing: the record's judged as now (here, stale).
+        assertNull(timed(FelixRules.liftAt(after), null, listOf(missed))?.takeIf { it.reason == Reason.SlotEnd })
+    }
+
+    @Test
+    fun `a nudge the hold would keep isn't written ahead, the next slot's is`() {
+        val a = first.chunk!!.taskId
+        val running = timer(a, first.start - 30 * 60_000L)
+        assertEquals(second.chunk!!.key, FelixRules.upcoming(plan, settings, at("16:40"), running)?.first?.key)
+        assertEquals(first.chunk!!.key, FelixRules.upcoming(plan, settings, at("16:40"))?.first?.key)
+        // Stopped, it holds no nudge: written ahead as ever.
+        assertEquals(first.chunk!!.key, FelixRules.upcoming(plan, settings, at("16:40"), running.copy(stoppedAt = at("16:35")))?.first?.key)
+    }
+
+    @Test
+    fun `he's told of a running timer with its piece, or in a line of its own`() {
+        val running = timer(first.chunk!!.taskId, at("17:02"), minutes = 30)
+        assertEquals("timer on it since 17:02, 8 min left", FelixPrompts.timerOn(running, at("17:24"), LONDON))
+        assertEquals("timer on it since 17:02, its time just up", FelixPrompts.timerOn(running, at("17:32") + 30_000L, LONDON))
+        assertEquals("timer on it since 17:02, 12 min over", FelixPrompts.timerOn(running, at("17:44"), LONDON))
+        assertEquals("Timer running on teams:a since 17:02, 8 min left", FelixPrompts.timerLine(running, at("17:24"), LONDON))
+        val now = at("17:12")
+        val text = FelixPrompts.describe(Reason.SlotStart, plan, first, null, emptyList(), emptyList(), null, settings, now, LONDON, timer = running)
+        assertTrue(text.lines().first { it.startsWith("Piece: ") }.endsWith(", timer on it since 17:02, 20 min left"), text)
+        val other = FelixPrompts.describe(Reason.SlotStart, plan, second, null, emptyList(), emptyList(), null, settings, now, LONDON, timer = running)
+        assertTrue("Timer running on teams:a since 17:02, 20 min left" in other, other)
+        // Stopped, nothing's said of it.
+        assertFalse("imer" in FelixPrompts.describe(Reason.SlotStart, plan, first, null, emptyList(), emptyList(), null, settings, now, LONDON, timer = running.copy(stoppedAt = now)))
+        val chat = ChatPrompts.plan(plan.copy(now = now), LONDON, timer = running)
+        assertTrue(", timer on it since 17:02, 20 min left" in chat.lines().first { it.startsWith("Now: ") }, chat)
+    }
+
+    @Test
+    fun `a message asked for is held once a timer started meanwhile holds it`() {
+        val a = first.chunk!!.taskId
+        val start = FelixRules.Trigger(Reason.SlotStart, slot = first)
+        val now = first.start + 10 * 60_000L
+        assertFalse(FelixRules.held(start, null, now))
+        assertTrue(FelixRules.held(start, timer(a, now - 5_000L), now))
+        assertFalse(FelixRules.held(start, timer(second.chunk!!.taskId, now - 5_000L), now))
+        assertFalse(FelixRules.held(start, timer(a, now - 5_000L, stoppedAt = now - 1_000L), now))
+        // A miss: held by a timer that could have covered it, till its hold lifts; one stale before it began isn't its.
+        val missed = record(first.chunk!!.key, SlotOutcome.Missed, first.start, first.end + Slotter.GRACE_MS)
+        val end = FelixRules.Trigger(Reason.SlotEnd, record = missed)
+        val after = timer(a, missed.at + 5_000L)
+        assertTrue(FelixRules.held(end, after, missed.at + 10_000L))
+        assertFalse(FelixRules.held(end, after, FelixRules.liftAt(after)))
+        val late = timer(a, missed.at + FelixRules.FRESH_MS + 60_000L)
+        assertFalse(FelixRules.held(end, late, late.startedAt + 10_000L))
+        // His other messages are never the timer's to hold.
+        assertFalse(FelixRules.held(FelixRules.Trigger(Reason.SlotKept, record = missed), after, missed.at + 10_000L))
     }
 }

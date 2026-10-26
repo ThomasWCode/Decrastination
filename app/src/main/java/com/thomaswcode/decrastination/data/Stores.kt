@@ -41,7 +41,7 @@ class Stores(
     val runtime = store("runtime.json", RuntimeState.serializer(), ::RuntimeState, migrations = listOf(ChatMigration.RUNTIME, RuntimeSplit.RUNTIME))
 
     /** What the blocker keeps from moment to moment, changing every half minute (Focus's). */
-    val session = store("session.json", SessionState.serializer(), ::SessionState, migrations = listOf(CreditMigration.SESSION))
+    val session = store("session.json", SessionState.serializer(), ::SessionState, migrations = listOf(CreditMigration.SESSION, TimerMigration.SESSION))
 
     /** Protection's own state: changes waiting, the override, what's armed, the watchdog's finding. */
     val protection = store("protection.json", ProtectionState.serializer(), ::ProtectionState)

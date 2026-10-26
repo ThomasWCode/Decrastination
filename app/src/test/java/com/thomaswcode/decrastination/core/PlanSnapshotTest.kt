@@ -5,6 +5,7 @@ import com.thomaswcode.decrastination.Fixtures.LONDON
 import com.thomaswcode.decrastination.data.ActivityLog
 import com.thomaswcode.decrastination.data.ChatMigration
 import com.thomaswcode.decrastination.data.CreditMigration
+import com.thomaswcode.decrastination.data.TimerMigration
 import com.thomaswcode.decrastination.data.MemoryMigration
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.LearningState
@@ -132,7 +133,7 @@ class PlanSnapshotTest {
 
     /** The stores' migrations, as [com.thomaswcode.decrastination.data.Stores] gives them: those of a shape past the first. */
     private val MIGRATIONS = mapOf(
-        "runtime.json" to listOf(ChatMigration.RUNTIME), "log.json" to listOf(ChatMigration.LOG, MemoryMigration.LOG, CreditMigration.LOG), "session.json" to listOf(CreditMigration.SESSION),
+        "runtime.json" to listOf(ChatMigration.RUNTIME), "log.json" to listOf(ChatMigration.LOG, MemoryMigration.LOG, CreditMigration.LOG), "session.json" to listOf(CreditMigration.SESSION, TimerMigration.SESSION),
         "tasks.json" to listOf(TasksMigration.TASKS, StepOrderMigration.TASKS), "instructions.json" to listOf(TasksMigration.INSTRUCTIONS, StepOrderMigration.INSTRUCTIONS),
         "settings.json" to listOf(SettingsMigration.SETTINGS),
     )
