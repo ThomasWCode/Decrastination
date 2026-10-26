@@ -61,6 +61,7 @@ The app is sideloaded onto the owner's main phone, over adb from this PC. Treat 
 - Never send input while the Teams widget app's sync has Teams in front; one can start by itself seconds after an install. Check `adb logcat -d | grep TeamsAutomation` and the focused window first.
 - Ask before driving the screen when the owner may be using the phone (check the focused window). The phone is often unplugged during the day: get what's needed while it's connected, and keep building meanwhile.
 - Never `am force-stop` Decrastination: Android drops its accessibility service. To edit a store by hand, stop the process with `run-as <package> kill -STOP <pid>`, pull the file, edit it, write it back and `mv` it over, then `kill -KILL <pid>`; it restarts by itself, still enabled.
+- In the app's forms, the Escape key closes the form unsaved: hide the keyboard with its own button, and take a screenshot after it, as the form scrolls.
 - Reading data is always fine: `adb exec-out run-as com.thomaswcode.decrastination cat files/<store>.json`, the calendar through `content query`, logcat.
 
 **Leaving it as found**
@@ -68,6 +69,7 @@ The app is sideloaded onto the owner's main phone, over adb from this PC. Treat 
 - Keep dark mode on (a light screenshot needs `cmd uimode night no`, then `yes` again), keep every accessibility service enabled, and never change `stay_on_while_plugged_in`. Save and restore rotation settings around a rotation test.
 - Don't change other apps or their settings (Teams, the Teams widget app, AnkiDroid, Google Calendar, Gmail and the rest).
 - A test's leftovers include what the owner was asked to do for it (a reply to Felix, a memory, slots that went by). To reset, use the app's Settings → Reset (it keeps a copy first), then put back the owner's real records; keep their real settings, tasks and calendar answers.
+- A made-up task of your own for a test leaves more than itself once finished: its completion in the log, its line in the rewarded ledger, and Felix's evening "how did it go?" about it (from 19:00, a paid call); a Start leaves an activity mark on its task. Delete the task through the app (the debug command `own-delete`), then take the rest out with `private/tools/clean_test_tasks.py`, the app paused as above.
 
 **Commands from the PC**
 - `adb shell am start -n com.thomaswcode.decrastination/.debug.Command --es cmd <name> [--es <key> <value> …]` runs a debug command (for example `setting` with `name` and `value`, `enrich`, `backup-now`); results are logged under the tag `Decrastination`. The commands are listed in [spec/storage-and-backups.md](spec/storage-and-backups.md).

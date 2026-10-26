@@ -18,7 +18,7 @@ Where this folder and the code disagree once the releases are merged, the code a
 - **4.5.1: a day for only some tasks.** The planner, Felix's prompts and schemas, and a stored change's new shape: reviewed and checked apart from the screen too, as it raises stored data's versions and changes goldens.
 - **4.6.0: the Day as a calendar.** The grid, its header, its blocks and the drag, on 4.5.0's rule.
 
-All three come after 4.4.0, the timer (`docs/plan_timer/`), which is planned and not yet built; none touches what the timer changes but the Day's DO NOW card, which 4.6.0 keeps as it is. Built before the timer, the numbers swap (`answers.md`, decided without asking, 1).
+All three come after 4.4.0, the timer (D-112, merged 26 Oct); none touches what the timer changed but the Day's DO NOW card, its **Start** and **Stop** among its actions, which 4.6.0 keeps as it is.
 
 ## What the Day looks like (4.6.0)
 
