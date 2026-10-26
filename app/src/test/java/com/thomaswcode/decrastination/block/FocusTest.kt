@@ -29,6 +29,7 @@ import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.data.ActivityLog
 import com.thomaswcode.decrastination.data.ChatMigration
 import com.thomaswcode.decrastination.data.CreditMigration
+import com.thomaswcode.decrastination.data.TimerMigration
 import com.thomaswcode.decrastination.data.MemoryMigration
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.SettingsMigration
@@ -62,7 +63,7 @@ class FocusTest {
     private val tasks = JsonStore(File(dir, "tasks.json"), TaskState.serializer(), ::TaskState, migrations = listOf(TasksMigration.TASKS, StepOrderMigration.TASKS))
     private val settings = JsonStore(File(dir, "settings.json"), Settings.serializer(), ::Settings, migrations = listOf(SettingsMigration.SETTINGS))
     private val protection = JsonStore(File(dir, "protection.json"), ProtectionState.serializer(), ::ProtectionState)
-    private val session = JsonStore(File(dir, "session.json"), SessionState.serializer(), ::SessionState, migrations = listOf(CreditMigration.SESSION))
+    private val session = JsonStore(File(dir, "session.json"), SessionState.serializer(), ::SessionState, migrations = listOf(CreditMigration.SESSION, TimerMigration.SESSION))
     private val learning = JsonStore(File(dir, "learning.json"), LearningState.serializer(), ::LearningState)
     private val log = JsonStore(File(dir, "log.json"), ActivityLog.serializer(), ::ActivityLog, migrations = listOf(ChatMigration.LOG, MemoryMigration.LOG, CreditMigration.LOG))
     private val focus = Focus(tasks, settings, session, learning, protection, log, clock) { state, s, now -> Planner.plan(Planner.Input(state.tasks, now, LONDON, s)) }
@@ -1073,5 +1074,120 @@ class FocusTest {
         assertEquals(SlotOutcome.Missed to 0, back.outcome to back.workedMin)
         assertEquals(first.end + Slotter.GRACE_MS, back.at)
         assertTrue(session.value.slots.missed.any { it.key == key })
+    }
+
+    // --- A timer on a piece (docs/plan_timer) ---
+
+    @Test
+    fun `a timer counts the plan's piece, else the step as its sheet shows it, else what's left of the task`() = runTest {
+        val (first, second) = laid(task("t", due = "2026-10-12T23:59", steps = listOf(SubStep("Q1-8", 20), SubStep("Q9-16", 40)), effort = 60))
+        val timer = slotted.startTimer("teams:t", 0, first.chunk!!.key)!!
+        assertEquals(first.chunk!!.key to 20, timer.key to timer.minutes)
+        assertEquals(first.chunk!!.label to clock.time, timer.label to timer.startedAt)
+        assertEquals(timer, session.value.timer)
+        // From the sheet's step, its piece in the plan.
+        assertEquals(second.chunk!!.key to 40, slotted.startTimer("teams:t", 1)!!.let { it.key to it.minutes })
+        // With nothing planned: the step's minutes as its sheet shows them, then the task's minutes left.
+        val unplanned = Focus(tasks, settings, session, learning, protection, log, clock) { _, s, now -> Planner.plan(Planner.Input(emptyList(), now, LONDON, s)) }
+        assertEquals(40 to "t: Q9-16", unplanned.startTimer("teams:t", 1)!!.let { it.minutes to it.label })
+        tasks.update { it.copy(tasks = it.tasks + task("whole", effort = 45)) }
+        assertEquals(45 to "teams:whole#-1#0", unplanned.startTimer("teams:whole", null)!!.let { it.minutes to it.key })
+        // No such step to do, or no such task open: none.
+        assertNull(slotted.startTimer("teams:t", 5))
+        assertNull(slotted.startTimer("teams:gone", null))
+    }
+
+    @Test
+    fun `a Start while one runs replaces it, and a second on the same piece restarts nothing`() = runTest {
+        val (first, second) = laid(task("t", due = "2026-10-12T23:59", steps = steps(), effort = 60))
+        val one = slotted.startTimer("teams:t", 0, first.chunk!!.key)!!
+        clock.time += 60_000L
+        assertEquals(one, slotted.startTimer("teams:t", 0, first.chunk!!.key))
+        val two = slotted.startTimer("teams:t", 1, second.chunk!!.key)!!
+        assertEquals(second.chunk!!.key to clock.time, two.key to two.startedAt)
+        assertEquals(two, slotted.timer)
+    }
+
+    @Test
+    fun `a timer's zero is told once, and a stop keeps it with its stop till the next Start`() = runTest {
+        val first = laid(task("t", due = "2026-10-12T23:59", steps = steps(), effort = 60)).first()
+        val timer = slotted.startTimer("teams:t", 0, first.chunk!!.key)!!
+        assertFalse(slotted.timerOver(timer.endsAt - 1))
+        assertTrue(slotted.timerOver(timer.endsAt))
+        assertFalse(slotted.timerOver(timer.endsAt + 60_000L))
+        assertTrue(slotted.timer!!.told)
+        assertTrue(slotted.stopTimer(timer.endsAt + 5 * 60_000L))
+        assertEquals(timer.endsAt + 5 * 60_000L, slotted.timer!!.stoppedAt)
+        assertFalse(slotted.timer!!.running)
+        // Stopped: nothing more to stop, or to tell.
+        assertFalse(slotted.stopTimer())
+        val again = slotted.startTimer("teams:t", 0, first.chunk!!.key)!!
+        assertTrue(again.running && !again.told)
+        assertTrue(slotted.stopTimer(again.startedAt + 60_000L))
+        assertFalse(slotted.timerOver(again.endsAt))
+    }
+
+    @Test
+    fun `a timer ends when its piece is done, whichever way it's done`() = runTest {
+        val steps = listOf(SubStep("Q1", 15), SubStep("Q2", 15), SubStep("Q3", 15))
+        val (first, second) = laid(task("t", due = "2026-10-12T23:59", steps = steps, effort = 45))
+        // Another piece of its task kept: its task's work moved on under it.
+        slotted.startTimer("teams:t", 1, second.chunk!!.key)
+        clock.time = first.end
+        assertTrue(slotted.keepSlot(first.chunk!!.key))
+        assertNull(slotted.timer)
+        // Its own piece kept.
+        slotted.startTimer("teams:t", 1, second.chunk!!.key)
+        clock.time = second.end
+        assertTrue(slotted.keepSlot(second.chunk!!.key))
+        assertNull(slotted.timer)
+        // Its piece found done by a photo.
+        tasks.update { s -> s.copy(tasks = s.tasks + task("u", due = "2026-10-12T23:59", effort = 15)) }
+        val other = slotted.plan().chunksOf("teams:u").single()
+        slotted.startTimer("teams:u", null, other.key)
+        assertTrue(slotted.photoChecked("teams:u", null, 15, key = other.key))
+        assertNull(slotted.timer)
+        // A step of your own ticked by hand.
+        tasks.update { s -> s.copy(tasks = s.tasks + task("mine", steps = listOf(SubStep("A", 10), SubStep("B", 10)), effort = 20).copy(id = "own:mine", source = Source.Own)) }
+        slotted.startTimer("own:mine", 0)
+        assertTrue(slotted.tickBlock("own:mine", 0, "A"))
+        assertNull(slotted.timer)
+        // Its task done by its source.
+        slotted.startTimer("teams:t", 2)
+        tasks.update { s -> s.copy(tasks = s.tasks.map { if (it.id == "teams:t") it.copy(status = Status.Done, doneAt = clock.time) else it }) }
+        slotted.onCompleted(listOf(tasks.value.tasks.single { it.id == "teams:t" }))
+        assertNull(slotted.timer)
+    }
+
+    @Test
+    fun `a timer ends with its task closed or its step changed under it, and stands while its piece is only moved`() = runTest {
+        val first = laid(task("t", due = "2026-10-12T23:59", steps = steps(), effort = 60)).first()
+        slotted.startTimer("teams:t", 0, first.chunk!!.key)
+        // Its slot gone by undone, missed and laid again later: the timer is on the step, not the slot.
+        clock.time = first.end + Slotter.GRACE_MS + 60_000L
+        slotted.missSlot(first.chunk!!.key, Focus.Laid(first.start, first.end, first.window), now = clock.time)
+        assertFalse(slotted.settleTimer())
+        assertTrue(slotted.timer!!.running)
+        // Its step renamed (Felix's Steps change, a sync).
+        tasks.update { s -> s.copy(tasks = s.tasks.map { t -> t.copy(subSteps = t.subSteps.mapIndexed { i, st -> if (i == 0) st.copy(title = "Q1-10") else st }) }) }
+        assertTrue(slotted.settleTimer())
+        assertNull(slotted.timer)
+        // Its task marked not a task.
+        slotted.startTimer("teams:t", 1)
+        tasks.update { s -> s.copy(tasks = s.tasks.map { it.yours(notATask = true) }) }
+        assertTrue(slotted.settleTimer())
+        // Nothing to settle: nothing done.
+        assertFalse(slotted.settleTimer())
+        assertNull(slotted.timer)
+    }
+
+    @Test
+    fun `a timer stopped by hand, its step then ticked, is cleared, so nothing lifts after it`() = runTest {
+        tasks.update { it.copy(tasks = listOf(task("mine", steps = listOf(SubStep("A", 10)), effort = 10).copy(id = "own:mine", source = Source.Own))) }
+        slotted.startTimer("own:mine", 0)
+        assertTrue(slotted.stopTimer(clock.time + 5 * 60_000L))
+        assertTrue(slotted.timer!!.stoppedAt != null)
+        assertTrue(slotted.tickBlock("own:mine", 0, "A"))
+        assertNull(slotted.timer)
     }
 }

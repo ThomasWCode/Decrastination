@@ -192,6 +192,10 @@
             android:exported="false" />
 
         <receiver
+            android:name=".block.TimerReceiver"
+            android:exported="false" />
+
+        <receiver
             android:name=".widget.NextWidgetReceiver"
             android:exported="false"
             android:label="@string/widget_label">

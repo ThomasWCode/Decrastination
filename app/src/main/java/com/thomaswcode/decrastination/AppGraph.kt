@@ -9,6 +9,7 @@ import com.thomaswcode.decrastination.block.Focus
 import com.thomaswcode.decrastination.block.Photos
 import com.thomaswcode.decrastination.block.SlotAlarms
 import com.thomaswcode.decrastination.block.Slots
+import com.thomaswcode.decrastination.block.TimerAlarms
 import com.thomaswcode.decrastination.calendar.CalendarWriter
 import com.thomaswcode.decrastination.calendar.SlotCalendar
 import com.thomaswcode.decrastination.core.DayKind
@@ -204,6 +205,8 @@ class AppGraph private constructor(context: Context) {
             // The blocker's plan kept for the minute let go: this one may come of what that isn't kept by (your pace, the
             // session, the school calendar, your instructions), so his looks and a reminder's alarm don't go by the last.
             { _ -> focus.forgetPlan() },
+            // The timer on a piece of a task finished, deleted or marked not a task anywhere (your own, a sync) ended with it.
+            { _ -> focus.settleTimer() },
             { made -> SlotAlarms.arm(app, made, clock.now()) },
             // Your reminders: any this plan lets go (its task closed) or brings due said and sent, with no call (one
             // whose words are to be asked for afresh is left to work of its own), then their alarm set by it, as a
@@ -383,6 +386,8 @@ class AppGraph private constructor(context: Context) {
             focus.finishKeeps()
             focus.finishPhotos()
             settleCompletions()
+            // A timer whose piece was done while the app was down ended.
+            focus.settleTimer()
             // Only then is the day judged empty: a slot kept as the app stopped is work done.
             runCatching { focus.grantAllowanceIfDue() }.onFailure { Log.w(TAG, "Giving the day's free time failed", it) }
         }
@@ -472,6 +477,14 @@ class AppGraph private constructor(context: Context) {
         scope.launch {
             runCatching { notifier.retire(NoticeId.RETIRED) }.onFailure { Log.w(TAG, "Letting go of the retired notifications failed", it) }
             outbox.notify(clock.now())
+        }
+        // The timer's notifications and alarms kept to it (docs/plan_timer): at this start, after a restart or a boot, shown
+        // again and set again, a zero gone by meanwhile told now; and at each change, wherever it came from (a Start, a
+        // Stop, its piece done).
+        scope.launch {
+            stores.session.state.map { it.timer }.distinctUntilChanged().collect {
+                runCatching { TimerAlarms.sync(app) }.onFailure { e -> Log.w(TAG, "Keeping the timer's notification failed", e) }
+            }
         }
         // Redraw the widget whenever what it shows may have changed.
         scope.launch {

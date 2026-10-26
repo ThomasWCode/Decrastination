@@ -1,0 +1,107 @@
+{
+    "credit": {
+        "day": "2026-10-18",
+        "earnedMs": 600000,
+        "spentMs": 120000,
+        "allowanceOn": "2026-10-17"
+    },
+    "slots": {
+        "date": "2026-10-18",
+        "previous": {
+            "teams:as-essay#1": 1792339200000
+        },
+        "missed": [
+            {
+                "key": "teams:as-sheet#1",
+                "taskId": "teams:as-sheet",
+                "at": 1792312800000,
+                "spilled": true
+            }
+        ]
+    },
+    "photosDone": [
+        {
+            "id": "photo-2",
+            "taskId": "teams:as-essay",
+            "step": "Plan the essay",
+            "minutes": 25,
+            "at": 1792314000000,
+            "stepIndex": 1,
+            "key": "teams:as-essay#1",
+            "takenAt": 1792313880000
+        }
+    ],
+    "keeping": [
+        {
+            "record": {
+                "date": "2026-10-18",
+                "key": "teams:as-essay#0",
+                "taskId": "teams:as-essay",
+                "kind": "Homework",
+                "className": "12X/Hi1",
+                "label": "History essay: causes of the war: Read the two sources",
+                "plannedMin": 30,
+                "start": 1792310400000,
+                "end": 1792312200000,
+                "window": "Evening",
+                "outcome": "Kept",
+                "workedMin": 30,
+                "photo": true,
+                "earned": true,
+                "earnedMin": null,
+                "at": 1792312200000
+            },
+            "stepIndex": 0,
+            "step": "Read the two sources",
+            "workedBefore": 10,
+            "earningMin": 10.0,
+            "replaces": {
+                "date": "2026-10-18",
+                "key": "teams:as-essay#0",
+                "taskId": "teams:as-essay",
+                "kind": "Homework",
+                "className": "12X/Hi1",
+                "label": "History essay: causes of the war: Read the two sources",
+                "plannedMin": 30,
+                "start": 1792310400000,
+                "end": 1792312200000,
+                "window": "Evening",
+                "outcome": "Missed",
+                "workedMin": 0,
+                "photo": true,
+                "earned": true,
+                "earnedMin": null,
+                "at": 1792312200000
+            },
+            "photo": {
+                "id": "photo-2",
+                "taskId": "teams:as-essay",
+                "step": "Plan the essay",
+                "minutes": 25,
+                "at": 1792314000000,
+                "stepIndex": 1,
+                "key": "teams:as-essay#1",
+                "takenAt": 1792313880000
+            },
+            "earnOnly": true
+        }
+    ],
+    "rewarded": [
+        {
+            "taskId": "teams:as-done",
+            "doneAt": 1791918000000
+        }
+    ],
+    "timer": {
+        "key": "teams:as-essay#1",
+        "taskId": "teams:as-essay",
+        "stepIndex": 1,
+        "step": "Plan the essay",
+        "label": "History essay: causes of the war: Plan the essay",
+        "minutes": 25,
+        "startedAt": 1792338600000,
+        "told": true,
+        "stoppedAt": 1792340400000
+    },
+    "version": 3
+}

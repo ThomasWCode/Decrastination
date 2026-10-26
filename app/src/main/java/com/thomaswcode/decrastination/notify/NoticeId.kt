@@ -20,6 +20,10 @@ enum class NoticeId(val id: Int, val codes: IntRange = IntRange.EMPTY) {
     FreeTime(2003, 2003..2003),
     FreeTimeEnding(2004, 2004..2004),
 
+    /** A timer on a piece (docs/plan_timer): the running one's tap and its *Stop*; the "time's up" one's tap. */
+    Timer(2005, 2005..2006),
+    TimerOver(2007, 2007..2007),
+
     /** The watchdog's: blocking or protection off. */
     Protection(3001, 3001..3001),
 

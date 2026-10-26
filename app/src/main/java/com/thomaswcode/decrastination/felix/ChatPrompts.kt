@@ -30,6 +30,7 @@ import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.Unplanned
 import com.thomaswcode.decrastination.core.Why
+import com.thomaswcode.decrastination.data.PieceTimer
 import com.thomaswcode.decrastination.enrich.Found
 import com.thomaswcode.decrastination.enrich.InstructionPrompts
 import com.thomaswcode.decrastination.enrich.Pricing
@@ -788,9 +789,11 @@ object ChatPrompts {
      * far days; each summary is at most [PLAN_LIST] lines. Today's slots and the next
      * piece of each task with no steps say their keys (G1), so he can keep one done, and the pieces [kept]
      * today (their keys and labels), which the plan no longer shows, so he can take one back; and after
-     * the slot under way, [blocking]: whether blocking applies and why, and the free time (G5).
+     * the slot under way, [blocking]: whether blocking applies and why, and the free time (G5). A running
+     * [timer] (docs/plan_timer) is said with the slot under way or the next thing where it's on that task,
+     * else in a line of its own.
      */
-    fun plan(plan: Plan, zone: ZoneId, kept: List<Pair<String, String>> = emptyList(), blocking: String? = null): String = buildString {
+    fun plan(plan: Plan, zone: ZoneId, kept: List<Pair<String, String>> = emptyList(), blocking: String? = null, timer: PieceTimer? = null): String = buildString {
         fun at(time: Long) = Instant.ofEpochMilli(time).atZone(zone).format(WHEN)
         fun piece(chunk: Chunk) = "${chunk.label.take(MAX_TITLE)} (${chunk.minutes} min)"
         fun event(task: TaskItem) = "${task.id} | ${task.title.take(MAX_TITLE)} | ${task.source.label}"
@@ -808,10 +811,14 @@ object ChatPrompts {
         val then = plan.then?.let { "; then ${piece(it)}" }.orEmpty()
         val doing = plan.slotAt(plan.now)
         fun clock(time: Long) = Instant.ofEpochMilli(time).atZone(zone).format(CLOCK)
+        // A timer running: on the piece said here, with it; on another, a line of its own.
+        val running = timer?.takeIf { it.running }
+        val on = running?.takeIf { it.taskId == (doing?.chunk ?: plan.next)?.taskId }?.let { ", " + FelixPrompts.timerOn(it, plan.now, zone) }.orEmpty()
         when {
-            doing != null -> appendLine("Now: ${clock(doing.start)}–${clock(doing.end)} ${piece(doing.chunk!!)}$then")
-            else -> plan.next?.let { appendLine("Next to do: ${piece(it)}$then") }
+            doing != null -> appendLine("Now: ${clock(doing.start)}–${clock(doing.end)} ${piece(doing.chunk!!)}$on$then")
+            else -> plan.next?.let { appendLine("Next to do: ${piece(it)}$on$then") }
         }
+        if (running != null && on.isEmpty()) appendLine(FelixPrompts.timerLine(running, plan.now, zone))
         // Whether blocking applies now and why, and their free time (G5): "how much free time have I got?"
         blocking?.let { appendLine(it) }
         // Today's slots at their times, each gone by, under way or to come (AI-13), so a time today isn't taken for past.

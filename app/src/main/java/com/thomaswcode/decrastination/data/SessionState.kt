@@ -16,9 +16,39 @@ data class SessionState(
     val keeping: List<Keeping> = emptyList(),
     /** Completions whose free time has been given, so each is given once (`Focus.onCompleted`); kept a fortnight. */
     val rewarded: List<Rewarded> = emptyList(),
+    /** The timer on a piece (docs/plan_timer), running or stopped by hand; none once its piece is done. Not backed up: a running timer is this phone's moment. */
+    val timer: PieceTimer? = null,
     /** The shape this is in ([Migration]): raised with each change of it, a migration bringing older files to it. */
-    val version: Int = 2,
+    val version: Int = 3,
 )
+
+/** A timer on a piece (docs/plan_timer): the owner's word they're on it, running from [startedAt] for [minutes]; stopped by hand, kept with [stoppedAt] till the next Start, so Felix's slot-over message waits its 30 minutes from the stop. */
+@Serializable
+data class PieceTimer(
+    /** The piece it was started on ([com.thomaswcode.decrastination.core.Chunk.key]). */
+    val key: String,
+    val taskId: String,
+    /** Its step's place in its task's list; null for a task with no steps, or a piece of it in sittings. */
+    val stepIndex: Int?,
+    /** The step's title as it was, so a step changed under it ends it. */
+    val step: String?,
+    /** "Task: step", as the notification and the card say it. */
+    val label: String,
+    val minutes: Int,
+    val startedAt: Long,
+    /** Its zero has been told (the "time's up" notification posted, the running one retitled). */
+    val told: Boolean = false,
+    val stoppedAt: Long? = null,
+) {
+    val endsAt: Long get() = startedAt + minutes * 60_000L
+    val running: Boolean get() = stoppedAt == null
+
+    /** Its minutes left at [now], rounded up: none from its zero on. */
+    fun leftMin(now: Long): Int = ((endsAt - now + 59_999L) / 60_000L).toInt().coerceAtLeast(0)
+
+    /** The whole minutes it has run past its zero by [now]: none before it. */
+    fun overMin(now: Long): Int = ((now - endsAt) / 60_000L).toInt().coerceAtLeast(0)
+}
 
 /** A completion that has had its free time: the task, and when it was confirmed done. */
 @Serializable
