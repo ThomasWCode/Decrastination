@@ -6,7 +6,7 @@ import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/** The timer's notifications' rules (docs/plan_timer): what [TimerAlarms.sync] says and keeps, apart from Android. */
+/** The timer's notifications' rules (D-112): what [TimerAlarms.sync] says and keeps, apart from Android. */
 class TimerAlarmsTest {
     private val timer = PieceTimer("teams:t#0", "teams:t", 0, "Q1", "t: Q1", minutes = 25, startedAt = 1_000_000L)
 

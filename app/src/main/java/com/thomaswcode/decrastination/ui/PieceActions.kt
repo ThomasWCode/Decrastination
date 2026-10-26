@@ -219,7 +219,7 @@ internal fun rememberTimerNow(graph: AppGraph, timer: PieceTimer?): Long {
 /**
  * What can be done with [piece], wherever it's shown (Day, the block screen): **Open** goes to
  * the task; **Start** runs a timer on it, and **Stop** stops the one on it, its time over the buttons
- * (docs/plan_timer); **Done** keeps its slot (LR-09); **Check it's done** asks its source (**All of it done**,
+ * (D-112); **Done** keeps its slot (LR-09); **Check it's done** asks its source (**All of it done**,
  * for one of your own, is your say); **Refresh Teams** asks the Teams widget to sync; **Photo check** sends a photo
  * of written work. [say] gives how each went.
  */

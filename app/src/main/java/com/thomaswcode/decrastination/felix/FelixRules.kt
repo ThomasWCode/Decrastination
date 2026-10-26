@@ -56,7 +56,7 @@ object FelixRules {
     /** How long after a slot's end and grace its miss is surely on record. */
     private const val MISS_LAG_MS = 60_000L
 
-    /** How long after a timer ends, at its zero or by a Stop, his messages about its task wait (docs/plan_timer). */
+    /** How long after a timer ends, at its zero or by a Stop, his messages about its task wait (D-112). */
     const val TIMER_HOLD_MS = 30 * 60_000L
 
     /**
@@ -72,7 +72,7 @@ object FelixRules {
     private fun covers(timer: PieceTimer?, record: SlotRecord): Boolean = timer != null && record.taskId == timer.taskId && record.at + FRESH_MS > timer.startedAt
 
     /**
-     * Whether [timer] holds [trigger]'s message at [now] (docs/plan_timer): a SlotStart about its task while it runs, or a
+     * Whether [timer] holds [trigger]'s message at [now] (D-112): a SlotStart about its task while it runs, or a
      * SlotEnd on a record it could have covered, till its hold lifts. [due] keeps such a message back; this is asked again
      * once his words are back, as a Start can come while he's asked.
      */
@@ -92,7 +92,7 @@ object FelixRules {
      * with nothing done on its task since it began (SlotStart), at most [MAX_PER_SLOT] times; and a
      * slot just kept, every third one (SlotKept). [today]: today's slots on record; [sent]: his
      * messages today, the silent ones (he chose not to write, or the model couldn't be asked) too.
-     * [timer]: the timer on a piece (docs/plan_timer), whose task's SlotStart and SlotEnd wait while
+     * [timer]: the timer on a piece (D-112), whose task's SlotStart and SlotEnd wait while
      * it [holds].
      */
     fun due(

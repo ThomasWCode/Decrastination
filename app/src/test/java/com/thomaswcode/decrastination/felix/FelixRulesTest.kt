@@ -232,7 +232,7 @@ class FelixRulesTest {
         assertEquals(now + FelixRules.RETRY_MS, FelixRules.next(empty, FelixState(retry = retry), settings, now))
     }
 
-    // --- A timer on a piece (docs/plan_timer): his slot-start and slot-over messages about its task held ---
+    // --- A timer on a piece (D-112): his slot-start and slot-over messages about its task held ---
 
     private val second = plan.todaySlots.filter { it.kind == SlotKind.Work }[1]
 

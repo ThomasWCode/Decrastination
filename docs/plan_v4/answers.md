@@ -1,6 +1,6 @@
 # The questions, and your answers
 
-Every question the 4.x plan put to you, and every one raised while it was built, in a line each: what was asked, what you answered, and where it's recorded. A "(Q31: A)" in [decisions.md](../decisions.md) or [spec/](../spec/) points here; "C-Q" is the cleanup plan's, "M" a call the merge of the two plans made on its own (18 Oct 2026), and Q32 on were asked while building, each with a recommendation and your answer. Where a line gives only the letter, you took the recommendation. A Q id written without its answer's letter, as "(Q13)", and the hyphenated ones, as "(Q-31)", are older requirement ids, not these ([spec/requirement-ids.md](../spec/requirement-ids.md) §Q).
+Every question the 4.x plan put to you, and every one raised while it was built, in a line each: what was asked, what you answered, and where it's recorded; after it, the timer's (4.4.0), with the choices its building made without asking. A "(Q31: A)" in [decisions.md](../decisions.md) or [spec/](../spec/) points here; "C-Q" is the cleanup plan's, "M" a call the merge of the two plans made on its own (18 Oct 2026), and Q32 on were asked while building, each with a recommendation and your answer. Where a line gives only the letter, you took the recommendation. A Q id written without its answer's letter, as "(Q13)", and the hyphenated ones, as "(Q-31)", are older requirement ids, not these ([spec/requirement-ids.md](../spec/requirement-ids.md) §Q).
 
 ## The cleanup's questions (17 and 18 Oct)
 
@@ -46,7 +46,7 @@ Every question the 4.x plan put to you, and every one raised while it was built,
 - **Q25, the summary email's form**: B, the third person about you, no "I" (D-66).
 - **Q26, the chat as the app's home screen**: dropped; the app opens on Day.
 - **Q27, the failed Gmail write's notification**: A, a new channel, *Your sources* (`Channels.SOURCES`, `NoticeId.GmailWrite`).
-- **Q28, summaries for him**: A, later: a conversation digest as 4.4.0 ([README.md](README.md) §After the plan); nothing else summarised.
+- **Q28, summaries for him**: A, later: a conversation digest ([README.md](README.md) §After the plan; numbered 4.4.0 then, a number the timer has since taken); nothing else summarised.
 - **Q29, his line's default**: A, "your mate who's on your case about the work".
 - **Q30, the swearing's line**: A as taken (mild, sparing, never at you), then left out with Q16 on 21 Oct.
 - **Q31, standing notes**: A, a note for every task of a class, subject or source (D-100).
@@ -93,5 +93,34 @@ Every question the 4.x plan put to you, and every one raised while it was built,
 - **Q64** (23 Oct): a reply of yours that was itself a question was kept as his question's answer: fixed in 4.3.12 (D-19).
 - **Q65** (23 Oct): a task's sheet named as "Next:" a step already ticked: fixed in 4.3.13.
 - **Q66** (24 Oct): a reply Claude can't read is kept as the question's answer, as built since 4.3.12: A, D-19 says so (4.3.19).
+
+## The timer (4.4.0, 25 and 26 Oct)
+
+Asked as the timer's plan was made (its Q1 to Q4), then while it was built. How it works is in [spec/blocking-and-protection.md](../spec/blocking-and-protection.md) §A timer on a piece and [spec/felix.md](../spec/felix.md) §His messages; the decision is D-112.
+
+- **Q67, which of Felix's messages a running timer holds**: as recommended, his slot-start nudge and his slot-over message, the slot's outcome recorded as ever: "Ensure that it will still record and message as 'missed' if the task does not get ticked off within 30 min of the session ending. In general, ensure that it can cope with the task not actually being completed in the session." The hold lifts 30 minutes after the countdown's zero, and his message comes then, fresh from the lift.
+- **Q68, time over at the zero**: Android's own counter running on as −mm:ss, the running notification retitled and a "Time's up" of its own (not re-based to count up, nor rewritten every half minute).
+- **Q69, where Start is**: the piece's actions and the task's sheet, and ▶ on the widget: "Make the tick and start button on the widget appear above each other in a column, and then the reload button appear in the column to the right, as it does now."
+- **Q70, after a Stop by hand with the piece undone**: 30 minutes after any end, its zero or a Stop, whichever comes first; not at once on a Stop, when a tick a moment after it would follow "you missed it".
+- **"Time's up" pops up** (26 Oct, at the phone): at the high level, as free time's last minute is, so it's seen on silent; built first at the middle level, which only sounded.
+
+Chosen without asking, yours to overturn (the alternative in brackets):
+
+- It's a timer in the code and on screen, not a session, so D-55 keeps its meaning. (Called a session, D-55 amended.)
+- One at a time: a Start replaces the one there is and says so; a second on the piece it runs on restarts nothing. (One a task.)
+- Start doesn't open the task; Open stays beside it. (One tap for both; Open can fail, and the line said would carry both.)
+- It counts the plan's piece's minutes; for a step the plan hasn't laid, the step's as its sheet shows them; a task with no steps has Start for its next piece only while the plan has one. (Minutes picked at each Start.)
+- Its time counts for nothing: not a kept slot's minutes, not the calibration, not free time. (The overrun offered as the kept slot's extra minutes when a piece is ticked over time; against it, a timer left running through dinner would teach a wrong pace.)
+- A Start is something done on its task (`Looks.noteActivity`), so the slot's nudge stays off after a Stop too. (Only a running timer holds it.)
+- Felix is told of a running timer in his plan's line, and can't start or stop one from the chat. (An action of his: a schema change.)
+- The wall clock, not uptime: nothing rides on it. (Uptime, as the old sessions kept for their blocking.)
+- "Time's up" comes whatever the hour: you started it, and it isn't his. A zero gone by unseen (the phone off over it) is told at the next start within its 30-minute hold, and past that is marked told without a word. (Held in quiet hours; told whenever the phone's next on.)
+- Not backed up; a reset leaves it, as no reset touches `session.json`. (In the backup's part of `session.json`; cleared with *Everything learned*.)
+- An Undo of the tick that ended it doesn't restart it. (Restarted where it was.)
+- A timer ended by its piece done is cleared and lifts no hold, so a piece ticked late isn't followed by "you missed it". A Start on another task replaces a stopped timer's record, and that task's miss falls back to his ordinary freshness.
+- A forgotten timer holds the slot-start nudge only till 30 minutes past its zero. (For as long as it runs, days included.)
+- The widget's column drops ▶ first where one icon fits (from a card 64 dp high); its pill says "⏱ till 17:30" and "⏱ over", not minutes left, as the widget redraws every 15 minutes at most. (Both shrunk to fit; minutes left, redrawn each minute.)
+- No setting for the 30-minute hold: `FelixRules.TIMER_HOLD_MS`. (Beside `felixGraceMin` in Settings.)
+- Declined in review: a hold that lifts after midnight finds its miss under yesterday's date, and it goes unsaid. With quiet hours from 22:30 and the day's hours ending by then, such a hold lifts in them, when he never writes (D-58); the fix, yesterday's records and messages in his look without his once-a-day messages counting yesterday's, is for when quiet hours start after midnight.
 
 Q41 was answered A on 21 Oct; its subject was only in that day's questions file, which is gone, so it can't be followed. Of the review of 4.3.13's findings, your calls on I01, I04, P01 and B08 are in [astra-review-4.3.13](../astra-review-4.3.13/README.md).

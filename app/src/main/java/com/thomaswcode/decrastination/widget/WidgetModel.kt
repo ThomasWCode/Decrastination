@@ -48,7 +48,7 @@ data class WidgetModel(
     val key: String? = null,
     /** When the plan it shows was made: a tick keeps only what it showed (a box's next piece has its key). */
     val seenAt: Long = 0L,
-    /** The timer runs on the piece it shows (docs/plan_timer): ■ in place of ▶. */
+    /** The timer runs on the piece it shows (D-112): ■ in place of ▶. */
     val timing: Boolean = false,
     /** That timer's pill, in place of the minutes': "⏱ till 17:30", "⏱ over". */
     val timerPill: String? = null,

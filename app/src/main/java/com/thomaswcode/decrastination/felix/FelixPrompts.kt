@@ -55,7 +55,7 @@ object FelixPrompts {
     const val TEXT = 1_500
 
     /**
-     * A running [timer] on a piece (docs/plan_timer) as he's told it beside its piece: "timer on it since 17:02, 8 min left",
+     * A running [timer] on a piece (D-112) as he's told it beside its piece: "timer on it since 17:02, 8 min left",
      * "…, its time just up" or "…, 12 min over".
      */
     fun timerOn(timer: PieceTimer, now: Long, zone: ZoneId): String = "timer on it since ${Instant.ofEpochMilli(timer.startedAt).atZone(zone).format(CLOCK)}, " + when {
@@ -103,7 +103,7 @@ object FelixPrompts {
      * twice; for the Morning, today's [reminders], and the steps he may rebalance to fit a free time at school ([rebalance], D-110).
      * What's done of [tasks], those of today's pieces, [task] and his messages shown (D-57), so his own
      * messages don't outweigh a tick; and, where nothing's been said for [GREET_AFTER_MIN], that it's his
-     * first message in a while. A running [timer] (docs/plan_timer): with the piece or task it's about where it's
+     * first message in a while. A running [timer] (D-112): with the piece or task it's about where it's
      * on that task, else in a line of its own.
      */
     fun describe(

@@ -478,7 +478,7 @@ class AppGraph private constructor(context: Context) {
             runCatching { notifier.retire(NoticeId.RETIRED) }.onFailure { Log.w(TAG, "Letting go of the retired notifications failed", it) }
             outbox.notify(clock.now())
         }
-        // The timer's notifications and alarms kept to it (docs/plan_timer): at this start, after a restart or a boot, shown
+        // The timer's notifications and alarms kept to it (D-112): at this start, after a restart or a boot, shown
         // again and set again, a zero gone by meanwhile told now; and at each change, wherever it came from (a Start, a
         // Stop, its piece done).
         scope.launch {

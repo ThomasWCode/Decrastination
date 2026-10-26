@@ -1076,7 +1076,7 @@ class FocusTest {
         assertTrue(session.value.slots.missed.any { it.key == key })
     }
 
-    // --- A timer on a piece (docs/plan_timer) ---
+    // --- A timer on a piece (D-112) ---
 
     @Test
     fun `a timer counts the plan's piece, else the step as its sheet shows it, else what's left of the task`() = runTest {

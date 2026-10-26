@@ -208,7 +208,7 @@ class NextWidget : GlanceAppWidget() {
                 Cue(model.warning.orEmpty())
             }
             // ✓: the piece done, as the app's Done keeps it (UI-05); over it, where there's height, ▶ to start a timer on
-            // it, or ■ to stop the one on it (docs/plan_timer).
+            // it, or ■ to stop the one on it (D-112).
             if (layout.tick) model.key?.let { key ->
                 Spacer(GlanceModifier.width(8.dp))
                 val tick = actionRunCallback<TickAction>(actionParametersOf(TickAction.KEY to key, TickAction.SEEN to model.seenAt))
@@ -336,7 +336,7 @@ data class WidgetLayout(
     val centred: Boolean,
     /** ✓ beside the next thing (UI-05), where it's a piece and there's room. */
     val tick: Boolean = false,
-    /** ▶ (or ■) over ✓, in one column (docs/plan_timer), where the height fits both; else ✓ alone. */
+    /** ▶ (or ■) over ✓, in one column (D-112), where the height fits both; else ✓ alone. */
     val start: Boolean = false,
     /**
      * A warning there's no room to say: a red ! beside the card's name instead, so no size shows
@@ -457,7 +457,7 @@ class TickAction : ActionCallback {
 
 /**
  * ▶: a timer started on [KEY]'s piece, or, the plan moved on since the widget was drawn, its [TASK]'s next
- * ([WidgetModel.startPiece]); or ■: the one on it stopped (docs/plan_timer), down the app's own path, and the widget drawn again.
+ * ([WidgetModel.startPiece]); or ■: the one on it stopped (D-112), down the app's own path, and the widget drawn again.
  */
 class StartAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
