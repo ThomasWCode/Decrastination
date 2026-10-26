@@ -115,7 +115,7 @@ Not sent: a task's reading, but as its minutes, its steps and a long text's summ
 
 `ChatPrompts.plan`:
 - a paragraph on what the plan is, and what each `[why: …]` code means;
-- the slot under way, or the next thing to do, and the one after;
+- the slot under way, or the next thing to do, and the one after; a timer running on its task with it (", timer on it since 17:18, 28 min left", D-112), or one on another's in a line of its own (`Timer running on …`);
 - whether blocking applies now and why, the free time, and what finishing today earns (G5, 4.1.1);
 - today's slots, each past, now or ahead, with its key (G1, 4.1.1);
 - the next piece of each task with no steps, by key, and the pieces kept today, which the plan no longer shows, by key (G1);
@@ -225,7 +225,7 @@ The tasks' own text (id; then its text: an assignment's instructions, an email's
     About 4,000 characters; the first draft by half term.
 
 The plan: the work the app has them do each day so every deadline is met, as its Day and Work tabs show it. Its minutes are the app's, from what it's learned of how long things take them, so they can differ from the task list's. While anything's planned for today, blocked apps stay blocked in blocking hours; otherwise they cost free time earned by working. Each piece's [why: …] says why it's on its day: duesoon (due today or tomorrow), overdue, spread (its share of the free time to its deadline), minimumtouch (kept within a week of its piece before), revisiongap (a day after its revision piece before), mostroom (a task in one piece, on the roomiest day before its deadline), soft (no due date: spare time this week), packed (its days are too tight to spread it, so as late as they allow), kept (where its slot today already was, under way or still to come), noroom (no room before its deadline).
-Now: 17:20–17:50 Rates of reaction worksheet: part 1 of 2 (30 min); then Vectors exercise 4B: Questions 1 to 6 (35 min)
+Now: 17:20–17:50 Rates of reaction worksheet: part 1 of 2 (30 min), timer on it since 17:18, 28 min left; then Vectors exercise 4B: Questions 1 to 6 (35 min)
 Blocking: on until today's work's done (2 pieces, 1 h 5 min); free time 0 min
 Today's slots (the times its pieces are laid at):
 - 17:20–17:50 Rates of reaction worksheet: part 1 of 2 (30 min) [now] key teams:t1#-1#1
@@ -427,12 +427,12 @@ You look things up on the web for the assistant in a UK sixth-form student's (Ye
 ### When he writes
 
 Every half minute while the blocker runs, at each slot's alarm, and at the check he set, the rules look for a reason to write (`FelixRules.due`), in this order:
-1. **SlotEnd**: a slot of today's went by undone, or was ticked without the photo it needs to earn, its time over; once a slot, while it's fresh (30 minutes).
+1. **SlotEnd**: a slot of today's went by undone, or was ticked without the photo it needs to earn, its time over; once a slot, while it's fresh (30 minutes). One a timer on its task could have covered waits till 30 minutes after the timer's zero or its Stop, whichever came first, and is fresh from then (D-112).
 2. **DayDone**: today's last slot kept, with nothing left planned today; once a day.
 3. **Question**: a question from a reading (AI-10), the oldest first; not before his next check.
 4. **Completions**: from 19:00, work a source says is done that no kept slot saw that day (LR-05); once an evening, not before his next check.
 5. Then only while a slot of today's is under way or to come, and not before his next check:
-   - **SlotStart**: a slot under way past his grace (`felixGraceMin`, 10 minutes) with nothing done on its task since it began; up to three times a slot.
+   - **SlotStart**: a slot under way past his grace (`felixGraceMin`, 10 minutes) with nothing done on its task since it began (a timer started on it among what's done), and no timer running on its task short of 30 minutes past its zero (D-112); up to three times a slot.
    - **SlotKept**: about one kept slot in three, while it's fresh.
 
 He isn't asked in quiet hours, during a timed calendar event that takes its time, or with Claude off. His notifications off silence only them: what he writes is in the chat. A standing instruction can quiet him further: he gives an empty message.
@@ -449,7 +449,7 @@ Also:
 1. **System**: [his prompt](#his-prompt), with his name and line from Settings, then the profile.
 2. **One message** (`FelixPrompts.describe`), a line each:
    - `Reason:` and `Now:`;
-   - the piece: for a slot under way, its label, minutes, times and what earns its free time, and its first action where one's written (AI-15); for a slot on record, whether it was missed, kept, or ticked without its photo; for a question, the task; for a Reminder, the slot then under way or next (`Slot then:`) and its task (`Task:`);
+   - the piece: for a slot under way, its label, minutes, times and what earns its free time, and its first action where one's written (AI-15); for a slot on record, whether it was missed, kept, or ticked without its photo; for a question, the task; for a Reminder, the slot then under way or next (`Slot then:`) and its task (`Task:`); a timer running on the task it's about at the piece's or task's line's end (", timer on it since …"), or one on another's in a line of its own (D-112);
    - `Its task's own text`: up to 1,500 characters of it (a longer one as its reading's summary, else its start and end), with its attachments, links and an email's sender (D-93);
    - `Notes on it:` the notes kept with its task (4.1.0), its own and the standing ones it matches;
    - `Their reminder…`: for a Reminder, your words; for a SlotStart, your reminder that came at the slot's start, so he doesn't say it twice;

@@ -47,7 +47,8 @@ object WidgetUpdater {
             return
         }
         val teamsAsOf = graph.tasks.value.status(Source.Teams).dataAsOf
-        alarms.setWindow(AlarmManager.RTC, nextRedrawAt(graph.planning.plan(), graph.clock.zone(), graph.settings.value, teamsAsOf), REDRAW_WINDOW_MS, redrawIntent(context))
+        val timerEndsAt = graph.focus.timer?.takeIf { it.running }?.endsAt
+        alarms.setWindow(AlarmManager.RTC, nextRedrawAt(graph.planning.plan(), graph.clock.zone(), graph.settings.value, teamsAsOf, timerEndsAt), REDRAW_WINDOW_MS, redrawIntent(context))
     }
 
     /** While the evening's hours run out, the plan shifts as they do: a chunk stops fitting today. */
@@ -58,10 +59,10 @@ object WidgetUpdater {
      * turns overdue), the moment a chunk can be started (an Anki deck's cards at 04:00), the start
      * or end of today's working hours, and, while they last, every 15 minutes, since the time left
      * today shrinks with every minute; the next slot's start or end (UI-05: the headline moves on);
-     * and the moment Teams' data, as of [teamsAsOf], turns stale and earns its warning. A minute
-     * away at the soonest.
+     * and the moment Teams' data, as of [teamsAsOf], turns stale and earns its warning; and a running
+     * timer's zero ([timerEndsAt]), where its pill turns to "over". A minute away at the soonest.
      */
-    fun nextRedrawAt(plan: Plan, zone: ZoneId, settings: Settings, teamsAsOf: Long? = null): Long {
+    fun nextRedrawAt(plan: Plan, zone: ZoneId, settings: Settings, teamsAsOf: Long? = null, timerEndsAt: Long? = null): Long {
         val now = plan.now
         val midnight = plan.today.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
         val deadline = plan.ordered.map { it.deadline }.filter { it > now }.minOrNull() ?: Long.MAX_VALUE
@@ -74,7 +75,8 @@ object WidgetUpdater {
         val working = if (now in start until end) now + WORKING_REDRAW_MS else Long.MAX_VALUE
         val boundary = listOf(start, end).filter { it > now }.minOrNull() ?: Long.MAX_VALUE
         val slot = plan.todaySlots.filter { it.kind == SlotKind.Work }.flatMap { listOf(it.start, it.end) }.filter { it > now }.minOrNull() ?: Long.MAX_VALUE
-        return maxOf(minOf(midnight, deadline, startable, stale, working, boundary, slot), now + 60_000L)
+        val zero = timerEndsAt?.takeIf { it > now } ?: Long.MAX_VALUE
+        return maxOf(minOf(midnight, deadline, startable, stale, working, boundary, slot, zero), now + 60_000L)
     }
 
     fun cancelRedraw(context: Context) {

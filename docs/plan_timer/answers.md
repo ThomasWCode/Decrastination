@@ -43,6 +43,18 @@ Codex's and Claude's reviews of the plan, each finding checked against the code 
 - **No draft paid for that the hold keeps unsent** (Claude): `Looks.draft` writes the slot-start nudge ahead from `FelixRules.upcoming` without `due`, so a timer started before the slot still cost a call; `upcoming` now takes the timer and passes such a slot over. `build.md` stage 4.
 - Two corrections to the text (Claude): a function named that doesn't exist (`finishKeep`), and a section cited from the owner's private notes rather than `docs/development.md`. Its third, the owner's school-day hours as a D-79 matter, was declined: the owner says school times aren't sensitive.
 
+## Changed in the build (4.4.0, 26 Oct)
+
+Where the build found the plan wrong, or made a call it left open:
+
+- **A reset leaves the timer.** The plan had *Everything learned* clear `session.json`; no reset touches it (`Stores.all`: the store has no resets), and *Everything learned* is "all of these" (the stats, the calibration, what Felix remembers, the chat, your changes), none of which is the timer. So a reset leaves it, as it leaves today's slots and free time; **Stop** ends it. Alternative: *Everything learned* clears the timer too, its description saying so.
+- **Start pokes no plan.** The plan had it make the plan again so the Day and the widget redraw; the Day reads the timer itself, and the widget redraws at every change to `session.json` (`AppGraph`'s collector), so a replan would cost its hooks for nothing.
+- **A Start from a step on the sheet counts the step's next piece in the plan**, its next sitting where it's cut into sittings, rather than the piece keyed by the step alone, which is its last sitting.
+- **A second Start on the piece it runs on restarts nothing**, so a double tap doesn't reset the countdown.
+- **A task marked not a task, or the same as another, ends the timer** as one closed does, and offers no Start.
+- **The widget's column** is ▶ over ✓ at 24 dp with a 4 dp gap, from a card 64 dp high; the phone's widget rows are about 96 dp, so its 2×1 has the column. To be looked at on the phone (§The phone, 6).
+- **No test of the notifications**: `TimerAlarms` reads the graph and Android's alarm and notification managers, with no seam a unit test can hold; its choices are checked on the phone.
+
 ## Decided without asking
 
 Each a routine call the owner may overturn; the alternative is named so the build can switch.
@@ -56,7 +68,7 @@ Each a routine call the owner may overturn; the alternative is named so the buil
 7. **Felix is told** of a running timer in one clause of his plan context, so his chat answers and his other messages know; **he can't start or stop one** from the chat (no new action in his schema, no golden or compile-size risk). Alternative: an `action` of his for Start and Stop, a schema change with its golden and `SchemaCompileTest`.
 8. **Wall clock, not uptime.** The old session fought date changes because blocking rode on it; nothing rides on this one. Alternative: the uptime clock as before, more code for no protection worth having.
 9. **The "time's up" notification comes whatever the hour**, quiet hours included: the owner started it, and it's the app's, not Felix's. Alternative: held in quiet hours as his are.
-10. **Not backed up**, and cleared by *Everything learned* with the rest of `session.json`; a running timer is this phone's moment. Alternative: add it to the backup's part of `session.json`; a restore would then bring back a timer from another day.
+10. **Not backed up**; a running timer is this phone's moment. (The plan had *Everything learned* clear it with the rest of `session.json`, which no reset clears: §Changed in the build.) Alternative: add it to the backup's part of `session.json`; a restore would then bring back a timer from another day.
 11. **An Undo of the tick or Done that ended it doesn't restart it.** Alternative: restart it from where it was; the state would have to keep the ended timer and the Undo would have to know of it.
 12. **A timer ended by its piece being done lifts no hold**: the slot's record is judged as now, so a piece ticked late isn't followed by "you missed it". A Stop by hand lifts it 30 minutes on (Q4), so Stop then tick never brings it either. A Start on another task meanwhile replaces the stopped timer's record, and the first task's miss falls back to his ordinary freshness; accepted as rare.
 13. **The widget's column drops ▶ first** where the height fits only one icon, keeping ✓ as now; the threshold is settled on the phone at 2×1 and 4×2. Alternative: shrink both to fit at every size, or drop ✓ and keep ▶.

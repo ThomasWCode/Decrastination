@@ -12,6 +12,7 @@ import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.SubStep
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.WindowKind
+import com.thomaswcode.decrastination.data.PieceTimer
 import com.thomaswcode.decrastination.data.ProtectionState
 import com.thomaswcode.decrastination.data.SessionState
 import com.thomaswcode.decrastination.data.SlotOutcome
@@ -170,6 +171,23 @@ class WidgetModelTest {
         val off = mapOf(Source.Teams to SourceStatus(lastSuccessAt = now, dataAsOf = now - 3_600_000L, note = "The Teams widget's sync service is off"))
         assertEquals("The Teams widget's sync service is off", model(emptyList(), off).warning)
     }
+    @Test
+    fun `a timer on the piece shown turns its play to stop, and its pill says till when, then over`() {
+        val tasks = listOf(task("Essay", "2026-10-09T21:00", effort = 20), task("Chapter 17", "2026-10-09T23:59", effort = 30))
+        val plan = Planner.plan(Planner.Input(tasks, now, LONDON, Settings(boxMin = 45)))
+        val next = plan.next!!
+        val timer = PieceTimer(next.key, next.taskId, null, null, next.label, 30, now - 5 * 60_000L)
+        val timed = WidgetModel.from(plan, TaskState(tasks), LONDON, SessionState(timer = timer))
+        assertTrue(timed.timing)
+        assertEquals("⏱ till 17:25", timed.timerPill)
+        assertEquals("⏱ over", WidgetModel.timerPill(timer, timer.endsAt, LONDON))
+        // On another piece, or stopped: the piece shown has its ▶ and its minutes.
+        for (other in listOf(timer.copy(key = "teams:other#-1#1"), timer.copy(stoppedAt = now))) {
+            val model = WidgetModel.from(plan, TaskState(tasks), LONDON, SessionState(timer = other))
+            assertFalse(model.timing)
+            assertNull(model.timerPill)
+        }
+    }
 }
 
 class WidgetLayoutTest {
@@ -269,6 +287,18 @@ class WidgetLayoutTest {
         assertTrue(WidgetLayout.of(width = 360f, height = 82f, next).then)
         assertFalse(WidgetLayout.of(width = 360f, height = 82f, next, fontScale = 1.3f).then)
     }
+    @Test
+    fun `play sits over the tick where the height holds both, else the tick alone`() {
+        val piece = WidgetLayout.Parts(badge = "Overdue", minutes = "40 min", tick = true)
+        assertTrue(WidgetLayout.of(width = 160f, height = 64f, piece).let { it.tick && it.start })
+        assertFalse(WidgetLayout.of(width = 160f, height = 63f, piece).start)
+        assertTrue(WidgetLayout.of(width = 160f, height = 63f, piece).tick)
+        // A 2x1 on a phone with tall rows, and the list's sizes, have the column.
+        assertTrue(WidgetLayout.of(width = 160f, height = 96f, piece).start)
+        assertTrue(WidgetLayout.of(width = 401f, height = 340f, piece).let { it.roomy && it.start })
+        // No piece to tick: no column either.
+        assertFalse(WidgetLayout.of(width = 401f, height = 340f, piece.copy(tick = false)).start)
+    }
 }
 
 class WidgetRedrawTest {
@@ -317,5 +347,13 @@ class WidgetRedrawTest {
             kind = Kind.Homework, sourceEffortMin = 30, firstSeenAt = 0, lastSeenAt = 0,
         )
         assertEquals(Fixtures.at("2026-10-09T23:00"), WidgetUpdater.nextRedrawAt(planAt("2026-10-09T22:10", listOf(task)), LONDON, settings))
+    }
+
+    @Test
+    fun `a running timer's zero redraws it, its pill turning to over`() {
+        assertEquals(Fixtures.at("2026-10-09T18:07"), WidgetUpdater.nextRedrawAt(planAt("2026-10-09T18:00"), LONDON, settings, timerEndsAt = Fixtures.at("2026-10-09T18:07")))
+        // Gone by, or later than the next redraw: as before.
+        assertEquals(Fixtures.at("2026-10-09T18:15"), WidgetUpdater.nextRedrawAt(planAt("2026-10-09T18:00"), LONDON, settings, timerEndsAt = Fixtures.at("2026-10-09T17:55")))
+        assertEquals(Fixtures.at("2026-10-09T18:15"), WidgetUpdater.nextRedrawAt(planAt("2026-10-09T18:00"), LONDON, settings, timerEndsAt = Fixtures.at("2026-10-09T18:40")))
     }
 }

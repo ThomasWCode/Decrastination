@@ -49,7 +49,7 @@ Grouped by prefix and sorted; where a later decision changed an item, its line g
 - AR-06: Crashes are written down on the phone as they happen (the last few kept), the last shown in Settings with Copy; nothing leaves the phone.
 - AR-07: Once a day everything the app keeps that the sources can't give back is saved as a dated JSON file in the phone's Documents/Decrastination folder, a second run that day replacing it and the newest fortnight kept (one too big for Import to read back isn't written, nor older ones let go for it); a backup holds what the app keeps (memories, Felix's state, today's slots and the chat included), never passwords or keys.
 - AR-08: A sync that changes nothing does no more than it must: an Anki deck isn't asked again until its counts or options change, and slots already written to an unchanged calendar aren't written again.
-- AR-09: There are no focus sessions: no Start, no session notification, alarm or credit, no box-length experiment; slots and their outcomes are the record.
+- AR-09: There are no focus sessions: no blocking or free time rides on starting work, and there's no box-length experiment; slots and their outcomes are the record. The timer of 4.4.0 (D-112) is a countdown and your word you're on a piece, not a session.
 
 ## BL: blocking and free time
 
@@ -200,7 +200,7 @@ These come from the questions answered for v1 and 2.0.0; Q31 here is not Q-31 be
 - UI-02: Each day in the week strip shows its load, minutes planned against free time, as a bar, with a mark where work is behind.
 - UI-03: A piece swiped one way is done (its slot kept), the other way moved later today, each with Undo.
 - UI-04: A piece held and moved goes by hand to another time or another day of the next fortnight; there's no limit on moves, but none past its real deadline.
-- UI-05: The widget shows the slot under way or next with its time and a ✓ that keeps it as the app's *Done* does, its badge and minutes, the *Then:* line, today's slots kept and the time left, and ↻; a tap opens the task.
+- UI-05: The widget shows the slot under way or next with its time and a ✓ that keeps it as the app's *Done* does (with ▶ over it to start a timer on it, D-112, where the height allows), its badge and minutes, the *Then:* line, today's slots kept and the time left, and ↻; a tap opens the task.
 - UI-06: Felix offers up to three quick replies under his last message; a tap sends one.
 - UI-07: The chat takes speech: the words go into the box to check, not sent.
 - UI-08: The Day view keeps kept slots in place, and shows what was done at its foot.

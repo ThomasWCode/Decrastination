@@ -46,7 +46,7 @@ From a PC, `force-block` makes blocking hours apply for up to two hours whatever
 
 `block/BlockedActivity.kt` runs in its own task (`singleTask`, excluded from recents), so neither Back nor Recents shows the app behind it. It shows:
 - "Not now", what's blocked and the reason's headline, and the reward line (BL-04, below);
-- the next piece (`Plan.next`) with its due date and minutes, and its actions (`ui/PieceActions.kt`): **Open**, **Done** (keeps its slot), **Check it's done** (asks its source; **All of it done** for one of your own);
+- the next piece (`Plan.next`) with its due date and minutes, and its actions (`ui/PieceActions.kt`), as Day's *Do now* card and a piece's sheet have them: **Open**, **Start** (a timer on it, below) or **Stop** with its time over them, **Done** (keeps its slot), **Check it's done** (asks its source; **All of it done** for one of your own);
 - **Refresh Teams** for a Teams task, and **Photo check** for written homework while Claude is on;
 - the free time left; **Why am I blocked?** (today's pieces, or the missed slot with no time left today: "A slot you missed has no time left today, so tonight stays blocked."); **Go to the home screen**; and Felix's button, about the next piece's task (UI-16).
 
@@ -81,6 +81,15 @@ What today's slots earn is at most today's plan's share at the ratio: the pieces
 Once today's done, it's "Today's plan is done. 25 min free."; on an empty day, "Nothing planned today: 1 h free."
 
 A keep, a photo's earning and a completion are each saved first (`SessionState.keeping`, `SessionState.photosDone`, `TaskState.unrewarded`), so a stop part-way is carried through at the next start, once (`Focus.finishKeeps`, `finishPhotos`, `rewardCompletions`).
+
+## A timer on a piece
+
+D-112, 4.4.0 ([plan_timer/](../plan_timer/README.md)). **Start** runs a countdown of a piece's minutes (the plan's piece's as laid; a step the plan has no piece for, its minutes as its sheet shows them) in a silent notification (channel *Timer*) with **Stop**, counted down by Android's own chronometer, its tap opening the task's sheet; and it's your word you're on the piece: something done on its task (`Looks.noteActivity`), and Felix's messages about it wait (D-112; [felix.md](felix.md) §His messages). It's on the piece's actions (above), on each step still to do in a task's sheet, on a task with no steps' sheet for its next piece, and on the widget, ▶ over ✓ in one column where the height holds both (■ while it runs, with a pill "⏱ till 17:30", then "⏱ over"), ↻ beside. One at a time: a Start replaces the one there is, and says so.
+
+- **At its zero** an exact alarm says "Time's up" once (channel *Timer over*, heard whatever the hour), and the running one is retitled "Over on: …", its counter running on as −mm:ss.
+- **It ends** by **Stop** (its notification's, the card's, the sheet's, the widget's ■), kept with its stop till the next Start so Felix's hold lifts 30 minutes on; or by its piece done, running or stopped (its step ticked, renamed or gone, a slot of its task kept since it began, its task closed or off the list), cleared then (`Focus.settleTimer`, after each keep, tick, photo check and completion, with each plan and at a start). An Undo doesn't restart it.
+- **It blocks nothing, earns nothing and teaches nothing**: `BlockPolicy`, `Credit` and the calibration don't know it; a slot gone by undone is missed as ever (LR-09).
+- **It's kept** in `session.json` (`SessionState.timer`, Focus's), not backed up; its notifications and alarms are made to match it at each change and at a start (`block/TimerAlarms.kt`), so after a restart it's shown again, and a zero gone by meanwhile is told then. It runs on across midnight till it's stopped or its piece is done; a reset leaves it.
 
 ## Photo checks
 

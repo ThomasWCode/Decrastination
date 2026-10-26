@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -20,18 +21,21 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.block.Credit
 import com.thomaswcode.decrastination.block.PhotoChecks
+import com.thomaswcode.decrastination.block.TimerAlarms
 import com.thomaswcode.decrastination.core.Chunk
 import com.thomaswcode.decrastination.core.EarnsBy
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Planner
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
+import com.thomaswcode.decrastination.data.PieceTimer
 import com.thomaswcode.decrastination.enrich.PhotoChecker
 import java.io.File
 import kotlin.math.roundToInt
@@ -187,22 +191,39 @@ internal fun stillPlanned(graph: AppGraph, taskId: String): String? {
 internal fun worked(task: TaskItem, multiplier: Double): Boolean =
     if (task.subSteps.isNotEmpty()) task.subSteps.all { it.done } else Planner.remaining(task, multiplier).roundToInt() <= 0
 
+/** A running [timer]'s time at [now], as its piece shows it: "Timer: 12 min left", "Timer: time's up", "Timer: 5 min over". */
+internal fun timerText(timer: PieceTimer, now: Long): String = when {
+    timer.leftMin(now) > 0 -> "Timer: ${Format.minutes(timer.leftMin(now))} left"
+    timer.overMin(now) == 0 -> "Timer: time's up"
+    else -> "Timer: ${Format.minutes(timer.overMin(now))} over"
+}
+
 /**
  * What can be done with [piece], wherever it's shown (Day, the block screen): **Open** goes to
- * the task; **Done** keeps its slot (LR-09); **Check it's done** asks its source (**All of it done**,
+ * the task; **Start** runs a timer on it, and **Stop** stops the one on it, its time over the buttons
+ * (docs/plan_timer); **Done** keeps its slot (LR-09); **Check it's done** asks its source (**All of it done**,
  * for one of your own, is your say); **Refresh Teams** asks the Teams widget to sync; **Photo check** sends a photo
  * of written work. [say] gives how each went.
  */
 @Composable
 fun PieceActions(graph: AppGraph, activity: Activity, piece: Chunk, now: Long, photo: PhotoCheck, say: (String) -> Unit) {
     val tasks by graph.tasks.state.collectAsStateWithLifecycle()
+    val session by graph.stores.session.state.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
+    // The timer running on this piece, if it's this one's.
+    val timer = session.timer?.takeIf { it.running && it.key == piece.key }
+    timer?.let { Text(timerText(it, now), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary) }
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Button(onClick = {
             tasks.tasks.firstOrNull { it.id == piece.taskId }?.let { task ->
                 scope.launch { TaskOpener.open(activity, task)?.let(say) }
             }
         }) { Text("Open") }
+        if (timer != null) {
+            FilledTonalButton(onClick = { scope.launch { say(TimerAlarms.stop(activity)) } }) { Text("Stop") }
+        } else {
+            OutlinedButton(onClick = { scope.launch { say(TimerAlarms.start(activity, piece.taskId, piece.stepIndex, piece.key)) } }) { Text("Start") }
+        }
         FilledTonalButton(onClick = { scope.launch { say(keepPiece(graph, piece, now)) } }) { Text("Done") }
         if (piece.source == Source.Own) {
             // Yours: nothing to ask, so all of it done is your say, earning no free time.

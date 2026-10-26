@@ -5,6 +5,7 @@ import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.SlotKind
 import com.thomaswcode.decrastination.core.Slotter
 import com.thomaswcode.decrastination.core.Source
+import com.thomaswcode.decrastination.data.PieceTimer
 import com.thomaswcode.decrastination.data.ProtectionState
 import com.thomaswcode.decrastination.data.SessionState
 import com.thomaswcode.decrastination.data.SlotOutcome
@@ -47,6 +48,10 @@ data class WidgetModel(
     val key: String? = null,
     /** When the plan it shows was made: a tick keeps only what it showed (a box's next piece has its key). */
     val seenAt: Long = 0L,
+    /** The timer runs on the piece it shows (docs/plan_timer): ■ in place of ▶. */
+    val timing: Boolean = false,
+    /** That timer's pill, in place of the minutes': "⏱ till 17:30", "⏱ over". */
+    val timerPill: String? = null,
 ) {
     /** A row of the list: [urgent] as the headline's badge is (overdue, due today, behind). */
     data class Line(val text: String, val minutes: String, val urgent: Boolean, val taskId: String)
@@ -81,6 +86,8 @@ data class WidgetModel(
             // After the next and the one after it, which have lines of their own; a task's pieces as one line (Q31).
             val rest = Groups.byTask(today.ifEmpty { tomorrow }.filterNot { it === next || it === plan.then })
             fun tasks(chunks: List<Chunk>) = chunks.map { it.taskId }.distinct().size
+            // A timer running on the piece shown.
+            val timer = session.timer?.takeIf { t -> t.running && next != null && t.key == next.key }
             return WidgetModel(
                 headline = when {
                     next == null -> "Nothing due"
@@ -112,8 +119,16 @@ data class WidgetModel(
                 taskId = next?.taskId,
                 key = next?.key,
                 seenAt = now,
+                timing = timer != null,
+                timerPill = timer?.let { timerPill(it, now, zone) },
             )
         }
+
+        /**
+         * A running [timer]'s pill at [now]: "⏱ till 17:30" while it counts down, "⏱ over" after, words that don't go
+         * stale between redraws (every 15 minutes at most); its notification's counter is the live one.
+         */
+        fun timerPill(timer: PieceTimer, now: Long, zone: ZoneId): String = if (now < timer.endsAt) "⏱ till ${Format.time(timer.endsAt, zone)}" else "⏱ over"
 
         /**
          * Today's slots as the header has them (UI-05): "Today: 1 of 4 kept, 1 h 20 left", the kept,

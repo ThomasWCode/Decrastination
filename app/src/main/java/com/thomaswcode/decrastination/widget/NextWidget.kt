@@ -49,6 +49,7 @@ import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.R
+import com.thomaswcode.decrastination.block.TimerAlarms
 import com.thomaswcode.decrastination.ui.Colours
 import com.thomaswcode.decrastination.ui.MainActivity
 import com.thomaswcode.decrastination.ui.OpenTaskActivity
@@ -171,19 +172,21 @@ class NextWidget : GlanceAppWidget() {
                 )
                 // Its first step (AI-15), where there's room.
                 if (layout.label) model.label?.let { Text(it, maxLines = 1, style = TextStyle(color = GlanceTheme.colors.onPrimaryContainer, fontSize = 13.sp)) }
-                if (model.badge != null || model.minutes != null) {
+                // The minutes, or while a timer runs on it, the timer's pill in their place.
+                val minutes = model.timerPill ?: model.minutes
+                if (model.badge != null || minutes != null) {
                     when (layout.pills) {
                         WidgetLayout.Pills.Row -> Row(GlanceModifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                             model.badge?.let { Pill(it, urgent = model.urgent) }
-                            if (model.badge != null && model.minutes != null) Spacer(GlanceModifier.width(6.dp))
-                            model.minutes?.let { Pill(it) }
+                            if (model.badge != null && minutes != null) Spacer(GlanceModifier.width(6.dp))
+                            minutes?.let { Pill(it) }
                         }
                         WidgetLayout.Pills.Stacked -> {
                             model.badge?.let { Box(GlanceModifier.padding(top = 4.dp)) { Pill(it, urgent = model.urgent) } }
-                            model.minutes?.let { Box(GlanceModifier.padding(top = 4.dp)) { Pill(it) } }
+                            minutes?.let { Box(GlanceModifier.padding(top = 4.dp)) { Pill(it) } }
                         }
                         WidgetLayout.Pills.Plain -> Text(
-                            listOfNotNull(model.badge, model.minutes).joinToString(" · "),
+                            listOfNotNull(model.badge, minutes).joinToString(" · "),
                             maxLines = 1,
                             modifier = GlanceModifier.padding(top = 2.dp),
                             style = TextStyle(
@@ -204,15 +207,25 @@ class NextWidget : GlanceAppWidget() {
                 Spacer(GlanceModifier.width(6.dp))
                 Cue(model.warning.orEmpty())
             }
-            // ✓: the piece done, as the app's Done keeps it (UI-05).
+            // ✓: the piece done, as the app's Done keeps it (UI-05); over it, where there's height, ▶ to start a timer on
+            // it, or ■ to stop the one on it (docs/plan_timer).
             if (layout.tick) model.key?.let { key ->
                 Spacer(GlanceModifier.width(8.dp))
-                Image(
-                    ImageProvider(R.drawable.ic_check),
-                    contentDescription = "Done",
-                    colorFilter = ColorFilter.tint(GlanceTheme.colors.primary),
-                    modifier = GlanceModifier.size(28.dp).clickable(actionRunCallback<TickAction>(actionParametersOf(TickAction.KEY to key, TickAction.SEEN to model.seenAt))),
-                )
+                val tick = actionRunCallback<TickAction>(actionParametersOf(TickAction.KEY to key, TickAction.SEEN to model.seenAt))
+                if (layout.start) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Image(
+                            ImageProvider(if (model.timing) R.drawable.ic_stop else R.drawable.ic_play),
+                            contentDescription = if (model.timing) "Stop the timer" else "Start a timer",
+                            colorFilter = ColorFilter.tint(GlanceTheme.colors.primary),
+                            modifier = GlanceModifier.size(24.dp).clickable(actionRunCallback<StartAction>(actionParametersOf(StartAction.KEY to key))),
+                        )
+                        Spacer(GlanceModifier.height(4.dp))
+                        Image(ImageProvider(R.drawable.ic_check), contentDescription = "Done", colorFilter = ColorFilter.tint(GlanceTheme.colors.primary), modifier = GlanceModifier.size(24.dp).clickable(tick))
+                    }
+                } else {
+                    Image(ImageProvider(R.drawable.ic_check), contentDescription = "Done", colorFilter = ColorFilter.tint(GlanceTheme.colors.primary), modifier = GlanceModifier.size(28.dp).clickable(tick))
+                }
             }
             if (layout.refresh) {
                 Spacer(GlanceModifier.width(8.dp))
@@ -323,6 +336,8 @@ data class WidgetLayout(
     val centred: Boolean,
     /** ✓ beside the next thing (UI-05), where it's a piece and there's room. */
     val tick: Boolean = false,
+    /** ▶ (or ■) over ✓, in one column (docs/plan_timer), where the height fits both; else ✓ alone. */
+    val start: Boolean = false,
     /**
      * A warning there's no room to say: a red ! beside the card's name instead, so no size shows
      * all well while something isn't (IMP-P1-007). It opens the app, which says what.
@@ -346,7 +361,7 @@ data class WidgetLayout(
         val tick: Boolean = false,
     ) {
         companion object {
-            fun of(model: WidgetModel) = Parts(model.warning != null, model.badge, model.minutes, model.then != null, model.label != null, model.key != null)
+            fun of(model: WidgetModel) = Parts(model.warning != null, model.badge, model.timerPill ?: model.minutes, model.then != null, model.label != null, model.key != null)
         }
     }
 
@@ -376,6 +391,9 @@ data class WidgetLayout(
         private const val CUE = 28f
         private const val TICK = 36f
 
+        /** ▶ over ✓: two 24 dp icons and the gap between. */
+        private const val START = 52f
+
         /** The narrowest a widget with ✓ is: a 2×1's. */
         private const val TICK_FROM = 140f
 
@@ -399,11 +417,13 @@ data class WidgetLayout(
                 val listLines = ((height - card - t(HEADLINE) * (headlineLines - 1)) / t(LINE)).toInt().coerceIn(0, 12)
                 return WidgetLayout(
                     true, headlineLines, label = parts.label, refresh, roomyPills, then = parts.then,
-                    summary = true, warning = parts.warning, listLines, centred = false, tick = tick,
+                    summary = true, warning = parts.warning, listLines, centred = false, tick = tick, start = tick,
                 )
             }
-            // Each in turn, as long as it fits; what isn't there takes no room.
-            var used = PADDING + t(HEADLINE) + pillsHigh
+            // Each in turn, as long as it fits; what isn't there takes no room. ▶ over ✓ beside them where the card's
+            // height holds both, the rows beside it counted from its height.
+            val start = tick && height >= PADDING + START
+            var used = PADDING + maxOf(t(HEADLINE) + pillsHigh, if (start) START else 0f)
             fun fits(extra: Float) = (height >= used + extra).also { if (it) used += extra }
             val pills = when {
                 sideBySide(SIDES) -> Pills.Row
@@ -415,7 +435,7 @@ data class WidgetLayout(
             val warning = parts.warning && fits(t(WARNING))
             val summary = fits(t(SUMMARY))
             val headlineLines = if (fits(t(HEADLINE))) 2 else 1
-            return WidgetLayout(false, headlineLines, label, refresh, pills, then, summary, warning, listLines = 0, centred = true, cue = parts.warning && !warning, tick = tick)
+            return WidgetLayout(false, headlineLines, label, refresh, pills, then, summary, warning, listLines = 0, centred = true, cue = parts.warning && !warning, tick = tick, start = start)
         }
     }
 }
@@ -432,6 +452,24 @@ class TickAction : ActionCallback {
     companion object {
         val KEY = ActionParameters.Key<String>("key")
         val SEEN = ActionParameters.Key<Long>("seen")
+    }
+}
+
+/** ▶: a timer started on [KEY]'s piece, or ■: the one on it stopped (docs/plan_timer), down the app's own path, and the widget drawn again. */
+class StartAction : ActionCallback {
+    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
+        val key = parameters[KEY] ?: return
+        val graph = AppGraph.get(context)
+        if (graph.focus.timer?.let { it.running && it.key == key } == true) {
+            TimerAlarms.stop(context)
+        } else {
+            graph.planning.plan().ordered.firstOrNull { it.key == key }?.let { TimerAlarms.start(context, it.taskId, it.stepIndex, key) }
+        }
+        WidgetUpdater.update(context)
+    }
+
+    companion object {
+        val KEY = ActionParameters.Key<String>("key")
     }
 }
 

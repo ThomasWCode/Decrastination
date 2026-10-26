@@ -38,7 +38,7 @@ Felix's slot-start nudge (`FelixRules.due`, reason `SlotStart`) comes `felixGrac
 - A restart of the app or the phone: the timer is in a store, so its notification is shown again and its alarm set again, or its zero told at once if it passed while the app was down.
 - The piece replanned or moved while the timer runs: the timer is on the task and its step, not on a slot, so it stands.
 - The task's steps changed under it (Felix's Steps change, a sync): a step no longer there by its index and title ends the timer.
-- The day ending: the timer runs across midnight if left; a reset of everything clears it and its notifications.
+- The day ending: the timer runs across midnight if left; a reset leaves it, as no reset touches `session.json` (found in the build: `answers.md` §Changed in the build).
 - Two Starts at once, a Stop racing the alarm: the store is written in one step; the second finds what the first left and does nothing more.
 
 ## Done when

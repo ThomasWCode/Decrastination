@@ -79,7 +79,8 @@ How the app works in detail is in [spec/](spec/); how the work is done is in [de
 - **D-52. A tick keeps any slot**; a piece under 20 minutes earns on its tick, a longer one with a photo (later the same day too), never more a day than its plan (BL-08). Finishing a task earns by the lower of your minutes and the app's estimate at the pace learned, each in its own scale.
 - **D-53. A day with nothing planned opens with an hour of free time.**
 - **D-54. Done on your own tasks earns nothing; a source's task can't be ticked done by hand**: its source says when it's done (Q28), but a starred email, which finishing here unstars, so Gmail says it (D-106).
-- **D-55. Focus sessions are gone and stay gone**: slot outcomes are the record (LR-09).
+- **D-55. Focus sessions are gone and stay gone**: slot outcomes are the record (LR-09). Sessions as blocking and credit stay gone; the timer of 4.4.0 (D-112) isn't one.
+- **D-112. A timer on a piece** (4.4.0, 25 Oct; [plan_timer/](plan_timer/README.md)): **Start** on a piece (beside **Open** on the Day's *Do now* card, a piece's sheet and the block screen; on a step still to do on its task's sheet, or a task with no steps' next piece; the widget's ▶ over its ✓) runs a countdown of its minutes in a notification, and is your word you're on it. Felix's slot-start nudge about its task waits while it runs, up to 30 minutes past its zero, and his slot-over message until 30 minutes after its zero or a **Stop** by hand, whichever comes first; a miss already stale when it began stays stale. Past its zero it runs on as −mm:ss, "Time's up" heard once, whatever the hour. It blocks nothing, earns nothing and teaches nothing; it ends by **Stop** or its piece done; it isn't backed up. Applies: `block/Focus.kt`, `block/TimerAlarms.kt`, `FelixRules.due`.
 - **D-56. The blocker is checked by hand on the phone**; there's no emulator harness.
 
 ## Felix and the chat
