@@ -685,6 +685,26 @@ class InstructionRulesTest {
         assertEquals("Claude's reading couldn't be used: it names a task that isn't listed", assertIs<InstructionAnswers.Reading.Unclear>(unknown).why)
     }
 
+    // --- Busy times in your calendar (D-117) ---
+
+    @Test
+    fun `a busy time is named from your words, and each day's is one event, named by the latest change that names it`() {
+        fun one(change: String) = assertIs<InstructionAnswers.Reading.Changes>(parse("""{"understood":true,"question":null,"changes":[$change]}""")).changes.single()
+        val named = one("""{"type":"BusyTime","date":"2026-10-13","time":"17:00","endTime":"18:30","title":" Football "}""")
+        assertEquals(Change(ChangeType.BusyTime, date = "2026-10-13", startMin = 1020, endMin = 1110, title = "Football"), named)
+        assertEquals("Tue 13 Oct, 17:00–18:30: busy (Football), no work", InstructionRules.describe(named, emptyMap(), LONDON))
+        // None given: none kept; a long one kept to a word or two's room.
+        val weekly = one("""{"type":"BusyTime","weekday":"Tuesday","time":"17:00","endTime":"18:30","title":""}""")
+        assertNull(weekly.title)
+        assertEquals(InstructionRules.MAX_BUSY_TITLE, one("""{"type":"BusyTime","date":"2026-10-13","time":"17:00","endTime":"18:30","title":"${"x".repeat(60)}"}""").title?.length)
+        // Each day's: the weekly one each Tuesday, named on the 13th by the dated one there.
+        val blocks = InstructionRules.busyBlocks(listOf(applied(weekly), applied(named, at = now + 1)), LocalDate.parse("2026-10-13"), LocalDate.parse("2026-10-21"))
+        assertEquals(listOf(BusyBlock(LocalDate.parse("2026-10-13"), 1020, 1110, "Football"), BusyBlock(LocalDate.parse("2026-10-20"), 1020, 1110, null)), blocks)
+        // A later change of the same time with no name keeps the name.
+        val unnamed = weekly.copy(weekday = null, date = "2026-10-13")
+        assertEquals("Football", InstructionRules.busyBlocks(listOf(applied(named), applied(unnamed, at = now + 1)), LocalDate.parse("2026-10-13"), LocalDate.parse("2026-10-13")).single().title)
+    }
+
     // --- A day's breaks outside, moved, taken off and added (D-116) ---
 
     @Test

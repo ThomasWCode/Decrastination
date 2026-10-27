@@ -249,6 +249,9 @@ class BackupTest {
         assertNotNull(Backups.problem(with(Change(ChangeType.OutsideAt, date = "2026-10-31", outsideMin = 780, startMin = 25 * 60))))
         assertNotNull(Backups.problem(with(Change(ChangeType.NoOutside, date = "2026-10-31", outsideMin = -5))))
         assertNotNull(Backups.problem(with(Change(ChangeType.OutsideAdded, date = "2026-10-31"))))
+        // A busy time's name (D-117): a word or two, within its room.
+        assertNull(Backups.problem(with(Change(ChangeType.BusyTime, date = "2026-10-31", startMin = 1020, endMin = 1110, title = "Football"))))
+        assertNotNull(Backups.problem(with(Change(ChangeType.BusyTime, date = "2026-10-31", startMin = 1020, endMin = 1110, title = "x".repeat(InstructionRules.MAX_BUSY_TITLE + 1)))))
     }
 
     @Test

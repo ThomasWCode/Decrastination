@@ -1,5 +1,6 @@
 package com.thomaswcode.decrastination.calendar
 
+import com.thomaswcode.decrastination.core.BusyBlock
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.enrich.MicroPlan
@@ -21,8 +22,11 @@ object SlotCalendarDiff {
     /** How many days of slots are written: today and the six after it. */
     const val DAYS = 7L
 
-    /** A slot as an event: its URI, its words, its times; [taskId] for a piece of work, null for a break outside. */
-    data class Desired(val uri: String, val title: String, val description: String, val start: Long, val end: Long, val taskId: String?)
+    /**
+     * A slot as an event: its URI, its words, its times; [taskId] for a piece of work, null for a break outside; or a
+     * busy time of yours ([busy], D-117), its time shown busy in your calendar, a slot's free.
+     */
+    data class Desired(val uri: String, val title: String, val description: String, val start: Long, val end: Long, val taskId: String?, val busy: Boolean = false)
 
     /**
      * One of the app's events, as the calendar has it now. Not [marked]: a copy of one that's lost the
@@ -33,13 +37,16 @@ object SlotCalendarDiff {
     /** A break outside's words, as [desired] writes them. */
     const val OUTSIDE = "A break outside."
 
+    /** A busy time's words, as [desired] writes them (D-117). */
+    const val BUSY = "A busy time of yours: no work then."
+
     /**
      * Whether an event's [description] is in the words [desired] writes: a piece's, its source first
-     * ("Teams. Due …"), or a break outside's. Only one of the signs of a copy ([isCopy]): an event of
+     * ("Teams. Due …"), a break outside's, or a busy time's. Only one of the signs of a copy ([isCopy]): an event of
      * yours could be worded so.
      */
     fun looksWritten(description: String): Boolean =
-        description == OUTSIDE || Source.entries.any { description.startsWith(it.label + ". ") }
+        description == OUTSIDE || description == BUSY || Source.entries.any { description.startsWith(it.label + ". ") }
 
     /** One version of an event as the app writes it to [calendarId], as a fingerprint of its title and times. */
     fun version(calendarId: Long, title: String, start: Long, end: Long): Long {
@@ -85,7 +92,8 @@ object SlotCalendarDiff {
     /** A piece's event you moved: [existing] at your time, [desired] where the plan has it. */
     data class HandMove(val existing: Existing, val desired: Desired)
 
-    data class Diff(val inserts: List<Desired>, val updates: List<Update>, val deletes: List<Existing>, val handMoves: List<HandMove>)
+    /** What a write changes; [restored], a busy time's event you deleted, inserted again among [inserts], to be said (D-117). */
+    data class Diff(val inserts: List<Desired>, val updates: List<Update>, val deletes: List<Existing>, val handMoves: List<HandMove>, val restored: List<Desired> = emptyList())
 
     /** Your moves as judged: those taken as your time, and those written back, with why. */
     data class Judged(val taken: List<HandMove>, val refused: List<Pair<HandMove, String>>)
@@ -121,10 +129,25 @@ object SlotCalendarDiff {
     fun pending(starts: Map<String, Long>, before: Map<String, Long>, taken: List<HandMove>): Map<String, Long> =
         starts + taken.mapNotNull { move -> before[move.desired.uri]?.let { move.desired.uri to it } }
 
-    /** [plan]'s slots, work and outside, from today for [DAYS] days, as events. */
-    fun desired(plan: Plan, zone: ZoneId, micro: Map<String, MicroPlan> = emptyMap()): List<Desired> = (0 until DAYS).flatMap { offset ->
+    /**
+     * [plan]'s slots, work and outside, from today for [DAYS] days, as events; and your [busy] times of those days (D-117),
+     * each "Busy: <its name>", or "Busy" with none, by its day and times (`busy:1020-1110`).
+     */
+    fun desired(plan: Plan, zone: ZoneId, micro: Map<String, MicroPlan> = emptyMap(), busy: List<BusyBlock> = emptyList()): List<Desired> = (0 until DAYS).flatMap { offset ->
         val date = plan.today.plusDays(offset)
-        plan.bucket(date)?.slots.orEmpty().map { slot ->
+        val midnight = date.atStartOfDay()
+        val blocks = busy.filter { it.date == date }.map { b ->
+            Desired(
+                uri = "$URI_PREFIX$date/${b.key}",
+                title = b.title?.let { "Busy: $it" } ?: "Busy",
+                description = BUSY,
+                start = midnight.plusMinutes(b.startMin.toLong()).atZone(zone).toInstant().toEpochMilli(),
+                end = midnight.plusMinutes(b.endMin.toLong()).atZone(zone).toInstant().toEpochMilli(),
+                taskId = null,
+                busy = true,
+            )
+        }
+        blocks + plan.bucket(date)?.slots.orEmpty().map { slot ->
             val chunk = slot.chunk
             Desired(
                 uri = "$URI_PREFIX$date/${slot.key}",
@@ -147,10 +170,15 @@ object SlotCalendarDiff {
         val inserts = mutableListOf<Desired>()
         val updates = mutableListOf<Update>()
         val moves = mutableListOf<HandMove>()
+        val restored = mutableListOf<Desired>()
         for (want in desired) {
             val event = there[want.uri]?.first()
             when {
-                event == null -> inserts += want
+                // Not there: inserted, one you deleted too; a busy time's, written before, said (D-117).
+                event == null -> {
+                    inserts += want
+                    if (want.busy && want.uri in written) restored += want
+                }
                 // Moved by hand: not where it was written, nor where the plan has it now. A break outside's too, which the
                 // writer puts back (D-116).
                 written[want.uri]?.let { it != event.start } == true && event.start != want.start -> moves += HandMove(event, want)
@@ -159,6 +187,6 @@ object SlotCalendarDiff {
         }
         // The app's events no longer a slot, a second copy of one that is, and those that lost its marks.
         val deletes = there.filterKeys { it !in wanted }.values.flatten() + there.filterKeys { it in wanted }.values.flatMap { it.drop(1) } + copies
-        return Diff(inserts, updates, deletes, moves)
+        return Diff(inserts, updates, deletes, moves, restored)
     }
 }

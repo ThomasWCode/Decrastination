@@ -14,6 +14,7 @@ import com.thomaswcode.decrastination.calendar.CalendarWriter
 import com.thomaswcode.decrastination.calendar.SlotCalendar
 import com.thomaswcode.decrastination.core.DayKind
 import com.thomaswcode.decrastination.core.Enrichments
+import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.InstructionStatus
 import com.thomaswcode.decrastination.core.Notes
 import com.thomaswcode.decrastination.core.OwnTask
@@ -265,6 +266,8 @@ class AppGraph private constructor(context: Context) {
             sync.refreshCalendar()
             Briefing.replanToday(app)
         },
+        busyTimes = { from, to -> InstructionRules.busyBlocks(instructions.value.applied, from, to) },
+        sayPutBack = { want, why -> SlotCalendar.sayPutBack(app, want, why) },
     )
 
     /** Today's slots as they pass: begun, or missed (PL-13). */
