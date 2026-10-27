@@ -8,12 +8,10 @@ A personal, sideloaded app for one phone, version 4.4.0.
 
 | | |
 |---|---|
-| [`docs/spec/`](docs/spec/) | How the app works now, an area a file: sources, Claude's readings, the planner, slots and the calendar, blocking and protection, Felix (and everything he's sent), learning, storage and backups, privacy; and the requirement ids the code cites |
+| [`docs/spec/`](docs/spec/) | How the app works now, an area a file: sources, Claude's readings, the planner, slots and the calendar, the Day, blocking and protection, Felix (and everything he's sent), learning, storage and backups, privacy; and the requirement ids the code cites |
 | [`docs/decisions.md`](docs/decisions.md) | The owner's decisions that govern how the app is developed, numbered |
 | [`docs/development.md`](docs/development.md) | How changes are made, reviewed, checked on the phone and shipped; the public repository's rules |
-| [`docs/plan_v4/`](docs/plan_v4/README.md) | The 4.x plan's record (done, Oct 2026): what was built release by release and what's left to check; the structure the code has and its conventions; the stores and their migrations; the owner's answers to the plan's questions and the timer's (4.4.0) |
-| [`docs/plan_day_grid/`](docs/plan_day_grid/README.md) | The plan for the Day as a calendar (4.5.0 to 4.6.0), not yet built: what it does, its stages, and the owner's answers |
-| [`docs/plan_outside_breaks/`](docs/plan_outside_breaks/README.md) | The plan for breaks outside kept once begun (4.4.1) and moved by Felix (4.5.2), not yet built: the bug, its stages, and the owner's answers |
+| [`docs/plan_v4/`](docs/plan_v4/README.md) | The 4.x plan's record (done, Oct 2026): what was built release by release and what's left to check; the structure the code has and its conventions; the stores and their migrations; the owner's answers to the plan's questions and to those asked since, from the timer (4.4.0) to the Day as a calendar (4.6.0) |
 | [`docs/astra-review-4.3.13/`](docs/astra-review-4.3.13/README.md) | An outside review of 4.3.13 (23 Oct 2026), each finding with what became of it |
 | [`fixtures/README.md`](fixtures/README.md) | The test fixtures and where they came from |
 

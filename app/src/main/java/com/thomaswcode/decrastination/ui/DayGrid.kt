@@ -252,7 +252,7 @@ internal fun windowName(kind: WindowKind): String = when (kind) {
     WindowKind.Lunch -> "Lunch"
 }
 
-/** A block of the grid, as its kind draws it (`plan_day_grid/README.md` §The blocks). */
+/** A block of the grid, as its kind draws it (`docs/spec/day.md` §The blocks). */
 @Composable
 private fun GridBlock(block: DayModel.Block, plan: Plan, zone: ZoneId, judge: (CalendarEvent) -> EventJudge.Judgement, asked: Collection<String>, micro: Map<String, MicroPlan>, messageOf: (String) -> String?, drag: DayDrag, actions: DayActions, width: Dp) {
     // A block under 40 dp wide shows its first word only.
@@ -274,7 +274,7 @@ private fun GridBlock(block: DayModel.Block, plan: Plan, zone: ZoneId, judge: (C
 }
 
 /**
- * A piece of the plan's (`plan_day_grid/README.md` §The blocks): its label and times, then as its height allows its reason, its
+ * A piece of the plan's (`docs/spec/day.md` §The blocks): its label and times, then as its height allows its reason, its
  * first step and the last thing said of its task; urgent, a red edge; a ✓ where it's 32 dp tall and 120 wide. Tapped, its sheet;
  * swiped right to left, done; left to right, later today (UI-03); held, dragged (UI-04). For TalkBack, *Done*, *Later today* and
  * *Move it*.

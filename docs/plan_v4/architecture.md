@@ -139,7 +139,7 @@ A cleanup PR claims to keep behaviour, and shows it four ways: every test passes
 | Where | What |
 |---|---|
 | `README.md` | what the app is, how to build and install it, where everything else is |
-| `docs/spec/` | how the app works now, one area a file: `sources.md`, `readings.md`, `planner.md`, `slots-and-calendar.md`, `blocking-and-protection.md`, `felix.md` (with `felix-inputs.md`, everything Felix is sent, written by a test), `learning.md`, `storage-and-backups.md`, `privacy.md`; and `requirement-ids.md`, what each id the code cites asks of the app |
+| `docs/spec/` | how the app works now, one area a file: `sources.md`, `readings.md`, `planner.md`, `slots-and-calendar.md`, `day.md`, `blocking-and-protection.md`, `felix.md` (with `felix-inputs.md`, everything Felix is sent, written by a test), `learning.md`, `storage-and-backups.md`, `privacy.md`; and `requirement-ids.md`, what each id the code cites asks of the app |
 | `docs/decisions.md` | your decisions, numbered (D-1…), dated, each with what it means for the code and where it applies; and what's still open for you |
 | `docs/development.md` | how changes are made, reviewed, checked on the phone and shipped; the public repository's rules |
 | `docs/plan_v4/` | the 4.x plan's record: this file, the plan's README, the stores and migrations, the questions answered |

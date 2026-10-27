@@ -344,7 +344,7 @@ object InstructionRules {
     /**
      * The days from [from] to [to] kept for only some tasks (D-115), by [applied] (in the order applied): each date's tasks,
      * those of its [ChangeType.DayOnly] changes, with those a move put on it since its first (an OnDay for it, or an AtTime
-     * on it: a later move wins, Q13, the move in force for it, its latest); and what its latest DayOnly lets in besides. A task finished stays among them, so a day
+     * on it: a later move wins, Q83, the move in force for it, its latest); and what its latest DayOnly lets in besides. A task finished stays among them, so a day
      * whose tasks are all done holds no work.
      */
     fun onlyDays(applied: List<Instruction>, from: LocalDate, to: LocalDate): Map<LocalDate, OnlyDay> {
