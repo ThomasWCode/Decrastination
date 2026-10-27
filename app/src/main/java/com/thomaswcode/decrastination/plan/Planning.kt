@@ -99,7 +99,10 @@ class Planning(
     fun breaksOn(day: LocalDate, applied: List<Instruction> = instructions.value.applied): DayBreaks {
         val now = clock.now()
         val zone = clock.zone()
-        val breaks = InstructionRules.dayBreaks(day, settings.value, SchoolDays.kindOf(day, school.value) == DayKind.Weekend, applied)
+        // A school day's, as a day off too, for a change after one making it so in the same answer.
+        val withBreaks = SchoolDays.kindOf(day, school.value) == DayKind.Weekend
+        val breaks = InstructionRules.dayBreaks(day, settings.value, withBreaks, applied)
+            .let { if (withBreaks) it else it.copy(offSchool = InstructionRules.dayBreaks(day, settings.value, true, applied)) }
         if (day != Instant.ofEpochMilli(now).atZone(zone).toLocalDate()) return breaks
         // Today's begun (D-113), by the starts kept: one under way at the start and end it was laid at, whatever the changes
         // now say of it, so a change over it is refused as the planner would keep it.
@@ -110,11 +113,12 @@ class Planning(
             Triple(name, start, kept[Slot.endKey(key)] ?: (start + settings.value.outsideBreakMin * 60_000L))
         }
         val underWay = begun.filter { (_, _, end) -> end > now }
-        return breaks.copy(
-            at = breaks.at + underWay.associate { (name, start, _) -> name to minute(start) },
+        fun kept(day: DayBreaks) = day.copy(
+            at = day.at + underWay.associate { (name, start, _) -> name to minute(start) },
             ends = underWay.associate { (name, _, end) -> name to minute(end) },
             begun = begun.mapTo(HashSet()) { it.first },
         )
+        return kept(breaks).copy(offSchool = breaks.offSchool?.let(::kept))
     }
 
     /** What's been learned of the app's estimates, the plans made by it: a task's steps' minutes as planned ([TaskItem.plannedStepMinutes]). */
