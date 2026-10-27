@@ -222,8 +222,32 @@ data class DayBucket(
 enum class SlotKind { Work, Outside }
 
 /** A time on a day (PL-12): a piece's, or an outside break's; [pinned] where you put it. Epoch millis. */
-data class Slot(val kind: SlotKind, val chunk: Chunk?, val start: Long, val end: Long, val window: WindowKind, val pinned: Boolean) {
-    val key: String get() = chunk?.key ?: "outside:$start"
+data class Slot(
+    val kind: SlotKind,
+    val chunk: Chunk?,
+    val start: Long,
+    val end: Long,
+    val window: WindowKind,
+    val pinned: Boolean,
+    /** A break outside's own time, its `outsideTimes` minute: -1 for work. */
+    val outsideAt: Int = -1,
+) {
+    /** Which slot it is from one plan to the next: a piece's [Chunk.key]; a break outside's by its own time, `outside:780` the 13:00 break wherever it's laid. */
+    val key: String get() = chunk?.key ?: "$OUTSIDE$outsideAt"
+
+    companion object {
+        /** A break outside's [key] before its own time. */
+        const val OUTSIDE = "outside:"
+
+        /** The own time of the break outside [key] names; null for a piece's. */
+        fun outsideAt(key: String): Int? = if (key.startsWith(OUTSIDE)) key.removePrefix(OUTSIDE).toIntOrNull() else null
+
+        /**
+         * Where a break outside's end is kept beside its start ([SlotState.laid]) once it's begun: its end as it was laid,
+         * so a length changed after it began neither brings it back once completed nor ends it early (D-113).
+         */
+        fun endKey(key: String): String = "$key-end"
+    }
 }
 
 /**

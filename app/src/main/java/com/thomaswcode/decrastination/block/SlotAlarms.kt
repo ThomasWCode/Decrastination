@@ -21,10 +21,10 @@ import kotlinx.coroutines.launch
 import java.time.Instant
 
 /**
- * Alarms at the next slot's start and at the next slot's end, its grace after it (PL-13): a start
- * makes the plan again; an end with its piece undone is a missed slot ([Slots.onEnd]), which moves.
- * Set again with every plan ([arm]), so they follow the slots wherever a replan puts them. Also
- * Felix's next look ([armFelix]) and your reminders' next moment ([armReminder]).
+ * Alarms at the next slot's start and at the next slot's end, its grace after it (PL-13): a start,
+ * or a break outside's end, makes the plan again; an end with its piece undone is a missed slot
+ * ([Slots.onEnd]), which moves. Set again with every plan ([arm]), so they follow the slots wherever a
+ * replan puts them. Also Felix's next look ([armFelix]) and your reminders' next moment ([armReminder]).
  */
 object SlotAlarms {
     const val ACTION_SLOT_START = "com.thomaswcode.decrastination.SLOT_START"
@@ -50,7 +50,7 @@ object SlotAlarms {
         alarms.cancel(intent(context, ACTION_SLOT_START, null))
         alarms.cancel(intent(context, ACTION_SLOT_END, null))
         val (start, end) = next(plan, now)
-        start?.let { set(alarms, it.start, intent(context, ACTION_SLOT_START, it)) }
+        start?.let { (slot, at) -> set(alarms, at, intent(context, ACTION_SLOT_START, slot)) }
         end?.let { set(alarms, it.end + GRACE_MS, intent(context, ACTION_SLOT_END, it)) }
     }
 
@@ -85,12 +85,16 @@ object SlotAlarms {
     }
 
     /**
-     * [plan]'s next work slot to start after [now], and the next whose end and grace are still to
-     * come, on whatever day they are: with nothing today or tomorrow, a later day's still rings.
+     * [plan]'s next moment after [now] its slots change by themselves, with the slot: a slot's start, a
+     * piece's or a break outside's, or a break outside's end, when it's completed and leaves the plan and
+     * the calendar (D-113); and the next work slot whose end and grace are still to come. On whatever
+     * day they are: with nothing today or tomorrow, a later day's still rings.
      */
-    fun next(plan: Plan, now: Long): Pair<Slot?, Slot?> {
-        val work = plan.buckets.flatMap { it.slots }.filter { it.kind == SlotKind.Work }.sortedBy { it.start }
-        return work.firstOrNull { it.start > now } to work.firstOrNull { it.end + GRACE_MS > now }
+    fun next(plan: Plan, now: Long): Pair<Pair<Slot, Long>?, Slot?> {
+        val slots = plan.buckets.flatMap { it.slots }
+        val work = slots.filter { it.kind == SlotKind.Work }.sortedBy { it.start }
+        val moments = slots.map { it to it.start } + slots.filter { it.kind == SlotKind.Outside }.map { it to it.end }
+        return moments.filter { it.second > now }.minByOrNull { it.second } to work.firstOrNull { it.end + GRACE_MS > now }
     }
 
     /** [intent] at [at], to the minute's window where exact alarms aren't allowed: the timer's too ([TimerAlarms]). */
@@ -123,9 +127,9 @@ object SlotAlarms {
  * is missed: kept on record, and no longer held to its time, so the next plan moves it.
  */
 class Slots(private val graph: AppGraph) {
-    /** [key]'s slot has begun. */
+    /** [key]'s slot has begun, or a break outside's has ended (D-113): the plan made again. */
     fun onStart(key: String) {
-        Log.i(AppGraph.TAG, "Slot begun: $key")
+        Log.i(AppGraph.TAG, "Slot begun or a break over: $key")
         graph.planning.watcher.poke()
     }
 
@@ -160,8 +164,7 @@ class Slots(private val graph: AppGraph) {
     suspend fun sweep(now: Long = graph.clock.now()) {
         val today = Instant.ofEpochMilli(now).atZone(graph.clock.zone()).toLocalDate()
         val state = graph.stores.session.value.slots.on(today)
-        val missed = state.missed.map { it.key }.toSet()
-        val started = state.previous.filter { (key, start) -> key !in missed && start + SlotAlarms.GRACE_MS < now }
+        val started = state.started(now, SlotAlarms.GRACE_MS)
         if (started.isEmpty()) return
         val plan = graph.planning.plan(now = now)
         for ((key, start) in started) {

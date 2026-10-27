@@ -54,6 +54,8 @@ Applied: §Two releases.
 
 ## 4.4.1: a break outside kept once begun
 
+**Built** in 4.4.1 (D-113). Found while building, beyond the stages below: the start alarm (`SlotAlarms.next`) rings at a break's start and end too, so a completed break leaves the calendar at its end, not at the next plan something else makes; the breaks begun are read from the kept starts by their keys, whatever `outsideTimes` now holds, so a break under way stays though its time is taken out of the settings.
+
 Read first, in full: `core/Slotter.kt` (`slot`, its outside pass and `choices`, `intervals`, `onFive`), `core/Plan.kt` (`Slot`), `core/SlotState.kt`, `plan/Planning.kt` (`keepSlots`), `calendar/SlotCalendarDiff.kt` (`desired`, `diff`), and their tests (`SlotterTest`, `SlotStateTest`, `PlannerTest`, `SlotCalendarDiffTest`, `CalendarWriterTest`, `PlanSnapshotTest`).
 
 ### 1. Each break a name of its own (15 min)

@@ -845,6 +845,30 @@ class PlannerTest {
         assertTrue(missedPlan.ordered.filter { it.key != missed }.none { it.why == Why.Refitted })
     }
 
+    @Test
+    fun `a break outside under way stays where it began, then goes at its end, the work after it unmoved (D-113)`() {
+        // Saturday 17 Oct, free from 08:30: two half hours due tonight, planned again as the midday break comes and goes,
+        // each plan with the starts the last one kept.
+        val saturday = LocalDate.parse("2026-10-17")
+        val day = mapOf(saturday to listOf(DayWindow(510, 1350, WindowKind.Evening)))
+        val tasks = listOf(task("a", Fixtures.at("2026-10-17T23:59"), effort = 30), task("b", Fixtures.at("2026-10-17T23:59"), effort = 30))
+        fun hm(time: Long) = Instant.ofEpochMilli(time).atZone(LONDON).toLocalTime().toString()
+        var kept = SlotState("2026-10-17")
+        val laid = listOf("12:58", "13:02", "13:11", "13:25").map { at ->
+            val plan = Planner.plan(windowed(tasks, "2026-10-17T$at", windows = day).copy(previousSlots = kept.previous))
+            kept = kept.laid(plan)
+            plan.todaySlots.joinToString { (it.chunk?.title ?: "outside") + " " + hm(it.start) }
+        }
+        val before = "outside 13:00, a 13:20, b 13:55, outside 16:00"
+        assertEquals(listOf(before, before, before, "a 13:20, b 13:55, outside 16:00"), laid)
+        // Completed, it stays kept so, with its end as it was laid, and isn't laid again from now...
+        assertEquals(Fixtures.at("2026-10-17T13:00"), kept.previous["outside:780"])
+        assertEquals(Fixtures.at("2026-10-17T13:20"), kept.previous["outside:780-end"])
+        // ...nor brought back by breaks made longer since.
+        val longer = Planner.plan(windowed(tasks, "2026-10-17T13:26", windows = day).copy(settings = settings.copy(outsideBreakMin = 30), previousSlots = kept.previous))
+        assertTrue(longer.todaySlots.none { it.outsideAt == 780 })
+    }
+
     // --- Pins: a day, a time (PL-04) ---
 
     @Test

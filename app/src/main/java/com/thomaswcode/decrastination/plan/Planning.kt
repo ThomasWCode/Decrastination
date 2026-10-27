@@ -15,7 +15,6 @@ import com.thomaswcode.decrastination.core.Planner
 import com.thomaswcode.decrastination.core.SchoolCalendar
 import com.thomaswcode.decrastination.core.SchoolDays
 import com.thomaswcode.decrastination.core.Settings
-import com.thomaswcode.decrastination.core.SlotKind
 import com.thomaswcode.decrastination.core.SlotState
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.WallClock
@@ -178,17 +177,16 @@ class Planning(
     )
 
     /**
-     * [made]'s today kept for the next plan (PL-13): its work slots' starts, and which missed pieces
-     * went to another day. Written only where that changes something, so keeping them doesn't make
-     * the plan again for nothing.
+     * [made]'s today kept for the next plan (PL-13): its slots' starts, breaks outside begun or completed
+     * among them (D-113), and which missed pieces went to another day. Written only where that changes
+     * something, so keeping them doesn't make the plan again for nothing.
      */
     private suspend fun keepSlots(made: Plan) {
         // A slot whose grace went by before its alarm or a sweep could see it is missed first: once its
         // start is replaced by where this plan moved it, nothing would know it was.
         runCatching { sweep() }.onFailure { Log.w(AppGraph.TAG, "Looking at missed slots failed", it) }
-        val starts = made.todaySlots.filter { it.kind == SlotKind.Work }.associate { it.chunk!!.key to it.start }
         session.update { state ->
-            val kept = state.slots.on(made.today).copy(previous = starts).reconciled(made)
+            val kept = state.slots.on(made.today).laid(made).reconciled(made)
             if (kept == state.slots) state else state.copy(slots = kept)
         }
     }

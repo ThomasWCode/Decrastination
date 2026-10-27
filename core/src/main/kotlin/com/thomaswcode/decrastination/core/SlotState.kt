@@ -13,6 +13,30 @@ data class SlotState(val date: String = "", val previous: Map<String, Long> = em
     /** As it stands on [date]: a new day starts empty. */
     fun on(date: LocalDate): SlotState = if (this.date == date.toString()) this else SlotState(date.toString())
 
+    /**
+     * As [plan] lays today: its slots' starts, breaks outside among them, with a begun break's end as laid ([Slot.endKey]),
+     * so a length changed after it began doesn't move its end; and each break outside begun that it no longer lays,
+     * completed, with its end (or [Plan.now], by which it was over, where no plan laid it under way), so the next plan knows
+     * it's done and never lays it again that day (D-113).
+     */
+    fun laid(plan: Plan): SlotState {
+        val slots = plan.todaySlots
+        val starts = slots.associate { it.key to it.start } +
+            slots.filter { it.kind == SlotKind.Outside && it.start <= plan.now }.associate { Slot.endKey(it.key) to it.end }
+        val completed = previous.filter { (key, start) -> Slot.outsideAt(key) != null && start <= plan.now && key !in starts }
+        val ends = completed.keys.associate { Slot.endKey(it) to (previous[Slot.endKey(it)] ?: plan.now) }
+        return copy(previous = starts + completed + ends)
+    }
+
+    /**
+     * Today's pieces whose start is more than [graceMs] before [now], not missed: those a sweep looks at (PL-13). A break
+     * outside's start and end, kept beside them (D-113), aside: a break has nothing to miss.
+     */
+    fun started(now: Long, graceMs: Long): Map<String, Long> {
+        val gone = missed.map { it.key }.toSet()
+        return previous.filter { (key, start) -> key !in gone && !key.startsWith(Slot.OUTSIDE) && start + graceMs < now }
+    }
+
     /** [key]'s slot missed at [at]: recorded once, and its start no longer kept, so it moves. */
     fun missed(key: String, taskId: String, at: Long): SlotState =
         copy(previous = previous - key, missed = if (missed.any { it.key == key }) missed else missed + MissedSlot(key, taskId, at))

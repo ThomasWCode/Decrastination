@@ -90,6 +90,42 @@ class SlotStateTest {
         assertEquals(after, after.reconciled(withoutA))
     }
 
+    @Test
+    fun `a plan's starts are kept, breaks outside among them, and a break begun it no longer lays stays kept as completed (D-113)`() {
+        val noon = Fixtures.at("2026-10-13T12:00")
+        fun outside(minute: Int, start: Long) = Slot(SlotKind.Outside, null, start, start + 20 * 60_000L, WindowKind.Evening, pinned = false, outsideAt = minute)
+        val work = Slot(SlotKind.Work, chunk("teams:b"), Fixtures.at("2026-10-13T17:00"), Fixtures.at("2026-10-13T17:30"), WindowKind.Evening, pinned = false)
+        // 13:10: the 13:00 break under way, its end as laid kept beside its start; the 16:00 one still to come, its start alone.
+        val during = Plan(Fixtures.at("2026-10-13T13:10"), tuesday, listOf(DayBucket(tuesday, 315, listOf(work.chunk!!), listOf(outside(780, Fixtures.at("2026-10-13T13:00")), outside(960, Fixtures.at("2026-10-13T16:00")), work))), emptyList())
+        assertEquals(
+            mapOf("outside:780" to Fixtures.at("2026-10-13T13:00"), "outside:960" to Fixtures.at("2026-10-13T16:00"), "teams:b#-1#1" to Fixtures.at("2026-10-13T17:00"), "outside:780-end" to Fixtures.at("2026-10-13T13:20")),
+            SlotState("2026-10-13").laid(during).previous,
+        )
+        // 13:30: the 13:00 break completed, so no longer laid, kept with its end; the 16:00 one and b's piece laid.
+        val later = Plan(Fixtures.at("2026-10-13T13:30"), tuesday, listOf(DayBucket(tuesday, 315, listOf(work.chunk!!), listOf(outside(960, Fixtures.at("2026-10-13T16:00")), work))), emptyList())
+        val before = SlotState("2026-10-13").laid(during).let { it.copy(previous = it.previous + ("teams:a#-1#1" to noon)) }
+        assertEquals(
+            mapOf("outside:960" to Fixtures.at("2026-10-13T16:00"), "teams:b#-1#1" to Fixtures.at("2026-10-13T17:00"), "outside:780" to Fixtures.at("2026-10-13T13:00"), "outside:780-end" to Fixtures.at("2026-10-13T13:20")),
+            before.laid(later).previous,
+        )
+        // One no plan laid under way (the phone off through it): kept with the plan's now as its end, by which it was over.
+        val unseen = SlotState("2026-10-13", previous = mapOf("outside:780" to Fixtures.at("2026-10-13T13:00")))
+        assertEquals(Fixtures.at("2026-10-13T13:30"), unseen.laid(later).previous["outside:780-end"])
+        // A piece's start the plan no longer has goes (a's), as a break's still to come would: only a break begun is kept so.
+        val still = SlotState("2026-10-13", previous = mapOf("outside:960" to Fixtures.at("2026-10-13T16:00")))
+        assertEquals(mapOf("teams:b#-1#1" to Fixtures.at("2026-10-13T17:00")), still.laid(later.copy(buckets = listOf(DayBucket(tuesday, 315, listOf(work.chunk!!), listOf(work))))).previous)
+        // Run twice, the same; and a new day starts empty, yesterday's breaks with the rest.
+        assertEquals(before.laid(later), before.laid(later).laid(later))
+        assertEquals(SlotState("2026-10-14"), before.laid(later).on(tuesday.plusDays(1)))
+    }
+
+    @Test
+    fun `a sweep looks at the pieces begun past their grace and not missed, never at a break outside's start or end`() {
+        val kept = SlotState("2026-10-13", previous = mapOf("teams:a#-1#1" to 10L, "teams:b#-1#1" to 10L, "teams:c#-1#1" to 95L, "outside:780" to 10L, "outside:780-end" to 30L))
+            .missed("teams:b#-1#1", "teams:b", 50L).let { it.copy(previous = it.previous + ("teams:b#-1#1" to 10L)) }
+        assertEquals(mapOf("teams:a#-1#1" to 10L), kept.started(now = 100L, graceMs = 10L))
+    }
+
     private fun chunk(taskId: String) = Chunk(
         taskId = taskId, source = Source.Teams, kind = Kind.Homework, title = taskId.removePrefix("teams:"), step = null, minutes = 30, dueAt = null,
         deadline = Fixtures.at("2026-10-20T09:00"), soft = false, overdue = false, dueToday = false, behind = false, part = 1, parts = 1,
