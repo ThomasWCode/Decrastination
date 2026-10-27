@@ -3,6 +3,9 @@ package com.thomaswcode.decrastination.ui
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
 import com.thomaswcode.decrastination.core.DayBreaks
+import com.thomaswcode.decrastination.core.Kind
+import com.thomaswcode.decrastination.core.Source
+import com.thomaswcode.decrastination.core.TaskItem
 import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -37,9 +40,9 @@ class MovesTest {
     @Test
     fun `a day is open to a piece from the day it can start to its real deadline's, overdue work to any`() {
         val now = Fixtures.at("2026-10-27T17:00")
-        val task = com.thomaswcode.decrastination.core.TaskItem(
-            id = "teams:a", source = com.thomaswcode.decrastination.core.Source.Teams, sourceId = "a", title = "a", dueAt = Fixtures.at("2026-10-29T09:00"),
-            kind = com.thomaswcode.decrastination.core.Kind.Homework, sourceEffortMin = 60, firstSeenAt = now, lastSeenAt = now, notBefore = Fixtures.at("2026-10-28T08:00"),
+        val task = TaskItem(
+            id = "teams:a", source = Source.Teams, sourceId = "a", title = "a", dueAt = Fixtures.at("2026-10-29T09:00"),
+            kind = Kind.Homework, sourceEffortMin = 60, firstSeenAt = now, lastSeenAt = now, notBefore = Fixtures.at("2026-10-28T08:00"),
         )
         assertEquals(listOf(false, true, true, false), (0L..3L).map { Moves.dayAllowed(task, LocalDate.parse("2026-10-27").plusDays(it), now, LONDON) })
         // Overdue: any day from today.
