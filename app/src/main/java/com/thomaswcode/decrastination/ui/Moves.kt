@@ -5,8 +5,10 @@ import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.Change
 import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.Chunk
+import com.thomaswcode.decrastination.core.DayBreaks
 import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.Planner
+import com.thomaswcode.decrastination.core.Slot
 import com.thomaswcode.decrastination.core.TaskItem
 import java.time.LocalDate
 import java.time.ZoneId
@@ -18,7 +20,8 @@ import kotlinx.coroutines.launch
 /**
  * A piece moved by hand (UI-04), as the move sheet makes the move: its task's next piece to a time on a day ([toTime]), or all
  * of its task to a day ([toDay]), each a change of yours, taken back in Your changes; the days a piece can go to are
- * [dayAllowed]'s. Each is checked first, and refused saying why, so none's said done that the plan would drop.
+ * [dayAllowed]'s. A break outside, dragged on the Day, to a time on its own day ([outsideTo], D-116). Each is checked first, and
+ * refused saying why, so none's said done that the plan would drop.
  */
 internal object Moves {
     /** What a move came to: made, and said so; or refused, and why. */
@@ -76,6 +79,29 @@ internal object Moves {
             graph.instructions.addOwnChange(UUID.randomUUID().toString(), "All of it on ${day.format(CHIP_DAY)}", About(taskId = chunk.taskId, taskTitle = chunk.title), Change(ChangeType.OnDay, taskId = chunk.taskId, date = day.toString()))
         }
         return Moved.Done("All of it on ${day.format(CHIP_DAY)}" + joins(graph, chunk, day))
+    }
+
+    /**
+     * A break outside ([slot]) to [minute] of its own [day] (D-116): an `OutsideAt` change of yours naming it by its own time,
+     * kept to the minute as a pin is; refused where [outsideProblem] says why.
+     */
+    fun outsideTo(graph: AppGraph, slot: Slot, day: LocalDate, minute: Int, zone: ZoneId): Moved {
+        outsideProblem(graph.planning.breaksOn(day), slot.outsideAt, minute, timeOf(day, minute, zone), graph.clock.now())?.let { return Moved.Refused(it) }
+        val said = "Outside at ${day.format(CHIP_DAY)} ${"%02d:%02d".format(Locale.UK, minute / 60, minute % 60)}"
+        graph.scope.launch { graph.instructions.addOwnChange(UUID.randomUUID().toString(), said, About(day = day.toString()), Change(ChangeType.OutsideAt, date = day.toString(), outsideMin = slot.outsideAt, startMin = minute)) }
+        return Moved.Done(said)
+    }
+
+    /**
+     * Why the break outside named [own] can't go to [minute] (its moment [at]) among its day's [breaks] at [now]: its time
+     * gone, the break begun (D-113), past midnight, or over another of the day's; null where it can.
+     */
+    fun outsideProblem(breaks: DayBreaks, own: Int, minute: Int, at: Long, now: Long): String? = when {
+        at < now -> "That time's gone"
+        own in breaks.begun -> "That break outside has begun"
+        minute + breaks.length > DayLayout.DAY_MINUTES -> "A break outside is over by midnight"
+        breaks.over(minute, own) -> "Another break outside is then"
+        else -> null
     }
 
     /** [minute] of [day] by its clock, as the planner lays it: on a day the clocks change too. */

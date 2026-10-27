@@ -58,6 +58,7 @@ object CalendarTime {
             CalendarContract.Instances.SELF_ATTENDEE_STATUS,
             CalendarContract.Instances.EVENT_LOCATION,
             CalendarContract.Instances.DESCRIPTION,
+            CalendarContract.Instances.DISPLAY_COLOR,
         )
         // Ids are numbers: put in the query as they are.
         val selection = excluded.takeIf { it.isNotEmpty() }?.let { "${CalendarContract.Instances.CALENDAR_ID} NOT IN (${it.joinToString(",")})" }
@@ -75,6 +76,7 @@ object CalendarTime {
                     calendar = c.getString(6).orEmpty(),
                     location = c.getString(8).orEmpty(),
                     description = c.getString(9).orEmpty().take(DESCRIPTION_CHARS),
+                    colour = if (c.isNull(10)) null else c.getInt(10),
                 )
             }
         }

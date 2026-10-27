@@ -3,6 +3,7 @@ package com.thomaswcode.decrastination.ui
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 
 /**
  * The app's colours: dark blue (in place of UI-12's pink from the logo), on paper
@@ -19,6 +20,12 @@ object Colours {
     val Paper = Color(0xFFFCFCFC)
     val Night = Color(0xFF121212)
     val OffWhite = Color(0xFFEDEDED)
+
+    /**
+     * The words on an event's own colour ([argb], the calendar's, 4.6.0): black or white, whichever has the greater contrast on
+     * it (their contrasts are equal at a luminance of about 0.179).
+     */
+    fun onEvent(argb: Int): Color = if (Color(argb).luminance() > 0.179f) Color.Black else Color.White
 
     /** The notifications' accent, as Android takes it: a mid blue, read on a light shade and a dark one. */
     const val BLUE_ARGB = 0xFF5B8DEF.toInt()
