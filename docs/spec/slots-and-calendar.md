@@ -102,14 +102,14 @@ Held, it goes to a day of the next fortnight, at a time or any time that day (`u
 With `WRITE_CALENDAR`, the plan's slots are written to the calendar you pick in Setup or Settings → Calendar (`Settings.calendarWriteId`); none is written to till you pick one.
 Pick one you made at calendar.google.com: a calendar an app makes stays on the phone.
 `CalendarWriter` writes it, built like `Focus`: its stores, the clock, and `CalendarProvider` for the calendar's events (`SlotCalendar` on the phone). It alone writes what the app knows of its writes (`calendar.json`: `CalendarState.calendarWritten`, `calendarWrittenTo`, `calendarsToClear` and its versions) and your answers about events, but for a backup restored, which merges its answers in (`Stores.replace`, as for every store); `CalendarWriterTest` drives it on temporary stores, against a calendar in memory.
-- **What**: the next seven days' slots (today and the six after, `SlotCalendarDiff.DAYS`), pieces of work and outside breaks.
-- **Each event**: the piece's label as its title ("Outside" for a break); its source and why as its description ("Teams. Due tomorrow."), with its first action where one's written (AI-15), or "A break outside.".
-- **Marked**: free, with no reminders, and with the app's package and its URI (`CUSTOM_APP_PACKAGE`, `CUSTOM_APP_URI`: `decrastination://slot/<date>/<key>`, a break's key by its own time, `outside:780`, so a break laid elsewhere is the same event moved).
+- **What**: the next seven days' slots (today and the six after, `SlotCalendarDiff.DAYS`), pieces of work and outside breaks; and your busy times of those days (D-117, `InstructionRules.busyBlocks`), every one in use whoever set it, each day's an event of its own, one for each start and end.
+- **Each event**: the piece's label as its title ("Outside" for a break, "Busy: Football" for a busy time named from your words, else "Busy"); its source and why as its description ("Teams. Due tomorrow."), with its first action where one's written (AI-15), or "A break outside.", or "A busy time of yours: no work then.".
+- **Marked**: free (a busy time's busy, to block its time out), with no reminders, and with the app's package and its URI (`CUSTOM_APP_PACKAGE`, `CUSTOM_APP_URI`: `decrastination://slot/<date>/<key>`, a break's key by its own time, `outside:780`, so a break laid elsewhere is the same event moved).
 - **Cheap**: two queries (its events, and those worded like them) and at most one batch a write (`CalendarWriter.writeSlots`), nothing written when nothing changed; slots as last written aren't even read back unless the calendar has changed after its last read (AR-08).
 - **Once quiet**: written after plans have been quiet 5 seconds (`CalendarWriter.CALENDAR_WRITE_QUIET_MS`), so a burst of changes is one write, not an event changed again while the calendar's sync still has it.
 
 `SlotCalendarDiff.diff` compares the slots with the app's events, those starting in the week and any with a slot's URI wherever it is now:
-- a slot with no event is inserted, so one you deleted is written again;
+- a slot with no event is inserted, so one you deleted is written again; a busy time's, written before, is said (`SlotCalendar.sayPutBack`: "a busy time is changed by asking Felix, or in Your changes", D-117);
 - an event whose times or words differ is updated;
 - an event no longer a slot, a second event of one URI, and copies (below) are deleted;
 - an event you moved, a piece's or a break's, is a hand move.
@@ -118,6 +118,7 @@ Pick one you made at calendar.google.com: a calendar an app makes stays on the p
 
 An event whose start is neither where the app last wrote it (`CalendarState.calendarWritten`) nor where the plan has it now is one you moved.
 `SlotCalendarDiff.judge` takes moves earliest first, each as your time for its task's next piece (an `AtTime` change, "Moved in the calendar", made at once, and kept to the minute as any time you give is, D-114), unless:
+- it's a busy time's: "a busy time is changed by asking Felix, or in Your changes" (D-117);
 - it's a break outside's: "a break outside is moved by asking Felix" (D-116; yours is the day grid's drag, within its day);
 - its task is no longer there;
 - the time is at or after the task's real deadline, still to come ("it's due before then"; overdue work takes any time);
