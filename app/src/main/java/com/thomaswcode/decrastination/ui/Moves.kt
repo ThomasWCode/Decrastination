@@ -43,7 +43,7 @@ internal object Moves {
     /** [chunk], its task's next piece, at [minute] of [day]: an `AtTime` change of yours, unless the plan wouldn't keep it. */
     fun toTime(graph: AppGraph, chunk: Chunk, day: LocalDate, minute: Int, zone: ZoneId): Moved {
         val task = graph.tasks.value.tasks.firstOrNull { it.id == chunk.taskId }
-        val time = day.atStartOfDay(zone).plusMinutes(minute.toLong()).toInstant().toEpochMilli()
+        val time = timeOf(day, minute, zone)
         val now = graph.clock.now()
         // Only a time the plan will keep: none it would drop is said done.
         val problem = when (task?.let { Planner.pinProblem(it, time, now, zone, chunk.minutes) }) {
@@ -77,6 +77,9 @@ internal object Moves {
         }
         return Moved.Done("All of it on ${day.format(CHIP_DAY)}" + joins(graph, chunk, day))
     }
+
+    /** [minute] of [day] by its clock, as the planner lays it: on a day the clocks change too. */
+    fun timeOf(day: LocalDate, minute: Int, zone: ZoneId): Long = day.atStartOfDay().plusMinutes(minute.toLong()).atZone(zone).toInstant().toEpochMilli()
 
     /** A day kept for only other tasks (D-115): the move makes [chunk]'s task one of them, said after the move's words. */
     private fun joins(graph: AppGraph, chunk: Chunk, day: LocalDate): String =
