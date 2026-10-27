@@ -16,6 +16,8 @@ import com.thomaswcode.decrastination.core.Enrichment
 import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.DayBucket
 import com.thomaswcode.decrastination.core.Given
+import com.thomaswcode.decrastination.core.Instruction
+import com.thomaswcode.decrastination.core.InstructionStatus
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.MessageKind
 import com.thomaswcode.decrastination.core.OwnStep
@@ -912,5 +914,18 @@ class ChatTest {
         assertEquals(emptyList(), ChatAnswers.movedPins(listOf(pin("own:u", at(19, 0)), Change(ChangeType.Minutes, taskId = "own:u", minutes = 20), pin("own:u", at(9, 0), "2026-11-30")), buckets, LONDON))
         // Not laid that day at all.
         assertEquals(listOf("21:50 had no free time, nor any after it that day."), ChatAnswers.movedPins(listOf(pin("own:v", at(21, 50))), buckets, LONDON))
+    }
+
+    @Test
+    fun `a task he puts on a day kept for only others is said to join them (D-115)`() {
+        fun task(id: String, title: String) = TaskItem(id = id, source = Source.Teams, sourceId = id, title = title, kind = Kind.Homework, firstSeenAt = 0, lastSeenAt = 0)
+        val tasks = listOf(task("teams:essay", "Essay"), task("teams:maths", "Maths")).associateBy { it.id }
+        fun applied(change: Change, at: Long) = Instruction("i$at", "words", at = at, state = InstructionStatus.Applied, changes = listOf(change), appliedAt = at)
+        val only = applied(Change(ChangeType.DayOnly, taskId = "teams:essay", date = "2026-10-24"), 1L)
+        val onDay = Change(ChangeType.OnDay, taskId = "teams:maths", date = "2026-10-24")
+        assertEquals(listOf("Sat 24 Oct was only for “Essay”: “Maths” joins it"), ChatAnswers.joined(listOf(onDay), listOf(only, applied(onDay, 2L)), tasks))
+        // One of the day's own tasks, or a day not kept for only some: nothing to say.
+        assertEquals(emptyList(), ChatAnswers.joined(listOf(onDay.copy(taskId = "teams:essay")), listOf(only, applied(onDay.copy(taskId = "teams:essay"), 2L)), tasks))
+        assertEquals(emptyList(), ChatAnswers.joined(listOf(onDay.copy(date = "2026-10-25")), listOf(only, applied(onDay.copy(date = "2026-10-25"), 2L)), tasks))
     }
 }

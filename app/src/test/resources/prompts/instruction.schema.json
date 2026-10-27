@@ -36,7 +36,8 @@
                             "AtTime",
                             "Steps",
                             "SameAs",
-                            "Rename"
+                            "Rename",
+                            "DayOnly"
                         ]
                     },
                     "taskId": {
@@ -131,6 +132,14 @@
                             ],
                             "additionalProperties": false
                         }
+                    },
+                    "alsoAllow": {
+                        "type": "string",
+                        "enum": [
+                            "",
+                            "anki",
+                            "anki-deadlines"
+                        ]
                     }
                 },
                 "required": [
@@ -146,7 +155,8 @@
                     "time",
                     "endTime",
                     "title",
-                    "steps"
+                    "steps",
+                    "alsoAllow"
                 ],
                 "additionalProperties": false
             }

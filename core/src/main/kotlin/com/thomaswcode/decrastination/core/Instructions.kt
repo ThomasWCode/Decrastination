@@ -121,6 +121,12 @@ enum class ChangeType {
 
     /** The task's name in the app is [Change.title]: made on one of your own; over another's, its source keeping its own. */
     Rename,
+
+    /**
+     * Only the tasks given a [DayOnly] for [Change.date] are planned on it, [Change.taskId] among them; [Change.alsoAllow]
+     * what else may come in (D-115).
+     */
+    DayOnly,
 }
 
 /** One change an instruction makes. Which fields mean anything depends on [type]. */
@@ -160,6 +166,11 @@ data class Change(
     val pacedFrom: Int? = null,
     /** The task's content when it was paced ([Enrichments.inputHash]): read again for newer prompts alone, it's the same. */
     val pacedHash: String? = null,
+    /**
+     * [ChangeType.DayOnly]'s day also takes Anki's cards ([InstructionRules.ALSO_ANKI]), or those and work that would
+     * otherwise miss its real deadline ([InstructionRules.ALSO_DEADLINES]); else nothing.
+     */
+    val alsoAllow: String? = null,
 )
 
 /** Your instructions. Kept in `instructions.json`. */
@@ -167,7 +178,7 @@ data class Change(
 data class InstructionState(
     val instructions: List<Instruction> = emptyList(),
     /** The shape this is in ([com.thomaswcode.decrastination.data.Migration]): raised with each change of it. */
-    val version: Int = 3,
+    val version: Int = 4,
 ) {
     /** Every step a change holds with an id ([withIds]): given as it's first stored, so the task steps it's laid as keep it. */
     fun withStepIds(): InstructionState {
@@ -187,6 +198,12 @@ data class InstructionState(
  * with the planner's capacity. Pure.
  */
 object InstructionRules {
+
+    /** What a [ChangeType.DayOnly]'s day also takes ([Change.alsoAllow]): Anki's cards. */
+    const val ALSO_ANKI = "anki"
+
+    /** Anki's cards, and work that would otherwise miss its real deadline. */
+    const val ALSO_DEADLINES = "anki-deadlines"
 
     /**
      * Whether what's in force for [taskId]'s [type] comes from a quick change ([Instruction.quick]):
@@ -310,6 +327,40 @@ object InstructionRules {
         return out
     }
 
+    /**
+     * The days from [from] to [to] kept for only some tasks (D-115), by [applied] (in the order applied): each date's tasks,
+     * those of its [ChangeType.DayOnly] changes, with those a move put on it since its first (an OnDay for it, or an AtTime
+     * on it: a later move wins, Q13); and what its latest DayOnly lets in besides. A task finished stays among them, so a day
+     * whose tasks are all done holds no work.
+     */
+    fun onlyDays(applied: List<Instruction>, from: LocalDate, to: LocalDate): Map<LocalDate, OnlyDay> {
+        val changes = applied.flatMap { it.changes }
+        val first = HashMap<LocalDate, Int>()
+        val last = HashMap<LocalDate, Int>()
+        changes.forEachIndexed { i, c ->
+            if (c.type != ChangeType.DayOnly || c.taskId == null) return@forEachIndexed
+            val day = date(c.date)?.takeIf { it in from..to } ?: return@forEachIndexed
+            first.putIfAbsent(day, i)
+            last[day] = i
+        }
+        return first.keys.sorted().associateWith { day ->
+            val named = changes.filter { it.type == ChangeType.DayOnly && date(it.date) == day }.mapNotNull { it.taskId }.toSet()
+            val moved = changes.withIndex().filter { (i, c) -> i > first.getValue(day) && (c.type == ChangeType.OnDay || c.type == ChangeType.AtTime) && date(c.date) == day }
+                .mapNotNull { it.value.taskId }.toSet()
+            val allow = changes[last.getValue(day)].alsoAllow
+            OnlyDay(named + moved, anki = allow == ALSO_ANKI || allow == ALSO_DEADLINES, deadlines = allow == ALSO_DEADLINES, joined = moved - named)
+        }
+    }
+
+    /**
+     * What a move of [taskId] onto [day] says, the day kept for only [named] (D-115): "Thu 29 Oct was only for “Essay”:
+     * “Maths” joins it" ([tasks]: to name them).
+     */
+    fun joinLine(day: LocalDate, named: Collection<String>, taskId: String, tasks: Map<String, TaskItem>): String {
+        fun title(id: String) = "“" + (tasks[id]?.title ?: "a task no longer listed") + "”"
+        return "${day.format(DAY)} was only for ${named.joinToString(", ") { title(it) }}: ${title(taskId)} joins it"
+    }
+
     /** The times [applied] says you can't work, from [from] to [to], where you are. */
     fun busy(applied: List<Instruction>, zone: ZoneId, from: LocalDate, to: LocalDate): List<Busy> {
         val times = applied.flatMap { it.changes }.filter { it.type == ChangeType.BusyTime && it.startMin != null && it.endMin != null && it.endMin > it.startMin }
@@ -406,6 +457,11 @@ object InstructionRules {
                 // Against its name as it is now; once this is the name in use, against its source's.
                 val was = task?.let { t -> t.sourceValues?.title?.takeIf { t.mine.title != null && t.mine.title.value == change.title } ?: t.title } ?: "a task no longer listed"
                 "“$was” renamed “${change.title}”"
+            }
+            ChangeType.DayOnly -> "${day(change)}: only ${title(change.taskId)}" + when (change.alsoAllow) {
+                ALSO_ANKI -> "; Anki too"
+                ALSO_DEADLINES -> "; Anki, and work that would miss its deadline, too"
+                else -> ""
             }
         }
     }

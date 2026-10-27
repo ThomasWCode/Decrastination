@@ -73,6 +73,8 @@ object Planner {
         val dayLoads: Map<LocalDate, Int> = emptyMap(),
         /** The most minutes of work a day holds, where your instructions limit it (0: none). */
         val dayCaps: Map<LocalDate, Int> = emptyMap(),
+        /** The days kept for only some tasks (D-115): no other task's work on them, but what each lets in besides. */
+        val onlyDays: Map<LocalDate, OnlyDay> = emptyMap(),
         /** Minutes of today's kept slots (LR-09): they come off today's limit, where there's one. */
         val workedTodayMin: Int = 0,
         /**
@@ -506,12 +508,24 @@ object Planner {
         val onDueDay = HashMap<Item, Int>()
         val onDueDayHome = HashMap<Item, Int>()
         /**
+         * Whether [day] is kept for only some tasks that [item]'s isn't among (D-115): not where its task is, nor Anki's
+         * cards where the day lets them in; nor, as a [lastResort], work with a real deadline still to come where the day
+         * lets in work that would otherwise miss it.
+         */
+        fun shut(item: Item, day: LocalDate, lastResort: Boolean = false): Boolean {
+            val only = input.onlyDays[day] ?: return false
+            if (item.task.id in only.taskIds || (only.anki && item.task.source == Source.Anki)) return false
+            return !(lastResort && only.deadlines && item.hard && item.deadline >= input.now)
+        }
+        /**
          * The time [day] has for [item]'s [piece] (PL-15): a piece only for home, the evening's left; any
          * other, all the day's. With no piece named, the item's: the evening's where all its pieces are home's.
          * A pin kept at its time needs of the day's free time only its part within it, of the evening's only its part there,
-         * but all of a limit you set (D-114).
+         * but all of a limit you set (D-114). None on a day kept for only other tasks ([shut], D-115); one that lets in work
+         * that would otherwise miss its deadline has room for it only as a [lastResort].
          */
-        fun room(item: Item, day: LocalDate, piece: Int? = null): Int {
+        fun room(item: Item, day: LocalDate, piece: Int? = null, lastResort: Boolean = false): Int {
+            if (shut(item, day, lastResort)) return 0
             val home = piece?.let { item.chunks[it].where == Where.Home } ?: item.home
             val left = (if (home) freeHome else free).getValue(day)
             val used = softUsed[day] ?: 0
@@ -581,9 +595,12 @@ object Planner {
         // Days you've limited: by a day's limit, or by busy times of yours within its hours.
         // By the time they take from a day's windows itself, before the shortest school time used is
         // applied: that threshold, crossed as a minute passes, mustn't make the day limited or not.
-        val limited = input.dayCaps.keys + if (input.hardBusy.isEmpty()) emptySet() else days.filter { workMinutes(it, input) < workMinutes(it, input.copy(hardBusy = emptyList())) }
+        val limited = input.dayCaps.keys + input.onlyDays.keys + if (input.hardBusy.isEmpty()) emptySet() else days.filter { workMinutes(it, input) < workMinutes(it, input.copy(hardBusy = emptyList())) }
         // [extra]: a pinned piece's minutes outside the day's free time, which a limit you set counts but the free time doesn't (D-114).
-        fun capped(day: LocalDate, minutes: Int, extra: Int = 0) = day in limited && (free.getValue(day) + extra < minutes || (capLeft[day] ?: Int.MAX_VALUE) < minutes)
+        // [item]'s, on a day kept for only other tasks: none at all (D-115), as work due today, its deadline still to come,
+        // has a day that lets in work that would otherwise miss it as its last resort.
+        fun capped(day: LocalDate, minutes: Int, extra: Int = 0, item: Item? = null) =
+            day in limited && ((item != null && shut(item, day, lastResort = true)) || free.getValue(day) + extra < minutes || (capLeft[day] ?: Int.MAX_VALUE) < minutes)
         // The first day a task's work can start: today, or later if it says so (an Anki deck
         // whose new cards for today are used up).
         fun firstDay(item: Item): LocalDate =
@@ -629,7 +646,8 @@ object Planner {
             // As much of each day as it can have: on a day it can only start late, the time after its
             // start; on its deadline's own day, only the time before the deadline.
             return generateSequence(from) { it.plusDays(1) }.takeWhile { it <= last }.sumOf { day ->
-                val room = room(item, day).coerceAtLeast(0)
+                // A day kept for only other tasks as it would take it, as a last resort (D-115).
+                val room = room(item, day, lastResort = true).coerceAtLeast(0)
                 // Its pins kept at their time that day: their part outside its free time is theirs as well (D-114), and before
                 // the deadline, as a pin kept is over by it.
                 val pinned = item.chunks.indices.sumOf { spanOf(item, day, it)?.outside ?: 0 }
@@ -671,7 +689,7 @@ object Planner {
                 fun waits(day: LocalDate) =
                     (perDay != null && (countOn(item, day) >= perDay || room(item, day, i) < item.chunks[i].minutes)) ||
                         (item.soft && room(item, day, i) < item.chunks[i].minutes) ||
-                        capped(day, item.chunks[i].minutes, spanOf(item, day, i)?.outside ?: 0)
+                        capped(day, item.chunks[i].minutes, spanOf(item, day, i)?.outside ?: 0, item)
                 while (day < horizon && waits(day)) day = day.plusDays(1)
                 // Beyond the horizon, the rest goes unplanned rather than breaking a per-day task's
                 // limit or undated work's allowance.
@@ -714,10 +732,13 @@ object Planner {
             val assigned = arrayOfNulls<LocalDate>(item.chunks.size)
             val behind = BooleanArray(item.chunks.size)
             val freeBefore = freeUntilDue(item, earliest)
-            fun fits(day: LocalDate, i: Int) =
-                room(item, day, i) >= item.chunks[i].minutes && (perDay == null || countOn(item, day) < perDay)
-            fun latest(from: LocalDate, i: Int): LocalDate? =
-                generateSequence(from) { it.minusDays(1) }.takeWhile { it >= earliest }.firstOrNull { fits(it, i) }
+            fun fits(day: LocalDate, i: Int, lastResort: Boolean = false) =
+                room(item, day, i, lastResort) >= item.chunks[i].minutes && (perDay == null || countOn(item, day) < perDay)
+            // A day kept for only other tasks that lets in work that would otherwise miss its deadline: only where no
+            // other day before the deadline has room for it (D-115).
+            fun latest(from: LocalDate, i: Int): LocalDate? = generateSequence(from) { it.minusDays(1) }.takeWhile { it >= earliest }.let { days ->
+                days.firstOrNull { fits(it, i) } ?: days.firstOrNull { fits(it, i, lastResort = true) }
+            }
 
             // Backwards, one chunk per day while there are days with room.
             var cursor = lastUsable

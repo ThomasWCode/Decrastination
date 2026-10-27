@@ -571,7 +571,10 @@ class Conversation(
         val waiting = waiting(now, messages)
         return ChatPrompts.Context(
             known = ChatPrompts.context(state.tasks, time.events, applied, now, clock.zone(), settings.value.classMap, runtime.value.notSame, settings.value, learning.value.calibration, kept.notes, kept.reminders, moments, lessons, waiting),
-            plan = ChatPrompts.plan(plan, clock.zone(), keptToday.map { it.key to it.label }, focus.blockingLine(plan, now), focus.timer),
+            plan = ChatPrompts.plan(
+                plan, clock.zone(), keptToday.map { it.key to it.label }, focus.blockingLine(plan, now), focus.timer,
+                InstructionRules.onlyDays(applied, plan.today, plan.today.plusDays(ChatPrompts.PLAN_DAYS.toLong())).mapValues { ChatPrompts.onlyLine(it.value, byId) },
+            ),
             keepable = keepable,
             kept = keptToday.associate { it.key to it.taskId },
             lessons = lessons,
@@ -875,7 +878,9 @@ class Conversation(
                 if (noted.any { it.action?.type == ChatAction.Type.SetReminder || it.action?.type == ChatAction.Type.MoveReminder }) scope.launch { draftReminders(clock.now()) }
                 // A time the plan couldn't keep (PL-04): where the piece went, said under the answer,
                 // which names the time asked for.
-                val moved = ChatAnswers.movedPins(instant.flatMap { it.changes }, planning.plan().buckets, clock.zone())
+                val moved = ChatAnswers.movedPins(instant.flatMap { it.changes }, planning.plan().buckets, clock.zone()) +
+                    // A task put on a day kept for only others joins them (D-115), said as the move sheet says it.
+                    ChatAnswers.joined(instant.flatMap { it.changes }, instructions.value.applied, tasks.value.tasks.associateBy { it.id })
                 // One that couldn't be made after all, said under the answer that says it was.
                 val refused = chat.value.messages.firstOrNull { it.id == reply.id }?.proposals.orEmpty()
                     .filter { p -> p.instant && p.state != ProposalState.Applied && p.note != null }.map { Act(Act.NOT_MADE + "${it.note!!.replaceFirstChar(Char::lowercase)}.", problem = true) }

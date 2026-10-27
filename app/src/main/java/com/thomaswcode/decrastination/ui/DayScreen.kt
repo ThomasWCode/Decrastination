@@ -176,16 +176,17 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
                 ).joinToString(" · "),
             )
         }
-        // Your instructions about the day, its limit and busy times, and one more (UI-11).
+        // Your instructions about the day, its limit, busy times and the tasks it's only for (D-115), and one more (UI-11).
         item(key = "said-$day") {
             val rules = instructions.applied.flatMap { it.changes }.filter { c ->
-                (c.type == ChangeType.DayLimit || c.type == ChangeType.BusyTime) &&
+                (c.type == ChangeType.DayLimit || c.type == ChangeType.BusyTime || c.type == ChangeType.DayOnly) &&
                     (c.date == day.toString() || (c.date == null && c.weekday == day.dayOfWeek.value))
             }
+            val byId = tasks.tasks.associateBy { it.id }
             Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
                 rules.forEach { rule ->
                     Text(
-                        "Your instruction: " + InstructionRules.describe(rule, emptyMap(), zone),
+                        "Your instruction: " + InstructionRules.describe(rule, byId, zone),
                         style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
                     )

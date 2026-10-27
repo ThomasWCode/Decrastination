@@ -17,6 +17,7 @@ import com.thomaswcode.decrastination.core.Lessons
 import com.thomaswcode.decrastination.core.MessageKind
 import com.thomaswcode.decrastination.core.Note
 import com.thomaswcode.decrastination.core.Notes
+import com.thomaswcode.decrastination.core.OnlyDay
 import com.thomaswcode.decrastination.core.OwnTaskRules
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.ProposalState
@@ -162,6 +163,7 @@ object ChatPrompts {
         1. Add tasks of their own (newTasks): something to do that isn't listed ("write my UCAS statement by 1 December", "buy mum a present before Sunday"). Give a short title in their words; kind: Homework, Revision, Admin, or Event for something that happens at a time (an appointment, a match); subject if it's for one (else an empty string); dueDate and dueTime if they gave them (an event's start; with no time, an event starts at 09:00 and anything else is due by the end of that day); minutes for the whole thing (your best estimate if they didn't say, and say so in your reply); startDate if it can't be started before a day; notes only for something worth keeping (else an empty string); and steps only for a big task worth splitting, each with minutes (adding up to the task's), its own dates where it has them, and anyOrder: true where it doesn't need the steps before it done first, false where it builds on them (steps they list themselves stay in their order unless they say it doesn't matter).
         2. Change their tasks and days (changes), with these:
 """ + InstructionPrompts.CHANGE_TYPES.prependIndent("        ") + """
+        When you keep a day for only some tasks and they haven't said what else may come in, make it with alsoAllow empty, ask in your reply whether to let in nothing else, Anki's cards, or those and work that would otherwise miss its deadline, and offer the three as suggested replies ("Nothing else", "Anki too", "Anki and deadlines"); their answer is one more DayOnly for that day, for one of its tasks, with its alsoAllow.
         A due date at a class's next lesson ("it's due next lesson", "next chemistry") is a DueBy with lesson the class, as the lessons' list names it (its subject or one of its names), and date and time empty: the app sets it to that lesson's start. Give lesson only for that; when it's refused, ask them the date.
         Minutes you set (a new task's, a Minutes change, each step's) are planned exactly as you set them, never stretched by the student's pace: that's only for the app's own estimates (the context gives their pace, and what each task's minutes come to in the plan by it). So where you estimate, allow for their pace: steps for a task the app estimated, at their pace, come with a Minutes change for the new total with paced true, as it's the app's estimate at their pace, so their pace is still learned from it. Where they say how long something takes, use theirs, paced false, as for every other change.
         3. Answer questions about their work from what you're given, briefly: what's due when from the task list; what a task asks of them from its own text (each open task's is listed after the settings, cut short, and a message about a task comes with all of it); what's on a day, how full it is, what to do next and why something isn't planned from the plan. The plan is what the app has them do and shows them, so say what it says rather than planning the work again yourself. The context gives the time now: a deadline later today is still ahead ("due at 16:00 today"), not past, and a slot marked past has gone by; say "overdue" only where the plan marks it so.
@@ -793,7 +795,7 @@ object ChatPrompts {
      * [timer] (D-112) is said with the slot under way or the next thing where it's on that task,
      * else in a line of its own.
      */
-    fun plan(plan: Plan, zone: ZoneId, kept: List<Pair<String, String>> = emptyList(), blocking: String? = null, timer: PieceTimer? = null): String = buildString {
+    fun plan(plan: Plan, zone: ZoneId, kept: List<Pair<String, String>> = emptyList(), blocking: String? = null, timer: PieceTimer? = null, only: Map<LocalDate, String> = emptyMap()): String = buildString {
         fun at(time: Long) = Instant.ofEpochMilli(time).atZone(zone).format(WHEN)
         fun piece(chunk: Chunk) = "${chunk.label.take(MAX_TITLE)} (${chunk.minutes} min)"
         fun event(task: TaskItem) = "${task.id} | ${task.title.take(MAX_TITLE)} | ${task.source.label}"
@@ -895,7 +897,9 @@ object ChatPrompts {
             } + bucket.date.format(DAY)
             val time = "${bucket.capacityMin} min of working time" + if (bucket.date == plan.today) " left" else ""
             val over = (bucket.plannedMin - bucket.capacityMin).takeIf { it > 0 }?.let { ", over by $it min" }.orEmpty()
-            appendLine(if (bucket.chunks.isEmpty()) "- $name: nothing planned ($time)" else "- $name: ${bucket.plannedMin} min planned of $time$over")
+            // A day kept for only some tasks (D-115): which, and what else it lets in.
+            val kept = only[bucket.date]?.let { "; $it" }.orEmpty()
+            appendLine(if (bucket.chunks.isEmpty()) "- $name: nothing planned ($time)$kept" else "- $name: ${bucket.plannedMin} min planned of $time$over$kept")
             eventsOn[bucket.date].orEmpty().forEach { appendLine("  - event at ${Instant.ofEpochMilli(it.dueAt!!).atZone(zone).format(CLOCK)}: ${event(it)}") }
             // A task a line, as the Plan lists them (Q31), its pieces that day in their order.
             bucket.chunks.groupBy { it.taskId }.forEach { (id, pieces) ->
@@ -915,6 +919,22 @@ object ChatPrompts {
             }
         }
     }.trimEnd()
+
+    /**
+     * A day kept for only some tasks, as the plan's day line says it (D-115): "kept for only “Essay”, “Maths revision” (done);
+     * Anki too". Those finished are marked done, so he can offer to free the day.
+     */
+    fun onlyLine(only: OnlyDay, tasks: Map<String, TaskItem>): String {
+        val names = only.taskIds.sorted().joinToString(", ") { id ->
+            val task = tasks[id]
+            "“" + (task?.title?.take(MAX_TITLE) ?: "a task no longer listed") + "”" + if (task != null && !task.isOpen) " (done)" else ""
+        }
+        return "kept for only $names" + when {
+            only.deadlines -> "; Anki, and work that would otherwise miss its deadline, too"
+            only.anki -> "; Anki too"
+            else -> ""
+        }
+    }
 
     /** The most lines in each of the plan's summaries (what isn't planned, other events, later tasks), so they leave the days room. */
     const val PLAN_LIST = 20

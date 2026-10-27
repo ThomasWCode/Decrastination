@@ -2,6 +2,7 @@ package com.thomaswcode.decrastination.enrich
 
 import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.Instruction
+import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.learn.CalendarEvent
 import com.thomaswcode.decrastination.learn.EventJudge
@@ -52,6 +53,7 @@ object InstructionPrompts {
         - SameAs: the task is the same work as another listed task, from another source, which is the one kept (this one is hidden). Needs taskId and afterTaskId (the one kept).
         - Steps: replace a task's steps with these (any task's, from any source, but Anki's, whose steps are its cards), adding up to its minutes (for a new total, add a Minutes change with it too); dates within the task's. Needs taskId and steps (each with title, minutes, startDate and dueDate as YYYY-MM-DD or empty, where: anywhere or home, and anyOrder: true where it doesn't need the steps before it done first, as separate questions don't, false where it builds on them, as a draft after its plan does, and for the first; steps the student lists themselves stay in their order, false, unless they say the order doesn't matter). One step is the whole task in one go.
         - Rename: the task's name as the app shows it (its source keeps its own). Needs taskId and title (the new name).
+        - DayOnly: a day kept for only some tasks' work: no other task's work is planned on it, and the time they don't use stays free. Their work is planned as usual, so the day may hold some of it or none: add OnDay for a task whose work should all go on that day. One change a task, each with taskId and date (a date, never a weekday). alsoAllow what else may come in: empty for nothing, "anki" for Anki's cards too, "anki-deadlines" for those and work that would otherwise miss its deadline; the day's latest DayOnly sets it for the whole day.
 
         Use the ids and event keys exactly as listed. Work out relative dates ("next Friday", "the weekend") from today; a weekday named alone ("on Saturday") means the next one, and only "every Saturday" or "on Saturdays" means each week. A stretch of days ("20 to 25 October", "this weekend") is one change per day, but for NoSchool, which takes the stretch whole. Leave every field a change type doesn't use empty: an empty string, minutes -1 (0 is a real value: a DayLimit's no work at all), and steps an empty list.
     """.trimIndent()
@@ -65,6 +67,8 @@ object InstructionPrompts {
 """ + CHANGE_TYPES.prependIndent("        ") + """
 
         When the instruction is about the given task, event or day, the change is to it unless the instruction clearly names another.
+
+        Where the instruction keeps a day for only some tasks without saying what else may come in, leave alsoAllow empty.
 
         If the instruction can't be turned into these changes, or it's unclear which task, event or date it means, set understood to false, give no changes, and in question say in one short sentence what's unclear or what the app can't do. Otherwise understood is true and question is null.
 
@@ -108,6 +112,7 @@ object InstructionPrompts {
                 "anyOrder" to mapOf("type" to "boolean"),
             ),
         ),
+        "alsoAllow" to mapOf("type" to "string", "enum" to listOf("", InstructionRules.ALSO_ANKI, InstructionRules.ALSO_DEADLINES)),
     )
 
     internal val CHANGE = obj(*CHANGE_FIELDS.toTypedArray())

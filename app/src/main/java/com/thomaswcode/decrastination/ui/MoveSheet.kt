@@ -58,9 +58,13 @@ fun MoveSheet(graph: AppGraph, chunk: Chunk, plan: Plan, zone: ZoneId, onDone: (
     val task = graph.tasks.value.tasks.firstOrNull { it.id == chunk.taskId }
     val last = task?.realDeadline?.takeIf { it > graph.clock.now() }?.let { Planner.date(it, zone) }
     val first = task?.notBefore?.let { Planner.date(it, zone) }
+    // A day kept for only other tasks (D-115): the move makes this one of them, and the snackbar says so.
+    fun joins(day: LocalDate): String = InstructionRules.onlyDays(graph.instructions.value.applied, day, day)[day]?.takeIf { chunk.taskId !in it.taskIds }
+        ?.let { " (" + InstructionRules.joinLine(day, it.taskIds - it.joined, chunk.taskId, graph.tasks.value.tasks.associateBy { t -> t.id }) + ")" }.orEmpty()
     fun apply(change: Change, said: String) {
+        val joining = change.date?.let(LocalDate::parse)?.let(::joins).orEmpty()
         graph.scope.launch { graph.instructions.addOwnChange(UUID.randomUUID().toString(), said, About(taskId = chunk.taskId, taskTitle = chunk.title), change) }
-        onDone(said)
+        onDone(said + joining)
     }
     ModalBottomSheet(onDismissRequest = onClose) {
         Column(Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -99,7 +103,7 @@ fun MoveSheet(graph: AppGraph, chunk: Chunk, plan: Plan, zone: ZoneId, onDone: (
                             if (quick) graph.instructions.takeBackQuick(chunk.taskId, ChangeType.AtTime)
                             graph.instructions.addOwnChange(UUID.randomUUID().toString(), "All of it on ${day.format(CHIP_DAY)}", About(taskId = chunk.taskId, taskTitle = chunk.title), Change(ChangeType.OnDay, taskId = chunk.taskId, date = day.toString()))
                         }
-                        onDone("All of it on ${day.format(CHIP_DAY)}")
+                        onDone("All of it on ${day.format(CHIP_DAY)}" + joins(day))
                     }
                 }) { Text("All of it, any time that day") }
             }
