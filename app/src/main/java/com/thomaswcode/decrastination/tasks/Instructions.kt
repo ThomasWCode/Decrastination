@@ -153,7 +153,7 @@ class Instructions(
         val from = listOfNotNull(now, own?.end, task.notBefore).max()
         val start = Slotter.firstFreeAfter(
             plan.todaySlots.filter { it.chunk?.key != key }, windows, busy, from, chunk.minutes, chunk.where, plan.today, zone, settings.value.slotBreakMin,
-        )?.takeIf { Planner.pinProblem(task, it, now, zone) == null } ?: return null
+        )?.takeIf { Planner.pinProblem(task, it, now, zone, chunk.minutes) == null } ?: return null
         val at = Instant.ofEpochMilli(start).atZone(zone)
         addOwnChange(
             UUID.randomUUID().toString(),

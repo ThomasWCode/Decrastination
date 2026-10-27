@@ -1668,5 +1668,76 @@ class PlannerTest {
         assertEquals(Planner.PinProblem.PastDeadline, Planner.pinProblem(task, Fixtures.at("2026-10-12T17:00"), now, LONDON))
         assertEquals(Planner.PinProblem.NotYet, Planner.pinProblem(task.copy(notBefore = Fixtures.at("2026-10-12T15:00")), Fixtures.at("2026-10-12T14:00"), now, LONDON))
         assertEquals(Planner.PinProblem.DayGone, Planner.pinProblem(task, Fixtures.at("2026-10-11T16:00"), now, LONDON))
+        // With its piece's minutes (D-114): 16:40 for half an hour wouldn't be over by 17:00; 16:30 would.
+        assertEquals(Planner.PinProblem.PastDeadline, Planner.pinProblem(task, Fixtures.at("2026-10-12T16:40"), now, LONDON, minutes = 30))
+        assertNull(Planner.pinProblem(task, Fixtures.at("2026-10-12T16:30"), now, LONDON, minutes = 30))
+        // Overdue work takes any time from now, whatever its minutes (D-30).
+        assertNull(Planner.pinProblem(task, Fixtures.at("2026-10-12T19:00"), Fixtures.at("2026-10-12T18:00"), LONDON, minutes = 30))
+    }
+
+    // --- A time you give, kept to the minute (D-114) ---
+
+    @Test
+    fun `of two times given over each other, the one given later keeps it and the other goes after it (D-114)`() {
+        val a = task("a", Fixtures.at("2026-10-16T23:59"), effort = 30).yours(atTime = Fixtures.at("2026-10-13T19:30"))
+        val b = task("b", Fixtures.at("2026-10-17T23:59"), effort = 30).yours(atTime = Fixtures.at("2026-10-13T19:40"))
+        fun hm(time: Long) = Instant.ofEpochMilli(time).atZone(LONDON).toLocalTime().toString()
+        fun laid(order: List<String>) = Planner.plan(windowed(listOf(a, b), "2026-10-12T17:00").copy(pinOrder = order)).bucket(tuesday)!!.slots
+            .filter { it.kind == SlotKind.Work }.joinToString { "${it.chunk!!.title} ${hm(it.start)}" }
+        // b given later: its 19:40 kept, a's 19:30 under it, so a after b and its break.
+        assertEquals("b 19:40, a 20:15", laid(listOf("teams:b", "teams:a")))
+        assertEquals("a 19:30, b 20:05", laid(listOf("teams:a", "teams:b")))
+        // With no order given, the day's order: a, due first, keeps its time.
+        assertEquals("a 19:30, b 20:05", laid(emptyList()))
+    }
+
+    @Test
+    fun `a time you give outside the day's free time takes none of it, the day's free time shown more by it (D-114)`() {
+        // Monday 17:00; on Tuesday, work for home filling all of its evening, put on Tuesday.
+        val base = windowed(emptyList(), "2026-10-12T17:00")
+        val evening = Planner.capacityOf(tuesday, base).homeMin
+        val fill = task("fill", Fixtures.at("2026-10-18T23:59"), effort = evening).yours(onDay = "2026-10-13")
+        // A half hour of home work pinned at 23:00, after the evening: the fill still all fits, none of it behind.
+        val late = task("late", Fixtures.at("2026-10-18T23:59"), effort = 30).yours(atTime = Fixtures.at("2026-10-13T23:00"))
+        val with = Planner.plan(windowed(listOf(late, fill), "2026-10-12T17:00"))
+        val without = Planner.plan(windowed(listOf(fill), "2026-10-12T17:00"))
+        assertTrue(with.chunksOf("teams:fill").none { it.behind }, "${with.chunksOf("teams:fill").map { it.behind }}")
+        assertEquals(without.chunksOf("teams:fill").map { it.key }, with.chunksOf("teams:fill").map { it.key })
+        assertEquals(Fixtures.at("2026-10-13T23:00"), with.bucket(tuesday)!!.slotOf(with.chunksOf("teams:late").single())!!.start)
+        assertEquals(without.bucket(tuesday)!!.capacityMin + 30, with.bucket(tuesday)!!.capacityMin)
+    }
+
+    @Test
+    fun `a time you give counts all its minutes against a limit you set on its day (D-114)`() {
+        // Tuesday limited to an hour: a half hour pinned at 23:00 leaves 30 of it, so a 45-minute piece put on Tuesday has no room there.
+        val limited = windowed(emptyList(), "2026-10-12T17:00").copy(dayCaps = mapOf(tuesday to 60))
+        val late = task("late", Fixtures.at("2026-10-18T23:59"), effort = 30).yours(atTime = Fixtures.at("2026-10-13T23:00"))
+        val other = task("other", Fixtures.at("2026-10-18T23:59"), effort = 45).yours(onDay = "2026-10-13")
+        val with = Planner.plan(limited.copy(tasks = listOf(late, other)))
+        val without = Planner.plan(limited.copy(tasks = listOf(other)))
+        assertEquals(listOf(tuesday), without.dayOf("other"))
+        assertTrue(with.dayOf("other") != listOf(tuesday) || with.chunksOf("teams:other").any { it.behind }, "${with.dayOf("other")}")
+        // Nor is the day shown with more free time than its limit.
+        assertEquals(60, without.bucket(tuesday)!!.capacityMin)
+        assertTrue(with.bucket(tuesday)!!.capacityMin <= 60)
+    }
+
+    @Test
+    fun `the minutes of a time given outside the day's free time, at a window's edges, over busy time, across midnight and gone by`() {
+        val input = windowed(emptyList(), "2026-10-12T17:00")
+        fun outside(at: String, minutes: Int, with: Planner.Input = input) = Planner.outsideFreeMin(tuesday, Fixtures.at("2026-10-13T$at"), minutes, with)
+        // Tuesday's evening is 16:45 to 22:00.
+        assertEquals(0, outside("19:00", 30))
+        assertEquals(15, outside("16:30", 30))
+        assertEquals(10, outside("21:50", 20))
+        assertEquals(30, outside("23:00", 30))
+        // Across midnight: all of it.
+        assertEquals(30, outside("23:50", 30))
+        // Over a busy event in the evening: none of it in the free time.
+        val drums = input.copy(busy = listOf(Busy(Fixtures.at("2026-10-13T19:00"), Fixtures.at("2026-10-13T20:00"))))
+        assertEquals(30, outside("19:15", 30, drums))
+        assertEquals(15, outside("18:45", 30, drums))
+        // Today, the part gone by isn't free time either.
+        assertEquals(10, outside("19:00", 30, input.copy(now = Fixtures.at("2026-10-13T19:10"))))
     }
 }
