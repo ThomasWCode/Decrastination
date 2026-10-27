@@ -376,7 +376,7 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
         SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).padding(bottom = 72.dp))
     }
 
-    // What the list held under its rows, now each a chip's sheet.
+    // What the list held under its rows, now each a chip's sheet; its headings set in as far as its lines, each line padding itself.
     daySheet?.let { which ->
         ModalBottomSheet(onDismissRequest = { daySheet = null }) {
             Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(bottom = 32.dp)) {
@@ -389,7 +389,7 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
                         }
                     }
                     DaySheet.NoTime -> {
-                        SectionHeading("No time ${if (today) "today" else "that day"}", sheet = true)
+                        Box(Modifier.padding(horizontal = 24.dp)) { SectionHeading("No time ${if (today) "today" else "that day"}", sheet = true) }
                         model.unslotted.forEachIndexed { index, chunk ->
                             ChunkTile(chunk, null, index, model.unslotted.size, plan.now, zone) {
                                 daySheet = null
@@ -398,7 +398,7 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
                         }
                     }
                     DaySheet.Done -> {
-                        SectionHeading("Done ${if (today) "today" else "that day"}", trailing = Format.minutes(model.doneMin), sheet = true)
+                        Box(Modifier.padding(horizontal = 24.dp)) { SectionHeading("Done ${if (today) "today" else "that day"}", trailing = Format.minutes(model.doneMin), sheet = true) }
                         model.done.forEachIndexed { index, record ->
                             ListTile(index, model.done.size) {
                                 Text(record.label, style = MaterialTheme.typography.bodyLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -412,7 +412,7 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
                     }
                     // Your instructions about the day, its limit, busy times and the tasks it's only for (D-115), and one more (UI-11).
                     DaySheet.Said -> {
-                        SectionHeading("Instructions", sheet = true)
+                        Box(Modifier.padding(horizontal = 24.dp)) { SectionHeading("Instructions", sheet = true) }
                         val rules = instructions.applied.flatMap { it.changes }.filter { c ->
                             saysOf(c.type) && (c.date == day.toString() || (c.date == null && c.weekday == day.dayOfWeek.value))
                         }
