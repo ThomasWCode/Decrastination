@@ -576,6 +576,59 @@ class InstructionRulesTest {
     }
 
     @Test
+    fun `work carried on from a first day you limited still takes a day kept for others that lets deadlines in, where it would miss its deadline without`() {
+        // Saturday 08:00, Saturday and Sunday limited to half an hour, Saturday kept for the essay with deadlines let in: a
+        // 90-minute sheet due Monday morning has both days' half hours, so only its last is past them.
+        val at = Fixtures.at("2026-10-10T08:00")
+        val essay = task("essay", "2026-10-30T09:00", effort = 60)
+        val sheet = task("sheet", "2026-10-12T09:00", effort = 90)
+        val rules = listOf(
+            applied(Change(ChangeType.DayLimit, date = "2026-10-10", freeMin = 30), at = at),
+            applied(Change(ChangeType.DayOnly, taskId = essay.id, date = "2026-10-10", alsoAllow = InstructionRules.ALSO_DEADLINES), at = at + 1),
+            applied(Change(ChangeType.DayLimit, date = "2026-10-11", freeMin = 30), at = at + 2),
+        )
+        val p = plan(listOf(essay, sheet), rules, at = at)
+        val days = p.buckets.associate { b -> b.date to b.chunks.filter { it.taskId == sheet.id }.sumOf { it.minutes } }.filterValues { it > 0 }
+        assertEquals(30, days[saturday], "$days")
+        assertEquals(30, days[LocalDate.parse("2026-10-11")], "$days")
+        assertEquals(90, p.chunksOf(sheet.id).sumOf { it.minutes })
+    }
+
+    @Test
+    fun `a task's pieces are sized by days kept for others that let deadlines in, where none else before its deadline has room`() {
+        // Saturday 08:00, Saturday and Sunday limited to 20 minutes and kept for the essay with deadlines let in: a 40-minute
+        // sheet due Monday morning goes in two pieces over the weekend, not one no day before its deadline holds.
+        val at = Fixtures.at("2026-10-10T08:00")
+        val essay = task("essay", "2026-10-30T09:00", effort = 60)
+        val sheet = task("sheet", "2026-10-12T09:00", effort = 40)
+        val rules = listOf("2026-10-10", "2026-10-11").flatMapIndexed { i, day ->
+            listOf(
+                applied(Change(ChangeType.DayLimit, date = day, freeMin = 20), at = at + 2 * i),
+                applied(Change(ChangeType.DayOnly, taskId = essay.id, date = day, alsoAllow = InstructionRules.ALSO_DEADLINES), at = at + 2 * i + 1),
+            )
+        }
+        val today = Planner.date(at, LONDON)
+        val p = Planner.plan(
+            Planner.Input(
+                listOf(essay, sheet), at, LONDON, Settings(boxMin = 60),
+                dayCaps = InstructionRules.dayCaps(rules, today, today.plusDays(90)), onlyDays = InstructionRules.onlyDays(rules, today, today.plusDays(90)),
+            ),
+        )
+        assertEquals(listOf(20, 20), p.chunksOf(sheet.id).map { it.minutes })
+        assertEquals(setOf(saturday, LocalDate.parse("2026-10-11")), p.buckets.filter { b -> b.chunks.any { it.taskId == sheet.id } }.map { it.date }.toSet())
+    }
+
+    @Test
+    fun `work not open yet is said not to fit where the days before its deadline are kept for others, unless they let deadlines in`() {
+        // Friday 21:00: a sheet that opens Saturday morning, due Monday morning; the weekend kept for the essay.
+        val essay = task("essay", "2026-10-30T09:00", effort = 60)
+        val sheet = task("sheet", "2026-10-12T09:00", effort = 60).copy(availableFrom = Fixtures.at("2026-10-10T08:00"))
+        fun kept(allow: String?) = listOf("2026-10-10", "2026-10-11").mapIndexed { i, day -> applied(Change(ChangeType.DayOnly, taskId = essay.id, date = day, alsoAllow = allow), at = now + i) }
+        assertEquals(listOf(sheet.id), plan(listOf(essay, sheet), kept(null)).wontFit.map { it.taskId })
+        assertEquals(emptyList(), plan(listOf(essay, sheet), kept(InstructionRules.ALSO_DEADLINES)).wontFit.map { it.taskId })
+    }
+
+    @Test
     fun `a day whose tasks are all done stays free of work, and overdue work goes to the next day while today's kept for others`() {
         val essay = task("essay", "2026-10-14T09:00", effort = 60).copy(status = Status.Done)
         val maths = task("maths", "2026-10-12T09:00", effort = 240)
