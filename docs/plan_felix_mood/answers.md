@@ -100,3 +100,31 @@ On the draft's proud line, "proper proud of you mate":
 Said back, and kept: an older close friend is someone who'd naturally be the one in charge, so the age suits the imbalance; sincere means specific (saying what was done); and sincerity's own failure in a model is a counsellor's words ("i hear you", "that's valid"), as wrong for a friend as a teacher's, so the scenarios' report flags those too.
 
 Applied: README §The levels' examples and §The prompt; build.md §4 and §5.
+
+## Q5. A kept slot after a let-down (from the PR's review, 28 Oct)
+
+The review found that nothing is sent when work starts, and a kept slot is answered about one time in three (`FelixRules.kt:153`), so after a firm or strong message the let-down is usually his last word: the "straight back" line would rarely be heard.
+
+> Should a kept slot always get his message when he was let down about that task earlier today?
+
+Offered:
+
+- **Always after a let-down (recommended):** a SlotKept always sent once a slot of that task is kept, if he was firm or strong about it today: one more call a recovery, a few cents, rare as it needs a let-down first; the lapse let go, out loud, as the research the levels rest on has it.
+- **Leave as is:** no new calls; the plan says the line will rarely be heard.
+- **Also on a start:** as the first, and also on a timer started or a step ticked after a let-down: the quickest, but more calls and a new trigger to build and test.
+
+Answer:
+
+> Always after a let-down (Recommended)
+
+Applied: README §A kept slot after a let-down; build.md §2 (`Mood.letDown`, `FelixRules.due`).
+
+## The review's other findings (28 Oct)
+
+The PR's review checked the rule against the code and found it would go against the answers above in three places, each fixed in the plan without a new question, as each only brings the rule in line with what was asked:
+
+- **A close deadline alone made him strong** on an ordinary evening's first nudge, as the planner lays most work the evening before it's due: against Q2's "starting at firm and going to strong". Now a deadline raises a level one step, only on a day with a miss or a piece already nudged (README §The levels).
+- **"Nothing done" missed steps ticked by hand** (read from `stepsWorkedMin`, which isn't a count of steps): now from `workedMin`, `photoMin` and `subSteps` (evidence.md §The code).
+- **A missed piece made up made a bad day proud:** now only with no other miss that day, and for the kept slot's own task ("no praise for nothing").
+
+And the nudges counted so the second, not the third, is the firm one, a silent one not counted; the chat's standing-instructions sentence placed after the register and the feelings, so a rule against disappointment wins; and the scenarios' budget, cost and `--rerun` set right.
