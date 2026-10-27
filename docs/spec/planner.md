@@ -31,6 +31,8 @@ A weekend or a day off school is `weekendHours` as one window; a half-day's scho
 - time taken at no set time comes off the evening first, then school's;
 - the evening's part is multiplied by its kind of day's yield, school's by school's (PL-06); a day's limit then caps the whole.
 
+A piece at a time you gave (PL-04) takes of its day's free time only its part within it (D-114): the part outside the day's windows, over busy time within them, or today already gone by takes none (`Planner.outsideFreeMin`), so the day holds as much other work as it would without it, and its free time as shown (`DayBucket.capacityMin`: the strip's bar, the Day's "planned, free", what Felix is told) is more by those minutes. A day you've limited still counts all of its minutes against the limit, which is the most work in the day wherever it falls, kept apart from the free time for that.
+
 `homeMin` is the evening's part and `anyMin` all of it: work only for home takes the evening's time, and work that can be done anywhere takes school's first.
 
 ## Effort and remaining time
@@ -156,8 +158,8 @@ Runs stay in order: none starts before the one before it, each is planned to be 
 
 Told to Felix or as an instruction, or made by moving a piece on Day or in the calendar, they're changes on the task (`mine.onDay`, `mine.atTime`):
 - **A day** (`OnDay`): all of the task on that day, placed before everything else; that day is its last usable day whatever the margin, and a deadline only where the task's own is that day.
-- **A time** (`AtTime`): its next piece a run of its own from that time, which the slotter keeps to the minute; the rest follow it.
-- Not kept: one whose day has gone, one before the task can start, and, while the task's real deadline is still to come, a day after its day or a time at or after it. Those last two are refused as they're given ("It's due before then", `InstructionRules.latePin`); on Day, all of them are (`Planner.pinProblem`).
+- **A time** (`AtTime`): its next piece a run of its own from that time, which the slotter keeps to the minute, wherever it is in the day (D-114: [slots-and-calendar.md](slots-and-calendar.md) §Pins); the rest follow it.
+- Not kept: one whose day has gone, one before the task can start, and, while the task's real deadline is still to come, a day after its day or a time at or after it. Those last two are refused as they're given ("It's due before then", `InstructionRules.latePin`); on Day and in the move sheet, all of them are, and a time its piece wouldn't be over by the deadline too (`Planner.pinProblem` with the piece's minutes). Felix's and the calendar's times keep "at or after the deadline": one whose piece can't be over by it is laid at the next start that is.
 - Work already overdue takes any day or time from now (D-30): all of it on the day you gave, or its next piece at your time and the rest after it, none of it before. It's still overdue there, and says so.
 - A time past a plan's date makes the date moot: the work is undated from that time. A later day for all of it drops a time on another day, and keeps one on that day.
 

@@ -12,6 +12,8 @@ Before the first edit of each release: `PROGRESS.md` from `private/tools/progres
 
 ## 4.5.0: a time you give, kept to the minute
 
+**Built** in 4.5.0 (D-114). Found while building, beyond the stages below: the breaks outside still to come are laid around the pins kept at their time (a pin at a break's time would otherwise have been laid over it), the pins kept being worked out once (`Slotter.exactPins`) for the breaks and the pieces; and a time given after the evening's end had no room on its day (its opening day's time from its start was none), so its piece went to the next day: with its part outside the free time taking none of it, it stays on its day.
+
 Read first, in full: `core/Slotter.kt` (`slot`, `lay`: its pin pass, `holding`, `place`, `carve`, `runOf`, `follows`), `core/Planner.kt` (`Input`, the building of `atPins`, `pinProblem`, `pinnedTime`, the call of `Slotter.slot`), `plan/Planning.kt` (where it builds `Planner.Input`), `core/Instructions.kt` (`InstructionState.applied`, `InstructionRules.latePin`), `felix/ChatAnswers.kt` (`movedPins`), `ui/MoveSheet.kt`, `tasks/Instructions.kt` (`laterToday`), `calendar/CalendarWriter.kt` (the hand moves), and their tests (`SlotterTest`, `PlannerTest`, `ChatTest`, where `ChatAnswers` is tested, and `PlanSnapshotTest`).
 
 ### 1. The pins' order (30 min)
