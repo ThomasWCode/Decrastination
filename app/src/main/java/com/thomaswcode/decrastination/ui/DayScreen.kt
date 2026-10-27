@@ -199,7 +199,7 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
     fun drop() {
         val slot = drag.slot ?: return
         val onto = drag.dayUnder()
-        val minute = drag.minuteOnGrid(grid.value.toFloat(), with(density) { settings.dayHourDp.dp.toPx() })
+        val minute = drag.minuteOnGrid(grid.value.toFloat(), drag.hourPx.takeIf { it > 0f } ?: with(density) { settings.dayHourDp.dp.toPx() })
         val moved: Moves.Moved? = if (slot.kind == SlotKind.Outside || slot.chunk == null) {
             when {
                 onto != null -> Moves.Moved.Refused("A break outside stays on its day")
@@ -289,16 +289,22 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
 
     var rootAt by remember { mutableStateOf(Offset.Zero) }
     val card = rememberScrollState()
+    // What's above the grid besides the card, measured: the hints and the strip, and the day's header and its all-day chips.
+    var aboveCard by remember { mutableIntStateOf(0) }
+    var belowCard by remember { mutableIntStateOf(0) }
     BoxWithConstraints(Modifier.fillMaxSize().onGloballyPositioned { rootAt = it.positionInRoot() }) {
-        // The card never takes the grid's room: at most what leaves the grid [MIN_GRID], scrolling within that.
-        val cap = (maxHeight - MIN_GRID).coerceAtLeast(MIN_GRID)
+        // The card never takes the grid's room: at most what leaves the grid [MIN_GRID] once all else above it is laid,
+        // scrolling within that; none at all, its line, where there's no room for it.
+        val cap = maxHeight - MIN_GRID - with(density) { (aboveCard + belowCard).toDp() }
         Column(Modifier.fillMaxSize()) {
-            Hint(graph, "day", "Day is when: today's slots as they come, and the week's days above. Work is what: every task, on the next tab.")
-            Hint(graph, "day-drag", "Hold a piece to move it: drag it to a time, or onto a day above.")
-            WeekStrip(plan, day, drag, tasks.tasks.associateBy { it.id }, graph.clock.now(), zone) { chosen = it.toString() }
+            Column(Modifier.onSizeChanged { aboveCard = it.height }) {
+                Hint(graph, "day", "Day is when: today's slots as they come, and the week's days above. Work is what: every task, on the next tab.")
+                Hint(graph, "day-drag", "Hold a piece to move it: drag it to a time, or onto a day above.")
+                WeekStrip(plan, day, drag, tasks.tasks.associateBy { it.id }, graph.clock.now(), zone) { chosen = it.toString() }
+            }
             if (today) {
                 val unread = Source.SYNCED.filter { tasks.status(it).lastSuccessAt == null }
-                val folded = cardFull > 0 && fold >= foldMax - 1f
+                val folded = (cardFull > 0 && fold >= foldMax - 1f) || cap < 40.dp
                 if (folded) {
                     val label = (plan.slotAt(plan.now)?.chunk ?: plan.next)?.label ?: "nothing planned"
                     Text(
@@ -321,17 +327,19 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
                     }
                 }
             }
-            DayHeader(model, plan, day, today, zone, instructions.applied.flatMap { it.changes }.count { c -> saysOf(c.type) && (c.date == day.toString() || (c.date == null && c.weekday == day.dayOfWeek.value)) }) { daySheet = it }
-            model.allDay.takeIf { it.isNotEmpty() }?.let { events ->
-                LazyRow(contentPadding = PaddingValues(start = GUTTER, end = 12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    items(events, key = { eventKey(it) }) { event ->
-                        val colour = event.colour?.let { Color(it) } ?: MaterialTheme.colorScheme.secondaryContainer
-                        AssistChip(
-                            onClick = { eventFor = eventKey(event) },
-                            label = { Text(event.title.ifBlank { "(no title)" }, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                            colors = AssistChipDefaults.assistChipColors(containerColor = colour, labelColor = event.colour?.let { Colours.onEvent(it) } ?: MaterialTheme.colorScheme.onSecondaryContainer),
-                            border = null,
-                        )
+            Column(Modifier.onSizeChanged { belowCard = it.height }) {
+                DayHeader(model, plan, day, today, zone, instructions.applied.flatMap { it.changes }.count { c -> saysOf(c.type) && (c.date == day.toString() || (c.date == null && c.weekday == day.dayOfWeek.value)) }) { daySheet = it }
+                model.allDay.takeIf { it.isNotEmpty() }?.let { events ->
+                    LazyRow(contentPadding = PaddingValues(start = GUTTER, end = 12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        items(events, key = { eventKey(it) }) { event ->
+                            val colour = event.colour?.let { Color(it) } ?: MaterialTheme.colorScheme.secondaryContainer
+                            AssistChip(
+                                onClick = { eventFor = eventKey(event) },
+                                label = { Text(event.title.ifBlank { "(no title)" }, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                colors = AssistChipDefaults.assistChipColors(containerColor = colour, labelColor = event.colour?.let { Colours.onEvent(it) } ?: MaterialTheme.colorScheme.onSecondaryContainer),
+                                border = null,
+                            )
+                        }
                     }
                 }
             }

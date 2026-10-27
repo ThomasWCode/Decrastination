@@ -33,6 +33,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.key
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -129,6 +131,8 @@ internal fun DayGrid(
     var hour by remember { mutableFloatStateOf(hourDp.toFloat()) }
     LaunchedEffect(hourDp) { hour = hourDp.toFloat() }
     val hourPx = with(density) { hour.dp.toPx() }
+    // A drop is judged at the hour the grid's drawn at.
+    SideEffect { drag.hourPx = hourPx }
     // Where a pinch would have the grid scrolled, kept till the grid's laid out at its new height: scrolled now, it would be
     // held to the old height's end.
     var anchored by remember { mutableStateOf<Float?>(null) }
@@ -176,7 +180,11 @@ internal fun DayGrid(
                             event.changes.forEach { it.consume() }
                         }
                     } while (event.changes.any { it.pressed })
-                    if (pinched) latestZoom(hour.roundToInt())
+                    // Settled on a whole height as it's saved, so the grid draws what the setting holds.
+                    if (pinched) {
+                        hour = hour.roundToInt().toFloat()
+                        latestZoom(hour.roundToInt())
+                    }
                 }
             },
     ) {
@@ -218,12 +226,15 @@ internal fun DayGrid(
                 val minutes = model.blocks.map { DayLayout.minuteOf(it.start, model.date, zone) to DayLayout.minuteOf(it.end, model.date, zone) }
                 val placed = DayLayout.columns(minutes, minMinutes)
                 model.blocks.forEachIndexed { i, block ->
-                    val (start, end) = minutes[i]
-                    val at = placed[i]
-                    val column = width / at.columns
-                    val height = maxOf(((end - start) * hour / 60f).dp, MIN_BLOCK)
-                    Box(Modifier.offset(x = column * at.column, y = (start * hour / 60f).dp).width(column * at.span).height(height).padding(1.dp)) {
-                        GridBlock(block, plan, zone, judge, asked, micro, messageOf, drag, actions, column * at.span)
+                    // Each block's state (its swipe, where it is) its own, by its key, not its place in the day.
+                    key(blockKey(block)) {
+                        val (start, end) = minutes[i]
+                        val at = placed[i]
+                        val column = width / at.columns
+                        val height = maxOf(((end - start) * hour / 60f).dp, MIN_BLOCK)
+                        Box(Modifier.offset(x = column * at.column, y = (start * hour / 60f).dp).width(column * at.span).height(height).padding(1.dp)) {
+                            GridBlock(block, plan, zone, judge, asked, micro, messageOf, drag, actions, column * at.span)
+                        }
                     }
                 }
                 // Where a dragged piece or break would go: a ghost at its snapped time, with its times.
