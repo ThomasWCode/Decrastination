@@ -6,6 +6,9 @@ import android.os.SystemClock
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.rememberScrollableState
+import androidx.compose.foundation.gestures.scrollable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -21,6 +24,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -60,6 +64,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -72,6 +77,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
@@ -103,11 +109,20 @@ import kotlinx.coroutines.launch
 /** How soon a second Done of the same block is the same swipe seen again (UI-03). */
 private const val SWIPE_AGAIN_MS = 3_000L
 
-/** The least the grid keeps of the Day's height, however tall today's card. */
-private val MIN_GRID = 200.dp
-
 /** The sheets the header's chips open, each holding what the Day's list held under its rows. */
 private enum class DaySheet { WontFit, NoTime, Done, Said }
+
+/**
+ * Today's DO NOW card's fold as a drag on the card reaches it: once it's folding, taken before what the card holds moves, so
+ * it folds from its top down; before that, only what's left once what it holds has scrolled to its end. [at] says how far
+ * it's folded; [by] folds it by what it can of a scroll and says what it took.
+ */
+internal class Folding(private val at: () -> Float, private val by: (Float) -> Float) : NestedScrollConnection {
+    override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset =
+        if (at() > 0f) Offset(0f, by(available.y)) else Offset.Zero
+
+    override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset = Offset(0f, by(available.y))
+}
 
 /**
  * The Day (UI-17, 4.6.0): the week ahead in a strip, each day with its load (UI-02) and a mark where work is behind; today's
@@ -274,46 +289,47 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
         onDrop = ::drop,
     )
 
-    // Today's DO NOW card folds into a line as the grid scrolls on to later hours, and unfolds as it scrolls back, or at a tap
-    // on the folded line; in landscape it starts folded, so the grid has room.
+    // Today's DO NOW card shows in full, up to the whole Day under the strip (Q96). It folds into a line as it's dragged up, or
+    // as the day's header is, and unfolds as the header's dragged down, wherever the grid's scrolled, as it's dragged down
+    // while part-folded, or at a tap on the folded line; the grid's own scrolls only move its hours (your word, replacing
+    // Q97). In landscape it starts folded, so the grid has room.
     var cardFull by remember { mutableIntStateOf(0) }
     // The card's cap (below) in pixels, as last laid out: the card folds from what it shows unfolded, its height or that cap.
     var cardCap by remember { mutableFloatStateOf(Float.MAX_VALUE) }
     val line = with(density) { 40.dp.toPx() }
     var fold by remember(landscape) { mutableFloatStateOf(if (landscape) Float.MAX_VALUE else 0f) }
     val foldMax = DayLayout.foldMax(cardFull.toFloat(), cardCap, line)
-    val folding = remember {
-        object : NestedScrollConnection {
-            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                if (cardFull == 0) return Offset.Zero
-                val was = fold.coerceAtMost(DayLayout.foldMax(cardFull.toFloat(), cardCap, line))
-                fold = DayLayout.folded(was, available.y, cardFull.toFloat(), cardCap, line)
-                return Offset(0f, was - fold)
-            }
-        }
+    // The fold takes what it can of a scroll [dy], and says what it took.
+    fun foldBy(dy: Float): Float {
+        if (cardFull == 0) return 0f
+        val was = fold.coerceAtMost(DayLayout.foldMax(cardFull.toFloat(), cardCap, line))
+        fold = DayLayout.folded(was, dy, cardFull.toFloat(), cardCap, line)
+        return was - fold
     }
+    val cardFolding = remember { Folding({ fold }, ::foldBy) }
+    // The day's header dragged, or flung, moves the fold itself: up folds the card, down pushes the hours down.
+    val pushing = rememberScrollableState { delta -> foldBy(delta) }
 
     var rootAt by remember { mutableStateOf(Offset.Zero) }
     val card = rememberScrollState()
     // On its side there's no room for the grid under what's above it, so the Day scrolls as one (Q94): what's above goes first
-    // as the grid scrolls on to later hours, and slides back in first as it scrolls back, as the card folds upright (Q95).
+    // as the grid scrolls on to later hours, and slides back in first as it scrolls back (Q95).
     val collapsing = remember {
         object : NestedScrollConnection {
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset =
                 Offset(0f, -page.dispatchRawDelta(-available.y))
         }
     }
-    // What's above the grid besides the card, measured: the hints and the strip, and the day's header and its all-day chips.
+    // What's above the card, measured: the hints and the strip.
     var aboveCard by remember { mutableIntStateOf(0) }
-    var belowCard by remember { mutableIntStateOf(0) }
     BoxWithConstraints(Modifier.fillMaxSize().onGloballyPositioned { rootAt = it.positionInRoot() }) {
-        // The card never takes the grid's room: at most what leaves the grid [MIN_GRID] once all else above it is laid,
-        // scrolling within that; only its line where there's no room for it.
-        val cap = maxHeight - MIN_GRID - with(density) { (aboveCard + belowCard).toDp() }
+        // The card shows in full up to the whole Day under the strip (Q96), scrolling within that, the day's header and the
+        // grid going on under the screen's edge till it folds; only its line where there's no room for it.
+        val cap = maxHeight - with(density) { aboveCard.toDp() }
         SideEffect { cardCap = with(density) { cap.toPx() } }
         // The Day's height: on its side, the grid's.
         val tall = maxHeight
-        Column(if (landscape) Modifier.fillMaxSize().verticalScroll(page) else Modifier.fillMaxSize()) {
+        Column(if (landscape) Modifier.fillMaxSize().verticalScroll(page) else Modifier.fillMaxSize().clipToBounds()) {
             Column(Modifier.onSizeChanged { aboveCard = it.height }) {
                 Hint(graph, "day", "Day is when: today's slots as they come, and the week's days above. Work is what: every task, on the next tab.")
                 Hint(graph, "day-drag", "Hold a piece to move it: drag it to a time, or onto a day above.")
@@ -338,17 +354,21 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
                     )
                 } else {
                     val shown = if (cardFull == 0) cap else minOf(with(density) { (minOf(cardFull.toFloat(), cardCap) - fold.coerceAtMost(foldMax)).toDp() }, cap)
-                    Box(Modifier.fillMaxWidth().heightIn(max = shown).verticalScroll(card)) {
+                    Box(Modifier.fillMaxWidth().heightIn(max = shown).nestedScroll(cardFolding).verticalScroll(card)) {
                         Box(Modifier.fillMaxWidth().onSizeChanged { cardFull = it.height }) {
                             NextCard(
                                 graph, activity, plan, zone, photo, ::messageOf, say,
                                 empty = if (unread.isNotEmpty()) "Nothing planned yet: ${unread.joinToString { it.label }} not read yet." else "No work is planned. New tasks appear as the sources are read.",
+                                // For TalkBack, folded by an action: while the card fills the Day, the grid has no room to be reached.
+                                actions = listOf(CustomAccessibilityAction("Fold it") { fold = Float.MAX_VALUE; true }),
                             )
                         }
                     }
                 }
             }
-            Column(Modifier.onSizeChanged { belowCard = it.height }) {
+            // Laid at its own height, running on under the screen's edge rather than squeezed, while the card fills the Day; on
+            // today, upright, dragged to fold the card or push the hours down, wherever they're scrolled.
+            Column(Modifier.wrapContentHeight(Alignment.Top, unbounded = true).then(if (today && !landscape) Modifier.scrollable(pushing, Orientation.Vertical) else Modifier)) {
                 DayHeader(model, plan, day, today, zone, instructions.applied.flatMap { it.changes }.count { c -> saysOf(c.type) && (c.date == day.toString() || (c.date == null && c.weekday == day.dayOfWeek.value)) }) { daySheet = it }
                 model.allDay.takeIf { it.isNotEmpty() }?.let { events ->
                     LazyRow(contentPadding = PaddingValues(start = GUTTER, end = 12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -368,9 +388,9 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
                 model, plan, zone, settings.dayHourDp, grid, { EventJudge.judge(it, answers) }, asked.eventsAsked, written.microPlans,
                 { messageOf(it) }, drag, actions,
                 onZoom = { hourDp -> scope.launch { graph.protection.changeSettings { it.copy(dayHourDp = hourDp) } } },
-                // The fold takes the grid's scrolls alone, on today only: another day has no card, and the card's own don't fold it.
-                // On its side the grid is the Day's height, under what's above it, and its scrolls take that away first.
-                modifier = if (landscape) Modifier.height(tall).nestedScroll(collapsing) else Modifier.weight(1f).then(if (today) Modifier.nestedScroll(folding) else Modifier),
+                // Upright, the grid's scrolls move only its hours, never the card. On its side the grid is the Day's height, under
+                // what's above it, and its scrolls take that away first.
+                modifier = if (landscape) Modifier.height(tall).nestedScroll(collapsing) else Modifier.weight(1f),
             )
         }
 
