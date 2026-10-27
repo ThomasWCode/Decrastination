@@ -284,6 +284,9 @@ object InstructionAnswers {
     /** A day's minutes: a break outside is over by its end. */
     private const val DAY_MIN = 24 * 60
 
+    /** The most days of a stretch off school whose breaks an answer's changes after it are checked against. */
+    private const val MAX_DAYS_OFF = 60L
+
     /**
      * [breaksOn] as the changes kept so far leave each day's breaks (D-116, [take] each as it's kept), so one change of an answer can
      * use time another frees: a break taken off, and another moved there.
@@ -293,9 +296,18 @@ object InstructionAnswers {
 
         override fun invoke(day: LocalDate): DayBreaks = days.getOrPut(day) { breaksOn(day) }
 
-        /** [change], kept: its day's breaks as it leaves them. */
+        /** [change], kept: its day's breaks as it leaves them; a stretch of days off school, each with its breaks as a day off. */
         fun take(change: Change) {
             val day = change.date?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: return
+            if (change.type == ChangeType.NoSchool) {
+                val last = change.endDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: day
+                var d = day
+                while (d <= last && d <= day.plusDays(MAX_DAYS_OFF)) {
+                    days[d] = invoke(d).let { it.offSchool ?: it }
+                    d = d.plusDays(1)
+                }
+                return
+            }
             days[day] = invoke(day).with(change)
         }
     }

@@ -631,7 +631,8 @@ object Planner {
         // Days you've limited: by a day's limit, or by busy times of yours within its hours.
         // By the time they take from a day's windows itself, before the shortest school time used is
         // applied: that threshold, crossed as a minute passes, mustn't make the day limited or not.
-        val limited = input.dayCaps.keys + input.onlyDays.keys + if (input.hardBusy.isEmpty()) emptySet() else days.filter { workMinutes(it, input) < workMinutes(it, input.copy(hardBusy = emptyList())) }
+        // Days a break outside you or Felix placed takes time of (D-116) too, as busy time would.
+        val limited = input.dayCaps.keys + input.onlyDays.keys + breaksIn.keys + if (input.hardBusy.isEmpty()) emptySet() else days.filter { workMinutes(it, input) < workMinutes(it, input.copy(hardBusy = emptyList())) }
         // [extra]: a pinned piece's minutes outside the day's free time, which a limit you set counts but the free time doesn't (D-114).
         // [item]'s, on a day kept for only other tasks: none at all (D-115), as work due today, its deadline still to come,
         // has a day that lets in work that would otherwise miss it as its last resort.
