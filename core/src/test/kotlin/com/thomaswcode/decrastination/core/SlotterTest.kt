@@ -451,6 +451,13 @@ class SlotterTest {
     }
 
     @Test
+    fun `a break placed near midnight is over by it, staying on its day (D-116)`() {
+        val (slots, _) = slot(tuesday, emptyList(), listOf(w("16:45", "22:00")), given = OutsideDay(added = listOf(minute("23:50"))))
+        assertEquals(listOf("outside 23:50–00:00"), slots.described())
+        assertEquals(Fixtures.at("2026-10-14T00:00"), slots.single().end)
+    }
+
+    @Test
     fun `an added break moved is laid where it was moved, still named by its own time (D-116)`() {
         val given = OutsideDay(added = listOf(minute("17:00")), moved = mapOf(minute("17:00") to minute("18:00")))
         val (slots, _) = slot(tuesday, emptyList(), listOf(w("16:45", "22:00")), given = given)

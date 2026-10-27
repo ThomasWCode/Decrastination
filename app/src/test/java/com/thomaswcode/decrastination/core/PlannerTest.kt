@@ -1708,6 +1708,21 @@ class PlannerTest {
     }
 
     @Test
+    fun `a break outside you placed takes its time from the day's free time, so work goes to a day with room (D-116)`() {
+        // Monday 17:00; Tuesday to Thursday each with a 20-minute window, no time on the other days, a break added in all of
+        // Tuesday's: a 10-minute task due next week goes on Wednesday or Thursday, slotted, and Tuesday shows no free time.
+        val window = listOf(DayWindow(17 * 60, 17 * 60 + 20, WindowKind.Evening))
+        val windows = (0L..14L).associate { tuesday.minusDays(1).plusDays(it) to if (it in 1L..3L) window else emptyList() }
+        val small = task("small", Fixtures.at("2026-10-19T23:59"), effort = 10)
+        val plan = Planner.plan(windowed(listOf(small), "2026-10-12T17:00", windows = windows).copy(outsideDays = mapOf(tuesday to OutsideDay(added = listOf(17 * 60)))))
+        assertTrue(plan.bucket(tuesday)!!.chunks.isEmpty())
+        assertEquals(0, plan.bucket(tuesday)!!.capacityMin)
+        val day = plan.buckets.single { b -> b.chunks.any { it.taskId == small.id } }
+        assertTrue(day.date in listOf(tuesday.plusDays(1), tuesday.plusDays(2)), "${day.date}")
+        assertTrue(day.slots.any { it.chunk?.taskId == small.id })
+    }
+
+    @Test
     fun `a time you give outside the day's free time takes none of it, the day's free time shown more by it (D-114)`() {
         // Monday 17:00; on Tuesday, work for home filling all of its evening, put on Tuesday.
         val base = windowed(emptyList(), "2026-10-12T17:00")

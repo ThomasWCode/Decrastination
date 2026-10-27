@@ -233,11 +233,12 @@ object ChatAnswers {
         val titles = events.associate { EventJudge.key(it) to it.title } + listOfNotNull(about.eventKey?.let { it to (about.eventTitle ?: it) })
         // His reminders and notes come as changes of their own types (Q13: B): taken out first, made their own way.
         val (kept, given) = answer.changes.take(MAX_CHANGES).map(InstructionAnswers.Given::normalised).partition { it.type == ChatPrompts.REMIND_TYPE || it.type == ChatPrompts.NOTE_TYPE }
+        // A day's breaks as the changes before each leave them (D-116), so one can use time another frees.
+        val breaks = InstructionAnswers.Breaks(context?.breaksOn ?: { DayBreaks.NONE })
         var changes = given.map { lessonOf(it, context, now, zone) ?: it }.mapNotNull { g ->
             // A due date at a class's next lesson it can't be set from (G8): refused, saying why, so he asks.
             if (g.type == ChangeType.DueBy.name && g.lesson.isNotBlank()) return@mapNotNull null.also { leftOut += "a change (${lessonProblem(g.lesson, context, zone)})" }
-            val breaksOn = context?.breaksOn ?: { DayBreaks.NONE }
-            InstructionAnswers.change(g, byId, titles, now, zone, breaksOn).also { if (it == null) leftOut += "a change (${InstructionAnswers.problem(g, byId, titles, now, zone, breaksOn)})" }
+            InstructionAnswers.change(g, byId, titles, now, zone, breaks).also { if (it == null) leftOut += "a change (${InstructionAnswers.problem(g, byId, titles, now, zone, breaks)})" else breaks.take(it) }
         }
         if (answer.changes.size > MAX_CHANGES) leftOut += "${answer.changes.size - MAX_CHANGES} more changes than the app takes at once"
         // A split whose steps don't come to its task's minutes, its total not said to change (AI-19): left out.

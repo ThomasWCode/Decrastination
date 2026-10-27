@@ -382,12 +382,14 @@ object Planner {
                 val withBreaks = (input.dayKinds[day] ?: DayKind.of(day)) == DayKind.Weekend
                 fun at(minute: Int) = day.atStartOfDay().plusMinutes(minute.toLong()).atZone(zone).toInstant().toEpochMilli()
                 fun begun(key: String) = day == today && key in begun
+                // Each over by the day's end, as the slotter lays it.
+                fun end(start: Long) = minOf(start + length, at(24 * 60))
                 val moved = if (!withBreaks) emptyList() else given.moved.filterKeys { it in times && !begun("${Slot.OUTSIDE}$it") }.map { (own, minute) ->
-                    Pin("$day/${Slot.OUTSIDE}$own", "${Slot.OUTSIDE}$day:$own", at(minute), at(minute) + length, null, null, grace = 0)
+                    Pin("$day/${Slot.OUTSIDE}$own", "${Slot.OUTSIDE}$day:$own", at(minute), end(at(minute)), null, null, grace = 0)
                 }
                 val added = given.added.distinct().filter { !begun("${Slot.ADDED}$it") && !(withBreaks && it in times) }.map { minute ->
                     val start = at(given.moved[minute] ?: minute)
-                    Pin("$day/${Slot.ADDED}$minute", "${Slot.ADDED}$day:$minute", start, start + length, null, null, grace = 0)
+                    Pin("$day/${Slot.ADDED}$minute", "${Slot.ADDED}$day:$minute", start, end(start), null, null, grace = 0)
                 }
                 moved + added
             }
@@ -409,6 +411,17 @@ object Planner {
             kept.map { it.key to (it.start to it.end) }
         }
         val exactPins: Set<String> = keptPins.mapTo(HashSet()) { it.first }
+        // The breaks outside you or Felix placed, kept at their time (D-116): never given up for work, so their part within a
+        // day's free time is none of the work's, there as a pin's is another's; nor is it the day's free time as shown.
+        val breaksPlaced = HashMap<LocalDate, Int>()
+        for ((key, span) in keptPins) {
+            if (!Slot.isOutside(key.substringAfter('/'))) continue
+            val day = date(span.first, zone).takeIf { it in free } ?: continue
+            val inside = pinSpan(day, span.first, ((span.second - span.first) / 60_000L).toInt(), input)
+            free[day] = free.getValue(day) - inside.school - inside.evening
+            freeHome[day] = freeHome.getValue(day) - inside.evening
+            breaksPlaced[day] = (breaksPlaced[day] ?: 0) + inside.school + inside.evening
+        }
         // Each day's time taken by pins kept on a day before it that run past midnight into it, as busy time: its own
         // slotting knows nothing else of them, and nothing else is laid there.
         fun across(day: LocalDate): List<Busy> {
@@ -1017,7 +1030,7 @@ object Planner {
         val buckets = days.map { day ->
             val chunks = placed.getValue(day).sortedWith(ORDER)
             // The day's free time as shown: more by the minutes of its pins outside it (D-114), but never past a limit you set.
-            val shown = (capacity.getValue(day) + (outsidePlaced[day] ?: 0)).let { m -> capOf(day)?.let { minOf(m, maxOf(it, capacity.getValue(day))) } ?: m }
+            val shown = ((capacity.getValue(day) - (breaksPlaced[day] ?: 0)).coerceAtLeast(0) + (outsidePlaced[day] ?: 0)).let { m -> capOf(day)?.let { minOf(m, maxOf(it, capacity.getValue(day))) } ?: m }
             val windows = input.windows[day] ?: return@map DayBucket(day, shown, chunks)
             // The pins in the order they were given, the latest first (D-114); those not in it after, in the day's order.
             val position = chunks.withIndex().associate { it.value.key to it.index }

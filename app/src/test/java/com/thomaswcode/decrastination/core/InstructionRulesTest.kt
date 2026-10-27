@@ -776,6 +776,21 @@ class InstructionRulesTest {
     }
 
     @Test
+    fun `an answer's changes to a day's breaks are checked in turn, so one can use the time another frees, and none runs past midnight`() {
+        val weekend: (LocalDate) -> DayBreaks = { day -> InstructionRules.dayBreaks(day, Settings(), day.dayOfWeek.value >= 6, emptyList()) }
+        fun read(vararg changes: String) =
+            InstructionAnswers.parse("""{"understood":true,"question":null,"changes":[${changes.joinToString(",")}]}""", listOf(essay, prep), listOf(drums), About(), now, LONDON, weekend)
+        // Saturday's 13:00 taken off, then its 16:00 moved there: both kept, as the day then has them.
+        val both = assertIs<InstructionAnswers.Reading.Changes>(read("""{"type":"NoOutside","date":"2026-10-10","outsideTime":"13:00"}""", """{"type":"OutsideAt","date":"2026-10-10","time":"13:00","outsideTime":"16:00"}"""))
+        assertEquals(listOf(Change(ChangeType.NoOutside, date = "2026-10-10", outsideMin = 780), Change(ChangeType.OutsideAt, date = "2026-10-10", outsideMin = 960, startMin = 780)), both.changes)
+        // The other way round, the move's over the break still there: not.
+        assertIs<InstructionAnswers.Reading.Unclear>(read("""{"type":"OutsideAt","date":"2026-10-10","time":"13:00","outsideTime":"16:00"}""", """{"type":"NoOutside","date":"2026-10-10","outsideTime":"13:00"}"""))
+        // A break at 23:50 would run past midnight: refused, said.
+        assertEquals("Claude's reading couldn't be used: a break outside is over by midnight, on its day", assertIs<InstructionAnswers.Reading.Unclear>(read("""{"type":"OutsideAdded","date":"2026-10-10","time":"23:50"}""")).why)
+        assertEquals(DayBreaks(mapOf(570 to 570), 20).with(Change(ChangeType.OutsideAdded, date = "2026-10-10", startMin = 1020)), DayBreaks(mapOf(570 to 570, 1020 to 1020), 20))
+    }
+
+    @Test
     fun `a time on the day the clocks go back is that day's clock time, as the planner lays it`() {
         // Sunday 25 October 2026, 09:00 in London, the clocks gone back at 02:00: 09:30 is still to come.
         val at = Fixtures.at("2026-10-25T09:00")

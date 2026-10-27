@@ -81,11 +81,13 @@ object Slotter {
         // with them. Over busy
         // time or outside the windows kept, never given up for work, nor held to 18:00; not once its time is over.
         val times = settings.outsideTimes.distinct()
+        // Each over by the day's end, a break staying on its day.
+        val midnight = at(date.plusDays(1), 0, zone)
         val moved = if (!outside) emptyList() else given.moved.filterKeys { it in times && it !in begun }.map { (own, minute) ->
-            at(date, minute, zone).let { breakOf(it, it + length, own, added = false) }
+            at(date, minute, zone).let { breakOf(it, minOf(it + length, midnight), own, added = false) }
         }
         val added = given.added.distinct().filter { it !in begunAdded && !(outside && it in times) }.map { minute ->
-            at(date, given.moved[minute] ?: minute, zone).let { breakOf(it, it + length, minute, added = true) }
+            at(date, given.moved[minute] ?: minute, zone).let { breakOf(it, minOf(it + length, midnight), minute, added = true) }
         }
         // Not once its time is over, but where a pin given later put it after that and it's still to come (its kept start).
         val placed = (moved + added).filter { it.end > now || (previous[it.key] ?: 0L) > now }

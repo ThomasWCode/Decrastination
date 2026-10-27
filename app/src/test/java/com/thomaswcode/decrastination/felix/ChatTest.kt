@@ -618,6 +618,10 @@ class ChatTest {
         assertEquals(listOf("a change (there's no 12:00 break outside that day)"), one("""{"type":"OutsideAt","date":"2026-10-17","time":"14:30","outsideTime":"12:00"}""").leftOut)
         assertEquals(listOf("a change (it would be over another break outside)"), one("""{"type":"OutsideAdded","date":"2026-10-17","time":"16:10"}""").leftOut)
         assertEquals(listOf("a change (a day's breaks outside are changed on a date, never a weekday)"), one("""{"type":"NoOutside","weekday":"Saturday","outsideTime":"13:00"}""").leftOut)
+        // His skip of the 13:00 and a move of the 16:00 there, in one answer: both kept.
+        val both = one("""{"type":"NoOutside","date":"2026-10-17","outsideTime":"13:00"},{"type":"OutsideAt","date":"2026-10-17","time":"13:00","outsideTime":"16:00"}""")
+        assertEquals(emptyList(), both.leftOut)
+        assertEquals(2, both.changes.size)
     }
 
     @Test

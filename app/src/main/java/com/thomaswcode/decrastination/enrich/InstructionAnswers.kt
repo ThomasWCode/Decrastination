@@ -97,8 +97,10 @@ object InstructionAnswers {
         val byId = tasks.associateBy { it.id }
         // The event it's about counts even if it's past the fortnight read.
         val titles = events.associate { EventJudge.key(it) to it.title } + listOfNotNull(about.eventKey?.let { it to (about.eventTitle ?: it) })
+        // A day's breaks as the changes before each leave them (D-116), so one can use time another frees.
+        val breaks = Breaks(breaksOn)
         val changes = answer.changes.map(Given::normalised).map { g ->
-            change(g, byId, titles, now, zone, breaksOn) ?: return Reading.Unclear("Claude's reading couldn't be used: ${problem(g, byId, titles, now, zone, breaksOn)}", answer.answersQuestion)
+            change(g, byId, titles, now, zone, breaks)?.also(breaks::take) ?: return Reading.Unclear("Claude's reading couldn't be used: ${problem(g, byId, titles, now, zone, breaks)}", answer.answersQuestion)
         }
         stepsProblem(changes, byId)?.let { return Reading.Unclear("Claude's reading couldn't be used: $it", answer.answersQuestion) }
         // Tasks waiting on each other in a circle within this one reading: none would ever be planned.
@@ -170,14 +172,14 @@ object InstructionAnswers {
                 Change(type, taskId = id, date = date, alsoAllow = g.alsoAllow.trim().takeIf { it == InstructionRules.ALSO_ANKI || it == InstructionRules.ALSO_DEADLINES })
             }
             // A day's breaks outside (D-116): on a date, never a weekday; one the day has, by the time it's named by (one of its
-            // own taken off, moved to put it back), not begun (D-113); a time today not gone; a break moved or added over none of
-            // the day's others, nor added at a time one is named by.
+            // own taken off, moved to put it back), not begun (D-113); a time today not gone, the break over by midnight, on its
+            // day; a break moved or added over none of the day's others, nor added at a time one is named by.
             ChangeType.OutsideAt -> {
                 val date = day(g.copy(weekday = null), now)?.first ?: return null
                 val own = minute(g.outsideTime) ?: return null
                 val start = minute(g.time)?.takeIf { !gone(date, it, now, zone) } ?: return null
                 val breaks = breaksOn(LocalDate.parse(date))
-                if ((own !in breaks.at && own !in breaks.reserved) || own in breaks.begun || breaks.over(start, own)) return null
+                if ((own !in breaks.at && own !in breaks.reserved) || own in breaks.begun || start + breaks.length > DAY_MIN || breaks.over(start, own)) return null
                 Change(type, date = date, outsideMin = own, startMin = start)
             }
             ChangeType.NoOutside -> {
@@ -191,7 +193,7 @@ object InstructionAnswers {
                 val date = day(g.copy(weekday = null), now)?.first ?: return null
                 val start = minute(g.time)?.takeIf { !gone(date, it, now, zone) } ?: return null
                 val breaks = breaksOn(LocalDate.parse(date))
-                if (start in breaks.at || start in breaks.reserved || breaks.over(start)) return null
+                if (start in breaks.at || start in breaks.reserved || start + breaks.length > DAY_MIN || breaks.over(start)) return null
                 Change(type, date = date, startMin = start)
             }
             // The same work as another listed task (DX-15), which is kept.
@@ -272,9 +274,29 @@ object InstructionAnswers {
             g.type == "OutsideAt" && g.outsideTime.isBlank() -> "it doesn't say which break outside"
             g.type != "NoOutside" && start == null -> "the time doesn't read"
             g.type != "NoOutside" && start != null && gone(date, start, now, zone) -> "that time's gone"
+            g.type != "NoOutside" && start != null && start + breaks.length > DAY_MIN -> "a break outside is over by midnight, on its day"
             g.type != "NoOutside" && start != null && breaks.over(start, own ?: -1) -> "it would be over another break outside"
             g.type == "OutsideAdded" && start != null && (start in breaks.at || start in breaks.reserved) -> "a break outside of that day's is named by that time: move or put back that one instead"
             else -> "a date, time or number in it is out of range"
+        }
+    }
+
+    /** A day's minutes: a break outside is over by its end. */
+    private const val DAY_MIN = 24 * 60
+
+    /**
+     * [breaksOn] as the changes kept so far leave each day's breaks (D-116, [take] each as it's kept), so one change of an answer can
+     * use time another frees: a break taken off, and another moved there.
+     */
+    internal class Breaks(private val breaksOn: (LocalDate) -> DayBreaks) : (LocalDate) -> DayBreaks {
+        private val days = HashMap<LocalDate, DayBreaks>()
+
+        override fun invoke(day: LocalDate): DayBreaks = days.getOrPut(day) { breaksOn(day) }
+
+        /** [change], kept: its day's breaks as it leaves them. */
+        fun take(change: Change) {
+            val day = change.date?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: return
+            days[day] = invoke(day).with(change)
         }
     }
 

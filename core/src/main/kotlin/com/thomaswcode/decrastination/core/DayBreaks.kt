@@ -7,6 +7,14 @@ package com.thomaswcode.decrastination.core
  * not ([reserved]: its settings' on a day with breaks), which no break added may be.
  */
 data class DayBreaks(val at: Map<Int, Int>, val length: Int, val begun: Set<Int> = emptySet(), val reserved: Set<Int> = emptySet()) {
+    /** As [change], one to the day's breaks, leaves them: a break moved, put back or added at its time, one or all taken off. */
+    fun with(change: Change): DayBreaks = when (change.type) {
+        ChangeType.OutsideAt -> change.startMin?.let { copy(at = at + (change.outsideMin to it)) } ?: this
+        ChangeType.NoOutside -> copy(at = if (change.outsideMin < 0) emptyMap() else at - change.outsideMin)
+        ChangeType.OutsideAdded -> change.startMin?.let { copy(at = at + (it to it)) } ?: this
+        else -> this
+    }
+
     /** Whether a break from [start] would be over another of the day's than the one named [own] (-1 for none). */
     fun over(start: Int, own: Int = -1): Boolean = at.any { (name, minute) -> name != own && minute < start + length && start < minute + length }
 
