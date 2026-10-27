@@ -341,7 +341,7 @@ object InstructionRules {
     /**
      * The days from [from] to [to] kept for only some tasks (D-115), by [applied] (in the order applied): each date's tasks,
      * those of its [ChangeType.DayOnly] changes, with those a move put on it since its first (an OnDay for it, or an AtTime
-     * on it: a later move wins, Q13); and what its latest DayOnly lets in besides. A task finished stays among them, so a day
+     * on it: a later move wins, Q13, the move in force for it, its latest); and what its latest DayOnly lets in besides. A task finished stays among them, so a day
      * whose tasks are all done holds no work.
      */
     fun onlyDays(applied: List<Instruction>, from: LocalDate, to: LocalDate): Map<LocalDate, OnlyDay> {
@@ -354,10 +354,11 @@ object InstructionRules {
             first.putIfAbsent(day, i)
             last[day] = i
         }
+        // Each task's move in force, its latest OnDay or AtTime: one moved on since doesn't stay where it was.
+        val moves = changes.withIndex().filter { (_, c) -> (c.type == ChangeType.OnDay || c.type == ChangeType.AtTime) && c.taskId != null }.associateBy { it.value.taskId!! }
         return first.keys.sorted().associateWith { day ->
             val named = changes.filter { it.type == ChangeType.DayOnly && date(it.date) == day }.mapNotNull { it.taskId }.toSet()
-            val moved = changes.withIndex().filter { (i, c) -> i > first.getValue(day) && (c.type == ChangeType.OnDay || c.type == ChangeType.AtTime) && date(c.date) == day }
-                .mapNotNull { it.value.taskId }.toSet()
+            val moved = moves.filterValues { (i, c) -> i > first.getValue(day) && date(c.date) == day }.keys
             val allow = changes[last.getValue(day)].alsoAllow
             OnlyDay(named + moved, anki = allow == ALSO_ANKI || allow == ALSO_DEADLINES, deadlines = allow == ALSO_DEADLINES, joined = moved - named)
         }
