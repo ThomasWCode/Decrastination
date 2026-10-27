@@ -54,6 +54,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
@@ -158,7 +159,8 @@ internal fun DayGrid(
             .onGloballyPositioned { coordinates ->
                 val top = coordinates.positionInRoot().y
                 drag.gridTop = top
-                drag.gridBottom = top + coordinates.size.height
+                // Its bottom as far as it's seen: on its side the grid runs on below the screen till what's above it has gone.
+                drag.gridBottom = minOf(top + coordinates.size.height, coordinates.boundsInRoot().bottom)
             }
             // Two fingers pinch the hour's height, about the point between them; one only scrolls.
             .pointerInput(Unit) {
