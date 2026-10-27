@@ -45,6 +45,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -272,16 +273,17 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
     // on the folded line; in landscape it starts folded, so the grid has room.
     val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
     var cardFull by remember { mutableIntStateOf(0) }
+    // The card's cap (below) in pixels, as last laid out: the card folds from what it shows unfolded, its height or that cap.
+    var cardCap by remember { mutableFloatStateOf(Float.MAX_VALUE) }
     val line = with(density) { 40.dp.toPx() }
     var fold by remember(landscape) { mutableFloatStateOf(if (landscape) Float.MAX_VALUE else 0f) }
-    val foldMax = (cardFull - line).coerceAtLeast(0f)
+    val foldMax = DayLayout.foldMax(cardFull.toFloat(), cardCap, line)
     val folding = remember {
         object : NestedScrollConnection {
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
                 if (cardFull == 0) return Offset.Zero
-                val most = (cardFull - line).coerceAtLeast(0f)
-                val was = fold.coerceAtMost(most)
-                fold = (was - available.y).coerceIn(0f, most)
+                val was = fold.coerceAtMost(DayLayout.foldMax(cardFull.toFloat(), cardCap, line))
+                fold = DayLayout.folded(was, available.y, cardFull.toFloat(), cardCap, line)
                 return Offset(0f, was - fold)
             }
         }
@@ -296,6 +298,7 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
         // The card never takes the grid's room: at most what leaves the grid [MIN_GRID] once all else above it is laid,
         // scrolling within that; only its line where there's no room for it.
         val cap = maxHeight - MIN_GRID - with(density) { (aboveCard + belowCard).toDp() }
+        SideEffect { cardCap = with(density) { cap.toPx() } }
         Column(Modifier.fillMaxSize()) {
             Column(Modifier.onSizeChanged { aboveCard = it.height }) {
                 Hint(graph, "day", "Day is when: today's slots as they come, and the week's days above. Work is what: every task, on the next tab.")
@@ -320,7 +323,7 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
                         modifier = Modifier.fillMaxWidth().height(40.dp).clickable(enabled = !roomless || doing != null) { if (roomless) sheetFor = doing?.key else fold = 0f }.padding(horizontal = 16.dp, vertical = 10.dp),
                     )
                 } else {
-                    val shown = if (cardFull == 0) cap else minOf(with(density) { (cardFull - fold.coerceAtMost(foldMax)).toDp() }, cap)
+                    val shown = if (cardFull == 0) cap else minOf(with(density) { (minOf(cardFull.toFloat(), cardCap) - fold.coerceAtMost(foldMax)).toDp() }, cap)
                     Box(Modifier.fillMaxWidth().heightIn(max = shown).verticalScroll(card)) {
                         Box(Modifier.fillMaxWidth().onSizeChanged { cardFull = it.height }) {
                             NextCard(

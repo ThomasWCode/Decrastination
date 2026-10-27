@@ -54,6 +54,23 @@ class DayLayoutTest {
     }
 
     @Test
+    fun `the DO NOW card folds from what it shows, so a scroll folds a card taller than its cap at once`() {
+        // A card 1,500 px tall behind a cap of 300, its line 112: it folds 188 at most, from 300 to its line.
+        assertEquals(188f, DayLayout.foldMax(1500f, 300f, 112f))
+        // A scroll of 100 on to later hours folds it 100 at once, then the rest of its 188, and no further.
+        assertEquals(100f, DayLayout.folded(0f, -100f, 1500f, 300f, 112f))
+        assertEquals(188f, DayLayout.folded(100f, -100f, 1500f, 300f, 112f))
+        // Back towards earlier hours it unfolds, to nothing folded.
+        assertEquals(88f, DayLayout.folded(188f, 100f, 1500f, 300f, 112f))
+        assertEquals(0f, DayLayout.folded(88f, 200f, 1500f, 300f, 112f))
+        // Folded past its most (as landscape starts), a scroll back unfolds it from its most.
+        assertEquals(88f, DayLayout.folded(Float.MAX_VALUE, 100f, 1500f, 300f, 112f))
+        // A card shorter than its cap folds from its own height; with no room for more than its line, it doesn't fold.
+        assertEquals(88f, DayLayout.foldMax(200f, 300f, 112f))
+        assertEquals(0f, DayLayout.foldMax(1500f, 80f, 112f))
+    }
+
+    @Test
     fun `a time's minute is its day's wall clock, on the day the clocks go back too, and an event across midnight is cut to the day`() {
         val day = LocalDate.parse("2026-10-25")
         assertEquals(m("09:30"), DayLayout.minuteOf(Fixtures.at("2026-10-25T09:30"), day, LONDON))
