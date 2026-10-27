@@ -4,9 +4,9 @@ Three releases, each on its own branch from `main`, one stacked on the one befor
 
 - `4.5.0: a time you give, kept to the minute`, branch `v4.5.0`, `versionCode` 80, `versionName` "4.5.0".
 - `4.5.1: a day for only some tasks`, branch `v4.5.1`, `versionCode` 81, `versionName` "4.5.1".
-- `4.6.0: the Day as a calendar`, branch `v4.6.0`, `versionCode` 83, `versionName` "4.6.0".
+- `4.6.0: the Day as a calendar`, branch `v4.6.0`, `versionCode` 84, `versionName` "4.6.0".
 
-The numbers follow 4.4.0, the timer (D-112), merged on 26 Oct at `versionCode` 78, then the breaks outside's plan ([`plan_outside_breaks/`](../plan_outside_breaks/README.md)): 4.4.1 at 79, before 4.5.0, and 4.5.2 at 82, between 4.5.1 and 4.6.0. The rules of the house hold throughout: `CLAUDE.md`, `docs/development.md`, `docs/plan_v4/architecture.md` §The rules and §Conventions. Nothing personal in code, tests, fixtures, docs or the PRs (D-79): fixtures and examples are made up. No new library: everything here is in the Compose BOM the app already uses (`androidx.compose.foundation`'s gestures and scroll, `androidx.compose.ui`'s pointer input, haptics and semantics), so there's nothing to install.
+The numbers follow 4.4.0, the timer (D-112), merged on 26 Oct at `versionCode` 78, then the breaks outside's plan ([`plan_outside_breaks/`](../plan_outside_breaks/README.md)): 4.4.1 at 79, before 4.5.0, and 4.5.2 at 82, between 4.5.1 and 4.6.0; then 4.5.3 at 83, your busy times in the calendar (D-117), whose blocks the grid draws. The rules of the house hold throughout: `CLAUDE.md`, `docs/development.md`, `docs/plan_v4/architecture.md` §The rules and §Conventions. Nothing personal in code, tests, fixtures, docs or the PRs (D-79): fixtures and examples are made up. No new library: everything here is in the Compose BOM the app already uses (`androidx.compose.foundation`'s gestures and scroll, `androidx.compose.ui`'s pointer input, haptics and semantics), so there's nothing to install.
 
 Before the first edit of each release: `PROGRESS.md` from `private/tools/progress.py init`, one item a stage below with its estimate, kept current and deleted before the PR is called done; never staged. Estimates are from stages of this size in 4.3.x; the actuals go in `PROGRESS.md` as each stage ends.
 
@@ -183,7 +183,7 @@ New `ui/DayGrid.kt`:
 
 ### 8. The release and the docs (45 min)
 
-- `app/build.gradle.kts`: 83, "4.6.0".
+- `app/build.gradle.kts`: 84, "4.6.0".
 - It migrates stored data (the settings): `scripts/rehearse.sh` on a recent backup of the phone's before the PR is called ready.
 - CI's command on the branch; `GoldenPromptsTest`, `PlanSnapshotTest` and `FelixInputsDocTest` unchanged (nothing here changes a prompt or a plan); the diff scanned; the PR; the reviews the owner asks for.
 - The phone session (§The phone, 4.6.0).

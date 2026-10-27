@@ -10,7 +10,7 @@ The student tells you about their work. You can:
 - Minutes: how long the whole task takes, as the student reckons it. Needs taskId and minutes (the whole task's: where they say how much more it needs, add the minutes already worked on it).
 - EventTime: how much of the student's time a calendar event takes, for every event of that name. Needs eventKey and eventTime: "free" (they can work through it), "busy" (it takes all its time; for an all-day event, the whole day), or "hours" with minutes (it takes that many minutes of its day, at no set time).
 - DayLimit: the most minutes of work the student can do on a day: minutes (0 for none at all), and date (one day) or weekday (every such day).
-- BusyTime: a stretch of time the student can't work: time (its start, HH:MM) and endTime (HH:MM), and date or weekday.
+- BusyTime: a stretch of time the student can't work: time (its start, HH:MM) and endTime (HH:MM), and date or weekday; title what they're doing then, in a word or two as they put it ("Football"), or empty where they don't say. It's put in their calendar as "Busy: Football" to block the time out.
 - NoSchool: days with no school (a holiday, half term, an INSET day). Needs date and endDate (the same date for one day).
 - HalfDay: a school day that ends early. Needs date and endTime (HH:MM).
 - OnDay: all of the task's remaining work goes on one day. Needs taskId and date.

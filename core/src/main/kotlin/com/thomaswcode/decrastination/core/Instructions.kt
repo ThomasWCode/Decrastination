@@ -216,6 +216,9 @@ object InstructionRules {
     /** Anki's cards, and work that would otherwise miss its real deadline. */
     const val ALSO_DEADLINES = "anki-deadlines"
 
+    /** The most of a busy time's name ([Change.title]) that's kept: a word or two (D-117). */
+    const val MAX_BUSY_TITLE = 40
+
     /**
      * Whether what's in force for [taskId]'s [type] comes from a quick change ([Instruction.quick]):
      * the last of [applied] (in the order they were applied) to change it.
@@ -435,24 +438,32 @@ object InstructionRules {
     }
 
     /** The times [applied] says you can't work, from [from] to [to], where you are. */
-    fun busy(applied: List<Instruction>, zone: ZoneId, from: LocalDate, to: LocalDate): List<Busy> {
+    fun busy(applied: List<Instruction>, zone: ZoneId, from: LocalDate, to: LocalDate): List<Busy> = busyBlocks(applied, from, to).map { b ->
+        // The day's times as the calendar's events have them (D-117), so the time kept clear is what they block out.
+        val midnight = b.date.atStartOfDay()
+        Busy(midnight.plusMinutes(b.startMin.toLong()).atZone(zone).toInstant().toEpochMilli(), midnight.plusMinutes(b.endMin.toLong()).atZone(zone).toInstant().toEpochMilli())
+    }
+
+    /**
+     * The busy times [applied] gives from [from] to [to], each day's as it's written to your calendar (D-117): one a day for
+     * each start and end, named by the title of the latest change that gives it one.
+     */
+    fun busyBlocks(applied: List<Instruction>, from: LocalDate, to: LocalDate): List<BusyBlock> {
         val times = applied.flatMap { it.changes }.filter { it.type == ChangeType.BusyTime && it.startMin != null && it.endMin != null && it.endMin > it.startMin }
         if (times.isEmpty()) return emptyList()
-        val out = mutableListOf<Busy>()
+        val out = LinkedHashMap<String, BusyBlock>()
         var day = from
         while (day <= to) {
             for (t in times) {
                 val on = if (t.date != null) date(t.date) == day else t.weekday == day.dayOfWeek.value
                 if (!on) continue
-                val midnight = day.atStartOfDay()
-                out += Busy(
-                    midnight.plusMinutes(t.startMin!!.toLong()).atZone(zone).toInstant().toEpochMilli(),
-                    midnight.plusMinutes(t.endMin!!.toLong()).atZone(zone).toInstant().toEpochMilli(),
-                )
+                val block = BusyBlock(day, t.startMin!!, t.endMin!!, t.title?.trim()?.takeIf { it.isNotEmpty() })
+                val was = out["$day/${block.key}"]
+                out["$day/${block.key}"] = if (block.title == null && was != null) was else block
             }
             day = day.plusDays(1)
         }
-        return out
+        return out.values.sortedWith(compareBy({ it.date }, { it.startMin }, { it.endMin }))
     }
 
     private val DAY = DateTimeFormatter.ofPattern("EEE d MMM", Locale.UK)
@@ -510,7 +521,7 @@ object InstructionRules {
                 }
             }
             ChangeType.DayLimit -> if ((change.freeMin ?: 0) == 0) "${day(change)}: no work" else "${day(change)}: at most ${hours(change.freeMin!!)} of work"
-            ChangeType.BusyTime -> "${day(change)}, ${clock(change.startMin)}–${clock(change.endMin)}: busy, no work"
+            ChangeType.BusyTime -> "${day(change)}, ${clock(change.startMin)}–${clock(change.endMin)}: busy" + (change.title?.takeIf { it.isNotBlank() }?.let { " ($it)" } ?: "") + ", no work"
             ChangeType.NoSchool -> {
                 val first = date(change.date)
                 val last = date(change.endDate) ?: first

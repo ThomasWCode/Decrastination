@@ -4,6 +4,7 @@ import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
 import com.thomaswcode.decrastination.calendar.SlotCalendarDiff.Desired
 import com.thomaswcode.decrastination.calendar.SlotCalendarDiff.Existing
+import com.thomaswcode.decrastination.core.BusyBlock
 import com.thomaswcode.decrastination.core.Chunk
 import com.thomaswcode.decrastination.core.DayBucket
 import com.thomaswcode.decrastination.core.Kind
@@ -59,6 +60,37 @@ class SlotCalendarDiffTest {
         val outside = SlotCalendarDiff.diff(listOf(want("outside:780", title = "Outside", taskId = null)), listOf(event(4, "outside:780", start = half, title = "Outside")), mapOf(want("outside:780").uri to five))
         assertEquals(listOf(4L), outside.handMoves.map { it.existing.id })
         assertEquals(emptyList(), outside.updates)
+    }
+
+    @Test
+    fun `your busy times are events of their own, named and shown busy, one deleted put back and said (D-117)`() {
+        val today = LocalDate.parse("2026-10-13")
+        val plan = Plan(five, today, listOf(DayBucket(today, 300, emptyList())), emptyList())
+        val busy = listOf(BusyBlock(today, 18 * 60, 19 * 60 + 30, "Football"), BusyBlock(today.plusDays(1), 17 * 60, 18 * 60, null), BusyBlock(today.plusDays(7), 17 * 60, 18 * 60, null))
+        val desired = SlotCalendarDiff.desired(plan, LONDON, busy = busy)
+        // Today's and tomorrow's; a week on, not yet.
+        assertEquals(listOf("decrastination://slot/2026-10-13/busy:1080-1170", "decrastination://slot/2026-10-14/busy:1020-1080"), desired.map { it.uri })
+        assertEquals(listOf("Busy: Football", "Busy"), desired.map { it.title })
+        assertTrue(desired.all { it.busy && it.taskId == null && it.description == SlotCalendarDiff.BUSY })
+        assertEquals(Fixtures.at("2026-10-13T18:00") to Fixtures.at("2026-10-13T19:30"), desired.first().let { it.start to it.end })
+        // Deleted by hand once written: inserted again, and said; one never written only inserted.
+        val football = desired.first()
+        val diff = SlotCalendarDiff.diff(desired, emptyList(), mapOf(football.uri to football.start))
+        assertEquals(desired, diff.inserts)
+        assertEquals(listOf(football), diff.restored)
+        // A piece's event deleted is written again unsaid, as before.
+        assertEquals(emptyList(), SlotCalendarDiff.diff(listOf(want("a")), emptyList(), mapOf(want("a").uri to five)).restored)
+        // Moved by hand: a hand move, for the writer to put back.
+        val later = Existing(9, football.uri, football.start + 3_600_000L, football.end + 3_600_000L, football.title, football.description)
+        assertEquals(listOf(9L), SlotCalendarDiff.diff(listOf(football), listOf(later), mapOf(football.uri to football.start)).handMoves.map { it.existing.id })
+        // Stretched by hand, its start left: put back as it was, and said; renamed by the app (Felix named it since), only updated.
+        val stretched = Existing(9, football.uri, football.start, football.end + 1_800_000L, football.title, football.description)
+        val edits = SlotCalendarDiff.diff(listOf(football), listOf(stretched), mapOf(football.uri to football.start)) { it.end != football.end }
+        assertEquals(listOf(9L), edits.updates.map { it.existing.id })
+        assertEquals(listOf(football), edits.reverted)
+        val renamed = SlotCalendarDiff.diff(listOf(football), listOf(stretched.copy(end = football.end, title = "Busy")), mapOf(football.uri to football.start)) { false }
+        assertEquals(listOf(9L), renamed.updates.map { it.existing.id })
+        assertEquals(emptyList(), renamed.reverted)
     }
 
     @Test

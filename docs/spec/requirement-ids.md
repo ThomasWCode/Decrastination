@@ -145,7 +145,7 @@ Grouped by prefix and sorted; where a later decision changed an item, its line g
 - NF-02: After each weekly review Claude writes the week's summary about the student, in the third person (D-66), all of it in the email body with no attachments; Felix's message (its *Send it*) opens it in the phone's email app to the address set in Settings, nothing is sent by itself, and the text is on the Reviews page.
 - NF-03: Time in AnkiDroid counts as work without touching this app: the decks' counts, read as AnkiDroid comes to the front and leaves it, tick a deck's pieces and keep their slots, the minutes being the time spent there.
 - NF-06: Work handed back with feedback becomes a short Admin task to read it, Open going to the assignment, done by its tick as no source can say it's read; it waits on the Teams widget listing returned work.
-- NF-07: The next seven days of slots, school windows and outside breaks included, are written to the one calendar picked in Settings, never read as busy time; a slot moved there by hand is taken as that piece's time where its deadline allows, an event added over a slot displaces it, and a deleted slot event comes back only if its time is still free.
+- NF-07: The next seven days of slots, school windows and outside breaks included, are written to the one calendar picked in Settings, never read as busy time; a slot moved there by hand is taken as that piece's time where its deadline allows, an event added over a slot displaces it, and a deleted slot event comes back only if its time is still free. Your busy times are written beside them, each day's an event of its own, named from your words and shown busy; one moved or deleted by hand is put back, saying so (D-117).
 
 ## PL: the planner and its analysis
 

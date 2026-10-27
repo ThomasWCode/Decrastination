@@ -144,7 +144,9 @@ object InstructionAnswers {
             ChangeType.BusyTime -> {
                 val start = minute(g.time) ?: return null
                 val end = minute(g.endTime)?.takeIf { it > start } ?: return null
-                day(g, now)?.let { (date, weekday) -> Change(type, date = date, weekday = weekday, startMin = start, endMin = end) }
+                // Named from your words where they give it (D-117): its event's "Busy: Football".
+                val title = g.title.trim().takeIf { it.isNotEmpty() }?.take(InstructionRules.MAX_BUSY_TITLE)
+                day(g, now)?.let { (date, weekday) -> Change(type, date = date, weekday = weekday, startMin = start, endMin = end, title = title) }
             }
             // A stretch of dates, not a weekday: the school calendar holds dates (PL-16).
             ChangeType.NoSchool -> {

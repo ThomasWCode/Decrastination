@@ -133,7 +133,8 @@ class SlotCalendar(private val context: Context) : CalendarProvider {
         put(Events.DTSTART, want.start)
         put(Events.DTEND, want.end)
         put(Events.EVENT_TIMEZONE, zone.id)
-        put(Events.AVAILABILITY, Events.AVAILABILITY_FREE)
+        // A busy time of yours blocks its time out (D-117); a slot leaves yours free.
+        put(Events.AVAILABILITY, if (want.busy) Events.AVAILABILITY_BUSY else Events.AVAILABILITY_FREE)
         put(Events.HAS_ALARM, 0)
         put(Events.CUSTOM_APP_PACKAGE, context.packageName)
         put(Events.CUSTOM_APP_URI, want.uri)
@@ -153,6 +154,17 @@ class SlotCalendar(private val context: Context) : CalendarProvider {
                 while (c.moveToNext()) found += DeviceCalendar(c.getLong(0), c.getString(1).orEmpty(), c.getString(2).orEmpty(), c.getInt(3) >= Calendars.CAL_ACCESS_CONTRIBUTOR)
             }
             return found
+        }
+
+        /** Says a busy time's event you [deleted] or changed was put back, and [why] (D-117). */
+        fun sayPutBack(context: Context, want: SlotCalendarDiff.Desired, deleted: Boolean, why: String) {
+            val notification = Notify.builder(context, Channels.CALENDAR)
+                .setSmallIcon(R.drawable.ic_focus)
+                .setContentTitle("“${want.title}” is back")
+                .setContentText(if (deleted) "It was deleted, but $why, so it's back where it was." else "It was changed, but $why, so it's back as it was.")
+                .setAutoCancel(true)
+                .build()
+            AppGraph.get(context).notifier.post(NoticeId.CalendarMove, notification, want.uri)
         }
 
         /** Says a move of yours was written back, and [why]. */
