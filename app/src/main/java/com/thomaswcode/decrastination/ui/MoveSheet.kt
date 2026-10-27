@@ -21,24 +21,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.thomaswcode.decrastination.AppGraph
-import com.thomaswcode.decrastination.core.About
-import com.thomaswcode.decrastination.core.Change
-import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.Chunk
-import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Planner
+import com.thomaswcode.decrastination.ui.Moves.CHIP_DAY
 import java.time.LocalDate
 import java.time.ZoneId
-import java.time.format.DateTimeFormatter
-import java.util.Locale
-import java.util.UUID
-import kotlinx.coroutines.launch
 
 /** How many days ahead a piece can be moved to. */
 private const val DAYS = 14L
-
-private val CHIP_DAY = DateTimeFormatter.ofPattern("EEE d", Locale.UK)
 
 /**
  * A piece moved by hand (UI-04), from a long press on its slot: a day of the next fortnight, each with
@@ -58,13 +49,10 @@ fun MoveSheet(graph: AppGraph, chunk: Chunk, plan: Plan, zone: ZoneId, onDone: (
     val task = graph.tasks.value.tasks.firstOrNull { it.id == chunk.taskId }
     val last = task?.realDeadline?.takeIf { it > graph.clock.now() }?.let { Planner.date(it, zone) }
     val first = task?.notBefore?.let { Planner.date(it, zone) }
-    // A day kept for only other tasks (D-115): the move makes this one of them, and the snackbar says so.
-    fun joins(day: LocalDate): String = InstructionRules.onlyDays(graph.instructions.value.applied, day, day)[day]?.takeIf { chunk.taskId !in it.taskIds }
-        ?.let { " (" + InstructionRules.joinLine(day, it.taskIds - it.joined, chunk.taskId, graph.tasks.value.tasks.associateBy { t -> t.id }) + ")" }.orEmpty()
-    fun apply(change: Change, said: String) {
-        val joining = change.date?.let(LocalDate::parse)?.let(::joins).orEmpty()
-        graph.scope.launch { graph.instructions.addOwnChange(UUID.randomUUID().toString(), said, About(taskId = chunk.taskId, taskTitle = chunk.title), change) }
-        onDone(said + joining)
+    // Made, and said (a day kept for only other tasks it joins too, D-115); or refused, and why.
+    fun moved(moved: Moves.Moved) = when (moved) {
+        is Moves.Moved.Done -> onDone(moved.said)
+        is Moves.Moved.Refused -> problem = moved.why
     }
     ModalBottomSheet(onDismissRequest = onClose) {
         Column(Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -72,11 +60,9 @@ fun MoveSheet(graph: AppGraph, chunk: Chunk, plan: Plan, zone: ZoneId, onDone: (
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 (0L until DAYS).map { plan.today.plusDays(it) }.forEach { day ->
                     val bucket = plan.bucket(day)
-                    val late = last != null && day > last
-                    val early = first != null && day < first
                     FilterChip(
                         selected = chosen == day.toString(),
-                        enabled = !late && !early,
+                        enabled = Moves.dayAllowed(task, day, graph.clock.now(), zone),
                         onClick = { chosen = day.toString() },
                         label = { Text("${if (day == plan.today) "Today" else day.format(CHIP_DAY)} · ${Format.minutes(bucket?.plannedMin ?: 0)}") },
                     )
@@ -90,22 +76,7 @@ fun MoveSheet(graph: AppGraph, chunk: Chunk, plan: Plan, zone: ZoneId, onDone: (
                 } else {
                     Text("Only its next piece takes a time: all of it can go to a day.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                OutlinedButton(onClick = {
-                    val applied = graph.instructions.value.applied
-                    val quick = InstructionRules.quickInForce(applied, chunk.taskId, ChangeType.AtTime)
-                    val pinned = task?.mine?.atTime?.value?.takeIf { Planner.date(it, zone) == day }
-                    if (pinned != null && !quick) {
-                        // A time from the chat holds it that day, over a day given after it: it's taken back where it was made.
-                        problem = "A time you gave in the chat holds it at ${Format.at(pinned, graph.clock.now(), zone)}: take that back in the chat's Your changes first."
-                    } else {
-                        // Any time: a time you gave it here before goes, as the plan would keep it on its day.
-                        graph.scope.launch {
-                            if (quick) graph.instructions.takeBackQuick(chunk.taskId, ChangeType.AtTime)
-                            graph.instructions.addOwnChange(UUID.randomUUID().toString(), "All of it on ${day.format(CHIP_DAY)}", About(taskId = chunk.taskId, taskTitle = chunk.title), Change(ChangeType.OnDay, taskId = chunk.taskId, date = day.toString()))
-                        }
-                        onDone("All of it on ${day.format(CHIP_DAY)}" + joins(day))
-                    }
-                }) { Text("All of it, any time that day") }
+                OutlinedButton(onClick = { moved(Moves.toDay(graph, chunk, day, zone)) }) { Text("All of it, any time that day") }
             }
             problem?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error) }
         }
@@ -114,16 +85,8 @@ fun MoveSheet(graph: AppGraph, chunk: Chunk, plan: Plan, zone: ZoneId, onDone: (
         val day = chosen?.let(LocalDate::parse) ?: plan.today
         TimeDialog("${chunk.label}, on ${day.format(CHIP_DAY)}", 17 * 60, onClose = { timing = false }) { minute ->
             timing = false
-            val time = day.atStartOfDay(zone).plusMinutes(minute.toLong()).toInstant().toEpochMilli()
-            val now = graph.clock.now()
-            // Only a time the plan will keep: none it would drop is said done.
-            problem = when (task?.let { Planner.pinProblem(it, time, now, zone, chunk.minutes) }) {
-                null -> null
-                Planner.PinProblem.DayGone -> "That time's gone: pick a later one."
-                Planner.PinProblem.NotYet -> "It can't be started till ${Format.at(task.notBefore!!, now, zone)}: pick a later time."
-                Planner.PinProblem.PastDeadline -> "It's due ${Format.at(task.realDeadline!!, now, zone)}: pick a time before then."
-            }
-            if (problem == null) apply(Change(ChangeType.AtTime, taskId = chunk.taskId, date = day.toString(), startMin = minute, time = time), "At ${day.format(CHIP_DAY)} ${"%02d:%02d".format(Locale.UK, minute / 60, minute % 60)}")
+            problem = null
+            moved(Moves.toTime(graph, chunk, day, minute, zone))
         }
     }
 }

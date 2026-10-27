@@ -1,0 +1,40 @@
+{
+    "pending": [
+        {
+            "id": "pending-1",
+            "field": "quietHours",
+            "value": {
+                "startMin": 1320,
+                "endMin": 450
+            },
+            "description": "Quiet hours from 22:00",
+            "requestedAt": 1792306800000,
+            "applyAt": 1792393200000,
+            "waitMs": 90000000,
+            "waitedMs": 3600000
+        }
+    ],
+    "overrideUntil": 1792173600000,
+    "adminArmed": true,
+    "codeLock": {
+        "lastUsedStep": 59000000,
+        "wrong": 1,
+        "lockedUntil": 1792170000000
+    },
+    "protection": {
+        "problems": [
+            "The focus service is off"
+        ],
+        "offSince": 1792148400000,
+        "checkedAt": 1792314000000,
+        "stoppedSince": 1792148400000,
+        "restartedAt": 1792148700000,
+        "restartTries": 1
+    },
+    "forceActiveUntil": 1792188600000,
+    "uptimeMark": {
+        "boot": 3,
+        "elapsedMs": 7200000
+    },
+    "version": 1
+}

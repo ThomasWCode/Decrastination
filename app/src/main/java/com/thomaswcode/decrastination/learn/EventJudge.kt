@@ -19,6 +19,8 @@ data class CalendarEvent(
     /** Where it is, and what it says of itself (DX-12): its description, cut short. */
     val location: String = "",
     val description: String = "",
+    /** Its colour as the calendar app shows it (ARGB): its own, else its calendar's; null where the provider gives none. */
+    val colour: Int? = null,
 )
 
 /**
