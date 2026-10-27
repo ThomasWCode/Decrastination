@@ -70,6 +70,44 @@ class DayLayoutTest {
         assertEquals(0f, DayLayout.foldMax(1500f, 80f, 112f))
     }
 
+    /**
+     * A scroll [dy] passed as Compose's nested scroll passes it: to the fold at [fold] where it goes first, then to what it's on
+     * (scrolled [at], of [range]), then to the fold with what's left. The fold and the scroll after, for a card 600 px tall
+     * under a cap of 1,000, its line 112.
+     */
+    private fun scroll(onCard: Boolean, dy: Float, fold: Float, at: Float, range: Float): Pair<Float, Float> {
+        var folded = fold
+        var left = dy
+        fun foldBy() {
+            val was = folded
+            folded = DayLayout.folded(was, left, 600f, 1000f, 112f)
+            left -= was - folded
+        }
+        if (DayLayout.foldsFirst(onCard, dy, fold)) foldBy()
+        val scrolled = (at - left).coerceIn(0f, range)
+        left -= at - scrolled
+        foldBy()
+        return folded to scrolled
+    }
+
+    @Test
+    fun `the grid's scrolls fold the card before the hours move and unfold it at midnight, and the card's own fold it from its top`() {
+        // Unfolded in full over the grid at 16:00: on to later hours, the card folds first, the grid where it was.
+        assertEquals(100f to 960f, scroll(onCard = false, dy = -100f, fold = 0f, at = 960f, range = 1440f))
+        // Folded to its line (488 px), the grid at 00:05: back, the grid goes to midnight first, the card unfolding with
+        // what's left (Q97).
+        assertEquals(288f to 0f, scroll(onCard = false, dy = 205f, fold = 488f, at = 5f, range = 1440f))
+        // The grid at 16:00: a scroll back moves only the grid, however far folded the card.
+        assertEquals(488f to 760f, scroll(onCard = false, dy = 200f, fold = 488f, at = 960f, range = 1440f))
+        // The card dragged up, all it holds shown: it folds at once.
+        assertEquals(50f to 0f, scroll(onCard = true, dy = -50f, fold = 0f, at = 0f, range = 0f))
+        // Taller than its room by 40: what it holds scrolls to its end first, then it folds with the rest.
+        assertEquals(60f to 40f, scroll(onCard = true, dy = -100f, fold = 0f, at = 0f, range = 40f))
+        // Once folding, it folds first, what it holds left where it is, and unfolds first as it's dragged back down.
+        assertEquals(110f to 40f, scroll(onCard = true, dy = -50f, fold = 60f, at = 40f, range = 90f))
+        assertEquals(0f to 20f, scroll(onCard = true, dy = 80f, fold = 60f, at = 40f, range = 90f))
+    }
+
     @Test
     fun `a time's minute is its day's wall clock, on the day the clocks go back too, and an event across midnight is cut to the day`() {
         val day = LocalDate.parse("2026-10-25")
