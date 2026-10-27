@@ -296,11 +296,11 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
     var rootAt by remember { mutableStateOf(Offset.Zero) }
     val card = rememberScrollState()
     // On its side there's no room for the grid under what's above it, so the Day scrolls as one (Q94): what's above goes first
-    // as the grid scrolls on to later hours, and comes back once the grid is back at its top.
+    // as the grid scrolls on to later hours, and slides back in first as it scrolls back, as the card folds upright (Q95).
     val collapsing = remember {
         object : NestedScrollConnection {
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset =
-                if (available.y < 0f) Offset(0f, -page.dispatchRawDelta(-available.y)) else Offset.Zero
+                Offset(0f, -page.dispatchRawDelta(-available.y))
         }
     }
     // What's above the grid besides the card, measured: the hints and the strip, and the day's header and its all-day chips.
@@ -321,9 +321,9 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
             }
             if (today) {
                 val unread = Source.SYNCED.filter { tasks.status(it).lastSuccessAt == null }
-                // With no room for the card, it stays its line, and a tap on the line opens the piece's sheet (the card's
-                // actions) instead of unfolding it.
-                val roomless = cap < 40.dp
+                // With no room for the card, or on its side (Q92), it stays its line, and a tap on the line opens the piece's
+                // sheet (the card's actions) instead of unfolding it.
+                val roomless = landscape || cap < 40.dp
                 val folded = (cardFull > 0 && fold >= foldMax - 1f) || roomless
                 if (folded) {
                     val doing = plan.slotAt(plan.now)?.chunk ?: plan.next
