@@ -530,11 +530,11 @@ object Planner {
         val onDueDayHome = HashMap<Item, Int>()
         /**
          * Whether [day] is kept for only some tasks that [item]'s isn't among (D-115): not where its task is, nor Anki's
-         * cards where the day lets them in; nor, as a [lastResort], work with a real deadline still to come where the day
-         * lets in work that would otherwise miss it.
+         * cards where the day lets them in; nor, as a [lastResort], work with a real deadline still to come, on a day before
+         * it, where the day lets in work that would otherwise miss it: on a day after, it can't save it.
          */
         fun shut(item: Item, day: LocalDate, lastResort: Boolean = false): Boolean =
-            shutFor(item.task, input.onlyDays[day], item.hard && item.deadline >= input.now, lastResort)
+            shutFor(item.task, input.onlyDays[day], item.hard && item.deadline >= input.now && day <= lastDayBefore(item, input), lastResort)
         /**
          * The time [day] has for [item]'s [piece] (PL-15): a piece only for home, the evening's left; any
          * other, all the day's. With no piece named, the item's: the evening's where all its pieces are home's.

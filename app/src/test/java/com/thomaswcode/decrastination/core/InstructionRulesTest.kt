@@ -629,6 +629,20 @@ class InstructionRulesTest {
     }
 
     @Test
+    fun `work its deadline has gone by on a day isn't let in there as a last resort, as that can't save it`() {
+        // Friday 21:00, no work tonight, Saturday kept for the essay with deadlines let in: a half hour due tonight goes to Sunday.
+        val essay = task("essay", "2026-10-30T09:00", effort = 60)
+        val form = task("form", "2026-10-09T23:30", effort = 30)
+        val rules = listOf(
+            applied(Change(ChangeType.DayLimit, date = "2026-10-09", freeMin = 0)),
+            applied(Change(ChangeType.DayOnly, taskId = essay.id, date = "2026-10-10", alsoAllow = InstructionRules.ALSO_DEADLINES), at = now + 1),
+        )
+        val p = plan(listOf(essay, form), rules)
+        assertTrue(p.on(saturday, form).isEmpty(), "${p.buckets.map { b -> b.date to b.chunks.filter { it.taskId == form.id }.size }}")
+        assertEquals(30, p.on(LocalDate.parse("2026-10-11"), form).sumOf { it.minutes })
+    }
+
+    @Test
     fun `a day whose tasks are all done stays free of work, and overdue work goes to the next day while today's kept for others`() {
         val essay = task("essay", "2026-10-14T09:00", effort = 60).copy(status = Status.Done)
         val maths = task("maths", "2026-10-12T09:00", effort = 240)
