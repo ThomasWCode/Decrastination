@@ -372,6 +372,8 @@ class PlannerPropertyTest {
             val byToday = { c: Chunk -> bucket.date == plan.today && !c.soft && Planner.date(c.deadline, LONDON) <= plan.today }
             fun outside(c: Chunk): Int {
                 val at = byId[c.taskId]?.mine?.atTime?.value?.takeIf { Planner.date(it, LONDON) == bucket.date && plan.chunksOf(c.taskId).minByOrNull { it.part }?.key == c.key } ?: return 0
+                // On a day laid out in time, only a pin laid at its time is exempt: one moved takes free time as any piece does.
+                if (input.windows[bucket.date] != null && bucket.slotOf(c)?.let { it.pinned && it.start == at } != true) return 0
                 return Planner.outsideFreeMin(bucket.date, at, c.minutes, input)
             }
             val home = bucket.chunks.filter { it.where == Where.Home && !it.behind && !it.overdue && !byToday(it) }.sumOf { it.minutes - outside(it) }
