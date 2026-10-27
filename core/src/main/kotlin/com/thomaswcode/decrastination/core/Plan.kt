@@ -229,18 +229,32 @@ data class Slot(
     val end: Long,
     val window: WindowKind,
     val pinned: Boolean,
-    /** A break outside's own time, its `outsideTimes` minute: -1 for work. */
+    /** A break outside's own time, its `outsideTimes` minute, or an added one's ([outsideAdded]): -1 for work. */
     val outsideAt: Int = -1,
+    /** A break outside you or Felix added (D-116), over and above the settings' breaks. */
+    val outsideAdded: Boolean = false,
 ) {
-    /** Which slot it is from one plan to the next: a piece's [Chunk.key]; a break outside's by its own time, `outside:780` the 13:00 break wherever it's laid. */
-    val key: String get() = chunk?.key ?: "$OUTSIDE$outsideAt"
+    /**
+     * Which slot it is from one plan to the next: a piece's [Chunk.key]; a break outside's by its own time, `outside:780` the
+     * 13:00 break wherever it's laid; an added break's by its minute, `outside+:1020`, never a settings break's key.
+     */
+    val key: String get() = chunk?.key ?: if (outsideAdded) "$ADDED$outsideAt" else "$OUTSIDE$outsideAt"
 
     companion object {
         /** A break outside's [key] before its own time. */
         const val OUTSIDE = "outside:"
 
-        /** The own time of the break outside [key] names; null for a piece's. */
+        /** An added break outside's [key] before its minute (D-116). */
+        const val ADDED = "outside+:"
+
+        /** The own time of the break outside [key] names; null for a piece's, or an added break's. */
         fun outsideAt(key: String): Int? = if (key.startsWith(OUTSIDE)) key.removePrefix(OUTSIDE).toIntOrNull() else null
+
+        /** The minute of the added break outside [key] names; null for any other's. */
+        fun addedAt(key: String): Int? = if (key.startsWith(ADDED)) key.removePrefix(ADDED).toIntOrNull() else null
+
+        /** Whether [key] is a break outside's, a settings one's or an added one's: not a piece's, nor a break's end ([endKey]). */
+        fun isOutside(key: String): Boolean = outsideAt(key) != null || addedAt(key) != null
 
         /**
          * Where a break outside's end is kept beside its start ([SlotState.laid]) once it's begun: its end as it was laid,

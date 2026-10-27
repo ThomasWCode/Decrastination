@@ -37,7 +37,10 @@
                             "Steps",
                             "SameAs",
                             "Rename",
-                            "DayOnly"
+                            "DayOnly",
+                            "OutsideAt",
+                            "NoOutside",
+                            "OutsideAdded"
                         ]
                     },
                     "taskId": {
@@ -140,6 +143,10 @@
                             "anki",
                             "anki-deadlines"
                         ]
+                    },
+                    "outsideTime": {
+                        "type": "string",
+                        "description": "HH:MM, 24-hour, or empty"
                     }
                 },
                 "required": [
@@ -156,7 +163,8 @@
                     "endTime",
                     "title",
                     "steps",
-                    "alsoAllow"
+                    "alsoAllow",
+                    "outsideTime"
                 ],
                 "additionalProperties": false
             }

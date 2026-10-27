@@ -105,6 +105,8 @@ class CalendarWriter(
                 write(calendarId, made, zone, before, known, model.value.microPlans) { move ->
                     val task = move.desired.taskId?.let(byId::get)
                     when {
+                        // A break outside is moved by Felix, in the chat (D-116): put back, and said.
+                        move.desired.taskId == null -> "a break outside is moved by asking Felix"
                         task == null -> "its task is no longer there"
                         InstructionRules.latePin(change(move, zone), task, zone, clock.now()) -> "it's due before then"
                         else -> null

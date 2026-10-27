@@ -141,6 +141,11 @@ class FelixInputsDocTest {
             "i2", "Keep Saturday for the statement, cards too", at = Fixtures.at("2026-10-12T19:10"), state = InstructionStatus.Applied,
             changes = listOf(Change(ChangeType.DayOnly, taskId = "own:o1", date = "2026-10-17", alsoAllow = InstructionRules.ALSO_ANKI)), appliedAt = Fixtures.at("2026-10-12T19:10"), by = By.Felix,
         ),
+        // Saturday's 16:00 break outside moved into its evening, by Felix (D-116).
+        Instruction(
+            "i3", "Saturday's 16:00 break at 17:30", at = Fixtures.at("2026-10-12T19:12"), state = InstructionStatus.Applied,
+            changes = listOf(Change(ChangeType.OutsideAt, date = "2026-10-17", outsideMin = 16 * 60, startMin = 17 * 60 + 30)), appliedAt = Fixtures.at("2026-10-12T19:12"), by = By.Felix,
+        ),
     )
     private val evening = (0L..20L).associate { LocalDate.parse("2026-10-13").plusDays(it) to listOf(DayWindow(16 * 60 + 45, 22 * 60, WindowKind.Evening)) }
 
@@ -154,7 +159,7 @@ class FelixInputsDocTest {
             Planner.Input(
                 tasks, now, LONDON, settings, calibration = calibration, busy = time.busy, dayLoads = time.dayLoads,
                 hardBusy = InstructionRules.busy(applied, LONDON, today, reach), dayCaps = InstructionRules.dayCaps(applied, today, reach), windows = evening,
-                onlyDays = InstructionRules.onlyDays(applied, today, reach),
+                onlyDays = InstructionRules.onlyDays(applied, today, reach), outsideDays = InstructionRules.outsideDays(applied, today, reach),
             ),
         )
     }
@@ -187,6 +192,7 @@ class FelixInputsDocTest {
             plan = ChatPrompts.plan(
                 planned, LONDON, blocking = Focus.blockingLine(BlockPolicy.Verdict.Block(BlockPolicy.Reason.TodayUndone), planned.todayBucket?.chunks.orEmpty(), 0, 16 * 60 + 45, null), timer = timer,
                 only = InstructionRules.onlyDays(applied, planned.today, planned.today.plusDays(ChatPrompts.PLAN_DAYS.toLong())).mapValues { ChatPrompts.onlyLine(it.value, tasks.associateBy { t -> t.id }) },
+                placed = InstructionRules.outsideBy(applied, planned.today, planned.today.plusDays(ChatPrompts.PLAN_DAYS.toLong())),
             ),
         )
         ChatPrompts.turns(listOf(earlier, reply, asked), context.known, byId, LONDON, plan = context.plan, events = events).forEachIndexed { i, (from, text) -> out["chat turn $i: $from"] = text }

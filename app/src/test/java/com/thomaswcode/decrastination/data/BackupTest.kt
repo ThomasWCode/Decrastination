@@ -239,6 +239,16 @@ class BackupTest {
         assertNotNull(Backups.problem(with(Change(ChangeType.DayOnly, taskId = "teams:a", weekday = 6))))
         assertNotNull(Backups.problem(with(Change(ChangeType.DayOnly, date = "2026-10-31"))))
         assertNotNull(Backups.problem(with(Change(ChangeType.DayOnly, taskId = "teams:a", date = "2026-10-31", alsoAllow = "everything"))))
+        // A day's breaks outside (D-116): each on a date; a move with its break and a time of the day, a NoOutside with its break or none, one added with its time.
+        assertNull(Backups.problem(with(Change(ChangeType.OutsideAt, date = "2026-10-31", outsideMin = 780, startMin = 870))))
+        assertNull(Backups.problem(with(Change(ChangeType.NoOutside, date = "2026-10-31"))))
+        assertNull(Backups.problem(with(Change(ChangeType.NoOutside, date = "2026-10-31", outsideMin = 960))))
+        assertNull(Backups.problem(with(Change(ChangeType.OutsideAdded, date = "2026-10-31", startMin = 1020))))
+        assertNotNull(Backups.problem(with(Change(ChangeType.OutsideAt, weekday = 6, outsideMin = 780, startMin = 870))))
+        assertNotNull(Backups.problem(with(Change(ChangeType.OutsideAt, date = "2026-10-31", startMin = 870))))
+        assertNotNull(Backups.problem(with(Change(ChangeType.OutsideAt, date = "2026-10-31", outsideMin = 780, startMin = 25 * 60))))
+        assertNotNull(Backups.problem(with(Change(ChangeType.NoOutside, date = "2026-10-31", outsideMin = -5))))
+        assertNotNull(Backups.problem(with(Change(ChangeType.OutsideAdded, date = "2026-10-31"))))
     }
 
     @Test

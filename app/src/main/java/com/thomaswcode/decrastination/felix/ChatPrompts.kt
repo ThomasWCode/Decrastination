@@ -7,6 +7,7 @@ import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.ChatHistory
 import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.core.Chunk
+import com.thomaswcode.decrastination.core.DayBreaks
 import com.thomaswcode.decrastination.core.Duplicates
 import com.thomaswcode.decrastination.core.FelixSettings
 import com.thomaswcode.decrastination.core.Given
@@ -24,6 +25,7 @@ import com.thomaswcode.decrastination.core.ProposalState
 import com.thomaswcode.decrastination.core.Reminder
 import com.thomaswcode.decrastination.core.Reminders
 import com.thomaswcode.decrastination.core.Settings
+import com.thomaswcode.decrastination.core.Slot
 import com.thomaswcode.decrastination.core.SlotKind
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Speaker
@@ -395,9 +397,10 @@ object ChatPrompts {
     /**
      * What the app knows, as the chat sends it: [known] ([context]), then the [plan] ([plan]), each with its share of the room ([turns]);
      * and what its answer is checked against that isn't in words: the pieces it lists to keep ([keepable]) and those
-     * kept today ([kept]), each key with its task's id (G1); the next lessons a due date at one is set from ([lessons], G8).
+     * kept today ([kept]), each key with its task's id (G1); the next lessons a due date at one is set from ([lessons], G8);
+     * each day's breaks outside, which a change to one is checked against ([breaksOn], D-116).
      */
-    data class Context(val known: String, val plan: String, val keepable: Map<String, String> = emptyMap(), val kept: Map<String, String> = emptyMap(), val lessons: Lessons.Timetabled? = null, val waiting: Set<String> = emptySet()) {
+    data class Context(val known: String, val plan: String, val keepable: Map<String, String> = emptyMap(), val kept: Map<String, String> = emptyMap(), val lessons: Lessons.Timetabled? = null, val waiting: Set<String> = emptySet(), val breaksOn: (LocalDate) -> DayBreaks = { DayBreaks.NONE }) {
         /** All of it, as it's sent when there's room. */
         val whole: String get() = if (plan.isEmpty()) known else known + PLAN_GAP + plan
     }
@@ -793,9 +796,10 @@ object ChatPrompts {
      * today (their keys and labels), which the plan no longer shows, so he can take one back; and after
      * the slot under way, [blocking]: whether blocking applies and why, and the free time (G5). A running
      * [timer] (D-112) is said with the slot under way or the next thing where it's on that task,
-     * else in a line of its own.
+     * else in a line of its own. Today's breaks outside are among today's slots, and the week's later
+     * days' on their lines (D-116), each named by its own time, with who [placed] it where it was moved or added.
      */
-    fun plan(plan: Plan, zone: ZoneId, kept: List<Pair<String, String>> = emptyList(), blocking: String? = null, timer: PieceTimer? = null, only: Map<LocalDate, String> = emptyMap()): String = buildString {
+    fun plan(plan: Plan, zone: ZoneId, kept: List<Pair<String, String>> = emptyList(), blocking: String? = null, timer: PieceTimer? = null, only: Map<LocalDate, String> = emptyMap(), placed: Map<String, By> = emptyMap()): String = buildString {
         fun at(time: Long) = Instant.ofEpochMilli(time).atZone(zone).format(WHEN)
         fun piece(chunk: Chunk) = "${chunk.label.take(MAX_TITLE)} (${chunk.minutes} min)"
         fun event(task: TaskItem) = "${task.id} | ${task.title.take(MAX_TITLE)} | ${task.source.label}"
@@ -823,17 +827,24 @@ object ChatPrompts {
         if (running != null && on.isEmpty()) appendLine(FelixPrompts.timerLine(running, plan.now, zone))
         // Whether blocking applies now and why, and their free time (G5): "how much free time have I got?"
         blocking?.let { appendLine(it) }
-        // Today's slots at their times, each gone by, under way or to come (AI-13), so a time today isn't taken for past.
-        val slots = plan.todaySlots.filter { it.kind == SlotKind.Work && it.chunk != null }
+        // A break outside by its own time, and who moved or added it (D-116): yours or theirs.
+        fun breakName(day: LocalDate, s: Slot): String {
+            val by = placed["$day/${s.key}"]?.let { if (it == By.Felix) "you" else "them" }
+            return "the ${hhmm(s.outsideAt)} break" + if (s.outsideAdded) ", added" + (by?.let { " by $it" } ?: "") else by?.let { ", moved by $it" } ?: ""
+        }
+        // Today's slots at their times, each gone by, under way or to come (AI-13), so a time today isn't taken for past; its
+        // breaks outside among them, under way or to come, each named by its own time (D-116), so a change to one names it.
+        val slots = plan.todaySlots.filter { (it.kind == SlotKind.Work && it.chunk != null) || (it.kind == SlotKind.Outside && it.end > plan.now) }
         if (slots.isNotEmpty()) {
-            appendLine("Today's slots (the times its pieces are laid at):")
+            appendLine("Today's slots (the times its pieces and breaks outside are laid at):")
             slots.forEach { s ->
                 val state = when {
                     s.end <= plan.now -> "past"
                     s.start <= plan.now -> "now"
                     else -> "ahead"
                 }
-                appendLine("- ${clock(s.start)}–${clock(s.end)} ${piece(s.chunk!!)} [$state] key ${s.chunk!!.key}")
+                val what = s.chunk?.let { "${piece(it)} [$state] key ${it.key}" } ?: "Outside, ${breakName(plan.today, s)} [$state]"
+                appendLine("- ${clock(s.start)}–${clock(s.end)} $what")
             }
         }
         val last = plan.today.plusDays(PLAN_DAYS - 1L)
@@ -899,7 +910,10 @@ object ChatPrompts {
             val over = (bucket.plannedMin - bucket.capacityMin).takeIf { it > 0 }?.let { ", over by $it min" }.orEmpty()
             // A day kept for only some tasks (D-115): which, and what else it lets in.
             val kept = only[bucket.date]?.let { "; $it" }.orEmpty()
-            appendLine(if (bucket.chunks.isEmpty()) "- $name: nothing planned ($time)$kept" else "- $name: ${bucket.plannedMin} min planned of $time$over$kept")
+            // A later day's breaks outside, the week's (D-116): each at its time, named by its own.
+            val breaks = bucket.slots.filter { it.kind == SlotKind.Outside }.takeIf { bucket.date > plan.today && bucket.date < plan.today.plusDays(InstructionPrompts.BREAK_DAYS.toLong()) }.orEmpty()
+            val outside = if (breaks.isEmpty()) "" else "; breaks outside: " + breaks.joinToString { "${clock(it.start)} (${breakName(bucket.date, it)})" }
+            appendLine(if (bucket.chunks.isEmpty()) "- $name: nothing planned ($time)$kept$outside" else "- $name: ${bucket.plannedMin} min planned of $time$over$kept$outside")
             eventsOn[bucket.date].orEmpty().forEach { appendLine("  - event at ${Instant.ofEpochMilli(it.dueAt!!).atZone(zone).format(CLOCK)}: ${event(it)}") }
             // A task a line, as the Plan lists them (Q31), its pieces that day in their order.
             bucket.chunks.groupBy { it.taskId }.forEach { (id, pieces) ->
@@ -919,6 +933,9 @@ object ChatPrompts {
             }
         }
     }.trimEnd()
+
+    /** A minute of the day, as HH:MM. */
+    private fun hhmm(minute: Int): String = "%02d:%02d".format(Locale.UK, minute / 60, minute % 60)
 
     /**
      * A day kept for only some tasks, as the plan's day line says it (D-115): "kept for only “Essay”, “Maths revision” (done);

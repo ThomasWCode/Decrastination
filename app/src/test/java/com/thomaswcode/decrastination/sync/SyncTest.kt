@@ -12,6 +12,7 @@ import com.thomaswcode.decrastination.data.CalendarState
 import com.thomaswcode.decrastination.data.ChatMigration
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.OnlyMigration
+import com.thomaswcode.decrastination.data.OutsideMigration
 import com.thomaswcode.decrastination.data.SettingsMigration
 import com.thomaswcode.decrastination.data.RuntimeSplit
 import com.thomaswcode.decrastination.data.RuntimeState
@@ -55,7 +56,7 @@ class SyncTest {
     private val settings = JsonStore(File(dir, "settings.json"), Settings.serializer(), ::Settings, migrations = listOf(SettingsMigration.SETTINGS))
     private val runtime = JsonStore(File(dir, "runtime.json"), RuntimeState.serializer(), ::RuntimeState, migrations = listOf(ChatMigration.RUNTIME, RuntimeSplit.RUNTIME))
     private val calendar = JsonStore(File(dir, "calendar.json"), CalendarState.serializer(), ::CalendarState, migrations = listOf(RuntimeSplit.CALENDAR))
-    private val instructions = JsonStore(File(dir, "instructions.json"), InstructionState.serializer(), ::InstructionState, migrations = listOf(TasksMigration.INSTRUCTIONS, StepOrderMigration.INSTRUCTIONS, OnlyMigration.INSTRUCTIONS))
+    private val instructions = JsonStore(File(dir, "instructions.json"), InstructionState.serializer(), ::InstructionState, migrations = listOf(TasksMigration.INSTRUCTIONS, StepOrderMigration.INSTRUCTIONS, OnlyMigration.INSTRUCTIONS, OutsideMigration.INSTRUCTIONS))
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val ports = Ports()
 

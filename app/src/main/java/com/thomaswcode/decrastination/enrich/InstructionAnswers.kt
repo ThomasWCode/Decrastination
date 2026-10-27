@@ -3,6 +3,7 @@ package com.thomaswcode.decrastination.enrich
 import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.Change
 import com.thomaswcode.decrastination.core.ChangeType
+import com.thomaswcode.decrastination.core.DayBreaks
 import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.OwnStep
@@ -60,6 +61,8 @@ object InstructionAnswers {
         val lesson: String = "",
         /** A DayOnly's: what else its day lets in (D-115), empty for nothing. */
         val alsoAllow: String = "",
+        /** An OutsideAt's or a NoOutside's break, by its own time (HH:MM): empty, for a NoOutside, all of the day's (D-116). */
+        val outsideTime: String = "",
     ) {
         /** As given, but an empty string or a minutes of -1 is none: the schema has no nullable fields ([InstructionPrompts.CHANGE_FIELDS]). */
         fun normalised(): Given = copy(
@@ -84,7 +87,7 @@ object InstructionAnswers {
      * listed, the [events] too, and every date and time must read and be plausible. One change that
      * can't be made and none are: you're told why, and can write it again.
      */
-    fun parse(text: String, tasks: List<TaskItem>, events: List<CalendarEvent>, about: About, now: Long, zone: ZoneId): Reading {
+    fun parse(text: String, tasks: List<TaskItem>, events: List<CalendarEvent>, about: About, now: Long, zone: ZoneId, breaksOn: (LocalDate) -> DayBreaks = { DayBreaks.NONE }): Reading {
         val answer = runCatching { json.decodeFromString(Answer.serializer(), text) }.getOrNull()
             ?: return Reading.Unclear("Claude's answer couldn't be read")
         if (!answer.understood || answer.changes.isEmpty()) {
@@ -94,8 +97,10 @@ object InstructionAnswers {
         val byId = tasks.associateBy { it.id }
         // The event it's about counts even if it's past the fortnight read.
         val titles = events.associate { EventJudge.key(it) to it.title } + listOfNotNull(about.eventKey?.let { it to (about.eventTitle ?: it) })
+        // A day's breaks as the changes before each leave them (D-116), so one can use time another frees.
+        val breaks = Breaks(breaksOn)
         val changes = answer.changes.map(Given::normalised).map { g ->
-            change(g, byId, titles, now, zone) ?: return Reading.Unclear("Claude's reading couldn't be used: ${problem(g, byId, titles)}", answer.answersQuestion)
+            change(g, byId, titles, now, zone, breaks)?.also(breaks::take) ?: return Reading.Unclear("Claude's reading couldn't be used: ${problem(g, byId, titles, now, zone, breaks)}", answer.answersQuestion)
         }
         stepsProblem(changes, byId)?.let { return Reading.Unclear("Claude's reading couldn't be used: $it", answer.answersQuestion) }
         // Tasks waiting on each other in a circle within this one reading: none would ever be planned.
@@ -103,8 +108,11 @@ object InstructionAnswers {
         return Reading.Changes(changes, answer.answersQuestion)
     }
 
-    /** [g] as a change the app can make, checked against the [tasks] and [events] there are; null if it can't be. */
-    internal fun change(g: Given, tasks: Map<String, TaskItem>, events: Map<String, String>, now: Long, zone: ZoneId): Change? {
+    /**
+     * [g] as a change the app can make, checked against the [tasks] and [events] there are, and for a day's breaks outside
+     * against those it has ([breaksOn]); null if it can't be.
+     */
+    internal fun change(g: Given, tasks: Map<String, TaskItem>, events: Map<String, String>, now: Long, zone: ZoneId, breaksOn: (LocalDate) -> DayBreaks = { DayBreaks.NONE }): Change? {
         val type = ChangeType.entries.firstOrNull { it.name == g.type } ?: return null
         val task = g.taskId?.takeIf { it in tasks }
         return when (type) {
@@ -163,6 +171,31 @@ object InstructionAnswers {
                 val date = day(g.copy(weekday = null), now)?.first ?: return null
                 Change(type, taskId = id, date = date, alsoAllow = g.alsoAllow.trim().takeIf { it == InstructionRules.ALSO_ANKI || it == InstructionRules.ALSO_DEADLINES })
             }
+            // A day's breaks outside (D-116): on a date, never a weekday; one the day has, by the time it's named by (one of its
+            // own taken off, moved to put it back), not begun (D-113); a time today not gone, the break over by midnight, on its
+            // day; a break moved or added over none of the day's others, nor added at a time one is named by.
+            ChangeType.OutsideAt -> {
+                val date = day(g.copy(weekday = null), now)?.first ?: return null
+                val own = minute(g.outsideTime) ?: return null
+                val start = minute(g.time)?.takeIf { !gone(date, it, now, zone) } ?: return null
+                val breaks = breaksOn(LocalDate.parse(date))
+                if ((own !in breaks.at && own !in breaks.reserved) || own in breaks.begun || start + breaks.length > DAY_MIN || breaks.over(start, own)) return null
+                Change(type, date = date, outsideMin = own, startMin = start)
+            }
+            ChangeType.NoOutside -> {
+                val date = day(g.copy(weekday = null), now)?.first ?: return null
+                val own = g.outsideTime.filled()?.let { minute(it) ?: return null } ?: -1
+                val breaks = breaksOn(LocalDate.parse(date))
+                if (own >= 0 && (own !in breaks.at || own in breaks.begun)) return null
+                Change(type, date = date, outsideMin = own)
+            }
+            ChangeType.OutsideAdded -> {
+                val date = day(g.copy(weekday = null), now)?.first ?: return null
+                val start = minute(g.time)?.takeIf { !gone(date, it, now, zone) } ?: return null
+                val breaks = breaksOn(LocalDate.parse(date))
+                if (start in breaks.at || start in breaks.reserved || start + breaks.length > DAY_MIN || breaks.over(start)) return null
+                Change(type, date = date, startMin = start)
+            }
             // The same work as another listed task (DX-15), which is kept.
             ChangeType.SameAs -> task?.let { id -> g.afterTaskId?.takeIf { it in tasks && it != id }?.let { Change(type, taskId = id, afterTaskId = it) } }
             // A task's name in the app: not one derived from Anki's counts, whose name is their count.
@@ -214,7 +247,8 @@ object InstructionAnswers {
     }
 
     /** Why [g] couldn't be used, in words. */
-    internal fun problem(g: Given, tasks: Map<String, TaskItem>, events: Map<String, String>): String = when {
+    internal fun problem(g: Given, tasks: Map<String, TaskItem>, events: Map<String, String>, now: Long = 0, zone: ZoneId = ZoneId.of("UTC"), breaksOn: (LocalDate) -> DayBreaks = { DayBreaks.NONE }): String = when {
+        g.type in setOf("OutsideAt", "NoOutside", "OutsideAdded") -> breakProblem(g, now, zone, breaksOn)
         ChangeType.entries.none { it.name == g.type } -> "a change of a kind the app doesn't make"
         g.type in setOf("NotATask", "StartFrom", "DueBy", "Minutes", "After", "OnDay", "AtTime", "Steps", "SameAs", "Rename", "DayOnly") && g.taskId !in tasks -> "it names a task that isn't listed"
         g.type == "DayOnly" && g.date == null -> "a day only for some tasks takes a date"
@@ -226,6 +260,61 @@ object InstructionAnswers {
         g.type == "EventTime" && g.eventKey !in events -> "it names an event that isn't in the calendar"
         else -> "a date, time or number in it is out of range"
     }
+
+    /** Why a change to a day's breaks outside ([g]) couldn't be used, in words (D-116). */
+    private fun breakProblem(g: Given, now: Long, zone: ZoneId, breaksOn: (LocalDate) -> DayBreaks): String {
+        val date = day(g.copy(weekday = null), now)?.first ?: return "a day's breaks outside are changed on a date, never a weekday"
+        val breaks = breaksOn(LocalDate.parse(date))
+        val own = minute(g.outsideTime)
+        val start = minute(g.time)
+        return when {
+            g.type != "OutsideAdded" && g.outsideTime.isNotBlank() && own == null -> "the break's time doesn't read"
+            g.type != "OutsideAdded" && own != null && own !in breaks.at && !(g.type == "OutsideAt" && own in breaks.reserved) -> "there's no ${g.outsideTime.trim().take(5)} break outside that day"
+            g.type != "OutsideAdded" && own != null && own in breaks.begun -> "that break outside has begun, and is kept as it is"
+            g.type == "OutsideAt" && g.outsideTime.isBlank() -> "it doesn't say which break outside"
+            g.type != "NoOutside" && start == null -> "the time doesn't read"
+            g.type != "NoOutside" && start != null && gone(date, start, now, zone) -> "that time's gone"
+            g.type != "NoOutside" && start != null && start + breaks.length > DAY_MIN -> "a break outside is over by midnight, on its day"
+            g.type != "NoOutside" && start != null && breaks.over(start, own ?: -1) -> "it would be over another break outside"
+            g.type == "OutsideAdded" && start != null && (start in breaks.at || start in breaks.reserved) -> "a break outside of that day's is named by that time: move or put back that one instead"
+            else -> "a date, time or number in it is out of range"
+        }
+    }
+
+    /** A day's minutes: a break outside is over by its end. */
+    private const val DAY_MIN = 24 * 60
+
+    /** The most days of a stretch off school whose breaks an answer's changes after it are checked against. */
+    private const val MAX_DAYS_OFF = 60L
+
+    /**
+     * [breaksOn] as the changes kept so far leave each day's breaks (D-116, [take] each as it's kept), so one change of an answer can
+     * use time another frees: a break taken off, and another moved there.
+     */
+    internal class Breaks(private val breaksOn: (LocalDate) -> DayBreaks) : (LocalDate) -> DayBreaks {
+        private val days = HashMap<LocalDate, DayBreaks>()
+
+        override fun invoke(day: LocalDate): DayBreaks = days.getOrPut(day) { breaksOn(day) }
+
+        /** [change], kept: its day's breaks as it leaves them; a stretch of days off school, each with its breaks as a day off. */
+        fun take(change: Change) {
+            val day = change.date?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: return
+            if (change.type == ChangeType.NoSchool) {
+                val last = change.endDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: day
+                var d = day
+                while (d <= last && d <= day.plusDays(MAX_DAYS_OFF)) {
+                    days[d] = invoke(d).let { it.offSchool ?: it }
+                    d = d.plusDays(1)
+                }
+                return
+            }
+            days[day] = invoke(day).with(change)
+        }
+    }
+
+    /** Whether [minute] of [date] (YYYY-MM-DD) has gone by at [now]: the day's clock time, as the planner lays it, on a day the clocks change too. */
+    private fun gone(date: String, minute: Int, now: Long, zone: ZoneId): Boolean =
+        LocalDate.parse(date).atStartOfDay().plusMinutes(minute.toLong()).atZone(zone).toInstant().toEpochMilli() < now
 
     /** A day's date (YYYY-MM-DD) or weekday (1–7), one of the two. */
     private fun day(g: Given, now: Long): Pair<String?, Int?>? {

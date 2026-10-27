@@ -574,11 +574,13 @@ class Conversation(
             plan = ChatPrompts.plan(
                 plan, clock.zone(), keptToday.map { it.key to it.label }, focus.blockingLine(plan, now), focus.timer,
                 InstructionRules.onlyDays(applied, plan.today, plan.today.plusDays(ChatPrompts.PLAN_DAYS.toLong())).mapValues { ChatPrompts.onlyLine(it.value, byId) },
+                InstructionRules.outsideBy(applied, plan.today, plan.today.plusDays(ChatPrompts.PLAN_DAYS.toLong())),
             ),
             keepable = keepable,
             kept = keptToday.associate { it.key to it.taskId },
             lessons = lessons,
             waiting = waiting.mapTo(HashSet()) { it.id },
+            breaksOn = { planning.breaksOn(it, applied) },
         )
     }
 

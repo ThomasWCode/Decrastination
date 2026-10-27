@@ -246,6 +246,21 @@ class CalendarWriterTest {
     }
 
     @Test
+    fun `a break outside moved in the calendar is written back, and you're told it's moved by asking Felix (D-116)`() = runBlocking {
+        pickCalendar(7)
+        val made = plan(Slot(SlotKind.Outside, null, at("17:00"), at("17:20"), WindowKind.Evening, pinned = false, outsideAt = 17 * 60))
+        val uri = SlotCalendarDiff.desired(made, LONDON).single().uri
+        writer.watchCalendar()
+        writer.writeSlots(made)
+        calendar.move(uri, at("18:00"))
+        writer.writeSlots(made)
+        assertEquals(listOf(uri to "a break outside is moved by asking Felix"), refused)
+        assertEquals(at("17:00"), calendar.events.single().start, "written back")
+        assertEquals(emptyList(), changes)
+        assertEquals(mapOf(uri to at("17:00")), versions.value.calendarWritten)
+    }
+
+    @Test
     fun `a calendar no longer written to is cleared of the app's events and their copies, tried again till it is`() = runBlocking {
         pickCalendar(7)
         val made = plan(work(chunk("teams:essay", "Essay"), "17:00"))

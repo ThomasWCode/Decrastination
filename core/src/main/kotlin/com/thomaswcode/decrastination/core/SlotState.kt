@@ -23,7 +23,7 @@ data class SlotState(val date: String = "", val previous: Map<String, Long> = em
         val slots = plan.todaySlots
         val starts = slots.associate { it.key to it.start } +
             slots.filter { it.kind == SlotKind.Outside && it.start <= plan.now }.associate { Slot.endKey(it.key) to it.end }
-        val completed = previous.filter { (key, start) -> Slot.outsideAt(key) != null && start <= plan.now && key !in starts }
+        val completed = previous.filter { (key, start) -> Slot.isOutside(key) && start <= plan.now && key !in starts }
         val ends = completed.keys.associate { Slot.endKey(it) to (previous[Slot.endKey(it)] ?: plan.now) }
         return copy(previous = starts + completed + ends)
     }
@@ -34,7 +34,7 @@ data class SlotState(val date: String = "", val previous: Map<String, Long> = em
      */
     fun started(now: Long, graceMs: Long): Map<String, Long> {
         val gone = missed.map { it.key }.toSet()
-        return previous.filter { (key, start) -> key !in gone && !key.startsWith(Slot.OUTSIDE) && start + graceMs < now }
+        return previous.filter { (key, start) -> key !in gone && !Slot.isOutside(key) && !key.endsWith(Slot.endKey("")) && start + graceMs < now }
     }
 
     /** [key]'s slot missed at [at]: recorded once, and its start no longer kept, so it moves. */

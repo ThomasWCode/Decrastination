@@ -17,6 +17,7 @@ import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.DayBucket
 import com.thomaswcode.decrastination.core.Given
 import com.thomaswcode.decrastination.core.Instruction
+import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.InstructionStatus
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.MessageKind
@@ -580,12 +581,47 @@ class ChatTest {
         assertTrue("\nNow: 22:30–23:04 Bridge and Balances Beam Q's: part 1 of 3 (34 min); then " in text, text)
         assertFalse("Next to do" in text, text)
         // Today's slots each say whether they've gone by, are under way or are to come (AI-13).
-        assertTrue("Today's slots (the times its pieces are laid at):\n- 22:30–23:04 Bridge and Balances Beam Q's: part 1 of 3 (34 min) [now]" in text, text)
+        assertTrue("Today's slots (the times its pieces and breaks outside are laid at):\n- 22:30–23:04 Bridge and Balances Beam Q's: part 1 of 3 (34 min) [now]" in text, text)
         val earlier = slot.copy(start = now - 90 * 60_000L, end = now - 60 * 60_000L)
         val later = slot.copy(start = now + 30 * 60_000L, end = now + 64 * 60_000L)
         val day = ChatPrompts.plan(plan.copy(buckets = plan.buckets.mapIndexed { i, b -> if (i == 0) b.copy(slots = listOf(earlier, later)) else b }), LONDON)
         assertTrue("[past]" in day && "[ahead]" in day, day)
         assertTrue("a deadline later today is still ahead" in ChatPrompts.system())
+    }
+
+    @Test
+    fun `today's breaks outside are among its slots and the week's on their days, each by its own time and who moved or added it (D-116)`() {
+        fun outside(date: LocalDate, own: Int, start: String, added: Boolean = false) =
+            Slot(SlotKind.Outside, null, Fixtures.at("${date}T$start"), Fixtures.at("${date}T$start") + 20 * 60_000L, WindowKind.Evening, pinned = false, outsideAt = own, outsideAdded = added)
+        val saturday = today.plusDays(5)
+        val far = today.plusDays(8)
+        val slots = mapOf(
+            // Tonight: one over at 22:20, completed, and one you added at 23:00.
+            today to listOf(outside(today, 1320, "22:00", added = true), outside(today, 1380, "23:00", added = true)),
+            saturday to listOf(outside(saturday, 570, "09:30"), outside(saturday, 780, "14:30"), outside(saturday, 1020, "17:00", added = true)),
+            far to listOf(outside(far, 570, "09:30")),
+        )
+        val placed = mapOf("$today/outside+:1320" to By.You, "$today/outside+:1380" to By.You, "$saturday/outside:780" to By.Felix, "$saturday/outside+:1020" to By.You)
+        val text = ChatPrompts.plan(plan.copy(buckets = plan.buckets.map { b -> slots[b.date]?.let { b.copy(slots = it) } ?: b }), LONDON, placed = placed)
+        assertTrue("Today's slots (the times its pieces and breaks outside are laid at):\n- 23:00–23:20 Outside, the 23:00 break, added by them [ahead]\n" in text, text)
+        assertFalse("22:00–22:20" in text, text)
+        assertTrue("\n- Saturday 17 October 2026: nothing planned (315 min of working time); breaks outside: 09:30 (the 09:30 break), 14:30 (the 13:00 break, moved by you), 17:00 (the 17:00 break, added by them)\n" in text, text)
+        // Past the week: not said.
+        assertTrue("\n- Tuesday 20 October 2026: nothing planned (315 min of working time)\n" in text, text)
+    }
+
+    @Test
+    fun `his changes to a day's breaks are kept where the day has the break and the time's free, else left out and said (D-116)`() {
+        val context = ChatPrompts.Context("", "", breaksOn = { day -> InstructionRules.dayBreaks(day, Settings(), day.dayOfWeek.value >= 6, emptyList()) })
+        fun one(change: String) = ChatAnswers.parse("""{"reply":"Done.","newTasks":[],"changes":[$change]}""", listOf(bridge), emptyList(), About(), now, LONDON, context = context)!!
+        assertEquals(listOf(Change(ChangeType.OutsideAt, date = "2026-10-17", outsideMin = 780, startMin = 870)), one("""{"type":"OutsideAt","date":"2026-10-17","time":"14:30","outsideTime":"13:00"}""").changes)
+        assertEquals(listOf("a change (there's no 12:00 break outside that day)"), one("""{"type":"OutsideAt","date":"2026-10-17","time":"14:30","outsideTime":"12:00"}""").leftOut)
+        assertEquals(listOf("a change (it would be over another break outside)"), one("""{"type":"OutsideAdded","date":"2026-10-17","time":"16:10"}""").leftOut)
+        assertEquals(listOf("a change (a day's breaks outside are changed on a date, never a weekday)"), one("""{"type":"NoOutside","weekday":"Saturday","outsideTime":"13:00"}""").leftOut)
+        // His skip of the 13:00 and a move of the 16:00 there, in one answer: both kept.
+        val both = one("""{"type":"NoOutside","date":"2026-10-17","outsideTime":"13:00"},{"type":"OutsideAt","date":"2026-10-17","time":"13:00","outsideTime":"16:00"}""")
+        assertEquals(emptyList(), both.leftOut)
+        assertEquals(2, both.changes.size)
     }
 
     @Test

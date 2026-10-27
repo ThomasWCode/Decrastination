@@ -151,8 +151,9 @@ object SlotCalendarDiff {
             val event = there[want.uri]?.first()
             when {
                 event == null -> inserts += want
-                // Moved by hand: not where it was written, nor where the plan has it now.
-                want.taskId != null && written[want.uri]?.let { it != event.start } == true && event.start != want.start -> moves += HandMove(event, want)
+                // Moved by hand: not where it was written, nor where the plan has it now. A break outside's too, which the
+                // writer puts back (D-116).
+                written[want.uri]?.let { it != event.start } == true && event.start != want.start -> moves += HandMove(event, want)
                 event.start != want.start || event.end != want.end || event.title != want.title || event.description != want.description -> updates += Update(event, want)
             }
         }

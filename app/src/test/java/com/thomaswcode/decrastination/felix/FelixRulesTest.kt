@@ -8,6 +8,7 @@ import com.thomaswcode.decrastination.core.FelixAnswer
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Planner
+import com.thomaswcode.decrastination.core.Slot
 import com.thomaswcode.decrastination.core.SlotKind
 import com.thomaswcode.decrastination.core.Slotter
 import com.thomaswcode.decrastination.core.Source
@@ -341,6 +342,16 @@ class FelixRulesTest {
         assertFalse("imer" in FelixPrompts.describe(Reason.SlotStart, plan, first, null, emptyList(), emptyList(), null, settings, now, LONDON, timer = running.copy(stoppedAt = now)))
         val chat = ChatPrompts.plan(plan.copy(now = now), LONDON, timer = running)
         assertTrue(", timer on it since 17:02, 20 min left" in chat.lines().first { it.startsWith("Now: ") }, chat)
+    }
+
+    @Test
+    fun `a look of his is told today's breaks outside under way or to come (D-116)`() {
+        val outside = Slot(SlotKind.Outside, null, at("18:00"), at("18:20"), WindowKind.Evening, pinned = false, outsideAt = 18 * 60, outsideAdded = true)
+        val withBreak = plan.copy(buckets = plan.buckets.map { if (it.date == monday) it.copy(slots = (it.slots + outside).sortedBy { s -> s.start }) else it })
+        fun told(now: String) = FelixPrompts.describe(Reason.Completions, withBreak, null, null, emptyList(), emptyList(), null, settings, at(now), LONDON).lines().filter { it.startsWith("Breaks outside today: ") }
+        assertEquals(listOf("Breaks outside today: 18:00–18:20"), told("17:12"))
+        assertEquals(listOf("Breaks outside today: 18:00–18:20 (under way)"), told("18:05"))
+        assertEquals(emptyList(), told("18:25"))
     }
 
     @Test

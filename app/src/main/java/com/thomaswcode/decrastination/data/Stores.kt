@@ -57,10 +57,10 @@ class Stores(
     val log = store("log.json", ActivityLog.serializer(), ::ActivityLog, migrations = listOf(ChatMigration.LOG, MemoryMigration.LOG, CreditMigration.LOG))
 
     /** Your instructions about tasks, events and days, and what Claude read them as. */
-    val instructions = store("instructions.json", InstructionState.serializer(), ::InstructionState, migrations = listOf(TasksMigration.INSTRUCTIONS, StepOrderMigration.INSTRUCTIONS, OnlyMigration.INSTRUCTIONS), onWrite = InstructionState::withStepIds)
+    val instructions = store("instructions.json", InstructionState.serializer(), ::InstructionState, migrations = listOf(TasksMigration.INSTRUCTIONS, StepOrderMigration.INSTRUCTIONS, OnlyMigration.INSTRUCTIONS, OutsideMigration.INSTRUCTIONS), onWrite = InstructionState::withStepIds)
 
     /** Your chat with Felix, the live window of it: every message of his and yours, what became of his cards, and his state. */
-    val chat = store("chat.json", ChatState.serializer(), ::ChatState, migrations = listOf(ChatMigration.CHAT, TasksMigration.CHAT, FelixStore.CHAT, FelixStore.CHAT_PIECES, MemoryMigration.CHAT, StepOrderMigration.CHAT, OnlyMigration.CHAT))
+    val chat = store("chat.json", ChatState.serializer(), ::ChatState, migrations = listOf(ChatMigration.CHAT, TasksMigration.CHAT, FelixStore.CHAT, FelixStore.CHAT_PIECES, MemoryMigration.CHAT, StepOrderMigration.CHAT, OnlyMigration.CHAT, OutsideMigration.CHAT))
 
     /**
      * The chat's messages past its window, oldest first, a month a file: each read only when it's wanted

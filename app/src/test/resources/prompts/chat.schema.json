@@ -114,6 +114,9 @@
                             "SameAs",
                             "Rename",
                             "DayOnly",
+                            "OutsideAt",
+                            "NoOutside",
+                            "OutsideAdded",
                             "Remind",
                             "Note"
                         ]
@@ -219,6 +222,10 @@
                             "anki-deadlines"
                         ]
                     },
+                    "outsideTime": {
+                        "type": "string",
+                        "description": "HH:MM, 24-hour, or empty"
+                    },
                     "paced": {
                         "type": "boolean"
                     },
@@ -241,6 +248,7 @@
                     "title",
                     "steps",
                     "alsoAllow",
+                    "outsideTime",
                     "paced",
                     "lesson"
                 ],
