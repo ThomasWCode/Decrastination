@@ -1723,6 +1723,17 @@ class PlannerTest {
     }
 
     @Test
+    fun `overdue work goes on to a day with room where a break you placed fills today's time (D-116)`() {
+        // Monday 17:00, a 20-minute window today and tomorrow, a break added over all of today's: a 10-minute task overdue goes tomorrow.
+        val monday = tuesday.minusDays(1)
+        val window = listOf(DayWindow(17 * 60, 17 * 60 + 20, WindowKind.Evening))
+        val late = task("late", Fixtures.at("2026-10-11T23:59"), effort = 10)
+        val plan = Planner.plan(windowed(listOf(late), "2026-10-12T17:00", windows = mapOf(monday to window, tuesday to window)).copy(outsideDays = mapOf(monday to OutsideDay(added = listOf(17 * 60)))))
+        assertTrue(plan.bucket(monday)!!.chunks.none { it.taskId == late.id })
+        assertTrue(plan.bucket(tuesday)!!.slots.any { it.chunk?.taskId == late.id })
+    }
+
+    @Test
     fun `a break outside you placed comes off the day's time before its learned yield, as busy time would (D-116)`() {
         // Tuesday's hour-long evening, worked at half its time as learned, a break added at 17:20: as much as the same 20
         // minutes busy would leave, 20 minutes.

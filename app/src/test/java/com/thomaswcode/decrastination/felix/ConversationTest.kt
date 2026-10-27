@@ -180,6 +180,10 @@ class ConversationTest {
             assertEquals(13 * 60 + 30, breaks.at[780])
             assertTrue(breaks.over(13 * 60 + 40))
             assertTrue(780 in breaks.begun)
+            // A school day's breaks were it made a day off, for a change after one in the same answer.
+            val tuesday = LocalDate.parse("2026-10-27")
+            assertEquals(emptyMap(), h.planning.breaksOn(tuesday).at)
+            assertEquals(setOf(570, 780, 960), h.planning.breaksOn(tuesday).offSchool?.at?.keys)
         }
     }
 

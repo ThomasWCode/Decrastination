@@ -813,6 +813,13 @@ class InstructionRulesTest {
         // A break at 23:50 would run past midnight: refused, said.
         assertEquals("Claude's reading couldn't be used: a break outside is over by midnight, on its day", assertIs<InstructionAnswers.Reading.Unclear>(read("""{"type":"OutsideAdded","date":"2026-10-10","time":"23:50"}""")).why)
         assertEquals(DayBreaks(mapOf(570 to 570), 20).with(Change(ChangeType.OutsideAdded, date = "2026-10-10", startMin = 1020)), DayBreaks(mapOf(570 to 570, 1020 to 1020), 20))
+        // A day made off school earlier in the answer has its breaks for the changes after it.
+        val school: (LocalDate) -> DayBreaks = { day -> InstructionRules.dayBreaks(day, Settings(), false, emptyList()).copy(offSchool = InstructionRules.dayBreaks(day, Settings(), true, emptyList())) }
+        val offSchool = InstructionAnswers.parse(
+            """{"understood":true,"question":null,"changes":[{"type":"NoSchool","date":"2026-10-13","endDate":"2026-10-13"},{"type":"OutsideAt","date":"2026-10-13","time":"14:00","outsideTime":"13:00"}]}""",
+            listOf(essay, prep), listOf(drums), About(), now, LONDON, school,
+        )
+        assertEquals(listOf(ChangeType.NoSchool, ChangeType.OutsideAt), assertIs<InstructionAnswers.Reading.Changes>(offSchool).changes.map { it.type })
         // A break begun stays whatever's taken off (D-113), so one added over it in the same answer is still refused.
         val begun: (LocalDate) -> DayBreaks = { day -> weekend(day).copy(begun = setOf(780)) }
         val over = InstructionAnswers.parse(

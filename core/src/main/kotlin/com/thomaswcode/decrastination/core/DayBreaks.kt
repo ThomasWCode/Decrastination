@@ -4,10 +4,18 @@ package com.thomaswcode.decrastination.core
  * A day's breaks outside as a change to them is checked (D-116): each by the time it's named by (a settings break's own
  * time, an added one's minute), [at] the minute it starts now (moved or not), each [length] minutes long; today's [begun]
  * by those names, kept as laid whatever's asked of them (D-113); and the times the day's own are named by, taken off or
- * not ([reserved]: its settings' on a day with breaks), which no break added may be; and where one under way ends ([ends]), as it
- * was laid, rather than its [length] on.
+ * not ([reserved]: its settings' on a day with breaks), which no break added may be; where one under way ends ([ends]), as it
+ * was laid, rather than its [length] on; and, on a school day, its breaks were it a day off ([offSchool]), for a change after
+ * one that makes it so in the same answer.
  */
-data class DayBreaks(val at: Map<Int, Int>, val length: Int, val begun: Set<Int> = emptySet(), val reserved: Set<Int> = emptySet(), val ends: Map<Int, Int> = emptyMap()) {
+data class DayBreaks(
+    val at: Map<Int, Int>,
+    val length: Int,
+    val begun: Set<Int> = emptySet(),
+    val reserved: Set<Int> = emptySet(),
+    val ends: Map<Int, Int> = emptyMap(),
+    val offSchool: DayBreaks? = null,
+) {
     /** As [change], one to the day's breaks, leaves them: a break moved, put back or added at its time, one or all (but those begun) taken off. */
     fun with(change: Change): DayBreaks = when (change.type) {
         ChangeType.OutsideAt -> change.startMin?.let { copy(at = at + (change.outsideMin to it)) } ?: this
