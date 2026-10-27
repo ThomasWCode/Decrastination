@@ -1759,6 +1759,30 @@ class PlannerTest {
     }
 
     @Test
+    fun `home work pinned at school after work there pushes that work into the evening, which home work after it can't then use`() {
+        // Tuesday 08:00: 30 minutes at school and 30 in the evening. Work that can go anywhere, put on today and due tonight,
+        // is placed first and takes school's; then home work pinned at 14:00 takes that school time, so the first goes in the
+        // evening, and home work due tomorrow has no room today.
+        val day = mapOf(tuesday to listOf(DayWindow(14 * 60, 14 * 60 + 30, WindowKind.Study), DayWindow(17 * 60, 17 * 60 + 30, WindowKind.Evening)))
+        val anywhere = task("anywhere", Fixtures.at("2026-10-13T23:59"), effort = 30).copy(source = Source.PowerPlanner).yours(onDay = "2026-10-13")
+        val pinned = task("pinned", Fixtures.at("2026-10-18T23:59"), effort = 30).yours(atTime = Fixtures.at("2026-10-13T14:00"))
+        val later = task("later", Fixtures.at("2026-10-14T23:59"), effort = 30)
+        val plan = Planner.plan(windowed(listOf(anywhere, pinned, later), "2026-10-13T08:00", windows = day))
+        val today = plan.todayBucket!!
+        assertTrue(today.unslotted.all { it.behind || it.overdue }, "${today.unslotted.map { it.key to it.behind }}")
+        assertEquals(Fixtures.at("2026-10-13T14:00"), today.slotOf(plan.chunksOf("teams:pinned").single())!!.start)
+    }
+
+    @Test
+    fun `a pin kept before its deadline outside the day's free time isn't said not to fit`() {
+        // Tuesday 22:30, the evening gone: a half hour pinned at 23:00, due 23:59.
+        val late = task("late", Fixtures.at("2026-10-13T23:59"), effort = 30).yours(atTime = Fixtures.at("2026-10-13T23:00"))
+        val plan = Planner.plan(windowed(listOf(late), "2026-10-13T22:30"))
+        assertEquals(Fixtures.at("2026-10-13T23:00"), plan.todayBucket!!.slotOf(plan.chunksOf("teams:late").single())!!.start)
+        assertEquals(emptyList(), plan.wontFit)
+    }
+
+    @Test
     fun `a time you give counts all its minutes against a limit you set on its day (D-114)`() {
         // Tuesday limited to an hour: a half hour pinned at 23:00 leaves 30 of it, so a 45-minute piece put on Tuesday has no room there.
         val limited = windowed(emptyList(), "2026-10-12T17:00").copy(dayCaps = mapOf(tuesday to 60))

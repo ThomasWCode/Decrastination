@@ -537,8 +537,9 @@ object Planner {
             capLeft[day]?.let { capLeft[day] = it - whole }
             if (span != null) outsidePlaced[day] = (outsidePlaced[day] ?: 0) + span.outside
             val school = (free.getValue(day) - freeHome.getValue(day)).coerceAtLeast(0)
-            // A pin's, where it is: its part in the evening (D-114).
-            val home = span?.evening ?: if (item.chunks[piece].where == Where.Home) minutes else (minutes - school).coerceAtLeast(0)
+            // A pin's, where it is (D-114): its part in the evening, and of its part at school whatever school's time left
+            // doesn't hold, as work laid there before it now goes in the evening.
+            val home = span?.let { it.evening + (it.school - school).coerceAtLeast(0) } ?: if (item.chunks[piece].where == Where.Home) minutes else (minutes - school).coerceAtLeast(0)
             if (item.hard && day == date(item.deadline, zone)) {
                 onDueDay[item] = (onDueDay[item] ?: 0) + minutes
                 onDueDayHome[item] = (onDueDayHome[item] ?: 0) + home
@@ -622,7 +623,10 @@ object Planner {
             // start; on its deadline's own day, only the time before the deadline.
             return generateSequence(from) { it.plusDays(1) }.takeWhile { it <= last }.sumOf { day ->
                 val room = room(item, day).coerceAtLeast(0)
-                if (day == dueDay) minOf(room, capacityBefore(day, item.deadline, input)) else room
+                // Its pins kept at their time that day: their part outside its free time is theirs as well (D-114), and before
+                // the deadline, as a pin kept is over by it.
+                val pinned = item.chunks.indices.sumOf { spanOf(item, day, it)?.outside ?: 0 }
+                (if (day == dueDay) minOf(room, capacityBefore(day, item.deadline, input)) else room) + pinned
             }
         }
         /** [item]'s deadline is within the plan's reach: only then were all its days before it counted. */
