@@ -87,6 +87,12 @@ object SlotCalendarDiff {
         return ((kept - fresh.toSet()) + fresh).takeLast(MAX_VERSIONS)
     }
 
+    /**
+     * How long after the app writes an event the calendar's sync may still bring back a version it was sending: an event found
+     * at one the app wrote that recently is the sync's echo of the app's own write, not your move (Q93).
+     */
+    const val ECHO_MS = 10 * 60_000L
+
     data class Update(val existing: Existing, val desired: Desired)
 
     /** A piece's event you moved: [existing] at your time, [desired] where the plan has it. */
@@ -165,10 +171,11 @@ object SlotCalendarDiff {
     }
 
     /**
-     * [desired] against the app's [existing] events, [written] holding each URI's start as the app last wrote it; [edited] whether
-     * an event is in a version the app never wrote, so changed by hand.
+     * [desired] against the app's [existing] events, [written] holding each URI's start as the app last wrote it; [echo] whether
+     * an event is at a version the app wrote moments before ([ECHO_MS]), brought back by the sync; [edited] whether an event is
+     * in a version the app never wrote, so changed by hand.
      */
-    fun diff(desired: List<Desired>, existing: List<Existing>, written: Map<String, Long>, edited: (Existing) -> Boolean = { false }): Diff {
+    fun diff(desired: List<Desired>, existing: List<Existing>, written: Map<String, Long>, echo: (Existing) -> Boolean = { false }, edited: (Existing) -> Boolean = { false }): Diff {
         // Copies that have lost the app's marks: found by their words alone, and deleted.
         val copies = existing.filterNot { it.marked }
         val there = existing.filter { it.marked }.groupBy { it.uri }
@@ -187,8 +194,9 @@ object SlotCalendarDiff {
                     if (want.busy && want.uri in written) restored += want
                 }
                 // Moved by hand: not where it was written, nor where the plan has it now. A break outside's too, which the
-                // writer puts back (D-116).
-                written[want.uri]?.let { it != event.start } == true && event.start != want.start -> moves += HandMove(event, want)
+                // writer puts back (D-116). Not one the sync brought back to a time the app wrote moments before, as it was
+                // still sending that when the app wrote the next (Q93): the app's own, written back below.
+                written[want.uri]?.let { it != event.start } == true && event.start != want.start && !echo(event) -> moves += HandMove(event, want)
                 event.start != want.start || event.end != want.end || event.title != want.title || event.description != want.description -> {
                     updates += Update(event, want)
                     // A busy time's event changed by hand, its start left: put back as it was, and said (D-117).

@@ -177,10 +177,14 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
     }
     val snackbar = remember { SnackbarHostState() }
     val grid = rememberScrollState()
+    // On its side the Day scrolls as one, [page] its scroll (Q94).
+    val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+    val page = rememberScrollState()
     val drag = remember { DayDrag() }
     val density = LocalDensity.current
 
-    // While a piece is dragged near the grid's top or bottom, the grid scrolls, up to 12 dp a frame.
+    // While a piece is dragged near the grid's top or bottom, the grid scrolls, up to 12 dp a frame. On its side, held at or
+    // above the grid's top once that's at midnight, the Day's page comes back, the strip with it, so a day can be dropped on.
     LaunchedEffect(drag.active) {
         val edge = with(density) { 48.dp.toPx() }
         val step = with(density) { 12.dp.toPx() }
@@ -188,6 +192,7 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
             val y = drag.finger.y
             when {
                 drag.dayUnder() != null -> Unit
+                landscape && grid.value == 0 && y < drag.gridTop + edge && page.value > 0 -> page.dispatchRawDelta(-step)
                 y in drag.gridTop..(drag.gridTop + edge) -> grid.dispatchRawDelta(-step * (1f - (y - drag.gridTop) / edge))
                 y in (drag.gridBottom - edge)..drag.gridBottom -> grid.dispatchRawDelta(step * (1f - (drag.gridBottom - y) / edge))
             }
@@ -271,7 +276,6 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
 
     // Today's DO NOW card folds into a line as the grid scrolls on to later hours, and unfolds as it scrolls back, or at a tap
     // on the folded line; in landscape it starts folded, so the grid has room.
-    val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
     var cardFull by remember { mutableIntStateOf(0) }
     // The card's cap (below) in pixels, as last laid out: the card folds from what it shows unfolded, its height or that cap.
     var cardCap by remember { mutableFloatStateOf(Float.MAX_VALUE) }
@@ -291,6 +295,14 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
 
     var rootAt by remember { mutableStateOf(Offset.Zero) }
     val card = rememberScrollState()
+    // On its side there's no room for the grid under what's above it, so the Day scrolls as one (Q94): what's above goes first
+    // as the grid scrolls on to later hours, and slides back in first as it scrolls back, as the card folds upright (Q95).
+    val collapsing = remember {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset =
+                Offset(0f, -page.dispatchRawDelta(-available.y))
+        }
+    }
     // What's above the grid besides the card, measured: the hints and the strip, and the day's header and its all-day chips.
     var aboveCard by remember { mutableIntStateOf(0) }
     var belowCard by remember { mutableIntStateOf(0) }
@@ -299,7 +311,9 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
         // scrolling within that; only its line where there's no room for it.
         val cap = maxHeight - MIN_GRID - with(density) { (aboveCard + belowCard).toDp() }
         SideEffect { cardCap = with(density) { cap.toPx() } }
-        Column(Modifier.fillMaxSize()) {
+        // The Day's height: on its side, the grid's.
+        val tall = maxHeight
+        Column(if (landscape) Modifier.fillMaxSize().verticalScroll(page) else Modifier.fillMaxSize()) {
             Column(Modifier.onSizeChanged { aboveCard = it.height }) {
                 Hint(graph, "day", "Day is when: today's slots as they come, and the week's days above. Work is what: every task, on the next tab.")
                 Hint(graph, "day-drag", "Hold a piece to move it: drag it to a time, or onto a day above.")
@@ -307,9 +321,9 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
             }
             if (today) {
                 val unread = Source.SYNCED.filter { tasks.status(it).lastSuccessAt == null }
-                // With no room for the card, it stays its line, and a tap on the line opens the piece's sheet (the card's
-                // actions) instead of unfolding it.
-                val roomless = cap < 40.dp
+                // With no room for the card, or on its side (Q92), it stays its line, and a tap on the line opens the piece's
+                // sheet (the card's actions) instead of unfolding it.
+                val roomless = landscape || cap < 40.dp
                 val folded = (cardFull > 0 && fold >= foldMax - 1f) || roomless
                 if (folded) {
                     val doing = plan.slotAt(plan.now)?.chunk ?: plan.next
@@ -355,7 +369,8 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
                 { messageOf(it) }, drag, actions,
                 onZoom = { hourDp -> scope.launch { graph.protection.changeSettings { it.copy(dayHourDp = hourDp) } } },
                 // The fold takes the grid's scrolls alone, on today only: another day has no card, and the card's own don't fold it.
-                modifier = Modifier.weight(1f).then(if (today) Modifier.nestedScroll(folding) else Modifier),
+                // On its side the grid is the Day's height, under what's above it, and its scrolls take that away first.
+                modifier = if (landscape) Modifier.height(tall).nestedScroll(collapsing) else Modifier.weight(1f).then(if (today) Modifier.nestedScroll(folding) else Modifier),
             )
         }
 
