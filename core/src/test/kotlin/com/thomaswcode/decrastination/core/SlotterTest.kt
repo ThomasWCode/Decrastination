@@ -267,6 +267,21 @@ class SlotterTest {
     }
 
     @Test
+    fun `a break outside begun keeps its end as it was laid, whatever its length becomes`() {
+        val day = listOf(w("08:30", "22:30"))
+        // Laid 13:00 to 13:20; its length then raised to 30, or cut to 10.
+        val kept = mapOf("outside:780" to Fixtures.at("2026-10-17T13:00"), "outside:780-end" to Fixtures.at("2026-10-17T13:20"))
+        fun laid(now: String, minutes: Int) =
+            Slotter.slot(LocalDate.parse(saturday), emptyList(), day, emptyList(), emptyMap(), kept, Fixtures.at(now), LONDON, settings.copy(outsideBreakMin = minutes), true) { null }.first
+                .filter { it.outsideAt == 780 }.described()
+        // Completed at 13:20: not brought back by a longer length.
+        assertEquals(emptyList(), laid("2026-10-17T13:25", 30))
+        // Under way: not ended early by a shorter one, nor made longer.
+        assertEquals(listOf("outside 13:00–13:20"), laid("2026-10-17T13:15", 10))
+        assertEquals(listOf("outside 13:00–13:20"), laid("2026-10-17T13:15", 30))
+    }
+
+    @Test
     fun `a break outside under way is kept though the work would give it up, and with no breaks to come`() {
         val day = listOf(w("08:30", "22:30"))
         val kept = mapOf("outside:780" to Fixtures.at("2026-10-17T13:00"))

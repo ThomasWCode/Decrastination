@@ -241,6 +241,12 @@ data class Slot(
 
         /** The own time of the break outside [key] names; null for a piece's. */
         fun outsideAt(key: String): Int? = if (key.startsWith(OUTSIDE)) key.removePrefix(OUTSIDE).toIntOrNull() else null
+
+        /**
+         * Where a break outside's end is kept beside its start ([SlotState.laid]) once it's begun: its end as it was laid,
+         * so a length changed after it began neither brings it back once completed nor ends it early (D-113).
+         */
+        fun endKey(key: String): String = "$key-end"
     }
 }
 

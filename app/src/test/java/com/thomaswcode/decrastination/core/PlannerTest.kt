@@ -861,8 +861,12 @@ class PlannerTest {
         }
         val before = "outside 13:00, a 13:20, b 13:55, outside 16:00"
         assertEquals(listOf(before, before, before, "a 13:20, b 13:55, outside 16:00"), laid)
-        // Completed, it stays kept so, and isn't laid again from now.
+        // Completed, it stays kept so, with its end as it was laid, and isn't laid again from now...
         assertEquals(Fixtures.at("2026-10-17T13:00"), kept.previous["outside:780"])
+        assertEquals(Fixtures.at("2026-10-17T13:20"), kept.previous["outside:780-end"])
+        // ...nor brought back by breaks made longer since.
+        val longer = Planner.plan(windowed(tasks, "2026-10-17T13:26", windows = day).copy(settings = settings.copy(outsideBreakMin = 30), previousSlots = kept.previous))
+        assertTrue(longer.todaySlots.none { it.outsideAt == 780 })
     }
 
     // --- Pins: a day, a time (PL-04) ---

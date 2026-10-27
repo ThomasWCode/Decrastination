@@ -53,13 +53,17 @@ object Slotter {
     ): Pair<List<Slot>, List<Chunk>> {
         val length = settings.outsideBreakMin * MINUTE
         val day = at(date, 0, zone) until at(date.plusDays(1), 0, zone)
-        // The breaks outside a plan laid today that have begun, by their own time (D-113): one under way laid at
-        // its start, whatever the free time and the settings now say, never given up for work; one over, completed,
+        // The breaks outside a plan laid today that have begun, by their own time (D-113), each to its end as it was
+        // laid ([Slot.endKey]), or by its length now where no plan laid it under way: one under way laid at its start
+        // till then, whatever the free time and the settings now say, never given up for work; one over, completed,
         // never laid again that day. Each counts towards `outsideBreaks`.
-        val begun = previous.mapNotNull { (key, start) -> Slot.outsideAt(key)?.takeIf { start in day && start <= now }?.let { it to start } }.toMap()
-        val underWay = begun.filterValues { it + length > now }.map { (minute, start) ->
+        val begun = previous.mapNotNull { (key, start) ->
+            Slot.outsideAt(key)?.takeIf { start in day && start <= now }?.let { it to (start to (previous[Slot.endKey(key)] ?: (start + length))) }
+        }.toMap()
+        val underWay = begun.filterValues { (_, end) -> end > now }.map { (minute, span) ->
+            val (start, end) = span
             val window = windows.firstOrNull { at(date, it.startMin, zone) <= start && start < at(date, it.endMin, zone) }?.kind ?: WindowKind.Evening
-            Slot(SlotKind.Outside, null, start, start + length, window, pinned = false, outsideAt = minute)
+            Slot(SlotKind.Outside, null, start, end, window, pinned = false, outsideAt = minute)
         }
         fun around(breaks: List<Slot>) = lay(date, chunks, windows, busy, pins, previous, now, zone, settings, underWay + breaks, deadlineMinOf)
         // Those still to come: as many as `outsideBreaks` leaves, those begun counted.
