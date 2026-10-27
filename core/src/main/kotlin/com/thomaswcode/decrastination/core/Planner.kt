@@ -412,15 +412,21 @@ object Planner {
         }
         val exactPins: Set<String> = keptPins.mapTo(HashSet()) { it.first }
         // The breaks outside you or Felix placed, kept at their time (D-116): never given up for work, so their part within a
-        // day's free time is none of the work's, there as a pin's is another's; nor is it the day's free time as shown.
-        val breaksPlaced = HashMap<LocalDate, Int>()
+        // day's free time is none of the work's, there as a pin's is another's; nor is it the day's free time as shown. Off the
+        // day's time itself, before a limit you set, which is of work, as a break isn't.
+        val breaksIn = HashMap<LocalDate, PinSpan>()
         for ((key, span) in keptPins) {
             if (!Slot.isOutside(key.substringAfter('/'))) continue
             val day = date(span.first, zone).takeIf { it in free } ?: continue
             val inside = pinSpan(day, span.first, ((span.second - span.first) / 60_000L).toInt(), input)
-            free[day] = free.getValue(day) - inside.school - inside.evening
-            freeHome[day] = freeHome.getValue(day) - inside.evening
-            breaksPlaced[day] = (breaksPlaced[day] ?: 0) + inside.school + inside.evening
+            breaksIn[day] = breaksIn[day]?.let { PinSpan(0, it.school + inside.school, it.evening + inside.evening) } ?: inside
+        }
+        val breaksPlaced = HashMap<LocalDate, Int>()
+        for ((day, inside) in breaksIn) {
+            val whole = capacityOf(day, input.copy(dayCaps = emptyMap()))
+            free[day] = minOf(free.getValue(day), whole.anyMin - inside.school - inside.evening)
+            freeHome[day] = minOf(freeHome.getValue(day), whole.homeMin - inside.evening)
+            breaksPlaced[day] = capacity.getValue(day) - free.getValue(day)
         }
         // Each day's time taken by pins kept on a day before it that run past midnight into it, as busy time: its own
         // slotting knows nothing else of them, and nothing else is laid there.

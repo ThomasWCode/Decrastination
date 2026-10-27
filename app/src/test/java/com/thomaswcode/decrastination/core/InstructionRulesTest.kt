@@ -813,6 +813,13 @@ class InstructionRulesTest {
         // A break at 23:50 would run past midnight: refused, said.
         assertEquals("Claude's reading couldn't be used: a break outside is over by midnight, on its day", assertIs<InstructionAnswers.Reading.Unclear>(read("""{"type":"OutsideAdded","date":"2026-10-10","time":"23:50"}""")).why)
         assertEquals(DayBreaks(mapOf(570 to 570), 20).with(Change(ChangeType.OutsideAdded, date = "2026-10-10", startMin = 1020)), DayBreaks(mapOf(570 to 570, 1020 to 1020), 20))
+        // A break begun stays whatever's taken off (D-113), so one added over it in the same answer is still refused.
+        val begun: (LocalDate) -> DayBreaks = { day -> weekend(day).copy(begun = setOf(780)) }
+        val over = InstructionAnswers.parse(
+            """{"understood":true,"question":null,"changes":[{"type":"NoOutside","date":"2026-10-10","outsideTime":""},{"type":"OutsideAdded","date":"2026-10-10","time":"13:10"}]}""",
+            listOf(essay, prep), listOf(drums), About(), Fixtures.at("2026-10-10T13:05"), LONDON, begun,
+        )
+        assertEquals("Claude's reading couldn't be used: it would be over another break outside", assertIs<InstructionAnswers.Reading.Unclear>(over).why)
     }
 
     @Test

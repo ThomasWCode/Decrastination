@@ -1723,6 +1723,15 @@ class PlannerTest {
     }
 
     @Test
+    fun `a break outside you placed comes off the day's time, not off a limit you set, which is of work (D-116)`() {
+        // Tuesday's evening of four hours, limited to 30 minutes, a break added at 18:00: still 30 minutes of work there.
+        val evening = mapOf(tuesday to listOf(DayWindow(17 * 60, 21 * 60, WindowKind.Evening)))
+        val half = task("half", Fixtures.at("2026-10-14T23:59"), effort = 30)
+        val input = windowed(listOf(half), "2026-10-12T17:00", windows = evening).copy(dayCaps = mapOf(tuesday to 30), outsideDays = mapOf(tuesday to OutsideDay(added = listOf(18 * 60))))
+        assertEquals(30, Planner.plan(input).bucket(tuesday)!!.capacityMin)
+    }
+
+    @Test
     fun `a time you give outside the day's free time takes none of it, the day's free time shown more by it (D-114)`() {
         // Monday 17:00; on Tuesday, work for home filling all of its evening, put on Tuesday.
         val base = windowed(emptyList(), "2026-10-12T17:00")
