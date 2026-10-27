@@ -177,10 +177,14 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
     }
     val snackbar = remember { SnackbarHostState() }
     val grid = rememberScrollState()
+    // On its side the Day scrolls as one, [page] its scroll (Q94).
+    val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+    val page = rememberScrollState()
     val drag = remember { DayDrag() }
     val density = LocalDensity.current
 
-    // While a piece is dragged near the grid's top or bottom, the grid scrolls, up to 12 dp a frame.
+    // While a piece is dragged near the grid's top or bottom, the grid scrolls, up to 12 dp a frame. On its side, held at or
+    // above the grid's top once that's at midnight, the Day's page comes back, the strip with it, so a day can be dropped on.
     LaunchedEffect(drag.active) {
         val edge = with(density) { 48.dp.toPx() }
         val step = with(density) { 12.dp.toPx() }
@@ -188,6 +192,7 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
             val y = drag.finger.y
             when {
                 drag.dayUnder() != null -> Unit
+                landscape && grid.value == 0 && y < drag.gridTop + edge && page.value > 0 -> page.dispatchRawDelta(-step)
                 y in drag.gridTop..(drag.gridTop + edge) -> grid.dispatchRawDelta(-step * (1f - (y - drag.gridTop) / edge))
                 y in (drag.gridBottom - edge)..drag.gridBottom -> grid.dispatchRawDelta(step * (1f - (drag.gridBottom - y) / edge))
             }
@@ -271,7 +276,6 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
 
     // Today's DO NOW card folds into a line as the grid scrolls on to later hours, and unfolds as it scrolls back, or at a tap
     // on the folded line; in landscape it starts folded, so the grid has room.
-    val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
     var cardFull by remember { mutableIntStateOf(0) }
     // The card's cap (below) in pixels, as last laid out: the card folds from what it shows unfolded, its height or that cap.
     var cardCap by remember { mutableFloatStateOf(Float.MAX_VALUE) }
@@ -293,7 +297,6 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
     val card = rememberScrollState()
     // On its side there's no room for the grid under what's above it, so the Day scrolls as one (Q94): what's above goes first
     // as the grid scrolls on to later hours, and comes back once the grid is back at its top.
-    val page = rememberScrollState()
     val collapsing = remember {
         object : NestedScrollConnection {
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset =
