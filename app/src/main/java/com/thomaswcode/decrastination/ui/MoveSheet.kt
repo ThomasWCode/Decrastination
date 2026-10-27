@@ -113,7 +113,7 @@ fun MoveSheet(graph: AppGraph, chunk: Chunk, plan: Plan, zone: ZoneId, onDone: (
             val time = day.atStartOfDay(zone).plusMinutes(minute.toLong()).toInstant().toEpochMilli()
             val now = graph.clock.now()
             // Only a time the plan will keep: none it would drop is said done.
-            problem = when (task?.let { Planner.pinProblem(it, time, now, zone) }) {
+            problem = when (task?.let { Planner.pinProblem(it, time, now, zone, chunk.minutes) }) {
                 null -> null
                 Planner.PinProblem.DayGone -> "That time's gone: pick a later one."
                 Planner.PinProblem.NotYet -> "It can't be started till ${Format.at(task.notBefore!!, now, zone)}: pick a later time."

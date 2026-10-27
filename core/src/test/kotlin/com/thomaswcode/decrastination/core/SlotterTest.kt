@@ -36,7 +36,7 @@ class SlotterTest {
         previous: Map<String, Long> = emptyMap(),
         outside: Boolean = false,
         deadlineMinOf: (Chunk) -> Int? = { null },
-    ) = Slotter.slot(LocalDate.parse(date), chunks, windows, busy, pins, previous, Fixtures.at(now), LONDON, settings, outside, deadlineMinOf)
+    ) = Slotter.slot(LocalDate.parse(date), chunks, windows, busy, pins, previous, Fixtures.at(now), LONDON, settings, outside, deadlineMinOf = deadlineMinOf)
 
     private fun hm(time: Long) = Instant.ofEpochMilli(time).atZone(LONDON).toLocalTime().toString()
 
@@ -102,16 +102,16 @@ class SlotterTest {
     }
 
     @Test
-    fun `a pin lands at its time, or at the next free start when something is in it`() {
+    fun `a pin lands at its time, to the minute, over busy time too (D-114)`() {
         val pin = mapOf(chunk("b").key to Fixtures.at("2026-10-13T19:30"))
         val (slots, _) = slot(tuesday, listOf(chunk("a"), chunk("b")), listOf(w("17:00", "22:00")), pins = pin)
         assertEquals(listOf("a 17:00–17:30", "b 19:30–20:00"), slots.described())
         assertEquals(listOf(false, true), slots.map { it.pinned })
-        // Drums from 19:00 to 20:00: at 20:00, still pinned.
+        // Drums from 19:00 to 20:00, in the calendar or a time you said you can't work: kept at 19:30 all the same.
         val drums = Busy(Fixtures.at("2026-10-13T19:00"), Fixtures.at("2026-10-13T20:00"))
-        val (moved, _) = slot(tuesday, listOf(chunk("a"), chunk("b")), listOf(w("17:00", "22:00")), busy = listOf(drums), pins = pin)
-        assertEquals(listOf("a 17:00–17:30", "b 20:00–20:30"), moved.described())
-        assertTrue(moved.last().pinned)
+        val (kept, _) = slot(tuesday, listOf(chunk("a"), chunk("b")), listOf(w("17:00", "22:00")), busy = listOf(drums), pins = pin)
+        assertEquals(listOf("a 17:00–17:30", "b 19:30–20:00"), kept.described())
+        assertTrue(kept.last().pinned)
         // A pin for another day doesn't touch this one.
         val thursday = mapOf(chunk("b").key to Fixtures.at("2026-10-15T19:30"))
         assertEquals(listOf("a 17:00–17:30", "b 17:35–18:05"), slot(tuesday, listOf(chunk("a"), chunk("b")), listOf(w("17:00", "22:00")), pins = thursday).first.described())
@@ -147,12 +147,13 @@ class SlotterTest {
     }
 
     @Test
-    fun `a pin where its piece can't be done is laid where it can`() {
-        // Work for home pinned in a study period: the evening's first free time, still pinned.
+    fun `a pin for home in a study period is kept there, and one its piece wouldn't be over by its deadline is laid where it would`() {
+        // Work for home pinned in a study period: kept where you put it (D-114), still pinned, a study period's.
         val essay = chunk("essay", where = Where.Home)
         val home = slot(tuesday, listOf(essay), listOf(w("14:35", "15:30", WindowKind.Study), w("16:45", "22:00")), pins = mapOf(essay.key to Fixtures.at("2026-10-13T14:40"))).first
-        assertEquals(listOf("essay 16:45–17:15"), home.described())
+        assertEquals(listOf("essay 14:40–15:10"), home.described())
         assertTrue(home.single().pinned)
+        assertEquals(WindowKind.Study, home.single().window)
         // Pinned at 17:50, due at 18:00: it would end after its deadline, so it goes where it's done by then.
         val form = chunk("form")
         val due = slot(tuesday, listOf(form), listOf(w("16:45", "22:00")), pins = mapOf(form.key to Fixtures.at("2026-10-13T17:50"))) { 18 * 60 }.first
@@ -160,11 +161,72 @@ class SlotterTest {
     }
 
     @Test
-    fun `a pin moved never takes the time of one that fits`() {
-        // a's 13:00 is the midday break outside's, so it moves; b's 13:30 is free and holds it.
+    fun `of two pins over each other the one given later keeps its time, the other going to the next free start after it (D-114)`() {
+        // b given later (first in the map): its 13:10 kept; a's 13:00 under it, so a goes after it and its break.
+        val pins = mapOf(chunk("b").key to Fixtures.at("2026-10-17T13:10"), chunk("a").key to Fixtures.at("2026-10-17T13:00"))
+        val (slots, _) = slot(saturday, listOf(chunk("a"), chunk("b")), listOf(w("08:30", "22:30")), pins = pins)
+        assertEquals(listOf("b 13:10–13:40", "a 13:45–14:15"), slots.described())
+        assertTrue(slots.all { it.pinned })
+        // Given the other way round: a's kept, b after it.
+        val (other, _) = slot(saturday, listOf(chunk("a"), chunk("b")), listOf(w("08:30", "22:30")), pins = pins.entries.reversed().associate { it.key to it.value })
+        assertEquals(listOf("a 13:00–13:30", "b 13:35–14:05"), other.described())
+    }
+
+    @Test
+    fun `a pin over a break outside's time keeps its time, the break laid around it (D-114)`() {
+        // a at 13:00 and b at 13:30, the midday break's time: both kept, back to back as given; the break after them.
         val pins = mapOf(chunk("a").key to Fixtures.at("2026-10-17T13:00"), chunk("b").key to Fixtures.at("2026-10-17T13:30"))
         val (slots, _) = slot(saturday, listOf(chunk("a"), chunk("b")), listOf(w("08:30", "22:30")), pins = pins, outside = true)
-        assertEquals(listOf("b 13:30–14:00", "a 14:05–14:35"), slots.filter { it.kind == SlotKind.Work }.described())
+        assertEquals(listOf("outside 09:30–09:50", "a 13:00–13:30", "b 13:30–14:00", "outside 14:00–14:20", "outside 16:00–16:20"), slots.described())
+    }
+
+    @Test
+    fun `a pin outside every window is kept at its minute, its slot of the nearest window's kind, and carves no break outside them (D-114)`() {
+        val school = listOf(w("10:45", "11:15", WindowKind.Break), w("13:15", "14:05", WindowKind.Lunch), w("16:45", "22:00"))
+        val essay = chunk("essay")
+        // At 23:00, after the evening: kept there, counted as the evening's.
+        val late = slot(tuesday, listOf(essay), school, pins = mapOf(essay.key to Fixtures.at("2026-10-13T23:00"))).first.single()
+        assertEquals("essay 23:00–23:30" to WindowKind.Evening, listOf(late).described().single() to late.window)
+        // At 12:30, between break and lunch: the lunch window's, the nearer; at 11:20, break's.
+        assertEquals(WindowKind.Lunch, slot(tuesday, listOf(essay), school, pins = mapOf(essay.key to Fixtures.at("2026-10-13T12:30"))).first.single().window)
+        assertEquals(WindowKind.Break, slot(tuesday, listOf(essay), school, pins = mapOf(essay.key to Fixtures.at("2026-10-13T11:20"))).first.single().window)
+        // Ending as the evening starts: a piece after it in the evening starts there, no break carved outside the windows.
+        val (both, _) = slot(tuesday, listOf(essay, chunk("next")), listOf(w("16:45", "22:00")), pins = mapOf(essay.key to Fixtures.at("2026-10-13T16:15")))
+        assertEquals(listOf("essay 16:15–16:45", "next 16:45–17:15"), both.described())
+    }
+
+    @Test
+    fun `a pin across two windows keeps all of its time from other work`() {
+        // Break till 12:00, then lunch: a pin at 11:50 for half an hour is counted in lunch, but 11:50 to 12:00 is its too,
+        // so a piece that opens at 11:45 doesn't go into it.
+        val windows = listOf(w("11:30", "12:00", WindowKind.Break), w("12:00", "13:00", WindowKind.Lunch))
+        val pin = chunk("pin")
+        val short = chunk("short", 15, availableAt = Fixtures.at("2026-10-13T11:45"))
+        val (slots, _) = slot(tuesday, listOf(pin, short), windows, pins = mapOf(pin.key to Fixtures.at("2026-10-13T11:50")))
+        assertEquals(listOf("pin 11:50–12:20", "short 12:25–12:40"), slots.described())
+        for ((a, b) in slots.sortedBy { it.start }.zipWithNext()) assertTrue(a.end <= b.start, slots.described().toString())
+    }
+
+    @Test
+    fun `a pin over a break outside under way goes after it, the break never given up for work (D-113)`() {
+        val kept = mapOf("outside:780" to Fixtures.at("2026-10-17T13:00"))
+        val essay = chunk("essay")
+        val (slots, _) = slot(saturday, listOf(essay), listOf(w("08:30", "22:30")), now = "2026-10-17T13:05", pins = mapOf(essay.key to Fixtures.at("2026-10-17T13:10")), previous = kept, outside = true)
+        assertEquals(listOf("outside 13:00–13:20", "essay 13:20–13:50", "outside 16:00–16:20"), slots.described())
+        assertTrue(slots.single { it.chunk != null }.pinned)
+    }
+
+    @Test
+    fun `a pin over a start kept from the last plan takes it, the piece kept there laid afresh, and its task's later steps follow it`() {
+        val evening = listOf(w("17:00", "22:00"))
+        // b kept at 18:00 by the last plan; a pinned at 18:10: b goes elsewhere.
+        val (slots, _) = slot(tuesday, listOf(chunk("a"), chunk("b")), evening, pins = mapOf(chunk("a").key to Fixtures.at("2026-10-13T18:10")), previous = mapOf(chunk("b").key to Fixtures.at("2026-10-13T18:00")))
+        assertEquals(listOf("b 17:00–17:30", "a 18:10–18:40"), slots.described())
+        // The essay's plan pinned at 20:00, after its draft's and revising's times: they follow it (D-108).
+        val steps = listOf(step("plan", 0, 30), step("draft", 1, 55), step("revise", 2, 25))
+        val kept = mapOf(steps[1].key to Fixtures.at("2026-10-13T17:00"), steps[2].key to Fixtures.at("2026-10-13T18:00"))
+        val (after, _) = slot(tuesday, steps, evening, pins = mapOf(steps[0].key to Fixtures.at("2026-10-13T20:00")), previous = kept)
+        assertEquals(listOf("plan 20:00–20:30", "draft 20:35–21:30", "revise 21:35–22:00"), after.described())
     }
 
     @Test

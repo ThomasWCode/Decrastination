@@ -50,9 +50,10 @@ object ChatAnswers {
 
     /**
      * The times given at once ([changes]' AtTime) that the plan, laid as [buckets], put elsewhere
-     * (PL-04: a pin whose time isn't free goes to the first free time after it), a line each, as
-     * the answer names the time asked for: "06:35 had no free time: it's at 10:45." A minute or
-     * less apart is the time kept. Pure.
+     * (PL-04, D-114: a pin is kept to the minute but where one given later covers it, its piece
+     * wouldn't be over by its deadline, or it's before its piece opens, when it goes to the first free
+     * time after it), a line each, as the answer names the time asked for: "06:35 had no free time:
+     * it's at 10:45." A minute or less apart is the time kept. Pure.
      */
     fun movedPins(changes: List<Change>, buckets: List<DayBucket>, zone: ZoneId): List<String> {
         val hm = DateTimeFormatter.ofPattern("HH:mm", Locale.UK)

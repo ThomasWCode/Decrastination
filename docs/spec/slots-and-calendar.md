@@ -40,8 +40,11 @@ Each break is named by its own time, wherever it's laid (`Slot.outsideAt`, its k
 
 ## Pins (PL-04)
 
-A piece at a time you gave is laid at that time, to the minute, where it's free and the piece may be done then (a window for its kind of work, over by its deadline, its task open); one under way stays.
-Otherwise it goes at the next free start at or after its time, after the pins laid at theirs, so it never takes another pin's time. It's laid before today's kept starts: a piece the last plan had there is laid afresh. Once its time and grace have gone by with the piece undone, it's laid as any piece is.
+A piece at a time you or Felix gave (on Day, in the move sheet, in the chat, or by moving its event in the calendar) is laid at that time, to the minute, wherever it is in the day (D-114): outside the day's windows, over a busy event or a time you said you can't work, home work in a school window. One under way stays.
+- **The one given last wins.** Pins are laid in the order they were given, the latest first (`Planner.Input.pinOrder`, from the instructions in use); one over a pin given later, on its day or across midnight, or over a break outside under way, goes to the next free start at or after its time, after the pins laid at theirs, so it never takes another pin's time, and the chat says where (`ChatAnswers.movedPins`). Which pins keep their time is worked out once, by the planner, for every day at once, before anything's placed, and the slotter is told (`Slotter.slot`'s `exact`), so the two never differ.
+- **Not kept**: a pin whose piece wouldn't be over by its real deadline that day, or before its piece opens (a deck's cards at 04:00), goes to the next start that holds it; once its time and grace have gone by with the piece undone, it's laid as any piece is.
+- **Around it**: it's laid before today's kept starts, so a piece the last plan had there is laid afresh; its task's later steps follow its end (D-108); the breaks outside still to come are laid around it.
+- **Its window**: in a window, its breaks are kept within the window as any piece's; outside every window it has a window of its own span, of the kind of the window nearest it in time, so no break is carved outside the windows and its record (`Slot.window`, `SlotRecord`) teaches that kind's yield (a pin in a lesson counts as school's, one late at night as the evening's).
 
 ## Kept starts (PL-13)
 
@@ -90,7 +93,7 @@ A stop part-way is finished at the next start (`Focus.finishKeeps`), before an e
 ## Moving a slot by hand
 
 On Day, a slot swiped right to left is done. Left to right, it's later today (`Instructions.laterToday`, its task's next piece only): at the first free time after it with its minutes, around today's other slots, as an `AtTime` change.
-Held, it goes to a day of the next fortnight, at a time or any time that day (`ui/MoveSheet.kt`): not a day before its task can start, nor one after a real deadline still to come, while overdue work can go to any (D-30). Each move is a change of yours, taken back in *Your changes*; one the plan wouldn't keep is refused first (`Planner.pinProblem`).
+Held, it goes to a day of the next fortnight, at a time or any time that day (`ui/MoveSheet.kt`): not a day before its task can start, nor one after a real deadline still to come, while overdue work can go to any (D-30). Each move is a change of yours, taken back in *Your changes*; one the plan wouldn't keep is refused first (`Planner.pinProblem`, which counts the piece's minutes: a time it wouldn't be over by its real deadline is refused, D-114).
 
 ## Writing the calendar (NF-07)
 
@@ -112,7 +115,7 @@ Pick one you made at calendar.google.com: a calendar an app makes stays on the p
 ## Hand moves
 
 A piece's event whose start is neither where the app last wrote it (`CalendarState.calendarWritten`) nor where the plan has it now is one you moved.
-`SlotCalendarDiff.judge` takes moves earliest first, each as your time for its task's next piece (an `AtTime` change, "Moved in the calendar", made at once), unless:
+`SlotCalendarDiff.judge` takes moves earliest first, each as your time for its task's next piece (an `AtTime` change, "Moved in the calendar", made at once, and kept to the minute as any time you give is, D-114), unless:
 - its task is no longer there;
 - the time is at or after the task's real deadline, still to come ("it's due before then"; overdue work takes any time);
 - another of its task's pieces moved in the same write (one at a time).

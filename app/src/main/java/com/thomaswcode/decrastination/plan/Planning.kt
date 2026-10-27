@@ -134,6 +134,9 @@ class Planning(
                 hardBusy = InstructionRules.busy(applied, zone, today, reach),
                 dayLoads = time.dayLoads,
                 dayCaps = InstructionRules.dayCaps(applied, today, reach),
+                // The tasks given a time, the latest given first (D-114): the Day's moves, the move sheet, Felix's and the
+                // calendar's hand moves are all changes of yours or his.
+                pinOrder = applied.flatMap { it.changes }.filter { it.type == ChangeType.AtTime }.mapNotNull { it.taskId }.reversed().distinct(),
                 workedTodayMin = workedToday(now, zone),
                 windows = windows,
                 dayKinds = dayKinds,
