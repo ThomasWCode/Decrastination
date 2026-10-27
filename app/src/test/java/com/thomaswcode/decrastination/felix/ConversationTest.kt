@@ -19,6 +19,7 @@ import com.thomaswcode.decrastination.core.Memories
 import com.thomaswcode.decrastination.core.MemoryState
 import com.thomaswcode.decrastination.core.MessageKind
 import com.thomaswcode.decrastination.core.OnlyDay
+import com.thomaswcode.decrastination.core.OutsideDay
 import com.thomaswcode.decrastination.core.Proposal
 import com.thomaswcode.decrastination.core.ProposalState
 import com.thomaswcode.decrastination.core.Rule
@@ -152,6 +153,20 @@ class ConversationTest {
         assertTrue(conversation.ask("Anki too"))
         felix.settle()
         assertEquals(OnlyDay(setOf(sheet.id), anki = true, deadlines = false), InstructionRules.onlyDays(stores.instructions.value.applied, saturday, saturday)[saturday])
+    }
+
+    @Test
+    fun `no midday break on Saturday, as he reads it, is made at once, its break gone from the plan he's told (D-116)`() = runBlocking {
+        val off = """[{"type":"NoOutside","taskId":"","afterTaskId":"","eventKey":"","eventTime":"","minutes":-1,"date":"2026-10-24","endDate":"","weekday":"","time":"","endTime":"","title":"","steps":[],"paced":false,"lesson":"","alsoAllow":"","outsideTime":"13:00"}]"""
+        val saturday = LocalDate.parse("2026-10-24")
+        assertTrue("(the 13:00 break)" in conversation.chatContext().plan.lines().single { it.startsWith("- Saturday 24 October 2026") })
+        felix.answers(felix.chatAnswer("no midday break on saturday, then.", changes = off))
+        assertTrue(conversation.ask("no midday break on saturday"))
+        felix.settle()
+        assertEquals(OutsideDay(off = setOf(780)), InstructionRules.outsideDays(stores.instructions.value.applied, saturday, saturday)[saturday])
+        val line = conversation.chatContext().plan.lines().single { it.startsWith("- Saturday 24 October 2026") }
+        assertFalse("13:00 break" in line, line)
+        assertTrue("(the 16:00 break)" in line, line)
     }
 
     @Test

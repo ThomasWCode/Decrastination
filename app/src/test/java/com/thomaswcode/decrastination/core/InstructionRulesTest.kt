@@ -613,6 +613,90 @@ class InstructionRulesTest {
         assertEquals("Claude's reading couldn't be used: it names a task that isn't listed", assertIs<InstructionAnswers.Reading.Unclear>(unknown).why)
     }
 
+    // --- A day's breaks outside, moved, taken off and added (D-116) ---
+
+    @Test
+    fun `a day's breaks outside are as its latest change for each leaves them, and taken back, as the settings have them`() {
+        val sat = LocalDate.parse("2026-10-10")
+        fun days(vararg changes: Change) = InstructionRules.outsideDays(changes.mapIndexed { i, c -> applied(c, at = now + i) }, sat, sat)[sat]
+        val moved = Change(ChangeType.OutsideAt, date = "2026-10-10", outsideMin = 780, startMin = 870)
+        val off = Change(ChangeType.NoOutside, date = "2026-10-10", outsideMin = 780)
+        // Moved twice: the latest wins. Moved, then taken off: off; taken off, then moved: moved.
+        assertEquals(OutsideDay(moved = mapOf(780 to 870)), days(moved.copy(startMin = 840), moved))
+        assertEquals(OutsideDay(off = setOf(780)), days(moved, off))
+        assertEquals(OutsideDay(moved = mapOf(780 to 870)), days(off, moved))
+        // None at all takes what came before; one added after it stands. An added one taken off by its time.
+        val added = Change(ChangeType.OutsideAdded, date = "2026-10-10", startMin = 1020)
+        assertEquals(OutsideDay(noneAtAll = true, added = listOf(1020)), days(added.copy(startMin = 600), Change(ChangeType.NoOutside, date = "2026-10-10"), added))
+        assertEquals(OutsideDay(off = setOf(1020)), days(added, Change(ChangeType.NoOutside, date = "2026-10-10", outsideMin = 1020)))
+        // Another day's, or none: the settings' alone.
+        assertNull(days(moved.copy(date = "2026-10-11")))
+        assertNull(days())
+    }
+
+    @Test
+    fun `a day's breaks are its own at their times where it has them and those added, each with who placed it`() {
+        val sat = LocalDate.parse("2026-10-10")
+        val tue = LocalDate.parse("2026-10-13")
+        val his = applied(Change(ChangeType.OutsideAt, date = "2026-10-10", outsideMin = 780, startMin = 870), Change(ChangeType.NoOutside, date = "2026-10-10", outsideMin = 960)).copy(by = By.Felix)
+        val yours = applied(Change(ChangeType.OutsideAdded, date = "2026-10-13", startMin = 1020), at = now + 1)
+        val both = listOf(his, yours)
+        assertEquals(DayBreaks(mapOf(570 to 570, 780 to 870), 20), InstructionRules.dayBreaks(sat, Settings(), withBreaks = true, both))
+        // A school day has only those added.
+        assertEquals(DayBreaks(mapOf(1020 to 1020), 20), InstructionRules.dayBreaks(tue, Settings(), withBreaks = false, both))
+        assertEquals(mapOf("2026-10-10/outside:780" to By.Felix, "2026-10-13/outside+:1020" to By.You), InstructionRules.outsideBy(both, sat, tue))
+        // None at all on Saturday after: none of its own, and no one's there.
+        val none = both + applied(Change(ChangeType.NoOutside, date = "2026-10-10"), at = now + 2)
+        assertEquals(DayBreaks(emptyMap(), 20), InstructionRules.dayBreaks(sat, Settings(), withBreaks = true, none))
+        assertEquals(mapOf("2026-10-13/outside+:1020" to By.You), InstructionRules.outsideBy(none, sat, tue))
+    }
+
+    @Test
+    fun `a change to a day's breaks is read on a date, for a break it has, at a time not gone and over no other, else said why`() {
+        // Friday 21:00: the weekend's breaks as the settings have them.
+        val weekend: (LocalDate) -> DayBreaks = { day -> InstructionRules.dayBreaks(day, Settings(), day.dayOfWeek.value >= 6, emptyList()) }
+        fun one(change: String, at: Long = now, breaksOn: (LocalDate) -> DayBreaks = weekend) =
+            InstructionAnswers.parse("""{"understood":true,"question":null,"changes":[$change]}""", listOf(essay, prep), listOf(drums), About(), at, LONDON, breaksOn)
+        fun kept(change: String) = assertIs<InstructionAnswers.Reading.Changes>(one(change)).changes.single()
+        fun why(change: String, at: Long = now, breaksOn: (LocalDate) -> DayBreaks = weekend) =
+            assertIs<InstructionAnswers.Reading.Unclear>(one(change, at, breaksOn)).why.removePrefix("Claude's reading couldn't be used: ")
+        val moved = kept("""{"type":"OutsideAt","date":"2026-10-10","time":"14:30","outsideTime":"13:00"}""")
+        assertEquals(Change(ChangeType.OutsideAt, date = "2026-10-10", outsideMin = 780, startMin = 870), moved)
+        val off = kept("""{"type":"NoOutside","date":"2026-10-10","outsideTime":"16:00"}""")
+        assertEquals(Change(ChangeType.NoOutside, date = "2026-10-10", outsideMin = 960), off)
+        val none = kept("""{"type":"NoOutside","date":"2026-10-11","outsideTime":""}""")
+        assertEquals(Change(ChangeType.NoOutside, date = "2026-10-11"), none)
+        val added = kept("""{"type":"OutsideAdded","date":"2026-10-13","time":"17:00"}""")
+        assertEquals(Change(ChangeType.OutsideAdded, date = "2026-10-13", startMin = 1020), added)
+        // Each said as Your changes and Felix list it.
+        assertEquals(
+            listOf("Sat 10 Oct: the 13:00 break outside at 14:30", "Sat 10 Oct: no 16:00 break outside", "Sun 11 Oct: no breaks outside", "Tue 13 Oct: a break outside at 17:00"),
+            listOf(moved, off, none, added).map { InstructionRules.describe(it, emptyMap(), LONDON) },
+        )
+        // Left out, and why: a weekday alone, a break the day hasn't (a school day has none of its own), one over another, a time gone.
+        assertEquals("a day's breaks outside are changed on a date, never a weekday", why("""{"type":"NoOutside","weekday":"Saturday","outsideTime":"13:00"}"""))
+        assertEquals("there's no 12:00 break outside that day", why("""{"type":"OutsideAt","date":"2026-10-10","time":"14:30","outsideTime":"12:00"}"""))
+        assertEquals("there's no 13:00 break outside that day", why("""{"type":"NoOutside","date":"2026-10-13","outsideTime":"13:00"}"""))
+        assertEquals("it would be over another break outside", why("""{"type":"OutsideAt","date":"2026-10-10","time":"15:50","outsideTime":"13:00"}"""))
+        assertEquals("it would be over another break outside", why("""{"type":"OutsideAdded","date":"2026-10-10","time":"09:40"}"""))
+        assertEquals("that time's gone", why("""{"type":"OutsideAdded","date":"2026-10-09","time":"20:00"}"""))
+        // One begun today is kept as it is (D-113).
+        val begun: (LocalDate) -> DayBreaks = { weekend(it).copy(begun = setOf(780)) }
+        assertEquals("that break outside has begun, and is kept as it is", why("""{"type":"OutsideAt","date":"2026-10-10","time":"15:00","outsideTime":"13:00"}""", Fixtures.at("2026-10-10T13:05"), begun))
+        // One added at the time of the day's own, moved away: that one's to be moved back.
+        val away: (LocalDate) -> DayBreaks = { day -> InstructionRules.dayBreaks(day, Settings(), true, listOf(applied(moved))) }
+        assertEquals("that day's own break outside at that time was moved: move it back instead", why("""{"type":"OutsideAdded","date":"2026-10-10","time":"13:00"}""", breaksOn = away))
+    }
+
+    @Test
+    fun `the instruction reader is told the week's breaks outside, each by its own time and where it is once moved`() {
+        val moved = listOf(applied(Change(ChangeType.OutsideAt, date = "2026-10-10", outsideMin = 780, startMin = 870)))
+        val text = InstructionPrompts.describe(Instruction("i", "no midday break on Saturday", at = now), listOf(essay), emptyList(), now, LONDON, breaksOn = { day -> InstructionRules.dayBreaks(day, Settings(), day.dayOfWeek.value >= 6, moved) })
+        assertTrue(text.endsWith("Breaks outside in the next week (each by its own time):\n- Saturday 10 October 2026: 09:30, 13:00 (moved to 14:30), 16:00\n- Sunday 11 October 2026: 09:30, 13:00, 16:00"), text)
+        // None in the week: nothing said.
+        assertFalse("Breaks outside" in InstructionPrompts.describe(Instruction("i", "x", at = now), emptyList(), emptyList(), now, LONDON))
+    }
+
     @Test
     fun `a day or a time after a task's real deadline is late`() {
         // The essay's due Monday 12 Oct, 09:00.

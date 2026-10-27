@@ -6,9 +6,11 @@ import com.anthropic.models.messages.JsonOutputFormat
 import com.anthropic.models.messages.MessageCreateParams
 import com.anthropic.models.messages.OutputConfig
 import com.anthropic.models.messages.StopReason
+import com.thomaswcode.decrastination.core.DayBreaks
 import com.thomaswcode.decrastination.core.Instruction
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.learn.CalendarEvent
+import java.time.LocalDate
 import java.time.ZoneId
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -19,13 +21,13 @@ class InstructionReader(private val client: AnthropicClient, private val zone: Z
     data class Result(val reading: InstructionAnswers.Reading?, val costUsd: Double, val refused: Boolean = false, val usage: ModelCalls.Usage = ModelCalls.Usage.NONE)
 
 
-    suspend fun read(instruction: Instruction, tasks: List<TaskItem>, events: List<CalendarEvent>, now: Long, question: String? = null): Result {
+    suspend fun read(instruction: Instruction, tasks: List<TaskItem>, events: List<CalendarEvent>, now: Long, question: String? = null, breaksOn: (LocalDate) -> DayBreaks = { DayBreaks.NONE }): Result {
         val schema = JsonOutputFormat.Schema.builder().apply { InstructionPrompts.SCHEMA.forEach { (k, v) -> putAdditionalProperty(k, JsonValue.from(v)) } }.build()
         val params = MessageCreateParams.builder()
             .model(model)
             .maxTokens(ClaudeEnricher.MAX_TOKENS)
             .systemOfTextBlockParams(ModelCalls.systemBlocks(InstructionPrompts.system(profile.year), profile.text))
-            .addUserMessage(InstructionPrompts.describe(instruction, tasks, events, now, zone, question).take(Pricing.MAX_INPUT_CHARS))
+            .addUserMessage(InstructionPrompts.describe(instruction, tasks, events, now, zone, question, breaksOn).take(Pricing.MAX_INPUT_CHARS))
             .outputConfig(OutputConfig.builder().effort(ModelEffort.of(ModelEffort.Job.Instruction)).format(JsonOutputFormat.builder().schema(schema).build()).build())
             .putAdditionalHeader("anthropic-beta", ClaudeEnricher.FALLBACK_BETA)
             .putAdditionalBodyProperty("fallbacks", JsonValue.from("default"))
@@ -39,6 +41,6 @@ class InstructionReader(private val client: AnthropicClient, private val zone: Z
             else -> Unit
         }
         val text = message.content().mapNotNull { it.text().orElse(null)?.text() }.joinToString("")
-        return Result(InstructionAnswers.parse(text, tasks, events, instruction.about, now, zone), cost, usage = usage)
+        return Result(InstructionAnswers.parse(text, tasks, events, instruction.about, now, zone, breaksOn), cost, usage = usage)
     }
 }

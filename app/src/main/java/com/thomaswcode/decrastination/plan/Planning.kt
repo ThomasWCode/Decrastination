@@ -5,6 +5,8 @@ import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.core.Calibration
 import com.thomaswcode.decrastination.core.Change
 import com.thomaswcode.decrastination.core.ChangeType
+import com.thomaswcode.decrastination.core.DayBreaks
+import com.thomaswcode.decrastination.core.DayKind
 import com.thomaswcode.decrastination.core.Duplicates
 import com.thomaswcode.decrastination.core.Instruction
 import com.thomaswcode.decrastination.core.InstructionRules
@@ -15,6 +17,7 @@ import com.thomaswcode.decrastination.core.Planner
 import com.thomaswcode.decrastination.core.SchoolCalendar
 import com.thomaswcode.decrastination.core.SchoolDays
 import com.thomaswcode.decrastination.core.Settings
+import com.thomaswcode.decrastination.core.Slot
 import com.thomaswcode.decrastination.core.SlotState
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.WallClock
@@ -31,6 +34,7 @@ import com.thomaswcode.decrastination.learn.Days
 import com.thomaswcode.decrastination.learn.EventJudge
 import kotlinx.coroutines.flow.combine
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
@@ -87,6 +91,17 @@ class Planning(
         }.let(Duplicates::linksPresent).let(Duplicates::credited)
     }
 
+    /**
+     * [day]'s breaks outside as [applied] leaves them (D-116), which a change to one is checked against: the settings' own
+     * times on a day off school, as moved or taken off, and those added; today's begun by the starts kept (D-113).
+     */
+    fun breaksOn(day: LocalDate, applied: List<Instruction> = instructions.value.applied): DayBreaks {
+        val now = clock.now()
+        val today = Instant.ofEpochMilli(now).atZone(clock.zone()).toLocalDate()
+        val begun = if (day != today) emptySet() else session.value.slots.on(today).previous.filterValues { it <= now }.keys.mapNotNullTo(HashSet()) { Slot.outsideAt(it) ?: Slot.addedAt(it) }
+        return InstructionRules.dayBreaks(day, settings.value, SchoolDays.kindOf(day, school.value) == DayKind.Weekend, applied).copy(begun = begun)
+    }
+
     /** What's been learned of the app's estimates, the plans made by it: a task's steps' minutes as planned ([TaskItem.plannedStepMinutes]). */
     fun calibration(): Calibration = learning.value.calibration
 
@@ -135,9 +150,17 @@ class Planning(
                 dayLoads = time.dayLoads,
                 dayCaps = InstructionRules.dayCaps(applied, today, reach),
                 onlyDays = InstructionRules.onlyDays(applied, today, reach),
-                // The tasks given a time, the latest given first (D-114): the Day's moves, the move sheet, Felix's and the
-                // calendar's hand moves are all changes of yours or his.
-                pinOrder = applied.flatMap { it.changes }.filter { it.type == ChangeType.AtTime }.mapNotNull { it.taskId }.reversed().distinct(),
+                // The tasks given a time and the breaks outside moved or added (D-116), the latest given first (D-114): the Day's
+                // moves, the move sheet, Felix's and the calendar's hand moves are all changes of yours or his.
+                pinOrder = applied.flatMap { it.changes }.mapNotNull { c ->
+                    when (c.type) {
+                        ChangeType.AtTime -> c.taskId
+                        ChangeType.OutsideAt -> c.date?.let { "${Slot.OUTSIDE}$it:${c.outsideMin}" }
+                        ChangeType.OutsideAdded -> c.date?.let { day -> c.startMin?.let { "${Slot.ADDED}$day:$it" } }
+                        else -> null
+                    }
+                }.reversed().distinct(),
+                outsideDays = InstructionRules.outsideDays(applied, today, reach),
                 workedTodayMin = workedToday(now, zone),
                 windows = windows,
                 dayKinds = dayKinds,

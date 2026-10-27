@@ -29,7 +29,8 @@ object Slotter {
     /**
      * [chunks] (in the day's order) laid into [windows] on [date], around [busy]. In turn: outside
      * breaks where [outside], as many as the work laid around them leaves room for, one begun kept as
-     * [previous] has it (D-113), those still to come around the pins; pinned pieces ([pins], by [Chunk.key],
+     * [previous] has it (D-113), one you or Felix moved or added at its time ([given], D-116), those still
+     * to come around the pins; pinned pieces ([pins], by [Chunk.key],
      * the latest given first) at their time to the minute wherever it is in the day, or, under one given
      * later, before their task opens or not over by their deadline, the next free start (D-114); pieces at
      * the time they had ([previous]) where it's still free, one under way or just over ([GRACE_MS]) included;
@@ -51,42 +52,67 @@ object Slotter {
         zone: ZoneId,
         settings: Settings,
         outside: Boolean,
-        /** The pins laid at their time, as [Planner] worked them out for every day at once (across midnight too); else found here. */
+        /** The day's breaks outside you or Felix moved, took off or added (D-116). */
+        given: OutsideDay = OutsideDay.NONE,
+        /**
+         * The pins laid at their time, and the breaks you or Felix placed (by `<date>/<key>`), as [Planner] worked them out for
+         * every day at once (across midnight too); else found here, those breaks all kept.
+         */
         exact: Set<String>? = null,
         deadlineMinOf: (Chunk) -> Int?,
     ): Pair<List<Slot>, List<Chunk>> {
         val length = settings.outsideBreakMin * MINUTE
         val day = at(date, 0, zone) until at(date.plusDays(1), 0, zone)
-        // The breaks outside a plan laid today that have begun, by their own time (D-113), each to its end as it was
-        // laid ([Slot.endKey]), or by its length now where no plan laid it under way: one under way laid at its start
-        // till then, whatever the free time and the settings now say, never given up for work; one over, completed,
-        // never laid again that day. Each counts towards `outsideBreaks`.
-        val begun = previous.mapNotNull { (key, start) ->
-            Slot.outsideAt(key)?.takeIf { start in day && start <= now }?.let { it to (start to (previous[Slot.endKey(key)] ?: (start + length))) }
+        fun windowAt(start: Long) = windows.firstOrNull { at(date, it.startMin, zone) <= start && start < at(date, it.endMin, zone) }?.kind ?: WindowKind.Evening
+        fun breakOf(start: Long, end: Long, minute: Int, added: Boolean) = Slot(SlotKind.Outside, null, start, end, windowAt(start), pinned = false, outsideAt = minute, outsideAdded = added)
+        // The breaks outside a plan laid today that have begun (D-113), a settings break's by its own time and one added by
+        // its minute (D-116), each to its end as it was laid ([Slot.endKey]), or by its length now where no plan laid it under
+        // way: one under way laid at its start till then, whatever the free time and the settings now say, never given up
+        // for work; one over, completed, never laid again that day. A settings one counts towards `outsideBreaks`.
+        fun begunOf(at: (String) -> Int?) = previous.mapNotNull { (key, start) ->
+            at(key)?.takeIf { start in day && start <= now }?.let { it to (start to (previous[Slot.endKey(key)] ?: (start + length))) }
         }.toMap()
-        val underWay = begun.filterValues { (_, end) -> end > now }.map { (minute, span) ->
-            val (start, end) = span
-            val window = windows.firstOrNull { at(date, it.startMin, zone) <= start && start < at(date, it.endMin, zone) }?.kind ?: WindowKind.Evening
-            Slot(SlotKind.Outside, null, start, end, window, pinned = false, outsideAt = minute)
+        val begun = begunOf(Slot::outsideAt)
+        val begunAdded = begunOf(Slot::addedAt)
+        val underWay = begun.filterValues { (_, end) -> end > now }.map { (minute, span) -> breakOf(span.first, span.second, minute, added = false) } +
+            begunAdded.filterValues { (_, end) -> end > now }.map { (minute, span) -> breakOf(span.first, span.second, minute, added = true) }
+        // Placed by you or Felix (D-116), not yet begun: a settings break moved, laid at its time to the minute, on a day
+        // that has them; one added, at its own, any day, but not at a settings break's time on a day with them. Over busy
+        // time or outside the windows kept, never given up for work, nor held to 18:00; not once its time is over.
+        val times = settings.outsideTimes.distinct()
+        val moved = if (!outside) emptyList() else given.moved.filterKeys { it in times && it !in begun }.map { (own, minute) ->
+            at(date, minute, zone).let { breakOf(it, it + length, own, added = false) }
         }
-        fun around(breaks: List<Slot>) = lay(date, chunks, windows, busy, pins, previous, now, zone, settings, underWay + breaks, exact, deadlineMinOf)
-        // Those still to come: as many as `outsideBreaks` leaves, those begun counted.
-        val left = settings.outsideBreaks - begun.size
-        if (!outside || left <= 0) return around(emptyList())
+        val added = given.added.distinct().filter { it !in begunAdded && !(outside && it in times) }.map { minute -> at(date, minute, zone).let { breakOf(it, it + length, minute, added = true) } }
+        val placed = (moved + added).filter { it.end > now }
+        // Those a pin given later covers (the planner's word): at the first free start at or after their time, laid below.
+        val (keptPlaced, shifted) = placed.partition { exact == null || "$date/${it.key}" in exact }
+        val free = intervals(date, windows, busy, now, zone, settings.minSchoolSlotMin)
+        for (slot in underWay + keptPlaced) carve(free, slot.start, slot.end)
+        // Your pins laid at their time (D-114): the breaks still to come are laid around them.
+        val pinned = exactPins(date, chunks, pins, now, zone, deadlineMinOf, underWay + keptPlaced, exact).first
+        for ((chunk, pin) in pinned) carve(free, pin, pin + chunk.minutes * MINUTE)
+        val laidAfter = shifted.mapNotNull { b ->
+            val interval = free.firstOrNull { maxOf(it.start, b.start) + length <= it.end } ?: return@mapNotNull null
+            val start = maxOf(interval.start, b.start)
+            carve(free, start, start + length)
+            b.copy(start = start, end = start + length, window = interval.window.kind)
+        }
+        val fixed = underWay + keptPlaced + laidAfter
+        fun around(breaks: List<Slot>) = lay(date, chunks, windows, busy, pins, previous, now, zone, settings, fixed + breaks, exact, deadlineMinOf)
+        // Those still to come: as many as `outsideBreaks` leaves, those begun and moved counted, the added ones over and above.
+        val left = settings.outsideBreaks - begun.size - moved.size
+        if (!outside || left <= 0 || given.noneAtAll) return around(emptyList())
         // Outside breaks still to come, each at or after its time, over by the next one's and started by 18:00 (so
         // on a day under way one whose time has gone, none laid, is laid from now, and none in the evening): as many
         // of them as the work leaves room for, the midday one given up first, then the afternoon's, then the morning's.
-        val free = intervals(date, windows, busy, now, zone, settings.minSchoolSlotMin)
-        for (slot in underWay) carve(free, slot.start, slot.end)
-        // Your pins laid at their time (D-114): the breaks still to come are laid around them.
-        val pinned = exactPins(date, chunks, pins, now, zone, deadlineMinOf, underWay, exact).first
-        for ((chunk, pin) in pinned) carve(free, pin, pin + chunk.minutes * MINUTE)
+        // Not one moved (laid above) nor one taken off (D-116).
         val room = free.sumOf { it.minutes }
         val latest = at(date, OUTSIDE_LATEST_MIN, zone)
         val found = mutableListOf<Pair<Int, Slot>>()
         // A time given twice is one break: its key is its time.
         for ((i, minute) in settings.outsideTimes.withIndex().distinctBy { it.value }.sortedBy { it.value }) {
-            if (minute in begun) continue
+            if (minute in begun || minute in given.moved || minute in given.off) continue
             val from = at(date, minute, zone)
             val by = settings.outsideTimes.filter { it > minute }.minOrNull()?.let { at(date, it, zone) } ?: Long.MAX_VALUE
             val interval = free.firstOrNull { maxOf(it.start, from) <= latest && maxOf(it.start, from) + length <= minOf(it.end, by) } ?: continue

@@ -1692,6 +1692,22 @@ class PlannerTest {
     }
 
     @Test
+    fun `of a break outside moved and a time given over each other, the one given later keeps it (D-116)`() {
+        val saturday = LocalDate.parse("2026-10-17")
+        val a = task("a", Fixtures.at("2026-10-20T23:59"), effort = 30).yours(atTime = Fixtures.at("2026-10-17T14:30"))
+        fun hm(time: Long) = Instant.ofEpochMilli(time).atZone(LONDON).toLocalTime().toString()
+        fun laid(order: List<String>) = Planner.plan(
+            windowed(listOf(a), "2026-10-12T17:00", windows = mapOf(saturday to listOf(DayWindow(8 * 60 + 30, 22 * 60 + 30, WindowKind.Evening))))
+                .copy(outsideDays = mapOf(saturday to OutsideDay(moved = mapOf(780 to 14 * 60 + 40))), pinOrder = order),
+        ).bucket(saturday)!!.slots.filter { it.start in Fixtures.at("2026-10-17T14:00") until Fixtures.at("2026-10-17T15:30") }
+            .joinToString { "${it.chunk?.title ?: it.key} ${hm(it.start)}" }
+        // The break given later: at its 14:40, a's 14:30 under it, so a after it.
+        assertEquals("outside:780 14:40, a 15:00", laid(listOf("outside:2026-10-17:780", "teams:a")))
+        // a given later: at 14:30, the break after it.
+        assertEquals("a 14:30, outside:780 15:00", laid(listOf("teams:a", "outside:2026-10-17:780")))
+    }
+
+    @Test
     fun `a time you give outside the day's free time takes none of it, the day's free time shown more by it (D-114)`() {
         // Monday 17:00; on Tuesday, work for home filling all of its evening, put on Tuesday.
         val base = windowed(emptyList(), "2026-10-12T17:00")

@@ -35,8 +35,10 @@ class SlotterTest {
         pins: Map<String, Long> = emptyMap(),
         previous: Map<String, Long> = emptyMap(),
         outside: Boolean = false,
+        given: OutsideDay = OutsideDay.NONE,
+        exact: Set<String>? = null,
         deadlineMinOf: (Chunk) -> Int? = { null },
-    ) = Slotter.slot(LocalDate.parse(date), chunks, windows, busy, pins, previous, Fixtures.at(now), LONDON, settings, outside, deadlineMinOf = deadlineMinOf)
+    ) = Slotter.slot(LocalDate.parse(date), chunks, windows, busy, pins, previous, Fixtures.at(now), LONDON, settings, outside, given = given, exact = exact, deadlineMinOf = deadlineMinOf)
 
     private fun hm(time: Long) = Instant.ofEpochMilli(time).atZone(LONDON).toLocalTime().toString()
 
@@ -380,6 +382,88 @@ class SlotterTest {
         assertEquals(emptyList(), slots("2026-10-17T11:00", mapOf("outside:570" to Fixtures.at("2026-10-17T09:30"))))
         // None begun: the morning's, laid from now as no plan laid it, as before.
         assertEquals(listOf("outside 11:00–11:20"), slots("2026-10-17T11:00", emptyMap()))
+    }
+
+    // --- Breaks outside you or Felix moved, took off or added (D-116) ---
+
+    @Test
+    fun `a break outside moved is laid at its time to the minute, over an event and after six, never given up for work (D-116)`() {
+        val day = listOf(w("08:30", "22:30"))
+        // The 13:00 break at 19:10, over a call from 19:00 to 20:00: laid there all the same, still the 13:00 break.
+        val call = Busy(Fixtures.at("2026-10-17T19:00"), Fixtures.at("2026-10-17T20:00"))
+        val moved = OutsideDay(moved = mapOf(780 to minute("19:10")))
+        val (slots, _) = slot(saturday, emptyList(), day, busy = listOf(call), outside = true, given = moved)
+        assertEquals(listOf("outside 09:30–09:50", "outside 16:00–16:20", "outside 19:10–19:30"), slots.described())
+        assertEquals("outside:780", slots.last().key)
+        // A day full of work gives up the settings' breaks, never the one placed.
+        val full = slot(saturday, (1..24).map { chunk("p$it") }, day, outside = true, given = moved).first
+        assertEquals(listOf("outside 19:10–19:30"), full.filter { it.kind == SlotKind.Outside }.described())
+    }
+
+    @Test
+    fun `a break outside taken off isn't laid, its time free for work, and with none at all only those placed after are (D-116)`() {
+        val day = listOf(w("08:30", "22:30"))
+        assertEquals(listOf("outside 09:30–09:50", "outside 16:00–16:20"), slot(saturday, emptyList(), day, outside = true, given = OutsideDay(off = setOf(780))).first.described())
+        assertEquals(emptyList(), slot(saturday, emptyList(), day, outside = true, given = OutsideDay(noneAtAll = true)).first.described())
+        // None at all, then the morning's moved to 11:00 and one added at 17:00: those two alone.
+        val after = OutsideDay(moved = mapOf(570 to minute("11:00")), noneAtAll = true, added = listOf(minute("17:00")))
+        assertEquals(listOf("outside 11:00–11:20", "outside 17:00–17:20"), slot(saturday, emptyList(), day, outside = true, given = after).first.described())
+        // From 12:50, the first piece waits for the midday break; with it off, it's laid at once.
+        val noon = listOf(w("12:50", "22:30"))
+        val work = listOf(chunk("a"), chunk("b"))
+        assertEquals(listOf("outside 13:00–13:20", "a 13:20–13:50"), slot(saturday, work, noon, outside = true).first.described().take(2))
+        assertEquals(listOf("a 12:50–13:20", "b 13:25–13:55"), slot(saturday, work, noon, outside = true, given = OutsideDay(off = setOf(780))).first.described().take(2))
+    }
+
+    @Test
+    fun `a break added is laid at its time on any day, over and above the day's own, but not at a time one of them is named by (D-116)`() {
+        // A school day's evening: one added at 17:00, the work around it.
+        val added = slot(tuesday, listOf(chunk("a")), listOf(w("16:45", "22:00")), given = OutsideDay(added = listOf(minute("17:00")))).first
+        assertEquals(listOf("outside 17:00–17:20", "a 17:20–17:50"), added.described())
+        assertEquals("outside+:1020", added.first().key)
+        // A Saturday: its three and the added one, which counts towards none of them.
+        val day = listOf(w("08:30", "22:30"))
+        val four = slot(saturday, emptyList(), day, outside = true, given = OutsideDay(added = listOf(minute("17:00")))).first
+        assertEquals(listOf("outside 09:30–09:50", "outside 13:00–13:20", "outside 16:00–16:20", "outside 17:00–17:20"), four.described())
+        // One at 13:00 on a Saturday isn't laid: the day has its own break then.
+        assertEquals(listOf("outside:570", "outside:780", "outside:960"), slot(saturday, emptyList(), day, outside = true, given = OutsideDay(added = listOf(780))).first.map { it.key })
+    }
+
+    @Test
+    fun `with no breaks a day, one moved and one added are laid all the same, and with one, the morning's moved, no other (D-116)`() {
+        val day = listOf(w("08:30", "22:30"))
+        fun laid(breaks: Int, given: OutsideDay) =
+            Slotter.slot(LocalDate.parse(saturday), emptyList(), day, emptyList(), emptyMap(), emptyMap(), Fixtures.at("2026-10-12T08:00"), LONDON, settings.copy(outsideBreaks = breaks), true, given = given) { null }.first.described()
+        assertEquals(listOf("outside 10:00–10:20", "outside 17:00–17:20"), laid(0, OutsideDay(moved = mapOf(570 to minute("10:00")), added = listOf(minute("17:00")))))
+        assertEquals(listOf("outside 10:00–10:20"), laid(1, OutsideDay(moved = mapOf(570 to minute("10:00")))))
+    }
+
+    @Test
+    fun `a break outside moved or added stays once begun, and once over isn't laid again that day (D-113, D-116)`() {
+        val day = listOf(w("08:30", "22:30"))
+        val given = OutsideDay(moved = mapOf(780 to minute("14:30")), added = listOf(minute("17:00")))
+        val kept = mapOf("outside:780" to Fixtures.at("2026-10-17T14:30"), "outside:960" to Fixtures.at("2026-10-17T16:00"), "outside+:1020" to Fixtures.at("2026-10-17T17:00"))
+        fun outside(now: String) = slot(saturday, emptyList(), day, now = "2026-10-17T$now", previous = kept, outside = true, given = given).first.described()
+        assertEquals(listOf("outside 14:30–14:50", "outside 16:00–16:20", "outside 17:00–17:20"), outside("14:35"))
+        assertEquals(listOf("outside 16:00–16:20", "outside 17:00–17:20"), outside("14:55"))
+        assertEquals(listOf("outside 17:00–17:20"), outside("17:05"))
+        assertEquals(emptyList(), outside("17:25"))
+    }
+
+    @Test
+    fun `a break placed under a pin given after it goes to the first free time from its own, and over one given before it keeps its time (D-116)`() {
+        val day = listOf(w("08:30", "22:30"))
+        val given = OutsideDay(moved = mapOf(780 to minute("14:30")))
+        val call = chunk("call")
+        val pins = mapOf(call.key to Fixtures.at("2026-10-17T14:20"))
+        fun around(exact: Set<String>) = slot(saturday, listOf(call), day, pins = pins, outside = true, given = given, exact = exact).first
+            .filter { it.start in Fixtures.at("2026-10-17T14:00") until Fixtures.at("2026-10-17T15:30") }
+        // The pin kept (the planner's word): the break after it, whole.
+        assertEquals(listOf("call 14:20–14:50", "outside 14:50–15:10"), around(setOf(call.key)).described())
+        // The break kept: the pin after it.
+        val kept = around(setOf("$saturday/outside:780"))
+        assertEquals("outside 14:30–14:50", kept.first().let { listOf(it).described().single() })
+        assertTrue(kept.single { it.kind == SlotKind.Work }.start >= Fixtures.at("2026-10-17T14:50"))
     }
 
     @Test

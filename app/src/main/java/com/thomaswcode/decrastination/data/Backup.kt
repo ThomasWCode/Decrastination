@@ -376,6 +376,11 @@ object Backups {
                 ChangeType.Rename -> named(change.taskId) && change.title?.let { it.isNotBlank() && it.length <= OwnTaskRules.MAX_TITLE } == true
                 // A day for only some tasks (D-115): a task named, a date, and what else may come in, nothing or one of the two.
                 ChangeType.DayOnly -> named(change.taskId) && isDate(change.date) && change.alsoAllow in setOf(null, InstructionRules.ALSO_ANKI, InstructionRules.ALSO_DEADLINES)
+                // A day's breaks outside (D-116): a date; a break moved by its own time to a minute of the day, one not laid by its own
+                // time or all of the day's (-1), one added at a minute of the day.
+                ChangeType.OutsideAt -> isDate(change.date) && change.outsideMin in 0 until DAY_MIN && change.startMin in 0 until DAY_MIN
+                ChangeType.NoOutside -> isDate(change.date) && (change.outsideMin == -1 || change.outsideMin in 0 until DAY_MIN)
+                ChangeType.OutsideAdded -> isDate(change.date) && change.startMin in 0 until DAY_MIN
             }
         }
     }

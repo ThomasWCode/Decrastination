@@ -1,6 +1,7 @@
 package com.thomaswcode.decrastination.enrich
 
 import com.thomaswcode.decrastination.core.ChangeType
+import com.thomaswcode.decrastination.core.DayBreaks
 import com.thomaswcode.decrastination.core.Instruction
 import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.TaskItem
@@ -53,6 +54,9 @@ object InstructionPrompts {
         - SameAs: the task is the same work as another listed task, from another source, which is the one kept (this one is hidden). Needs taskId and afterTaskId (the one kept).
         - Steps: replace a task's steps with these (any task's, from any source, but Anki's, whose steps are its cards), adding up to its minutes (for a new total, add a Minutes change with it too); dates within the task's. Needs taskId and steps (each with title, minutes, startDate and dueDate as YYYY-MM-DD or empty, where: anywhere or home, and anyOrder: true where it doesn't need the steps before it done first, as separate questions don't, false where it builds on them, as a draft after its plan does, and for the first; steps the student lists themselves stay in their order, false, unless they say the order doesn't matter). One step is the whole task in one go.
         - Rename: the task's name as the app shows it (its source keeps its own). Needs taskId and title (the new name).
+        - OutsideAt: one of a day's breaks outside at another time that day. Needs date (a date, never a weekday; a break stays on its day), outsideTime naming the break by its own time as listed ("13:00", even once it's been moved), and time (its new start, HH:MM).
+        - NoOutside: a day's break outside not taken. Needs date, and outsideTime naming the break by its own time, or empty for all of the day's.
+        - OutsideAdded: a break outside at a time on a date, any day, over and above the day's own. Needs date and time (its start, HH:MM).
         - DayOnly: a day kept for only some tasks' work: no other task's work is planned on it, and the time they don't use stays free. Their work is planned as usual, so the day may hold some of it or none: add OnDay for a task whose work should all go on that day. One change a task, each with taskId and date (a date, never a weekday). alsoAllow what else may come in: empty for nothing, "anki" for Anki's cards too, "anki-deadlines" for those and work that would otherwise miss its deadline; the day's latest DayOnly sets it for the whole day.
 
         Use the ids and event keys exactly as listed. Work out relative dates ("next Friday", "the weekend") from today; a weekday named alone ("on Saturday") means the next one, and only "every Saturday" or "on Saturdays" means each week. A stretch of days ("20 to 25 October", "this weekend") is one change per day, but for NoSchool, which takes the stretch whole. Leave every field a change type doesn't use empty: an empty string, minutes -1 (0 is a real value: a DayLimit's no work at all), and steps an empty list.
@@ -113,6 +117,7 @@ object InstructionPrompts {
             ),
         ),
         "alsoAllow" to mapOf("type" to "string", "enum" to listOf("", InstructionRules.ALSO_ANKI, InstructionRules.ALSO_DEADLINES)),
+        "outsideTime" to TIME,
     )
 
     internal val CHANGE = obj(*CHANGE_FIELDS.toTypedArray())
@@ -128,11 +133,15 @@ object InstructionPrompts {
     private val WHEN = DateTimeFormatter.ofPattern("EEE d MMM yyyy HH:mm", Locale.UK)
     private val DAY = DateTimeFormatter.ofPattern("EEEE d MMMM yyyy", Locale.UK)
 
+    /** The days whose breaks outside are said, from today: a week. */
+    const val BREAK_DAYS = 7
+
     /**
      * The instruction as Claude reads it: today, what it's about, and the open tasks and the
-     * fortnight's events to choose from; for your reply to Felix's question, the [question] it replies to.
+     * fortnight's events to choose from; for your reply to Felix's question, the [question] it replies to;
+     * the week's breaks outside ([breaksOn], D-116), by their own times, so a change to one names it.
      */
-    fun describe(instruction: Instruction, tasks: List<TaskItem>, events: List<CalendarEvent>, now: Long, zone: ZoneId, question: String? = null): String = buildString {
+    fun describe(instruction: Instruction, tasks: List<TaskItem>, events: List<CalendarEvent>, now: Long, zone: ZoneId, question: String? = null, breaksOn: (LocalDate) -> DayBreaks = { DayBreaks.NONE }): String = buildString {
         fun at(time: Long) = Instant.ofEpochMilli(time).atZone(zone).format(WHEN)
         // The deadline in force (PL-14), as the chat and the Tasks list have it: a plan's gone by, the real one behind it.
         fun due(t: TaskItem) = (t.deadlineAt(now) ?: t.dueAt)?.let { at(it) + if (t.hardAt(now)) "" else " (a plan)" } ?: "no date"
@@ -174,6 +183,17 @@ object InstructionPrompts {
         fortnight.sortedBy { it.start }.take(MAX_EVENTS).forEach { e ->
             val time = if (e.allDay) "all day " + Instant.ofEpochMilli(e.start).atZone(ZoneId.of("UTC")).toLocalDate().format(DAY) else "${at(e.start)} to ${at(e.end)}"
             appendLine("- ${EventJudge.key(e)} | ${e.title.take(MAX_TITLE)} | $time")
+        }
+        // The week's breaks outside (D-116): each by its own time, and where it is now once moved.
+        val today = Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
+        val week = (0L until BREAK_DAYS).map { today.plusDays(it) }.associateWith(breaksOn).filterValues { it.at.isNotEmpty() }
+        if (week.isNotEmpty()) {
+            appendLine()
+            appendLine("Breaks outside in the next week (each by its own time):")
+            fun clock(minute: Int) = "%02d:%02d".format(Locale.UK, minute / 60, minute % 60)
+            week.forEach { (day, breaks) ->
+                appendLine("- ${day.format(DAY)}: " + breaks.at.entries.sortedBy { it.value }.joinToString { (own, at) -> clock(own) + if (at != own) " (moved to ${clock(at)})" else "" })
+            }
         }
     }.trimEnd()
 

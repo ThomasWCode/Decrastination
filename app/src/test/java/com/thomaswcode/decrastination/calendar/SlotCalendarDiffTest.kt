@@ -55,9 +55,10 @@ class SlotCalendarDiffTest {
         // Moved out of the week (found by what it is): a move all the same.
         val far = SlotCalendarDiff.diff(listOf(want("a")), listOf(event(1, "a", start = five + 9 * 24 * 3_600_000L)), written)
         assertEquals(listOf(1L), far.handMoves.map { it.existing.id })
-        // A break outside moved is put back: it's no piece's time to take.
-        val outside = SlotCalendarDiff.diff(listOf(want("outside:1", title = "Outside", taskId = null)), listOf(event(4, "outside:1", start = half, title = "Outside")), mapOf(want("outside:1").uri to five))
-        assertEquals(listOf(4L), outside.updates.map { it.existing.id })
+        // A break outside moved is a hand move too, which the writer puts back and says (D-116).
+        val outside = SlotCalendarDiff.diff(listOf(want("outside:780", title = "Outside", taskId = null)), listOf(event(4, "outside:780", start = half, title = "Outside")), mapOf(want("outside:780").uri to five))
+        assertEquals(listOf(4L), outside.handMoves.map { it.existing.id })
+        assertEquals(emptyList(), outside.updates)
     }
 
     @Test

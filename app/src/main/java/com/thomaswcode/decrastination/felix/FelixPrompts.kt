@@ -180,6 +180,9 @@ object FelixPrompts {
         appendLine("Today: $kept kept, $missed missed, ${toCome.size} to come$next")
         if (reminders.isNotEmpty()) appendLine("Reminders today: " + reminders.joinToString("; "))
         if (toCome.isNotEmpty()) appendLine("Left today: " + toCome.joinToString("; ") { "${it.chunk?.label} ${clock(it.start)}–${clock(it.end)}" })
+        // Today's breaks outside under way or to come (D-116), so a look knows one is under way.
+        val breaks = plan.todaySlots.filter { it.kind == SlotKind.Outside && it.end > now }
+        if (breaks.isNotEmpty()) appendLine("Breaks outside today: " + breaks.joinToString("; ") { "${clock(it.start)}–${clock(it.end)}" + if (it.start <= now) " (under way)" else "" })
         if (rebalance.isNotEmpty()) {
             appendLine("Steps you may rebalance (task id | task | step | the two steps | the free time at school):")
             for (c in rebalance) appendLine("- ${c.taskId} | ${c.title} | ${c.index} | “${c.first.title}” (${c.firstMinutes} min), then “${c.second.title}” (${c.secondMinutes} min) | ${clock(c.gap.start)}, ${c.gap.minutes} min")

@@ -127,6 +127,15 @@ enum class ChangeType {
      * what else may come in (D-115).
      */
     DayOnly,
+
+    /** [Change.date]'s break outside of [Change.outsideMin] (its own time) at [Change.startMin] (D-116). */
+    OutsideAt,
+
+    /** [Change.date]'s break outside of [Change.outsideMin] (its own time) not laid; -1, none of the day's (D-116). */
+    NoOutside,
+
+    /** A break outside at [Change.startMin] on [Change.date], whatever kind of day it is (D-116). */
+    OutsideAdded,
 }
 
 /** One change an instruction makes. Which fields mean anything depends on [type]. */
@@ -171,6 +180,8 @@ data class Change(
      * otherwise miss its real deadline ([InstructionRules.ALSO_DEADLINES]); else nothing.
      */
     val alsoAllow: String? = null,
+    /** [ChangeType.OutsideAt]'s and [ChangeType.NoOutside]'s break, by its own time (its `outsideTimes` minute); -1, none, or all of a NoOutside's day. */
+    val outsideMin: Int = -1,
 )
 
 /** Your instructions. Kept in `instructions.json`. */
@@ -178,7 +189,7 @@ data class Change(
 data class InstructionState(
     val instructions: List<Instruction> = emptyList(),
     /** The shape this is in ([com.thomaswcode.decrastination.data.Migration]): raised with each change of it. */
-    val version: Int = 4,
+    val version: Int = 5,
 ) {
     /** Every step a change holds with an id ([withIds]): given as it's first stored, so the task steps it's laid as keep it. */
     fun withStepIds(): InstructionState {
@@ -361,6 +372,59 @@ object InstructionRules {
         return "${day.format(DAY)} was only for ${named.joinToString(", ") { title(it) }}: ${title(taskId)} joins it"
     }
 
+    /**
+     * The breaks outside you or Felix gave the days from [from] to [to] (D-116), by [applied] (in the order applied): each
+     * date's moved, off and added, the latest change for a break winning (a NoOutside for all of a day taking every break
+     * given it before).
+     */
+    fun outsideDays(applied: List<Instruction>, from: LocalDate, to: LocalDate): Map<LocalDate, OutsideDay> {
+        val out = HashMap<LocalDate, OutsideDay>()
+        for (c in applied.flatMap { it.changes }) {
+            if (c.type != ChangeType.OutsideAt && c.type != ChangeType.NoOutside && c.type != ChangeType.OutsideAdded) continue
+            val day = date(c.date)?.takeIf { it in from..to } ?: continue
+            val was = out[day] ?: OutsideDay.NONE
+            out[day] = when (c.type) {
+                ChangeType.OutsideAt -> c.startMin?.takeIf { c.outsideMin >= 0 }?.let { at -> was.copy(moved = was.moved + (c.outsideMin to at), off = was.off - c.outsideMin) } ?: was
+                ChangeType.NoOutside -> if (c.outsideMin < 0) OutsideDay(noneAtAll = true) else was.copy(moved = was.moved - c.outsideMin, off = was.off + c.outsideMin, added = was.added - c.outsideMin)
+                else -> c.startMin?.let { at -> was.copy(added = (was.added - at) + at) } ?: was
+            }
+        }
+        return out
+    }
+
+    /**
+     * Who placed each break outside [applied] moves or adds, from [from] to [to] (D-116), by `<date>/<key>` as the plan keys its
+     * slots: the latest change for a break wins, and one taken off has none.
+     */
+    fun outsideBy(applied: List<Instruction>, from: LocalDate, to: LocalDate): Map<String, By> {
+        val out = HashMap<String, By>()
+        for (i in applied) for (c in i.changes) {
+            val day = date(c.date)?.takeIf { it in from..to } ?: continue
+            when (c.type) {
+                ChangeType.OutsideAt -> if (c.outsideMin >= 0 && c.startMin != null) out["$day/${Slot.OUTSIDE}${c.outsideMin}"] = i.by
+                ChangeType.OutsideAdded -> c.startMin?.let { out["$day/${Slot.ADDED}$it"] = i.by }
+                ChangeType.NoOutside -> if (c.outsideMin < 0) {
+                    out.keys.removeAll { it.startsWith("$day/") }
+                } else {
+                    out -= "$day/${Slot.OUTSIDE}${c.outsideMin}"
+                    out -= "$day/${Slot.ADDED}${c.outsideMin}"
+                }
+                else -> {}
+            }
+        }
+        return out
+    }
+
+    /**
+     * [day]'s breaks outside as [applied] leaves them (D-116): the settings' own times where the day has them ([withBreaks]: a
+     * weekend or a day off school), each at its time or where it was moved, but those taken off; and those added.
+     */
+    fun dayBreaks(day: LocalDate, settings: Settings, withBreaks: Boolean, applied: List<Instruction>): DayBreaks {
+        val given = outsideDays(applied, day, day)[day] ?: OutsideDay.NONE
+        val own = if (!withBreaks) emptyMap() else settings.outsideTimes.distinct().filter { it !in given.off && (!given.noneAtAll || it in given.moved) }.associateWith { given.moved[it] ?: it }
+        return DayBreaks(own + given.added.filterNot { it in own }.associateWith { it }, settings.outsideBreakMin)
+    }
+
     /** The times [applied] says you can't work, from [from] to [to], where you are. */
     fun busy(applied: List<Instruction>, zone: ZoneId, from: LocalDate, to: LocalDate): List<Busy> {
         val times = applied.flatMap { it.changes }.filter { it.type == ChangeType.BusyTime && it.startMin != null && it.endMin != null && it.endMin > it.startMin }
@@ -463,6 +527,9 @@ object InstructionRules {
                 ALSO_DEADLINES -> "; Anki, and work that would miss its deadline, too"
                 else -> ""
             }
+            ChangeType.OutsideAt -> "${day(change)}: the ${clock(change.outsideMin)} break outside at ${clock(change.startMin)}"
+            ChangeType.NoOutside -> if (change.outsideMin < 0) "${day(change)}: no breaks outside" else "${day(change)}: no ${clock(change.outsideMin)} break outside"
+            ChangeType.OutsideAdded -> "${day(change)}: a break outside at ${clock(change.startMin)}"
         }
     }
 
