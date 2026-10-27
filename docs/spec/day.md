@@ -1,0 +1,48 @@
+# The Day
+
+The Day tab (UI-17, D-118): the week ahead in a strip, today's DO NOW card, the chosen day's header, and the day as a calendar, as Google Calendar's Day view draws one. `ui/DayScreen.kt` puts it together; `ui/DayModel.kt` gives the chosen day as it's shown (pure); `ui/DayLayout.kt` says where things go on the grid (pure); `ui/DayGrid.kt` draws the grid and its blocks; `ui/DayDrag.kt` holds a drag; `ui/Moves.kt` makes a move by hand, as the move sheet (`ui/MoveSheet.kt`) and the drag both make it. What the plan leaves out, and the sources, are on Work.
+
+## Top to bottom
+
+- **The first-run hints**: the Day's own, and "Hold a piece to move it: drag it to a time, or onto a day above.", each shown till put away (`Hint`).
+- **The week strip** (UI-02): seven days from today, each with its load as a bar and a red dot where work is behind; a tap picks the day.
+- **Today's DO NOW card** (`NextCard`), on today only. It folds into one line ("DO NOW · Essay: plan") as the grid scrolls on to later hours, and unfolds as it scrolls back, or at a tap on the line, as Material's top bar does; in landscape it starts folded, so the grid has room.
+- **The day's header**: its weekday over its date in the gutter's width (today's date in a filled circle of the primary colour); its name and load (`Format.load`); its all-day events as chips in their calendar's colours, each opening its event sheet; and chips for what won't fit (today's, PL-02, in the error colour), the pieces with no time, what's done (UI-08) and its instructions (UI-11, "Instruction…" where there's none), each opening a sheet that holds what the Day's list held under its rows. "Nothing planned." where the day has no slot, record or piece.
+- **The grid**, the rest of the screen, scrolling on its own.
+
+## The grid
+
+- 00:00 to 24:00 down a gutter of hours, as the app writes times ("15:00"), every hour but midnight's, a thin line across at each. The day's windows are bands behind the blocks, school's tinted, each named at its top ("Study period", "Break", "Lunch", "Your time"); the hours outside every window are shaded.
+- Each slot, record, timed event and busy time of yours is a **block** from its start, as tall as it lasts but never under 24 dp. Blocks at the same time stand side by side, each in the first column free at its start and widened right over the columns free for all its time (`DayLayout.columns`); a block under 40 dp wide shows its first word only.
+- The grid is the day's wall clock (`DayLayout.minuteOf`): on the day the clocks go back, the hour repeated is drawn once, two things in it side by side; on the day they go forward, the missing hour is empty. An event across midnight is drawn on each day it covers, from 00:00 or to 24:00.
+- Today's moment is a line across in the primary colour with a dot at the gutter's edge, moved each minute.
+- It opens, on today, an hour before now; on another day, half an hour before its first window or block (`DayModel.opensAt`); picking a day scrolls so again.
+- Two fingers pinch it between 40 and 120 dp an hour (60 at first), about the point between them; the zoom is kept in the settings (`Settings.dayHourDp`), saved as the pinch ends, so it's the same next time. One finger only scrolls.
+- The free time between slots is the empty grid.
+
+## The blocks
+
+| Block | How it looks | Tap | Swipe (UI-03) | Hold |
+|---|---|---|---|---|
+| A piece ahead | `primaryContainer`: its label, its times, then as its height allows its reason (`Chunk.whyLine`), its first step ("First: …", AI-15) and the last thing said about its task; urgent, a red edge on its left; a ✓ where it's at least 32 dp tall and 120 dp wide | its piece's sheet (`PieceSheet`) | right to left: Done, with Undo; left to right: later today (today's only) | drag |
+| The piece under way | the same in `primary`, its times followed by " · now" | as above | as above | as above |
+| A piece gone by, not yet moved | faded, " · gone by" | as above | as above | as above |
+| A break outside | a pale strip, "Outside" | none | none | drag within its day, not under way |
+| A slot kept, or kept late | grey, its label struck through, its outcome | none | none | none |
+| A slot missed | outlined and worded in the error colour, "Missed" | none | none | none |
+| An event | its colour (the event's own, else its calendar's, `CalendarEvent.colour`); its words black or white, whichever reads better on it (`Colours.onEvent`); outlined only where the plan counts it free; a small "?" where the plan needs your answer about it, not asked yet | its event sheet (`EventSheet`) | none | none |
+| A busy time of yours (D-117) | outlined, "Busy: Football", or "Busy" | none | none | none |
+
+For TalkBack, each piece's block says its times and label, and offers *Done*, *Later today* and *Move it* (the move sheet), so nothing needs the drag or a swipe; a break outside is moved without the drag by asking Felix (D-116).
+
+## Moving a piece by hand (UI-04)
+
+- **Hold a piece**: it lifts, with a tick of haptics, and follows the finger over the whole Day. A ghost on the grid marks where it would go, in five-minute steps, with its times ("17:15–17:40"); near the grid's top or bottom edge, the grid scrolls.
+- **Let go on the grid**: its task's next piece (PL-04) takes that time on that day, as the move sheet's time does (`Moves.toTime`): an `AtTime` change of yours, "At Thu 29 17:15", undone in the chat's *Your changes*, kept to the minute (D-114). A piece dropped where it would run past midnight starts so it's over by it (`DayLayout.dropStart`).
+- **Refused**, it springs back and the snackbar says why, in the move sheet's words: the time's gone; it can't be started till then; it's due before its piece would be over (a real deadline still to come; overdue work goes anywhere from now, D-30).
+- **A later piece of its task** can't take a time (PL-04): let go on the grid, it springs back, "Only its next piece takes a time: drag it onto a day above".
+- **Let go on a day of the strip**: all of its task on that day (`Moves.toDay`, an `OnDay`), as the move sheet's *All of it, any time that day*, with its check (a time you gave in the chat holding it on that day is taken back there first). While a piece is dragged, the day under the finger is outlined and the days it can't go to are dimmed, as the move sheet's chips are (`Moves.dayAllowed`); let go on one, it springs back and says why; on its own day, nothing changes.
+- **A break outside** drags up and down its own day only (`Moves.outsideTo`): let go on the grid, it takes that time, an `OutsideAt` change of yours for that date ("Outside at Sat 31 14:30", D-116), refused where its time's gone, it's begun, it would run past midnight or it would be over another of the day's breaks; let go on the strip, it springs back, "A break outside stays on its day"; under way, it doesn't lift.
+- **Let go anywhere else**, nothing changes. The drop is judged on the plan as it then is, by the piece's key: one no longer there is "That piece has changed since (done, or planned again).". A drag under way isn't kept: rotated, or the process killed, it's dropped; the day chosen and the zoom are kept.
+- **A sideways movement before the hold's time is a swipe**; a hold, then a movement, is a drag; an upward or downward movement before it is the grid's scroll.
+- **The move sheet stays**: TalkBack's *Move it* opens it, for the fortnight and a time by the clock; the task sheet's *Change* keeps its days (UI-09). Events and records don't move: events are the calendar's own, moved in Google Calendar; records are what happened.

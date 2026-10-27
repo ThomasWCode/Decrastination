@@ -199,17 +199,17 @@ These come from the questions answered for v1 and 2.0.0; Q31 here is not Q-31 be
 - UI-01: Times are picked on a clock, and a stretch of the day as its two ends with its length shown, never typed.
 - UI-02: Each day in the week strip shows its load, minutes planned against free time, as a bar, with a mark where work is behind.
 - UI-03: A piece swiped one way is done (its slot kept), the other way moved later today, each with Undo.
-- UI-04: A piece held and moved goes by hand to another time or another day of the next fortnight; there's no limit on moves, but none past its real deadline.
+- UI-04: A piece held and moved goes by hand to another time or another day of the next fortnight; there's no limit on moves, but none past its real deadline. On the Day's grid it's held and dragged to a time on its day, or onto a day of the strip; the move sheet does the fortnight and a time by the clock (TalkBack's *Move it*); a break outside is dragged within its own day only (D-118).
 - UI-05: The widget shows the slot under way or next with its time and a ✓ that keeps it as the app's *Done* does (with ▶ over it to start a timer on it, D-112, where the height allows), its badge and minutes, the *Then:* line, today's slots kept and the time left, and ↻; a tap opens the task.
 - UI-06: Felix offers up to three quick replies under his last message; a tap sends one.
 - UI-07: The chat takes speech: the words go into the box to check, not sent.
-- UI-08: The Day view keeps kept slots in place, and shows what was done at its foot.
+- UI-08: The Day view keeps kept slots in place, on its grid, and shows what was done in its header's chip.
 - UI-09: A task's sheet is in three parts: Do (its next piece done, its steps, the task where it lives, a photo), About (when it's due, how long, when it can start, what it says, its next step while it's open (the first still to do where it has steps, else its reading's suggestion, 4.3.13), its steps, when and why it's planned) and Change (later today, tomorrow, a day, not a task, Felix, and editing one of the student's own).
 - UI-10: The Work view groups by due date or by subject and filters by source; the finished, the hidden and what the plan leaves out are folded at its foot.
-- UI-11: There's no Calendar page: events live on the Day timeline, each with its sheet and answers, and Settings → Calendar picks the calendars read and the one written to.
+- UI-11: There's no Calendar page: events live on the Day's grid in their calendar's colours, all-day ones in its header, each with its sheet and answers, and Settings → Calendar picks the calendars read and the one written to.
 - UI-12: The app is dark blue (navy on paper by day, near-black with navy by night), the widget and notifications alike; the launcher icon keeps the logo's pink, and overdue keeps the standard red.
 - UI-13: Each setting shows one sentence, worked out from its value, on what it does to the plan.
 - UI-15: The form for a task of the student's own edits its steps one by one (add, remove, rename, minutes, order, where each can be done), a renamed step keeping its tick.
 - UI-16: Felix's chat button, Material's standard 56 dp, is on every screen, the block screen included, opening the chat about what that screen shows, and wearing the count of his messages unread.
-- UI-17: Two screens for the work and one for the record: Day (when: a timeline of the chosen day's windows, events, slots and free time, under the week ahead) and Work (what: every open task), and Stats; a first-run hint says *Day is when, Work is what*.
+- UI-17: Two screens for the work and one for the record: Day (when: a time grid of the chosen day, as Google Calendar's Day view, its windows, events, slots and busy times, under the week ahead, D-118, `docs/spec/day.md`) and Work (what: every open task), and Stats; a first-run hint says *Day is when, Work is what*.
 - UI-18: The menu holds only the week's check-in, the Reviews and Settings (and, on a debug build, Debug: AR-03), which gathers Setup, protection, the calendar and Reset; a mark opens Setup when something there needs the student.

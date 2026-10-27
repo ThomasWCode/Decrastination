@@ -95,7 +95,7 @@ A stop part-way is finished at the next start (`Focus.finishKeeps`), before an e
 ## Moving a slot by hand
 
 On Day, a slot swiped right to left is done. Left to right, it's later today (`Instructions.laterToday`, its task's next piece only): at the first free time after it with its minutes, around today's other slots, as an `AtTime` change.
-Held, it goes to a day of the next fortnight, at a time or any time that day (`ui/MoveSheet.kt`): not a day before its task can start, nor one after a real deadline still to come, while overdue work can go to any (D-30). Each move is a change of yours, taken back in *Your changes*; one the plan wouldn't keep is refused first (`Planner.pinProblem`, which counts the piece's minutes: a time it wouldn't be over by its real deadline is refused, D-114).
+Held, it's dragged on the Day's grid to a time on its day, or onto a day of the strip (D-118, [day.md](day.md)); a break outside within its own day only (`Moves.outsideTo`, an `OutsideAt` change of yours, D-116). The move sheet does it too, TalkBack's *Move it*: a day of the next fortnight, at a time or any time that day (`ui/MoveSheet.kt`): not a day before its task can start, nor one after a real deadline still to come, while overdue work can go to any (D-30). Each move is a change of yours, taken back in *Your changes*; one the plan wouldn't keep is refused first (`Planner.pinProblem`, which counts the piece's minutes: a time it wouldn't be over by its real deadline is refused, D-114).
 
 ## Writing the calendar (NF-07)
 
