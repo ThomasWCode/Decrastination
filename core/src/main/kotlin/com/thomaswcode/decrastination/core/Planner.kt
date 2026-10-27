@@ -1259,12 +1259,16 @@ object Planner {
     /**
      * The day you gave for all of [task] (PL-04), where it's still to come, not before the day it can
      * start, and not after its real deadline's ([real]) while that's still to come: overdue work can
-     * go to any day from today (D-30), as [InstructionRules.latePin] lets it.
+     * go to any day from today (D-30), as [InstructionRules.latePin] lets it. None where the day is kept
+     * for only other tasks, the task left out (D-115): its real deadline holds it.
      */
     private fun keptDay(task: TaskItem, real: Long?, input: Input): LocalDate? {
         val day = task.mine.onDay?.value?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: return null
         val start = task.notBefore?.let { date(it, input.zone) }
-        return day.takeIf { it >= date(input.now, input.zone) && (start == null || it >= start) && (real == null || real <= input.now || it <= date(real, input.zone)) }
+        return day.takeIf {
+            it >= date(input.now, input.zone) && (start == null || it >= start) && (real == null || real <= input.now || it <= date(real, input.zone)) &&
+                !shutFor(task, input.onlyDays[it], hard = false, lastResort = false)
+        }
     }
 
     /** Why a time won't be kept for a task's next piece ([pinProblem]). */
@@ -1331,12 +1335,16 @@ object Planner {
     /**
      * The time you gave for [task]'s next piece (PL-04), where its day hasn't gone, it's no earlier
      * than the task can start, and it's before its real deadline ([real]) while that's still to
-     * come: overdue work takes any time from now (D-30), as [InstructionRules.latePin] lets it.
+     * come: overdue work takes any time from now (D-30), as [InstructionRules.latePin] lets it. None on a day kept for
+     * only other tasks, the task left out (D-115).
      */
     private fun pinnedTime(task: TaskItem, real: Long?, input: Input): Long? {
         val at = task.mine.atTime?.value ?: return null
         val end = date(at, input.zone).plusDays(1).atStartOfDay(input.zone).toInstant().toEpochMilli() - 1
-        return at.takeIf { end >= input.now && (task.notBefore == null || it >= task.notBefore) && (real == null || real <= input.now || it < real) }
+        return at.takeIf {
+            end >= input.now && (task.notBefore == null || it >= task.notBefore) && (real == null || real <= input.now || it < real) &&
+                !shutFor(task, input.onlyDays[date(it, input.zone)], hard = false, lastResort = false)
+        }
     }
 
     /**

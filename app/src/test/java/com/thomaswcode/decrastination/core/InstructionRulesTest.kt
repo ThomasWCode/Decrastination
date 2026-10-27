@@ -497,12 +497,17 @@ class InstructionRulesTest {
         val left = laid(listOf(essay, maths), listOf(before, only))
         assertTrue(left.on(saturday, maths).isEmpty())
         assertEquals(60, left.chunksOf(maths.id).sumOf { it.minutes })
+        // Its day no pin then: its real deadline holds it, so none of its work is behind.
+        assertTrue(left.chunksOf(maths.id).none { it.behind }, "${left.chunksOf(maths.id).map { it.behind }}")
         // A DayOnly made later (Felix's answer to his own question, say) keeps one that joined; the latest sets what's let in.
         val anki = applied(Change(ChangeType.DayOnly, taskId = essay.id, date = "2026-10-10", alsoAllow = InstructionRules.ALSO_ANKI), at = now + 1)
         val still = InstructionRules.onlyDays(listOf(only, after, anki), saturday, saturday).getValue(saturday)
         assertEquals(OnlyDay(setOf(essay.id, maths.id), anki = true, deadlines = false, joined = setOf(maths.id)), still)
         // Said as it joins.
         assertEquals("Sat 10 Oct was only for “essay”: “maths” joins it", InstructionRules.joinLine(saturday, still.taskIds - still.joined, maths.id, listOf(essay, maths).associateBy { it.id }))
+        // Moved on after it joined (a time on Sunday): the move in force for it is that one, so it's no longer among them.
+        val away = applied(Change(ChangeType.AtTime, taskId = maths.id, date = "2026-10-11", startMin = 600, time = Fixtures.at("2026-10-11T10:00")), at = now + 2)
+        assertEquals(setOf(essay.id), InstructionRules.onlyDays(listOf(only, after, away), saturday, saturday).getValue(saturday).taskIds)
         // Days outside the range asked for, or none kept: none.
         assertEquals(emptyMap(), InstructionRules.onlyDays(listOf(only), saturday.plusDays(1), saturday.plusDays(5)))
     }
