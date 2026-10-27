@@ -291,6 +291,15 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
 
     var rootAt by remember { mutableStateOf(Offset.Zero) }
     val card = rememberScrollState()
+    // On its side there's no room for the grid under what's above it, so the Day scrolls as one (Q94): what's above goes first
+    // as the grid scrolls on to later hours, and comes back once the grid is back at its top.
+    val page = rememberScrollState()
+    val collapsing = remember {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset =
+                if (available.y < 0f) Offset(0f, -page.dispatchRawDelta(-available.y)) else Offset.Zero
+        }
+    }
     // What's above the grid besides the card, measured: the hints and the strip, and the day's header and its all-day chips.
     var aboveCard by remember { mutableIntStateOf(0) }
     var belowCard by remember { mutableIntStateOf(0) }
@@ -299,7 +308,7 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
         // scrolling within that; only its line where there's no room for it.
         val cap = maxHeight - MIN_GRID - with(density) { (aboveCard + belowCard).toDp() }
         SideEffect { cardCap = with(density) { cap.toPx() } }
-        Column(Modifier.fillMaxSize()) {
+        Column(if (landscape) Modifier.fillMaxSize().verticalScroll(page) else Modifier.fillMaxSize()) {
             Column(Modifier.onSizeChanged { aboveCard = it.height }) {
                 Hint(graph, "day", "Day is when: today's slots as they come, and the week's days above. Work is what: every task, on the next tab.")
                 Hint(graph, "day-drag", "Hold a piece to move it: drag it to a time, or onto a day above.")
@@ -355,7 +364,8 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
                 { messageOf(it) }, drag, actions,
                 onZoom = { hourDp -> scope.launch { graph.protection.changeSettings { it.copy(dayHourDp = hourDp) } } },
                 // The fold takes the grid's scrolls alone, on today only: another day has no card, and the card's own don't fold it.
-                modifier = Modifier.weight(1f).then(if (today) Modifier.nestedScroll(folding) else Modifier),
+                // On its side the grid is the Day's height, under what's above it, and its scrolls take that away first.
+                modifier = if (landscape) Modifier.height(this@BoxWithConstraints.maxHeight).nestedScroll(collapsing) else Modifier.weight(1f).then(if (today) Modifier.nestedScroll(folding) else Modifier),
             )
         }
 
