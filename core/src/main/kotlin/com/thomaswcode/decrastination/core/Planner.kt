@@ -735,9 +735,11 @@ object Planner {
             fun fits(day: LocalDate, i: Int, lastResort: Boolean = false) =
                 room(item, day, i, lastResort) >= item.chunks[i].minutes && (perDay == null || countOn(item, day) < perDay)
             // A day kept for only other tasks that lets in work that would otherwise miss its deadline: only where no
-            // other day before the deadline has room for it (D-115).
+            // other day before the deadline itself has room for it, past the safety margin too (D-115).
             fun latest(from: LocalDate, i: Int): LocalDate? = generateSequence(from) { it.minusDays(1) }.takeWhile { it >= earliest }.let { days ->
-                days.firstOrNull { fits(it, i) } ?: days.firstOrNull { fits(it, i, lastResort = true) }
+                days.firstOrNull { fits(it, i) } ?: days.firstOrNull { fits(it, i, lastResort = true) }?.takeIf {
+                    generateSequence(from.plusDays(1)) { it.plusDays(1) }.takeWhile { it <= minOf(horizon, lastDayBefore(item, input)) }.none { fits(it, i) }
+                }
             }
 
             // Backwards, one chunk per day while there are days with room.
@@ -1198,13 +1200,15 @@ object Planner {
      * reach, which it carries on into. Null where nothing's limited.
      */
     private fun roomiest(task: TaskItem, input: Input): Int? {
-        if (input.dayCaps.isEmpty() && input.hardBusy.isEmpty()) return null
+        if (input.dayCaps.isEmpty() && input.hardBusy.isEmpty() && input.onlyDays.isEmpty()) return null
         val zone = input.zone
         val today = date(input.now, zone)
         // A day you gave for all of it is the only day it goes on (PL-04).
         val kept = keptDay(task, task.realDeadline, input)
         val from = kept ?: task.notBefore?.let { date(it, zone) }?.takeIf { it > today } ?: today
-        fun most(until: LocalDate) = generateSequence(from) { it.plusDays(1) }.takeWhile { it <= until }.maxOfOrNull { capacity(it, input) } ?: 0
+        // A day kept for only other tasks has none for it (D-115), Anki's cards on one that lets them in aside.
+        fun shut(day: LocalDate) = input.onlyDays[day]?.let { task.id !in it.taskIds && !(it.anki && task.source == Source.Anki) } == true
+        fun most(until: LocalDate) = generateSequence(from) { it.plusDays(1) }.takeWhile { it <= until }.maxOfOrNull { if (shut(it)) 0 else capacity(it, input) } ?: 0
         val lastUsable = kept ?: lastUsableDay(deadlineOf(task, input), task.kind, input)
         val before = most(lastUsable)
         if (before >= MIN_CHUNK) return before

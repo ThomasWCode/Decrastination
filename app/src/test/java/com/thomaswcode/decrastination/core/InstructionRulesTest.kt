@@ -539,6 +539,43 @@ class InstructionRulesTest {
     }
 
     @Test
+    fun `deadlines are let in only where no day before the deadline itself has room, past the safety margin too`() {
+        // Saturday 08:00, kept for the essay, deadlines let in: a sheet due Sunday 21:00, whose last usable day by the margin
+        // is Saturday, has all of Sunday free, so it doesn't take Saturday.
+        val at = Fixtures.at("2026-10-10T08:00")
+        val essay = task("essay", "2026-10-14T09:00", effort = 60)
+        val sheet = task("sheet", "2026-10-11T21:00", effort = 30)
+        val open = applied(Change(ChangeType.DayOnly, taskId = essay.id, date = "2026-10-10", alsoAllow = InstructionRules.ALSO_DEADLINES), at = at)
+        val p = plan(listOf(essay, sheet), listOf(open), at = at)
+        assertTrue(p.on(saturday, sheet).isEmpty(), "${p.buckets.map { b -> b.date to b.chunks.filter { it.taskId == sheet.id }.size }}")
+        assertEquals(30, p.chunksOf(sheet.id).sumOf { it.minutes })
+    }
+
+    @Test
+    fun `a task's pieces are no longer than the most a day it can go on holds, a day kept for others not among them`() {
+        // Friday, Friday and Sunday limited to 20 minutes, Saturday kept for the essay: a 40-minute sheet due Monday morning
+        // goes in two pieces on Friday and Sunday, not one with no day to hold it.
+        val friday = Fixtures.at("2026-10-09T17:00")
+        val essay = task("essay", "2026-10-20T09:00", effort = 60)
+        val sheet = task("sheet", "2026-10-12T09:00", effort = 40)
+        val rules = listOf(
+            applied(Change(ChangeType.DayLimit, date = "2026-10-09", freeMin = 20), at = friday),
+            applied(Change(ChangeType.DayOnly, taskId = essay.id, date = "2026-10-10"), at = friday + 1),
+            applied(Change(ChangeType.DayLimit, date = "2026-10-11", freeMin = 20), at = friday + 2),
+        )
+        // With boxes of an hour, so only the days' room cuts it.
+        val today = Planner.date(friday, LONDON)
+        val p = Planner.plan(
+            Planner.Input(
+                listOf(essay, sheet), friday, LONDON, Settings(boxMin = 60),
+                dayCaps = InstructionRules.dayCaps(rules, today, today.plusDays(90)), onlyDays = InstructionRules.onlyDays(rules, today, today.plusDays(90)),
+            ),
+        )
+        assertEquals(listOf(20, 20), p.chunksOf(sheet.id).map { it.minutes })
+        assertTrue(p.chunksOf(sheet.id).none { it.behind }, "${p.chunksOf(sheet.id).map { it.behind }}")
+    }
+
+    @Test
     fun `a day whose tasks are all done stays free of work, and overdue work goes to the next day while today's kept for others`() {
         val essay = task("essay", "2026-10-14T09:00", effort = 60).copy(status = Status.Done)
         val maths = task("maths", "2026-10-12T09:00", effort = 240)
