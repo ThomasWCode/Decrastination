@@ -94,6 +94,18 @@ class SlotCalendarDiffTest {
     }
 
     @Test
+    fun `an event the sync brought back to a time the app wrote moments before is written back, not your move (Q93)`() {
+        // The app wrote a at 17:00, then at 17:30; the sync, still sending 17:00, put it back there.
+        val echoed = SlotCalendarDiff.diff(listOf(want("a", start = half)), listOf(event(1, "a")), mapOf(want("a").uri to half), echo = { it.start == five })
+        assertEquals(emptyList(), echoed.handMoves)
+        assertEquals(listOf(1L), echoed.updates.map { it.existing.id })
+        // At a time that isn't one of the app's moments-old versions: your move, as before.
+        val yours = SlotCalendarDiff.diff(listOf(want("a", start = half)), listOf(event(1, "a")), mapOf(want("a").uri to half), echo = { false })
+        assertEquals(listOf(1L), yours.handMoves.map { it.existing.id })
+        assertEquals(emptyList(), yours.updates)
+    }
+
+    @Test
     fun `an event moved where the plan now has it is left be, and one the app moved isn't yours`() {
         // The plan moved a to 17:30 and the event is there already: nothing to do.
         assertEquals(SlotCalendarDiff.Diff(emptyList(), emptyList(), emptyList(), emptyList()), SlotCalendarDiff.diff(listOf(want("a", start = half)), listOf(event(1, "a", start = half)), mapOf(want("a").uri to five)))

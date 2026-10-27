@@ -239,6 +239,32 @@ class CalendarWriterTest {
     }
 
     @Test
+    fun `a piece moved twice in a moment, the sync bringing back its first time, is written back to its second, not taken as yours (Q93)`() = runBlocking {
+        pickCalendar(7)
+        tasks.update { it.copy(tasks = listOf(task("essay"))) }
+        val first = plan(work(chunk("teams:essay", "Essay"), "17:00"))
+        val second = plan(work(chunk("teams:essay", "Essay"), "18:00"))
+        val uri = SlotCalendarDiff.desired(first, LONDON).single().uri
+        writer.watchCalendar()
+        writer.writeSlots(first)
+        writer.writeSlots(second)
+        assertEquals(at("18:00"), calendar.events.single().start)
+        // The sync, still sending 17:00 as 18:00 was written, puts the event back at 17:00.
+        calendar.move(uri, at("17:00"))
+        writer.writeSlots(second)
+        assertEquals(emptyList(), changes, "not taken as your move")
+        assertEquals(emptyList(), refused, "nothing said: the app's own")
+        assertEquals(at("18:00"), calendar.events.single().start, "written back to the plan's time")
+        assertEquals(mapOf(uri to at("18:00")), versions.value.calendarWritten)
+        // Once that's long past, a move to the same time is yours, as before.
+        clock.time += SlotCalendarDiff.ECHO_MS + 60_000L
+        calendar.move(uri, at("17:00"))
+        writer.writeSlots(second)
+        assertEquals("Moved in the calendar", changes.single().first)
+        assertEquals(at("17:00"), calendar.events.single().start)
+    }
+
+    @Test
     fun `a move the plan can't take is written back, and you're told why`() = runBlocking {
         pickCalendar(7)
         // The essay is due at 19:00 today; the old task has gone from the list.
