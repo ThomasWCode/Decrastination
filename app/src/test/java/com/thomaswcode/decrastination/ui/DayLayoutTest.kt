@@ -59,13 +59,13 @@ class DayLayoutTest {
     fun `the DO NOW card folds from what it shows, so a scroll folds a card taller than its cap at once`() {
         // A card 1,500 px tall behind a cap of 300, its line 112: it folds 188 at most, from 300 to its line.
         assertEquals(188f, DayLayout.foldMax(1500f, 300f, 112f))
-        // A scroll of 100 on to later hours folds it 100 at once, then the rest of its 188, and no further.
+        // A drag of 100 up folds it 100 at once, then the rest of its 188, and no further.
         assertEquals(100f, DayLayout.folded(0f, -100f, 1500f, 300f, 112f))
         assertEquals(188f, DayLayout.folded(100f, -100f, 1500f, 300f, 112f))
-        // Back towards earlier hours it unfolds, to nothing folded.
+        // Dragged back down (the day's header, wherever the grid's scrolled) it unfolds, to nothing folded.
         assertEquals(88f, DayLayout.folded(188f, 100f, 1500f, 300f, 112f))
         assertEquals(0f, DayLayout.folded(88f, 200f, 1500f, 300f, 112f))
-        // Folded past its most (as landscape starts), a scroll back unfolds it from its most.
+        // Folded past its most (as landscape starts, or by TalkBack's Fold it), a drag down unfolds it from its most.
         assertEquals(88f, DayLayout.folded(Float.MAX_VALUE, 100f, 1500f, 300f, 112f))
         // A card shorter than its cap folds from its own height; with no room for more than its line, it doesn't fold.
         assertEquals(88f, DayLayout.foldMax(200f, 300f, 112f))
@@ -73,13 +73,13 @@ class DayLayoutTest {
     }
 
     /**
-     * A scroll [dy] passed as Compose's nested scroll passes it, through the Day's [Folding] with the card folded [fold]: its
-     * pre-scroll, then what it's on (scrolled [at], of [range]), then its post-scroll with what's left. The fold and the
-     * scroll after, for a card 600 px tall under a cap of 1,000, its line 112.
+     * A drag [dy] on the card, passed as Compose's nested scroll passes it, through the card's [Folding] with it folded [fold]:
+     * its pre-scroll, then what the card holds (scrolled [at], of [range]), then its post-scroll with what's left. The fold and
+     * the scroll after, for a card 600 px tall under a cap of 1,000, its line 112.
      */
-    private fun scroll(onCard: Boolean, dy: Float, fold: Float, at: Float, range: Float): Pair<Float, Float> {
+    private fun drag(dy: Float, fold: Float, at: Float, range: Float): Pair<Float, Float> {
         var folded = fold
-        val folding = Folding(onCard, { folded }) { by ->
+        val folding = Folding({ folded }) { by ->
             val was = folded
             folded = DayLayout.folded(was, by, 600f, 1000f, 112f)
             was - folded
@@ -92,21 +92,16 @@ class DayLayoutTest {
     }
 
     @Test
-    fun `the grid's scrolls fold the card before the hours move and unfold it at midnight, and the card's own fold it from its top`() {
-        // Unfolded in full over the grid at 16:00: on to later hours, the card folds first, the grid where it was.
-        assertEquals(100f to 960f, scroll(onCard = false, dy = -100f, fold = 0f, at = 960f, range = 1440f))
-        // Folded to its line (488 px), the grid at 00:05: back, the grid goes to midnight first, the card unfolding with
-        // what's left (Q97).
-        assertEquals(288f to 0f, scroll(onCard = false, dy = 205f, fold = 488f, at = 5f, range = 1440f))
-        // The grid at 16:00: a scroll back moves only the grid, however far folded the card.
-        assertEquals(488f to 760f, scroll(onCard = false, dy = 200f, fold = 488f, at = 960f, range = 1440f))
-        // The card dragged up, all it holds shown: it folds at once.
-        assertEquals(50f to 0f, scroll(onCard = true, dy = -50f, fold = 0f, at = 0f, range = 0f))
+    fun `the card dragged folds once what it holds has scrolled to its end, then from its top, and unfolds first dragged back`() {
+        // All it holds shown: it folds at once.
+        assertEquals(50f to 0f, drag(dy = -50f, fold = 0f, at = 0f, range = 0f))
         // Taller than its room by 40: what it holds scrolls to its end first, then it folds with the rest.
-        assertEquals(60f to 40f, scroll(onCard = true, dy = -100f, fold = 0f, at = 0f, range = 40f))
+        assertEquals(60f to 40f, drag(dy = -100f, fold = 0f, at = 0f, range = 40f))
         // Once folding, it folds first, what it holds left where it is, and unfolds first as it's dragged back down.
-        assertEquals(110f to 40f, scroll(onCard = true, dy = -50f, fold = 60f, at = 40f, range = 90f))
-        assertEquals(0f to 20f, scroll(onCard = true, dy = 80f, fold = 60f, at = 40f, range = 90f))
+        assertEquals(110f to 40f, drag(dy = -50f, fold = 60f, at = 40f, range = 90f))
+        assertEquals(0f to 20f, drag(dy = 80f, fold = 60f, at = 40f, range = 90f))
+        // Unfolded, dragged down: what it holds goes back to its top, and the fold's left alone.
+        assertEquals(0f to 0f, drag(dy = 100f, fold = 0f, at = 40f, range = 40f))
     }
 
     @Test

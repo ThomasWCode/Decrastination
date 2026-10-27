@@ -90,19 +90,11 @@ internal object DayLayout {
     fun foldMax(full: Float, cap: Float, line: Float): Float = (minOf(full, cap) - line).coerceAtLeast(0f)
 
     /**
-     * How far the DO NOW card is folded once a scroll, [dy] (on to later hours or up the card, negative), reaches it at [fold]:
-     * folded from what it shows, so the scroll moves it at once, however much taller than its cap the card is.
+     * How far the DO NOW card is folded once a drag, [dy] (up the card or the day's header, negative), reaches it at [fold]:
+     * folded from what it shows, so the drag moves it at once, however much taller than its cap the card is.
      */
     fun folded(fold: Float, dy: Float, full: Float, cap: Float, line: Float): Float {
         val most = foldMax(full, cap, line)
         return (fold.coerceAtMost(most) - dy).coerceIn(0f, most)
     }
-
-    /**
-     * Whether the DO NOW card's fold, at [fold], takes a scroll [dy] before it moves what it's on, or only what that leaves.
-     * The grid's: on to later hours first, so the card folds away before the hours move; back only what's left at midnight,
-     * so the grid goes back first and the card comes back at its top (Q97). The card's own ([onCard]): first once it's
-     * folding, so it folds from its top down, else what it holds scrolls to its end first.
-     */
-    fun foldsFirst(onCard: Boolean, dy: Float, fold: Float): Boolean = if (onCard) fold > 0f else dy < 0f
 }

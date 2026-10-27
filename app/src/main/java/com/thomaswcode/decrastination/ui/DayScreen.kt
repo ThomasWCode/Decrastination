@@ -6,6 +6,9 @@ import android.os.SystemClock
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.rememberScrollableState
+import androidx.compose.foundation.gestures.scrollable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -110,13 +113,13 @@ private const val SWIPE_AGAIN_MS = 3_000L
 private enum class DaySheet { WontFit, NoTime, Done, Said }
 
 /**
- * Today's DO NOW card's fold as a scroll of the grid's, or of the card's own ([onCard]), reaches it: taken before the scroll
- * moves what it's on, or with what that leaves ([DayLayout.foldsFirst]). [at] says how far it's folded; [by] folds it by
- * what it can of a scroll and says what it took.
+ * Today's DO NOW card's fold as a drag on the card reaches it: once it's folding, taken before what the card holds moves, so
+ * it folds from its top down; before that, only what's left once what it holds has scrolled to its end. [at] says how far
+ * it's folded; [by] folds it by what it can of a scroll and says what it took.
  */
-internal class Folding(private val onCard: Boolean, private val at: () -> Float, private val by: (Float) -> Float) : NestedScrollConnection {
+internal class Folding(private val at: () -> Float, private val by: (Float) -> Float) : NestedScrollConnection {
     override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset =
-        if (DayLayout.foldsFirst(onCard, available.y, at())) Offset(0f, by(available.y)) else Offset.Zero
+        if (at() > 0f) Offset(0f, by(available.y)) else Offset.Zero
 
     override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset = Offset(0f, by(available.y))
 }
@@ -286,9 +289,10 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
         onDrop = ::drop,
     )
 
-    // Today's DO NOW card shows in full, up to the whole Day under the strip (Q96). It folds into a line as the grid scrolls on
-    // to later hours, or as it's dragged up itself, and unfolds once the grid's scrolled back to midnight (Q97), as it's
-    // dragged down while part-folded, or at a tap on the folded line; in landscape it starts folded, so the grid has room.
+    // Today's DO NOW card shows in full, up to the whole Day under the strip (Q96). It folds into a line as it's dragged up, or
+    // as the day's header is, and unfolds as the header's dragged down, wherever the grid's scrolled, as it's dragged down
+    // while part-folded, or at a tap on the folded line; the grid's own scrolls only move its hours (your word, replacing
+    // Q97). In landscape it starts folded, so the grid has room.
     var cardFull by remember { mutableIntStateOf(0) }
     // The card's cap (below) in pixels, as last laid out: the card folds from what it shows unfolded, its height or that cap.
     var cardCap by remember { mutableFloatStateOf(Float.MAX_VALUE) }
@@ -302,8 +306,9 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
         fold = DayLayout.folded(was, dy, cardFull.toFloat(), cardCap, line)
         return was - fold
     }
-    val folding = remember { Folding(onCard = false, { fold }, ::foldBy) }
-    val cardFolding = remember { Folding(onCard = true, { fold }, ::foldBy) }
+    val cardFolding = remember { Folding({ fold }, ::foldBy) }
+    // The day's header dragged, or flung, moves the fold itself: up folds the card, down pushes the hours down.
+    val pushing = rememberScrollableState { delta -> foldBy(delta) }
 
     var rootAt by remember { mutableStateOf(Offset.Zero) }
     val card = rememberScrollState()
@@ -361,8 +366,9 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
                     }
                 }
             }
-            // Laid at its own height, running on under the screen's edge rather than squeezed, while the card fills the Day.
-            Column(Modifier.wrapContentHeight(Alignment.Top, unbounded = true)) {
+            // Laid at its own height, running on under the screen's edge rather than squeezed, while the card fills the Day; on
+            // today, upright, dragged to fold the card or push the hours down, wherever they're scrolled.
+            Column(Modifier.wrapContentHeight(Alignment.Top, unbounded = true).then(if (today && !landscape) Modifier.scrollable(pushing, Orientation.Vertical) else Modifier)) {
                 DayHeader(model, plan, day, today, zone, instructions.applied.flatMap { it.changes }.count { c -> saysOf(c.type) && (c.date == day.toString() || (c.date == null && c.weekday == day.dayOfWeek.value)) }) { daySheet = it }
                 model.allDay.takeIf { it.isNotEmpty() }?.let { events ->
                     LazyRow(contentPadding = PaddingValues(start = GUTTER, end = 12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -382,9 +388,9 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
                 model, plan, zone, settings.dayHourDp, grid, { EventJudge.judge(it, answers) }, asked.eventsAsked, written.microPlans,
                 { messageOf(it) }, drag, actions,
                 onZoom = { hourDp -> scope.launch { graph.protection.changeSettings { it.copy(dayHourDp = hourDp) } } },
-                // The grid's scrolls fold the card on today only: another day has no card. On its side the grid is the Day's
-                // height, under what's above it, and its scrolls take that away first.
-                modifier = if (landscape) Modifier.height(tall).nestedScroll(collapsing) else Modifier.weight(1f).then(if (today) Modifier.nestedScroll(folding) else Modifier),
+                // Upright, the grid's scrolls move only its hours, never the card. On its side the grid is the Day's height, under
+                // what's above it, and its scrolls take that away first.
+                modifier = if (landscape) Modifier.height(tall).nestedScroll(collapsing) else Modifier.weight(1f),
             )
         }
 
