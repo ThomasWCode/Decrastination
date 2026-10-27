@@ -1718,6 +1718,47 @@ class PlannerTest {
     }
 
     @Test
+    fun `a pin moved by one given later takes free time where it's laid, its given time no longer outside it`() {
+        // An evening of 17:00 to 19:00, busy till 18:00: half hours pinned at 17:00 and, given later, 17:10. The 17:10 is kept
+        // over the busy time; the 17:00 goes to 18:00, in the free time, and takes it.
+        val evening = mapOf(tuesday to listOf(DayWindow(17 * 60, 19 * 60, WindowKind.Evening)))
+        val busy = listOf(Busy(Fixtures.at("2026-10-13T17:00"), Fixtures.at("2026-10-13T18:00")))
+        val a = task("a", Fixtures.at("2026-10-18T23:59"), effort = 30).yours(atTime = Fixtures.at("2026-10-13T17:00"))
+        val b = task("b", Fixtures.at("2026-10-18T23:59"), effort = 30).yours(atTime = Fixtures.at("2026-10-13T17:10"))
+        val input = windowed(listOf(a, b), "2026-10-12T17:00", windows = evening, busy = busy).copy(pinOrder = listOf("teams:b", "teams:a"))
+        val plan = Planner.plan(input)
+        fun hm(time: Long) = Instant.ofEpochMilli(time).atZone(LONDON).toLocalTime().toString()
+        assertEquals(listOf("b 17:10", "a 18:00"), plan.bucket(tuesday)!!.slots.map { "${it.chunk!!.title} ${hm(it.start)}" })
+        // Only the kept one's minutes are outside the free time: the day shows 60 free and its 30.
+        assertEquals(Planner.capacity(tuesday, input) + 30, plan.bucket(tuesday)!!.capacityMin)
+    }
+
+    @Test
+    fun `home work pinned in a school window takes school's time, not the evening's`() {
+        // Tuesday's break at 10:45 holds a half hour of home work you pinned there; the evening is filled by work put on Tuesday.
+        val base = windowed(emptyList(), "2026-10-12T17:00")
+        val fill = task("fill", Fixtures.at("2026-10-18T23:59"), effort = Planner.capacityOf(tuesday, base).homeMin).yours(onDay = "2026-10-13")
+        val pinned = task("pinned", Fixtures.at("2026-10-18T23:59"), effort = 30).yours(atTime = Fixtures.at("2026-10-13T10:45"))
+        val plan = Planner.plan(windowed(listOf(pinned, fill), "2026-10-12T17:00"))
+        assertEquals(Fixtures.at("2026-10-13T10:45"), plan.bucket(tuesday)!!.slotOf(plan.chunksOf("teams:pinned").single())!!.start)
+        assertTrue(plan.chunksOf("teams:fill").none { it.behind }, "${plan.chunksOf("teams:fill").map { it.behind }}")
+        assertTrue(plan.chunksOf("teams:fill").all { plan.bucket(tuesday)!!.chunks.contains(it) })
+    }
+
+    @Test
+    fun `pins either side of midnight over each other are told apart, the one given later keeping its time`() {
+        // Half hours pinned at 23:50 on Tuesday and, given later, 00:00 on Wednesday: they'd overlap by 20 minutes.
+        val days = mapOf(tuesday to schoolDay, tuesday.plusDays(1) to schoolDay)
+        val late = task("late", Fixtures.at("2026-10-18T23:59"), effort = 30).yours(atTime = Fixtures.at("2026-10-13T23:50"))
+        val early = task("early", Fixtures.at("2026-10-18T23:59"), effort = 30).yours(atTime = Fixtures.at("2026-10-14T00:00"))
+        val plan = Planner.plan(windowed(listOf(late, early), "2026-10-12T17:00", windows = days).copy(pinOrder = listOf("teams:early", "teams:late")))
+        val slots = plan.buckets.flatMap { it.slots }.filter { it.kind == SlotKind.Work }
+        val kept = slots.single { it.chunk!!.taskId == "teams:early" }
+        assertEquals(Fixtures.at("2026-10-14T00:00"), kept.start)
+        assertTrue(slots.none { it != kept && it.start < kept.end && kept.start < it.end }, "${slots.map { Instant.ofEpochMilli(it.start) }}")
+    }
+
+    @Test
     fun `a time you give counts all its minutes against a limit you set on its day (D-114)`() {
         // Tuesday limited to an hour: a half hour pinned at 23:00 leaves 30 of it, so a 45-minute piece put on Tuesday has no room there.
         val limited = windowed(emptyList(), "2026-10-12T17:00").copy(dayCaps = mapOf(tuesday to 60))

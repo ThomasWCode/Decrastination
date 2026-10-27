@@ -36,7 +36,7 @@ class SlotterTest {
         previous: Map<String, Long> = emptyMap(),
         outside: Boolean = false,
         deadlineMinOf: (Chunk) -> Int? = { null },
-    ) = Slotter.slot(LocalDate.parse(date), chunks, windows, busy, pins, previous, Fixtures.at(now), LONDON, settings, outside, deadlineMinOf)
+    ) = Slotter.slot(LocalDate.parse(date), chunks, windows, busy, pins, previous, Fixtures.at(now), LONDON, settings, outside, deadlineMinOf = deadlineMinOf)
 
     private fun hm(time: Long) = Instant.ofEpochMilli(time).atZone(LONDON).toLocalTime().toString()
 
