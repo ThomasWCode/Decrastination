@@ -5,7 +5,10 @@ The code as it is now, quoted with its file and line on `main` at 24a8774, uncha
 ## Read first, in full
 
 - `felix/FelixPrompts.kt`: `REGISTER` (line 37), `JUST_TALK` (40, used only by the chat), `system` (76; `${REGISTER}` at 81, the standing-instructions sentence at 83), `describe` (109 on; its "Today:" line at 176–180).
-- `felix/FelixRules.kt`: `MAX_PER_SLOT` (48), the SlotStart and SlotKept arms of `due` (149, 153).
+- `felix/FelixRules.kt`: `MAX_PER_SLOT` (48), `FRESH_MS` (51), and `due` from 130: DayDone (132), then `paced` (135), the early exits `if (work.none { it.end > now }) return null` (141) and `if (paced) return null` (142), then the SlotStart and SlotKept arms (149, 153).
+- `block/Focus.kt`: `keep` finding today's `Missed` record of the same key (348), the task's minutes worked added (398–403), and `finish` replacing that record with the kept one (422: `filterNot { it == k.replaces } + kept`).
+- `felix/FelixAnswers.kt`: `parse` returning `bounded` (4–6), and `message` cutting at a sentence or a word (34–38); `felix/FelixCaller.kt:22`, `Result`, which has no raw text.
+- `core/Chat.kt`: `ChatState.version` (21, now 9) and the archive month's (114, now 8); `data/Stores.kt:63`, the chat store's migrations; `docs/plan_v4/data-and-migrations.md` §Versions and migrations, rule 6, and its 4.5.1 to 4.6.0 entries, the pattern for a raise with nothing to change.
 - `felix/ChatPrompts.kt`: `system` (160 on; `REGISTER` and `JUST_TALK` interpolated at 177 and 179, the examples after them), `plan` (802 on; today's slots under "Today's slots …").
 - `felix/Looks.kt`: `today(now)` (361), the two `describe` calls (314, the Morning; 591, the rest), and where his message is made and sent (431–446: a silent one too, with blank text, its `kind` and `pieceKey` set).
 - `felix/Conversation.kt`: `chatContext` (555), its `ChatPrompts.plan` call (574), `keptToday` (672).
@@ -43,7 +46,7 @@ The code as it is now, quoted with its file and line on `main` at 24a8774, uncha
 
 A chat case has `"kind": "chat"` and `"message"`, the student's words, and goes through the Conversation on temporary stores, seeded as the chat's set seeds them (line 148).
 
-**What the test does with each case:** builds the `Plan`, the `SlotRecord`s, the messages and the profile (`Profile.block` with the case's memories) as the app has them; for a `felix` case, `FelixPrompts.system(settings, 12)` and `describe(...)` sent through `FelixCaller.say` (`felix/FelixCaller.kt:26`), the answer read by `FelixAnswers.parse` (240 characters, 480 for the Morning: `FelixAnswers.kt:10`, `13`); for a `chat` case, `Conversation.ask`, its answer read by `ChatAnswers.parse`. It writes `answers/<id>-<run>.json` and the run's `report-<run>.md`, each case's cost printed as it goes, and keeps to the chat set's soft budget: `EVAL_BUDGET_USD`, 3 dollars unless set, stopping before a case once what's left is under twice the dearest case so far (half a dollar at least). Not the readings' hard guard (2 dollars, every call held to `Pricing.WORST_CALL_USD`), which would stop at about $0.65; a case not asked is listed in the report as not asked.
+**What the test does with each case:** builds the `Plan`, the `SlotRecord`s, the messages and the profile (`Profile.block` with the case's memories) as the app has them; for a `felix` case, `FelixPrompts.system(settings, 12)` and `describe(...)` sent through `FelixCaller.say` (`felix/FelixCaller.kt:26`), the answer read by `FelixAnswers.parse` (240 characters, 480 for the Morning: `FelixAnswers.kt:10`, `13`). `parse` cuts a longer message rather than refusing it, so `FelixCaller.Result` gains `cut: Boolean`, set where the raw answer's message is longer than `maxMessage` before `bounded`; the report shows it beside the cut text, and a cut message fails its case; for a `chat` case, `Conversation.ask`, its answer read by `ChatAnswers.parse`. It writes `answers/<id>-<run>.json` and the run's `report-<run>.md`, each case's cost printed as it goes, and keeps to the chat set's soft budget: `EVAL_BUDGET_USD`, 3 dollars unless set, stopping before a case once what's left is under twice the dearest case so far (half a dollar at least). Not the readings' hard guard (2 dollars, every call held to `Pricing.WORST_CALL_USD`), which would stop at about $0.65; a case not asked is listed in the report as not asked.
 
 The command, each time with `--rerun` so an unchanged set isn't skipped as up to date:
 
@@ -53,7 +56,7 @@ The command, each time with `--rerun` so an unchanged set isn't skipped as up to
 
 `EVAL_CASES` (ids, by commas) asks only those, for a round after the owner's read.
 
-**The cases** (README §1 lists them; each `expect` is what the rule should give):
+**The cases** (README §1 lists them; each `expect` is what the rule should give). Their `today` is written as the app writes it: one record a piece's key, a missed piece kept later standing as its `KeptLate` record (its `at` after its `end`), with his SlotEnd about it in `recent`, never a `Missed` and a kept record side by side.
 
 | id | reason | today | expect |
 |---|---|---|---|
@@ -63,20 +66,23 @@ The command, each time with `--rerun` so an unchanged set isn't skipped as up to
 | m04-second-nudge | SlotStart | none missed; 1 SlotStart with words already sent on this piece, and 1 silent one | Firm (the silent one not counted) |
 | m05-deadline-first-nudge | SlotStart | none missed; no nudge yet; a real deadline in 20 h, nothing done | Neutral (a deadline only raises a level a day already has) |
 | m05b-deadline-first-miss | SlotEnd | 1 missed (this one); a real deadline in 20 h, nothing done | Firm |
-| m06-started-after | SlotKept | 2 missed (this task's and another's), then this task's next kept; a firm SlotEnd of his earlier about it | Pleased, nothing held; sent though its key isn't one in three (Q5) |
+| m06-started-after | SlotKept | this task's piece missed and now kept late (`KeptLate`, a SlotEnd of his about it kept at `"Firm"`), another task's still `Missed` | Pleased, nothing held; sent though its key isn't one in three (Q5) |
 | m07-reason-given | chat: "had football, sorry" | 2 missed | Firm as the ceiling; written neutral and kind |
 | m08-ill | SlotEnd | 2 missed; a memory "cold: feeling rough (until …)" | Firm as the ceiling; written kind |
 | m09-stressed | chat: "i can't do this rn" | 3 missed | Strong as the ceiling; written kind, asking what's up |
 | m10-just-talk | chat: "lol skipped physics" | 1 missed | Neutral |
 | m11-kept-after-miss | SlotKept | 1 missed earlier, this one kept | Pleased |
-| m12-all-kept | DayDone | 4 of 4 kept | Proud, saying what was done |
-| m13-made-up | SlotKept | a piece missed at 17:00, its task's next kept at 20:00, no other miss | Proud |
+| m12-all-kept | DayDone | 4 of 4 kept, none late | Proud, saying what was done |
+| m13-made-up | SlotKept | one piece, laid 17:00–17:30, kept late at 20:00 (`KeptLate`, a SlotEnd of his about it), no other miss | Proud |
 | m14-morning-after | Morning | yesterday 3 missed, today none yet | Neutral (no line) |
 | m15-move-missed | chat: "can you move the essay to tomorrow" | 2 missed | Firm as the ceiling; the change made |
 | m16-nickname | SlotKept | none missed, kept | Pleased; a memory "call me: <a made-up name>", used once or not at all |
 | m17-rule-wins | SlotEnd | 3 missed; a standing rule "stop being disappointed in me" | Strong as the line; written with no let-down at all, as the rule says |
 | m18-rule-wins-chat | chat: "skipped it again" | 3 missed; the same rule | Strong as the line; no let-down in the chat either |
 | m19-hand-ticked | SlotStart | 1 missed today; a real deadline in 20 h; 2 of 4 steps ticked by hand, 0 minutes | Neutral (something's done, so the deadline doesn't raise it) |
+| m20-kept-more-to-come | SlotKept | 2 kept, 2 still to come | Pleased, never "every slot today" |
+| m21-two-made-up | DayDone | two pieces, both missed and both kept late, nothing else | Pleased (made up, not a day kept) |
+| m22-recovery-last-slot | SlotKept | the evening's last slot kept late after a `"Strong"` SlotEnd about it, an unplaced piece still in today's bucket (so no DayDone); his next check 45 min off | Sent (above `due`'s exits), Pleased |
 
 **Run once now**, on the prompts as they are (before stage 4), into `report-before.md`: today's voice, with no mood line.
 
@@ -87,7 +93,7 @@ A draft; the names follow `FelixRules`.
 ```kotlin
 /**
  * How Felix feels about today's work (D-119): let down by misses and ignored nudges, pleased and proud by
- * work kept. Today's records alone, so it starts each day neutral and keeps nothing. A ceiling: his
+ * work kept. Today's records alone, so it starts each day neutral; the level a message was written at is kept on it (Q6). A ceiling: his
  * prompt brings him down from it where their words give a reason, an illness or a hard time. Pure.
  */
 object Mood {
@@ -106,19 +112,29 @@ object Mood {
 
     fun of(side: Side, today: List<SlotRecord>, record: SlotRecord?, nudges: Int, task: TaskItem?, now: Long, zone: ZoneId): Feeling
 
-    /** Whether he was let down (firm or strong) about [taskId] in a message of his today: a kept slot is then always answered (Q5). */
-    fun letDown(taskId: String, today: List<SlotRecord>, messages: List<ChatMessage>, tasks: List<TaskItem>, zone: ZoneId): Boolean
+    /** A missed piece kept later: its record kept late, after its slot's end, with a SlotEnd of his about it today. */
+    fun madeUp(record: SlotRecord, messages: List<ChatMessage>): Boolean
+
+    /** Whether he was let down (firm or strong) about [taskId] in a message of his today, by the level kept on it (Q6): a kept slot is then always answered (Q5). */
+    fun letDown(taskId: String, messages: List<ChatMessage>, now: Long, zone: ZoneId): Boolean
 }
 ```
+
+`of` takes the chat's `messages` too, for `madeUp`.
 
 - **Down**, in two steps:
   - the day's level: Strong with 3 or more `Missed` today; Firm with 2, or `nudges >= 1` (this is the piece's second nudge); else Neutral;
   - the deadline: where `task.hardAt(now)`, `deadlineAt(now)` is within 24 hours and nothing's done on it (`workedMin == 0 && photoMin == 0 && subSteps.none { it.done }`), one step up (Neutral to Firm, Firm to Strong), and only where the day has a `Missed` record or `nudges >= 1`. So a first nudge with nothing missed stays Neutral, however close the deadline.
-- **Up:** Proud with every one of today's records kept and two or more; or `record`'s task has a `Missed` record earlier today and no other task has one (the miss made up, nothing else missed); else Pleased where `record` is kept; else Neutral.
+- **The records as the app keeps them:** a missed piece kept later isn't `Missed` any more: `Focus.keep` finds its `Missed` record by key (348) and `finish` replaces it with the `KeptLate` one, `at` the keep's time (422), the task's `workedMin` raised with it (398–403). `madeUp(record)` is `record.outcome == KeptLate && record.at > record.end` with a SlotEnd of his today whose `pieceKey == record.key`; a `KeptLate` inside its slot's time, with no SlotEnd, is only late, not a make-up.
+- **Down** counts `Missed` records only: a make-up has stopped being a miss.
+- **Up:**
+  - Proud on DayDone with every one of today's records kept, two or more, and none of them `madeUp`; or where `madeUp(record)` and no other record today is `Missed` or `madeUp`;
+  - else Pleased where `record` is kept, including a SlotKept with work still to come (never "every slot" before DayDone, as `today` is records, not the plan) and a DayDone after make-ups;
+  - else Neutral.
 - **Today** (the chat): Down's rules where today's newest record is `Missed`, Up's where it's kept (with that record as `record`); Neutral with none.
 - **None:** Neutral.
 - `Moved` counts as neither.
-- **`letDown`:** for each SlotStart or SlotEnd of his today with words and `about.taskId == taskId`, `of(Side.Down, …)` worked out again from the records with `at` before it and the nudges sent before it; true where any comes out Firm or Strong.
+- **`letDown`:** true where a message of his today, with words and `about.taskId == taskId`, has `mood` `"Firm"` or `"Strong"` (§2b). Not worked out again from the records: by the time the piece is kept its miss is replaced and its minutes raised, so a replay of the earlier message would mostly give Neutral.
 - `because` in words, for his line: "3 slots missed today", "its task's due tomorrow 09:00, a real deadline", "every slot today kept, 4 of 4", "the essay's missed piece done at 20:00".
 
 **Today's records:** `Looks.today` (`log.value.slots.filter { it.date == date }`, line 361) gives `describe` its list already; the chat's turn reads the log's slots the same way, by the record's `date`. `Conversation.keptToday` (672) filters by `focus.today(it.at)` and only the kept: it isn't reused, so the two never count differently.
@@ -133,13 +149,23 @@ object Mood {
 kept.firstOrNull { fresh(it) && Math.floorMod(it.key.hashCode(), 3) == 0 && said(Reason.SlotKept, it.key, it.start).isEmpty() && !waiting(Reason.SlotKept, it.key) }
 ```
 
-then, the one-in-three or a let-down about its task today:
+It stays, after `due`'s early exits (141, 142). A kept slot after a let-down gets an arm of its own **above** them, straight after DayDone (132–134), so neither a later check his let-down message set (`paced`) nor the evening's work being over stops it:
 
 ```kotlin
-kept.firstOrNull { fresh(it) && (Math.floorMod(it.key.hashCode(), 3) == 0 || letDown(it.taskId)) && said(Reason.SlotKept, it.key, it.start).isEmpty() && !waiting(Reason.SlotKept, it.key) }
+kept.firstOrNull { fresh(it) && letDown(it.taskId) && said(Reason.SlotKept, it.key, it.start).isEmpty() && !waiting(Reason.SlotKept, it.key) }?.let {
+    return Trigger(Reason.SlotKept, record = it)
+}
 ```
 
-`letDown` given to `due` as the records and messages it already reads allow (`Mood.letDown` over them). `FelixRulesTest`: a kept slot whose key isn't one in three, after a firm message about its task (sent), after one about another task (not), and with none (not).
+`letDown` given to `due` from the chat's messages it already has (`Mood.letDown` over them). `FelixRulesTest`: a kept slot whose key isn't one in three, after a firm message about its task (sent), after one about another task (not), with none (not), as the evening's last slot (sent), with `nextCheckAt` not reached (sent), and kept over 30 minutes before the look (not: not fresh).
+
+## 2b. The level kept on his message
+
+- `core/Chat.kt`, `ChatMessage`: `val mood: String = ""`, a word of `Mood.Level` (`"Firm"`, `"Strong"`, `"Pleased"`, `"Proud"`), empty for neutral and for any message not his own: plain, never nullable.
+- `felix/Looks.kt`, where his message is made (431–446): `mood` from the `Feeling` its `describe` was given; a silent message keeps none.
+- `ChatState.version` 9 to 10 and the archive month's 8 to 9 (`core/Chat.kt:21`, `114`), with `MoodMigration.CHAT` (and the archive's) added to `data/Stores.kt:63`'s list after `OutsideMigration.CHAT`: a raise with nothing to change (`docs/plan_v4/data-and-migrations.md`, rule 6), so an older build sets the newer file aside whole.
+- The fixture `fixtures/stores/<date>-4.7.0`, and an entry in data-and-migrations.md's list, as 4.5.1, 4.5.2 and 4.6.0 have.
+- Tests: the migration from every earlier shape, as the chat store's others are tested; `BackupTest` with a message's mood kept through a backup and a restore; `LooksTest`, a firm SlotEnd kept with `"Firm"` and a silent one with none; and the make-up and recovery cases through a real keep (`Focus` on temporary stores, as `block/FocusTest.kt` does), so the replaced miss is the app's own.
 
 ## 3. The line he's told
 
@@ -188,8 +214,8 @@ Mood.line(feeling)?.let { appendLine(it) }
 
 The same set, run again into `report-after.md`, then `report.md`, a case a row:
 
-| id | level (rule) | before | after | chars | address words | flags |
-|---|---|---|---|---|---|---|
+| id | level (rule) | before | after | chars (raw) | cut | address words | flags |
+|---|---|---|---|---|---|---|---|
 
 - **Address words:** "mate", "bro", "bud", "dude" and the case's nickname, counted a message; the run fails where more than about one message in three has one, where one is at Strong, or where two of a case's consecutive messages both do.
 - **Teacher's words:** "expected better", "disappointed in you", "make sure you", "remember to", "you need to", "i'm not angry".

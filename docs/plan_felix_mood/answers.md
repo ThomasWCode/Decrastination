@@ -119,6 +119,24 @@ Answer:
 
 Applied: README §A kept slot after a let-down; build.md §2 (`Mood.letDown`, `FelixRules.due`).
 
+## Q6. How the let-down is known afterwards (from the review's second round, 28 Oct)
+
+Both reviewers found Q5's first design couldn't work: keeping a missed piece replaces its `Missed` record with a `KeptLate` one and adds to its minutes worked (`Focus.kt:348`, `398–403`, `422`), so working the earlier mood out again from the records mostly gives Neutral, and the promised message isn't sent.
+
+> How should it know?
+
+Offered:
+
+- **Store it on his message (recommended):** his message keeps the level it was written at; can't drift; tested through a real keep. A stored field with a default: `chat.json` and the archive's months raised with nothing migrated, a fixture, as 4.5.1 and 4.6.0 did.
+- **Any nudge or miss message:** no storage: a kept slot always answered after any SlotStart or SlotEnd about its task today, neutral ones too; wider than Q5's "firm or strong".
+- **Rebuild the past state:** no storage: a record kept late after his message counted as a miss at that time, minutes kept since taken back; Q5 exactly, but fragile, mirroring how `Focus` rewrites the log.
+
+Answer:
+
+> Store it on his message (Recommended)
+
+Applied: README §The level kept on his message; build.md §2b.
+
 ## The review's other findings (28 Oct)
 
 The PR's review checked the rule against the code and found it would go against the answers above in three places, each fixed in the plan without a new question, as each only brings the rule in line with what was asked:
@@ -128,3 +146,11 @@ The PR's review checked the rule against the code and found it would go against 
 - **A missed piece made up made a bad day proud:** now only with no other miss that day, and for the kept slot's own task ("no praise for nothing").
 
 And the nudges counted so the second, not the third, is the firm one, a silent one not counted; the chat's standing-instructions sentence placed after the register and the feelings, so a rule against disappointment wins; and the scenarios' budget, cost and `--rerun` set right.
+
+Its second round, besides Q6, found three more, fixed without a new question for the same reason:
+
+- **A make-up was read as a `Missed` record beside a kept one,** which the log never holds: now a `KeptLate` record after its slot's end with his SlotEnd about it, so two make-ups aren't "every slot kept".
+- **"Every slot kept" was said with work still to come,** as the records aren't the plan: now on DayDone only.
+- **Q5's "always" stopped at `due`'s early exits** (a later check he set, the evening's work over): the let-down's arm now sits above them, beside DayDone.
+
+And the eval reads whether a message was cut (`FelixCaller.Result.cut`), as `FelixAnswers.parse` cuts a long one rather than refusing it.
