@@ -512,11 +512,8 @@ object Planner {
          * cards where the day lets them in; nor, as a [lastResort], work with a real deadline still to come where the day
          * lets in work that would otherwise miss it.
          */
-        fun shut(item: Item, day: LocalDate, lastResort: Boolean = false): Boolean {
-            val only = input.onlyDays[day] ?: return false
-            if (item.task.id in only.taskIds || (only.anki && item.task.source == Source.Anki)) return false
-            return !(lastResort && only.deadlines && item.hard && item.deadline >= input.now)
-        }
+        fun shut(item: Item, day: LocalDate, lastResort: Boolean = false): Boolean =
+            shutFor(item.task, input.onlyDays[day], item.hard && item.deadline >= input.now, lastResort)
         /**
          * The time [day] has for [item]'s [piece] (PL-15): a piece only for home, the evening's left; any
          * other, all the day's. With no piece named, the item's: the evening's where all its pieces are home's.
@@ -774,19 +771,34 @@ object Planner {
             // day they can be, so that as much as can be is done by the deadline and the rest
             // follows it; what fits nowhere within the horizon goes unplanned.
             if (carriesOn && assigned.any { it == null }) {
-                for (i in item.chunks.indices) {
-                    assigned[i]?.let { give(item, it, i) }
-                    assigned[i] = null
+                fun clear() {
+                    for (i in item.chunks.indices) {
+                        assigned[i]?.let { give(item, it, i) }
+                        assigned[i] = null
+                    }
                 }
-                var from = earliest
                 // Not past a run of its task after it, where that's placed: what fits nowhere before
                 // then goes unplanned, rather than out of order.
                 val until = minOf(horizon, ceilingOf(item) ?: horizon)
-                for (i in item.chunks.indices) {
-                    val day = generateSequence(from) { it.plusDays(1) }.takeWhile { it <= until }.firstOrNull { fits(it, i) } ?: break
-                    assigned[i] = day
-                    take(item, day, i)
-                    from = day
+                val deadlineDay = lastDayBefore(item, input)
+                // In order from the first day it can be; with [lastResort], a day kept for only other tasks that lets in work
+                // that would otherwise miss its deadline is one of them before the deadline (D-115).
+                fun forwards(lastResort: Boolean) {
+                    var from = earliest
+                    for (i in item.chunks.indices) {
+                        val day = generateSequence(from) { it.plusDays(1) }.takeWhile { it <= until }.firstOrNull { fits(it, i, lastResort && it <= deadlineDay) } ?: break
+                        assigned[i] = day
+                        take(item, day, i)
+                        from = day
+                    }
+                }
+                clear()
+                forwards(lastResort = false)
+                // Some of it then past its deadline, or not planned: those days taken too, as backwards, only as it would be without
+                // them. Each piece goes no later than it did, as the days only gain room.
+                if (assigned.any { it == null || it > deadlineDay }) {
+                    clear()
+                    forwards(lastResort = true)
                 }
             }
             // Short of time before its deadline: a piece with no day, one carried past the deadline's day,
@@ -969,8 +981,9 @@ object Planner {
             if (last > horizon || wontFit.any { it.taskId == task.id }) continue
             val first = date(opens, zone)
             // All of each day's time it can use (the most it could have): on its opening day the time
-            // after it opens, on its deadline's own day only the time before the deadline.
-            val room = generateSequence(first) { it.plusDays(1) }.takeWhile { it <= last }.sumOf { day ->
+            // after it opens, on its deadline's own day only the time before the deadline; none of a day kept for only
+            // other tasks, but one that lets in work that would otherwise miss its deadline (D-115).
+            val room = generateSequence(first) { it.plusDays(1) }.takeWhile { it <= last }.filterNot { shutFor(task, input.onlyDays[it], hard = true, lastResort = true) }.sumOf { day ->
                 val whole = if (day == first) capacityFrom(day, opens, home) else capacities.getValue(day).let { if (home) it.homeMin else it.anyMin }
                 if (day == date(deadline, zone)) minOf(whole, capacitiesBefore(day, deadline, input).let { if (home) it.homeMin else it.anyMin }) else whole
             }
@@ -1206,13 +1219,25 @@ object Planner {
         // A day you gave for all of it is the only day it goes on (PL-04).
         val kept = keptDay(task, task.realDeadline, input)
         val from = kept ?: task.notBefore?.let { date(it, zone) }?.takeIf { it > today } ?: today
-        // A day kept for only other tasks has none for it (D-115), Anki's cards on one that lets them in aside.
-        fun shut(day: LocalDate) = input.onlyDays[day]?.let { task.id !in it.taskIds && !(it.anki && task.source == Source.Anki) } == true
-        fun most(until: LocalDate) = generateSequence(from) { it.plusDays(1) }.takeWhile { it <= until }.maxOfOrNull { if (shut(it)) 0 else capacity(it, input) } ?: 0
+        // A day kept for only other tasks has none for it (D-115), Anki's cards on one that lets them in aside; one that lets in
+        // work that would otherwise miss its deadline, only where no other day before the deadline has any.
+        val hard = task.hardAt(input.now) && (task.deadlineAt(input.now) ?: Long.MIN_VALUE) >= input.now
+        fun most(until: LocalDate, lastResort: Boolean = false) = generateSequence(from) { it.plusDays(1) }.takeWhile { it <= until }
+            .maxOfOrNull { if (shutFor(task, input.onlyDays[it], hard, lastResort)) 0 else capacity(it, input) } ?: 0
         val lastUsable = kept ?: lastUsableDay(deadlineOf(task, input), task.kind, input)
-        val before = most(lastUsable)
+        val before = most(lastUsable).takeIf { it >= MIN_CHUNK } ?: most(lastUsable, lastResort = true)
         if (before >= MIN_CHUNK) return before
         return most(minOf(maxOf(lastUsable, today.plusDays(MIN_HORIZON_DAYS)), today.plusDays(MAX_HORIZON_DAYS)))
+    }
+
+    /**
+     * Whether [only], a day kept for only some tasks (D-115), has none of its time for [task]: not where it's among them, nor
+     * Anki's cards where the day lets them in; nor, as a [lastResort], work with a real deadline still to come ([hard]) where
+     * the day lets in work that would otherwise miss it.
+     */
+    private fun shutFor(task: TaskItem, only: OnlyDay?, hard: Boolean, lastResort: Boolean): Boolean {
+        if (only == null || task.id in only.taskIds || (only.anki && task.source == Source.Anki)) return false
+        return !(lastResort && only.deadlines && hard)
     }
 
     /**
