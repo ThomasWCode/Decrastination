@@ -74,6 +74,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
@@ -107,6 +108,18 @@ private const val SWIPE_AGAIN_MS = 3_000L
 
 /** The sheets the header's chips open, each holding what the Day's list held under its rows. */
 private enum class DaySheet { WontFit, NoTime, Done, Said }
+
+/**
+ * Today's DO NOW card's fold as a scroll of the grid's, or of the card's own ([onCard]), reaches it: taken before the scroll
+ * moves what it's on, or with what that leaves ([DayLayout.foldsFirst]). [at] says how far it's folded; [by] folds it by
+ * what it can of a scroll and says what it took.
+ */
+internal class Folding(private val onCard: Boolean, private val at: () -> Float, private val by: (Float) -> Float) : NestedScrollConnection {
+    override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset =
+        if (DayLayout.foldsFirst(onCard, available.y, at())) Offset(0f, by(available.y)) else Offset.Zero
+
+    override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset = Offset(0f, by(available.y))
+}
 
 /**
  * The Day (UI-17, 4.6.0): the week ahead in a strip, each day with its load (UI-02) and a mark where work is behind; today's
@@ -275,7 +288,7 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
 
     // Today's DO NOW card shows in full, up to the whole Day under the strip (Q96). It folds into a line as the grid scrolls on
     // to later hours, or as it's dragged up itself, and unfolds once the grid's scrolled back to midnight (Q97), as it's
-    // dragged down, or at a tap on the folded line; in landscape it starts folded, so the grid has room.
+    // dragged down while part-folded, or at a tap on the folded line; in landscape it starts folded, so the grid has room.
     var cardFull by remember { mutableIntStateOf(0) }
     // The card's cap (below) in pixels, as last laid out: the card folds from what it shows unfolded, its height or that cap.
     var cardCap by remember { mutableFloatStateOf(Float.MAX_VALUE) }
@@ -283,22 +296,14 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
     var fold by remember(landscape) { mutableFloatStateOf(if (landscape) Float.MAX_VALUE else 0f) }
     val foldMax = DayLayout.foldMax(cardFull.toFloat(), cardCap, line)
     // The fold takes what it can of a scroll [dy], and says what it took.
-    fun foldBy(dy: Float): Offset {
-        if (cardFull == 0) return Offset.Zero
+    fun foldBy(dy: Float): Float {
+        if (cardFull == 0) return 0f
         val was = fold.coerceAtMost(DayLayout.foldMax(cardFull.toFloat(), cardCap, line))
         fold = DayLayout.folded(was, dy, cardFull.toFloat(), cardCap, line)
-        return Offset(0f, was - fold)
+        return was - fold
     }
-    // The grid's scrolls, or the card's own ([onCard]), each folding it before they move what they're on or with what that
-    // leaves (DayLayout.foldsFirst).
-    fun foldingOn(onCard: Boolean) = object : NestedScrollConnection {
-        override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset =
-            if (DayLayout.foldsFirst(onCard, available.y, fold)) foldBy(available.y) else Offset.Zero
-
-        override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset = foldBy(available.y)
-    }
-    val folding = remember { foldingOn(onCard = false) }
-    val cardFolding = remember { foldingOn(onCard = true) }
+    val folding = remember { Folding(onCard = false, { fold }, ::foldBy) }
+    val cardFolding = remember { Folding(onCard = true, { fold }, ::foldBy) }
 
     var rootAt by remember { mutableStateOf(Offset.Zero) }
     val card = rememberScrollState()
@@ -349,6 +354,8 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
                             NextCard(
                                 graph, activity, plan, zone, photo, ::messageOf, say,
                                 empty = if (unread.isNotEmpty()) "Nothing planned yet: ${unread.joinToString { it.label }} not read yet." else "No work is planned. New tasks appear as the sources are read.",
+                                // For TalkBack, folded by an action: while the card fills the Day, the grid has no room to be reached.
+                                actions = listOf(CustomAccessibilityAction("Fold it") { fold = Float.MAX_VALUE; true }),
                             )
                         }
                     }

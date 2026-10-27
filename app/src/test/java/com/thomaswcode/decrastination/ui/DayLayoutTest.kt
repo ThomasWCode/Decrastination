@@ -1,5 +1,7 @@
 package com.thomaswcode.decrastination.ui
 
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
 import com.thomaswcode.decrastination.ui.DayLayout.Box
@@ -71,22 +73,21 @@ class DayLayoutTest {
     }
 
     /**
-     * A scroll [dy] passed as Compose's nested scroll passes it: to the fold at [fold] where it goes first, then to what it's on
-     * (scrolled [at], of [range]), then to the fold with what's left. The fold and the scroll after, for a card 600 px tall
-     * under a cap of 1,000, its line 112.
+     * A scroll [dy] passed as Compose's nested scroll passes it, through the Day's [Folding] with the card folded [fold]: its
+     * pre-scroll, then what it's on (scrolled [at], of [range]), then its post-scroll with what's left. The fold and the
+     * scroll after, for a card 600 px tall under a cap of 1,000, its line 112.
      */
     private fun scroll(onCard: Boolean, dy: Float, fold: Float, at: Float, range: Float): Pair<Float, Float> {
         var folded = fold
-        var left = dy
-        fun foldBy() {
+        val folding = Folding(onCard, { folded }) { by ->
             val was = folded
-            folded = DayLayout.folded(was, left, 600f, 1000f, 112f)
-            left -= was - folded
+            folded = DayLayout.folded(was, by, 600f, 1000f, 112f)
+            was - folded
         }
-        if (DayLayout.foldsFirst(onCard, dy, fold)) foldBy()
+        var left = dy - folding.onPreScroll(Offset(0f, dy), NestedScrollSource.UserInput).y
         val scrolled = (at - left).coerceIn(0f, range)
         left -= at - scrolled
-        foldBy()
+        folding.onPostScroll(Offset(0f, dy - left), Offset(0f, left), NestedScrollSource.UserInput)
         return folded to scrolled
     }
 
