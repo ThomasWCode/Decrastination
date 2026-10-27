@@ -38,6 +38,8 @@ Each break is named by its own time, wherever it's laid (`Slot.outsideAt`, its k
 
 `outsideBreaks` counts the day's breaks begun, under way or completed: the breaks still to come are at most `outsideBreaks` less those, so a day never has more than the setting. When the day's work needs their time (with its breaks, as they'd be laid), the midday one is given up first, then the afternoon's, then the morning's; and fewer still while more of the work would go unslotted around them than with none.
 
+**Yours and Felix's** (D-116): a day's break can be moved to a time that day (`OutsideAt`, naming it by its own time), taken off (`NoOutside`, one or all of the day's), or one added at a time on any day, a school day too (`OutsideAdded`, its key `outside+:1020`, `Slot.outsideAdded`); each is a change on a date, never a weekday, and a break stays on its day (`InstructionRules.outsideDays`, the latest change for a break winning; a NoOutside for all of a day takes what came before it). One moved or added is laid at its time to the minute, as a pin is (D-114): over busy time, outside the windows, after 18:00, and never given up for work (D-4). A moved one counts towards `outsideBreaks`, the rest chosen among the others; one added is over and above them, and one added at a time the day's own breaks are named by isn't laid, the day having its own then. With none at all on a day, only those moved or added after are laid. Of a placed break and a pin over each other, the one given last keeps its time, the other going whole to the first free time at or after its own (`Planner.Input.pinOrder` names the breaks' changes, `outside:<date>:<own time>` and `outside+:<date>:<minute>`). The four cases above hold for them too: one under way stays, one completed drops out. A change is checked as it's read, against the day's breaks as they stand (`Planning.breaksOn`): a break the day has, not begun, at a time not gone, over none of the day's others; else it's left out, saying why.
+
 ## Pins (PL-04)
 
 A piece at a time you or Felix gave (on Day, in the move sheet, in the chat, or by moving its event in the calendar) is laid at that time, to the minute, wherever it is in the day (D-114): outside the day's windows, over a busy event or a time you said you can't work, home work in a school window. One under way stays.
@@ -110,18 +112,19 @@ Pick one you made at calendar.google.com: a calendar an app makes stays on the p
 - a slot with no event is inserted, so one you deleted is written again;
 - an event whose times or words differ is updated;
 - an event no longer a slot, a second event of one URI, and copies (below) are deleted;
-- a piece's event you moved is a hand move.
+- an event you moved, a piece's or a break's, is a hand move.
 
 ## Hand moves
 
-A piece's event whose start is neither where the app last wrote it (`CalendarState.calendarWritten`) nor where the plan has it now is one you moved.
+An event whose start is neither where the app last wrote it (`CalendarState.calendarWritten`) nor where the plan has it now is one you moved.
 `SlotCalendarDiff.judge` takes moves earliest first, each as your time for its task's next piece (an `AtTime` change, "Moved in the calendar", made at once, and kept to the minute as any time you give is, D-114), unless:
+- it's a break outside's: "a break outside is moved by asking Felix" (D-116; yours is the day grid's drag, within its day);
 - its task is no longer there;
 - the time is at or after the task's real deadline, still to come ("it's due before then"; overdue work takes any time);
 - another of its task's pieces moved in the same write (one at a time).
 
 A move refused is written back, and a notification says why (`SlotCalendar.sayRefused`). A move taken counts as written only once its change is in (`SlotCalendarDiff.pending`).
-Only the start counts: the slot keeps its piece's length. A break outside moved by hand is put back.
+Only the start counts: the slot keeps its piece's length.
 
 ## Copies left by a calendar's sync
 

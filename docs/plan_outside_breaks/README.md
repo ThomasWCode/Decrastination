@@ -95,6 +95,8 @@ A break's key in `previous` is safe where it's read: `SlotState.released` (by a 
 
 ## 4.5.2: Felix moves, skips and adds breaks outside
 
+**Built** in 4.5.2 (D-116). Decided while building: the instruction reader is told the week's breaks by their own times (`InstructionPrompts.describe`), as it couldn't name one otherwise; what a day's breaks are, for both readers' checks, is said in one place (`Planning.breaksOn`, from `InstructionRules.dayBreaks`); a change to a break begun today is refused ("that break outside has begun, and is kept as it is"), as the planner keeps it as it is, and one added at the time a day's own break is named by, moved away, is refused too ("move it back instead"), as it wouldn't be laid; a break taken off or moved still bounds the one before it by its own time (each over by the next one's time as the settings have them); a placed break a pin given later covers goes whole to the first free time at or after its own.
+
 Read first, in full: what 4.5.1's read-first list names (`core/Instructions.kt`, `core/Chat.kt`, `enrich/InstructionAnswers.kt`, `enrich/InstructionPrompts.kt`, `felix/ChatPrompts.kt`, `felix/ChatAnswers.kt`, `felix/FelixPrompts.kt`, `data/Backup.kt`, `data/Stores.kt` and their tests), with `core/Slotter.kt` as 4.4.1 and 4.5.0 left it, `calendar/SlotCalendarDiff.kt` and `calendar/CalendarWriter.kt` (the hand moves), and `calendar/SlotCalendar.kt` (`sayRefused`).
 
 ### 1. The changes, and the stores that hold them (30 min)

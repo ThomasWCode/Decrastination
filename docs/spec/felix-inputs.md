@@ -186,6 +186,7 @@ Next lessons (class: its subject, and its names | its next three):
 Changes already in use:
 - Fri 16 Oct: at most 1 h of work
 - Sat 17 Oct: only “Personal statement first draft”; Anki too
+- Sat 17 Oct: the 16:00 break outside at 17:30
 
 Their own tasks finished in the last week (id | title | finished):
 - own:o0 | Return the library book | Mon 12 Oct 2026 18:10
@@ -228,7 +229,7 @@ The tasks' own text (id; then its text: an assignment's instructions, an email's
 The plan: the work the app has them do each day so every deadline is met, as its Day and Work tabs show it. Its minutes are the app's, from what it's learned of how long things take them, so they can differ from the task list's. While anything's planned for today, blocked apps stay blocked in blocking hours; otherwise they cost free time earned by working. Each piece's [why: …] says why it's on its day: duesoon (due today or tomorrow), overdue, spread (its share of the free time to its deadline), minimumtouch (kept within a week of its piece before), revisiongap (a day after its revision piece before), mostroom (a task in one piece, on the roomiest day before its deadline), soft (no due date: spare time this week), packed (its days are too tight to spread it, so as late as they allow), kept (where its slot today already was, under way or still to come), noroom (no room before its deadline).
 Now: 17:20–17:50 Rates of reaction worksheet: part 1 of 2 (30 min), timer on it since 17:18, 28 min left; then Vectors exercise 4B: Questions 1 to 6 (35 min)
 Blocking: on until today's work's done (2 pieces, 1 h 5 min); free time 0 min
-Today's slots (the times its pieces are laid at):
+Today's slots (the times its pieces and breaks outside are laid at):
 - 17:20–17:50 Rates of reaction worksheet: part 1 of 2 (30 min) [now] key teams:t1#-1#1
 - 17:55–18:30 Vectors exercise 4B: Questions 1 to 6 (35 min) [ahead] key powerplanner:p1#0
 The next piece of each task with no steps (task | the piece | its key, for keepPiece):
@@ -248,8 +249,8 @@ Day by day:
   - own:o1 | Personal statement first draft | 30 min: part 2 of 4 (30 min) [why: soft] | no due date
 - Friday 16 October 2026: 30 min planned of 60 min of working time
   - own:o1 | Personal statement first draft | 30 min: part 3 of 4 (30 min) [why: soft] | no due date
-- Saturday 17 October 2026: nothing planned (0 min of working time); kept for only “Personal statement first draft”; Anki too
-- Sunday 18 October 2026: 30 min planned of 315 min of working time
+- Saturday 17 October 2026: nothing planned (0 min of working time); kept for only “Personal statement first draft”; Anki too; breaks outside: 17:30 (the 16:00 break, moved by you)
+- Sunday 18 October 2026: 30 min planned of 315 min of working time; breaks outside: 16:45 (the 16:00 break)
   - own:o1 | Personal statement first draft | 30 min: part 4 of 4 (30 min) [why: soft] | no due date
 - Monday 19 October 2026: nothing planned (315 min of working time)
 - Tuesday 20 October 2026: nothing planned (315 min of working time)
@@ -358,6 +359,9 @@ The student tells you about their work. You can:
 - SameAs: the task is the same work as another listed task, from another source, which is the one kept (this one is hidden). Needs taskId and afterTaskId (the one kept).
 - Steps: replace a task's steps with these (any task's, from any source, but Anki's, whose steps are its cards), adding up to its minutes (for a new total, add a Minutes change with it too); dates within the task's. Needs taskId and steps (each with title, minutes, startDate and dueDate as YYYY-MM-DD or empty, where: anywhere or home, and anyOrder: true where it doesn't need the steps before it done first, as separate questions don't, false where it builds on them, as a draft after its plan does, and for the first; steps the student lists themselves stay in their order, false, unless they say the order doesn't matter). One step is the whole task in one go.
 - Rename: the task's name as the app shows it (its source keeps its own). Needs taskId and title (the new name).
+- OutsideAt: one of a day's breaks outside at another time that day. Needs date (a date, never a weekday; a break stays on its day), outsideTime naming the break by its own time as listed ("13:00", even once it's been moved), and time (its new start, HH:MM).
+- NoOutside: a day's break outside not taken. Needs date, and outsideTime naming the break by its own time, or empty for all of the day's.
+- OutsideAdded: a break outside at a time on a date, any day, over and above the day's own. Needs date and time (its start, HH:MM).
 - DayOnly: a day kept for only some tasks' work: no other task's work is planned on it, and the time they don't use stays free. Their work is planned as usual, so the day may hold some of it or none: add OnDay for a task whose work should all go on that day. One change a task, each with taskId and date (a date, never a weekday). alsoAllow what else may come in: empty for nothing, "anki" for Anki's cards too, "anki-deadlines" for those and work that would otherwise miss its deadline; the day's latest DayOnly sets it for the whole day.
 
 Use the ids and event keys exactly as listed. Work out relative dates ("next Friday", "the weekend") from today; a weekday named alone ("on Saturday") means the next one, and only "every Saturday" or "on Saturdays" means each week. A stretch of days ("20 to 25 October", "this weekend") is one change per day, but for NoSchool, which takes the stretch whole. Leave every field a change type doesn't use empty: an empty string, minutes -1 (0 is a real value: a DayLimit's no work at all), and steps an empty list.
