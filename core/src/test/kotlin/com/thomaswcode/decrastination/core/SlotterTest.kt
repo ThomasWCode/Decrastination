@@ -196,6 +196,27 @@ class SlotterTest {
     }
 
     @Test
+    fun `a pin across two windows keeps all of its time from other work`() {
+        // Break till 12:00, then lunch: a pin at 11:50 for half an hour is counted in lunch, but 11:50 to 12:00 is its too,
+        // so a piece that opens at 11:45 doesn't go into it.
+        val windows = listOf(w("11:30", "12:00", WindowKind.Break), w("12:00", "13:00", WindowKind.Lunch))
+        val pin = chunk("pin")
+        val short = chunk("short", 15, availableAt = Fixtures.at("2026-10-13T11:45"))
+        val (slots, _) = slot(tuesday, listOf(pin, short), windows, pins = mapOf(pin.key to Fixtures.at("2026-10-13T11:50")))
+        assertEquals(listOf("pin 11:50–12:20", "short 12:25–12:40"), slots.described())
+        for ((a, b) in slots.sortedBy { it.start }.zipWithNext()) assertTrue(a.end <= b.start, slots.described().toString())
+    }
+
+    @Test
+    fun `a pin over a break outside under way goes after it, the break never given up for work (D-113)`() {
+        val kept = mapOf("outside:780" to Fixtures.at("2026-10-17T13:00"))
+        val essay = chunk("essay")
+        val (slots, _) = slot(saturday, listOf(essay), listOf(w("08:30", "22:30")), now = "2026-10-17T13:05", pins = mapOf(essay.key to Fixtures.at("2026-10-17T13:10")), previous = kept, outside = true)
+        assertEquals(listOf("outside 13:00–13:20", "essay 13:20–13:50", "outside 16:00–16:20"), slots.described())
+        assertTrue(slots.single { it.chunk != null }.pinned)
+    }
+
+    @Test
     fun `a pin over a start kept from the last plan takes it, the piece kept there laid afresh, and its task's later steps follow it`() {
         val evening = listOf(w("17:00", "22:00"))
         // b kept at 18:00 by the last plan; a pinned at 18:10: b goes elsewhere.

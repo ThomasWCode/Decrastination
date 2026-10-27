@@ -1708,6 +1708,16 @@ class PlannerTest {
     }
 
     @Test
+    fun `a time gone by with its piece undone takes free time as any piece does, its minutes no longer outside it`() {
+        // Tuesday 18:00: pinned at 16:00 today and missed, its time and grace gone; laid again in the evening's free time.
+        val missed = task("late", Fixtures.at("2026-10-18T23:59"), effort = 30).yours(atTime = Fixtures.at("2026-10-13T16:00"))
+        val other = task("other", Fixtures.at("2026-10-18T23:59"), effort = 30)
+        val with = Planner.plan(windowed(listOf(missed, other), "2026-10-13T18:00"))
+        val without = Planner.plan(windowed(listOf(other), "2026-10-13T18:00"))
+        assertEquals(without.bucket(tuesday)!!.capacityMin, with.bucket(tuesday)!!.capacityMin)
+    }
+
+    @Test
     fun `a time you give counts all its minutes against a limit you set on its day (D-114)`() {
         // Tuesday limited to an hour: a half hour pinned at 23:00 leaves 30 of it, so a 45-minute piece put on Tuesday has no room there.
         val limited = windowed(emptyList(), "2026-10-12T17:00").copy(dayCaps = mapOf(tuesday to 60))

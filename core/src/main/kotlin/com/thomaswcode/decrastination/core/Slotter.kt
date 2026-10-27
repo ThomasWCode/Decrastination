@@ -77,7 +77,7 @@ object Slotter {
         val free = intervals(date, windows, busy, now, zone, settings.minSchoolSlotMin)
         for (slot in underWay) carve(free, slot.start, slot.end)
         // Your pins laid at their time (D-114): the breaks still to come are laid around them.
-        val pinned = exactPins(date, chunks, pins, now, zone, deadlineMinOf).first
+        val pinned = exactPins(date, chunks, pins, now, zone, deadlineMinOf, underWay).first
         for ((chunk, pin) in pinned) carve(free, pin, pin + chunk.minutes * MINUTE)
         val room = free.sumOf { it.minutes }
         val latest = at(date, OUTSIDE_LATEST_MIN, zone)
@@ -263,8 +263,12 @@ object Slotter {
         // Pinned ([exactPins]): each at its time, to the minute, wherever it is in the day (D-114); then those a pin given
         // later covers, or that may not be done then, at the next free start that holds them, so a pin moved never takes
         // another's time.
-        val (exact, moved) = exactPins(date, chunks, pins, now, zone, deadlineMinOf)
-        for ((chunk, pin) in exact) place(chunk, pin, pinnedIn(chunk, pin), pinned = true)
+        val (exact, moved) = exactPins(date, chunks, pins, now, zone, deadlineMinOf, breaks)
+        for ((chunk, pin) in exact) {
+            place(chunk, pin, pinnedIn(chunk, pin), pinned = true)
+            // All of its time, whichever window it's counted in: one across two windows has its breaks kept in one.
+            carve(free, pin, pin + chunk.minutes * MINUTE)
+        }
         for ((chunk, pin) in moved) {
             // Free time running past the pin, from before it too, at a start no earlier than it.
             val later = free.filter { it.end > pin }.firstNotNullOfOrNull { iv -> startIn(chunk, iv, after = pin)?.let { iv to it } } ?: continue
@@ -294,12 +298,21 @@ object Slotter {
     /**
      * [pins] on [date] laid at their time, and those that go to the next free start after it (D-114), in [pins]' order, the
      * latest given first: each at its time, to the minute, wherever it is in the day (over busy time, outside the windows,
-     * in a window not for its kind of work), where its time overlaps no pin laid before it, its piece is over by its
-     * deadline and its task is open by then (to the minute: the time you gave, not the next five); one under way stays.
+     * in a window not for its kind of work), where its time overlaps no pin laid before it and none of [breaks] (a break
+     * outside under way is never given up for work, D-113), its piece is over by its deadline and its task is open by then
+     * (to the minute: the time you gave, not the next five); one under way stays.
      * One whose time and grace have gone by (its slot missed, PL-13) is in neither: laid as any piece, where the last plan
      * put it, so it isn't laid again at the next five minutes at every plan and never begins.
      */
-    private fun exactPins(date: LocalDate, chunks: List<Chunk>, pins: Map<String, Long>, now: Long, zone: ZoneId, deadlineMinOf: (Chunk) -> Int?): Pair<List<Pair<Chunk, Long>>, List<Pair<Chunk, Long>>> {
+    private fun exactPins(
+        date: LocalDate,
+        chunks: List<Chunk>,
+        pins: Map<String, Long>,
+        now: Long,
+        zone: ZoneId,
+        deadlineMinOf: (Chunk) -> Int?,
+        breaks: List<Slot>,
+    ): Pair<List<Pair<Chunk, Long>>, List<Pair<Chunk, Long>>> {
         val day = at(date, 0, zone) until at(date.plusDays(1), 0, zone)
         val exact = mutableListOf<Pair<Chunk, Long>>()
         val moved = mutableListOf<Pair<Chunk, Long>>()
@@ -308,7 +321,7 @@ object Slotter {
             val chunk = chunks.firstOrNull { it.key == key } ?: continue
             val end = pin + chunk.minutes * MINUTE
             if (end + GRACE_MS <= now) continue
-            val clear = exact.none { (other, at) -> at < end && pin < at + other.minutes * MINUTE }
+            val clear = exact.none { (other, at) -> at < end && pin < at + other.minutes * MINUTE } && breaks.none { it.start < end && pin < it.end }
             val due = deadlineMinOf(chunk)?.let { end <= at(date, it, zone) } ?: true
             if (clear && due && pin >= (chunk.availableAt ?: Long.MIN_VALUE)) exact += chunk to pin else moved += chunk to pin
         }

@@ -354,9 +354,16 @@ object Planner {
         val capLeft = days.mapNotNull { day -> capOf(day)?.let { day to it } }.toMap(HashMap())
         // Each day's pinned minutes outside its free time, which took none of it (D-114).
         val outsidePlaced = HashMap<LocalDate, Int>()
-        // The minutes of [item]'s piece [i] outside [day]'s free time, where it's at a time you gave on that day (D-114).
-        fun outside(item: Item, day: LocalDate, i: Int): Int =
-            item.chunks[i].at?.takeIf { date(it, zone) == day }?.let { outsideFreeMin(day, it, item.chunks[i].minutes, input) } ?: 0
+        // The minutes of [item]'s piece [i] outside [day]'s free time, where it's at a time you gave on that day and the slotter
+        // keeps it there (D-114): not once its time and grace have gone by, nor where it wouldn't be over by its deadline that
+        // day, when it's laid as any piece, in the free time.
+        fun outside(item: Item, day: LocalDate, i: Int): Int {
+            val piece = item.chunks[i]
+            val at = piece.at?.takeIf { date(it, zone) == day } ?: return 0
+            val end = at + piece.minutes * 60_000L
+            if (end + Slotter.GRACE_MS <= input.now || (item.hard && date(item.deadline, zone) == day && end > item.deadline)) return 0
+            return outsideFreeMin(day, at, piece.minutes, input)
+        }
         // Each task's pieces on each day, all its runs' together, so a deck's step a day holds across
         // runs where its work splits (home and anywhere, PL-15; blocks with their own dates).
         val stepsOn = HashMap<Pair<String, LocalDate>, Int>()
