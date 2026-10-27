@@ -35,45 +35,45 @@ day 2026-10-22 THU: 117 of 486 min
   slot Work 13:03-13:48 Evening teams:essay#2#1
   slot Work 13:53-14:37 Evening teams:essay#2
 day 2026-10-23 FRI: 0 of 588 min
-  slot Outside 09:30-09:50 Evening outside:1792744200000
-  slot Outside 13:00-13:20 Evening outside:1792756800000
-  slot Outside 16:00-16:20 Evening outside:1792767600000
+  slot Outside 09:30-09:50 Evening outside:570
+  slot Outside 13:00-13:20 Evening outside:780
+  slot Outside 16:00-16:20 Evening outside:960
 day 2026-10-24 SAT: 0 of 525 min
-  slot Outside 09:30-09:50 Evening outside:1792830600000
-  slot Outside 13:00-13:20 Evening outside:1792843200000
-  slot Outside 16:00-16:20 Evening outside:1792854000000
+  slot Outside 09:30-09:50 Evening outside:570
+  slot Outside 13:00-13:20 Evening outside:780
+  slot Outside 16:00-16:20 Evening outside:960
 day 2026-10-25 SUN: 0 of 588 min
-  slot Outside 09:30-09:50 Evening outside:1792920600000
-  slot Outside 13:00-13:20 Evening outside:1792933200000
-  slot Outside 16:00-16:20 Evening outside:1792944000000
+  slot Outside 09:30-09:50 Evening outside:570
+  slot Outside 13:00-13:20 Evening outside:780
+  slot Outside 16:00-16:20 Evening outside:960
 day 2026-10-26 MON: 0 of 588 min
-  slot Outside 09:30-09:50 Evening outside:1793007000000
-  slot Outside 13:00-13:20 Evening outside:1793019600000
-  slot Outside 16:00-16:20 Evening outside:1793030400000
+  slot Outside 09:30-09:50 Evening outside:570
+  slot Outside 13:00-13:20 Evening outside:780
+  slot Outside 16:00-16:20 Evening outside:960
 day 2026-10-27 TUE: 0 of 546 min
-  slot Outside 09:30-09:50 Evening outside:1793093400000
-  slot Outside 13:00-13:20 Evening outside:1793106000000
-  slot Outside 16:00-16:20 Evening outside:1793116800000
+  slot Outside 09:30-09:50 Evening outside:570
+  slot Outside 13:00-13:20 Evening outside:780
+  slot Outside 16:00-16:20 Evening outside:960
 day 2026-10-28 WED: 0 of 588 min
-  slot Outside 09:30-09:50 Evening outside:1793179800000
-  slot Outside 13:00-13:20 Evening outside:1793192400000
-  slot Outside 16:00-16:20 Evening outside:1793203200000
+  slot Outside 09:30-09:50 Evening outside:570
+  slot Outside 13:00-13:20 Evening outside:780
+  slot Outside 16:00-16:20 Evening outside:960
 day 2026-10-29 THU: 0 of 588 min
-  slot Outside 09:30-09:50 Evening outside:1793266200000
-  slot Outside 13:00-13:20 Evening outside:1793278800000
-  slot Outside 16:00-16:20 Evening outside:1793289600000
+  slot Outside 09:30-09:50 Evening outside:570
+  slot Outside 13:00-13:20 Evening outside:780
+  slot Outside 16:00-16:20 Evening outside:960
 day 2026-10-30 FRI: 0 of 588 min
-  slot Outside 09:30-09:50 Evening outside:1793352600000
-  slot Outside 13:00-13:20 Evening outside:1793365200000
-  slot Outside 16:00-16:20 Evening outside:1793376000000
+  slot Outside 09:30-09:50 Evening outside:570
+  slot Outside 13:00-13:20 Evening outside:780
+  slot Outside 16:00-16:20 Evening outside:960
 day 2026-10-31 SAT: 0 of 588 min
-  slot Outside 09:30-09:50 Evening outside:1793439000000
-  slot Outside 13:00-13:20 Evening outside:1793451600000
-  slot Outside 16:00-16:20 Evening outside:1793462400000
+  slot Outside 09:30-09:50 Evening outside:570
+  slot Outside 13:00-13:20 Evening outside:780
+  slot Outside 16:00-16:20 Evening outside:960
 day 2026-11-01 SUN: 0 of 588 min
-  slot Outside 09:30-09:50 Evening outside:1793525400000
-  slot Outside 13:00-13:20 Evening outside:1793538000000
-  slot Outside 16:00-16:20 Evening outside:1793548800000
+  slot Outside 09:30-09:50 Evening outside:570
+  slot Outside 13:00-13:20 Evening outside:780
+  slot Outside 16:00-16:20 Evening outside:960
 day 2026-11-02 MON: 0 of 347 min
 unplanned teams:later "Spring project" 72 min in 3: NotOpen at 2027-02-01 08:00
 unplanned gmail:form "Trip consent form" 10 min in 1: Waits after "History essay"

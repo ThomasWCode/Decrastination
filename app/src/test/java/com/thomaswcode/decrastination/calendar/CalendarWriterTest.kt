@@ -151,6 +151,23 @@ class CalendarWriterTest {
     }
 
     @Test
+    fun `a break outside's event is known by its own time, one under the URI of its start deleted once and its own inserted (D-113)`() = runBlocking {
+        pickCalendar(7)
+        val start = at("13:00")
+        val outside = Slot(SlotKind.Outside, null, start, start + 20 * 60_000L, WindowKind.Evening, pinned = false, outsideAt = 780)
+        // As an earlier build wrote it, under the URI of its start.
+        val old = calendar.add("${SlotCalendarDiff.URI_PREFIX}$today/outside:$start", Desired("", "Outside", SlotCalendarDiff.OUTSIDE, start, start + 20 * 60_000L, null))
+        writer.writeSlots(plan(outside))
+        assertEquals(listOf("${SlotCalendarDiff.URI_PREFIX}$today/outside:780"), calendar.events.map { it.uri })
+        assertTrue(calendar.events.none { it.id == old })
+        // Laid elsewhere, it's the same event moved: updated, not one deleted and another made.
+        val id = calendar.events.single().id
+        calendar.changed()
+        writer.writeSlots(plan(outside.copy(start = at("14:00"), end = at("14:20"))))
+        assertEquals(listOf(id to at("14:00")), calendar.events.map { it.id to it.start })
+    }
+
+    @Test
     fun `a burst of plans is one write, of the last, once plans have been quiet`() = runBlocking {
         pickCalendar(7)
         writer.start()

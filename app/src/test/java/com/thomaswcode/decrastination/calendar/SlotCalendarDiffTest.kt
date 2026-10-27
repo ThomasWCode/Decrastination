@@ -107,7 +107,7 @@ class SlotCalendarDiffTest {
             deadline = Fixtures.at("2026-10-16T23:59"), soft = false, overdue = false, dueToday = false, behind = false, part = 1, parts = 2, taskMinutes = 60, why = Why.Spread,
         )
         val work = Slot(SlotKind.Work, chunk, five, half, WindowKind.Evening, pinned = false)
-        val outside = Slot(SlotKind.Outside, null, Fixtures.at("2026-10-17T09:30"), Fixtures.at("2026-10-17T09:50"), WindowKind.Evening, pinned = false)
+        val outside = Slot(SlotKind.Outside, null, Fixtures.at("2026-10-17T09:30"), Fixtures.at("2026-10-17T09:50"), WindowKind.Evening, pinned = false, outsideAt = 570)
         val far = Slot(SlotKind.Work, chunk, Fixtures.at("2026-10-20T17:00"), Fixtures.at("2026-10-20T17:30"), WindowKind.Evening, pinned = false)
         val plan = Plan(
             five - 60_000L, today,
@@ -115,7 +115,10 @@ class SlotCalendarDiffTest {
             emptyList(),
         )
         val desired = SlotCalendarDiff.desired(plan, LONDON)
-        assertEquals(listOf("decrastination://slot/2026-10-13/teams:essay#-1#1", "decrastination://slot/2026-10-17/outside:${outside.start}"), desired.map { it.uri })
+        // A break's URI by its own time (D-113): the 09:30 break's wherever it's laid.
+        assertEquals(listOf("decrastination://slot/2026-10-13/teams:essay#-1#1", "decrastination://slot/2026-10-17/outside:570"), desired.map { it.uri })
+        val hourLater = plan.copy(buckets = plan.buckets.map { b -> b.copy(slots = b.slots.map { if (it == outside) it.copy(start = it.start + 3_600_000L, end = it.end + 3_600_000L) else it }) })
+        assertEquals(desired.map { it.uri }, SlotCalendarDiff.desired(hourLater, LONDON).map { it.uri })
         assertEquals(listOf("Essay: Draft", "Outside"), desired.map { it.title })
         assertEquals("Teams. Spread over the 3 days to its deadline.", desired.first().description)
         assertEquals(listOf("teams:essay", null), desired.map { it.taskId })

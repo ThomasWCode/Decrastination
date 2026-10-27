@@ -229,9 +229,77 @@ class SlotterTest {
     }
 
     @Test
-    fun `on a free day under way, a break outside whose time has gone isn't laid after now`() {
+    fun `on a free day under way, a break outside no plan laid before its time is laid from now while it can be over by the next one's`() {
+        // The morning's can't be over by 13:00 from 14:10; the midday one, laid by no plan, goes from now, still the 13:00 break.
         val (slots, _) = slot(saturday, emptyList(), listOf(w("08:30", "22:30")), now = "2026-10-17T14:10", outside = true)
         assertEquals(listOf("outside 14:10–14:30", "outside 16:00–16:20"), slots.described())
+        assertEquals(listOf("outside:780", "outside:960"), slots.map { it.key })
+    }
+
+    @Test
+    fun `a break outside is named by its own time wherever it's laid`() {
+        // A call over 13:00: the midday break at 14:00, still the 13:00 break.
+        val call = Busy(Fixtures.at("2026-10-17T12:50"), Fixtures.at("2026-10-17T14:00"))
+        val (slots, _) = slot(saturday, emptyList(), listOf(w("08:30", "22:30")), busy = listOf(call), outside = true)
+        assertEquals(listOf("outside 09:30–09:50", "outside 14:00–14:20", "outside 16:00–16:20"), slots.described())
+        assertEquals(listOf("outside:570", "outside:780", "outside:960"), slots.map { it.key })
+        assertEquals(listOf(570, 780, 960), slots.map { it.outsideAt })
+    }
+
+    @Test
+    fun `a break outside begun stays where it began till its end, then is completed and never laid again that day (D-113)`() {
+        val day = listOf(w("08:30", "22:30"))
+        val work = listOf(chunk("a"), chunk("b"))
+        // 12:58: the 13:00 break still to come, laid at its time; its start kept for the next plan.
+        val first = slot(saturday, work, day, now = "2026-10-17T12:58", outside = true).first
+        val kept = first.associate { it.key to it.start }
+        assertEquals(Fixtures.at("2026-10-17T13:00"), kept["outside:780"])
+        // 13:02, 13:11, 13:19: under way, at 13:00 each time, not from now.
+        for (now in listOf("13:02", "13:11", "13:19")) {
+            val laid = slot(saturday, work, day, now = "2026-10-17T$now", previous = kept, outside = true).first
+            assertEquals(listOf("outside 13:00–13:20", "outside 16:00–16:20"), laid.filter { it.kind == SlotKind.Outside }.described(), now)
+        }
+        // 13:20 and after: completed, not laid, and not from now either.
+        for (now in listOf("13:20", "13:25", "14:40")) {
+            val laid = slot(saturday, work, day, now = "2026-10-17T$now", previous = kept, outside = true).first
+            assertEquals(listOf("outside 16:00–16:20"), laid.filter { it.kind == SlotKind.Outside }.described(), now)
+        }
+    }
+
+    @Test
+    fun `a break outside under way is kept though the work would give it up, and with no breaks to come`() {
+        val day = listOf(w("08:30", "22:30"))
+        val kept = mapOf("outside:780" to Fixtures.at("2026-10-17T13:00"))
+        // From 13:05, sixteen half hours need all the afternoon and evening: no break still to come, but the one under way stays.
+        val full = slot(saturday, (1..16).map { chunk("p$it") }, day, now = "2026-10-17T13:05", previous = kept, outside = true).first
+        assertEquals(listOf("outside 13:00–13:20"), full.filter { it.kind == SlotKind.Outside }.described())
+        assertTrue(full.filter { it.kind == SlotKind.Work }.all { it.start >= Fixtures.at("2026-10-17T13:20") })
+        // With no breaks outside in the settings, or on a day turned school's, the one under way stays all the same.
+        assertEquals(listOf("outside 13:00–13:20"), Slotter.slot(LocalDate.parse(saturday), emptyList(), day, emptyList(), emptyMap(), kept, Fixtures.at("2026-10-17T13:05"), LONDON, settings.copy(outsideBreaks = 0), true) { null }.first.described())
+        assertEquals(listOf("outside 13:00–13:20"), slot(saturday, emptyList(), day, now = "2026-10-17T13:05", previous = kept).first.described())
+    }
+
+    @Test
+    fun `a break outside still to come is laid afresh at its time, not held at its kept start`() {
+        // Kept at 13:00 by the last plan, the morning's completed; a call from 12:55 to 13:40 since: laid at 13:40.
+        val kept = mapOf("outside:570" to Fixtures.at("2026-10-17T09:30"), "outside:780" to Fixtures.at("2026-10-17T13:00"))
+        val call = Busy(Fixtures.at("2026-10-17T12:55"), Fixtures.at("2026-10-17T13:40"))
+        val (slots, _) = slot(saturday, emptyList(), listOf(w("08:30", "22:30")), now = "2026-10-17T12:30", busy = listOf(call), previous = kept, outside = true)
+        assertEquals(listOf("outside 13:40–14:00", "outside 16:00–16:20"), slots.described())
+    }
+
+    @Test
+    fun `the breaks begun count towards how many a day has`() {
+        val day = listOf(w("08:30", "22:30"))
+        val one = settings.copy(outsideBreaks = 1)
+        fun slots(now: String, previous: Map<String, Long>) =
+            Slotter.slot(LocalDate.parse(saturday), emptyList(), day, emptyList(), emptyMap(), previous, Fixtures.at(now), LONDON, one, true) { null }.first.described()
+        // With one a day: the midday one under way, no other laid.
+        assertEquals(listOf("outside 13:00–13:20"), slots("2026-10-17T13:05", mapOf("outside:780" to Fixtures.at("2026-10-17T13:00"))))
+        // The morning's completed: none other that day.
+        assertEquals(emptyList(), slots("2026-10-17T11:00", mapOf("outside:570" to Fixtures.at("2026-10-17T09:30"))))
+        // None begun: the morning's, laid from now as no plan laid it, as before.
+        assertEquals(listOf("outside 11:00–11:20"), slots("2026-10-17T11:00", emptyMap()))
     }
 
     @Test

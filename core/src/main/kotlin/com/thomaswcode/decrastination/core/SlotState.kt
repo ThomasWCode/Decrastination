@@ -13,6 +13,16 @@ data class SlotState(val date: String = "", val previous: Map<String, Long> = em
     /** As it stands on [date]: a new day starts empty. */
     fun on(date: LocalDate): SlotState = if (this.date == date.toString()) this else SlotState(date.toString())
 
+    /**
+     * As [plan] lays today: its slots' starts, breaks outside among them; and each break outside begun that it no
+     * longer lays, completed at its end, so the next plan knows it's done and never lays it again that day (D-113).
+     */
+    fun laid(plan: Plan): SlotState {
+        val starts = plan.todaySlots.associate { it.key to it.start }
+        val completed = previous.filter { (key, start) -> Slot.outsideAt(key) != null && start <= plan.now && key !in starts }
+        return copy(previous = starts + completed)
+    }
+
     /** [key]'s slot missed at [at]: recorded once, and its start no longer kept, so it moves. */
     fun missed(key: String, taskId: String, at: Long): SlotState =
         copy(previous = previous - key, missed = if (missed.any { it.key == key }) missed else missed + MissedSlot(key, taskId, at))

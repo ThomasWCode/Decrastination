@@ -31,7 +31,7 @@ class SlotAlarmsTest {
         val thursday = work("Draft", "2026-10-15T17:00")
         val days = listOf(DayBucket(today, 300, emptyList()), DayBucket(today.plusDays(1), 300, emptyList()), DayBucket(today.plusDays(2), 300, listOf(thursday.chunk!!), listOf(thursday)))
         val plan = Plan(Fixtures.at("2026-10-13T16:00"), today, days, emptyList())
-        assertEquals(thursday to thursday, SlotAlarms.next(plan, plan.now))
+        assertEquals((thursday to thursday.start) to thursday, SlotAlarms.next(plan, plan.now))
     }
 
     @Test
@@ -39,7 +39,18 @@ class SlotAlarmsTest {
         val first = work("Draft", "2026-10-13T17:00")
         val second = work("Finish", "2026-10-13T17:35")
         val plan = Plan(Fixtures.at("2026-10-13T17:10"), today, listOf(DayBucket(today, 300, listOf(first.chunk!!, second.chunk!!), listOf(first, second))), emptyList())
-        assertEquals(second to first, SlotAlarms.next(plan, plan.now))
+        assertEquals((second to second.start) to first, SlotAlarms.next(plan, plan.now))
         assertEquals(null to first, SlotAlarms.next(plan, Fixtures.at("2026-10-13T17:36")))
+    }
+
+    @Test
+    fun `a break outside rings at its start and at its end, so the plan's made again as it's completed (D-113)`() {
+        val outside = Slot(SlotKind.Outside, null, Fixtures.at("2026-10-13T13:00"), Fixtures.at("2026-10-13T13:20"), WindowKind.Evening, pinned = false, outsideAt = 780)
+        val draft = work("Draft", "2026-10-13T17:00")
+        val plan = Plan(Fixtures.at("2026-10-13T12:00"), today, listOf(DayBucket(today, 300, listOf(draft.chunk!!), listOf(outside, draft))), emptyList())
+        assertEquals((outside to outside.start) to draft, SlotAlarms.next(plan, plan.now))
+        // Under way: its end, before the next piece's start; the end alarm stays the piece's.
+        assertEquals((outside to outside.end) to draft, SlotAlarms.next(plan, Fixtures.at("2026-10-13T13:05")))
+        assertEquals((draft to draft.start) to draft, SlotAlarms.next(plan, Fixtures.at("2026-10-13T13:20")))
     }
 }

@@ -27,7 +27,8 @@ object Slotter {
 
     /**
      * [chunks] (in the day's order) laid into [windows] on [date], around [busy]. In turn: outside
-     * breaks where [outside], as many as the work laid around them leaves room for; pinned pieces ([pins], by [Chunk.key]) at their time, or the next free
+     * breaks where [outside], as many as the work laid around them leaves room for, one begun kept as
+     * [previous] has it (D-113); pinned pieces ([pins], by [Chunk.key]) at their time, or the next free
      * start; pieces at the time they had ([previous]) where it's still free, one under way or just
      * over ([GRACE_MS]) included;
      * the rest, in order, at the first free time each fits whole. A task's steps keep their order
@@ -50,23 +51,35 @@ object Slotter {
         outside: Boolean,
         deadlineMinOf: (Chunk) -> Int?,
     ): Pair<List<Slot>, List<Chunk>> {
-        fun around(breaks: List<Slot>) = lay(date, chunks, windows, busy, pins, previous, now, zone, settings, breaks, deadlineMinOf)
-        if (!outside || settings.outsideBreaks <= 0) return around(emptyList())
-        // Outside breaks, each at or after its time, over by the next one's and started by 18:00 (so on
-        // a day under way one whose time has gone isn't laid after now, nor any in the evening): as many
-        // of `outsideBreaks` as the work leaves room for, the midday one given up first, then the
-        // afternoon's, then the morning's.
-        val free = intervals(date, windows, busy, now, zone, settings.minSchoolSlotMin)
-        val room = free.sumOf { it.minutes }
         val length = settings.outsideBreakMin * MINUTE
+        val day = at(date, 0, zone) until at(date.plusDays(1), 0, zone)
+        // The breaks outside a plan laid today that have begun, by their own time (D-113): one under way laid at
+        // its start, whatever the free time and the settings now say, never given up for work; one over, completed,
+        // never laid again that day. Each counts towards `outsideBreaks`.
+        val begun = previous.mapNotNull { (key, start) -> Slot.outsideAt(key)?.takeIf { start in day && start <= now }?.let { it to start } }.toMap()
+        val underWay = begun.filterValues { it + length > now }.map { (minute, start) ->
+            val window = windows.firstOrNull { at(date, it.startMin, zone) <= start && start < at(date, it.endMin, zone) }?.kind ?: WindowKind.Evening
+            Slot(SlotKind.Outside, null, start, start + length, window, pinned = false, outsideAt = minute)
+        }
+        fun around(breaks: List<Slot>) = lay(date, chunks, windows, busy, pins, previous, now, zone, settings, underWay + breaks, deadlineMinOf)
+        // Those still to come: as many as `outsideBreaks` leaves, those begun counted.
+        val left = settings.outsideBreaks - begun.size
+        if (!outside || left <= 0) return around(emptyList())
+        // Outside breaks still to come, each at or after its time, over by the next one's and started by 18:00 (so
+        // on a day under way one whose time has gone, none laid, is laid from now, and none in the evening): as many
+        // of them as the work leaves room for, the midday one given up first, then the afternoon's, then the morning's.
+        val free = intervals(date, windows, busy, now, zone, settings.minSchoolSlotMin)
+        for (slot in underWay) carve(free, slot.start, slot.end)
+        val room = free.sumOf { it.minutes }
         val latest = at(date, OUTSIDE_LATEST_MIN, zone)
         val found = mutableListOf<Pair<Int, Slot>>()
         for ((i, minute) in settings.outsideTimes.withIndex().sortedBy { it.value }) {
+            if (minute in begun) continue
             val from = at(date, minute, zone)
             val by = settings.outsideTimes.filter { it > minute }.minOrNull()?.let { at(date, it, zone) } ?: Long.MAX_VALUE
             val interval = free.firstOrNull { maxOf(it.start, from) <= latest && maxOf(it.start, from) + length <= minOf(it.end, by) } ?: continue
             val start = maxOf(interval.start, from)
-            found += i to Slot(SlotKind.Outside, null, start, start + length, interval.window.kind, pinned = false)
+            found += i to Slot(SlotKind.Outside, null, start, start + length, interval.window.kind, pinned = false, outsideAt = minute)
             carve(free, start, start + length)
         }
         // The work's time with its rests as they'd be laid back to back: a longer one after each run
@@ -82,7 +95,7 @@ object Slotter {
         // From the most that leave the work that time, fewer, till laid around them it's all slotted,
         // or no less of it than with none (time cut up around them holds less than its sum).
         val choices = (GIVEN_UP.runningFold(found.toList()) { kept, drop -> kept.filterNot { it.first == drop } } + listOf(emptyList<Pair<Int, Slot>>()))
-            .distinct().filter { it.size <= settings.outsideBreaks }
+            .distinct().filter { it.size <= left }
         val bare by lazy { around(emptyList()) }
         for (kept in choices.dropWhile { it.isNotEmpty() && room - it.size * settings.outsideBreakMin < need }) {
             if (kept.isEmpty()) return bare
