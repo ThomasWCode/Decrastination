@@ -62,6 +62,8 @@ The owner's word (`answers.md` §Changed at the owner's word): a piece pinned ou
 
 ## 4.5.1: a day for only some tasks
 
+**Built** in 4.5.1 (D-115). Decided while building: a task moved onto the day joins it where the move came after the day's *first* DayOnly in force, not its latest as stage 2 below says, so Felix's answer to his own question (one more DayOnly, "Anki too") keeps a task that joined between; `alsoAllow` is an enum in the schemas (empty, `anki`, `anki-deadlines`), a plain string still, never nullable; `OnlyDay` carries the tasks that joined (`joined`), so the join is said by Felix's answer and the move sheet.
+
 Read first, in full: `core/Instructions.kt` (`ChangeType`, `Change`, `InstructionState`, `InstructionRules.dayCaps`, `describe`), `core/Chat.kt` (`Proposal`, and the two states' versions), `core/Planner.kt` (`Input`, `room`, `limited` and `capped`, `placeBack`, `freeUntilDue`), `plan/Planning.kt`, `enrich/InstructionAnswers.kt` (`Given`, `change`, `problem`), `enrich/InstructionPrompts.kt`, `felix/ChatPrompts.kt` (the system prompt and its Gmail variant, `plan`), `felix/ChatAnswers.kt`, `felix/FelixPrompts.kt` (`describe`), `data/Backup.kt` (its checks of each change's fields), `data/Stores.kt`, and the tests `InstructionRulesTest` (which tests `InstructionAnswers` too), `PlannerTest`, `ChatTest` (`ChatAnswers`), `ConversationTest`, `GoldenPromptsTest`, `SchemaLimitsTest`, `MigrationTest`, `StoresDecodeTest`.
 
 ### 1. The change, and the stores that hold it (45 min)

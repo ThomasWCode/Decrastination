@@ -42,6 +42,7 @@ class InstructionRulesTest {
                 Settings(),
                 hardBusy = InstructionRules.busy(applied, LONDON, today, today.plusDays(90)),
                 dayCaps = InstructionRules.dayCaps(applied, today, today.plusDays(90)),
+                onlyDays = InstructionRules.onlyDays(applied, today, today.plusDays(90)),
             ),
         )
     }
@@ -440,6 +441,248 @@ class InstructionRulesTest {
         fun one(change: String) = parse("""{"understood":true,"question":null,"changes":[$change]}""")
         assertIs<InstructionAnswers.Reading.Unclear>(one("""{"type":"OnDay","taskId":"teams:essay","afterTaskId":null,"eventKey":null,"eventTime":null,"minutes":null,"date":null,"endDate":null,"weekday":"Monday","time":null,"endTime":null}"""))
         assertIs<InstructionAnswers.Reading.Unclear>(one("""{"type":"AtTime","taskId":"teams:essay","afterTaskId":null,"eventKey":null,"eventTime":null,"minutes":null,"date":"2026-10-11","endDate":null,"weekday":null,"time":null,"endTime":null}"""))
+    }
+
+    // --- A day for only some tasks (D-115) ---
+
+    private val saturday = LocalDate.parse("2026-10-10")
+
+    private fun Plan.on(day: LocalDate, task: TaskItem) = bucket(day)!!.chunks.filter { it.taskId == task.id }
+
+    /** [tasks] with [applied]'s values laid on them, as the app plans them, then planned. */
+    private fun laid(tasks: List<TaskItem>, applied: List<Instruction>, at: Long = now): Plan {
+        val overrides = InstructionRules.taskOverrides(applied)
+        return plan(tasks.map { t -> overrides[t.id]?.let { t.withMine(it) } ?: t }, applied, at)
+    }
+
+    @Test
+    fun `a day kept for only some tasks holds their work alone, the rest of its time free`() {
+        // Friday 21:00; the essay due Wednesday, maths Monday; Saturday kept for the essay.
+        val essay = task("essay", "2026-10-14T09:00", effort = 120)
+        val maths = task("maths", "2026-10-12T09:00", effort = 240)
+        val only = applied(Change(ChangeType.DayOnly, taskId = essay.id, date = "2026-10-10"))
+        val kept = plan(listOf(essay, maths), listOf(only))
+        assertTrue(kept.on(saturday, maths).isEmpty())
+        // All of maths still planned, on its other days; without the day kept, Saturday had some of it.
+        assertEquals(240, kept.chunksOf(maths.id).sumOf { it.minutes })
+        assertTrue(plan(listOf(essay, maths)).on(saturday, maths).isNotEmpty())
+        // The day's free time isn't taken by anything else: what's planned there is the essay's alone.
+        assertEquals(kept.on(saturday, essay).sumOf { it.minutes }, kept.bucket(saturday)!!.plannedMin)
+    }
+
+    @Test
+    fun `its tasks are planned as usual, and one given the day as well has all its work there`() {
+        val essay = task("essay", "2026-10-14T09:00", effort = 120)
+        val only = applied(Change(ChangeType.DayOnly, taskId = essay.id, date = "2026-10-10"))
+        // As usual: where it would go anyway, not pulled onto the day.
+        assertEquals(plan(listOf(essay)).chunksOf(essay.id).map { it.key to it.minutes }, plan(listOf(essay), listOf(only)).chunksOf(essay.id).map { it.key to it.minutes })
+        assertEquals(plan(listOf(essay)).buckets.map { it.date to it.plannedMin }, plan(listOf(essay), listOf(only)).buckets.map { it.date to it.plannedMin })
+        // Given the day too (OnDay): all of it there.
+        val day = applied(Change(ChangeType.OnDay, taskId = essay.id, date = "2026-10-10"), at = now + 1)
+        assertEquals(120, laid(listOf(essay), listOf(only, day)).on(saturday, essay).sumOf { it.minutes })
+    }
+
+    @Test
+    fun `a task moved onto the day after it was kept for others joins them, one moved there before is left out`() {
+        val essay = task("essay", "2026-10-14T09:00", effort = 120)
+        val maths = task("maths", "2026-10-16T09:00", effort = 60)
+        val before = applied(Change(ChangeType.OnDay, taskId = maths.id, date = "2026-10-10"), at = now - 2)
+        val only = applied(Change(ChangeType.DayOnly, taskId = essay.id, date = "2026-10-10"), at = now - 1)
+        val after = applied(Change(ChangeType.OnDay, taskId = maths.id, date = "2026-10-10"), at = now)
+        val joined = InstructionRules.onlyDays(listOf(only, after), saturday, saturday).getValue(saturday)
+        assertEquals(setOf(essay.id, maths.id) to setOf(maths.id), joined.taskIds to joined.joined)
+        assertEquals(60, laid(listOf(essay, maths), listOf(only, after)).on(saturday, maths).sumOf { it.minutes })
+        // Moved there before: left out, its work on other days.
+        assertEquals(setOf(essay.id), InstructionRules.onlyDays(listOf(before, only), saturday, saturday).getValue(saturday).taskIds)
+        val left = laid(listOf(essay, maths), listOf(before, only))
+        assertTrue(left.on(saturday, maths).isEmpty())
+        assertEquals(60, left.chunksOf(maths.id).sumOf { it.minutes })
+        // Its day no pin then: its real deadline holds it, so none of its work is behind.
+        assertTrue(left.chunksOf(maths.id).none { it.behind }, "${left.chunksOf(maths.id).map { it.behind }}")
+        // A DayOnly made later (Felix's answer to his own question, say) keeps one that joined; the latest sets what's let in.
+        val anki = applied(Change(ChangeType.DayOnly, taskId = essay.id, date = "2026-10-10", alsoAllow = InstructionRules.ALSO_ANKI), at = now + 1)
+        val still = InstructionRules.onlyDays(listOf(only, after, anki), saturday, saturday).getValue(saturday)
+        assertEquals(OnlyDay(setOf(essay.id, maths.id), anki = true, deadlines = false, joined = setOf(maths.id)), still)
+        // Said as it joins.
+        assertEquals("Sat 10 Oct was only for “essay”: “maths” joins it", InstructionRules.joinLine(saturday, still.taskIds - still.joined, maths.id, listOf(essay, maths).associateBy { it.id }))
+        // Moved on after it joined (a time on Sunday): the move in force for it is that one, so it's no longer among them.
+        val away = applied(Change(ChangeType.AtTime, taskId = maths.id, date = "2026-10-11", startMin = 600, time = Fixtures.at("2026-10-11T10:00")), at = now + 2)
+        assertEquals(setOf(essay.id), InstructionRules.onlyDays(listOf(only, after, away), saturday, saturday).getValue(saturday).taskIds)
+        // Days outside the range asked for, or none kept: none.
+        assertEquals(emptyMap(), InstructionRules.onlyDays(listOf(only), saturday.plusDays(1), saturday.plusDays(5)))
+    }
+
+    @Test
+    fun `Anki's cards come in only where the day lets them`() {
+        // Saturday 08:00, kept for the essay: today's cards, due by 21:30.
+        val at = Fixtures.at("2026-10-10T08:00")
+        val essay = task("essay", "2026-10-14T09:00", effort = 60)
+        val deck = task("deck", "2026-10-10T21:30", effort = 20, source = Source.Anki)
+        val shut = applied(Change(ChangeType.DayOnly, taskId = essay.id, date = "2026-10-10"), at = at)
+        assertTrue(plan(listOf(essay, deck), listOf(shut), at = at).on(saturday, deck).isEmpty())
+        val anki = applied(Change(ChangeType.DayOnly, taskId = essay.id, date = "2026-10-10", alsoAllow = InstructionRules.ALSO_ANKI), at = at)
+        assertEquals(20, plan(listOf(essay, deck), listOf(anki), at = at).on(saturday, deck).sumOf { it.minutes })
+    }
+
+    @Test
+    fun `with deadlines let in, work with no other day before its deadline takes the day, and work with one doesn't`() {
+        // Saturday 08:00, kept for the essay: a form due 20:00 today has no other day; a sheet due Monday has Sunday and Monday.
+        val at = Fixtures.at("2026-10-10T08:00")
+        val essay = task("essay", "2026-10-14T09:00", effort = 60)
+        val form = task("form", "2026-10-10T20:00", effort = 30)
+        val sheet = task("sheet", "2026-10-12T21:00", effort = 30)
+        val open = applied(Change(ChangeType.DayOnly, taskId = essay.id, date = "2026-10-10", alsoAllow = InstructionRules.ALSO_DEADLINES), at = at)
+        val p = plan(listOf(essay, form, sheet), listOf(open), at = at)
+        assertEquals(30, p.on(saturday, form).sumOf { it.minutes })
+        assertTrue(p.on(saturday, sheet).isEmpty())
+        assertTrue(p.wontFit.none { it.taskId == form.id })
+        // Not let in: the form isn't on it, and is said not to fit before its deadline (PL-02).
+        val shut = applied(Change(ChangeType.DayOnly, taskId = essay.id, date = "2026-10-10"), at = at)
+        val q = plan(listOf(essay, form, sheet), listOf(shut), at = at)
+        assertTrue(q.on(saturday, form).isEmpty())
+        assertTrue(q.wontFit.any { it.taskId == form.id })
+    }
+
+    @Test
+    fun `deadlines are let in only where no day before the deadline itself has room, past the safety margin too`() {
+        // Saturday 08:00, kept for the essay, deadlines let in: a sheet due Sunday 21:00, whose last usable day by the margin
+        // is Saturday, has all of Sunday free, so it doesn't take Saturday.
+        val at = Fixtures.at("2026-10-10T08:00")
+        val essay = task("essay", "2026-10-14T09:00", effort = 60)
+        val sheet = task("sheet", "2026-10-11T21:00", effort = 30)
+        val open = applied(Change(ChangeType.DayOnly, taskId = essay.id, date = "2026-10-10", alsoAllow = InstructionRules.ALSO_DEADLINES), at = at)
+        val p = plan(listOf(essay, sheet), listOf(open), at = at)
+        assertTrue(p.on(saturday, sheet).isEmpty(), "${p.buckets.map { b -> b.date to b.chunks.filter { it.taskId == sheet.id }.size }}")
+        assertEquals(30, p.chunksOf(sheet.id).sumOf { it.minutes })
+    }
+
+    @Test
+    fun `a task's pieces are no longer than the most a day it can go on holds, a day kept for others not among them`() {
+        // Friday, Friday and Sunday limited to 20 minutes, Saturday kept for the essay: a 40-minute sheet due Monday morning
+        // goes in two pieces on Friday and Sunday, not one with no day to hold it.
+        val friday = Fixtures.at("2026-10-09T17:00")
+        val essay = task("essay", "2026-10-20T09:00", effort = 60)
+        val sheet = task("sheet", "2026-10-12T09:00", effort = 40)
+        val rules = listOf(
+            applied(Change(ChangeType.DayLimit, date = "2026-10-09", freeMin = 20), at = friday),
+            applied(Change(ChangeType.DayOnly, taskId = essay.id, date = "2026-10-10"), at = friday + 1),
+            applied(Change(ChangeType.DayLimit, date = "2026-10-11", freeMin = 20), at = friday + 2),
+        )
+        // With boxes of an hour, so only the days' room cuts it.
+        val today = Planner.date(friday, LONDON)
+        val p = Planner.plan(
+            Planner.Input(
+                listOf(essay, sheet), friday, LONDON, Settings(boxMin = 60),
+                dayCaps = InstructionRules.dayCaps(rules, today, today.plusDays(90)), onlyDays = InstructionRules.onlyDays(rules, today, today.plusDays(90)),
+            ),
+        )
+        assertEquals(listOf(20, 20), p.chunksOf(sheet.id).map { it.minutes })
+        assertTrue(p.chunksOf(sheet.id).none { it.behind }, "${p.chunksOf(sheet.id).map { it.behind }}")
+    }
+
+    @Test
+    fun `work carried on from a first day you limited still takes a day kept for others that lets deadlines in, where it would miss its deadline without`() {
+        // Saturday 08:00, Saturday and Sunday limited to half an hour, Saturday kept for the essay with deadlines let in: a
+        // 90-minute sheet due Monday morning has both days' half hours, so only its last is past them.
+        val at = Fixtures.at("2026-10-10T08:00")
+        val essay = task("essay", "2026-10-30T09:00", effort = 60)
+        val sheet = task("sheet", "2026-10-12T09:00", effort = 90)
+        val rules = listOf(
+            applied(Change(ChangeType.DayLimit, date = "2026-10-10", freeMin = 30), at = at),
+            applied(Change(ChangeType.DayOnly, taskId = essay.id, date = "2026-10-10", alsoAllow = InstructionRules.ALSO_DEADLINES), at = at + 1),
+            applied(Change(ChangeType.DayLimit, date = "2026-10-11", freeMin = 30), at = at + 2),
+        )
+        val p = plan(listOf(essay, sheet), rules, at = at)
+        val days = p.buckets.associate { b -> b.date to b.chunks.filter { it.taskId == sheet.id }.sumOf { it.minutes } }.filterValues { it > 0 }
+        assertEquals(30, days[saturday], "$days")
+        assertEquals(30, days[LocalDate.parse("2026-10-11")], "$days")
+        assertEquals(90, p.chunksOf(sheet.id).sumOf { it.minutes })
+    }
+
+    @Test
+    fun `a task's pieces are sized by days kept for others that let deadlines in, where none else before its deadline has room`() {
+        // Saturday 08:00, Saturday and Sunday limited to 20 minutes and kept for the essay with deadlines let in: a 40-minute
+        // sheet due Monday morning goes in two pieces over the weekend, not one no day before its deadline holds.
+        val at = Fixtures.at("2026-10-10T08:00")
+        val essay = task("essay", "2026-10-30T09:00", effort = 60)
+        val sheet = task("sheet", "2026-10-12T09:00", effort = 40)
+        val rules = listOf("2026-10-10", "2026-10-11").flatMapIndexed { i, day ->
+            listOf(
+                applied(Change(ChangeType.DayLimit, date = day, freeMin = 20), at = at + 2 * i),
+                applied(Change(ChangeType.DayOnly, taskId = essay.id, date = day, alsoAllow = InstructionRules.ALSO_DEADLINES), at = at + 2 * i + 1),
+            )
+        }
+        val today = Planner.date(at, LONDON)
+        val p = Planner.plan(
+            Planner.Input(
+                listOf(essay, sheet), at, LONDON, Settings(boxMin = 60),
+                dayCaps = InstructionRules.dayCaps(rules, today, today.plusDays(90)), onlyDays = InstructionRules.onlyDays(rules, today, today.plusDays(90)),
+            ),
+        )
+        assertEquals(listOf(20, 20), p.chunksOf(sheet.id).map { it.minutes })
+        assertEquals(setOf(saturday, LocalDate.parse("2026-10-11")), p.buckets.filter { b -> b.chunks.any { it.taskId == sheet.id } }.map { it.date }.toSet())
+    }
+
+    @Test
+    fun `work not open yet is said not to fit where the days before its deadline are kept for others, unless they let deadlines in`() {
+        // Friday 21:00: a sheet that opens Saturday morning, due Monday morning; the weekend kept for the essay.
+        val essay = task("essay", "2026-10-30T09:00", effort = 60)
+        val sheet = task("sheet", "2026-10-12T09:00", effort = 60).copy(availableFrom = Fixtures.at("2026-10-10T08:00"))
+        fun kept(allow: String?) = listOf("2026-10-10", "2026-10-11").mapIndexed { i, day -> applied(Change(ChangeType.DayOnly, taskId = essay.id, date = day, alsoAllow = allow), at = now + i) }
+        assertEquals(listOf(sheet.id), plan(listOf(essay, sheet), kept(null)).wontFit.map { it.taskId })
+        assertEquals(emptyList(), plan(listOf(essay, sheet), kept(InstructionRules.ALSO_DEADLINES)).wontFit.map { it.taskId })
+    }
+
+    @Test
+    fun `work its deadline has gone by on a day isn't let in there as a last resort, as that can't save it`() {
+        // Friday 21:00, no work tonight, Saturday kept for the essay with deadlines let in: a half hour due tonight goes to Sunday.
+        val essay = task("essay", "2026-10-30T09:00", effort = 60)
+        val form = task("form", "2026-10-09T23:30", effort = 30)
+        val rules = listOf(
+            applied(Change(ChangeType.DayLimit, date = "2026-10-09", freeMin = 0)),
+            applied(Change(ChangeType.DayOnly, taskId = essay.id, date = "2026-10-10", alsoAllow = InstructionRules.ALSO_DEADLINES), at = now + 1),
+        )
+        val p = plan(listOf(essay, form), rules)
+        assertTrue(p.on(saturday, form).isEmpty(), "${p.buckets.map { b -> b.date to b.chunks.filter { it.taskId == form.id }.size }}")
+        assertEquals(30, p.on(LocalDate.parse("2026-10-11"), form).sumOf { it.minutes })
+    }
+
+    @Test
+    fun `a day whose tasks are all done stays free of work, and overdue work goes to the next day while today's kept for others`() {
+        val essay = task("essay", "2026-10-14T09:00", effort = 60).copy(status = Status.Done)
+        val maths = task("maths", "2026-10-12T09:00", effort = 240)
+        val only = applied(Change(ChangeType.DayOnly, taskId = essay.id, date = "2026-10-10"))
+        val p = plan(listOf(essay, maths), listOf(only))
+        assertTrue(p.bucket(saturday)!!.chunks.isEmpty())
+        assertEquals(240, p.chunksOf(maths.id).sumOf { it.minutes })
+        // Friday 17:00, kept for the essay: the overdue work goes to Saturday, not today.
+        val friday = Fixtures.at("2026-10-09T17:00")
+        val late = task("late", "2026-10-08T09:00", effort = 60)
+        val today = applied(Change(ChangeType.DayOnly, taskId = essay.id, date = "2026-10-09"), at = friday)
+        val q = plan(listOf(essay, late), listOf(today), at = friday)
+        assertTrue(q.on(LocalDate.parse("2026-10-09"), late).isEmpty())
+        assertEquals(60, q.on(saturday, late).sumOf { it.minutes })
+    }
+
+    @Test
+    fun `a day for only some tasks is read with a date, what else it lets in kept where it's one of the two, and said`() {
+        fun one(change: String) = parse("""{"understood":true,"question":null,"changes":[$change]}""")
+        val reading = one("""{"type":"DayOnly","taskId":"teams:essay","afterTaskId":null,"eventKey":null,"eventTime":null,"minutes":null,"date":"2026-10-11","endDate":null,"weekday":null,"time":null,"endTime":null,"alsoAllow":"anki"}""")
+        val change = assertIs<InstructionAnswers.Reading.Changes>(reading).changes.single()
+        assertEquals(Change(ChangeType.DayOnly, taskId = "teams:essay", date = "2026-10-11", alsoAllow = InstructionRules.ALSO_ANKI), change)
+        val tasks = listOf(essay, prep).associateBy { it.id }
+        assertEquals("Sun 11 Oct: only “essay”; Anki too", InstructionRules.describe(change, tasks, LONDON))
+        assertEquals("Sun 11 Oct: only “essay”", InstructionRules.describe(change.copy(alsoAllow = null), tasks, LONDON))
+        assertEquals("Sun 11 Oct: only “essay”; Anki, and work that would miss its deadline, too", InstructionRules.describe(change.copy(alsoAllow = InstructionRules.ALSO_DEADLINES), tasks, LONDON))
+        // Anything else it lets in is nothing; empty is nothing.
+        val other = one("""{"type":"DayOnly","taskId":"teams:essay","afterTaskId":null,"eventKey":null,"eventTime":null,"minutes":null,"date":"2026-10-11","endDate":null,"weekday":null,"time":null,"endTime":null,"alsoAllow":"everything"}""")
+        assertNull(assertIs<InstructionAnswers.Reading.Changes>(other).changes.single().alsoAllow)
+        // A weekday alone isn't a day for it: left out, and said.
+        val weekday = one("""{"type":"DayOnly","taskId":"teams:essay","afterTaskId":null,"eventKey":null,"eventTime":null,"minutes":null,"date":null,"endDate":null,"weekday":"Sunday","time":null,"endTime":null,"alsoAllow":""}""")
+        assertEquals("Claude's reading couldn't be used: a day only for some tasks takes a date", assertIs<InstructionAnswers.Reading.Unclear>(weekday).why)
+        // Nor a task that isn't listed.
+        val unknown = one("""{"type":"DayOnly","taskId":"teams:nope","afterTaskId":null,"eventKey":null,"eventTime":null,"minutes":null,"date":"2026-10-11","endDate":null,"weekday":null,"time":null,"endTime":null,"alsoAllow":""}""")
+        assertEquals("Claude's reading couldn't be used: it names a task that isn't listed", assertIs<InstructionAnswers.Reading.Unclear>(unknown).why)
     }
 
     @Test

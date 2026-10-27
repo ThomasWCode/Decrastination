@@ -10,6 +10,7 @@ import com.thomaswcode.decrastination.core.Due
 import com.thomaswcode.decrastination.core.DueKind
 import com.thomaswcode.decrastination.core.FelixSettings
 import com.thomaswcode.decrastination.core.Given
+import com.thomaswcode.decrastination.core.Instruction
 import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Lessons
@@ -73,6 +74,17 @@ object ChatAnswers {
             }
         }.distinct()
     }
+
+    /**
+     * The tasks [changes] (an OnDay, an AtTime) put on a day kept for only others, as [applied] has it now with them in, a
+     * line each (D-115, Q13): "Thu 29 Oct was only for “Essay”: “Maths” joins it". Pure.
+     */
+    fun joined(changes: List<Change>, applied: List<Instruction>, tasks: Map<String, TaskItem>): List<String> =
+        changes.filter { (it.type == ChangeType.OnDay || it.type == ChangeType.AtTime) && it.taskId != null }.mapNotNull { c ->
+            val day = c.date?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: return@mapNotNull null
+            val only = InstructionRules.onlyDays(applied, day, day)[day]?.takeIf { c.taskId in it.joined } ?: return@mapNotNull null
+            InstructionRules.joinLine(day, only.taskIds - only.joined, c.taskId!!, tasks)
+        }.distinct()
 
     data class Reading(
         val reply: String,

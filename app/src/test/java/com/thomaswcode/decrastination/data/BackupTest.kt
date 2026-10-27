@@ -16,6 +16,7 @@ import com.thomaswcode.decrastination.core.Fact
 import com.thomaswcode.decrastination.core.FelixState
 import com.thomaswcode.decrastination.core.HalfDay
 import com.thomaswcode.decrastination.core.Instruction
+import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.InstructionStatus
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.MemoryState
@@ -232,6 +233,12 @@ class BackupTest {
         assertNotNull(Backups.problem(with(Change(ChangeType.StartFrom, taskId = "teams:a", time = now + 3650 * 86_400_000L))))
         assertNotNull(Backups.problem(with(Change(ChangeType.After, taskId = "teams:a", afterTaskId = "teams:a"))))
         assertNotNull(Backups.problem(with(Change(ChangeType.EventTime, eventKey = "Trip", eventAnswer = "sometimes"))))
+        // A day for only some tasks (D-115): a task, a date, and nothing else let in or one of the two.
+        assertNull(Backups.problem(with(Change(ChangeType.DayOnly, taskId = "teams:a", date = "2026-10-31"))))
+        assertNull(Backups.problem(with(Change(ChangeType.DayOnly, taskId = "teams:a", date = "2026-10-31", alsoAllow = InstructionRules.ALSO_DEADLINES))))
+        assertNotNull(Backups.problem(with(Change(ChangeType.DayOnly, taskId = "teams:a", weekday = 6))))
+        assertNotNull(Backups.problem(with(Change(ChangeType.DayOnly, date = "2026-10-31"))))
+        assertNotNull(Backups.problem(with(Change(ChangeType.DayOnly, taskId = "teams:a", date = "2026-10-31", alsoAllow = "everything"))))
     }
 
     @Test

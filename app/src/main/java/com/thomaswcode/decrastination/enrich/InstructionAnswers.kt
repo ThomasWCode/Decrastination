@@ -58,6 +58,8 @@ object InstructionAnswers {
         val paced: Boolean = false,
         /** The chat's only (G8): a DueBy at this class's next lesson, its date and time the app's to set. */
         val lesson: String = "",
+        /** A DayOnly's: what else its day lets in (D-115), empty for nothing. */
+        val alsoAllow: String = "",
     ) {
         /** As given, but an empty string or a minutes of -1 is none: the schema has no nullable fields ([InstructionPrompts.CHANGE_FIELDS]). */
         fun normalised(): Given = copy(
@@ -155,6 +157,12 @@ object InstructionAnswers {
                 val start = minute(g.time) ?: return null
                 at(date, g.time, LocalTime.MIDNIGHT, zone)?.takeIf { plausible(it, now) }?.let { Change(type, taskId = id, date = date, startMin = start, time = it) }
             }
+            // A day for only some tasks (D-115): a date, not a weekday, as a day kept free of the rest once its tasks are done
+            // would be every such day; what else it lets in where that's one of the two, else nothing.
+            ChangeType.DayOnly -> task?.let { id ->
+                val date = day(g.copy(weekday = null), now)?.first ?: return null
+                Change(type, taskId = id, date = date, alsoAllow = g.alsoAllow.trim().takeIf { it == InstructionRules.ALSO_ANKI || it == InstructionRules.ALSO_DEADLINES })
+            }
             // The same work as another listed task (DX-15), which is kept.
             ChangeType.SameAs -> task?.let { id -> g.afterTaskId?.takeIf { it in tasks && it != id }?.let { Change(type, taskId = id, afterTaskId = it) } }
             // A task's name in the app: not one derived from Anki's counts, whose name is their count.
@@ -208,7 +216,8 @@ object InstructionAnswers {
     /** Why [g] couldn't be used, in words. */
     internal fun problem(g: Given, tasks: Map<String, TaskItem>, events: Map<String, String>): String = when {
         ChangeType.entries.none { it.name == g.type } -> "a change of a kind the app doesn't make"
-        g.type in setOf("NotATask", "StartFrom", "DueBy", "Minutes", "After", "OnDay", "AtTime", "Steps", "SameAs", "Rename") && g.taskId !in tasks -> "it names a task that isn't listed"
+        g.type in setOf("NotATask", "StartFrom", "DueBy", "Minutes", "After", "OnDay", "AtTime", "Steps", "SameAs", "Rename", "DayOnly") && g.taskId !in tasks -> "it names a task that isn't listed"
+        g.type == "DayOnly" && g.date == null -> "a day only for some tasks takes a date"
         g.type == "SameAs" -> "the task it's the same as isn't listed"
         g.type in setOf("Steps", "Rename") && tasks[g.taskId]?.let { it.derived || (g.type == "Steps" && it.source == Source.Anki) } == true -> "an Anki task's steps and name come from its cards"
         g.type == "Rename" -> "the new name is missing"

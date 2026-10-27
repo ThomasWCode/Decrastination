@@ -166,9 +166,9 @@ class FelixHarness(
         return MockResponse().setHeader("Content-Type", "application/json").setBody(body.toString())
     }
 
-    /** The chat's answer [reply], with the tasks and changes it offers (the schema's JSON for them), what it names [answered], the actions it takes ([actions]), and nothing else. */
-    fun chatAnswer(reply: String, newTasks: String = "[]", changes: String = "[]", answered: String = "[]", actions: String = "[]"): String =
-        """{"reply":"$reply","newTasks":$newTasks,"changes":$changes,"memories":[],"suggestedReplies":[],"actions":$actions,"research":"","details":[],"answered":$answered}"""
+    /** The chat's answer [reply], with the tasks and changes it offers (the schema's JSON for them), what it names [answered], the actions it takes ([actions]), the [replies] it offers, and nothing else. */
+    fun chatAnswer(reply: String, newTasks: String = "[]", changes: String = "[]", answered: String = "[]", actions: String = "[]", replies: String = "[]"): String =
+        """{"reply":"$reply","newTasks":$newTasks,"changes":$changes,"memories":[],"suggestedReplies":$replies,"actions":$actions,"research":"","details":[],"answered":$answered}"""
 
     /** What the service started in the background (an answer asked for as a message is kept), finished. */
     fun settle() = runBlocking {

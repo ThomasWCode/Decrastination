@@ -1,0 +1,1175 @@
+{
+    "tasks": [
+        {
+            "id": "teams:as-essay",
+            "source": "Teams",
+            "sourceId": "as-essay",
+            "title": "History essay: causes of the war",
+            "detail": "Write 1,200 words on the causes of the war, using both sources from the lesson. Hand in through Teams.",
+            "className": "12X/Hi1",
+            "dueAt": 1792742400000,
+            "availableFrom": 1791788400000,
+            "kind": "Homework",
+            "sourceEffortMin": 120,
+            "aiEffortMin": 135,
+            "sourceProgress": 0.0,
+            "firstProgress": 0.0,
+            "peakEffortMin": 150,
+            "workedMin": 40,
+            "photoMin": 10,
+            "photosCounted": {
+                "photo-1": 10
+            },
+            "answers": [
+                "Two sources are enough"
+            ],
+            "photo": {
+                "path": "/data/user/0/com.thomaswcode.decrastination/files/photos/teams_as-essay.jpg",
+                "hash": "00112233aabbccdd",
+                "at": 1792083600000
+            },
+            "subSteps": [
+                {
+                    "title": "Read the two sources",
+                    "minutes": 30,
+                    "done": true,
+                    "ankiSections": [],
+                    "from": null,
+                    "dueAt": null,
+                    "byHand": false,
+                    "timedMin": 30,
+                    "where": "anywhere",
+                    "id": "305e2e5c",
+                    "origin": "Reading",
+                    "anyOrder": false
+                },
+                {
+                    "title": "Plan the essay",
+                    "minutes": 25,
+                    "done": false,
+                    "ankiSections": [],
+                    "from": null,
+                    "dueAt": null,
+                    "byHand": false,
+                    "timedMin": 0,
+                    "where": "anywhere",
+                    "id": "4e7d1827",
+                    "origin": "Reading",
+                    "anyOrder": false
+                },
+                {
+                    "title": "Write the essay",
+                    "minutes": 80,
+                    "done": false,
+                    "ankiSections": [],
+                    "from": 1792364400000,
+                    "dueAt": 1792742400000,
+                    "byHand": false,
+                    "timedMin": 0,
+                    "where": "home",
+                    "id": "5ac62583",
+                    "origin": "Reading",
+                    "anyOrder": false
+                }
+            ],
+            "stepsWorkedMin": 5,
+            "stepsPerDay": null,
+            "notBefore": null,
+            "status": "Open",
+            "derived": false,
+            "firstSeenAt": 1791820800000,
+            "lastSeenAt": 1792314000000,
+            "doneAt": null,
+            "extra": {
+                "tab": "assignments",
+                "dueText": "Due Fri 23 Oct",
+                "links": "https://example.org/sources",
+                "feedbackOn": ""
+            },
+            "enrichment": {
+                "inputHash": "a1b2c3d4e5f60718",
+                "by": "claude-opus-5-5",
+                "at": 1791821100000,
+                "kind": "Homework",
+                "actionableFrom": 1791788400000,
+                "deadline": 1792742400000,
+                "deadlineQuoted": true,
+                "effortMin": 135,
+                "nextStep": "Read the two sources",
+                "subSteps": [
+                    {
+                        "title": "Read the two sources",
+                        "minutes": 30,
+                        "done": false,
+                        "ankiSections": [],
+                        "from": null,
+                        "dueAt": null,
+                        "byHand": false,
+                        "timedMin": 0,
+                        "where": "anywhere",
+                        "id": "305e2e5c",
+                        "origin": "Reading",
+                        "anyOrder": false
+                    },
+                    {
+                        "title": "Plan the essay",
+                        "minutes": 25,
+                        "done": false,
+                        "ankiSections": [],
+                        "from": null,
+                        "dueAt": null,
+                        "byHand": false,
+                        "timedMin": 0,
+                        "where": "anywhere",
+                        "id": "4e7d1827",
+                        "origin": "Reading",
+                        "anyOrder": false
+                    },
+                    {
+                        "title": "Write the essay",
+                        "minutes": 80,
+                        "done": false,
+                        "ankiSections": [],
+                        "from": 1792364400000,
+                        "dueAt": 1792742400000,
+                        "byHand": false,
+                        "timedMin": 0,
+                        "where": "home",
+                        "id": "5ac62583",
+                        "origin": "Reading",
+                        "anyOrder": false
+                    }
+                ],
+                "ankiSections": [
+                    "2.1"
+                ],
+                "testDate": 1792656000000,
+                "dropped": "a step past the deadline",
+                "question": "Is it 1,200 words with or without the bibliography?",
+                "adjusted": [
+                    "Plan the essay: its date was after the deadline"
+                ],
+                "reason": "hand in by Friday",
+                "summary": "An essay on the causes of the war from two sources.",
+                "fromPhoto": true,
+                "promptVersion": 7
+            },
+            "sourceValues": {
+                "kind": "Homework",
+                "dueAt": 1792742400000,
+                "availableFrom": 1791788400000,
+                "title": "History essay: causes of the war"
+            },
+            "mine": {
+                "notATask": null,
+                "from": null,
+                "after": null,
+                "dueAt": null,
+                "minutes": {
+                    "minutes": 150,
+                    "by": "You",
+                    "paced": {
+                        "from": 135,
+                        "contentHash": "a1b2c3d4e5f60718"
+                    }
+                },
+                "onDay": null,
+                "atTime": {
+                    "value": 1792425600000,
+                    "by": "You"
+                },
+                "sameAs": null,
+                "steps": null,
+                "title": null
+            }
+        },
+        {
+            "id": "teams:as-sheet",
+            "source": "Teams",
+            "sourceId": "as-sheet",
+            "title": "Forces worksheet",
+            "detail": "Answer questions 1 to 12.",
+            "className": "12X/Ph1",
+            "dueAt": 1792483200000,
+            "availableFrom": null,
+            "kind": "Homework",
+            "sourceEffortMin": 40,
+            "aiEffortMin": null,
+            "sourceProgress": 0.0,
+            "firstProgress": null,
+            "peakEffortMin": null,
+            "workedMin": 0,
+            "photoMin": 0,
+            "photosCounted": {},
+            "answers": [],
+            "photo": null,
+            "subSteps": [
+                {
+                    "title": "Questions 1 to 6",
+                    "minutes": 20,
+                    "done": true,
+                    "ankiSections": [],
+                    "from": null,
+                    "dueAt": null,
+                    "byHand": true,
+                    "timedMin": 5,
+                    "where": null,
+                    "id": "97e165cf",
+                    "origin": "Yours",
+                    "anyOrder": false
+                },
+                {
+                    "title": "Questions 7 to 12",
+                    "minutes": 20,
+                    "done": false,
+                    "ankiSections": [],
+                    "from": null,
+                    "dueAt": null,
+                    "byHand": false,
+                    "timedMin": 0,
+                    "where": "home",
+                    "id": "e683ff38",
+                    "origin": "Yours",
+                    "anyOrder": true
+                }
+            ],
+            "stepsWorkedMin": 0,
+            "stepsPerDay": null,
+            "notBefore": null,
+            "status": "Open",
+            "derived": false,
+            "firstSeenAt": 1791820800000,
+            "lastSeenAt": 1792314000000,
+            "doneAt": null,
+            "extra": {},
+            "enrichment": null,
+            "sourceValues": {
+                "kind": "Homework",
+                "dueAt": 1792483200000,
+                "availableFrom": null,
+                "title": "Worksheet 3"
+            },
+            "mine": {
+                "notATask": null,
+                "from": {
+                    "value": 1792335600000,
+                    "by": "You"
+                },
+                "after": null,
+                "dueAt": null,
+                "minutes": null,
+                "onDay": null,
+                "atTime": null,
+                "sameAs": null,
+                "steps": {
+                    "steps": [
+                        {
+                            "title": "Questions 1 to 6",
+                            "minutes": 20,
+                            "from": null,
+                            "dueAt": null,
+                            "where": null,
+                            "id": "97e165cf",
+                            "anyOrder": false
+                        },
+                        {
+                            "title": "Questions 7 to 12",
+                            "minutes": 20,
+                            "from": null,
+                            "dueAt": null,
+                            "where": "home",
+                            "id": "e683ff38",
+                            "anyOrder": true
+                        }
+                    ],
+                    "by": "You"
+                },
+                "title": {
+                    "value": "Forces worksheet",
+                    "by": "You"
+                }
+            }
+        },
+        {
+            "id": "powerplanner:pp-poster",
+            "source": "PowerPlanner",
+            "sourceId": "pp-poster",
+            "title": "Biology poster",
+            "detail": "A poster on cell division.",
+            "className": "Biology",
+            "dueAt": 1792598400000,
+            "availableFrom": null,
+            "kind": "Homework",
+            "sourceEffortMin": 45,
+            "aiEffortMin": null,
+            "sourceProgress": 0.25,
+            "firstProgress": 0.25,
+            "peakEffortMin": null,
+            "workedMin": 0,
+            "photoMin": 0,
+            "photosCounted": {},
+            "answers": [],
+            "photo": null,
+            "subSteps": [
+                {
+                    "title": "Read the brief",
+                    "minutes": 15,
+                    "done": false,
+                    "ankiSections": [],
+                    "from": null,
+                    "dueAt": null,
+                    "byHand": false,
+                    "timedMin": 0,
+                    "where": "anywhere",
+                    "id": "db2ee7bb",
+                    "origin": "Felix",
+                    "anyOrder": false
+                },
+                {
+                    "title": "Plan the poster",
+                    "minutes": 25,
+                    "done": false,
+                    "ankiSections": [],
+                    "from": 1792364400000,
+                    "dueAt": 1792598400000,
+                    "byHand": false,
+                    "timedMin": 0,
+                    "where": "home",
+                    "id": "4f04aa55",
+                    "origin": "Felix",
+                    "anyOrder": false
+                }
+            ],
+            "stepsWorkedMin": 0,
+            "stepsPerDay": null,
+            "notBefore": null,
+            "status": "Open",
+            "derived": false,
+            "firstSeenAt": 1791820800000,
+            "lastSeenAt": 1792314000000,
+            "doneAt": null,
+            "extra": {
+                "classId": "class-bio",
+                "allDay": "false",
+                "endAt": "1792602000000"
+            },
+            "enrichment": null,
+            "sourceValues": {
+                "kind": "Homework",
+                "dueAt": 1792656000000,
+                "availableFrom": null,
+                "title": "Biology poster"
+            },
+            "mine": {
+                "notATask": null,
+                "from": null,
+                "after": null,
+                "dueAt": {
+                    "value": 1792598400000,
+                    "by": "Felix"
+                },
+                "minutes": null,
+                "onDay": {
+                    "value": "2026-10-20",
+                    "by": "Felix"
+                },
+                "atTime": null,
+                "sameAs": null,
+                "steps": {
+                    "steps": [
+                        {
+                            "title": "Read the brief",
+                            "minutes": 15,
+                            "from": null,
+                            "dueAt": null,
+                            "where": "anywhere",
+                            "id": "db2ee7bb",
+                            "anyOrder": false
+                        },
+                        {
+                            "title": "Plan the poster",
+                            "minutes": 25,
+                            "from": 1792364400000,
+                            "dueAt": 1792598400000,
+                            "where": "home",
+                            "id": "4f04aa55",
+                            "anyOrder": false
+                        }
+                    ],
+                    "by": "Felix"
+                },
+                "title": null
+            }
+        },
+        {
+            "id": "anki:deck-2.3",
+            "source": "Anki",
+            "sourceId": "deck-2.3",
+            "title": "Vocabulary 2.3",
+            "detail": "",
+            "className": null,
+            "dueAt": 1792355400000,
+            "availableFrom": null,
+            "kind": "Revision",
+            "sourceEffortMin": 20,
+            "aiEffortMin": null,
+            "sourceProgress": 0.0,
+            "firstProgress": null,
+            "peakEffortMin": 25,
+            "workedMin": 0,
+            "photoMin": 0,
+            "photosCounted": {},
+            "answers": [],
+            "photo": null,
+            "subSteps": [
+                {
+                    "title": "New cards 1 to 10",
+                    "minutes": 10,
+                    "done": false,
+                    "ankiSections": [
+                        "2.3"
+                    ],
+                    "from": null,
+                    "dueAt": null,
+                    "byHand": false,
+                    "timedMin": 0,
+                    "where": null,
+                    "id": "834788dc",
+                    "origin": "Source",
+                    "anyOrder": false
+                },
+                {
+                    "title": "New cards 11 to 20",
+                    "minutes": 10,
+                    "done": false,
+                    "ankiSections": [
+                        "2.3"
+                    ],
+                    "from": null,
+                    "dueAt": null,
+                    "byHand": false,
+                    "timedMin": 0,
+                    "where": null,
+                    "id": "7c336378",
+                    "origin": "Source",
+                    "anyOrder": false
+                }
+            ],
+            "stepsWorkedMin": 0,
+            "stepsPerDay": 1,
+            "notBefore": 1792378800000,
+            "status": "Open",
+            "derived": true,
+            "firstSeenAt": 1791820800000,
+            "lastSeenAt": 1792314000000,
+            "doneAt": null,
+            "extra": {
+                "deckId": "1700000000001",
+                "deckName": "Textbook 1::2.3",
+                "for": "teams:as-sheet",
+                "real": "1792483200000"
+            },
+            "enrichment": null,
+            "sourceValues": null,
+            "mine": {
+                "notATask": null,
+                "from": null,
+                "after": null,
+                "dueAt": null,
+                "minutes": null,
+                "onDay": null,
+                "atTime": null,
+                "sameAs": null,
+                "steps": null,
+                "title": null
+            }
+        },
+        {
+            "id": "gmail:thr-trip",
+            "source": "Gmail",
+            "sourceId": "thr-trip",
+            "title": "Trip consent form",
+            "detail": "From: A Teacher\nPlease return the consent form for the field trip by Wednesday.",
+            "className": null,
+            "dueAt": 1792623540000,
+            "availableFrom": null,
+            "kind": "Admin",
+            "sourceEffortMin": 10,
+            "aiEffortMin": null,
+            "sourceProgress": 0.0,
+            "firstProgress": null,
+            "peakEffortMin": null,
+            "workedMin": 0,
+            "photoMin": 0,
+            "photosCounted": {},
+            "answers": [],
+            "photo": null,
+            "subSteps": [
+                {
+                    "title": "Sign and return the form",
+                    "minutes": 10,
+                    "done": false,
+                    "ankiSections": [],
+                    "from": null,
+                    "dueAt": null,
+                    "byHand": false,
+                    "timedMin": 0,
+                    "where": null,
+                    "id": "4e44617e",
+                    "origin": "Rules",
+                    "anyOrder": false
+                }
+            ],
+            "stepsWorkedMin": 0,
+            "stepsPerDay": null,
+            "notBefore": null,
+            "status": "Open",
+            "derived": false,
+            "firstSeenAt": 1791820800000,
+            "lastSeenAt": 1792314000000,
+            "doneAt": null,
+            "extra": {
+                "messageId": "<made-up-1@example.org>",
+                "from": "A Teacher <teacher@example.org>",
+                "fromName": "A Teacher",
+                "fromAddress": "teacher@example.org",
+                "received": "1791963000000",
+                "sent": "false",
+                "nextStep": "Sign the form",
+                "messages": "2",
+                "uids": "101,102",
+                "uidValidity": "7",
+                "textPending": "false",
+                "textReadTo": "2",
+                "attachments": "consent.pdf",
+                "textRules": "2"
+            },
+            "enrichment": {
+                "inputHash": "0f1e2d3c4b5a6978",
+                "by": "rules",
+                "at": 1791963060000,
+                "kind": "Admin",
+                "actionableFrom": null,
+                "deadline": 1792623540000,
+                "deadlineQuoted": false,
+                "effortMin": 10,
+                "nextStep": null,
+                "subSteps": [
+                    {
+                        "title": "Sign and return the form",
+                        "minutes": 10,
+                        "done": false,
+                        "ankiSections": [],
+                        "from": null,
+                        "dueAt": null,
+                        "byHand": false,
+                        "timedMin": 0,
+                        "where": null,
+                        "id": "4e44617e",
+                        "origin": "Rules",
+                        "anyOrder": false
+                    }
+                ],
+                "ankiSections": [],
+                "testDate": null,
+                "dropped": null,
+                "question": null,
+                "adjusted": [],
+                "reason": null,
+                "summary": null,
+                "fromPhoto": false,
+                "promptVersion": 7
+            },
+            "sourceValues": {
+                "kind": "Info",
+                "dueAt": null,
+                "availableFrom": null,
+                "title": "Trip consent form"
+            },
+            "mine": {
+                "notATask": null,
+                "from": null,
+                "after": {
+                    "value": "teams:as-essay",
+                    "by": "You"
+                },
+                "dueAt": {
+                    "value": 1792623540000,
+                    "by": "You"
+                },
+                "minutes": null,
+                "onDay": null,
+                "atTime": null,
+                "sameAs": null,
+                "steps": null,
+                "title": null
+            }
+        },
+        {
+            "id": "gmail:thr-news",
+            "source": "Gmail",
+            "sourceId": "thr-news",
+            "title": "Newsletter",
+            "detail": "This week at school.",
+            "className": null,
+            "dueAt": null,
+            "availableFrom": null,
+            "kind": "Info",
+            "sourceEffortMin": 2,
+            "aiEffortMin": null,
+            "sourceProgress": 0.0,
+            "firstProgress": null,
+            "peakEffortMin": null,
+            "workedMin": 0,
+            "photoMin": 0,
+            "photosCounted": {},
+            "answers": [],
+            "photo": null,
+            "subSteps": [],
+            "stepsWorkedMin": 0,
+            "stepsPerDay": null,
+            "notBefore": null,
+            "status": "Open",
+            "derived": false,
+            "firstSeenAt": 1791820800000,
+            "lastSeenAt": 1792314000000,
+            "doneAt": null,
+            "extra": {},
+            "enrichment": null,
+            "sourceValues": {
+                "kind": "Info",
+                "dueAt": null,
+                "availableFrom": null,
+                "title": null
+            },
+            "mine": {
+                "notATask": {
+                    "value": true,
+                    "by": "You"
+                },
+                "from": null,
+                "after": null,
+                "dueAt": null,
+                "minutes": null,
+                "onDay": null,
+                "atTime": null,
+                "sameAs": null,
+                "steps": null,
+                "title": null
+            }
+        },
+        {
+            "id": "powerplanner:pp-sheet",
+            "source": "PowerPlanner",
+            "sourceId": "pp-sheet",
+            "title": "Forces worksheet",
+            "detail": "",
+            "className": null,
+            "dueAt": 1792483200000,
+            "availableFrom": null,
+            "kind": "Homework",
+            "sourceEffortMin": 40,
+            "aiEffortMin": null,
+            "sourceProgress": 0.0,
+            "firstProgress": null,
+            "peakEffortMin": null,
+            "workedMin": 0,
+            "photoMin": 0,
+            "photosCounted": {},
+            "answers": [],
+            "photo": null,
+            "subSteps": [],
+            "stepsWorkedMin": 0,
+            "stepsPerDay": null,
+            "notBefore": null,
+            "status": "Open",
+            "derived": false,
+            "firstSeenAt": 1791820800000,
+            "lastSeenAt": 1792314000000,
+            "doneAt": null,
+            "extra": {},
+            "enrichment": null,
+            "sourceValues": {
+                "kind": "Homework",
+                "dueAt": 1792483200000,
+                "availableFrom": null,
+                "title": null
+            },
+            "mine": {
+                "notATask": null,
+                "from": null,
+                "after": null,
+                "dueAt": null,
+                "minutes": null,
+                "onDay": null,
+                "atTime": null,
+                "sameAs": {
+                    "value": "teams:as-sheet",
+                    "by": "You"
+                },
+                "steps": null,
+                "title": null
+            }
+        },
+        {
+            "id": "own:own-1",
+            "source": "Own",
+            "sourceId": "own-1",
+            "title": "Revise for the maths test",
+            "detail": "Chapters 3 and 4.",
+            "className": "Maths",
+            "dueAt": 1792656000000,
+            "availableFrom": null,
+            "kind": "Revision",
+            "sourceEffortMin": 60,
+            "aiEffortMin": null,
+            "sourceProgress": 0.0,
+            "firstProgress": null,
+            "peakEffortMin": null,
+            "workedMin": 0,
+            "photoMin": 0,
+            "photosCounted": {},
+            "answers": [],
+            "photo": null,
+            "subSteps": [
+                {
+                    "title": "Chapter 3",
+                    "minutes": 30,
+                    "done": false,
+                    "ankiSections": [],
+                    "from": null,
+                    "dueAt": null,
+                    "byHand": false,
+                    "timedMin": 0,
+                    "where": "home",
+                    "id": "75f111ee",
+                    "origin": "OwnTask",
+                    "anyOrder": false
+                },
+                {
+                    "title": "Chapter 4",
+                    "minutes": 30,
+                    "done": false,
+                    "ankiSections": [],
+                    "from": null,
+                    "dueAt": null,
+                    "byHand": false,
+                    "timedMin": 0,
+                    "where": "home",
+                    "id": "5e8f961c",
+                    "origin": "OwnTask",
+                    "anyOrder": false
+                }
+            ],
+            "stepsWorkedMin": 0,
+            "stepsPerDay": null,
+            "notBefore": 1792364400000,
+            "status": "Open",
+            "derived": false,
+            "firstSeenAt": 1791820800000,
+            "lastSeenAt": 1792314000000,
+            "doneAt": null,
+            "extra": {
+                "where": "home"
+            },
+            "enrichment": null,
+            "sourceValues": {
+                "kind": "Revision",
+                "dueAt": 1792656000000,
+                "availableFrom": null,
+                "title": "Revise for the maths test"
+            },
+            "mine": {
+                "notATask": null,
+                "from": null,
+                "after": null,
+                "dueAt": null,
+                "minutes": null,
+                "onDay": null,
+                "atTime": null,
+                "sameAs": null,
+                "steps": null,
+                "title": null
+            }
+        },
+        {
+            "id": "teams:as-returned",
+            "source": "Teams",
+            "sourceId": "as-returned",
+            "title": "Feedback: lab report",
+            "detail": "",
+            "className": null,
+            "dueAt": null,
+            "availableFrom": null,
+            "kind": "Admin",
+            "sourceEffortMin": 5,
+            "aiEffortMin": null,
+            "sourceProgress": 0.0,
+            "firstProgress": null,
+            "peakEffortMin": null,
+            "workedMin": 0,
+            "photoMin": 0,
+            "photosCounted": {},
+            "answers": [],
+            "photo": null,
+            "subSteps": [],
+            "stepsWorkedMin": 0,
+            "stepsPerDay": null,
+            "notBefore": null,
+            "status": "Open",
+            "derived": false,
+            "firstSeenAt": 1791820800000,
+            "lastSeenAt": 1792314000000,
+            "doneAt": null,
+            "extra": {
+                "tickDone": "true",
+                "feedbackOn": "1792148400000"
+            },
+            "enrichment": null,
+            "sourceValues": null,
+            "mine": {
+                "notATask": null,
+                "from": null,
+                "after": null,
+                "dueAt": null,
+                "minutes": null,
+                "onDay": null,
+                "atTime": null,
+                "sameAs": null,
+                "steps": null,
+                "title": null
+            }
+        },
+        {
+            "id": "teams:as-done",
+            "source": "Teams",
+            "sourceId": "as-done",
+            "title": "Chemistry practical write-up",
+            "detail": "Write up the titration practical: method, results table, two evaluation points. Write up the titration practical: method, results table, two evaluation points. Write up the titration practical: method, results table, two evaluation points. Write up the titration practical: method, results table, two evaluation points. Write up the titration practical: method, results table, two evaluation points. Write up the titration practical: method, results table, two evaluation points.",
+            "className": "12X/Ch1",
+            "dueAt": 1791964800000,
+            "availableFrom": null,
+            "kind": "Homework",
+            "sourceEffortMin": 50,
+            "aiEffortMin": null,
+            "sourceProgress": 0.0,
+            "firstProgress": null,
+            "peakEffortMin": null,
+            "workedMin": 55,
+            "photoMin": 0,
+            "photosCounted": {},
+            "answers": [],
+            "photo": null,
+            "subSteps": [
+                {
+                    "title": "Write it up",
+                    "minutes": 50,
+                    "done": true,
+                    "ankiSections": [],
+                    "from": null,
+                    "dueAt": null,
+                    "byHand": false,
+                    "timedMin": 0,
+                    "where": null,
+                    "id": "3a1ba099",
+                    "origin": "Source",
+                    "anyOrder": false
+                }
+            ],
+            "stepsWorkedMin": 0,
+            "stepsPerDay": null,
+            "notBefore": null,
+            "status": "Done",
+            "derived": false,
+            "firstSeenAt": 1790870400000,
+            "lastSeenAt": 1791918000000,
+            "doneAt": 1791918000000,
+            "extra": {},
+            "enrichment": {
+                "inputHash": "1122334455667788",
+                "by": "claude-opus-5-5",
+                "at": 1790870520000,
+                "kind": null,
+                "actionableFrom": null,
+                "deadline": null,
+                "deadlineQuoted": false,
+                "effortMin": 50,
+                "nextStep": null,
+                "subSteps": null,
+                "ankiSections": [],
+                "testDate": null,
+                "dropped": null,
+                "question": null,
+                "adjusted": [],
+                "reason": null,
+                "summary": "A practical write-up.",
+                "fromPhoto": false,
+                "promptVersion": 7
+            },
+            "sourceValues": null,
+            "mine": {
+                "notATask": null,
+                "from": null,
+                "after": null,
+                "dueAt": null,
+                "minutes": null,
+                "onDay": null,
+                "atTime": null,
+                "sameAs": null,
+                "steps": null,
+                "title": null
+            }
+        },
+        {
+            "id": "gmail:thr-done",
+            "source": "Gmail",
+            "sourceId": "thr-done",
+            "title": "Library book due",
+            "detail": "Your library book is due back on Friday. Your library book is due back on Friday. Your library book is due back on Friday. Your library book is due back on Friday.",
+            "className": null,
+            "dueAt": null,
+            "availableFrom": null,
+            "kind": "Admin",
+            "sourceEffortMin": 5,
+            "aiEffortMin": null,
+            "sourceProgress": 0.0,
+            "firstProgress": null,
+            "peakEffortMin": null,
+            "workedMin": 0,
+            "photoMin": 0,
+            "photosCounted": {},
+            "answers": [],
+            "photo": null,
+            "subSteps": [],
+            "stepsWorkedMin": 0,
+            "stepsPerDay": null,
+            "notBefore": null,
+            "status": "Done",
+            "derived": false,
+            "firstSeenAt": 1791187200000,
+            "lastSeenAt": 1791532800000,
+            "doneAt": 1791532800000,
+            "extra": {
+                "messageId": "<made-up-2@example.org>",
+                "uids": "88",
+                "uidValidity": "7"
+            },
+            "enrichment": null,
+            "sourceValues": null,
+            "mine": {
+                "notATask": null,
+                "from": null,
+                "after": null,
+                "dueAt": null,
+                "minutes": null,
+                "onDay": null,
+                "atTime": null,
+                "sameAs": null,
+                "steps": null,
+                "title": null
+            }
+        },
+        {
+            "id": "anki:quota-2026-10-15",
+            "source": "Anki",
+            "sourceId": "quota-2026-10-15",
+            "title": "Anki: today's cards",
+            "detail": "",
+            "className": null,
+            "dueAt": null,
+            "availableFrom": null,
+            "kind": "Revision",
+            "sourceEffortMin": 15,
+            "aiEffortMin": null,
+            "sourceProgress": 0.0,
+            "firstProgress": null,
+            "peakEffortMin": null,
+            "workedMin": 0,
+            "photoMin": 0,
+            "photosCounted": {},
+            "answers": [],
+            "photo": null,
+            "subSteps": [],
+            "stepsWorkedMin": 0,
+            "stepsPerDay": null,
+            "notBefore": null,
+            "status": "Missed",
+            "derived": true,
+            "firstSeenAt": 1792033200000,
+            "lastSeenAt": 1792119600000,
+            "doneAt": 1792119600000,
+            "extra": {},
+            "enrichment": null,
+            "sourceValues": null,
+            "mine": {
+                "notATask": null,
+                "from": null,
+                "after": null,
+                "dueAt": null,
+                "minutes": null,
+                "onDay": null,
+                "atTime": null,
+                "sameAs": null,
+                "steps": null,
+                "title": null
+            }
+        }
+    ],
+    "sources": {
+        "Teams": {
+            "lastSuccessAt": 1792314000000,
+            "lastAttemptAt": 1792314000000,
+            "error": null,
+            "dataAsOf": 1792312800000,
+            "note": "The Teams widget's sync service is off"
+        },
+        "PowerPlanner": {
+            "lastSuccessAt": 1792314000000,
+            "lastAttemptAt": 1792314000000,
+            "error": null,
+            "dataAsOf": 1792312800000,
+            "note": null
+        },
+        "Anki": {
+            "lastSuccessAt": 1792314000000,
+            "lastAttemptAt": 1792314000000,
+            "error": null,
+            "dataAsOf": 1792312800000,
+            "note": null
+        },
+        "Gmail": {
+            "lastSuccessAt": 1792314000000,
+            "lastAttemptAt": 1792314000000,
+            "error": "Read timed out",
+            "dataAsOf": 1792312800000,
+            "note": null
+        }
+    },
+    "ankiDay": {
+        "day": "2026-10-18",
+        "deckId": 1700000000001,
+        "deckName": "Textbook 1::2.3",
+        "reviewsOnly": true
+    },
+    "deckTopics": {
+        "2.3": "Around town"
+    },
+    "unrewarded": [
+        {
+            "id": "teams:as-done",
+            "source": "Teams",
+            "sourceId": "as-done",
+            "title": "Chemistry practical write-up",
+            "detail": "Write up the titration practical: method, results table, two evaluation points. Write up the titration practical: method, results table, two evaluation points. Write up the titration practical: method, results table, two evaluation points. Write up the titration practical: method, results table, two evaluation points. Write up the titration practical: method, results table, two evaluation points. Write up the titration practical: method, results table, two evaluation points.",
+            "className": "12X/Ch1",
+            "dueAt": 1791964800000,
+            "availableFrom": null,
+            "kind": "Homework",
+            "sourceEffortMin": 50,
+            "aiEffortMin": null,
+            "sourceProgress": 0.0,
+            "firstProgress": null,
+            "peakEffortMin": null,
+            "workedMin": 55,
+            "photoMin": 0,
+            "photosCounted": {},
+            "answers": [],
+            "photo": null,
+            "subSteps": [
+                {
+                    "title": "Write it up",
+                    "minutes": 50,
+                    "done": true,
+                    "ankiSections": [],
+                    "from": null,
+                    "dueAt": null,
+                    "byHand": false,
+                    "timedMin": 0,
+                    "where": null,
+                    "id": "0321e4be",
+                    "origin": "Source",
+                    "anyOrder": false
+                }
+            ],
+            "stepsWorkedMin": 0,
+            "stepsPerDay": null,
+            "notBefore": null,
+            "status": "Done",
+            "derived": false,
+            "firstSeenAt": 1790870400000,
+            "lastSeenAt": 1791918000000,
+            "doneAt": 1791918000000,
+            "extra": {},
+            "enrichment": {
+                "inputHash": "1122334455667788",
+                "by": "claude-opus-5-5",
+                "at": 1790870520000,
+                "kind": null,
+                "actionableFrom": null,
+                "deadline": null,
+                "deadlineQuoted": false,
+                "effortMin": 50,
+                "nextStep": null,
+                "subSteps": null,
+                "ankiSections": [],
+                "testDate": null,
+                "dropped": null,
+                "question": null,
+                "adjusted": [],
+                "reason": null,
+                "summary": "A practical write-up.",
+                "fromPhoto": false,
+                "promptVersion": 7
+            },
+            "sourceValues": null,
+            "mine": {
+                "notATask": null,
+                "from": null,
+                "after": null,
+                "dueAt": null,
+                "minutes": null,
+                "onDay": null,
+                "atTime": null,
+                "sameAs": null,
+                "steps": null,
+                "title": null
+            }
+        }
+    ],
+    "timetable": {
+        "weekOneStartsOn": "2026-09-07T00:00:00",
+        "classes": [
+            {
+                "Identifier": "class-study",
+                "Name": "Study Period",
+                "Schedules": [
+                    {
+                        "StartTime": "2026-09-05T11:15:00",
+                        "EndTime": "2026-09-05T12:15:00",
+                        "DayOfWeek": 2,
+                        "ScheduleWeek": 1
+                    },
+                    {
+                        "StartTime": "2026-09-05T09:00:00",
+                        "EndTime": "2026-09-05T10:00:00",
+                        "DayOfWeek": 4,
+                        "ScheduleWeek": 3
+                    }
+                ]
+            },
+            {
+                "Identifier": "class-bio",
+                "Name": "Biology",
+                "Schedules": [
+                    {
+                        "StartTime": "2026-09-05T13:55:00",
+                        "EndTime": "2026-09-05T14:55:00",
+                        "DayOfWeek": 1,
+                        "ScheduleWeek": 3
+                    }
+                ]
+            }
+        ]
+    },
+    "version": 3
+}

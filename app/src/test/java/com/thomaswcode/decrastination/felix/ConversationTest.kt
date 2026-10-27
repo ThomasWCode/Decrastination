@@ -10,6 +10,7 @@ import com.thomaswcode.decrastination.core.ChatHistory
 import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.core.ChatState
 import com.thomaswcode.decrastination.core.Fact
+import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.InstructionStatus
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Given
@@ -17,6 +18,7 @@ import com.thomaswcode.decrastination.core.Instruction
 import com.thomaswcode.decrastination.core.Memories
 import com.thomaswcode.decrastination.core.MemoryState
 import com.thomaswcode.decrastination.core.MessageKind
+import com.thomaswcode.decrastination.core.OnlyDay
 import com.thomaswcode.decrastination.core.Proposal
 import com.thomaswcode.decrastination.core.ProposalState
 import com.thomaswcode.decrastination.core.Rule
@@ -37,6 +39,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import java.time.LocalDate
 
 /**
  * The Conversation's flows (docs/plan_v4/architecture.md §The rules), on temporary stores, his answers read by
@@ -132,6 +135,23 @@ class ConversationTest {
         val undone = stores.chat.value.messages.last().proposals.single()
         assertEquals(ProposalState.Proposed, undone.state)
         assertNull(undone.made)
+    }
+
+    @Test
+    fun `a day he keeps for only some tasks is made at once with his three replies, and the reply that lets Anki in changes what it takes (D-115)`() = runBlocking {
+        stores.tasks.update { it.copy(tasks = listOf(sheet)) }
+        val only = """[{"type":"DayOnly","taskId":"teams:sheet","afterTaskId":"","eventKey":"","eventTime":"","minutes":-1,"date":"2026-10-24","endDate":"","weekday":"","time":"","endTime":"","title":"","steps":[],"paced":false,"lesson":"","alsoAllow":""}]"""
+        felix.answers(felix.chatAnswer("kept sat for the worksheet. anything else allowed on it?", changes = only, replies = """["Nothing else","Anki too","Anki and deadlines"]"""))
+        assertTrue(conversation.ask("only the worksheet on saturday"))
+        felix.settle()
+        assertEquals(listOf("Nothing else", "Anki too", "Anki and deadlines"), his().last().suggestedReplies)
+        val saturday = LocalDate.parse("2026-10-24")
+        assertEquals(OnlyDay(setOf(sheet.id), anki = false, deadlines = false), InstructionRules.onlyDays(stores.instructions.value.applied, saturday, saturday)[saturday])
+        // Their answer: one more DayOnly for the day, with what it lets in.
+        felix.answers(felix.chatAnswer("done, anki's cards can go on it too.", changes = only.replace("\"alsoAllow\":\"\"", "\"alsoAllow\":\"anki\"")))
+        assertTrue(conversation.ask("Anki too"))
+        felix.settle()
+        assertEquals(OnlyDay(setOf(sheet.id), anki = true, deadlines = false), InstructionRules.onlyDays(stores.instructions.value.applied, saturday, saturday)[saturday])
     }
 
     @Test

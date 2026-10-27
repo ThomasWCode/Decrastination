@@ -374,6 +374,8 @@ object Backups {
                 ChangeType.Steps -> named(change.taskId) && change.steps.orEmpty().let { steps -> steps.size in 1..OwnTaskRules.MAX_STEPS && steps.all { it.title.isNotBlank() && it.minutes in OwnTaskRules.MINUTES } }
                 // A task's name: one, within a name's length.
                 ChangeType.Rename -> named(change.taskId) && change.title?.let { it.isNotBlank() && it.length <= OwnTaskRules.MAX_TITLE } == true
+                // A day for only some tasks (D-115): a task named, a date, and what else may come in, nothing or one of the two.
+                ChangeType.DayOnly -> named(change.taskId) && isDate(change.date) && change.alsoAllow in setOf(null, InstructionRules.ALSO_ANKI, InstructionRules.ALSO_DEADLINES)
             }
         }
     }

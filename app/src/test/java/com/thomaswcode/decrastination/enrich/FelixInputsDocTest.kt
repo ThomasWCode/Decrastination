@@ -137,6 +137,10 @@ class FelixInputsDocTest {
     )
     private val applied = listOf(
         Instruction("i1", "Not much on Friday please", at = Fixtures.at("2026-10-12T19:05"), state = InstructionStatus.Applied, changes = listOf(Change(ChangeType.DayLimit, date = "2026-10-16", freeMin = 60)), appliedAt = Fixtures.at("2026-10-12T19:05")),
+        Instruction(
+            "i2", "Keep Saturday for the statement, cards too", at = Fixtures.at("2026-10-12T19:10"), state = InstructionStatus.Applied,
+            changes = listOf(Change(ChangeType.DayOnly, taskId = "own:o1", date = "2026-10-17", alsoAllow = InstructionRules.ALSO_ANKI)), appliedAt = Fixtures.at("2026-10-12T19:10"), by = By.Felix,
+        ),
     )
     private val evening = (0L..20L).associate { LocalDate.parse("2026-10-13").plusDays(it) to listOf(DayWindow(16 * 60 + 45, 22 * 60, WindowKind.Evening)) }
 
@@ -150,6 +154,7 @@ class FelixInputsDocTest {
             Planner.Input(
                 tasks, now, LONDON, settings, calibration = calibration, busy = time.busy, dayLoads = time.dayLoads,
                 hardBusy = InstructionRules.busy(applied, LONDON, today, reach), dayCaps = InstructionRules.dayCaps(applied, today, reach), windows = evening,
+                onlyDays = InstructionRules.onlyDays(applied, today, reach),
             ),
         )
     }
@@ -179,7 +184,10 @@ class FelixInputsDocTest {
         val context = ChatPrompts.Context(
             known = ChatPrompts.context(tasks, events, applied, now, LONDON, settings.classMap, emptyList(), settings, calibration, notes, reminders, moments, lessons, listOf(waiting)),
             // With whether blocking applies, and the free time (G5), as Focus says it then.
-            plan = ChatPrompts.plan(planned, LONDON, blocking = Focus.blockingLine(BlockPolicy.Verdict.Block(BlockPolicy.Reason.TodayUndone), planned.todayBucket?.chunks.orEmpty(), 0, 16 * 60 + 45, null), timer = timer),
+            plan = ChatPrompts.plan(
+                planned, LONDON, blocking = Focus.blockingLine(BlockPolicy.Verdict.Block(BlockPolicy.Reason.TodayUndone), planned.todayBucket?.chunks.orEmpty(), 0, 16 * 60 + 45, null), timer = timer,
+                only = InstructionRules.onlyDays(applied, planned.today, planned.today.plusDays(ChatPrompts.PLAN_DAYS.toLong())).mapValues { ChatPrompts.onlyLine(it.value, tasks.associateBy { t -> t.id }) },
+            ),
         )
         ChatPrompts.turns(listOf(earlier, reply, asked), context.known, byId, LONDON, plan = context.plan, events = events).forEachIndexed { i, (from, text) -> out["chat turn $i: $from"] = text }
         // A reply from Felix's notification: his message leads your first turn.
