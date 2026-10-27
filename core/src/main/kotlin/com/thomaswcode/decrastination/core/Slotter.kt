@@ -77,7 +77,8 @@ object Slotter {
         val room = free.sumOf { it.minutes }
         val latest = at(date, OUTSIDE_LATEST_MIN, zone)
         val found = mutableListOf<Pair<Int, Slot>>()
-        for ((i, minute) in settings.outsideTimes.withIndex().sortedBy { it.value }) {
+        // A time given twice is one break: its key is its time.
+        for ((i, minute) in settings.outsideTimes.withIndex().distinctBy { it.value }.sortedBy { it.value }) {
             if (minute in begun) continue
             val from = at(date, minute, zone)
             val by = settings.outsideTimes.filter { it > minute }.minOrNull()?.let { at(date, it, zone) } ?: Long.MAX_VALUE

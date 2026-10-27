@@ -28,6 +28,15 @@ data class SlotState(val date: String = "", val previous: Map<String, Long> = em
         return copy(previous = starts + completed + ends)
     }
 
+    /**
+     * Today's pieces whose start is more than [graceMs] before [now], not missed: those a sweep looks at (PL-13). A break
+     * outside's start and end, kept beside them (D-113), aside: a break has nothing to miss.
+     */
+    fun started(now: Long, graceMs: Long): Map<String, Long> {
+        val gone = missed.map { it.key }.toSet()
+        return previous.filter { (key, start) -> key !in gone && !key.startsWith(Slot.OUTSIDE) && start + graceMs < now }
+    }
+
     /** [key]'s slot missed at [at]: recorded once, and its start no longer kept, so it moves. */
     fun missed(key: String, taskId: String, at: Long): SlotState =
         copy(previous = previous - key, missed = if (missed.any { it.key == key }) missed else missed + MissedSlot(key, taskId, at))

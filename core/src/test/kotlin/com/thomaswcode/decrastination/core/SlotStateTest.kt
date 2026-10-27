@@ -119,6 +119,13 @@ class SlotStateTest {
         assertEquals(SlotState("2026-10-14"), before.laid(later).on(tuesday.plusDays(1)))
     }
 
+    @Test
+    fun `a sweep looks at the pieces begun past their grace and not missed, never at a break outside's start or end`() {
+        val kept = SlotState("2026-10-13", previous = mapOf("teams:a#-1#1" to 10L, "teams:b#-1#1" to 10L, "teams:c#-1#1" to 95L, "outside:780" to 10L, "outside:780-end" to 30L))
+            .missed("teams:b#-1#1", "teams:b", 50L).let { it.copy(previous = it.previous + ("teams:b#-1#1" to 10L)) }
+        assertEquals(mapOf("teams:a#-1#1" to 10L), kept.started(now = 100L, graceMs = 10L))
+    }
+
     private fun chunk(taskId: String) = Chunk(
         taskId = taskId, source = Source.Teams, kind = Kind.Homework, title = taskId.removePrefix("teams:"), step = null, minutes = 30, dueAt = null,
         deadline = Fixtures.at("2026-10-20T09:00"), soft = false, overdue = false, dueToday = false, behind = false, part = 1, parts = 1,

@@ -164,8 +164,7 @@ class Slots(private val graph: AppGraph) {
     suspend fun sweep(now: Long = graph.clock.now()) {
         val today = Instant.ofEpochMilli(now).atZone(graph.clock.zone()).toLocalDate()
         val state = graph.stores.session.value.slots.on(today)
-        val missed = state.missed.map { it.key }.toSet()
-        val started = state.previous.filter { (key, start) -> key !in missed && start + SlotAlarms.GRACE_MS < now }
+        val started = state.started(now, SlotAlarms.GRACE_MS)
         if (started.isEmpty()) return
         val plan = graph.planning.plan(now = now)
         for ((key, start) in started) {

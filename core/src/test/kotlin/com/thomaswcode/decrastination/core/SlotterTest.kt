@@ -244,6 +244,9 @@ class SlotterTest {
         assertEquals(listOf("outside 09:30–09:50", "outside 14:00–14:20", "outside 16:00–16:20"), slots.described())
         assertEquals(listOf("outside:570", "outside:780", "outside:960"), slots.map { it.key })
         assertEquals(listOf(570, 780, 960), slots.map { it.outsideAt })
+        // A time given twice (a file edited by hand): one break, as its key is its time.
+        val twice = Slotter.slot(LocalDate.parse(saturday), emptyList(), listOf(w("08:30", "22:30")), emptyList(), emptyMap(), emptyMap(), Fixtures.at("2026-10-12T08:00"), LONDON, settings.copy(outsideTimes = listOf(570, 780, 780)), true) { null }.first
+        assertEquals(listOf("outside:570", "outside:780"), twice.map { it.key })
     }
 
     @Test
