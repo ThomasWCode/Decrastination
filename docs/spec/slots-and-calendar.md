@@ -29,8 +29,14 @@ What's laid, in turn:
 
 ## Outside breaks
 
-On a weekend or a day off, `outsideBreaks` (3) breaks of `outsideBreakMin` (20) are laid first, one at or after each of `outsideTimes` (09:30, 13:00, 16:00), each over by the next one's time and none starting after 18:00 (`Slotter.OUTSIDE_LATEST_MIN`, D-41): one with no room by then isn't laid. On a day under way, one whose time has gone is laid from now while it can be over by the next one's time, and not at all once it can't.
-When the day's work needs their time (with its breaks, as they'd be laid), the midday one is given up first, then the afternoon's, then the morning's; and fewer still while more of the work would go unslotted around them than with none.
+On a weekend or a day off, `outsideBreaks` (3) breaks of `outsideBreakMin` (20) are laid first, one at or after each of `outsideTimes` (09:30, 13:00, 16:00), each over by the next one's time and none starting after 18:00 (`Slotter.OUTSIDE_LATEST_MIN`, D-41): one with no room by then isn't laid.
+Each break is named by its own time, wherever it's laid (`Slot.outsideAt`, its key `outside:780` for the 13:00 break), and its start is kept from one plan to the next with the pieces' (§Kept starts). By that kept start, each is one of four (D-113):
+- **under way** (its start at or before now, its end after it): laid at its start, whatever the free time and the settings now say, and never given up for work: its time is taken before the work's and before the breaks still to come are chosen, on a school day or with `outsideBreaks` at 0 too;
+- **completed** (its end at or before now): not laid, and never again that day; it's gone from the Day and the calendar at its end, as a piece kept is. There's no grace: a break has nothing to tick;
+- **still to come** (its start after now): laid afresh at or after its time at each plan, so it follows busy time and the day's work as they change;
+- **none kept, its time gone** (no plan laid it: the phone off, the day's first plan made after its time, or given up for work then freed): laid from now while it can be over by the next one's time, and not at all once it can't; then kept.
+
+`outsideBreaks` counts the day's breaks begun, under way or completed: the breaks still to come are at most `outsideBreaks` less those, so a day never has more than the setting. When the day's work needs their time (with its breaks, as they'd be laid), the midday one is given up first, then the afternoon's, then the morning's; and fewer still while more of the work would go unslotted around them than with none.
 
 ## Pins (PL-04)
 
@@ -39,13 +45,13 @@ Otherwise it goes at the next free start at or after its time, after the pins la
 
 ## Kept starts (PL-13)
 
-After each plan, today's work slots' starts are saved by key (`SlotState.previous`, in `SessionState.slots`). The next plan lays each piece there again where that's still free, one under way or in its grace included, so a replan doesn't shuffle the day. A piece kept today also stays today's when the plan chooses its day, dated or undated, and one under way even with less than its length left, so work with days to spare isn't moved to a day with more room once its slot has begun; it says so (`Why.Kept`) where keeping it changed its day.
+After each plan, today's slots' starts are saved by key (`SlotState.previous`, in `SessionState.slots`, by `SlotState.laid`): the pieces' and the breaks outside's, with each break begun that the plan no longer lays, so the next plan knows it's completed (D-113). The next plan lays each piece there again where that's still free, one under way or in its grace included, so a replan doesn't shuffle the day. A piece kept today also stays today's when the plan chooses its day, dated or undated, and one under way even with less than its length left, so work with days to spare isn't moved to a day with more room once its slot has begun; it says so (`Why.Kept`) where keeping it changed its day.
 A piece's key is its task and its step's place (`Chunk.key`: sittings counted from the end), so ticking a step or a sitting doesn't renumber the next and move it. A box goes by its part, counted over what's left: keeping one hands its key to the next box, laid afresh. A new day starts empty (`SlotState.on`).
 
 ## Grace, and missed slots (PL-13)
 
 A slot just over stays where it is for `Slotter.GRACE_MS` (10 minutes), its piece still to tick.
-- `SlotAlarms.arm` sets an alarm at the next slot's start, which makes the plan again, and one at the next slot's end plus its grace (`Slots.onEnd`).
+- `SlotAlarms.arm` sets an alarm at the next slot's start, a piece's or a break outside's, or a break outside's end if that comes first, which makes the plan again (so a completed break leaves the calendar at its end), and one at the next work slot's end plus its grace (`Slots.onEnd`).
 - At the end, a piece still planned is missed: recorded once (`Focus.missSlot`, `SlotOutcome.Missed`), and its start no longer kept (`SlotState.missed`), so the plan moves it to the next free time and says so (`Why.Refitted`).
 - Whether that took it to another day is noted (`MissedSlot.spilled`, by `SlotState.reconciled`): its task still in the plan and the piece in none of today's slots. A slot missed today whose piece is left with no slot today (gone to a later day, or out of the plan's room) keeps today blocked till the day's hours end (BL-11, [blocking-and-protection.md](blocking-and-protection.md)); one whose task the plan no longer holds (finished since, or deleted) went to no day, and isn't kept as having gone once it finishes.
 - A slot whose alarm couldn't ring (the phone off) is found at the next plan (`Slots.sweep`).
@@ -93,7 +99,7 @@ Pick one you made at calendar.google.com: a calendar an app makes stays on the p
 `CalendarWriter` writes it, built like `Focus`: its stores, the clock, and `CalendarProvider` for the calendar's events (`SlotCalendar` on the phone). It alone writes what the app knows of its writes (`calendar.json`: `CalendarState.calendarWritten`, `calendarWrittenTo`, `calendarsToClear` and its versions) and your answers about events, but for a backup restored, which merges its answers in (`Stores.replace`, as for every store); `CalendarWriterTest` drives it on temporary stores, against a calendar in memory.
 - **What**: the next seven days' slots (today and the six after, `SlotCalendarDiff.DAYS`), pieces of work and outside breaks.
 - **Each event**: the piece's label as its title ("Outside" for a break); its source and why as its description ("Teams. Due tomorrow."), with its first action where one's written (AI-15), or "A break outside.".
-- **Marked**: free, with no reminders, and with the app's package and its URI (`CUSTOM_APP_PACKAGE`, `CUSTOM_APP_URI`: `decrastination://slot/<date>/<key>`).
+- **Marked**: free, with no reminders, and with the app's package and its URI (`CUSTOM_APP_PACKAGE`, `CUSTOM_APP_URI`: `decrastination://slot/<date>/<key>`, a break's key by its own time, `outside:780`, so a break laid elsewhere is the same event moved).
 - **Cheap**: two queries (its events, and those worded like them) and at most one batch a write (`CalendarWriter.writeSlots`), nothing written when nothing changed; slots as last written aren't even read back unless the calendar has changed after its last read (AR-08).
 - **Once quiet**: written after plans have been quiet 5 seconds (`CalendarWriter.CALENDAR_WRITE_QUIET_MS`), so a burst of changes is one write, not an event changed again while the calendar's sync still has it.
 
