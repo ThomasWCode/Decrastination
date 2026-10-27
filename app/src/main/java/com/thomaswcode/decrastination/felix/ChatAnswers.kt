@@ -78,7 +78,7 @@ object ChatAnswers {
 
     /**
      * The tasks [changes] (an OnDay, an AtTime) put on a day kept for only others, as [applied] has it now with them in, a
-     * line each (D-115, Q13): "Thu 29 Oct was only for “Essay”: “Maths” joins it". Pure.
+     * line each (D-115, Q83): "Thu 29 Oct was only for “Essay”: “Maths” joins it". Pure.
      */
     fun joined(changes: List<Change>, applied: List<Instruction>, tasks: Map<String, TaskItem>): List<String> =
         changes.filter { (it.type == ChangeType.OnDay || it.type == ChangeType.AtTime) && it.taskId != null }.mapNotNull { c ->
