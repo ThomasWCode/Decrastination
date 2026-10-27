@@ -8,6 +8,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
@@ -15,11 +16,11 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -58,7 +59,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -101,6 +101,9 @@ import kotlinx.coroutines.launch
 
 /** How soon a second Done of the same block is the same swipe seen again (UI-03). */
 private const val SWIPE_AGAIN_MS = 3_000L
+
+/** The least the grid keeps of the Day's height, however tall today's card. */
+private val MIN_GRID = 200.dp
 
 /** The sheets the header's chips open, each holding what the Day's list held under its rows. */
 private enum class DaySheet { WontFit, NoTime, Done, Said }
@@ -285,9 +288,11 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
     }
 
     var rootAt by remember { mutableStateOf(Offset.Zero) }
-    Box(Modifier.fillMaxSize().onGloballyPositioned { rootAt = it.positionInRoot() }) {
-        // On today only: another day has no card to fold.
-        Column(Modifier.fillMaxSize().then(if (today) Modifier.nestedScroll(folding) else Modifier)) {
+    val card = rememberScrollState()
+    BoxWithConstraints(Modifier.fillMaxSize().onGloballyPositioned { rootAt = it.positionInRoot() }) {
+        // The card never takes the grid's room: at most what leaves the grid [MIN_GRID], scrolling within that.
+        val cap = (maxHeight - MIN_GRID).coerceAtLeast(MIN_GRID)
+        Column(Modifier.fillMaxSize()) {
             Hint(graph, "day", "Day is when: today's slots as they come, and the week's days above. Work is what: every task, on the next tab.")
             Hint(graph, "day-drag", "Hold a piece to move it: drag it to a time, or onto a day above.")
             WeekStrip(plan, day, drag, tasks.tasks.associateBy { it.id }, graph.clock.now(), zone) { chosen = it.toString() }
@@ -305,9 +310,9 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
                         modifier = Modifier.fillMaxWidth().height(40.dp).clickable { fold = 0f }.padding(horizontal = 16.dp, vertical = 10.dp),
                     )
                 } else {
-                    val shown = if (cardFull == 0) Modifier else Modifier.height(with(density) { (cardFull - fold.coerceAtMost(foldMax)).toDp() })
-                    Box(Modifier.fillMaxWidth().then(shown).clipToBounds()) {
-                        Box(Modifier.fillMaxWidth().wrapContentHeight(align = Alignment.Top, unbounded = true).onSizeChanged { cardFull = it.height }) {
+                    val shown = if (cardFull == 0) cap else minOf(with(density) { (cardFull - fold.coerceAtMost(foldMax)).toDp() }, cap)
+                    Box(Modifier.fillMaxWidth().heightIn(max = shown).verticalScroll(card)) {
+                        Box(Modifier.fillMaxWidth().onSizeChanged { cardFull = it.height }) {
                             NextCard(
                                 graph, activity, plan, zone, photo, ::messageOf, say,
                                 empty = if (unread.isNotEmpty()) "Nothing planned yet: ${unread.joinToString { it.label }} not read yet." else "No work is planned. New tasks appear as the sources are read.",
@@ -334,7 +339,8 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
                 model, plan, zone, settings.dayHourDp, grid, { EventJudge.judge(it, answers) }, asked.eventsAsked, written.microPlans,
                 { messageOf(it) }, drag, actions,
                 onZoom = { hourDp -> scope.launch { graph.protection.changeSettings { it.copy(dayHourDp = hourDp) } } },
-                modifier = Modifier.weight(1f),
+                // The fold takes the grid's scrolls alone, on today only: another day has no card, and the card's own don't fold it.
+                modifier = Modifier.weight(1f).then(if (today) Modifier.nestedScroll(folding) else Modifier),
             )
         }
 

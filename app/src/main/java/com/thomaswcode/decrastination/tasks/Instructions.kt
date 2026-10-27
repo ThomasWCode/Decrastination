@@ -127,8 +127,9 @@ class Instructions(
         val instruction = Instruction(id, text, about, clock.now(), state = InstructionStatus.Understood, changes = listOf(change), quick = true)
         instructions.update { state ->
             // An earlier quick change of the same kind to the same task is replaced, not piled under
-            // this one; the new one is laid in its place as it's applied.
-            state.copy(instructions = state.instructions.filterNot { it.id != id && isQuick(it, change.taskId, change.type) } + instruction)
+            // this one; the new one is laid in its place as it's applied. A break outside's, which has no task, is the same
+            // break's that day (D-116).
+            state.copy(instructions = state.instructions.filterNot { it.id != id && replaces(it, change) } + instruction)
         }
         applyInstruction(id)
     }
@@ -163,6 +164,11 @@ class Instructions(
         )
         return start
     }
+
+    /** Whether [change], a quick change of yours, takes [instruction]'s place: of its kind to its task; a break's, that break's that day. */
+    private fun replaces(instruction: Instruction, change: Change): Boolean =
+        isQuick(instruction, change.taskId, change.type) &&
+            (change.type != ChangeType.OutsideAt || instruction.changes.single().let { it.date == change.date && it.outsideMin == change.outsideMin })
 
     /** Whether [instruction] is a quick change of [type] to [taskId] alone. */
     private fun isQuick(instruction: Instruction, taskId: String?, type: ChangeType): Boolean =
