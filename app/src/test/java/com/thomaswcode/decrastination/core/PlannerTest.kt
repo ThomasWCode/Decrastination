@@ -1723,6 +1723,17 @@ class PlannerTest {
     }
 
     @Test
+    fun `a break you placed outside the day's time leaves the day as it was, overdue work in it as ever (D-116)`() {
+        // Monday 17:00, half an hour's window today and tomorrow, an hour overdue: with a break added at 19:30, after the window,
+        // today holds what it held without it.
+        val monday = tuesday.minusDays(1)
+        val window = listOf(DayWindow(17 * 60, 17 * 60 + 30, WindowKind.Evening))
+        val late = task("late", Fixtures.at("2026-10-11T23:59"), effort = 60)
+        fun today(outside: Map<LocalDate, OutsideDay>) = Planner.plan(windowed(listOf(late), "2026-10-12T17:00", windows = mapOf(monday to window, tuesday to window)).copy(outsideDays = outside)).bucket(monday)!!.plannedMin
+        assertEquals(today(emptyMap()), today(mapOf(monday to OutsideDay(added = listOf(19 * 60 + 30)))))
+    }
+
+    @Test
     fun `overdue work goes on to a day with room where a break you placed fills today's time (D-116)`() {
         // Monday 17:00, a 20-minute window today and tomorrow, a break added over all of today's: a 10-minute task overdue goes tomorrow.
         val monday = tuesday.minusDays(1)
