@@ -1723,6 +1723,18 @@ class PlannerTest {
     }
 
     @Test
+    fun `a break outside you placed comes off the day's time before its learned yield, as busy time would (D-116)`() {
+        // Tuesday's hour-long evening, worked at half its time as learned, a break added at 17:20: as much as the same 20
+        // minutes busy would leave, 20 minutes.
+        val evening = mapOf(tuesday to listOf(DayWindow(17 * 60, 18 * 60, WindowKind.Evening)))
+        val base = windowed(emptyList(), "2026-10-12T17:00", windows = evening).copy(calibration = Calibration(yields = mapOf(DayKind.Weekday to 0.5)))
+        val withBreak = Planner.plan(base.copy(outsideDays = mapOf(tuesday to OutsideDay(added = listOf(17 * 60 + 20))))).bucket(tuesday)!!.capacityMin
+        val withBusy = Planner.plan(base.copy(hardBusy = listOf(Busy(Fixtures.at("2026-10-13T17:20"), Fixtures.at("2026-10-13T17:40"))))).bucket(tuesday)!!.capacityMin
+        assertEquals(20, withBreak)
+        assertEquals(withBusy, withBreak)
+    }
+
+    @Test
     fun `a break outside you placed comes off the day's time, not off a limit you set, which is of work (D-116)`() {
         // Tuesday's evening of four hours, limited to 30 minutes, a break added at 18:00: still 30 minutes of work there.
         val evening = mapOf(tuesday to listOf(DayWindow(17 * 60, 21 * 60, WindowKind.Evening)))
