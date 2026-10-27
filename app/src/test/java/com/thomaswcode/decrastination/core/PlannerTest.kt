@@ -1795,6 +1795,17 @@ class PlannerTest {
     }
 
     @Test
+    fun `a pin in a school stretch too short to be used takes none of the day's free time there`() {
+        // Tuesday's break, 10:45 to 11:15, busy till 11:05: the 10 minutes left are under the shortest school time used, so
+        // the day's free time never counted them; ten minutes pinned at 11:05 are outside it.
+        val busy = listOf(Busy(Fixtures.at("2026-10-13T10:45"), Fixtures.at("2026-10-13T11:05")))
+        val input = windowed(emptyList(), "2026-10-12T17:00", busy = busy)
+        assertEquals(Planner.PinSpan(10, 0, 0), Planner.pinSpan(tuesday, Fixtures.at("2026-10-13T11:05"), 10, input))
+        // In a stretch long enough, it's school's.
+        assertEquals(Planner.PinSpan(0, 10, 0), Planner.pinSpan(tuesday, Fixtures.at("2026-10-13T10:50"), 10, windowed(emptyList(), "2026-10-12T17:00")))
+    }
+
+    @Test
     fun `a time you give counts all its minutes against a limit you set on its day (D-114)`() {
         // Tuesday limited to an hour: a half hour pinned at 23:00 leaves 30 of it, so a 45-minute piece put on Tuesday has no room there.
         val limited = windowed(emptyList(), "2026-10-12T17:00").copy(dayCaps = mapOf(tuesday to 60))

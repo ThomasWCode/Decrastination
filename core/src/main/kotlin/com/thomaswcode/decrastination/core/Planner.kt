@@ -1246,7 +1246,11 @@ object Planner {
      */
     fun outsideFreeMin(day: LocalDate, start: Long, minutes: Int, input: Input): Int = pinSpan(day, start, minutes, input).outside
 
-    /** [outsideFreeMin]'s minutes, and those within the day's free time, at school and in the evening: where a pin kept at [start] takes its time. */
+    /**
+     * [outsideFreeMin]'s minutes, and those within the day's free time, at school and in the evening: where a pin kept at [start]
+     * takes its time. The free time as [capacityOf] counts it: a school window's free stretch under `minSchoolSlotMin` isn't,
+     * so a pin's minutes there are outside it.
+     */
     fun pinSpan(day: LocalDate, start: Long, minutes: Int, input: Input): PinSpan {
         val end = start + minutes * 60_000L
         val hours = if (day.dayOfWeek == DayOfWeek.SATURDAY || day.dayOfWeek == DayOfWeek.SUNDAY) input.settings.weekendHours else input.settings.weekdayHours
@@ -1255,17 +1259,19 @@ object Planner {
         var evening = 0L
         for (window in input.windows[day] ?: listOf(DayWindow(hours.startMin, hours.endMin, WindowKind.Evening))) {
             val closes = midnight.plusMinutes(window.endMin.toLong()).atZone(input.zone).toInstant().toEpochMilli()
-            val from = maxOf(start, midnight.plusMinutes(window.startMin.toLong()).atZone(input.zone).toInstant().toEpochMilli(), minOf(closes, input.now))
-            val to = minOf(end, closes)
-            if (to <= from) continue
-            // Less the busy time within it, its blocks merged so two that overlap aren't taken off twice.
-            var busy = 0L
-            var reached = from
-            for ((a, b) in (input.busy + input.hardBusy).map { maxOf(from, it.start) to minOf(to, it.end) }.filter { it.second > it.first }.sortedBy { it.first }) {
-                if (b > reached) busy += b - maxOf(a, reached)
+            val begin = maxOf(midnight.plusMinutes(window.startMin.toLong()).atZone(input.zone).toInstant().toEpochMilli(), minOf(closes, input.now))
+            if (closes <= begin) continue
+            // The window's free stretches between busy times (theirs merged), as [freeIn] finds them, those long enough counted.
+            val stretches = mutableListOf<Pair<Long, Long>>()
+            var reached = begin
+            for ((a, b) in (input.busy + input.hardBusy).map { maxOf(begin, it.start) to minOf(closes, it.end) }.filter { it.second > it.first }.sortedBy { it.first }) {
+                if (a > reached) stretches += reached to a
                 reached = maxOf(reached, b)
             }
-            if (window.kind.atSchool) school += to - from - busy else evening += to - from - busy
+            if (closes > reached) stretches += reached to closes
+            val shortest = if (window.kind.atSchool) input.settings.minSchoolSlotMin * 60_000L else 0L
+            val inside = stretches.filter { (a, b) -> b - a >= shortest }.sumOf { (a, b) -> maxOf(0L, minOf(b, end) - maxOf(a, start)) }
+            if (window.kind.atSchool) school += inside else evening += inside
         }
         val atSchool = (school / 60_000L).toInt().coerceIn(0, minutes)
         val inEvening = (evening / 60_000L).toInt().coerceIn(0, minutes - atSchool)
