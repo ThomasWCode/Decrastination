@@ -129,6 +129,15 @@ internal fun DayGrid(
     var hour by remember { mutableFloatStateOf(hourDp.toFloat()) }
     LaunchedEffect(hourDp) { hour = hourDp.toFloat() }
     val hourPx = with(density) { hour.dp.toPx() }
+    // Where a pinch would have the grid scrolled, kept till the grid's laid out at its new height: scrolled now, it would be
+    // held to the old height's end.
+    var anchored by remember { mutableStateOf<Float?>(null) }
+    LaunchedEffect(hour) {
+        anchored?.let { target ->
+            scroll.scrollTo(target.roundToInt())
+            anchored = null
+        }
+    }
     val latestZoom by rememberUpdatedState(onZoom)
     // Where it opens: today an hour before now; another day half an hour before its first window or block.
     LaunchedEffect(model.date) {
@@ -159,10 +168,9 @@ internal fun DayGrid(
                             if (zoom != 1f) {
                                 val centroid = event.calculateCentroid(useCurrent = false)
                                 val before = hour.dp.toPx()
-                                val minute = (scroll.value + centroid.y) * 60f / before
+                                val minute = ((anchored ?: scroll.value.toFloat()) + centroid.y) * 60f / before
                                 hour = (hour * zoom).coerceIn(SettingsLimits.DAY_HOUR_DP.first.toFloat(), SettingsLimits.DAY_HOUR_DP.last.toFloat())
-                                val target = minute * hour.dp.toPx() / 60f - centroid.y
-                                scroll.dispatchRawDelta(target - scroll.value)
+                                anchored = (minute * hour.dp.toPx() / 60f - centroid.y).coerceAtLeast(0f)
                                 pinched = true
                             }
                             event.changes.forEach { it.consume() }

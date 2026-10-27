@@ -81,6 +81,19 @@ class InstructionsTest {
     }
 
     @Test
+    fun `a break outside moved by hand replaces only that break's move that day, not another's (D-116)`() = runBlocking {
+        fun moved(day: String, own: Int, at: Int) = Change(ChangeType.OutsideAt, date = day, outsideMin = own, startMin = at)
+        val about = About(day = "2026-10-31")
+        h.instructions.addOwnChange("b1", "Outside at Sat 31 14:30", about, moved("2026-10-31", 780, 870))
+        h.instructions.addOwnChange("b2", "Outside at Sat 31 17:00", about, moved("2026-10-31", 960, 1020))
+        h.instructions.addOwnChange("b3", "Outside at Sun 1 11:00", About(day = "2026-11-01"), moved("2026-11-01", 570, 660))
+        assertEquals(listOf("b1", "b2", "b3"), h.instructions.value.instructions.map { it.id })
+        // The 13:00 break that Saturday moved again: its first move goes, the others stay.
+        h.instructions.addOwnChange("b4", "Outside at Sat 31 15:00", about, moved("2026-10-31", 780, 900))
+        assertEquals(listOf("b2", "b3", "b4"), h.instructions.value.instructions.map { it.id })
+    }
+
+    @Test
     fun `new steps on a task let go of its starts kept today still to come, so they're laid afresh (D-110)`() = runBlocking {
         h.stores.tasks.update { it.copy(tasks = listOf(h.teams("sheet", minutes = 65))) }
         val now = h.clock.now()
