@@ -85,4 +85,16 @@ internal object DayLayout {
 
     /** The strip's day under a finger at [x], [y], of the [chips] by their bounds; null for none. */
     fun dayAt(x: Float, y: Float, chips: Map<LocalDate, Box>): LocalDate? = chips.entries.firstOrNull { it.value.contains(x, y) }?.key
+
+    /** The most the DO NOW card folds: from what it shows unfolded, its [full] height or its [cap] where that's less, to its [line]. */
+    fun foldMax(full: Float, cap: Float, line: Float): Float = (minOf(full, cap) - line).coerceAtLeast(0f)
+
+    /**
+     * How far the DO NOW card is folded once a scroll of the grid's, [dy] (on to later hours, negative), reaches it at [fold]:
+     * folded from what it shows, so the scroll moves it at once, however much taller than its cap the card is.
+     */
+    fun folded(fold: Float, dy: Float, full: Float, cap: Float, line: Float): Float {
+        val most = foldMax(full, cap, line)
+        return (fold.coerceAtMost(most) - dy).coerceIn(0f, most)
+    }
 }
