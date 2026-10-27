@@ -1,6 +1,6 @@
 # The questions, and your answers
 
-Every question the 4.x plan put to you, and every one raised while it was built, in a line each: what was asked, what you answered, and where it's recorded; after it, the timer's (4.4.0), with the choices its building made without asking, then those of the Day as a calendar (4.5.0 to 4.6.0), the breaks outside (4.4.1 and 4.5.2) and your busy times in your calendar (4.5.3), each with the choices made without asking. A "(Q31: A)" in [decisions.md](../decisions.md) or [spec/](../spec/) points here; "C-Q" is the cleanup plan's, "M" a call the merge of the two plans made on its own (18 Oct 2026), and Q32 on were asked while building, each with a recommendation and your answer. Where a line gives only the letter, you took the recommendation. A Q id written without its answer's letter, as "(Q13)", and the hyphenated ones, as "(Q-31)", are older requirement ids, not these ([spec/requirement-ids.md](../spec/requirement-ids.md) §Q).
+Every question the 4.x plan put to you, and every one raised while it was built, in a line each: what was asked, what you answered, and where it's recorded; after it, the timer's (4.4.0), with the choices its building made without asking, then those of the Day as a calendar (4.5.0 to 4.6.0), the breaks outside (4.4.1 and 4.5.2) and your busy times in your calendar (4.5.3), each with the choices made without asking. A "(Q31: A)" in [decisions.md](../decisions.md) or [spec/](../spec/) points here; "C-Q" is the cleanup plan's, "M" a call the merge of the two plans made on its own (18 Oct 2026), and Q32 on were asked while building, each with a recommendation and your answer. Where a line gives only the letter, you took the recommendation. From Q32 on, a Q id is always one of these, with its letter or without, as "(Q83)"; below that, one written without its answer's letter, as "(Q13)", and the hyphenated ones, as "(Q-31)", are older requirement ids, not these ([spec/requirement-ids.md](../spec/requirement-ids.md) §Q).
 
 ## The cleanup's questions (17 and 18 Oct)
 
@@ -93,6 +93,8 @@ Every question the 4.x plan put to you, and every one raised while it was built,
 - **Q64** (23 Oct): a reply of yours that was itself a question was kept as his question's answer: fixed in 4.3.12 (D-19).
 - **Q65** (23 Oct): a task's sheet named as "Next:" a step already ticked: fixed in 4.3.13.
 - **Q66** (24 Oct): a reply Claude can't read is kept as the question's answer, as built since 4.3.12: A, D-19 says so (4.3.19).
+
+Q41 was answered A on 21 Oct; its subject was only in that day's questions file, which is gone, so it can't be followed. Of the review of 4.3.13's findings, your calls on I01, I04, P01 and B08 are in [astra-review-4.3.13](../astra-review-4.3.13/README.md).
 
 ## The timer (4.4.0, 25 and 26 Oct)
 
@@ -337,5 +339,3 @@ Chosen without asking while it was built, yours to overturn:
 - A name of 40 characters at most (`InstructionRules.MAX_BUSY_TITLE`): a word or two is what's meant.
 - Two busy times with the same start and end on a day are one event, named by the latest that gives a name.
 - One changed by hand there (stretched, shortened, renamed) is put back and said too, as one moved or deleted is.
-
-Q41 was answered A on 21 Oct; its subject was only in that day's questions file, which is gone, so it can't be followed. Of the review of 4.3.13's findings, your calls on I01, I04, P01 and B08 are in [astra-review-4.3.13](../astra-review-4.3.13/README.md).

@@ -166,7 +166,7 @@ Grouped by prefix and sorted; where a later decision changed an item, its line g
 
 ## Q: decisions from the first build's questions (no hyphen)
 
-These come from the questions answered for v1 and 2.0.0; Q31 here is not Q-31 below. An id written with its answer's letter, as "(Q31: A)" or "(Q13: B)", is the 4.x plan's own question, not one of these: Q1 to Q31, and Q32 on, asked while the plan was built, are in [plan_v4/answers.md](../plan_v4/answers.md). The cleanup's questions, C-Q1 to C-Q12 in the same file, are cited by number alone, as "(C-Q3)".
+These come from the questions answered for v1 and 2.0.0; Q31 here is not Q-31 below. An id written with its answer's letter, as "(Q31: A)" or "(Q13: B)", is the 4.x plan's own question, not one of these, and so is any from Q32 on, with its letter or without (these stop at Q31): Q1 to Q31, and Q32 on, asked while the plan was built, are in [plan_v4/answers.md](../plan_v4/answers.md). The cleanup's questions, C-Q1 to C-Q12 in the same file, are cited by number alone, as "(C-Q3)".
 
 - Q6: Work is planned in set working hours, a school-day evening window and a longer weekend window (Settings); sleep hours are never blocked.
 - Q6b: On school days blocking starts at a set time after school, leaving school hours alone; sleep hours are unchanged.
