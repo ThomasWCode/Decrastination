@@ -42,9 +42,10 @@ internal class DayDrag {
         private set
     var finger by mutableStateOf(Offset.Zero)
 
-    /** The grid's top and bottom on the screen. */
+    /** The grid's top and bottom on the screen, and the height of an hour it's drawn at. */
     var gridTop by mutableFloatStateOf(0f)
     var gridBottom by mutableFloatStateOf(0f)
+    var hourPx by mutableFloatStateOf(0f)
 
     /** The strip's chips' bounds, each day's. */
     val chips = mutableStateMapOf<LocalDate, DayLayout.Box>()
