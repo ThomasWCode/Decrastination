@@ -308,6 +308,8 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
         // scrolling within that; only its line where there's no room for it.
         val cap = maxHeight - MIN_GRID - with(density) { (aboveCard + belowCard).toDp() }
         SideEffect { cardCap = with(density) { cap.toPx() } }
+        // The Day's height: on its side, the grid's.
+        val tall = maxHeight
         Column(if (landscape) Modifier.fillMaxSize().verticalScroll(page) else Modifier.fillMaxSize()) {
             Column(Modifier.onSizeChanged { aboveCard = it.height }) {
                 Hint(graph, "day", "Day is when: today's slots as they come, and the week's days above. Work is what: every task, on the next tab.")
@@ -365,7 +367,7 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
                 onZoom = { hourDp -> scope.launch { graph.protection.changeSettings { it.copy(dayHourDp = hourDp) } } },
                 // The fold takes the grid's scrolls alone, on today only: another day has no card, and the card's own don't fold it.
                 // On its side the grid is the Day's height, under what's above it, and its scrolls take that away first.
-                modifier = if (landscape) Modifier.height(this@BoxWithConstraints.maxHeight).nestedScroll(collapsing) else Modifier.weight(1f).then(if (today) Modifier.nestedScroll(folding) else Modifier),
+                modifier = if (landscape) Modifier.height(tall).nestedScroll(collapsing) else Modifier.weight(1f).then(if (today) Modifier.nestedScroll(folding) else Modifier),
             )
         }
 
