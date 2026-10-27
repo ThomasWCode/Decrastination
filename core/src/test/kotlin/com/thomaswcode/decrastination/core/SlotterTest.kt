@@ -451,6 +451,14 @@ class SlotterTest {
     }
 
     @Test
+    fun `a break placed that a later pin puts off its time, no window time free after it, goes straight after the pin (D-116)`() {
+        val call = chunk("call")
+        val pins = mapOf(call.key to Fixtures.at("2026-10-13T20:30"))
+        val laid = slot(tuesday, listOf(call), listOf(w("16:45", "21:00")), pins = pins, given = OutsideDay(added = listOf(minute("20:30"))), exact = setOf(call.key)).first
+        assertEquals(listOf("call 20:30–21:00", "outside 21:00–21:20"), laid.filter { it.start >= Fixtures.at("2026-10-13T20:00") }.described())
+    }
+
+    @Test
     fun `a break placed near midnight is over by it, staying on its day (D-116)`() {
         val (slots, _) = slot(tuesday, emptyList(), listOf(w("16:45", "22:00")), given = OutsideDay(added = listOf(minute("23:50"))))
         assertEquals(listOf("outside 23:50–00:00"), slots.described())

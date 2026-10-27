@@ -99,11 +99,22 @@ object Slotter {
         // Your pins laid at their time (D-114): the breaks still to come are laid around them.
         val pinned = exactPins(date, chunks, pins, now, zone, deadlineMinOf, underWay + keptPlaced, exact).first
         for ((chunk, pin) in pinned) carve(free, pin, pin + chunk.minutes * MINUTE)
+        // Where the windows have no time free after it, straight after what put it off its time, a placed break being kept
+        // outside them too; by the day's end, or not laid.
+        val taken = ((underWay + keptPlaced).map { it.start to it.end } + pinned.map { (chunk, pin) -> pin to pin + chunk.minutes * MINUTE }).toMutableList()
         val laidAfter = shifted.mapNotNull { b ->
-            val interval = free.firstOrNull { maxOf(it.start, b.start) + length <= it.end } ?: return@mapNotNull null
-            val start = maxOf(interval.start, b.start)
-            carve(free, start, start + length)
-            b.copy(start = start, end = start + length, window = interval.window.kind)
+            val interval = free.firstOrNull { maxOf(it.start, b.start) + length <= it.end }
+            if (interval != null) {
+                val start = maxOf(interval.start, b.start)
+                carve(free, start, start + length)
+                taken += start to start + length
+                return@mapNotNull b.copy(start = start, end = start + length, window = interval.window.kind)
+            }
+            var start = maxOf(b.start, now)
+            while (true) start = taken.filter { (from, to) -> from < start + length && start < to }.maxOfOrNull { it.second } ?: break
+            if (start + length > midnight) return@mapNotNull null
+            taken += start to start + length
+            b.copy(start = start, end = start + length, window = windowAt(start))
         }
         val fixed = underWay + keptPlaced + laidAfter
         fun around(breaks: List<Slot>) = lay(date, chunks, windows, busy, pins, previous, now, zone, settings, fixed + breaks, exact, deadlineMinOf)
