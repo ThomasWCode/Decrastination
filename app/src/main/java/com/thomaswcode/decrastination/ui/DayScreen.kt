@@ -294,7 +294,7 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
     var belowCard by remember { mutableIntStateOf(0) }
     BoxWithConstraints(Modifier.fillMaxSize().onGloballyPositioned { rootAt = it.positionInRoot() }) {
         // The card never takes the grid's room: at most what leaves the grid [MIN_GRID] once all else above it is laid,
-        // scrolling within that; none at all, its line, where there's no room for it.
+        // scrolling within that; only its line where there's no room for it.
         val cap = maxHeight - MIN_GRID - with(density) { (aboveCard + belowCard).toDp() }
         Column(Modifier.fillMaxSize()) {
             Column(Modifier.onSizeChanged { aboveCard = it.height }) {
@@ -304,16 +304,20 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
             }
             if (today) {
                 val unread = Source.SYNCED.filter { tasks.status(it).lastSuccessAt == null }
-                val folded = (cardFull > 0 && fold >= foldMax - 1f) || cap < 40.dp
+                // With no room for the card, it stays its line, and a tap on the line opens the piece's sheet (the card's
+                // actions) instead of unfolding it.
+                val roomless = cap < 40.dp
+                val folded = (cardFull > 0 && fold >= foldMax - 1f) || roomless
                 if (folded) {
-                    val label = (plan.slotAt(plan.now)?.chunk ?: plan.next)?.label ?: "nothing planned"
+                    val doing = plan.slotAt(plan.now)?.chunk ?: plan.next
+                    val label = doing?.label ?: "nothing planned"
                     Text(
                         "DO NOW · $label",
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.primary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.fillMaxWidth().height(40.dp).clickable { fold = 0f }.padding(horizontal = 16.dp, vertical = 10.dp),
+                        modifier = Modifier.fillMaxWidth().height(40.dp).clickable(enabled = !roomless || doing != null) { if (roomless) sheetFor = doing?.key else fold = 0f }.padding(horizontal = 16.dp, vertical = 10.dp),
                     )
                 } else {
                     val shown = if (cardFull == 0) cap else minOf(with(density) { (cardFull - fold.coerceAtMost(foldMax)).toDp() }, cap)
