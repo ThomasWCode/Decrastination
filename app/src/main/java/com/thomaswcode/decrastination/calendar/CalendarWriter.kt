@@ -141,8 +141,9 @@ class CalendarWriter(
             val versions = desired.filter { d -> d.uri !in moved }.map { d -> SlotCalendarDiff.version(calendarId, d.title, d.start, d.end) }.filterNot { it in written.yours }
             calendar.update { it.copy(written = SlotCalendarDiff.remembered(it.written, versions)) }
         }.onFailure { Log.w(AppGraph.TAG, "Remembering what was written to the calendar failed", it) }
-        // And when each was written, so the sync bringing one back within [SlotCalendarDiff.ECHO_MS] is known for the app's own.
-        desired.filter { d -> d.uri !in moved }.forEach { d -> wroteAt[SlotCalendarDiff.version(calendarId, d.title, d.start, d.end)] = now }
+        // And each event inserted or changed, by its URI and version, with when, so the sync bringing it back to that within
+        // [SlotCalendarDiff.ECHO_MS] is known for the app's own; not one left as it was, nor another event's.
+        written.wrote.forEach { d -> wroteAt[d.uri to SlotCalendarDiff.version(calendarId, d.title, d.start, d.end)] = now }
         // A move taken counts as written only once its instruction is in: stopped before, the next
         // write finds it a move again, rather than putting it back.
         val held = SlotCalendarDiff.pending(written.starts, before, written.taken)
@@ -165,8 +166,11 @@ class CalendarWriter(
      */
     private val writing = Mutex()
 
-    /** The versions this writer wrote ([SlotCalendarDiff.version]) in the last [SlotCalendarDiff.ECHO_MS], each with when; under [writing]. */
-    private val wroteAt = mutableMapOf<Long, Long>()
+    /**
+     * The events this writer inserted or changed in the last [SlotCalendarDiff.ECHO_MS], each as its URI and version
+     * ([SlotCalendarDiff.version]), with when; under [writing].
+     */
+    private val wroteAt = mutableMapOf<Pair<String, Long>, Long>()
 
     /** The app's events taken out of calendars no longer written to, each kept on the list till that's done; under [writing]. */
     private suspend fun clearOldCalendars() {
@@ -180,9 +184,9 @@ class CalendarWriter(
     /**
      * What a write left: each URI's start as it now stands, and the moves you made, taken or written
      * back (with why); and the versions it wrote that an event of yours already has, not to be
-     * remembered ([SlotCalendarDiff.yours]).
+     * remembered ([SlotCalendarDiff.yours]); and the events it inserted or changed ([wrote]).
      */
-    data class Written(val starts: Map<String, Long>, val taken: List<SlotCalendarDiff.HandMove>, val refused: List<Pair<SlotCalendarDiff.HandMove, String>>, val yours: Set<Long> = emptySet(), val restored: List<SlotCalendarDiff.Desired> = emptyList(), val reverted: List<SlotCalendarDiff.Desired> = emptyList())
+    data class Written(val starts: Map<String, Long>, val taken: List<SlotCalendarDiff.HandMove>, val refused: List<Pair<SlotCalendarDiff.HandMove, String>>, val yours: Set<Long> = emptySet(), val restored: List<SlotCalendarDiff.Desired> = emptyList(), val reverted: List<SlotCalendarDiff.Desired> = emptyList(), val wrote: List<SlotCalendarDiff.Desired> = emptyList())
 
     /** [move] as your time for its task's next piece: an [ChangeType.AtTime] at its event's start. */
     private fun change(move: SlotCalendarDiff.HandMove, zone: ZoneId): Change {
@@ -195,9 +199,9 @@ class CalendarWriter(
      * last written); a hand move taken as [SlotCalendarDiff.judge] judges it, else written back. A
      * copy of one of its events is known by [versions], those it has written ([SlotCalendarDiff.isCopy]);
      * an event of yours under a slot's title at its times, there before it, is said ([Written.yours]).
-     * One at a version of [echoes], written moments before, is the sync's echo of it, written back (Q93).
+     * One at a version of [echoes] (its URI and version), written moments before, is the sync's echo of it, written back (Q93).
      */
-    private fun write(calendarId: Long, plan: Plan, zone: ZoneId, written: Map<String, Long>, versions: Set<Long>, echoes: Set<Long>, micro: Map<String, MicroPlan> = emptyMap(), busy: List<BusyBlock> = emptyList(), refuses: (SlotCalendarDiff.HandMove) -> String?): Written {
+    private fun write(calendarId: Long, plan: Plan, zone: ZoneId, written: Map<String, Long>, versions: Set<Long>, echoes: Set<Pair<String, Long>>, micro: Map<String, MicroPlan> = emptyMap(), busy: List<BusyBlock> = emptyList(), refuses: (SlotCalendarDiff.HandMove) -> String?): Written {
         val from = plan.today.atStartOfDay(zone).toInstant().toEpochMilli()
         val to = plan.today.plusDays(SlotCalendarDiff.DAYS).atStartOfDay(zone).toInstant().toEpochMilli()
         val desired = SlotCalendarDiff.desired(plan, zone, micro, busy)
@@ -206,13 +210,14 @@ class CalendarWriter(
         val copies = unmarked.filter { SlotCalendarDiff.isCopy(calendarId, it.title, it.description, it.start, it.end, versions) }
         // An event in a version the app never wrote there was changed by hand.
         val diff = SlotCalendarDiff.diff(desired, provider.existing(calendarId, from, to, desired.map { it.uri }) + copies, written, echo = { e ->
-            SlotCalendarDiff.version(calendarId, e.title, e.start, e.end) in echoes
+            (e.uri to SlotCalendarDiff.version(calendarId, e.title, e.start, e.end)) in echoes
         }) { e ->
             SlotCalendarDiff.version(calendarId, e.title, e.start, e.end) !in versions
         }
         val (taken, refused) = SlotCalendarDiff.judge(diff.handMoves, refuses)
         provider.apply(calendarId, zone, diff.inserts, diff.updates.map { it.existing.id to it.desired } + refused.map { it.first.existing.id to it.first.desired }, diff.deletes.map { it.id })
-        return Written(desired.associate { it.uri to it.start } + taken.associate { it.desired.uri to it.existing.start }, taken, refused, SlotCalendarDiff.yours(calendarId, desired, unmarked, versions), diff.restored, diff.reverted)
+        val wrote = diff.inserts + diff.updates.map { it.desired } + refused.map { it.first.desired }
+        return Written(desired.associate { it.uri to it.start } + taken.associate { it.desired.uri to it.existing.start }, taken, refused, SlotCalendarDiff.yours(calendarId, desired, unmarked, versions), diff.restored, diff.reverted, wrote)
     }
 
     /**

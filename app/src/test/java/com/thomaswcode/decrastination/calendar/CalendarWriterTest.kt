@@ -265,6 +265,45 @@ class CalendarWriterTest {
     }
 
     @Test
+    fun `a time another event of the same title left a moment ago isn't taken for this one's echo, so your move there is yours (Q93)`() = runBlocking {
+        pickCalendar(7)
+        tasks.update { it.copy(tasks = listOf(task("essay"), task("essay2"))) }
+        val a = chunk("teams:essay", "Essay")
+        val b = chunk("teams:essay2", "Essay")
+        val first = plan(work(a, "17:00"), work(b, "18:00"))
+        val second = plan(work(a, "17:00"), work(b, "19:00"))
+        val uri = SlotCalendarDiff.desired(first, LONDON).first { it.taskId == "teams:essay" }.uri
+        writer.watchCalendar()
+        writer.writeSlots(first)
+        writer.writeSlots(second)
+        // You drag a's event to 18:00, where b's, under the same title, was written a moment ago.
+        calendar.move(uri, at("18:00"))
+        writer.writeSlots(second)
+        assertEquals(listOf("Moved in the calendar"), changes.map { it.first }, "taken as yours")
+        assertEquals(at("18:00"), calendar.events.first { it.uri == uri }.start)
+    }
+
+    @Test
+    fun `an event left as it was isn't counted as written again, so a time it had long ago isn't taken for an echo (Q93)`() = runBlocking {
+        pickCalendar(7)
+        tasks.update { it.copy(tasks = listOf(task("essay"), task("maths"))) }
+        val essay = chunk("teams:essay", "Essay")
+        val maths = chunk("teams:maths", "Maths")
+        val uri = SlotCalendarDiff.desired(plan(work(essay, "17:00")), LONDON).single().uri
+        writer.watchCalendar()
+        writer.writeSlots(plan(work(essay, "17:00")))
+        // Long after, another slot is written beside it, the essay's event left as it was; then the essay moves to 18:00.
+        clock.time += SlotCalendarDiff.ECHO_MS + 60_000L
+        writer.writeSlots(plan(work(essay, "17:00"), work(maths, "19:00")))
+        writer.writeSlots(plan(work(essay, "18:00"), work(maths, "19:00")))
+        // You drag it back to 17:00, where it was written long ago, not a moment ago: your move.
+        calendar.move(uri, at("17:00"))
+        writer.writeSlots(plan(work(essay, "18:00"), work(maths, "19:00")))
+        assertEquals(listOf("Moved in the calendar"), changes.map { it.first })
+        assertEquals(at("17:00"), calendar.events.first { it.uri == uri }.start)
+    }
+
+    @Test
     fun `a move the plan can't take is written back, and you're told why`() = runBlocking {
         pickCalendar(7)
         // The essay is due at 19:00 today; the old task has gone from the list.
