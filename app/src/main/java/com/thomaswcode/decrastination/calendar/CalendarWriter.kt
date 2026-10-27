@@ -66,8 +66,8 @@ class CalendarWriter(
     private val reread: suspend () -> Unit,
     /** Your busy times from one day to another, as the instructions in use give them ([InstructionRules.busyBlocks]): each written as its own event (D-117). */
     private val busyTimes: (from: LocalDate, to: LocalDate) -> List<BusyBlock>,
-    /** A busy time's event you deleted, written again, and why, said ([SlotCalendar.sayPutBack]). */
-    private val sayPutBack: (want: SlotCalendarDiff.Desired, why: String) -> Unit,
+    /** A busy time's event you [deleted] or changed, put back, and why, said ([SlotCalendar.sayPutBack]). */
+    private val sayPutBack: (want: SlotCalendarDiff.Desired, deleted: Boolean, why: String) -> Unit,
     /** How long plans are quiet before the calendar's written: [CALENDAR_WRITE_QUIET_MS], but in a test. */
     private val quietMs: Long = CALENDAR_WRITE_QUIET_MS,
 ) {
@@ -142,7 +142,8 @@ class CalendarWriter(
         val held = SlotCalendarDiff.pending(written.starts, before, written.taken)
         if (held != before) calendar.update { it.copy(calendarWritten = held) }
         written.refused.forEach { (move, why) -> sayRefused(move, zone, why) }
-        written.restored.forEach { sayPutBack(it, BUSY_CHANGED) }
+        written.restored.forEach { sayPutBack(it, true, BUSY_CHANGED) }
+        written.reverted.forEach { sayPutBack(it, false, BUSY_CHANGED) }
         lastWritten = calendarId to desired
         for (move in written.taken) {
             val taskId = move.desired.taskId ?: continue
@@ -172,7 +173,7 @@ class CalendarWriter(
      * back (with why); and the versions it wrote that an event of yours already has, not to be
      * remembered ([SlotCalendarDiff.yours]).
      */
-    data class Written(val starts: Map<String, Long>, val taken: List<SlotCalendarDiff.HandMove>, val refused: List<Pair<SlotCalendarDiff.HandMove, String>>, val yours: Set<Long> = emptySet(), val restored: List<SlotCalendarDiff.Desired> = emptyList())
+    data class Written(val starts: Map<String, Long>, val taken: List<SlotCalendarDiff.HandMove>, val refused: List<Pair<SlotCalendarDiff.HandMove, String>>, val yours: Set<Long> = emptySet(), val restored: List<SlotCalendarDiff.Desired> = emptyList(), val reverted: List<SlotCalendarDiff.Desired> = emptyList())
 
     /** [move] as your time for its task's next piece: an [ChangeType.AtTime] at its event's start. */
     private fun change(move: SlotCalendarDiff.HandMove, zone: ZoneId): Change {
@@ -193,10 +194,13 @@ class CalendarWriter(
         // Those with none of its marks in its words: copies of its own, to delete, and events of yours.
         val unmarked = provider.unmarked(calendarId)
         val copies = unmarked.filter { SlotCalendarDiff.isCopy(calendarId, it.title, it.description, it.start, it.end, versions) }
-        val diff = SlotCalendarDiff.diff(desired, provider.existing(calendarId, from, to, desired.map { it.uri }) + copies, written)
+        // An event in a version the app never wrote there was changed by hand.
+        val diff = SlotCalendarDiff.diff(desired, provider.existing(calendarId, from, to, desired.map { it.uri }) + copies, written) { e ->
+            SlotCalendarDiff.version(calendarId, e.title, e.start, e.end) !in versions
+        }
         val (taken, refused) = SlotCalendarDiff.judge(diff.handMoves, refuses)
         provider.apply(calendarId, zone, diff.inserts, diff.updates.map { it.existing.id to it.desired } + refused.map { it.first.existing.id to it.first.desired }, diff.deletes.map { it.id })
-        return Written(desired.associate { it.uri to it.start } + taken.associate { it.desired.uri to it.existing.start }, taken, refused, SlotCalendarDiff.yours(calendarId, desired, unmarked, versions), diff.restored)
+        return Written(desired.associate { it.uri to it.start } + taken.associate { it.desired.uri to it.existing.start }, taken, refused, SlotCalendarDiff.yours(calendarId, desired, unmarked, versions), diff.restored, diff.reverted)
     }
 
     /**

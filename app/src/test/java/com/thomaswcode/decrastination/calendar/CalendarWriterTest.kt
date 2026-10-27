@@ -78,9 +78,9 @@ class CalendarWriterTest {
     /** Each move written back, by its slot's URI, and why. */
     private val refused: MutableList<Pair<String, String>> = Collections.synchronizedList(mutableListOf())
 
-    /** Your busy times, as the instructions in use give them; each one's event you deleted, written again, by its URI, and why. */
+    /** Your busy times, as the instructions in use give them; each one's event you deleted or changed, put back, by its URI, and whether deleted. */
     @Volatile private var busy: List<BusyBlock> = emptyList()
-    private val putBack: MutableList<Pair<String, String>> = Collections.synchronizedList(mutableListOf())
+    private val putBack: MutableList<Pair<String, Boolean>> = Collections.synchronizedList(mutableListOf())
     private val replans = AtomicInteger()
     private val settled: MutableList<String> = Collections.synchronizedList(mutableListOf())
     private val rereads = AtomicInteger()
@@ -97,7 +97,10 @@ class CalendarWriterTest {
         settleEvent = { settled += it },
         reread = { rereads.incrementAndGet() },
         busyTimes = { from, to -> busy.filter { it.date in from..to } },
-        sayPutBack = { want, why -> putBack += want.uri to why },
+        sayPutBack = { want, deleted, why ->
+            check(why == CalendarWriter.BUSY_CHANGED)
+            putBack += want.uri to deleted
+        },
         quietMs = quietMs,
     )
 
@@ -285,14 +288,19 @@ class CalendarWriterTest {
         // Deleted by hand: written again, and said.
         calendar.delete(football)
         writer.writeSlots(made)
-        assertEquals(listOf(football to CalendarWriter.BUSY_CHANGED), putBack)
+        assertEquals(listOf(football to true), putBack)
         assertEquals(at("18:00"), calendar.events.single { it.uri == football }.start)
+        // Stretched by hand, its start left: put back as it was, and said.
+        calendar.stretch(football, at("20:00"))
+        writer.writeSlots(made)
+        assertEquals(listOf(football to true, football to false), putBack)
+        assertEquals(at("19:30"), calendar.events.single { it.uri == football }.end)
         assertEquals(emptyList(), changes)
         // Taken back: its events go, unsaid.
         busy = emptyList()
         writer.writeSlots(made)
         assertTrue(calendar.events.none { it.description == SlotCalendarDiff.BUSY })
-        assertEquals(1, putBack.size)
+        assertEquals(2, putBack.size)
     }
 
     @Test
@@ -435,6 +443,12 @@ class CalendarWriterTest {
         /** The app's event of [uri] dragged by you to [start], keeping its length; the calendar says so. */
         fun move(uri: String, start: Long) {
             events.replaceAll { if (it.uri == uri) it.copy(start = start, end = start + (it.end - it.start)) else it }
+            changed()
+        }
+
+        /** The app's event of [uri] stretched by you to end at [end], its start left; the calendar says so. */
+        fun stretch(uri: String, end: Long) {
+            events.replaceAll { if (it.uri == uri) it.copy(end = end) else it }
             changed()
         }
 

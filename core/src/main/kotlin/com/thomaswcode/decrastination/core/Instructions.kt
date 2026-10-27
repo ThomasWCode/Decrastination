@@ -438,24 +438,10 @@ object InstructionRules {
     }
 
     /** The times [applied] says you can't work, from [from] to [to], where you are. */
-    fun busy(applied: List<Instruction>, zone: ZoneId, from: LocalDate, to: LocalDate): List<Busy> {
-        val times = applied.flatMap { it.changes }.filter { it.type == ChangeType.BusyTime && it.startMin != null && it.endMin != null && it.endMin > it.startMin }
-        if (times.isEmpty()) return emptyList()
-        val out = mutableListOf<Busy>()
-        var day = from
-        while (day <= to) {
-            for (t in times) {
-                val on = if (t.date != null) date(t.date) == day else t.weekday == day.dayOfWeek.value
-                if (!on) continue
-                val midnight = day.atStartOfDay()
-                out += Busy(
-                    midnight.plusMinutes(t.startMin!!.toLong()).atZone(zone).toInstant().toEpochMilli(),
-                    midnight.plusMinutes(t.endMin!!.toLong()).atZone(zone).toInstant().toEpochMilli(),
-                )
-            }
-            day = day.plusDays(1)
-        }
-        return out
+    fun busy(applied: List<Instruction>, zone: ZoneId, from: LocalDate, to: LocalDate): List<Busy> = busyBlocks(applied, from, to).map { b ->
+        // The day's times as the calendar's events have them (D-117), so the time kept clear is what they block out.
+        val midnight = b.date.atStartOfDay()
+        Busy(midnight.plusMinutes(b.startMin.toLong()).atZone(zone).toInstant().toEpochMilli(), midnight.plusMinutes(b.endMin.toLong()).atZone(zone).toInstant().toEpochMilli())
     }
 
     /**

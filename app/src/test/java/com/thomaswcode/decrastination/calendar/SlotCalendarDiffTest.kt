@@ -83,6 +83,14 @@ class SlotCalendarDiffTest {
         // Moved by hand: a hand move, for the writer to put back.
         val later = Existing(9, football.uri, football.start + 3_600_000L, football.end + 3_600_000L, football.title, football.description)
         assertEquals(listOf(9L), SlotCalendarDiff.diff(listOf(football), listOf(later), mapOf(football.uri to football.start)).handMoves.map { it.existing.id })
+        // Stretched by hand, its start left: put back as it was, and said; renamed by the app (Felix named it since), only updated.
+        val stretched = Existing(9, football.uri, football.start, football.end + 1_800_000L, football.title, football.description)
+        val edits = SlotCalendarDiff.diff(listOf(football), listOf(stretched), mapOf(football.uri to football.start)) { it.end != football.end }
+        assertEquals(listOf(9L), edits.updates.map { it.existing.id })
+        assertEquals(listOf(football), edits.reverted)
+        val renamed = SlotCalendarDiff.diff(listOf(football), listOf(stretched.copy(end = football.end, title = "Busy")), mapOf(football.uri to football.start)) { false }
+        assertEquals(listOf(9L), renamed.updates.map { it.existing.id })
+        assertEquals(emptyList(), renamed.reverted)
     }
 
     @Test

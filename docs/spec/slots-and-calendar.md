@@ -110,7 +110,7 @@ Pick one you made at calendar.google.com: a calendar an app makes stays on the p
 
 `SlotCalendarDiff.diff` compares the slots with the app's events, those starting in the week and any with a slot's URI wherever it is now:
 - a slot with no event is inserted, so one you deleted is written again; a busy time's, written before, is said (`SlotCalendar.sayPutBack`: "a busy time is changed by asking Felix, or in Your changes", D-117);
-- an event whose times or words differ is updated;
+- an event whose times or words differ is updated; a busy time's changed by hand, its start left (stretched, shortened, renamed: in a version the app never wrote there), is put back as it was and said, as one moved or deleted is (D-117);
 - an event no longer a slot, a second event of one URI, and copies (below) are deleted;
 - an event you moved, a piece's or a break's, is a hand move.
 
