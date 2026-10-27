@@ -290,6 +290,10 @@ private fun PieceBlock(item: DayModel.Row.Planned, chunk: Chunk, plan: Plan, zon
     val haptic = LocalHapticFeedback.current
     var origin by remember { mutableStateOf(Offset.Zero) }
     var size by remember { mutableStateOf(IntSize.Zero) }
+    // The block's slot and the Day's actions as they now are: the drag's handler outlives a recomposition.
+    val held by rememberUpdatedState(slot)
+    val heldChunk by rememberUpdatedState(chunk)
+    val current by rememberUpdatedState(actions)
     val container = if (now) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primaryContainer
     val content = if (now) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onPrimaryContainer
     val times = "${gridClock(slot.start, zone)}–${gridClock(slot.end, zone)}" + when (item.state) {
@@ -334,17 +338,17 @@ private fun PieceBlock(item: DayModel.Row.Planned, chunk: Chunk, plan: Plan, zon
                     )
                 }
                 .clickable { actions.onOpen(chunk) }
-                .pointerInput(slot.key) {
+                .pointerInput(slot.key, slot.start) {
                     detectDragGesturesAfterLongPress(
                         onDragStart = { offset ->
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            drag.start(slot, size, origin + offset, offset, chunk.minutes)
+                            drag.start(held, size, origin + offset, offset, heldChunk.minutes)
                         },
                         onDrag = { change, amount ->
                             change.consume()
                             drag.finger += amount
                         },
-                        onDragEnd = { actions.onDrop() },
+                        onDragEnd = { current.onDrop() },
                         onDragCancel = { drag.cancel() },
                     )
                 },
@@ -374,6 +378,9 @@ private fun OutsideBlock(item: DayModel.Row.Planned, zone: ZoneId, drag: DayDrag
     val haptic = LocalHapticFeedback.current
     var origin by remember { mutableStateOf(Offset.Zero) }
     var size by remember { mutableStateOf(IntSize.Zero) }
+    // As a piece's: a break's key names its own time, the same on any day, so its handler goes by its start too.
+    val held by rememberUpdatedState(slot)
+    val current by rememberUpdatedState(actions)
     val movable = item.state == DayModel.State.Ahead
     Box(
         Modifier.fillMaxSize().clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.6f))
@@ -384,17 +391,17 @@ private fun OutsideBlock(item: DayModel.Row.Planned, zone: ZoneId, drag: DayDrag
             }
             .semantics { contentDescription = "${gridClock(slot.start, zone)} to ${gridClock(slot.end, zone)}, outside" }
             .then(
-                if (!movable) Modifier else Modifier.pointerInput(slot.key) {
+                if (!movable) Modifier else Modifier.pointerInput(slot.key, slot.start) {
                     detectDragGesturesAfterLongPress(
                         onDragStart = { offset ->
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            drag.start(slot, size, origin + offset, offset, ((slot.end - slot.start) / 60_000L).toInt())
+                            drag.start(held, size, origin + offset, offset, ((held.end - held.start) / 60_000L).toInt())
                         },
                         onDrag = { change, amount ->
                             change.consume()
                             drag.finger += amount
                         },
-                        onDragEnd = { actions.onDrop() },
+                        onDragEnd = { current.onDrop() },
                         onDragCancel = { drag.cancel() },
                     )
                 },

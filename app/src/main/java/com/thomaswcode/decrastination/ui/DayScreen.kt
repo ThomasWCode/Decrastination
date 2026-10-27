@@ -42,6 +42,7 @@ import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -285,7 +286,8 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
 
     var rootAt by remember { mutableStateOf(Offset.Zero) }
     Box(Modifier.fillMaxSize().onGloballyPositioned { rootAt = it.positionInRoot() }) {
-        Column(Modifier.fillMaxSize().nestedScroll(folding)) {
+        // On today only: another day has no card to fold.
+        Column(Modifier.fillMaxSize().then(if (today) Modifier.nestedScroll(folding) else Modifier)) {
             Hint(graph, "day", "Day is when: today's slots as they come, and the week's days above. Work is what: every task, on the next tab.")
             Hint(graph, "day-drag", "Hold a piece to move it: drag it to a time, or onto a day above.")
             WeekStrip(plan, day, drag, tasks.tasks.associateBy { it.id }, graph.clock.now(), zone) { chosen = it.toString() }
@@ -525,6 +527,8 @@ private fun WeekStrip(plan: Plan, chosen: LocalDate, drag: DayDrag, tasks: Map<S
             val free = bucket?.capacityMin ?: 0
             val over = planned > free
             val dimmed = drag.active && (dragged == null || !Moves.dayAllowed(tasks[dragged.taskId], date, now, zone))
+            // Its bounds go with it: a day the strip no longer shows (midnight passed) is no drop target.
+            DisposableEffect(date) { onDispose { drag.chips.remove(date) } }
             Card(
                 onClick = { onPick(date) },
                 modifier = Modifier.width(76.dp)
