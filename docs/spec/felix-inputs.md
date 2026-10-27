@@ -185,6 +185,7 @@ Next lessons (class: its subject, and its names | its next three):
 
 Changes already in use:
 - Fri 16 Oct: at most 1 h of work
+- Sat 17 Oct: only “Personal statement first draft”; Anki too
 
 Their own tasks finished in the last week (id | title | finished):
 - own:o0 | Return the library book | Mon 12 Oct 2026 18:10
@@ -247,7 +248,7 @@ Day by day:
   - own:o1 | Personal statement first draft | 30 min: part 2 of 4 (30 min) [why: soft] | no due date
 - Friday 16 October 2026: 30 min planned of 60 min of working time
   - own:o1 | Personal statement first draft | 30 min: part 3 of 4 (30 min) [why: soft] | no due date
-- Saturday 17 October 2026: nothing planned (0 min of working time)
+- Saturday 17 October 2026: nothing planned (0 min of working time); kept for only “Personal statement first draft”; Anki too
 - Sunday 18 October 2026: 30 min planned of 315 min of working time
   - own:o1 | Personal statement first draft | 30 min: part 4 of 4 (30 min) [why: soft] | no due date
 - Monday 19 October 2026: nothing planned (315 min of working time)
@@ -357,8 +358,10 @@ The student tells you about their work. You can:
 - SameAs: the task is the same work as another listed task, from another source, which is the one kept (this one is hidden). Needs taskId and afterTaskId (the one kept).
 - Steps: replace a task's steps with these (any task's, from any source, but Anki's, whose steps are its cards), adding up to its minutes (for a new total, add a Minutes change with it too); dates within the task's. Needs taskId and steps (each with title, minutes, startDate and dueDate as YYYY-MM-DD or empty, where: anywhere or home, and anyOrder: true where it doesn't need the steps before it done first, as separate questions don't, false where it builds on them, as a draft after its plan does, and for the first; steps the student lists themselves stay in their order, false, unless they say the order doesn't matter). One step is the whole task in one go.
 - Rename: the task's name as the app shows it (its source keeps its own). Needs taskId and title (the new name).
+- DayOnly: a day kept for only some tasks' work: no other task's work is planned on it, and the time they don't use stays free. Their work is planned as usual, so the day may hold some of it or none: add OnDay for a task whose work should all go on that day. One change a task, each with taskId and date (a date, never a weekday). alsoAllow what else may come in: empty for nothing, "anki" for Anki's cards too, "anki-deadlines" for those and work that would otherwise miss its deadline; the day's latest DayOnly sets it for the whole day.
 
 Use the ids and event keys exactly as listed. Work out relative dates ("next Friday", "the weekend") from today; a weekday named alone ("on Saturday") means the next one, and only "every Saturday" or "on Saturdays" means each week. A stretch of days ("20 to 25 October", "this weekend") is one change per day, but for NoSchool, which takes the stretch whole. Leave every field a change type doesn't use empty: an empty string, minutes -1 (0 is a real value: a DayLimit's no work at all), and steps an empty list.
+When you keep a day for only some tasks and they haven't said what else may come in, make it with alsoAllow empty, ask in your reply whether to let in nothing else, Anki's cards, or those and work that would otherwise miss its deadline, and offer the three as suggested replies ("Nothing else", "Anki too", "Anki and deadlines"); their answer is one more DayOnly for that day, for one of its tasks, with its alsoAllow.
 A due date at a class's next lesson ("it's due next lesson", "next chemistry") is a DueBy with lesson the class, as the lessons' list names it (its subject or one of its names), and date and time empty: the app sets it to that lesson's start. Give lesson only for that; when it's refused, ask them the date.
 Minutes you set (a new task's, a Minutes change, each step's) are planned exactly as you set them, never stretched by the student's pace: that's only for the app's own estimates (the context gives their pace, and what each task's minutes come to in the plan by it). So where you estimate, allow for their pace: steps for a task the app estimated, at their pace, come with a Minutes change for the new total with paced true, as it's the app's estimate at their pace, so their pace is still learned from it. Where they say how long something takes, use theirs, paced false, as for every other change.
 3. Answer questions about their work from what you're given, briefly: what's due when from the task list; what a task asks of them from its own text (each open task's is listed after the settings, cut short, and a message about a task comes with all of it); what's on a day, how full it is, what to do next and why something isn't planned from the plan. The plan is what the app has them do and shows them, so say what it says rather than planning the work again yourself. The context gives the time now: a deadline later today is still ahead ("due at 16:00 today"), not past, and a slot marked past has gone by; say "overdue" only where the plan marks it so.

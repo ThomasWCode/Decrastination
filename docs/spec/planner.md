@@ -162,6 +162,7 @@ Told to Felix or as an instruction, or made by moving a piece on Day or in the c
 - Not kept: one whose day has gone, one before the task can start, and, while the task's real deadline is still to come, a day after its day or a time at or after it. Those last two are refused as they're given ("It's due before then", `InstructionRules.latePin`); on Day and in the move sheet, all of them are, and a time its piece wouldn't be over by the deadline too (`Planner.pinProblem` with the piece's minutes). Felix's and the calendar's times keep "at or after the deadline": one whose piece can't be over by it is laid at the next start that is.
 - Work already overdue takes any day or time from now (D-30): all of it on the day you gave, or its next piece at your time and the rest after it, none of it before. It's still overdue there, and says so.
 - A time past a plan's date makes the date moot: the work is undated from that time. A later day for all of it drops a time on another day, and keeps one on that day.
+- **A day for only some tasks** (`DayOnly`, D-115; `InstructionRules.onlyDays`, `Planner.Input.onlyDays`): one change a task, each with a date, never a weekday; together they're the day's tasks. No other task's work is planned on the day, and the time its tasks don't use stays free. Its tasks are planned as usual, so the day may hold some of their work or none; an `OnDay` for one of them as well puts its work there first, all of the day's time theirs. What else it lets in is its latest DayOnly's (`alsoAllow`): nothing; Anki's cards; or those and work that would otherwise miss its real deadline, given the day only where no other day before the deadline has room for it, tried last (`Planner`'s `shut`, `lastResort`). A task put on the day after it was first kept for others (an `OnDay` for it, an `AtTime` on it: dragged there, the move sheet, Felix, its event moved in Google Calendar) joins its tasks (Q13), and the move sheet and Felix's answer say so (`InstructionRules.joinLine`); one put there before is left out, its work going to other days. A day whose tasks are all finished stays free of work till its changes are taken back. Such a day counts as limited: overdue work doesn't pile into it but goes to the next day with time.
 
 ## Why a piece is on its day (PL-07)
 
@@ -179,6 +180,7 @@ Day shows "6 h left, 4 h free before Sat 09:00", with *What gives?* to ask Felix
 - The free time runs to the deadline itself (its day, where a window the work can use starts before it), as much of each day as the task can have; not to its last usable day, as the margin is the app's own.
 - Never for overdue work, undated work, a plan's date, or a deadline past the plan's reach.
 - Work not open yet is said too, where even its days from its opening, all their time its own, can't hold it.
+- Work a day kept for only other tasks pushes past its deadline is said too, the free time counted as the planner gives it (D-115).
 
 ## What's left out (IMP-P1-002)
 
