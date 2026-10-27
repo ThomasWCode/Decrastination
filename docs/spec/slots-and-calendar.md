@@ -117,6 +117,7 @@ Pick one you made at calendar.google.com: a calendar an app makes stays on the p
 ## Hand moves
 
 An event whose start is neither where the app last wrote it (`CalendarState.calendarWritten`) nor where the plan has it now is one you moved.
+One at a time the app itself wrote it at in the last 10 minutes (`SlotCalendarDiff.ECHO_MS`, the writer's own record, held while the app runs) isn't: the calendar's sync, still sending that write as the app wrote the next, brought it back. It's written back to the plan's time, unsaid (Q93), so a piece moved twice in a moment stays where it went last.
 `SlotCalendarDiff.judge` takes moves earliest first, each as your time for its task's next piece (an `AtTime` change, "Moved in the calendar", made at once, and kept to the minute as any time you give is, D-114), unless:
 - it's a busy time's: "a busy time is changed by asking Felix, or in Your changes" (D-117);
 - it's a break outside's: "a break outside is moved by asking Felix" (D-116; yours is the day grid's drag, within its day);
