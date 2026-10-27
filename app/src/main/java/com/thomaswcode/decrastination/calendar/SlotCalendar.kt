@@ -156,12 +156,12 @@ class SlotCalendar(private val context: Context) : CalendarProvider {
             return found
         }
 
-        /** Says a busy time's event you deleted was written again, and [why] (D-117). */
-        fun sayPutBack(context: Context, want: SlotCalendarDiff.Desired, why: String) {
+        /** Says a busy time's event you [deleted] or changed was put back, and [why] (D-117). */
+        fun sayPutBack(context: Context, want: SlotCalendarDiff.Desired, deleted: Boolean, why: String) {
             val notification = Notify.builder(context, Channels.CALENDAR)
                 .setSmallIcon(R.drawable.ic_focus)
                 .setContentTitle("“${want.title}” is back")
-                .setContentText("It was deleted, but $why, so it's back where it was.")
+                .setContentText(if (deleted) "It was deleted, but $why, so it's back where it was." else "It was changed, but $why, so it's back as it was.")
                 .setAutoCancel(true)
                 .build()
             AppGraph.get(context).notifier.post(NoticeId.CalendarMove, notification, want.uri)

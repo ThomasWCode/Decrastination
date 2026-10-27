@@ -23,6 +23,7 @@ import com.thomaswcode.decrastination.core.OutsideDay
 import com.thomaswcode.decrastination.core.Proposal
 import com.thomaswcode.decrastination.core.ProposalState
 import com.thomaswcode.decrastination.core.Rule
+import com.thomaswcode.decrastination.core.SlotState
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.core.TaskItem
@@ -167,6 +168,19 @@ class ConversationTest {
         val line = conversation.chatContext().plan.lines().single { it.startsWith("- Saturday 24 October 2026") }
         assertFalse("13:00 break" in line, line)
         assertTrue("(the 16:00 break)" in line, line)
+    }
+
+    @Test
+    fun `a break begun late is checked where it was laid, so none's added over it (D-113, D-116)`() = runBlocking {
+        FelixHarness(start = "2026-10-24T13:35").use { h ->
+            val saturday = LocalDate.parse("2026-10-24")
+            // The 13:00 break laid at 13:30 to 13:50, after a call: under way at 13:35.
+            h.stores.session.update { it.copy(slots = SlotState(saturday.toString(), mapOf("outside:780" to Fixtures.at("2026-10-24T13:30"), "outside:780-end" to Fixtures.at("2026-10-24T13:50")))) }
+            val breaks = h.planning.breaksOn(saturday)
+            assertEquals(13 * 60 + 30, breaks.at[780])
+            assertTrue(breaks.over(13 * 60 + 40))
+            assertTrue(780 in breaks.begun)
+        }
     }
 
     @Test

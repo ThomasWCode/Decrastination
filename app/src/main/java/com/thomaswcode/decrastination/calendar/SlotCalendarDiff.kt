@@ -92,8 +92,11 @@ object SlotCalendarDiff {
     /** A piece's event you moved: [existing] at your time, [desired] where the plan has it. */
     data class HandMove(val existing: Existing, val desired: Desired)
 
-    /** What a write changes; [restored], a busy time's event you deleted, inserted again among [inserts], to be said (D-117). */
-    data class Diff(val inserts: List<Desired>, val updates: List<Update>, val deletes: List<Existing>, val handMoves: List<HandMove>, val restored: List<Desired> = emptyList())
+    /**
+     * What a write changes; [restored], a busy time's event you deleted, inserted again among [inserts], and [reverted], one you
+     * changed, its start left (stretched, shortened, renamed), put back among [updates]: each to be said (D-117).
+     */
+    data class Diff(val inserts: List<Desired>, val updates: List<Update>, val deletes: List<Existing>, val handMoves: List<HandMove>, val restored: List<Desired> = emptyList(), val reverted: List<Desired> = emptyList())
 
     /** Your moves as judged: those taken as your time, and those written back, with why. */
     data class Judged(val taken: List<HandMove>, val refused: List<Pair<HandMove, String>>)
@@ -161,8 +164,11 @@ object SlotCalendarDiff {
         }
     }
 
-    /** [desired] against the app's [existing] events, [written] holding each URI's start as the app last wrote it. */
-    fun diff(desired: List<Desired>, existing: List<Existing>, written: Map<String, Long>): Diff {
+    /**
+     * [desired] against the app's [existing] events, [written] holding each URI's start as the app last wrote it; [edited] whether
+     * an event is in a version the app never wrote, so changed by hand.
+     */
+    fun diff(desired: List<Desired>, existing: List<Existing>, written: Map<String, Long>, edited: (Existing) -> Boolean = { false }): Diff {
         // Copies that have lost the app's marks: found by their words alone, and deleted.
         val copies = existing.filterNot { it.marked }
         val there = existing.filter { it.marked }.groupBy { it.uri }
@@ -171,6 +177,7 @@ object SlotCalendarDiff {
         val updates = mutableListOf<Update>()
         val moves = mutableListOf<HandMove>()
         val restored = mutableListOf<Desired>()
+        val reverted = mutableListOf<Desired>()
         for (want in desired) {
             val event = there[want.uri]?.first()
             when {
@@ -182,11 +189,15 @@ object SlotCalendarDiff {
                 // Moved by hand: not where it was written, nor where the plan has it now. A break outside's too, which the
                 // writer puts back (D-116).
                 written[want.uri]?.let { it != event.start } == true && event.start != want.start -> moves += HandMove(event, want)
-                event.start != want.start || event.end != want.end || event.title != want.title || event.description != want.description -> updates += Update(event, want)
+                event.start != want.start || event.end != want.end || event.title != want.title || event.description != want.description -> {
+                    updates += Update(event, want)
+                    // A busy time's event changed by hand, its start left: put back as it was, and said (D-117).
+                    if (want.busy && edited(event)) reverted += want
+                }
             }
         }
         // The app's events no longer a slot, a second copy of one that is, and those that lost its marks.
         val deletes = there.filterKeys { it !in wanted }.values.flatten() + there.filterKeys { it in wanted }.values.flatMap { it.drop(1) } + copies
-        return Diff(inserts, updates, deletes, moves, restored)
+        return Diff(inserts, updates, deletes, moves, restored, reverted)
     }
 }

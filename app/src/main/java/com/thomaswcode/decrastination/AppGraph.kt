@@ -267,7 +267,7 @@ class AppGraph private constructor(context: Context) {
             Briefing.replanToday(app)
         },
         busyTimes = { from, to -> InstructionRules.busyBlocks(instructions.value.applied, from, to) },
-        sayPutBack = { want, why -> SlotCalendar.sayPutBack(app, want, why) },
+        sayPutBack = { want, deleted, why -> SlotCalendar.sayPutBack(app, want, deleted, why) },
     )
 
     /** Today's slots as they pass: begun, or missed (PL-13). */

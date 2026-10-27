@@ -36,6 +36,7 @@ import kotlinx.coroutines.flow.combine
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import java.time.temporal.ChronoUnit
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -97,9 +98,23 @@ class Planning(
      */
     fun breaksOn(day: LocalDate, applied: List<Instruction> = instructions.value.applied): DayBreaks {
         val now = clock.now()
-        val today = Instant.ofEpochMilli(now).atZone(clock.zone()).toLocalDate()
-        val begun = if (day != today) emptySet() else session.value.slots.on(today).previous.filterValues { it <= now }.keys.mapNotNullTo(HashSet()) { Slot.outsideAt(it) ?: Slot.addedAt(it) }
-        return InstructionRules.dayBreaks(day, settings.value, SchoolDays.kindOf(day, school.value) == DayKind.Weekend, applied).copy(begun = begun)
+        val zone = clock.zone()
+        val breaks = InstructionRules.dayBreaks(day, settings.value, SchoolDays.kindOf(day, school.value) == DayKind.Weekend, applied)
+        if (day != Instant.ofEpochMilli(now).atZone(zone).toLocalDate()) return breaks
+        // Today's begun (D-113), by the starts kept: one under way at the start and end it was laid at, whatever the changes
+        // now say of it, so a change over it is refused as the planner would keep it.
+        val kept = session.value.slots.on(day).previous
+        fun minute(at: Long) = ChronoUnit.MINUTES.between(day.atStartOfDay(), Instant.ofEpochMilli(at).atZone(zone).toLocalDateTime()).toInt()
+        val begun = kept.mapNotNull { (key, start) ->
+            val name = (Slot.outsideAt(key) ?: Slot.addedAt(key))?.takeIf { start <= now } ?: return@mapNotNull null
+            Triple(name, start, kept[Slot.endKey(key)] ?: (start + settings.value.outsideBreakMin * 60_000L))
+        }
+        val underWay = begun.filter { (_, _, end) -> end > now }
+        return breaks.copy(
+            at = breaks.at + underWay.associate { (name, start, _) -> name to minute(start) },
+            ends = underWay.associate { (name, _, end) -> name to minute(end) },
+            begun = begun.mapTo(HashSet()) { it.first },
+        )
     }
 
     /** What's been learned of the app's estimates, the plans made by it: a task's steps' minutes as planned ([TaskItem.plannedStepMinutes]). */
