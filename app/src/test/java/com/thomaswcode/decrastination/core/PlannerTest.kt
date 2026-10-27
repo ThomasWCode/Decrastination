@@ -1783,6 +1783,18 @@ class PlannerTest {
     }
 
     @Test
+    fun `a pin kept past midnight keeps its time the next day from other work there`() {
+        // A half hour pinned at 23:50 on Tuesday runs to 00:20; Wednesday's window opens at midnight, and holds work put on it.
+        val days = mapOf(tuesday to schoolDay, tuesday.plusDays(1) to listOf(DayWindow(0, 60, WindowKind.Evening)))
+        val late = task("late", Fixtures.at("2026-10-18T23:59"), effort = 30).yours(atTime = Fixtures.at("2026-10-13T23:50"))
+        val early = task("early", Fixtures.at("2026-10-18T23:59"), effort = 30).yours(onDay = "2026-10-14")
+        val plan = Planner.plan(windowed(listOf(late, early), "2026-10-12T17:00", windows = days))
+        assertEquals(Fixtures.at("2026-10-13T23:50"), plan.bucket(tuesday)!!.slotOf(plan.chunksOf("teams:late").single())!!.start)
+        val wednesday = plan.bucket(tuesday.plusDays(1))!!.slotOf(plan.chunksOf("teams:early").single())!!
+        assertTrue(wednesday.start >= Fixtures.at("2026-10-14T00:20"), "${Instant.ofEpochMilli(wednesday.start)}")
+    }
+
+    @Test
     fun `a time you give counts all its minutes against a limit you set on its day (D-114)`() {
         // Tuesday limited to an hour: a half hour pinned at 23:00 leaves 30 of it, so a 45-minute piece put on Tuesday has no room there.
         val limited = windowed(emptyList(), "2026-10-12T17:00").copy(dayCaps = mapOf(tuesday to 60))

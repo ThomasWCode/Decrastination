@@ -361,7 +361,7 @@ object Planner {
         // before it, on its day or across midnight, nor a break outside under way today, and its piece is open by then and over
         // by its deadline that day; not one whose time and grace have gone by. Only these take of a day's free time just their
         // part within it; the rest go to the next free start, in it, as any piece does.
-        val exactPins: Set<String> = run {
+        val keptPins: List<Pair<String, Pair<Long, Long>>> = run {
             val rank = input.pinOrder.withIndex().associate { it.value to it.index }
             val length = input.settings.outsideBreakMin * 60_000L
             val breaks = input.previousSlots.mapNotNull { (key, start) ->
@@ -383,7 +383,14 @@ object Planner {
                 if (kept.any { it.start < pin.end && pin.start < it.end } || breaks.any { (start, end) -> start < pin.end && pin.start < end }) continue
                 kept += pin
             }
-            kept.map { it.key }.toSet()
+            kept.map { it.key to (it.start to it.end) }
+        }
+        val exactPins: Set<String> = keptPins.mapTo(HashSet()) { it.first }
+        // Each day's time taken by pins kept on a day before it that run past midnight into it, as busy time: its own
+        // slotting knows nothing else of them, and nothing else is laid there.
+        fun across(day: LocalDate): List<Busy> {
+            val (start, end) = day.atStartOfDay(zone).toInstant().toEpochMilli() to day.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
+            return keptPins.map { it.second }.filter { (from, to) -> from < start && to > start }.map { (_, to) -> Busy(start, minOf(to, end)) }
         }
         // Piece [i] of [item] on [day] where it's a pin kept at its time there: its minutes outside the day's free time, and
         // those within it at school and in the evening (D-114).
@@ -961,7 +968,7 @@ object Planner {
                 .sortedWith(compareBy({ rank[pinTask[it.key]] ?: Int.MAX_VALUE }, { position[it.key] ?: Int.MAX_VALUE }))
                 .associate { it.key to it.value }
             val (slots, unslotted) = Slotter.slot(
-                day, chunks, windows, input.busy + input.hardBusy, pins,
+                day, chunks, windows, input.busy + input.hardBusy + across(day), pins,
                 previous = if (day == today) input.previousSlots else emptyMap(),
                 now = input.now, zone = zone, settings = input.settings,
                 outside = (input.dayKinds[day] ?: DayKind.of(day)) == DayKind.Weekend,
@@ -972,7 +979,7 @@ object Planner {
                 if (chunk.hard && due.toLocalDate() == day) due.hour * 60 + due.minute else null
             }
             // Today's free times at school, for two of Felix's steps to be rebalanced to fit one (D-110).
-            val gaps = if (day == today) Slotter.schoolGaps(day, windows, input.busy + input.hardBusy, slots, input.now, zone, input.settings) else emptyList()
+            val gaps = if (day == today) Slotter.schoolGaps(day, windows, input.busy + input.hardBusy + across(day), slots, input.now, zone, input.settings) else emptyList()
             DayBucket(day, shown, chunks, slots, unslotted, gaps)
         }
         // A task's runs left out for the same reason are one line: their pieces and minutes together, the soonest opening.
