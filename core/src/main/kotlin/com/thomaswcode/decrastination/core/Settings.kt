@@ -29,6 +29,8 @@ data class Settings(
     val felixSearches: Boolean = true,
     /** The screens' first-run hints you've put away (UI-17), by name. */
     val hintsSeen: List<String> = emptyList(),
+    /** The Day's grid: the height of an hour as last pinched (4.6.0), 40 to 120. */
+    val dayHourDp: Int = 60,
     /** When the daily Anki quota is due (21:30, D-9). */
     val ankiDeadlineMin: Int = 21 * 60 + 30,
 
@@ -133,8 +135,8 @@ data class Settings(
     val armed: Boolean = false,
     /** How long a change that loosens blocking waits, once armed. */
     val loosenDelayHours: Int = 24,
-    /** The shape this is in ([Migration]): raised with each change of it, a migration bringing older files to it. 2 from 4.3.0 ([gmailFinishes]). */
-    val version: Int = 2,
+    /** The shape this is in ([Migration]): raised with each change of it, a migration bringing older files to it. 2 from 4.3.0 ([gmailFinishes]), 3 from 4.6.0 ([dayHourDp]). */
+    val version: Int = 3,
 )
 
 /** A stretch of a day, in minutes after midnight; one that ends before it starts crosses midnight. */

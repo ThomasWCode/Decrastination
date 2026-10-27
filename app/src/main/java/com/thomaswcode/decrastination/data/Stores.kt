@@ -36,7 +36,7 @@ class Stores(
 
     // A file that can't be read at all starts armed while the device admin is on, as only arming
     // turns it on: a bad file never disarms protection (IMP-P1-003).
-    val settings = store("settings.json", Settings.serializer(), ::Settings, unreadable = { Settings(armed = armedIfUnreadable()) }, migrations = listOf(SettingsMigration.SETTINGS))
+    val settings = store("settings.json", Settings.serializer(), ::Settings, unreadable = { Settings(armed = armedIfUnreadable()) }, migrations = listOf(SettingsMigration.SETTINGS, ZoomMigration.SETTINGS))
     val secrets = SecretStore(File(dir, "secrets.bin"), cipher, clock)
     val runtime = store("runtime.json", RuntimeState.serializer(), ::RuntimeState, migrations = listOf(ChatMigration.RUNTIME, RuntimeSplit.RUNTIME))
 

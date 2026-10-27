@@ -21,6 +21,7 @@ import com.thomaswcode.decrastination.data.SettingsMigration
 import com.thomaswcode.decrastination.data.MemoryMigration
 import com.thomaswcode.decrastination.data.StepOrderMigration
 import com.thomaswcode.decrastination.data.TasksMigration
+import com.thomaswcode.decrastination.data.ZoomMigration
 import com.thomaswcode.decrastination.notify.NoticeId
 import com.thomaswcode.decrastination.notify.Notices
 import java.io.File
@@ -47,7 +48,7 @@ class OutboxTest {
     private val clock = FixedClock(Fixtures.at("2026-10-19T18:00"), Fixtures.LONDON)
     private val chat = JsonStore(File(dir, "chat.json"), ChatState.serializer(), ::ChatState, migrations = listOf(ChatMigration.CHAT, TasksMigration.CHAT, FelixStore.CHAT, FelixStore.CHAT_PIECES, MemoryMigration.CHAT, StepOrderMigration.CHAT, OnlyMigration.CHAT, OutsideMigration.CHAT))
     private val archive = ChatArchiveStore(dir)
-    private val settings = JsonStore(File(dir, "settings.json"), Settings.serializer(), ::Settings, migrations = listOf(SettingsMigration.SETTINGS))
+    private val settings = JsonStore(File(dir, "settings.json"), Settings.serializer(), ::Settings, migrations = listOf(SettingsMigration.SETTINGS, ZoomMigration.SETTINGS))
     private var onScreen = false
     private var shown = true
     /** What his notification showed as each was made, with the chat as it was then. */

@@ -1,0 +1,69 @@
+{
+    "messages": [
+        {
+            "id": "arch-ask",
+            "from": "You",
+            "text": "What's due before the holidays?",
+            "at": 1786381200000,
+            "about": {
+                "taskId": null,
+                "taskTitle": null,
+                "eventKey": null,
+                "eventTitle": null,
+                "eventStart": null,
+                "day": null
+            },
+            "kind": "Chat",
+            "byApp": false,
+            "replyTo": null,
+            "pieceKey": null,
+            "nextCheckAt": null,
+            "asks": [],
+            "opens": null,
+            "proposals": [],
+            "answeredAt": 1786381260000,
+            "note": null,
+            "stuck": false,
+            "memoryEdits": [],
+            "acts": [],
+            "suggestedReplies": [],
+            "searched": [],
+            "sources": [],
+            "reminderId": null
+        },
+        {
+            "id": "arch-answer",
+            "from": "Claude",
+            "text": "the reading log and the lab write-up, both by friday.",
+            "at": 1786381260000,
+            "about": {
+                "taskId": null,
+                "taskTitle": null,
+                "eventKey": null,
+                "eventTitle": null,
+                "eventStart": null,
+                "day": null
+            },
+            "kind": "Chat",
+            "byApp": false,
+            "replyTo": null,
+            "pieceKey": null,
+            "nextCheckAt": null,
+            "asks": [],
+            "opens": null,
+            "proposals": [],
+            "answeredAt": null,
+            "note": null,
+            "stuck": false,
+            "memoryEdits": [],
+            "acts": [],
+            "suggestedReplies": [
+                "ok"
+            ],
+            "searched": [],
+            "sources": [],
+            "reminderId": null
+        }
+    ],
+    "version": 8
+}

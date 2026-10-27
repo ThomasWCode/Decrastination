@@ -32,6 +32,7 @@ object SettingsLimits {
     val FELIX_CHECK_MIN = 5..240
     const val MAX_NAME = 60
     const val MAX_LUNCH_WINDOWS = 4
+    val DAY_HOUR_DP = 40..120
 
     /** How long a loosening change may wait: the screen doesn't set it, so it's held to what makes sense. */
     val LOOSEN_DELAY_HOURS = 1..24 * 14
@@ -65,6 +66,7 @@ object SettingsLimits {
             check("Felix's name and line", felixName.isNotBlank() && felixName.length <= MAX_NAME && felixLine.isNotBlank() && felixLine.length <= MAX_FELIX_LINE)
             check("when Felix asks and checks again", felixGraceMin in FELIX_GRACE_MIN && felixDefaultCheckMin in FELIX_CHECK_MIN)
             check("the hints seen", hintsSeen.size <= MAX_HINTS && hintsSeen.all { it.length <= MAX_NAME })
+            check("the Day's zoom", dayHourDp in DAY_HOUR_DP)
             check("an empty day's free time", freeAllowanceMin in FREE_ALLOWANCE_MIN)
             check("the calendars", (calendarWriteId == null || calendarWriteId > 0) && calendarsExcluded.size <= MAX_CALENDARS_EXCLUDED && calendarsExcluded.all { it > 0 })
             check("the box length", boxMin in BOX_MIN)

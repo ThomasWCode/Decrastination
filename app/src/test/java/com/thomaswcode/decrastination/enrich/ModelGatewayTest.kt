@@ -23,6 +23,7 @@ import com.thomaswcode.decrastination.data.RuntimeSplit
 import com.thomaswcode.decrastination.data.RuntimeState
 import com.thomaswcode.decrastination.data.StepOrderMigration
 import com.thomaswcode.decrastination.data.TaskState
+import com.thomaswcode.decrastination.data.ZoomMigration
 import com.thomaswcode.decrastination.data.TasksMigration
 import java.io.File
 import java.net.UnknownHostException
@@ -48,7 +49,7 @@ import kotlinx.coroutines.test.runTest
 class ModelGatewayTest {
     private val dir: File = Files.createTempDirectory("gateway").toFile()
     private val clock = FixedClock(Fixtures.at("2026-10-14T18:00"), Fixtures.LONDON)
-    private val settings = JsonStore(File(dir, "settings.json"), Settings.serializer(), { Settings(aiEnabled = true, aiKeyActive = true) }, migrations = listOf(SettingsMigration.SETTINGS))
+    private val settings = JsonStore(File(dir, "settings.json"), Settings.serializer(), { Settings(aiEnabled = true, aiKeyActive = true) }, migrations = listOf(SettingsMigration.SETTINGS, ZoomMigration.SETTINGS))
     private val runtime = JsonStore(File(dir, "runtime.json"), RuntimeState.serializer(), ::RuntimeState, migrations = listOf(ChatMigration.RUNTIME, RuntimeSplit.RUNTIME))
     private val model = JsonStore(File(dir, "model.json"), ModelState.serializer(), ::ModelState)
     private val tasks = JsonStore(File(dir, "tasks.json"), TaskState.serializer(), ::TaskState, migrations = listOf(TasksMigration.TASKS, StepOrderMigration.TASKS))
