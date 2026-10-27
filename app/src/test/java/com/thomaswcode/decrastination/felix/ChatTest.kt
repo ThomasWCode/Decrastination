@@ -603,9 +603,9 @@ class ChatTest {
         )
         val placed = mapOf("$today/outside+:1320" to By.You, "$today/outside+:1380" to By.You, "$saturday/outside:780" to By.Felix, "$saturday/outside+:1020" to By.You)
         val text = ChatPrompts.plan(plan.copy(buckets = plan.buckets.map { b -> slots[b.date]?.let { b.copy(slots = it) } ?: b }), LONDON, placed = placed)
-        assertTrue("Today's slots (the times its pieces and breaks outside are laid at):\n- 23:00–23:20 Outside, a break added by them [ahead]\n" in text, text)
+        assertTrue("Today's slots (the times its pieces and breaks outside are laid at):\n- 23:00–23:20 Outside, the 23:00 break, added by them [ahead]\n" in text, text)
         assertFalse("22:00–22:20" in text, text)
-        assertTrue("\n- Saturday 17 October 2026: nothing planned (315 min of working time); breaks outside: 09:30 (the 09:30 break), 14:30 (the 13:00 break, moved by you), 17:00 (a break added by them)\n" in text, text)
+        assertTrue("\n- Saturday 17 October 2026: nothing planned (315 min of working time); breaks outside: 09:30 (the 09:30 break), 14:30 (the 13:00 break, moved by you), 17:00 (the 17:00 break, added by them)\n" in text, text)
         // Past the week: not said.
         assertTrue("\n- Tuesday 20 October 2026: nothing planned (315 min of working time)\n" in text, text)
     }

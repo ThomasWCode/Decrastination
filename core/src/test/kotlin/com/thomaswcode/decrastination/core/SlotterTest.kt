@@ -451,6 +451,28 @@ class SlotterTest {
     }
 
     @Test
+    fun `an added break moved is laid where it was moved, still named by its own time (D-116)`() {
+        val given = OutsideDay(added = listOf(minute("17:00")), moved = mapOf(minute("17:00") to minute("18:00")))
+        val (slots, _) = slot(tuesday, emptyList(), listOf(w("16:45", "22:00")), given = given)
+        assertEquals(listOf("outside 18:00–18:20"), slots.described())
+        assertEquals("outside+:1020", slots.single().key)
+    }
+
+    @Test
+    fun `a break a pin given later put after its time stays till it begins, however late the replan (D-116)`() {
+        val evening = listOf(w("16:45", "22:00"))
+        val call = chunk("call")
+        val pins = mapOf(call.key to Fixtures.at("2026-10-13T17:00"))
+        val given = OutsideDay(added = listOf(minute("17:00")))
+        // At 16:50: the call kept at 17:00 (the planner's word), the break after it.
+        val first = slot(tuesday, listOf(call), evening, now = "2026-10-13T16:50", pins = pins, given = given, exact = setOf(call.key)).first
+        assertEquals(listOf("call 17:00–17:30", "outside 17:30–17:50"), first.described())
+        // At 17:25, its own time over: still there after the call, not dropped.
+        val later = slot(tuesday, listOf(call), evening, now = "2026-10-13T17:25", pins = pins, previous = first.associate { it.key to it.start }, given = given, exact = setOf(call.key)).first
+        assertEquals(listOf("call 17:00–17:30", "outside 17:30–17:50"), later.described())
+    }
+
+    @Test
     fun `a break placed under a pin given after it goes to the first free time from its own, and over one given before it keeps its time (D-116)`() {
         val day = listOf(w("08:30", "22:30"))
         val given = OutsideDay(moved = mapOf(780 to minute("14:30")))

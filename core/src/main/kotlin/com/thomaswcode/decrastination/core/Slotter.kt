@@ -77,16 +77,21 @@ object Slotter {
         val underWay = begun.filterValues { (_, end) -> end > now }.map { (minute, span) -> breakOf(span.first, span.second, minute, added = false) } +
             begunAdded.filterValues { (_, end) -> end > now }.map { (minute, span) -> breakOf(span.first, span.second, minute, added = true) }
         // Placed by you or Felix (D-116), not yet begun: a settings break moved, laid at its time to the minute, on a day
-        // that has them; one added, at its own, any day, but not at a settings break's time on a day with them. Over busy
+        // that has them; one added, at its own or where it was moved, any day, but not at a settings break's time on a day
+        // with them. Over busy
         // time or outside the windows kept, never given up for work, nor held to 18:00; not once its time is over.
         val times = settings.outsideTimes.distinct()
         val moved = if (!outside) emptyList() else given.moved.filterKeys { it in times && it !in begun }.map { (own, minute) ->
             at(date, minute, zone).let { breakOf(it, it + length, own, added = false) }
         }
-        val added = given.added.distinct().filter { it !in begunAdded && !(outside && it in times) }.map { minute -> at(date, minute, zone).let { breakOf(it, it + length, minute, added = true) } }
-        val placed = (moved + added).filter { it.end > now }
-        // Those a pin given later covers (the planner's word): at the first free start at or after their time, laid below.
-        val (keptPlaced, shifted) = placed.partition { exact == null || "$date/${it.key}" in exact }
+        val added = given.added.distinct().filter { it !in begunAdded && !(outside && it in times) }.map { minute ->
+            at(date, given.moved[minute] ?: minute, zone).let { breakOf(it, it + length, minute, added = true) }
+        }
+        // Not once its time is over, but where a pin given later put it after that and it's still to come (its kept start).
+        val placed = (moved + added).filter { it.end > now || (previous[it.key] ?: 0L) > now }
+        // Those a pin given later covers (the planner's word), and those it put after their time: at the first free start at or
+        // after their time, laid below.
+        val (keptPlaced, shifted) = placed.partition { (exact == null || "$date/${it.key}" in exact) && it.end > now }
         val free = intervals(date, windows, busy, now, zone, settings.minSchoolSlotMin)
         for (slot in underWay + keptPlaced) carve(free, slot.start, slot.end)
         // Your pins laid at their time (D-114): the breaks still to come are laid around them.

@@ -375,7 +375,7 @@ object Planner {
             val breaks = begun.map { (key, start) -> start to (input.previousSlots[Slot.endKey(key)] ?: (start + length)) }.filter { (_, end) -> end > input.now }
             class Pin(val key: String, val task: String, val start: Long, val end: Long, val opens: Long?, val due: Long?, val grace: Long = Slotter.GRACE_MS)
             // The breaks placed (D-116), as the slotter lays them: a settings break moved on a day that has them, one added
-            // but at a settings break's time on such a day, neither begun; over at its end, with no grace.
+            // (where it was moved) but at a settings break's time on such a day, neither begun; over at its end, with no grace.
             val times = input.settings.outsideTimes.distinct()
             val placed = days.flatMap { day ->
                 val given = input.outsideDays[day] ?: return@flatMap emptyList()
@@ -386,7 +386,8 @@ object Planner {
                     Pin("$day/${Slot.OUTSIDE}$own", "${Slot.OUTSIDE}$day:$own", at(minute), at(minute) + length, null, null, grace = 0)
                 }
                 val added = given.added.distinct().filter { !begun("${Slot.ADDED}$it") && !(withBreaks && it in times) }.map { minute ->
-                    Pin("$day/${Slot.ADDED}$minute", "${Slot.ADDED}$day:$minute", at(minute), at(minute) + length, null, null, grace = 0)
+                    val start = at(given.moved[minute] ?: minute)
+                    Pin("$day/${Slot.ADDED}$minute", "${Slot.ADDED}$day:$minute", start, start + length, null, null, grace = 0)
                 }
                 moved + added
             }

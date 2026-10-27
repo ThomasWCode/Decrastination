@@ -169,15 +169,15 @@ object InstructionAnswers {
                 val date = day(g.copy(weekday = null), now)?.first ?: return null
                 Change(type, taskId = id, date = date, alsoAllow = g.alsoAllow.trim().takeIf { it == InstructionRules.ALSO_ANKI || it == InstructionRules.ALSO_DEADLINES })
             }
-            // A day's breaks outside (D-116): on a date, never a weekday; one the day has, by the time it's named by, not begun
-            // (D-113); a time today not gone; a break moved or added over none of the day's others, nor added at the time
-            // another's named by.
+            // A day's breaks outside (D-116): on a date, never a weekday; one the day has, by the time it's named by (one of its
+            // own taken off, moved to put it back), not begun (D-113); a time today not gone; a break moved or added over none of
+            // the day's others, nor added at a time one is named by.
             ChangeType.OutsideAt -> {
                 val date = day(g.copy(weekday = null), now)?.first ?: return null
                 val own = minute(g.outsideTime) ?: return null
                 val start = minute(g.time)?.takeIf { !gone(date, it, now, zone) } ?: return null
                 val breaks = breaksOn(LocalDate.parse(date))
-                if (own !in breaks.at || own in breaks.begun || breaks.over(start, own)) return null
+                if ((own !in breaks.at && own !in breaks.reserved) || own in breaks.begun || breaks.over(start, own)) return null
                 Change(type, date = date, outsideMin = own, startMin = start)
             }
             ChangeType.NoOutside -> {
@@ -191,7 +191,7 @@ object InstructionAnswers {
                 val date = day(g.copy(weekday = null), now)?.first ?: return null
                 val start = minute(g.time)?.takeIf { !gone(date, it, now, zone) } ?: return null
                 val breaks = breaksOn(LocalDate.parse(date))
-                if (start in breaks.at || breaks.over(start)) return null
+                if (start in breaks.at || start in breaks.reserved || breaks.over(start)) return null
                 Change(type, date = date, startMin = start)
             }
             // The same work as another listed task (DX-15), which is kept.
@@ -267,20 +267,20 @@ object InstructionAnswers {
         val start = minute(g.time)
         return when {
             g.type != "OutsideAdded" && g.outsideTime.isNotBlank() && own == null -> "the break's time doesn't read"
-            g.type != "OutsideAdded" && own != null && own !in breaks.at -> "there's no ${g.outsideTime.trim().take(5)} break outside that day"
+            g.type != "OutsideAdded" && own != null && own !in breaks.at && !(g.type == "OutsideAt" && own in breaks.reserved) -> "there's no ${g.outsideTime.trim().take(5)} break outside that day"
             g.type != "OutsideAdded" && own != null && own in breaks.begun -> "that break outside has begun, and is kept as it is"
             g.type == "OutsideAt" && g.outsideTime.isBlank() -> "it doesn't say which break outside"
             g.type != "NoOutside" && start == null -> "the time doesn't read"
             g.type != "NoOutside" && start != null && gone(date, start, now, zone) -> "that time's gone"
             g.type != "NoOutside" && start != null && breaks.over(start, own ?: -1) -> "it would be over another break outside"
-            g.type == "OutsideAdded" && start != null && start in breaks.at -> "that day's own break outside at that time was moved: move it back instead"
+            g.type == "OutsideAdded" && start != null && (start in breaks.at || start in breaks.reserved) -> "a break outside of that day's is named by that time: move or put back that one instead"
             else -> "a date, time or number in it is out of range"
         }
     }
 
-    /** Whether [minute] of [date] (YYYY-MM-DD) has gone by at [now]. */
+    /** Whether [minute] of [date] (YYYY-MM-DD) has gone by at [now]: the day's clock time, as the planner lays it, on a day the clocks change too. */
     private fun gone(date: String, minute: Int, now: Long, zone: ZoneId): Boolean =
-        LocalDate.parse(date).atStartOfDay(zone).plusMinutes(minute.toLong()).toInstant().toEpochMilli() < now
+        LocalDate.parse(date).atStartOfDay().plusMinutes(minute.toLong()).atZone(zone).toInstant().toEpochMilli() < now
 
     /** A day's date (YYYY-MM-DD) or weekday (1–7), one of the two. */
     private fun day(g: Given, now: Long): Pair<String?, Int?>? {

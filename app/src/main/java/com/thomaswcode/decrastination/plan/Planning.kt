@@ -152,12 +152,13 @@ class Planning(
                 onlyDays = InstructionRules.onlyDays(applied, today, reach),
                 // The tasks given a time and the breaks outside moved or added (D-116), the latest given first (D-114): the Day's
                 // moves, the move sheet, Felix's and the calendar's hand moves are all changes of yours or his.
-                pinOrder = applied.flatMap { it.changes }.mapNotNull { c ->
+                pinOrder = applied.flatMap { it.changes }.flatMap { c ->
                     when (c.type) {
-                        ChangeType.AtTime -> c.taskId
-                        ChangeType.OutsideAt -> c.date?.let { "${Slot.OUTSIDE}$it:${c.outsideMin}" }
-                        ChangeType.OutsideAdded -> c.date?.let { day -> c.startMin?.let { "${Slot.ADDED}$day:$it" } }
-                        else -> null
+                        ChangeType.AtTime -> listOfNotNull(c.taskId)
+                        // A move names a settings break or one added by its own time: whichever the day has.
+                        ChangeType.OutsideAt -> c.date?.let { listOf("${Slot.OUTSIDE}$it:${c.outsideMin}", "${Slot.ADDED}$it:${c.outsideMin}") }.orEmpty()
+                        ChangeType.OutsideAdded -> listOfNotNull(c.date?.let { day -> c.startMin?.let { "${Slot.ADDED}$day:$it" } })
+                        else -> emptyList()
                     }
                 }.reversed().distinct(),
                 outsideDays = InstructionRules.outsideDays(applied, today, reach),

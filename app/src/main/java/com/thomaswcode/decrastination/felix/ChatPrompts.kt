@@ -830,7 +830,7 @@ object ChatPrompts {
         // A break outside by its own time, and who moved or added it (D-116): yours or theirs.
         fun breakName(day: LocalDate, s: Slot): String {
             val by = placed["$day/${s.key}"]?.let { if (it == By.Felix) "you" else "them" }
-            return if (s.outsideAdded) "a break added" + (by?.let { " by $it" } ?: "") else "the ${hhmm(s.outsideAt)} break" + (by?.let { ", moved by $it" } ?: "")
+            return "the ${hhmm(s.outsideAt)} break" + if (s.outsideAdded) ", added" + (by?.let { " by $it" } ?: "") else by?.let { ", moved by $it" } ?: ""
         }
         // Today's slots at their times, each gone by, under way or to come (AI-13), so a time today isn't taken for past; its
         // breaks outside among them, under way or to come, each named by its own time (D-116), so a change to one names it.

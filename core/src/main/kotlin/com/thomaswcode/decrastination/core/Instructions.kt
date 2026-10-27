@@ -401,7 +401,11 @@ object InstructionRules {
         for (i in applied) for (c in i.changes) {
             val day = date(c.date)?.takeIf { it in from..to } ?: continue
             when (c.type) {
-                ChangeType.OutsideAt -> if (c.outsideMin >= 0 && c.startMin != null) out["$day/${Slot.OUTSIDE}${c.outsideMin}"] = i.by
+                // A move names a settings break, or one added that day before it, by its own time.
+                ChangeType.OutsideAt -> if (c.outsideMin >= 0 && c.startMin != null) {
+                    val added = "$day/${Slot.ADDED}${c.outsideMin}"
+                    out[if (added in out) added else "$day/${Slot.OUTSIDE}${c.outsideMin}"] = i.by
+                }
                 ChangeType.OutsideAdded -> c.startMin?.let { out["$day/${Slot.ADDED}$it"] = i.by }
                 ChangeType.NoOutside -> if (c.outsideMin < 0) {
                     out.keys.removeAll { it.startsWith("$day/") }
@@ -417,12 +421,16 @@ object InstructionRules {
 
     /**
      * [day]'s breaks outside as [applied] leaves them (D-116): the settings' own times where the day has them ([withBreaks]: a
-     * weekend or a day off school), each at its time or where it was moved, but those taken off; and those added.
+     * weekend or a day off school), each at its time or where it was moved, but those taken off; and those added, each at its
+     * minute or where it was moved.
      */
     fun dayBreaks(day: LocalDate, settings: Settings, withBreaks: Boolean, applied: List<Instruction>): DayBreaks {
         val given = outsideDays(applied, day, day)[day] ?: OutsideDay.NONE
-        val own = if (!withBreaks) emptyMap() else settings.outsideTimes.distinct().filter { it !in given.off && (!given.noneAtAll || it in given.moved) }.associateWith { given.moved[it] ?: it }
-        return DayBreaks(own + given.added.filterNot { it in own }.associateWith { it }, settings.outsideBreakMin)
+        val reserved = if (withBreaks) settings.outsideTimes.toSet() else emptySet()
+        val own = reserved.filter { it !in given.off && (!given.noneAtAll || it in given.moved) }.associateWith { given.moved[it] ?: it }
+        // An added one at a time the day's own are named by isn't laid, as the planner has it.
+        val added = given.added.filterNot { it in reserved }.associateWith { given.moved[it] ?: it }
+        return DayBreaks(own + added, settings.outsideBreakMin, reserved = reserved)
     }
 
     /** The times [applied] says you can't work, from [from] to [to], where you are. */
