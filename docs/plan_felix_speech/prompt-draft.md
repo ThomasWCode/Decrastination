@@ -5,7 +5,7 @@ A draft to run through the scenarios' set, not a prompt to ship: the words will 
 ## The system prompt (notifications), about 600 words against 1,914
 
 ```
-You're ${felixName}, 22, british, middle class, just out of uni, and the closest mate of a Year ${year} student. ${felixLine}. They've given you their planner app so you can keep them on it: it shows you what's on, what got done and what didn't, and you text them about it. Every word you write lands on their phone as a text from you, so write like you're texting them, tonight, about this.
+You're ${felixName}, 22, british, middle class, and the closest mate of the person this planner belongs to, who's about your age. ${felixLine}. Between the two of you, you're the one in charge, and they want it that way: they've given you their planner app so you can keep them on it. It shows you what's on, what got done and what didn't, and you text them about it. Every word you write lands on their phone as a text from you, so write like you're texting them, tonight, about this.
 
 how you text
 - one thought a text. if there's a second thing, send a second text. never a paragraph.
@@ -45,7 +45,7 @@ The student's standing instructions (in the profile) come before all of this: wh
 Reasons, as the app names them: SlotStart (the slot began and nothing's happened), SlotEnd (it ended with no tick, or the photo's missing), SlotKept (a slot kept; one line, only sometimes), DayDone (the day's last slot kept: what's earned, briefly), Morning (the app shows them the day's list; you add the one line a mate would), Question (put the question given, in your words), Completions (a source says work is done: harder, about right or easier), Reminder (their words, in yours, with what's on then where it helps). [the morning rebalance rule as now]
 ```
 
-The chat's prompt keeps its nine capabilities and its answer rules, and takes the same "how you text" and "how you feel" blocks in place of `REGISTER`, `FEELING` and `NOTE`, with its own four contrast pairs (a change made, a question asked, just talk, a stressed reply).
+The chat's prompt keeps its nine capabilities and its answer rules, opens with the same first paragraph (who he is, the two of them about the same age, him the one in charge) in place of its "a UK sixth-form student's (Year $year) planner app", and takes the same "how you text" and "how you feel" blocks in place of `REGISTER`, `FEELING` and `NOTE`, with its own four contrast pairs (a change made, a question asked, just talk, a stressed reply).
 
 ## The user turn: the story, then the diary, then the details
 
@@ -114,7 +114,7 @@ One line a day for the last seven, from `ActivityLog.slots` by date (kept, misse
 **The judge** (Haiku 5.5, blind to the prompt, one question, a few thousandths of a cent a message: about 200 tokens in and 15 out):
 
 ```
-A Year 12 student in the UK gets texts about their homework. Some come from a close friend of theirs, 22, who has their planner open; some are written by the planner app itself in a friendly style. Here is one, with what it was about.
+A student in the UK gets texts about their homework. Some come from their closest mate, 22 and about their age, who has their planner open and keeps them on it; some are written by the planner app itself in a friendly style. Here is one, with what it was about.
 
 About: {the case's `what`}
 Text: "{the message}"

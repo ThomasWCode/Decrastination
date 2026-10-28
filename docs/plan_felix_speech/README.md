@@ -137,6 +137,7 @@ Each stands until the owner says otherwise; the proposal and why, so the answer 
 | D-57: lower case, a little slang | | Kept as the default; a mirror-the-owner variant tested blind | Style matching |
 | One message a look | | Up to two texts a look, sent as one notification | Texting's shape |
 | 4.7.0's harness: the hand-kept ban lists as what decides a run | | Kept for regressions; the judge and the counted measures decide | The lists only know what they were told |
+| 4.7.0 plan, answers §The age: "an older close friend is someone who'd naturally be the one in charge, so the age suits the imbalance" | `REGISTER`'s "early twenties"; both prompts name the student's year | He stays 22, and the two of them are about the same age; the imbalance is the relationship's (he's the one in charge, and they want it that way), not his seniority | Decided, the owner's word, 28 Oct: an older friend of a sixth-former reads as an older brother, and the dynamic wanted is between two of an age |
 
 ## What stays
 
