@@ -12,6 +12,7 @@ A personal, sideloaded app for one phone, version 4.6.2.
 | [`docs/decisions.md`](docs/decisions.md) | The owner's decisions that govern how the app is developed, numbered |
 | [`docs/development.md`](docs/development.md) | How changes are made, reviewed, checked on the phone and shipped; the public repository's rules |
 | [`docs/plan_v4/`](docs/plan_v4/README.md) | The 4.x plan's record (done, Oct 2026): what was built release by release and what's left to check; the structure the code has and its conventions; the stores and their migrations; the owner's answers to the plan's questions and to those asked since, from the timer (4.4.0) to Felix's moods (4.7.0) |
+| [`docs/plan_felix_speech/`](docs/plan_felix_speech/README.md) | The review of how to make Felix sound like a person rather than an app (28 Oct 2026), not yet built: the diagnosis, the ideas ranked and evaluated, a draft of the new briefing, the evidence from the code and the runs, and the research |
 | [`docs/astra-review-4.3.13/`](docs/astra-review-4.3.13/README.md) | An outside review of 4.3.13 (23 Oct 2026), each finding with what became of it |
 | [`fixtures/README.md`](fixtures/README.md) | The test fixtures and where they came from |
 
