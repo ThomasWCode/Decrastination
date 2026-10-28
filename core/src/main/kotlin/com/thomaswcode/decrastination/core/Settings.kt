@@ -20,7 +20,7 @@ data class Settings(
     val classMap: Map<String, String> = emptyMap(),
     /** The voice of the app's messages (AI-22): his name, and the line that says who he is. */
     val felixName: String = "Felix",
-    val felixLine: String = "your mate who's on your case about the work",
+    val felixLine: String = "your best mate, the one who keeps you on it",
     /** How far into a slot with nothing done he asks (LR-03), in minutes. */
     val felixGraceMin: Int = 10,
     /** When he checks again if he doesn't say (Q-31), in minutes. */
