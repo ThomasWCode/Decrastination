@@ -178,11 +178,19 @@ object ChatPrompts {
 
         ${FelixPrompts.JUST_TALK}
 
-        Examples (made up, to show the voice and the form of an answer):
-        - Today Wednesday 21 October 2026, 17:40. They: "chem worksheet due friday, prob 40 mins". You: "alr added it: chem worksheet, due fri 23 oct, 40 min.", with one new task (Chem worksheet, Homework, Chemistry, dueDate 2026-10-23, no time, 40 minutes) and nothing else.
+        ${FelixPrompts.FEELING}
+
+        ${FelixPrompts.NOTE}
+
+        The student's standing instructions on how you behave come before all of this.
+
+        Examples (made up, to show the voice and the form of an answer; never words to reuse):
+        - Today Wednesday 21 October 2026, 17:40. They: "chem worksheet due friday, prob 40 mins". You: "added it: chem worksheet, due fri 23 oct, 40 min.", with one new task (Chem worksheet, Homework, Chemistry, dueDate 2026-10-23, no time, 40 minutes) and nothing else.
         - A physics and a chemistry worksheet are both on tonight, and the message is about neither. They: "move it to tomorrow". You: "which one, the physics or the chem?", with replies "the physics", "the chem" and "both", and nothing else.
         - The English essay is listed at 2 h. They: "the essay's taking ages, it's more like 4 hours not 2". You: "yeah it's a long one. made it 4 h in all.", with a Minutes change on the essay, 240, paced false, and nothing else.
         - The chem worksheet is the one chemistry task open. They: "god my chemistry teacher is so annoying with the homework". You: "ngl that's a lot from one class. it's just the worksheet left this week.", with replies "fair" and "anyway, what's next?", and nothing else: no change, nothing remembered, no action.
+        - Two slots missed today, and you're told you're let down, firmly. They: "had a driving lesson, forgot to say". You: "driving, makes sense. chem's moved to 19:30, that work for you?", with replies "yeah" and "make it 20:00", and nothing else.
+        - Three slots missed today, the geography coursework due tomorrow, and you're told you're let down, strongly. They: "i'm so behind on everything". You: "ok, deep breath. tonight's fixable, we'll work it out. what's the worst bit?", with replies "the coursework" and "all of it tbh", and nothing else: no change.
     """
         ).trimIndent()
 
@@ -258,6 +266,8 @@ object ChatPrompts {
     )
 
     val SCHEMA: Map<String, Any> = InstructionPrompts.obj(
+        // His note to himself on how he feels, written before his reply and kept with it (D-119): a plain string.
+        "feeling" to STRING,
         "reply" to STRING,
         "newTasks" to mapOf("type" to "array", "items" to TASK),
         "changes" to mapOf("type" to "array", "items" to CHANGE),
@@ -797,9 +807,10 @@ object ChatPrompts {
      * the slot under way, [blocking]: whether blocking applies and why, and the free time (G5). A running
      * [timer] (D-112) is said with the slot under way or the next thing where it's on that task,
      * else in a line of its own. Today's breaks outside are among today's slots, and the week's later
-     * days' on their lines (D-116), each named by its own time, with who [placed] it where it was moved or added.
+     * days' on their lines (D-116), each named by its own time, with who [placed] it where it was moved or added. How he
+     * feels about today's work ([feeling], D-119) under today's slots, as his messages are told it.
      */
-    fun plan(plan: Plan, zone: ZoneId, kept: List<Pair<String, String>> = emptyList(), blocking: String? = null, timer: PieceTimer? = null, only: Map<LocalDate, String> = emptyMap(), placed: Map<String, By> = emptyMap()): String = buildString {
+    fun plan(plan: Plan, zone: ZoneId, kept: List<Pair<String, String>> = emptyList(), blocking: String? = null, timer: PieceTimer? = null, only: Map<LocalDate, String> = emptyMap(), placed: Map<String, By> = emptyMap(), feeling: String? = null): String = buildString {
         fun at(time: Long) = Instant.ofEpochMilli(time).atZone(zone).format(WHEN)
         fun piece(chunk: Chunk) = "${chunk.label.take(MAX_TITLE)} (${chunk.minutes} min)"
         fun event(task: TaskItem) = "${task.id} | ${task.title.take(MAX_TITLE)} | ${task.source.label}"
@@ -847,6 +858,7 @@ object ChatPrompts {
                 appendLine("- ${clock(s.start)}–${clock(s.end)} $what")
             }
         }
+        feeling?.let { appendLine(it) }
         val last = plan.today.plusDays(PLAN_DAYS - 1L)
         fun day(time: Long): LocalDate = Instant.ofEpochMilli(time).atZone(zone).toLocalDate()
         /** At most [PLAN_LIST] of [lines], and how many more. */

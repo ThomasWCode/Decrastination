@@ -80,6 +80,17 @@ class FelixTest {
     }
 
     @Test
+    fun `how he feels is said under today's slots, and nothing at neutral (D-119)`() {
+        val slot = plan.todaySlots.first { it.chunk?.title == "Statics" }
+        val strong = Mood.Feeling(Mood.Level.Strong, listOf("3 slots missed today"))
+        val lines = FelixPrompts.describe(FelixPrompts.Reason.SlotStart, plan, slot, null, emptyList(), emptyList(), null, settings, now, LONDON, feeling = strong).lines()
+        assertTrue(lines[4].startsWith("Today: "), lines[4])
+        assertEquals("How you feel, at most: let down, strongly (3 slots missed today)", lines[5])
+        val neutral = FelixPrompts.describe(FelixPrompts.Reason.SlotStart, plan, slot, null, emptyList(), emptyList(), null, settings, now, LONDON, feeling = Mood.NEUTRAL)
+        assertEquals(FelixPrompts.describe(FelixPrompts.Reason.SlotStart, plan, slot, null, emptyList(), emptyList(), null, settings, now, LONDON), neutral)
+    }
+
+    @Test
     fun `for each reason, what it's about and nothing that isn't there`() {
         for (reason in FelixPrompts.Reason.entries) {
             val text = FelixPrompts.describe(reason, plan, null, task("Statics", 30), emptyList(), emptyList(), "Is the test on the 12th or the 19th?".takeIf { reason == FelixPrompts.Reason.Question }, settings, now, LONDON, freeMin = 25)
@@ -172,11 +183,19 @@ class FelixTest {
         val long = "word ".repeat(80).trim()
         val answer = FelixAnswers.parse("""{"message":"$long","replies":["Starting now"," ","Give me 15 minutes, I'm finishing dinner first","Starting now","Not tonight","Later"],"nextCheckMin":2,"memories":[]}""")!!
         assertTrue(answer.message.length <= FelixAnswers.MAX_MESSAGE && answer.message.endsWith("word…"), answer.message)
+        // How long it was as he wrote it, before it was cut: what the scenarios' report checks it by.
+        assertEquals(long.length, FelixAnswers.messageLength("""{"message":"  $long ","replies":[]}"""))
+        assertEquals(0, FelixAnswers.messageLength("not JSON"))
         assertEquals(listOf("Starting now", "Give me 15 minutes, I'm finishing…", "Not tonight"), answer.replies)
         assertEquals(FelixAnswers.MIN_CHECK_MIN, answer.nextCheckMin)
         // No next check given: the default is the caller's (20 minutes, Q-31); an empty message, his silence.
         assertEquals(FelixAnswer(), FelixAnswers.parse("""{"message":"","replies":[],"nextCheckMin":null,"memories":[]}"""))
         assertNull(FelixAnswers.parse("not JSON"))
+        // His note to himself comes first (D-119), read with the answer and kept with it, held to its room; none, empty.
+        val noted = """{"feeling":" irritated: that's two ","message":"physics went by too.","replies":[],"nextCheckMin":null,"memories":[]}"""
+        assertEquals(FelixAnswer("physics went by too.", feeling = "irritated: that's two"), FelixAnswers.parse(noted))
+        assertEquals(FelixAnswers.MAX_FEELING, FelixAnswers.parse("""{"feeling":"${"x".repeat(900)}","message":"hey","replies":[]}""")?.feeling?.length)
+        assertEquals("", FelixAnswers.parse("""{"message":"hey","replies":[]}""")?.feeling)
     }
 
     @Test

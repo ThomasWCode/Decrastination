@@ -60,7 +60,7 @@ class Stores(
     val instructions = store("instructions.json", InstructionState.serializer(), ::InstructionState, migrations = listOf(TasksMigration.INSTRUCTIONS, StepOrderMigration.INSTRUCTIONS, OnlyMigration.INSTRUCTIONS, OutsideMigration.INSTRUCTIONS), onWrite = InstructionState::withStepIds)
 
     /** Your chat with Felix, the live window of it: every message of his and yours, what became of his cards, and his state. */
-    val chat = store("chat.json", ChatState.serializer(), ::ChatState, migrations = listOf(ChatMigration.CHAT, TasksMigration.CHAT, FelixStore.CHAT, FelixStore.CHAT_PIECES, MemoryMigration.CHAT, StepOrderMigration.CHAT, OnlyMigration.CHAT, OutsideMigration.CHAT))
+    val chat = store("chat.json", ChatState.serializer(), ::ChatState, migrations = listOf(ChatMigration.CHAT, TasksMigration.CHAT, FelixStore.CHAT, FelixStore.CHAT_PIECES, MemoryMigration.CHAT, StepOrderMigration.CHAT, OnlyMigration.CHAT, OutsideMigration.CHAT, MoodMigration.CHAT))
 
     /**
      * The chat's messages past its window, oldest first, a month a file: each read only when it's wanted
@@ -91,7 +91,7 @@ class Stores(
     val memory = store("memory.json", MemoryState.serializer(), ::MemoryState, migrations = listOf(MemoryMigration.MEMORY))
 
     /** What Felix keeps at your asking: notes on tasks, standing notes, and reminders with their drafts. */
-    val felix = store("felix.json", FelixStore.serializer(), ::FelixStore)
+    val felix = store("felix.json", FelixStore.serializer(), ::FelixStore, migrations = listOf(MoodMigration.FELIX))
 
     /** The versions of its events the app has written to calendars, so a copy of one is known; what it wrote where; your answers about events. */
     val calendar = store("calendar.json", CalendarState.serializer(), ::CalendarState, migrations = listOf(RuntimeSplit.CALENDAR))

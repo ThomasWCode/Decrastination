@@ -110,6 +110,8 @@ object ChatAnswers {
         val calendar: String? = null,
         /** His messages still waiting that the words answered (D-99): those the context listed ([ChatPrompts.Context.waiting]). */
         val answered: List<String> = emptyList(),
+        /** His note to himself on how he felt (D-119), kept with his reply. */
+        val feeling: String = "",
     )
 
     /**
@@ -137,6 +139,7 @@ object ChatAnswers {
         val research: String = "",
         val details: List<String> = emptyList(),
         val answered: List<String> = emptyList(),
+        val feeling: String = "",
     )
 
     /**
@@ -276,7 +279,7 @@ object ChatAnswers {
         // His messages the words answered: only those the context listed as waiting, each once; any other id dropped.
         val waiting = context?.waiting.orEmpty()
         val answered = answer.answered.map(String::trim).filter { it in waiting }.distinct()
-        return Reading(reply.take(ChatPrompts.MAX_TEXT), made, changes, leftOut, answer.memories.take(MAX_MEMORIES), replies, actions, answer.research.trim().take(ResearchPrompts.MAX_QUESTION).takeIf { it.isNotEmpty() }, details, reminders, notes, stats, calendar, answered)
+        return Reading(reply.take(ChatPrompts.MAX_TEXT), made, changes, leftOut, answer.memories.take(MAX_MEMORIES), replies, actions, answer.research.trim().take(ResearchPrompts.MAX_QUESTION).takeIf { it.isNotEmpty() }, details, reminders, notes, stats, calendar, answered, answer.feeling.trim().take(FelixAnswers.MAX_FEELING))
     }
 
     /**

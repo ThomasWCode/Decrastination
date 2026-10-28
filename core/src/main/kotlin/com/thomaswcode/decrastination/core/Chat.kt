@@ -18,7 +18,7 @@ data class ChatState(
     /** His state between looks (LR-03): his next check, what he wrote ahead, what waits to be asked, the check-in's answers so far. */
     val felix: FelixState = FelixState(),
     /** The shape this is in ([com.thomaswcode.decrastination.data.Migration]): raised with each change of it. */
-    val version: Int = 9,
+    val version: Int = 10,
 ) {
     /**
      * Your newest message still waiting for his answer: a message of his written since, unasked, doesn't
@@ -97,6 +97,24 @@ data class ChatMessage(
     /** Claude's: what he searched the web for to answer it, and the pages the searches found, the first few. */
     val searched: List<String> = emptyList(),
     val sources: List<WebSource> = emptyList(),
+    /**
+     * His, written unasked: how he felt as he wrote it (D-119), a level of the app's rule's ("Firm", "Strong", "Pleased",
+     * "Proud"); empty for neutral, for a silence and for every other message. Kept, as the records it rested on change once
+     * the piece is kept (Q103).
+     */
+    val mood: String = "",
+    /**
+     * His, from a call: his note to himself on how he felt, written before the message (D-119), whole; kept so your
+     * rating of it can be read beside it, never shown in the chat but as you rate it, and never sent back to him.
+     */
+    val feeling: String = "",
+    /**
+     * His, as you rated it, holding it: "Up" or "Down", empty for none; what you wrote of it ([feedback]) and when
+     * ([ratedAt], 0 for never). Read off the phone to tune his prompts; never sent to him.
+     */
+    val rating: String = "",
+    val feedback: String = "",
+    val ratedAt: Long = 0,
 )
 
 /** A page a web search found ([ChatMessage.sources]): its title and where it is. */
@@ -111,7 +129,7 @@ data class WebSource(val title: String, val url: String)
 data class ChatArchive(
     val messages: List<ChatMessage> = emptyList(),
     /** The shape this is in ([com.thomaswcode.decrastination.data.Migration]): raised with each change of it. */
-    val version: Int = 8,
+    val version: Int = 9,
 )
 
 /** The conversation read as a thread. Pure. */

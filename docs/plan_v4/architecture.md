@@ -55,7 +55,7 @@ Makes the stores (through `Stores`), the gateway, the notifier and the services;
 | **Learning** (`learn/`) | `log.json`, `learning.json` (the calibration) | workers, screens, the Conversation's replies |
 | **Backups** (`data/BackupService`) | the backup folder, reset copies | screens, the backup worker |
 
-Each service is a class in the package that holds its concern. Felix's has a package of its own, `felix/`: the service (`Conversation`), his looks (`Looks`), his rules, prompts and caller, the check-in's flow, the chat's prompts, answers, rounds and reader, the outbox and his words (`FelixWords`), the replies' routing (`Replies`), his notification and his port to Android (`FelixPorts`), and the receiver and workers that carry a reply or a look.
+Each service is a class in the package that holds its concern. Felix's has a package of its own, `felix/`: the service (`Conversation`), his looks (`Looks`), his rules, how he feels (`Mood`, D-119), prompts and caller, the check-in's flow, the chat's prompts, answers, rounds and reader, the outbox and his words (`FelixWords`), the replies' routing (`Replies`), his notification and his port to Android (`FelixPorts`), and the receiver and workers that carry a reply or a look.
 
 ## The platform
 

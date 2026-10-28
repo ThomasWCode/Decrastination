@@ -35,12 +35,16 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import com.thomaswcode.decrastination.core.WindowKind
+import com.thomaswcode.decrastination.data.SlotOutcome
+import com.thomaswcode.decrastination.data.SlotRecord
 import com.thomaswcode.decrastination.learn.CalendarTime
 import com.thomaswcode.decrastination.sync.GmailFinishes
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import java.time.Instant
 import java.time.LocalDate
 
 /**
@@ -154,6 +158,15 @@ class ConversationTest {
         assertTrue(conversation.ask("Anki too"))
         felix.settle()
         assertEquals(OnlyDay(setOf(sheet.id), anki = true, deadlines = false), InstructionRules.onlyDays(stores.instructions.value.applied, saturday, saturday)[saturday])
+    }
+
+    @Test
+    fun `the chat is told how he feels as today's newest slot leans, as his messages are (D-119)`() = runBlocking {
+        val today = Instant.ofEpochMilli(now).atZone(Fixtures.LONDON).toLocalDate().toString()
+        fun missed(key: String, end: Long) = SlotRecord(today, key, key.substringBefore('#'), Kind.Homework, label = key, plannedMin = 30, start = end - 30 * 60_000L, end = end, window = WindowKind.Evening, outcome = SlotOutcome.Missed, workedMin = 0, at = end + 60_000L)
+        assertFalse("How you feel" in conversation.chatContext().plan)
+        stores.log.update { it.copy(slots = listOf(missed("teams:a#-1#1", now - 3 * 3_600_000L), missed("teams:b#-1#1", now - 3_600_000L))) }
+        assertTrue("How you feel, at most: let down, firmly (2 slots missed today)" in conversation.chatContext().plan.lines(), conversation.chatContext().plan)
     }
 
     @Test
@@ -731,6 +744,33 @@ class ConversationTest {
         // Answered there, so it takes no second answer.
         assertNotNull(felix.stores.chatArchive.value.messages.single().answeredAt)
         assertEquals(0, felix.server.requestCount)
+    }
+
+    @Test
+    fun `his message rated, held, in the chat or the archive, and taken off again, yours not, and none of it told him (D-119)`() = runBlocking {
+        stores.chat.update { it.copy(messages = listOf(ChatMessage("f1", Speaker.Felix, "that's two tonight.", now - 60_000L, kind = MessageKind.SlotEnd, feeling = "NOTE-MARKER"), ChatMessage("y1", Speaker.You, "sorry", now - 30_000L))) }
+        stores.chatArchive.update { it.copy(messages = listOf(ChatMessage("f0", Speaker.Felix, "physics done in the end.", now - 70 * 86_400_000L, kind = MessageKind.SlotKept))) }
+        conversation.rate("f1", up = false, feedback = "  FEEDBACK-MARKER  ")
+        val rated = stores.chat.value.messages.first { it.id == "f1" }
+        assertEquals(listOf(Conversation.RATED_DOWN, "FEEDBACK-MARKER", "NOTE-MARKER"), listOf(rated.rating, rated.feedback, rated.feeling))
+        assertEquals(felix.clock.now(), rated.ratedAt)
+        // One scrolled back to, in the archive; one of yours isn't rated.
+        conversation.rate("f0", up = true, feedback = "")
+        assertEquals(Conversation.RATED_UP, stores.chatArchive.value.messages.single().rating)
+        conversation.rate("y1", up = true, feedback = "mine")
+        assertEquals("", stores.chat.value.messages.first { it.id == "y1" }.rating)
+        // The chat's next turn tells him neither your words nor his note; his reply keeps its own note.
+        felix.answers("""{"feeling":"easy, glad they're back on it",""" + felix.chatAnswer("Fine, physics at 19:30 then.").removePrefix("{"))
+        assertTrue(conversation.ask("what's next?"))
+        felix.settle()
+        val sent = felix.server.takeRequest().body.readUtf8()
+        assertTrue("that's two tonight." in sent)
+        assertFalse("FEEDBACK-MARKER" in sent)
+        assertFalse("NOTE-MARKER" in sent)
+        assertEquals("easy, glad they're back on it", stores.chat.value.messages.last { it.from == Speaker.Felix }.feeling)
+        // Taken off, words and all.
+        conversation.rate("f1", up = null, feedback = "")
+        assertEquals(listOf("", "", "0"), stores.chat.value.messages.first { it.id == "f1" }.let { listOf(it.rating, it.feedback, it.ratedAt.toString()) })
     }
 
     @Test

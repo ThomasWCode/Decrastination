@@ -88,6 +88,12 @@ class Outbox(
         archive.answered(id, at)
     }
 
+    /** Message [id] in the archive as [change] makes it (your rating of it, D-119); one in the live window is the chat's, and the archive isn't read for it. */
+    suspend fun changeInArchive(id: String, change: (ChatMessage) -> ChatMessage) {
+        if (chat.value.messages.any { it.id == id }) return
+        archive.change(id, change)
+    }
+
     /** Message [id] in the archive waiting for its answer again (a reply under it that wasn't one); one in the live window is the chat's. */
     suspend fun waitingInArchive(id: String) {
         if (chat.value.messages.any { it.id == id }) return

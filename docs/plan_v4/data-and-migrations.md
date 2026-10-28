@@ -65,6 +65,7 @@ Each store's migrations are listed in `data/Stores.kt`; the shapes they came fro
 - **4.5.1** (`OnlyMigration`): a change of a new type, `DayOnly`, with what else its day lets in (`Change.alsoAllow`, D-115): `instructions.json` at version 4, `chat.json` and the archive's months raised (8 and 7), nothing migrated; the fixture `fixtures/stores/2026-10-27-4.5.1`.
 - **4.5.2** (`OutsideMigration`): three changes of new types for a day's breaks outside, `OutsideAt`, `NoOutside` and `OutsideAdded`, with the break's own time (`Change.outsideMin`, -1 for none, D-116): `instructions.json` at version 5, `chat.json` and the archive's months raised (9 and 8), nothing migrated; the fixture `fixtures/stores/2026-10-27-4.5.2`.
 - **4.6.0** (`ZoomMigration`): `settings.json` at version 3, the Day grid's zoom (`Settings.dayHourDp`, the height of an hour as last pinched, 40 to 120 dp), none in a file from before, nothing migrated; the fixture `fixtures/stores/2026-10-27-4.6.0`.
+- **4.7.0** (`MoodMigration`): a message of Felix's keeps the level he wrote it at (`ChatMessage.mood`, D-119), his note on how he felt (`feeling`, on `FelixAnswer` too, so a reminder's words written ahead keep theirs) and your rating of it (`rating`, `feedback`, `ratedAt`): `chat.json` at version 10, the archive's months at 9 and `felix.json` at 2, its first migration, none in a file from before, nothing migrated; the fixture `fixtures/stores/2026-10-27-4.7.0`, every new field filled.
 
 ## Rolling back
 

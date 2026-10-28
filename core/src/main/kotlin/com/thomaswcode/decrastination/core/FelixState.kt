@@ -42,9 +42,12 @@ data class FelixRetry(val reason: String, val key: String?, val notBefore: Long)
 @Serializable
 data class FelixQuestion(val taskId: String, val question: String, val at: Long)
 
-/** A message of Felix's written ahead (AC-10): sent if it still fits its reason and piece when the time comes. */
+/**
+ * A message of Felix's written ahead (AC-10): sent if it still fits its reason and piece when the time comes. [mood]: the
+ * level he was told as it was written (D-119), kept on the message as sent (Q103); null in a draft from before it was kept.
+ */
 @Serializable
-data class FelixDraft(val reason: String, val key: String?, val answer: FelixAnswer, val at: Long)
+data class FelixDraft(val reason: String, val key: String?, val answer: FelixAnswer, val at: Long, val mood: String? = null)
 
 /** A finished task's "how was it?" (LR-05): what he asks about, and when it was finished. */
 @Serializable

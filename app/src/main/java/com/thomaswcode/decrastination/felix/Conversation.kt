@@ -323,6 +323,24 @@ class Conversation(
         return marked
     }
 
+    /**
+     * His message [id] rated by you, held in the chat (D-119): [up] a thumb up or down with what you wrote of it
+     * ([feedback]), or null to take the rating off. In the live chat, or else in the archive's months; one of yours
+     * is left as it is. Nothing else follows: it isn't a turn of the chat, nor sent to him.
+     */
+    suspend fun rate(id: String, up: Boolean?, feedback: String): Unit = withContext(NonCancellable) {
+        val now = clock.now()
+        val rated = { m: ChatMessage ->
+            when {
+                m.from != Speaker.Felix -> m
+                up == null -> m.copy(rating = "", feedback = "", ratedAt = 0)
+                else -> m.copy(rating = if (up) RATED_UP else RATED_DOWN, feedback = feedback.trim().take(MAX_FEEDBACK), ratedAt = now)
+            }
+        }
+        chat.update { s -> s.copy(messages = s.messages.map { if (it.id == id) rated(it) else it }) }
+        outbox.changeInArchive(id, rated)
+    }
+
     /** [marked]'s Undo: those still answered as they were marked wait for your answer again. */
     suspend fun unmarkAnswered(marked: Marked): Unit = withContext(NonCancellable) {
         chat.update { s -> s.copy(messages = s.messages.map { if (it.id in marked.ids && it.answeredAt == marked.at) it.copy(answeredAt = null) else it }) }
@@ -567,6 +585,9 @@ class Conversation(
         // The pieces he may keep (G1): today's slots', and each task with no steps' next; and those kept today, to take back.
         val keepable = (plan.todaySlots.mapNotNull { it.chunk } + plan.ordered.filter { it.stepIndex == null }.distinctBy { it.taskId }).associate { it.key to it.taskId }
         val keptToday = keptToday(now)
+        // How he feels about today's work (D-119), as today's newest slot on record leans: what his messages are told, so the two agree.
+        val todays = log.value.slots.filter { it.date == focus.today(now).toString() }
+        val feeling = Mood.line(Mood.of(null, todays, null, 0, Mood.newest(todays)?.let { r -> state.tasks.firstOrNull { it.id == r.taskId } }, messages, now, clock.zone()))
         val lessons = lessons(state, now)
         val waiting = waiting(now, messages)
         return ChatPrompts.Context(
@@ -575,6 +596,7 @@ class Conversation(
                 plan, clock.zone(), keptToday.map { it.key to it.label }, focus.blockingLine(plan, now), focus.timer,
                 InstructionRules.onlyDays(applied, plan.today, plan.today.plusDays(ChatPrompts.PLAN_DAYS.toLong())).mapValues { ChatPrompts.onlyLine(it.value, byId) },
                 InstructionRules.outsideBy(applied, plan.today, plan.today.plusDays(ChatPrompts.PLAN_DAYS.toLong())),
+                feeling,
             ),
             keepable = keepable,
             kept = keptToday.associate { it.key to it.taskId },
@@ -821,6 +843,8 @@ class Conversation(
                 from = Speaker.Felix,
                 text = reading.reply,
                 at = clock.now(),
+                // His note on how he felt, kept with it (D-119): read beside your rating of it.
+                feeling = reading.feeling,
                 // Everything on a card made as it comes (D-60), each with its Undo.
                 proposals = ChatAnswers.cards(reading, tasks.value.tasks.associateBy { it.id }, clock.zone()),
                 suggestedReplies = reading.suggestedReplies,
@@ -1545,6 +1569,13 @@ class Conversation(
 
         /** A message's button opening a week's summary to send, the week (its Monday) after it ([ChatMessage.opens]). */
         const val OPENS_SUMMARY = "summary:"
+
+        /** A message of his rated, held ([rate], D-119): its [ChatMessage.rating]. */
+        const val RATED_UP = "Up"
+        const val RATED_DOWN = "Down"
+
+        /** What you write of a message you rate, at most. */
+        const val MAX_FEEDBACK = 1_000
 
         /** Completions kept for his evening question, at most: the newest. */
         private const val MAX_ASKS = 20

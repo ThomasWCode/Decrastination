@@ -142,6 +142,22 @@ class ChatArchiveStore(private val dir: File, private val clock: () -> Long = Sy
         }
     }
 
+    /** Message [id] as [change] makes it, where it's there (your rating of it, D-119): the months read back from the newest till it's found. */
+    suspend fun change(id: String, change: (ChatMessage) -> ChatMessage): Unit = writing.withLock {
+        withContext(Dispatchers.IO) {
+            for (file in files().asReversed()) {
+                val store = month(file)
+                if (store.value.messages.none { it.id == id }) continue
+                val was = store.value.messages.first { it.id == id }
+                if (change(was) != was) {
+                    store.update { a -> a.copy(messages = a.messages.map { if (it.id == id) change(it) else it }) }
+                    _changes.update { it + 1 }
+                }
+                break
+            }
+        }
+    }
+
     /** Message [id] waiting for its answer again, where it's there and marked answered ([answered]'s undoing): found as it is. */
     suspend fun unanswered(id: String): Unit = writing.withLock {
         withContext(Dispatchers.IO) {
@@ -232,7 +248,7 @@ class ChatArchiveStore(private val dir: File, private val clock: () -> Long = Sy
         const val NAME = "chat-archive.json"
 
         /** What brings a month of an older shape to this one: the tasks its acts keep, in their second shape (4.0.13). */
-        val MIGRATIONS: List<Migration> = listOf(TasksMigration.ARCHIVE, FelixStore.ARCHIVE, FelixStore.ARCHIVE_PIECES, MemoryMigration.ARCHIVE, StepOrderMigration.ARCHIVE, OnlyMigration.ARCHIVE, OutsideMigration.ARCHIVE)
+        val MIGRATIONS: List<Migration> = listOf(TasksMigration.ARCHIVE, FelixStore.ARCHIVE, FelixStore.ARCHIVE_PIECES, MemoryMigration.ARCHIVE, StepOrderMigration.ARCHIVE, OnlyMigration.ARCHIVE, OutsideMigration.ARCHIVE, MoodMigration.ARCHIVE)
 
         /** A month's file, as [fileOf] names it: a year past 9999 written with its sign and more digits. */
         private val MONTH_FILE = Regex("""chat-archive-\+?\d{4,}-\d{2}\.json""")

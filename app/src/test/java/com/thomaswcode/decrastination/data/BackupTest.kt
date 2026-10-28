@@ -20,6 +20,7 @@ import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.InstructionStatus
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.MemoryState
+import com.thomaswcode.decrastination.core.MessageKind
 import com.thomaswcode.decrastination.core.NoSchool
 import com.thomaswcode.decrastination.core.Note
 import com.thomaswcode.decrastination.core.NoteScope
@@ -319,8 +320,10 @@ class BackupTest {
 
     @Test
     fun `format 7's chat with Felix's state, its earlier messages and today's slots are kept, and a newer format is refused`() {
-        val chat = ChatState(listOf(ChatMessage("m1", Speaker.You, "move the physics to Thursday", 5)), felix = FelixState(nextCheckAt = 42))
-        val archive = ChatArchive(listOf(ChatMessage("m0", Speaker.You, "what's due?", 1)))
+        // A message of his with the level he wrote it at (D-119, Q103), his note on how he felt, and your rating of it, kept with it.
+        val firm = ChatMessage("m2", Speaker.Felix, "that's two today.", 6, kind = MessageKind.SlotEnd, mood = "Firm", feeling = "annoyed: two gone", rating = "Down", feedback = "too sharp", ratedAt = 7)
+        val chat = ChatState(listOf(ChatMessage("m1", Speaker.You, "move the physics to Thursday", 5), firm), felix = FelixState(nextCheckAt = 42))
+        val archive = ChatArchive(listOf(ChatMessage("m0", Speaker.You, "what's due?", 1), ChatMessage("m00", Speaker.Felix, "every slot today. really proud of you.", 2, kind = MessageKind.DayDone, mood = "Proud")))
         val backup = Backup(
             exportedAt = 1, settings = Settings(), log = ActivityLog(), chat = chat, archive = archive,
             slots = SlotState("2026-10-15", previous = mapOf("teams:a#0" to 7L)),

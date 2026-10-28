@@ -162,7 +162,7 @@ class NotesAndRemindersTest {
         val moment = now + 5 * MIN
         stores.felix.update { s ->
             s.copy(reminders = listOf(
-                at("call gran", moment).copy(draft = FelixAnswer("oi, you said to call gran. between slots now, so good time"), draftedAt = moment - 8 * MIN, draftFor = moment),
+                at("call gran", moment).copy(draft = FelixAnswer("oi, you said to call gran. between slots now, so good time", feeling = "glad to pass it on"), draftedAt = moment - 8 * MIN, draftFor = moment),
                 at("stretch", now - 40 * MIN).copy(draft = FelixAnswer("stretch now"), draftedAt = now - 45 * MIN, draftFor = now - 40 * MIN),
             ))
         }
@@ -171,6 +171,8 @@ class NotesAndRemindersTest {
         val (late, his) = stores.chat.value.messages.filter { it.kind == MessageKind.Reminder }
         assertEquals("oi, you said to call gran. between slots now, so good time", his.text)
         assertFalse(his.byApp)
+        // His note on how he felt goes with his words (D-119); yours carry none.
+        assertEquals("glad to pass it on" to "", his.feeling to late.feeling)
         // Forty-five minutes late: the moment his words were for has gone, so yours, with when it was for.
         assertEquals(FelixWords.reminder("stretch") + " " + FelixWords.late("16:20"), late.text)
         assertTrue(late.byApp)

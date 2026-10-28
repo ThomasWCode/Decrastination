@@ -1,6 +1,7 @@
 package com.thomaswcode.decrastination.felix
 
 import com.thomaswcode.decrastination.Fixtures
+import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.By
 import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.ChatMessage
@@ -10,12 +11,15 @@ import com.thomaswcode.decrastination.core.ProposalState
 import com.thomaswcode.decrastination.core.Rebalance
 import com.thomaswcode.decrastination.core.SlotKind
 import com.thomaswcode.decrastination.core.SlotState
+import com.thomaswcode.decrastination.core.Slotter
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.core.StepOrigin
 import com.thomaswcode.decrastination.core.SubStep
 import com.thomaswcode.decrastination.core.TaskItem
+import com.thomaswcode.decrastination.data.SlotOutcome
+import com.thomaswcode.decrastination.data.SlotRecord
 import java.time.Instant
 import kotlin.test.AfterTest
 import kotlin.test.Test
@@ -189,13 +193,15 @@ class LooksTest {
     @Test
     fun `the morning's call may rebalance two of his steps to fit a free time at school, made at once with an Undo, and not asked about once taken back`() = runBlocking {
         worksheetInSteps()
-        felix.answers(REBALANCED)
+        felix.answers(REBALANCED.replaceFirst("{", """{"feeling":"easy morning, one thing to move","""))
         assertTrue(felix.looks.morning())
         val asked = felix.server.takeRequest().body.readUtf8()
         assertTrue("Steps you may rebalance" in asked && "teams:sheet | Forces worksheet | 0" in asked && "10:45, 30 min" in asked, asked)
         val message = stores.chat.value.messages.single()
         val proposal = message.proposals.single()
         assertEquals(MessageKind.Morning to ProposalState.Applied, message.kind to proposal.state)
+        // His note on how he felt, kept with it (D-119).
+        assertEquals("easy morning, one thing to move", message.feeling)
         // His change on the task, named by what it made, its two steps moved and their ids kept.
         val made = stores.instructions.value.instructions.single { it.id == proposal.made }
         assertEquals(By.Felix, made.by)
@@ -351,5 +357,83 @@ class LooksTest {
         assertEquals(1, felix.server.requestCount)
         assertTrue(stores.chat.value.messages.none { it.kind == MessageKind.SlotStart })
         assertNull(felix.ports.showing)
+    }
+
+    @Test
+    fun `his note on how he felt is kept with his message, and neither a note nor your rating of one is told him again (D-119)`() = runBlocking {
+        val key = underWay()
+        // His first nudge, with his note on it, rated by you.
+        val rated = ChatMessage("n1", Speaker.Felix, "worksheet's on. starting?", felix.clock.time - 60_000L, About(taskId = "teams:sheet"), kind = MessageKind.SlotStart, pieceKey = key, feeling = "NOTE-MARKER", rating = Conversation.RATED_DOWN, feedback = "FEEDBACK-MARKER", ratedAt = 1)
+        stores.chat.update { it.copy(messages = listOf(rated)) }
+        felix.answers("""{"feeling":" not impressed: second nudge ","message":"still nothing on it. start it now.","replies":[],"nextCheckMin":10,"memories":[]}""")
+        felix.looks.check()
+        val asked = felix.server.takeRequest().body.readUtf8()
+        assertTrue("worksheet's on. starting?" in asked)
+        assertFalse("NOTE-MARKER" in asked)
+        assertFalse("FEEDBACK-MARKER" in asked)
+        assertEquals("not impressed: second nudge", stores.chat.value.messages.last().feeling)
+    }
+
+    @Test
+    fun `his second nudge on a piece is kept at the level he wrote it at, a silence with none (D-119, Q103)`() = runBlocking {
+        val key = underWay()
+        // His first nudge on it, with words, a minute ago.
+        stores.chat.update { it.copy(messages = listOf(ChatMessage("n1", Speaker.Felix, "worksheet's on. starting?", felix.clock.time - 60_000L, About(taskId = "teams:sheet"), kind = MessageKind.SlotStart, pieceKey = key))) }
+        felix.answers("""{"message":"that's two nudges now. start it and i'll leave you to it.","replies":[],"nextCheckMin":10,"memories":[]}""")
+        felix.looks.check()
+        // Firm for a second nudge, and a step up as it's due tomorrow morning with nothing done on it: told so, and kept so.
+        assertTrue("How you feel, at most: let down, strongly" in felix.server.takeRequest().body.readUtf8())
+        assertEquals("Strong", stores.chat.value.messages.last().mood)
+        // At his next check he chooses not to write: a silence keeps none.
+        felix.clock.time += 11 * 60_000L
+        felix.answers("""{"message":"","replies":[],"nextCheckMin":10,"memories":[]}""")
+        felix.looks.check()
+        val silence = stores.chat.value.messages.last()
+        assertEquals(MessageKind.SlotStart to "", silence.kind to silence.text)
+        assertEquals("", silence.mood)
+    }
+
+    @Test
+    fun `a nudge is kept at the level he was told, a piece kept while he was asked changing nothing of it (Q103)`() = runBlocking {
+        val key = underWay()
+        stores.chat.update { it.copy(messages = listOf(ChatMessage("n1", Speaker.Felix, "worksheet's on. starting?", felix.clock.time - 60_000L, About(taskId = "teams:sheet"), kind = MessageKind.SlotStart, pieceKey = key))) }
+        // Told strongly (a second nudge, its task due tomorrow morning with nothing done); kept as Day's Done keeps it while he's asked,
+        // which puts minutes on its task, so the same rule asked again after would say firmly.
+        felix.server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                runBlocking { felix.focusKeep(key) }
+                return felix.answer("""{"message":"that's two nudges now. start it.","replies":[],"nextCheckMin":10,"memories":[]}""")
+            }
+        }
+        felix.looks.check()
+        assertTrue("How you feel, at most: let down, strongly" in felix.server.takeRequest().body.readUtf8())
+        assertEquals("Strong", stores.chat.value.messages.last { it.kind == MessageKind.SlotStart }.mood)
+    }
+
+    @Test
+    fun `a missed piece kept after his let-down about it is answered, its miss replaced as Focus keeps it (Q102, Q103)`() = runBlocking {
+        val key = underWay()
+        // More work tonight, so the day isn't done with it.
+        stores.tasks.update {
+            it.copy(tasks = it.tasks + TaskItem(id = "teams:essay", source = Source.Teams, sourceId = "essay", title = "Essay", dueAt = Fixtures.at("2026-10-20T08:30"), kind = Kind.Homework, sourceEffortMin = 60, firstSeenAt = now, lastSeenAt = now))
+        }
+        val slot = felix.planning.plan().todaySlots.first { it.chunk?.key == key }
+        val chunk = slot.chunk!!
+        // Gone by undone: its miss on record as the app writes it, and his let-down about it, kept on his message.
+        val today = Instant.ofEpochMilli(slot.start).atZone(Fixtures.LONDON).toLocalDate().toString()
+        stores.log.update {
+            it.copy(slots = it.slots + SlotRecord(today, key, "teams:sheet", Kind.Homework, label = chunk.label, plannedMin = chunk.minutes, start = slot.start, end = slot.end, window = slot.window, outcome = SlotOutcome.Missed, workedMin = 0, at = slot.end + Slotter.GRACE_MS))
+        }
+        stores.chat.update { it.copy(messages = listOf(ChatMessage("e1", Speaker.Felix, "worksheet's gone by. 19:00, you're on it.", slot.end + 5 * 60_000L, About(taskId = "teams:sheet"), kind = MessageKind.SlotEnd, pieceKey = key, mood = "Strong"))) }
+        // Kept later, as Day's Done keeps it: one record, kept late, in place of the miss.
+        felix.clock.time = slot.end + 40 * 60_000L
+        assertTrue(felix.focusKeep(key))
+        assertEquals(listOf(SlotOutcome.KeptLate), stores.log.value.slots.filter { it.key == key }.map { it.outcome })
+        felix.answers("""{"message":"there you go. knew you had it in you.","replies":[],"nextCheckMin":30,"memories":[]}""")
+        felix.looks.check()
+        // Answered, whether or not its key is one in three, and proud: a missed piece made up, no other miss today.
+        val said = stores.chat.value.messages.last()
+        assertEquals(MessageKind.SlotKept to key, said.kind to said.pieceKey)
+        assertEquals("Proud", said.mood)
     }
 }

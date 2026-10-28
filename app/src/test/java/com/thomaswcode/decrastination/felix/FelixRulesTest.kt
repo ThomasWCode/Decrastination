@@ -2,7 +2,11 @@ package com.thomaswcode.decrastination.felix
 
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
+import com.thomaswcode.decrastination.core.About
+import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.core.ChatState
+import com.thomaswcode.decrastination.core.MessageKind
+import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.core.DayWindow
 import com.thomaswcode.decrastination.core.FelixAnswer
 import com.thomaswcode.decrastination.core.Kind
@@ -112,6 +116,31 @@ class FelixRulesTest {
         val keys = (1..30).map { "teams:k$it#-1#1" }
         val lined = keys.filter { k -> due(at("17:40"), today = listOf(record(k, SlotOutcome.Kept, at("17:00"), at("17:35"))))?.reason == Reason.SlotKept }
         assertEquals(keys.filter { Math.floorMod(it.hashCode(), 3) == 0 }, lined)
+    }
+
+    @Test
+    fun `a kept slot of a task he was let down about today is always answered (Q102)`() {
+        // A key that isn't one in three, kept late at 21:50 after the evening's work (the plan's slots over, a piece still in today's bucket).
+        val key = (1..30).map { "teams:k$it#-1#1" }.first { Math.floorMod(it.hashCode(), 3) != 0 }
+        val kept = record(key, SlotOutcome.KeptLate, at("17:00"), at("21:50"))
+        fun his(about: String, mood: String) = ChatMessage("f", Speaker.Felix, "that's two today. you said 17:00, so 21:30 it is.", at("17:35"), About(taskId = about), kind = MessageKind.SlotEnd, pieceKey = key, mood = mood)
+        fun due(now: Long, messages: List<ChatMessage>, state: FelixState = FelixState(), sent: List<Sent> = emptyList()) =
+            FelixRules.due(plan, state, listOf(kept), sent, settings, now, false, false, needsPhoto = { false }, letDown = { taskId, keptAt -> Mood.letDown(taskId, messages, now, LONDON, keptAt) })
+        val firm = listOf(his(key.substringBefore('#'), "Firm"))
+        assertEquals(Reason.SlotKept to kept, due(at("21:55"), firm).let { it?.reason to it?.record })
+        // His check not reached: answered all the same.
+        assertEquals(Reason.SlotKept, due(at("21:55"), firm, FelixState(nextCheckAt = at("22:40")))?.reason)
+        // About another task, neutral, or none: nothing, as before.
+        assertNull(due(at("21:55"), listOf(his("teams:other", "Firm"))))
+        assertNull(due(at("21:55"), listOf(his(key.substringBefore('#'), ""))))
+        assertNull(due(at("21:55"), emptyList()))
+        // Said once; and not once it's stale.
+        assertNull(due(at("21:57"), firm, sent = listOf(sent(Reason.SlotKept, key, at("21:55")))))
+        // The day done said about it answers it: not said again as a kept slot.
+        assertNull(due(at("21:57"), firm, sent = listOf(sent(Reason.DayDone, key, at("21:55")))))
+        // A let-down written after it was kept (about the task's next piece, say) isn't one it recovers from.
+        assertNull(due(at("21:55"), listOf(his(key.substringBefore('#'), "Firm").copy(at = at("21:52")))))
+        assertNull(due(at("22:25"), firm))
     }
 
     @Test
