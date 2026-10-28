@@ -63,7 +63,7 @@ Your diary:
 - tue: 2 of 4; the essay slipped to wed.
 - wed (today): see above.
 - sun's check-in, their words: felt "ok", avoided "the essay", in the way "evenings after football", energy "low".
-- remembered this week: "cold: feeling rough (till sun)"; "football: training on tuesdays".
+- remembered this week: "football: training on tuesdays"; "worksheet: can be handed in on paper".
 
 Details:
 Reason: SlotEnd
@@ -84,8 +84,8 @@ The story is built by `Looks` from what it already has: the chat's messages of t
   "feeling": "irritated, two gone, and they'd said 7 themselves. want them to feel it and just go",
   "texts": [
     "maths went too. you said 7.\nphysics is on at 19:40, then maths at 8",
-    "two gone tonight. not great\nphysics is on at 19:40",
-    "you said 7 for the maths and nothing. physics at 19:40, maths after"
+    "two gone tonight. not great\nphysics first, then the maths",
+    "you said 7 for the maths and nothing. physics is next, maths after"
   ],
   "send": 1,
   "replies": ["on it", "give me 5", "can't tonight"],
