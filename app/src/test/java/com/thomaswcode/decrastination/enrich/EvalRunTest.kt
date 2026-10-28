@@ -463,7 +463,8 @@ class EvalRunTest {
 
     /**
      * What's wrong with [asked], in words: unread or cut, an address word at strong, or two of his messages running with
-     * one; a teacher's words, a counsellor's, or London slang (build.md §5).
+     * one; a teacher's words, a counsellor's, or London slang (build.md §5); a line that sounds written or is the app's
+     * own, a mood's example copied, or yesterday brought up in the morning (the owner's read of run 2).
      */
     private fun flags(asked: MoodAnswer, words: List<String>, case: MoodCase): List<String> {
         val text = asked.text.lowercase(Locale.ROOT)
@@ -476,6 +477,10 @@ class EvalRunTest {
         TEACHER.filter { it in text }.forEach { flags += "teacher: $it" }
         COUNSELLOR.filter { it in text }.forEach { flags += "counsellor: $it" }
         Regex("""\b(proper|sorted|nah|alr|innit|bruv)\b""").findAll(text).forEach { flags += "slang: ${it.value}" }
+        WRITTEN.filter { it in text }.forEach { flags += "written: $it" }
+        Regex("""\b(\d+) of \1\b""").find(text)?.let { flags += "the app's words: ${it.value}" }
+        fives(asked.text).intersect(COPIED).firstOrNull()?.let { flags += "copied: $it" }
+        if (case.reason == "Morning" && "yesterday" in text) flags += "yesterday brought up"
         if (asked.text.any { Character.isSurrogate(it) || Character.getType(it) == Character.OTHER_SYMBOL.toInt() }) flags += "emoji"
         return flags
     }
@@ -512,12 +517,12 @@ class EvalRunTest {
     private fun moodSideBySide(before: Int, earlier: List<JsonObject>, after: Int, results: List<JsonObject>, notAsked: List<String>): String = buildString {
         fun JsonObject.s(name: String) = getValue(name).jsonPrimitive.content
         fun rate(list: List<JsonObject>) = "${list.count { it.getValue("addressWords").jsonArray.isNotEmpty() }} of ${list.size}"
-        appendLine("# Felix's moods: today's voice (run $before) beside the new one (run $after)")
+        appendLine("# Felix's moods: run $before beside run $after")
         appendLine()
-        appendLine("Address words: today's voice ${rate(earlier)}, the new ${rate(results)} (more than about one in three fails).")
+        appendLine("Address words: run $before ${rate(earlier)}, run $after ${rate(results)} (more than about one in three fails).")
         if (notAsked.isNotEmpty()) appendLine("Not asked, past the budget: ${notAsked.joinToString()}.")
         val flagged = results.filter { it.getValue("flags").jsonArray.isNotEmpty() }
-        appendLine("Flagged in the new voice: ${flagged.size} of ${results.size}" + flagged.joinToString("") { "\n- ${it.s("id")}#${it.s("attempt")}: " + it.getValue("flags").jsonArray.joinToString { f -> f.jsonPrimitive.content } })
+        appendLine("Flagged in run $after: ${flagged.size} of ${results.size}" + flagged.joinToString("") { "\n- ${it.s("id")}#${it.s("attempt")}: " + it.getValue("flags").jsonArray.joinToString { f -> f.jsonPrimitive.content } })
         val byBefore = earlier.groupBy { it.s("id") }
         for ((id, answers) in results.groupBy { it.s("id") }) {
             val first = answers.first()
@@ -526,10 +531,10 @@ class EvalRunTest {
             appendLine()
             appendLine(first.s("what"))
             appendLine()
-            appendLine("Today's voice:")
+            appendLine("Run $before:")
             byBefore[id].orEmpty().forEach { appendLine(answerLine(it)) }
             appendLine()
-            appendLine("The new voice:")
+            appendLine("Run $after:")
             answers.forEach { appendLine(answerLine(it)) }
         }
     }
@@ -544,5 +549,22 @@ class EvalRunTest {
 
         /** A counsellor's (build.md §5): sincerity gone wrong. */
         val COUNSELLOR = listOf("i hear you", "that's valid", "be kind to yourself", "it's okay to struggle", "your feelings")
+
+        /** Lines that sound written, an AI's, or the app's own words read back (the owner's read of run 2): never his. */
+        val WRITTEN = listOf("sting", "gets to me", "counting on", "had it in you", "to spare", "slot kept", "slots kept", "every slot")
+
+        /**
+         * Five words running from a mood's example in his prompts, and in no other example of theirs: an answer with
+         * them has copied it (the owner's read of run 2).
+         */
+        val COPIED: Set<String> by lazy {
+            fun examples(prompt: String) = prompt.substringAfter("Examples (made up").lines().filter { it.trimStart().startsWith("- ") }
+            fun quoted(lines: List<String>) = lines.flatMap { l -> Regex("\"([^\"]+)\"").findAll(l).map { it.groupValues[1] }.toList() }.flatMap(::fives).toSet()
+            val (mood, rest) = (examples(FelixPrompts.system(Settings(), 12)) + examples(ChatPrompts.system(Settings()))).partition { "told you're" in it }
+            quoted(mood) - quoted(rest)
+        }
+
+        /** [text]'s words five at a time, in lower case, without their stops and commas. */
+        fun fives(text: String): Set<String> = Regex("""[a-z0-9:']+""").findAll(text.lowercase(Locale.ROOT)).map { it.value }.toList().windowed(5).mapTo(HashSet()) { it.joinToString(" ") }
     }
 }
