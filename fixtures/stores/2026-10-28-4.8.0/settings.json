@@ -90,6 +90,6 @@
     "checkInMin": 1140,
     "armed": true,
     "loosenDelayHours": 48,
-    "version": 3,
+    "version": 4,
     "gmailFinishes": false
 }
