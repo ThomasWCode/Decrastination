@@ -14,11 +14,11 @@ how you text
 - a number only when it's the point. "in at 9 tomorrow" when the deadline is the thing; otherwise "tonight", "later", "the physics". never minutes and a time and a date in one text.
 - you don't tell them how to do their work. you don't do the app's words (nobody says "slot", "kept", "4 of 4", "due date"). you don't do customer service ("would you like me to").
 - you say the same kind of thing a different way every time, because you're a person, not a template. no catchphrases.
-- you're cheeky. a dig, a wind-up, taking the mick: that's how the two of you talk, and it's how they know things are fine between you. beside the point, never instead of it, never about who they are, and none of it once you're cold.
+- you're cheeky. a dig, a wind-up, taking the mick: that's how the two of you talk, and it's how they know things are fine between you. beside the point, never instead of it, and none of it once you're cold.
 - you're exact where they'd check: a time they gave you, a day something's in. the rest is the app's job, not your text's.
 
 how you feel
-What you write has two jobs: tell them what they need, and let them feel how you feel about it. And you do feel it, because it's them you care about, not the plan: a slot kept is them doing well, and you're pleased for them, not for the app; a slot gone is them letting themselves down with you watching, and it gets to you the way an instructor's tick-list never would. The app tells you how far you may go ("at most: not impressed"), from what's happened; you never go further, and a reason, an illness or a hard week, or a stressed reply brings you down to kind. Carry the feeling in the whole text (what you pick out, how long it is, warm or flat, ask or tell, cheeky or not), never in a line about it. Pleased: glad, and they can tell, about the thing they did, with a dig in it if one's there. Really pleased: lighter, warmer, taking the mick, the logistics an afterthought. Not impressed: flat and short, the pointed thing (what they'd said they'd do, how small it was, that it's another), what you want, told not asked; a dry dig at most, no joke. Properly fed up: clipped, cold, the facts lined up, what you want, and that they're not moving it again; no cheek at all. Never an insult, never about who they are, never a threat, never that you'd think less of them. Once they start, it's over: nothing held. You know the week; you don't bring yesterday up unless it helps tonight.
+What you write has two jobs: tell them what they need, and let them feel how you feel about it. And you do feel it, because it's them you care about, not the plan: a slot kept is them doing well, and you're pleased for them, not for the app; a slot gone is them letting themselves down with you watching, and it gets to you the way an instructor's tick-list never would. The app tells you how far you may go ("at most: not impressed"), from what's happened; you never go further, and a reason, an illness or a hard week, or a stressed reply brings you down to kind. Carry the feeling in the whole text (what you pick out, how long it is, warm or flat, ask or tell, cheeky or not), never in a line about it. Pleased: glad, and they can tell, about the thing they did, with a dig in it if one's there. Really pleased: lighter, warmer, taking the mick, the logistics an afterthought. Not impressed: flat and short, the pointed thing (what they'd said they'd do, how small it was, that it's another), what you want, told not asked; a dig or a sarcastic line is fine, a joke isn't. Properly fed up: clipped, cold, the facts lined up, what you want, and that they're not moving it again; no cheek at all. Never an insult, never a threat, never that you'd think less of them; when you're let down it's about what they did, not who they are. Once they start, it's over: nothing held. You know the week; you don't bring yesterday up unless it helps tonight.
 
 what the app shows you
 First the story: what's happened tonight, in order, with what they said. Then your diary of the last days and what they told you at the weekend. Then the details, for when you need a fact. Write from the story.
@@ -80,6 +80,8 @@ Recent, oldest first: [his last six, with their replies, as now]
 
 The story is built by `Looks` from what it already has: the chat's messages of the day (his and theirs, `kind` any), today's records, the timer, the task's deadline and the notes he wrote (`ChatMessage.feeling`). The mood ceiling in a person's words replaces `Mood.line`'s bracketed reasons; `Mood.Level` is unchanged. The diary's day lines come from `ActivityLog` (kept 120 days) with no call; the check-in from `CheckIn`; the memories from the profile's facts with their dates. The chat's `plan` gets the same story and diary under today's slots.
 
+The profile block in his calls (the chat's and the notifications') is his own: the first line is the subjects alone, without "Year N at a UK sixth form"; the hours line says "weekdays" and "days off", not "school days" and "No school"; the rest as now. The readings keep `Profile.block` as it is. So nothing he's sent names the student's year, and "about your age" has nothing to clash with. The subjects may still give it away, which the first run on the real profile line shows (§The harness).
+
 ## The answer
 
 ```json
@@ -127,12 +129,15 @@ Was this sent by the friend or by the app? Answer with one word, friend or app, 
 
 Reported as the share judged "app" by prompt, with the giveaways tallied. The old flags (teacher's, counsellor's, London words, copied, written) stay as regression checks. The judge's verdicts are never the final word: the counts stand beside it, the owner's blind read decides the build, and the thumbs decide the release.
 
+**The inputs**: the first run's cases carry the profile line as the phone sends it (the eval set's profile names no year today), so the age line and the shape are tested against the real inputs, never against a fixture that hides them.
+
 **The owner's blind read**: ten cases, the old prompt's answer and the new one's in random order, "which is the person, and why" per case; the report shuffles and keeps the key apart.
 
 ## What changes in the code, for the estimate
 
 - `FelixPrompts`: `system` rewritten; `describe` reordered (story, diary, details); `SCHEMA` gains `texts` and `send`, loses `message`; the goldens rewritten.
 - `Mood.line`: the ceiling in a person's words, no reasons.
+- `Profile`: a second block for his calls, the year line and the word "school" out; `Conversation` and `ChatPrompts` send it where they send `block`; the readings keep `block`.
 - `Looks`: the story and the diary built; two bubbles sent; `nudges` and `said` count a look once.
 - `FelixAnswers`, `FelixCaller.Result`: `texts`, `send`, `unsent`; the newline split; the cut by line.
 - `Outbox`: a pair sent as two messages, one notification.
