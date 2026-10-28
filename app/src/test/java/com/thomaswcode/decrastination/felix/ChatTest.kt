@@ -642,7 +642,8 @@ class ChatTest {
     fun `the prompts are whole, the change types in both, with no stray indent`() {
         for (system in listOf(ChatPrompts.system(), InstructionPrompts.system())) {
             assertTrue("\n- Minutes: how long the whole task takes" in system, system)
-            assertFalse(system.lines().any { it.startsWith(" ") }, system)
+            // A pair's why under it the one indent there is (D-120).
+            assertFalse(system.lines().any { it.startsWith(" ") && !it.startsWith("  why: ") }, system)
         }
         assertNotNull(ChatPrompts.SCHEMA["properties"])
         // Questions about a day go by the plan.
@@ -694,8 +695,10 @@ class ChatTest {
     fun `replies to offer are read, three at most, and the chat is Felix`() {
         val reading = parse("""{"reply":"Moved.","newTasks":[],$none,"memories":[],"suggestedReplies":[" Thanks ","","Undo that","Thanks","Move it to 20:00 instead, after football training finishes","More"]}""")!!
         assertEquals(listOf("Thanks", "Undo that", "Move it to 20:00 instead, after football"), reading.suggestedReplies)
-        val system = ChatPrompts.system(Settings(felixName = "Max", felixLine = "a coach"), 13)
-        assertTrue(system.startsWith("You are Max: a coach, and this is the chat in a UK sixth-form student's (Year 13) planner app."), system)
+        val system = ChatPrompts.system(Settings(felixName = "Max", felixLine = "a coach"))
+        // Who he is as his messages have it, and no year of the student's (D-120).
+        assertTrue(system.startsWith("You're Max, 22, British, middle-class. The app describes you to them as “a coach”."), system)
+        assertTrue("This is the chat in that app" in system && "Year" !in system, system)
         assertTrue("is made as soon as you give it" in system && "give what puts it back" in system && "never what you'd do" in system)
     }
 

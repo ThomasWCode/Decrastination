@@ -70,7 +70,7 @@ class LooksTest {
     @Test
     fun `a look at a slot under way with nothing done writes in the chat, makes his notification from it and sets his next`() = runBlocking {
         val key = underWay()
-        felix.answers("""{"message":"Ten minutes in: started the worksheet?","replies":["Yes","Not yet"],"nextCheckMin":15,"memories":[]}""")
+        felix.answers("""{"texts":["Ten minutes in: started the worksheet?"],"send":1,"replies":["Yes","Not yet"],"nextCheckMin":15,"memories":[]}""")
         felix.looks.check()
         val message = stores.chat.value.messages.single()
         assertEquals(Speaker.Felix to MessageKind.SlotStart, message.from to message.kind)
@@ -115,7 +115,7 @@ class LooksTest {
         val grace = stores.settings.value.felixGraceMin * 60_000L
         // Five minutes before its moment: written ahead, opening with a greeting.
         felix.clock.time = slot.start + grace - 5 * 60_000L
-        felix.answers("""{"message":"hey, the worksheet's on. starting?","replies":[],"nextCheckMin":15,"memories":[]}""")
+        felix.answers("""{"texts":["hey, the worksheet's on. starting?"],"send":1,"replies":[],"nextCheckMin":15,"memories":[]}""")
         felix.looks.check()
         assertNotNull(stores.chat.value.felix.draft)
         // You say something in the chat meanwhile, twice, with a look after each: not written again ahead, so no call an exchange.
@@ -128,7 +128,7 @@ class LooksTest {
         assertEquals(1, felix.server.requestCount)
         // At its moment it's written again, not sent as it was.
         felix.clock.time = slot.start + grace + 60_000L
-        felix.answers("""{"message":"worksheet's 10 min in and nothing yet. starting?","replies":[],"nextCheckMin":15,"memories":[]}""")
+        felix.answers("""{"texts":["worksheet's 10 min in and nothing yet. starting?"],"send":1,"replies":[],"nextCheckMin":15,"memories":[]}""")
         felix.looks.check()
         assertEquals("worksheet's 10 min in and nothing yet. starting?", stores.chat.value.messages.last { it.from == Speaker.Felix }.text)
         assertEquals(2, felix.server.requestCount)
@@ -140,7 +140,7 @@ class LooksTest {
         val slot = felix.planning.plan().todaySlots.first { it.kind == SlotKind.Work }
         val grace = stores.settings.value.felixGraceMin * 60_000L
         felix.clock.time = slot.start + grace - 5 * 60_000L
-        felix.answers("""{"message":"worksheet's on till its end. starting?","replies":[],"nextCheckMin":15,"memories":[]}""")
+        felix.answers("""{"texts":["worksheet's on till its end. starting?"],"send":1,"replies":[],"nextCheckMin":15,"memories":[]}""")
         felix.looks.check()
         assertNotNull(stores.chat.value.felix.draft)
         felix.clock.time = slot.start + grace + 60_000L
@@ -155,7 +155,7 @@ class LooksTest {
         val slot = felix.planning.plan().todaySlots.first { it.kind == SlotKind.Work }
         val grace = stores.settings.value.felixGraceMin * 60_000L
         felix.clock.time = slot.start + grace - 5 * 60_000L
-        felix.answers("""{"message":"worksheet's on till its old end. starting?","replies":[],"nextCheckMin":15,"memories":[]}""")
+        felix.answers("""{"texts":["worksheet's on till its old end. starting?"],"send":1,"replies":[],"nextCheckMin":15,"memories":[]}""")
         felix.looks.check()
         assertNotNull(stores.chat.value.felix.draft)
         // Its slot moved five minutes, its piece the same: what was written for its old times would say what isn't so.
@@ -163,7 +163,7 @@ class LooksTest {
         stores.session.update { it.copy(slots = SlotState(today, previous = mapOf(key to slot.start + 5 * 60_000L))) }
         felix.clock.time = slot.start + 5 * 60_000L + grace + 60_000L
         assertEquals(slot.start + 5 * 60_000L, felix.planning.plan().todaySlots.first { it.chunk?.key == key }.start)
-        felix.answers("""{"message":"worksheet's on, five later. starting?","replies":[],"nextCheckMin":15,"memories":[]}""")
+        felix.answers("""{"texts":["worksheet's on, five later. starting?"],"send":1,"replies":[],"nextCheckMin":15,"memories":[]}""")
         felix.looks.check()
         assertEquals("worksheet's on, five later. starting?", stores.chat.value.messages.last { it.from == Speaker.Felix }.text)
         assertEquals(2, felix.server.requestCount)
@@ -173,7 +173,7 @@ class LooksTest {
     fun `his notifications off silence only them, and he still writes in the chat`() = runBlocking {
         underWay()
         felix.shown = false
-        felix.answers("""{"message":"Ten minutes in: started the worksheet?","replies":[],"nextCheckMin":15,"memories":[]}""")
+        felix.answers("""{"texts":["Ten minutes in: started the worksheet?"],"send":1,"replies":[],"nextCheckMin":15,"memories":[]}""")
         felix.looks.check()
         assertEquals("Ten minutes in: started the worksheet?", stores.chat.value.messages.single().text)
         assertNull(felix.ports.showing)
@@ -182,7 +182,7 @@ class LooksTest {
     @Test
     fun `his silence is kept in the chat, shown nowhere, and counted as said`() = runBlocking {
         underWay()
-        felix.answers("""{"message":"","replies":[],"nextCheckMin":15,"memories":[]}""")
+        felix.answers("""{"texts":[""],"send":1,"replies":[],"nextCheckMin":15,"memories":[]}""")
         felix.looks.check()
         val silent = stores.chat.value.messages.single()
         assertEquals("" to MessageKind.SlotStart, silent.text to silent.kind)
@@ -274,7 +274,7 @@ class LooksTest {
         worksheetInSteps()
         stores.tasks.update { s -> s.copy(tasks = s.tasks + s.tasks.single().copy(id = "teams:sheet2", sourceId = "sheet2", title = "Waves worksheet")) }
         felix.answers(
-            """{"message":"morning. waves q1 at lunch.","replies":[],"nextCheckMin":null,"memories":[],
+            """{"texts":["morning. waves q1 at lunch."],"send":1,"replies":[],"nextCheckMin":null,"memories":[],
               "rebalances":[{"taskId":"teams:sheet2","stepIndex":0,"firstTitle":"Question 1","firstMinutes":20,"secondTitle":"Questions 2 and 3","secondMinutes":45}]}""",
         )
         assertFalse(felix.looks.morning())
@@ -338,7 +338,7 @@ class LooksTest {
 
     private companion object {
         /** His morning's answer, the worksheet's first two steps rebalanced. */
-        const val REBALANCED = """{"message":"morning. question 1 at break, the rest tonight.","replies":[],"nextCheckMin":null,"memories":[],
+        const val REBALANCED = """{"texts":["morning. question 1 at break, the rest tonight."],"send":1,"replies":[],"nextCheckMin":null,"memories":[],
             "rebalances":[{"taskId":"teams:sheet","stepIndex":0,"firstTitle":"Question 1","firstMinutes":25,"secondTitle":"Questions 2 and 3","secondMinutes":40}]}"""
     }
 
@@ -350,7 +350,7 @@ class LooksTest {
             override fun dispatch(request: RecordedRequest): MockResponse {
                 // Start tapped while he's asked.
                 runBlocking { felix.focus.startTimer("teams:sheet", null, key) }
-                return felix.answer("""{"message":"Ten minutes in: started the worksheet?","replies":[],"nextCheckMin":15,"memories":[]}""")
+                return felix.answer("""{"texts":["Ten minutes in: started the worksheet?"],"send":1,"replies":[],"nextCheckMin":15,"memories":[]}""")
             }
         }
         felix.looks.check()
@@ -360,18 +360,20 @@ class LooksTest {
     }
 
     @Test
-    fun `his note on how he felt is kept with his message, and neither a note nor your rating of one is told him again (D-119)`() = runBlocking {
+    fun `his note on how he felt is kept with his message, told him again that day, and your rating of one never (D-119, D-120)`() = runBlocking {
         val key = underWay()
         // His first nudge, with his note on it, rated by you.
         val rated = ChatMessage("n1", Speaker.Felix, "worksheet's on. starting?", felix.clock.time - 60_000L, About(taskId = "teams:sheet"), kind = MessageKind.SlotStart, pieceKey = key, feeling = "NOTE-MARKER", rating = Conversation.RATED_DOWN, feedback = "FEEDBACK-MARKER", ratedAt = 1)
         stores.chat.update { it.copy(messages = listOf(rated)) }
-        felix.answers("""{"feeling":" not impressed: second nudge ","message":"still nothing on it. start it now.","replies":[],"nextCheckMin":10,"memories":[]}""")
+        felix.answers("""{"feeling":" not impressed: second nudge ","texts":["that's two nudges","still nothing on it. start it now.",""],"send":2,"replies":[],"nextCheckMin":10,"memories":[]}""")
         felix.looks.check()
         val asked = felix.server.takeRequest().body.readUtf8()
         assertTrue("worksheet's on. starting?" in asked)
-        assertFalse("NOTE-MARKER" in asked)
+        assertTrue("(you felt: “NOTE-MARKER”)" in asked, asked)
         assertFalse("FEEDBACK-MARKER" in asked)
         assertEquals("not impressed: second nudge", stores.chat.value.messages.last().feeling)
+        // The one he chose sent, the text he wrote beside it kept with it (D-120), the empty one not.
+        assertEquals("still nothing on it. start it now." to listOf("that's two nudges"), stores.chat.value.messages.last().let { it.text to it.unsent })
     }
 
     @Test
@@ -379,14 +381,14 @@ class LooksTest {
         val key = underWay()
         // His first nudge on it, with words, a minute ago.
         stores.chat.update { it.copy(messages = listOf(ChatMessage("n1", Speaker.Felix, "worksheet's on. starting?", felix.clock.time - 60_000L, About(taskId = "teams:sheet"), kind = MessageKind.SlotStart, pieceKey = key))) }
-        felix.answers("""{"message":"that's two nudges now. start it and i'll leave you to it.","replies":[],"nextCheckMin":10,"memories":[]}""")
+        felix.answers("""{"texts":["that's two nudges now. start it and i'll leave you to it."],"send":1,"replies":[],"nextCheckMin":10,"memories":[]}""")
         felix.looks.check()
         // Firm for a second nudge, and a step up as it's due tomorrow morning with nothing done on it: told so, and kept so.
-        assertTrue("How you feel, at most: let down, strongly" in felix.server.takeRequest().body.readUtf8())
+        assertTrue("How you feel, at most: properly fed up" in felix.server.takeRequest().body.readUtf8())
         assertEquals("Strong", stores.chat.value.messages.last().mood)
         // At his next check he chooses not to write: a silence keeps none.
         felix.clock.time += 11 * 60_000L
-        felix.answers("""{"message":"","replies":[],"nextCheckMin":10,"memories":[]}""")
+        felix.answers("""{"texts":[""],"send":1,"replies":[],"nextCheckMin":10,"memories":[]}""")
         felix.looks.check()
         val silence = stores.chat.value.messages.last()
         assertEquals(MessageKind.SlotStart to "", silence.kind to silence.text)
@@ -402,11 +404,11 @@ class LooksTest {
         felix.server.dispatcher = object : Dispatcher() {
             override fun dispatch(request: RecordedRequest): MockResponse {
                 runBlocking { felix.focusKeep(key) }
-                return felix.answer("""{"message":"that's two nudges now. start it.","replies":[],"nextCheckMin":10,"memories":[]}""")
+                return felix.answer("""{"texts":["that's two nudges now. start it."],"send":1,"replies":[],"nextCheckMin":10,"memories":[]}""")
             }
         }
         felix.looks.check()
-        assertTrue("How you feel, at most: let down, strongly" in felix.server.takeRequest().body.readUtf8())
+        assertTrue("How you feel, at most: properly fed up" in felix.server.takeRequest().body.readUtf8())
         assertEquals("Strong", stores.chat.value.messages.last { it.kind == MessageKind.SlotStart }.mood)
     }
 
@@ -429,7 +431,7 @@ class LooksTest {
         felix.clock.time = slot.end + 40 * 60_000L
         assertTrue(felix.focusKeep(key))
         assertEquals(listOf(SlotOutcome.KeptLate), stores.log.value.slots.filter { it.key == key }.map { it.outcome })
-        felix.answers("""{"message":"there you go. knew you had it in you.","replies":[],"nextCheckMin":30,"memories":[]}""")
+        felix.answers("""{"texts":["there you go. knew you had it in you."],"send":1,"replies":[],"nextCheckMin":30,"memories":[]}""")
         felix.looks.check()
         // Answered, whether or not its key is one in three, and proud: a missed piece made up, no other miss today.
         val said = stores.chat.value.messages.last()

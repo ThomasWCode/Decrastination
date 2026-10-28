@@ -170,7 +170,7 @@ class Outbox(
             if (his.isEmpty()) return null
             val shown = his.mapTo(HashSet()) { it.id }
             // In the chat's order, which is the order they were said in.
-            val lines = after.filter { it.id in shown || (it.from == Speaker.You && it.replyTo in shown) }.map { Notice.Line(it.id, line(it), it.at, it.from == Speaker.You) }
+            val lines = after.filter { it.id in shown || (it.from == Speaker.You && it.replyTo in shown) }.flatMap(::lines)
             val newest = his.last()
             // A tap opens at the first you haven't replied to: one you have, you've seen.
             val replied = repliedTo(state)
@@ -204,13 +204,23 @@ class Outbox(
         }
 
         /**
-         * [message] in words, as his notification shows it: his, and the gist of what it made (as the
-         * chat's history tells him of his cards); yours, and why it waits for his answer, if it does.
+         * [message] as his notification's lines: his a line a text (D-120), as the chat shows them, the first ([id]#0) above
+         * the last, which carries the message's id and the gist of what it made; yours, one.
          */
-        private fun line(message: ChatMessage): String = when (message.from) {
-            Speaker.You -> message.text + (message.note?.takeIf { message.answeredAt == null }?.let { "\n($it)" } ?: "")
+        private fun lines(message: ChatMessage): List<Notice.Line> {
+            val texts = FelixAnswers.texts(message)
+            return texts.dropLast(1).mapIndexed { i, text -> Notice.Line("${message.id}#$i", text, message.at, false) } +
+                Notice.Line(message.id, line(message, texts.last()), message.at, message.from == Speaker.You)
+        }
+
+        /**
+         * [message] in words, its [text] (its last text, for his), as his notification shows it: his, and the gist of what
+         * it made (as the chat's history tells him of his cards); yours, and why it waits for his answer, if it does.
+         */
+        private fun line(message: ChatMessage, text: String = message.text): String = when (message.from) {
+            Speaker.You -> text + (message.note?.takeIf { message.answeredAt == null }?.let { "\n($it)" } ?: "")
             Speaker.Felix -> (
-                listOf(message.text) +
+                listOf(text) +
                     message.proposals.filter { it.state == ProposalState.Applied }.map { p -> p.task?.let { "Added “${it.title}”" } ?: p.lines.joinToString("; ") } +
                     message.acts.filter { it.action != null && !it.undone }.map { it.line }
                 ).filter { it.isNotBlank() }.joinToString("\n")

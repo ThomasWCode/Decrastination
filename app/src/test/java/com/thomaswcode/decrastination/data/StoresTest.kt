@@ -32,7 +32,7 @@ class StoresTest {
 
     @Test
     fun `a store's copies are let go, deleted or, where that fails, emptied, and another file is left`() = runTest {
-        val store = JsonStore(File(dir, "felix.json"), FelixStore.serializer(), ::FelixStore, migrations = listOf(MoodMigration.FELIX))
+        val store = JsonStore(File(dir, "felix.json"), FelixStore.serializer(), ::FelixStore, migrations = listOf(MoodMigration.FELIX, SpeechMigration.FELIX))
         val copies = listOf("felix.json.v1", "felix.json.unreadable-20261021-010000").map { File(dir, it).apply { writeText("{\"notes\":[]}") } }
         val others = listOf("felix.json.tmp", "tasks.json.v2").map { File(dir, it).apply { writeText("{}") } }
         // The folder closed to deletes, where the system allows it (not Windows, where a folder's read-only mark doesn't): each copy emptied instead.
@@ -172,7 +172,7 @@ class StoresTest {
         assertEquals(stores.all.size, stores.all.map { it.file }.toSet().size)
         // Every JSON store's shape is known to a backup, at the version its state says, each with a migration from every one before.
         assertEquals(made - "secrets.bin", stores.shapes.keys)
-        assertEquals(mapOf("calendar.json" to 2, "chat.json" to 10, "chat-archive.json" to 9, "felix.json" to 2, "instructions.json" to 5, "log.json" to 4, "memory.json" to 2, "runtime.json" to 3, "session.json" to 3, "settings.json" to 3, "tasks.json" to 3), stores.shapes.filterValues { it.version > 1 }.mapValues { it.value.version })
+        assertEquals(mapOf("calendar.json" to 2, "chat.json" to 11, "chat-archive.json" to 10, "felix.json" to 3, "instructions.json" to 5, "log.json" to 4, "memory.json" to 2, "runtime.json" to 3, "session.json" to 3, "settings.json" to 3, "tasks.json" to 3), stores.shapes.filterValues { it.version > 1 }.mapValues { it.value.version })
         assertTrue(stores.shapes.values.all { Migration.complete(it.version, it.migrations) })
         // And each is said in words when it can't be read, not by its file's name.
         for (file in made) assertTrue(!JsonStore.Unreadable(file, null, kept = false, at = 0).says.startsWith(file), file)

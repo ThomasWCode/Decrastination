@@ -199,8 +199,9 @@ class Looks(
         val message = ChatMessage(
             "reminder-${r.id}-$moment", Speaker.Felix, if (late) "$words ${FelixWords.late(time)}" else words, now, About(taskId = r.taskId, taskTitle = task?.title),
             kind = MessageKind.Reminder, byApp = draft == null, reminderId = r.id, suggestedReplies = FelixWords.REMINDER_REPLIES,
-            // His note on how he felt, where his words go (D-119): read beside your rating of it.
+            // His note on how he felt, where his words go (D-119), and the texts he wrote beside them (D-120): read beside your rating of it.
             feeling = draft?.feeling.orEmpty(),
+            unsent = draft?.unsent.orEmpty(),
         )
         outbox.send(message)
         // Marked sent only as it was sent: moved, snoozed or cancelled while it went, it's another moment's, to come then.
@@ -313,11 +314,11 @@ class Looks(
         // Two steps, his or the reading's, he may rebalance to fit a free time at school today (D-110), at their minutes as
         // planned, none of a task he's had one taken back on.
         val rebalance = Rebalance.candidates(plan, tasks.value.tasks, Rebalance.declined(chat.value.messages), now, planning.calibration())
-        val user = FelixPrompts.describe(FelixPrompts.Reason.Morning, plan, null, null, today(now), chat.value.messages, null, settings, now, clock.zone(), reminders = remindersToday(plan, now), rebalance = rebalance, tasks = planning.asPlanned(), timer = focus.timer)
+        val user = FelixPrompts.describe(FelixPrompts.Reason.Morning, plan, null, null, today(now), chat.value.messages, null, settings, now, clock.zone(), reminders = remindersToday(plan, now), rebalance = rebalance, tasks = planning.asPlanned(), timer = focus.timer, story = story(now), diary = diary(now), since = dayStart(now))
         // Asked in the app's scope, not the briefing's: past [MORNING_MS] the briefing goes without
         // it, and the call, paid for, comes back and is counted all the same.
         val call = scope.async {
-            gateway.call(interactive = false, record = ModelCalls.OnRecord(ModelEffort.Job.Felix, "Morning") { r: FelixCaller.Result -> r.usage to ModelCalls.outcome(r.refused, r.answer == null) }, cost = { r: FelixCaller.Result -> r.costUsd to r.refused }) { caller.say(FelixPrompts.system(settings, profile.year), profile.text, user, maxMessage = FelixAnswers.MAX_MORNING) }
+            gateway.call(interactive = false, record = ModelCalls.OnRecord(ModelEffort.Job.Felix, "Morning") { r: FelixCaller.Result -> r.usage to ModelCalls.outcome(r.refused, r.answer == null) }, cost = { r: FelixCaller.Result -> r.costUsd to r.refused }) { caller.say(FelixPrompts.system(settings), profile.felix, user, maxMessage = FelixAnswers.MAX_MORNING) }
         }
         val called = withTimeoutOrNull(MORNING_MS) { call.await() }
         val result = (called as? Called.Answered)?.value
@@ -352,7 +353,7 @@ class Looks(
             return@withLock false
         }
         // His message whole, with no list of the day beside it (D-65): the room is his.
-        val message = ChatMessage(UUID.randomUUID().toString(), Speaker.Felix, answer.message, now, kind = MessageKind.Morning, suggestedReplies = answer.replies, proposals = proposals, feeling = answer.feeling)
+        val message = ChatMessage(UUID.randomUUID().toString(), Speaker.Felix, answer.message, now, kind = MessageKind.Morning, suggestedReplies = answer.replies, proposals = proposals, feeling = answer.feeling, unsent = answer.unsent)
         outbox.send(message)
         // Made at once, each with its Undo, as his changes in the chat are.
         proposals.forEach { applyProposal(message.id, it.id) }
@@ -364,6 +365,15 @@ class Looks(
         val date = focus.today(now).toString()
         return log.value.slots.filter { it.date == date }
     }
+
+    /** When the day of [now] began, as the slots on record have it: today's story is from then (D-120). */
+    private fun dayStart(now: Long): Long = focus.today(now).atStartOfDay(clock.zone()).toInstant().toEpochMilli()
+
+    /** Today's story as of [now] (D-120): today's slots on record and what's been said, his notes with his. */
+    private fun story(now: Long): List<String> = Story.today(today(now), chat.value.messages, dayStart(now), clock.zone())
+
+    /** His diary as of [now] (D-120): the week's days, the week before, and the week's check-in. */
+    private fun diary(now: Long): List<String> = log.value.let { Story.diary(it.slots, it.checkIns, chat.value.messages, focus.today(now), clock.zone()) }
 
     private fun due(now: Long): FelixRules.Trigger? {
         // Claude off: he has no voice, nothing's asked of the model, and nothing's put in the chat, so
@@ -442,8 +452,9 @@ class Looks(
             // How he felt as he wrote it (D-119), kept (Q103): what a kept slot after a let-down is known by. Written ahead,
             // the level he was told then; a draft from before that was kept, as it is now.
             mood = drafted?.mood ?: Mood.kept(mood, text),
-            // His note on how he felt, kept with it (D-119): read beside your rating of it.
+            // His note on how he felt, kept with it (D-119), and the texts he wrote beside it (D-120): read beside your rating of it.
             feeling = answer?.feeling.orEmpty(),
+            unsent = answer?.unsent.orEmpty(),
         )
         // Held or failed, or a question or completions with no answer it could read: nothing written,
         // tried again from his next look past the wait.
@@ -601,8 +612,8 @@ class Looks(
         val settings = this.settings.value
         val profile = this.profile(at)
         val free = (focus.creditLeftMs(at) / 60_000L).toInt().takeIf { trigger.reason == FelixPrompts.Reason.DayDone || trigger.reason == FelixPrompts.Reason.SlotKept }
-        val user = FelixPrompts.describe(trigger.reason, planning.plan(), trigger.slot, task, today(at), chat.value.messages, trigger.question?.question, settings, at, clock.zone(), free, trigger.record, trigger.asks.map { it.title }, firstAction = trigger.slot?.chunk?.key?.let { model.value.microPlans[it] }?.first?.takeIf { it.isNotEmpty() }, reminder = reminder, notes = notes, tasks = planning.asPlanned(), timer = focus.timer, feeling = mood)
-        val called = gateway.call(interactive = interactive, record = ModelCalls.OnRecord(ModelEffort.Job.Felix, trigger.reason.name) { r: FelixCaller.Result -> r.usage to ModelCalls.outcome(r.refused, r.answer == null) }, cost = { r: FelixCaller.Result -> r.costUsd to r.refused }) { caller.say(FelixPrompts.system(settings, profile.year), profile.text, user) }
+        val user = FelixPrompts.describe(trigger.reason, planning.plan(), trigger.slot, task, today(at), chat.value.messages, trigger.question?.question, settings, at, clock.zone(), free, trigger.record, trigger.asks.map { it.title }, firstAction = trigger.slot?.chunk?.key?.let { model.value.microPlans[it] }?.first?.takeIf { it.isNotEmpty() }, reminder = reminder, notes = notes, tasks = planning.asPlanned(), timer = focus.timer, feeling = mood, story = story(at), diary = diary(at), since = dayStart(at))
+        val called = gateway.call(interactive = interactive, record = ModelCalls.OnRecord(ModelEffort.Job.Felix, trigger.reason.name) { r: FelixCaller.Result -> r.usage to ModelCalls.outcome(r.refused, r.answer == null) }, cost = { r: FelixCaller.Result -> r.costUsd to r.refused }) { caller.say(FelixPrompts.system(settings), profile.felix, user) }
         if (called is Called.Failed) Log.w(AppGraph.TAG, "Felix's message failed", called.error)
         return called
     }

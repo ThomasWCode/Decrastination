@@ -15,7 +15,7 @@ data class FelixStore(
     val notes: List<Note> = emptyList(),
     val reminders: List<Reminder> = emptyList(),
     /** The shape this is in ([Migration]): raised with each change of it. */
-    val version: Int = 2,
+    val version: Int = 3,
 ) {
     companion object {
         /** chat.json from version 3: 4.1.0's acts on reminders and notes, and a reminder's messages, read as they are (their fields have defaults). */
