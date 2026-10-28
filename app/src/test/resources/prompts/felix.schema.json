@@ -1,6 +1,9 @@
 {
     "type": "object",
     "properties": {
+        "feeling": {
+            "type": "string"
+        },
         "message": {
             "type": "string"
         },
@@ -92,6 +95,7 @@
         }
     },
     "required": [
+        "feeling",
         "message",
         "replies",
         "nextCheckMin",

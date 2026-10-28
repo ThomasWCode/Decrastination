@@ -28,6 +28,12 @@ object FelixAnswers {
     /** How long his message in [text] is as he wrote it, before it's held to its room ([message]): 0 when it isn't one. */
     fun messageLength(text: String): Int = runCatching { json.decodeFromString(FelixAnswer.serializer(), text).message.trim().length }.getOrDefault(0)
 
+    /** His note to himself on how he feels in [text] (FelixPrompts.SCHEMA), read for the scenarios' report and never kept: empty when there's none. */
+    fun feeling(text: String): String = runCatching { json.decodeFromString(Feeling.serializer(), text).feeling.trim() }.getOrDefault("")
+
+    @Serializable
+    private data class Feeling(val feeling: String = "")
+
     /**
      * The steps he rebalanced in [text], a morning's answer (D-110), every one: each is checked against what he
      * was asked about as it's made, and one that isn't keeps his message, which may name it, from being sent.
