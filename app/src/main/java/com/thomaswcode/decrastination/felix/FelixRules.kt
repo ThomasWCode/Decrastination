@@ -93,7 +93,7 @@ object FelixRules {
      * slot just kept, every third one (SlotKept). [today]: today's slots on record; [sent]: his
      * messages today, the silent ones (he chose not to write, or the model couldn't be asked) too.
      * [timer]: the timer on a piece (D-112), whose task's SlotStart and SlotEnd wait while
-     * it [holds]. A slot kept of a task he was [letDown] about today (D-119, Q102) is answered after
+     * it [holds]. A slot kept of a task he was [letDown] about today before it was kept (D-119, Q102) is answered after
      * DayDone, before the check he set and whatever's left today, so the let-down is never his last word.
      */
     fun due(
@@ -109,7 +109,7 @@ object FelixRules {
         toAsk: List<AssessLater> = emptyList(),
         zone: ZoneId = ZoneId.systemDefault(),
         timer: PieceTimer? = null,
-        letDown: (String) -> Boolean = { false },
+        letDown: (taskId: String, keptAt: Long) -> Boolean = { _, _ -> false },
     ): Trigger? {
         if (quiet || busyNow) return null
         fun said(reason: Reason, key: String?, since: Long) = sent.filter { it.reason == reason.name && it.key == key && it.at >= since }
@@ -134,7 +134,7 @@ object FelixRules {
         }
         // A slot kept of a task he was let down about today (Q102): always answered, not one in three, nor held by his
         // check or the evening's work being over, so it's said that it's over. The day done said about it answers it.
-        kept.firstOrNull { fresh(it) && letDown(it.taskId) && said(Reason.SlotKept, it.key, it.start).isEmpty() && said(Reason.DayDone, it.key, it.start).isEmpty() && !waiting(Reason.SlotKept, it.key) }?.let {
+        kept.firstOrNull { fresh(it) && letDown(it.taskId, it.at) && said(Reason.SlotKept, it.key, it.start).isEmpty() && said(Reason.DayDone, it.key, it.start).isEmpty() && !waiting(Reason.SlotKept, it.key) }?.let {
             return Trigger(Reason.SlotKept, record = it)
         }
         val paced = state.nextCheckAt?.let { now < it } == true

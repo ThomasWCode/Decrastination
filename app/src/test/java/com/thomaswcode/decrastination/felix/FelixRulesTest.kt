@@ -125,7 +125,7 @@ class FelixRulesTest {
         val kept = record(key, SlotOutcome.KeptLate, at("17:00"), at("21:50"))
         fun his(about: String, mood: String) = ChatMessage("f", Speaker.Felix, "that's two today. you said 17:00, so 21:30 it is.", at("17:35"), About(taskId = about), kind = MessageKind.SlotEnd, pieceKey = key, mood = mood)
         fun due(now: Long, messages: List<ChatMessage>, state: FelixState = FelixState(), sent: List<Sent> = emptyList()) =
-            FelixRules.due(plan, state, listOf(kept), sent, settings, now, false, false, needsPhoto = { false }, letDown = { Mood.letDown(it, messages, now, LONDON) })
+            FelixRules.due(plan, state, listOf(kept), sent, settings, now, false, false, needsPhoto = { false }, letDown = { taskId, keptAt -> Mood.letDown(taskId, messages, now, LONDON, keptAt) })
         val firm = listOf(his(key.substringBefore('#'), "Firm"))
         assertEquals(Reason.SlotKept to kept, due(at("21:55"), firm).let { it?.reason to it?.record })
         // His check not reached: answered all the same.
@@ -138,6 +138,8 @@ class FelixRulesTest {
         assertNull(due(at("21:57"), firm, sent = listOf(sent(Reason.SlotKept, key, at("21:55")))))
         // The day done said about it answers it: not said again as a kept slot.
         assertNull(due(at("21:57"), firm, sent = listOf(sent(Reason.DayDone, key, at("21:55")))))
+        // A let-down written after it was kept (about the task's next piece, say) isn't one it recovers from.
+        assertNull(due(at("21:55"), listOf(his(key.substringBefore('#'), "Firm").copy(at = at("21:52")))))
         assertNull(due(at("22:25"), firm))
     }
 

@@ -404,7 +404,7 @@ class Looks(
             // A timer on a piece holds his slot-start and slot-over messages about its task (D-112).
             timer = focus.timer,
             // A slot kept of a task he was let down about today is always answered (Q102).
-            letDown = { Mood.letDown(it, conversation.messages, now, zone) },
+            letDown = { taskId, keptAt -> Mood.letDown(taskId, conversation.messages, now, zone, keptAt) },
         )
     }
 

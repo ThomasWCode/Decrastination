@@ -218,5 +218,9 @@ class MoodTest {
         assertFalse(Mood.letDown("teams:maths", listOf(his(MessageKind.SlotEnd, key, "17:35", "that's two today.", mood = "Firm")), now, LONDON))
         assertFalse(Mood.letDown("teams:essay", listOf(his(MessageKind.SlotEnd, key, "17:35", "", mood = "Firm")), now, LONDON))
         assertFalse(Mood.letDown("teams:essay", listOf(his(MessageKind.SlotEnd, key, "17:35", "that's two today.", mood = "Firm", date = "2026-11-03")), now, LONDON))
+        // Only one before the piece was kept: one after it is about what came next.
+        val firm = listOf(his(MessageKind.SlotEnd, key, "17:35", "that's two today.", mood = "Firm"))
+        assertTrue(Mood.letDown("teams:essay", firm, now, LONDON, keptAt = at("17:40")))
+        assertFalse(Mood.letDown("teams:essay", firm, now, LONDON, keptAt = at("17:30")))
     }
 }
