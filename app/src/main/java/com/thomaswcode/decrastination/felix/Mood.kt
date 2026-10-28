@@ -140,16 +140,16 @@ object Mood {
 
     /**
      * Whether he was let down (firmly or strongly) about [taskId] in a message of his today before [keptAt], by the level
-     * kept on it (Q103): a slot of that task kept after it is then always answered (Q102), so the let-down is never his
-     * last word on it; one kept before it, the let-down about what came after, isn't a recovery. Read from what was kept,
-     * not worked out again: keeping the piece has replaced its miss and added to its minutes.
+     * kept on it (Q103), and hasn't answered a slot of it kept since (a SlotKept or DayDone about it): the next slot of that
+     * task kept is then always answered (Q102), so the let-down is never his last word on it, once a let-down; one kept
+     * before it, the let-down about what came after, isn't a recovery. Read from what was kept, not worked out again:
+     * keeping the piece has replaced its miss and added to its minutes.
      */
     fun letDown(taskId: String, messages: List<ChatMessage>, now: Long, zone: ZoneId, keptAt: Long = now): Boolean {
         val day = dayOf(now, zone)
-        return messages.any {
-            it.from == Speaker.Felix && it.about.taskId == taskId && it.text.isNotBlank() && dayOf(it.at, zone) == day && it.at < keptAt &&
-                (it.mood == Level.Firm.name || it.mood == Level.Strong.name)
-        }
+        val his = messages.filter { it.from == Speaker.Felix && it.about.taskId == taskId && it.text.isNotBlank() && dayOf(it.at, zone) == day && it.at < keptAt }
+        val last = his.filter { it.mood == Level.Firm.name || it.mood == Level.Strong.name }.maxOfOrNull { it.at } ?: return false
+        return his.none { (it.kind == MessageKind.SlotKept || it.kind == MessageKind.DayDone) && it.at > last }
     }
 
     /** What's kept on his message for [feeling] ([ChatMessage.mood]): its level's name, empty for neutral or a silence. */

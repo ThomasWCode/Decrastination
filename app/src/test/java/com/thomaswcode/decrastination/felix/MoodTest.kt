@@ -222,5 +222,10 @@ class MoodTest {
         val firm = listOf(his(MessageKind.SlotEnd, key, "17:35", "that's two today.", mood = "Firm"))
         assertTrue(Mood.letDown("teams:essay", firm, now, LONDON, keptAt = at("17:40")))
         assertFalse(Mood.letDown("teams:essay", firm, now, LONDON, keptAt = at("17:30")))
+        // Answered once: a kept slot of it said since (or the day done about it) takes the let-down off, till another.
+        val answered = firm + his(MessageKind.SlotKept, key, "17:50", "there you go.", mood = "Pleased")
+        assertFalse(Mood.letDown("teams:essay", answered, now, LONDON, keptAt = at("18:30")))
+        assertFalse(Mood.letDown("teams:essay", firm + his(MessageKind.DayDone, key, "17:50", "that's today done."), now, LONDON, keptAt = at("18:30")))
+        assertTrue(Mood.letDown("teams:essay", answered + his(MessageKind.SlotStart, key, "18:00", "on again now. go.", mood = "Firm"), now, LONDON, keptAt = at("18:30")))
     }
 }
