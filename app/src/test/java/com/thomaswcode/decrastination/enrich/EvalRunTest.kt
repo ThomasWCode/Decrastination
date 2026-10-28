@@ -380,7 +380,9 @@ class EvalRunTest {
         val about = case.about?.let { id -> About(taskId = id, taskTitle = case.tasks.firstOrNull { it.id == id }?.title) } ?: About()
         h.conversation.ask(case.message!!, about)
         h.settle()
-        val reply = h.stores.chat.value.messages.lastOrNull { it.from == Speaker.Felix }
+        // His answer, a message the case didn't hold: a call failed, refused or unread adds none, so it's unread.
+        val seeded = messages.mapTo(HashSet()) { it.id }
+        val reply = h.stores.chat.value.messages.lastOrNull { it.from == Speaker.Felix && it.id !in seeded }
         val made = reply?.proposals.orEmpty().filter { it.state == ProposalState.Applied }.flatMap { p -> p.lines }
         val before = ChatHistory.his(messages).filter { it.text.isNotBlank() }.maxByOrNull { it.at }?.text
         MoodAnswer(

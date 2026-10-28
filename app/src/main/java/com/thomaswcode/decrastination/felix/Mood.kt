@@ -139,14 +139,15 @@ object Mood {
     }
 
     /**
-     * Whether he was let down (firmly or strongly) about [taskId] in a message of his today, by the level kept on it
-     * (Q103): a kept slot of that task is then always answered (Q102), so the let-down is never his last word on it. Read
-     * from what was kept, not worked out again: keeping the piece has replaced its miss and added to its minutes.
+     * Whether he was let down (firmly or strongly) about [taskId] in a message of his today before [keptAt], by the level
+     * kept on it (Q103): a slot of that task kept after it is then always answered (Q102), so the let-down is never his
+     * last word on it; one kept before it, the let-down about what came after, isn't a recovery. Read from what was kept,
+     * not worked out again: keeping the piece has replaced its miss and added to its minutes.
      */
-    fun letDown(taskId: String, messages: List<ChatMessage>, now: Long, zone: ZoneId): Boolean {
+    fun letDown(taskId: String, messages: List<ChatMessage>, now: Long, zone: ZoneId, keptAt: Long = now): Boolean {
         val day = dayOf(now, zone)
         return messages.any {
-            it.from == Speaker.Felix && it.about.taskId == taskId && it.text.isNotBlank() && dayOf(it.at, zone) == day &&
+            it.from == Speaker.Felix && it.about.taskId == taskId && it.text.isNotBlank() && dayOf(it.at, zone) == day && it.at < keptAt &&
                 (it.mood == Level.Firm.name || it.mood == Level.Strong.name)
         }
     }
