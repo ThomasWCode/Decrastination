@@ -18,9 +18,13 @@ import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.core.StepOrigin
 import com.thomaswcode.decrastination.core.SubStep
 import com.thomaswcode.decrastination.core.TaskItem
+import com.thomaswcode.decrastination.core.WindowKind
 import com.thomaswcode.decrastination.data.SlotOutcome
 import com.thomaswcode.decrastination.data.SlotRecord
+import com.thomaswcode.decrastination.learn.CheckIn
 import java.time.Instant
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -393,6 +397,38 @@ class LooksTest {
         val silence = stores.chat.value.messages.last()
         assertEquals(MessageKind.SlotStart to "", silence.kind to silence.text)
         assertEquals("", silence.mood)
+    }
+
+    @Test
+    fun `his call is told today's story and his diary of the week from the stores, the check-in in your words (D-120)`() = runBlocking {
+        val key = underWay()
+        val now = felix.clock.time
+        val yesterday = Instant.ofEpochMilli(now).atZone(Fixtures.LONDON).toLocalDate().minusDays(1)
+        val at = yesterday.atTime(17, 0).atZone(Fixtures.LONDON).toInstant().toEpochMilli()
+        // Yesterday's sheet gone by, his let-down about it kept on his message, and the week's check-in.
+        stores.log.update {
+            it.copy(
+                slots = it.slots + SlotRecord(yesterday.toString(), "teams:sheet#-1#9", "teams:sheet", Kind.Homework, label = "Forces worksheet", plannedMin = 30, start = at, end = at + 30 * 60_000L, window = WindowKind.Evening, outcome = SlotOutcome.Missed, workedMin = 0, at = at + 35 * 60_000L),
+                checkIns = it.checkIns + CheckIn("2026-10-12", now - 2 * 86_400_000L, 2, "the sheet", "", "", "low"),
+            )
+        }
+        stores.chat.update {
+            it.copy(
+                messages = listOf(
+                    ChatMessage("y1", Speaker.Felix, "sheet went by. tomorrow then", at + 40 * 60_000L, About(taskId = "teams:sheet"), kind = MessageKind.SlotEnd, mood = "Firm"),
+                    ChatMessage("t1", Speaker.Felix, "sheet's on", now - 5 * 60_000L, About(taskId = "teams:sheet", taskTitle = "Forces worksheet"), kind = MessageKind.SlotStart, pieceKey = key, feeling = "just a nudge"),
+                ),
+            )
+        }
+        felix.answers("""{"texts":["still nothing on it"],"send":1,"replies":[],"nextCheckMin":10,"memories":[]}""")
+        felix.looks.check()
+        val asked = felix.server.takeRequest().body.readUtf8()
+        val day = yesterday.format(DateTimeFormatter.ofPattern("EEE d MMM", Locale.UK)).lowercase(Locale.UK)
+        assertTrue("- $day: 0 of 1 done; gone by: Forces worksheet; you were not impressed once" in asked, asked)
+        assertTrue("in their words: the week felt 2 of 5; put off: “the sheet”; energy: “low”" in asked, asked)
+        // Today's nudge in the story, with his note; yesterday's message among his texts before today.
+        assertTrue("you texted about Forces worksheet: “sheet's on” (you felt: “just a nudge”)" in asked, asked)
+        assertTrue("you texted: sheet went by. tomorrow then" in asked, asked)
     }
 
     @Test

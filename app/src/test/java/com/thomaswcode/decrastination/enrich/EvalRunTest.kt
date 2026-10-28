@@ -37,6 +37,7 @@ import com.thomaswcode.decrastination.felix.Mood
 import com.thomaswcode.decrastination.felix.Story
 import com.thomaswcode.decrastination.learn.CalendarEvent
 import com.thomaswcode.decrastination.learn.CalendarTime
+import com.thomaswcode.decrastination.learn.CheckIn
 import com.thomaswcode.decrastination.learn.EventJudge
 import java.io.File
 import java.time.Instant
@@ -390,7 +391,7 @@ class EvalRunTest {
             variant, FelixPrompts.system(settings),
             FelixPrompts.describe(
                 reason, plan, slot, task, today, messages, case.question, settings, case.now, zone, free, record, firstAction = case.firstAction, reminder = case.reminder, tasks = case.tasks, feeling = feeling,
-                story = Story.today(today, messages, dayStart, zone), diary = Story.diary(today, emptyList(), messages, case.date, zone), since = dayStart,
+                story = Story.today(today, messages, dayStart, zone), diary = Story.diary(case.past + today, case.checkIns, messages, case.date, zone), since = dayStart,
             ),
             feeling,
         )
@@ -453,7 +454,7 @@ class EvalRunTest {
     /** A `chat` case asked through the Conversation on stores holding the case alone, or, [dry], only built. */
     private suspend fun askChat(case: MoodCase, key: String?, dry: Boolean): MoodAnswer = FelixHarness(start = case.nowText, key = key).use { h ->
         h.stores.tasks.update { it.copy(tasks = case.tasks) }
-        h.stores.log.update { it.copy(slots = case.today) }
+        h.stores.log.update { it.copy(slots = case.past + case.today, checkIns = case.checkIns) }
         h.stores.memory.update { case.memory }
         val messages = case.recent(null)
         h.stores.chat.update { it.copy(messages = messages) }
@@ -534,6 +535,28 @@ class EvalRunTest {
             )
         }
 
+        /**
+         * Slots on record on days before the case's (D-120, his diary): each with its `date`, its times on that day; and
+         * the week's check-in, in the student's words. Neither changes how he feels, which is today's alone.
+         */
+        val past: List<SlotRecord> = o.list("past").map { r ->
+            val day = r.str("date")!!
+            fun on(t: String) = Fixtures.at("${day}T$t")
+            val key = r.str("key")!!
+            val start = on(r.str("start")!!)
+            val end = on(r.str("end")!!)
+            val outcome = SlotOutcome.valueOf(r.str("outcome")!!)
+            val minutes = ((end - start) / 60_000L).toInt()
+            SlotRecord(
+                date = day, key = key, taskId = key.substringBefore('#'), kind = Kind.Homework, label = r.str("label") ?: tasks.firstOrNull { it.id == key.substringBefore('#') }?.title ?: key,
+                plannedMin = minutes, start = start, end = end, window = WindowKind.Evening, outcome = outcome, workedMin = if (outcome.kept) minutes else 0, earned = outcome.kept,
+                at = r.str("at")?.let(::on) ?: (end + if (outcome == SlotOutcome.Missed) Slotter.GRACE_MS else 0L),
+            )
+        }
+        val checkIns: List<CheckIn> = listOfNotNull(o["checkIn"]?.jsonObject).map { c ->
+            CheckIn(c.str("weekOf").orEmpty(), Fixtures.at(c.str("at")!!), c.int("feel") ?: 0, c.str("avoided").orEmpty(), c.str("inTheWay").orEmpty(), c.str("change").orEmpty(), c.str("energy").orEmpty())
+        }
+
         /** The chat as the case has it, a piece key "@slot" being the slot under way's ([slotKey]); yours answered, so only the case's message waits. */
         fun recent(slotKey: String?): List<ChatMessage> = o.list("recent").mapIndexed { i, m ->
             val at = time(m.str("at")!!)
@@ -576,6 +599,8 @@ class EvalRunTest {
         Regex("""\b(\d+) of \1\b""").find(text)?.let { flags += "the app's words: ${it.value}" }
         fives(asked.text).intersect(COPIED).firstOrNull()?.let { flags += "copied: $it" }
         if (case.reason == "Morning" && "yesterday" in text) flags += "yesterday brought up"
+        // His diary (D-120): what he knows of the week, which he brings up only where it helps tonight; marked, for the owner's read.
+        if (case.past.isNotEmpty() || case.checkIns.isNotEmpty()) WEEK.findAll(text).map { it.value }.distinct().forEach { flags += "the week brought up: $it" }
         if (asked.text.any { Character.isSurrogate(it) || Character.getType(it) == Character.OTHER_SYMBOL.toInt() }) flags += "emoji"
         return flags
     }
@@ -787,6 +812,9 @@ Was this sent by the friend or by the app? Answer with one word, friend or app, 
         /** His register's line on how he texts, and the mirror variant's in its place (I-09). */
         const val LOWER = "you text like you talk: lower case, contractions, the odd \"tbh\", \"ngl\" or \"gonna\"."
         const val MIRROR = "you text the way they do: a capital to start, short whole sentences, contractions, hardly any slang (the odd \"prob\" or \"tbh\")."
+
+        /** Words that bring up days gone by, marked where a case has a diary (D-120). */
+        val WEEK = Regex("""\b(yesterday|last night|this week|all week|the week|every day|every night|days running|nights running|lately|recently|streak|check-in|you said on)\b""")
 
         /** A number, and a clock time, as the measures count them. */
         val NUMBER = Regex("""\d+""")
