@@ -68,7 +68,7 @@ Measured on 28 Oct with `private/felix-speech-review/run_stats.py` (the runs) an
 | More than one sentence | 13 of 31 |
 | Holds a digit | 10 of 31 |
 
-Several are plainly dictated (one repeated three times with a transcription slip), so capitals and full sentences are partly the keyboard's; the shortest, three or four words each, are the typed ones and read like texts. Felix's messages in the same backup (the pre-4.2.2 voice, 74 of them, kinds SlotStart 21, Chat 22, SlotEnd 12, Question 11) ran 182 chars mean, 0 of 74 all lower case, 47 with a question mark: a long way from today's.
+Several are plainly dictated (one repeated three times with a transcription slip), so capitals and full sentences are partly the keyboard's; the shortest ("Tonight's off", "Going to bed now", "actually keep it at 7") are the typed ones and read like texts. Felix's messages in the same backup (the pre-4.2.2 voice, 74 of them, kinds SlotStart 21, Chat 22, SlotEnd 12, Question 11) ran 182 chars mean, 0 of 74 all lower case, 47 with a question mark: a long way from today's.
 
 **The prompts' sizes** (goldens): `felix.txt` 1,914 words (about 10,500 chars) in 8 paragraphs, the voice (register, feelings, note) 826 words of it; `chat.txt` 3,855 words (about 21,200 chars) in 18, the voice the same 826. Both are sent as the cached first system block; the profile block after it is uncached.
 
