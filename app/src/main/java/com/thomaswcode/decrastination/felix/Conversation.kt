@@ -567,6 +567,9 @@ class Conversation(
         // The pieces he may keep (G1): today's slots', and each task with no steps' next; and those kept today, to take back.
         val keepable = (plan.todaySlots.mapNotNull { it.chunk } + plan.ordered.filter { it.stepIndex == null }.distinctBy { it.taskId }).associate { it.key to it.taskId }
         val keptToday = keptToday(now)
+        // How he feels about today's work (D-119), as today's newest slot on record leans: what his messages are told, so the two agree.
+        val todays = log.value.slots.filter { it.date == focus.today(now).toString() }
+        val feeling = Mood.line(Mood.of(null, todays, null, 0, Mood.newest(todays)?.let { r -> state.tasks.firstOrNull { it.id == r.taskId } }, messages, now, clock.zone()))
         val lessons = lessons(state, now)
         val waiting = waiting(now, messages)
         return ChatPrompts.Context(
@@ -575,6 +578,7 @@ class Conversation(
                 plan, clock.zone(), keptToday.map { it.key to it.label }, focus.blockingLine(plan, now), focus.timer,
                 InstructionRules.onlyDays(applied, plan.today, plan.today.plusDays(ChatPrompts.PLAN_DAYS.toLong())).mapValues { ChatPrompts.onlyLine(it.value, byId) },
                 InstructionRules.outsideBy(applied, plan.today, plan.today.plusDays(ChatPrompts.PLAN_DAYS.toLong())),
+                feeling,
             ),
             keepable = keepable,
             kept = keptToday.associate { it.key to it.taskId },

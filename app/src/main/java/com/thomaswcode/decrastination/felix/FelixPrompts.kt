@@ -104,7 +104,8 @@ object FelixPrompts {
      * What's done of [tasks], those of today's pieces, [task] and his messages shown (D-57), so his own
      * messages don't outweigh a tick; and, where nothing's been said for [GREET_AFTER_MIN], that it's his
      * first message in a while. A running [timer] (D-112): with the piece or task it's about where it's
-     * on that task, else in a line of its own.
+     * on that task, else in a line of its own. How he feels ([feeling], D-119), as far as he may go, under today's
+     * slots: nothing said at neutral.
      */
     fun describe(
         reason: Reason,
@@ -127,6 +128,7 @@ object FelixPrompts {
         rebalance: List<Rebalance.Candidate> = emptyList(),
         tasks: List<TaskItem> = emptyList(),
         timer: PieceTimer? = null,
+        feeling: Mood.Feeling? = null,
     ): String = buildString {
         fun clock(at: Long) = Instant.ofEpochMilli(at).atZone(zone).format(CLOCK)
         appendLine("Reason: $reason")
@@ -178,6 +180,7 @@ object FelixPrompts {
         val toCome = plan.todaySlots.filter { it.kind == SlotKind.Work && it.end > now && it.chunk != null }
         val next = toCome.firstOrNull { it.start > now }?.let { "; next: ${it.chunk?.label} at ${clock(it.start)}" }.orEmpty()
         appendLine("Today: $kept kept, $missed missed, ${toCome.size} to come$next")
+        feeling?.let(Mood::line)?.let { appendLine(it) }
         if (reminders.isNotEmpty()) appendLine("Reminders today: " + reminders.joinToString("; "))
         if (toCome.isNotEmpty()) appendLine("Left today: " + toCome.joinToString("; ") { "${it.chunk?.label} ${clock(it.start)}–${clock(it.end)}" })
         // Today's breaks outside under way or to come (D-116), so a look knows one is under way.

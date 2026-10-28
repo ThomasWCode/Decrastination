@@ -797,9 +797,10 @@ object ChatPrompts {
      * the slot under way, [blocking]: whether blocking applies and why, and the free time (G5). A running
      * [timer] (D-112) is said with the slot under way or the next thing where it's on that task,
      * else in a line of its own. Today's breaks outside are among today's slots, and the week's later
-     * days' on their lines (D-116), each named by its own time, with who [placed] it where it was moved or added.
+     * days' on their lines (D-116), each named by its own time, with who [placed] it where it was moved or added. How he
+     * feels about today's work ([feeling], D-119) under today's slots, as his messages are told it.
      */
-    fun plan(plan: Plan, zone: ZoneId, kept: List<Pair<String, String>> = emptyList(), blocking: String? = null, timer: PieceTimer? = null, only: Map<LocalDate, String> = emptyMap(), placed: Map<String, By> = emptyMap()): String = buildString {
+    fun plan(plan: Plan, zone: ZoneId, kept: List<Pair<String, String>> = emptyList(), blocking: String? = null, timer: PieceTimer? = null, only: Map<LocalDate, String> = emptyMap(), placed: Map<String, By> = emptyMap(), feeling: String? = null): String = buildString {
         fun at(time: Long) = Instant.ofEpochMilli(time).atZone(zone).format(WHEN)
         fun piece(chunk: Chunk) = "${chunk.label.take(MAX_TITLE)} (${chunk.minutes} min)"
         fun event(task: TaskItem) = "${task.id} | ${task.title.take(MAX_TITLE)} | ${task.source.label}"
@@ -847,6 +848,7 @@ object ChatPrompts {
                 appendLine("- ${clock(s.start)}–${clock(s.end)} $what")
             }
         }
+        feeling?.let { appendLine(it) }
         val last = plan.today.plusDays(PLAN_DAYS - 1L)
         fun day(time: Long): LocalDate = Instant.ofEpochMilli(time).atZone(zone).toLocalDate()
         /** At most [PLAN_LIST] of [lines], and how many more. */

@@ -35,12 +35,16 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import com.thomaswcode.decrastination.core.WindowKind
+import com.thomaswcode.decrastination.data.SlotOutcome
+import com.thomaswcode.decrastination.data.SlotRecord
 import com.thomaswcode.decrastination.learn.CalendarTime
 import com.thomaswcode.decrastination.sync.GmailFinishes
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import java.time.Instant
 import java.time.LocalDate
 
 /**
@@ -154,6 +158,15 @@ class ConversationTest {
         assertTrue(conversation.ask("Anki too"))
         felix.settle()
         assertEquals(OnlyDay(setOf(sheet.id), anki = true, deadlines = false), InstructionRules.onlyDays(stores.instructions.value.applied, saturday, saturday)[saturday])
+    }
+
+    @Test
+    fun `the chat is told how he feels as today's newest slot leans, as his messages are (D-119)`() = runBlocking {
+        val today = Instant.ofEpochMilli(now).atZone(Fixtures.LONDON).toLocalDate().toString()
+        fun missed(key: String, end: Long) = SlotRecord(today, key, key.substringBefore('#'), Kind.Homework, label = key, plannedMin = 30, start = end - 30 * 60_000L, end = end, window = WindowKind.Evening, outcome = SlotOutcome.Missed, workedMin = 0, at = end + 60_000L)
+        assertFalse("How you feel" in conversation.chatContext().plan)
+        stores.log.update { it.copy(slots = listOf(missed("teams:a#-1#1", now - 3 * 3_600_000L), missed("teams:b#-1#1", now - 3_600_000L))) }
+        assertTrue("How you feel, at most: let down, firmly (2 slots missed today)" in conversation.chatContext().plan.lines(), conversation.chatContext().plan)
     }
 
     @Test

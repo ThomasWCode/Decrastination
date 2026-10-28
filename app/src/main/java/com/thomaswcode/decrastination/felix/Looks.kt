@@ -391,6 +391,8 @@ class Looks(
             zone = zone,
             // A timer on a piece holds his slot-start and slot-over messages about its task (D-112).
             timer = focus.timer,
+            // A slot kept of a task he was let down about today is always answered (Q5).
+            letDown = { Mood.letDown(it, conversation.messages, now, zone) },
         )
     }
 
@@ -432,6 +434,8 @@ class Looks(
             UUID.randomUUID().toString(), Speaker.Felix, text, now, About(taskId = trigger.taskId, taskTitle = task?.title),
             // Why he wrote it, its kind (his answer, the chat's).
             kind = MessageKind.entries.firstOrNull { it.name == trigger.reason.name } ?: MessageKind.Chat, pieceKey = trigger.key, nextCheckAt = next, asks = trigger.asks, suggestedReplies = replies,
+            // How he felt as he wrote it (D-119), kept (Q6): what a kept slot after a let-down is known by.
+            mood = Mood.kept(feeling(trigger, now, task), text),
         )
         // Held or failed, or a question or completions with no answer it could read: nothing written,
         // tried again from his next look past the wait.
@@ -588,10 +592,19 @@ class Looks(
         val settings = this.settings.value
         val profile = this.profile(at)
         val free = (focus.creditLeftMs(at) / 60_000L).toInt().takeIf { trigger.reason == FelixPrompts.Reason.DayDone || trigger.reason == FelixPrompts.Reason.SlotKept }
-        val user = FelixPrompts.describe(trigger.reason, planning.plan(), trigger.slot, task, today(at), chat.value.messages, trigger.question?.question, settings, at, clock.zone(), free, trigger.record, trigger.asks.map { it.title }, firstAction = trigger.slot?.chunk?.key?.let { model.value.microPlans[it] }?.first?.takeIf { it.isNotEmpty() }, reminder = reminder, notes = notes, tasks = planning.asPlanned(), timer = focus.timer)
+        val user = FelixPrompts.describe(trigger.reason, planning.plan(), trigger.slot, task, today(at), chat.value.messages, trigger.question?.question, settings, at, clock.zone(), free, trigger.record, trigger.asks.map { it.title }, firstAction = trigger.slot?.chunk?.key?.let { model.value.microPlans[it] }?.first?.takeIf { it.isNotEmpty() }, reminder = reminder, notes = notes, tasks = planning.asPlanned(), timer = focus.timer, feeling = feeling(trigger, at, task))
         val called = gateway.call(interactive = interactive, record = ModelCalls.OnRecord(ModelEffort.Job.Felix, trigger.reason.name) { r: FelixCaller.Result -> r.usage to ModelCalls.outcome(r.refused, r.answer == null) }, cost = { r: FelixCaller.Result -> r.costUsd to r.refused }) { caller.say(FelixPrompts.system(settings, profile.year), profile.text, user) }
         if (called is Called.Failed) Log.w(AppGraph.TAG, "Felix's message failed", called.error)
         return called
+    }
+
+    /**
+     * How he feels writing [trigger]'s message at [at] (D-119), about [task]: by today's slots on record, the one it's about,
+     * and his nudges already sent on its piece, from the chat as it is.
+     */
+    private fun feeling(trigger: FelixRules.Trigger, at: Long, task: TaskItem?): Mood.Feeling {
+        val messages = chat.value.messages
+        return Mood.of(trigger.reason, today(at), trigger.record, Mood.nudges(messages, trigger.key, at, clock.zone()), task, messages, at, clock.zone())
     }
 
     /** [task]'s notes, its own and the standing ones it matches, as he's told them. */

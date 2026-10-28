@@ -1,6 +1,7 @@
 package com.thomaswcode.decrastination.felix
 
 import com.thomaswcode.decrastination.Fixtures
+import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.By
 import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.ChatMessage
@@ -10,12 +11,15 @@ import com.thomaswcode.decrastination.core.ProposalState
 import com.thomaswcode.decrastination.core.Rebalance
 import com.thomaswcode.decrastination.core.SlotKind
 import com.thomaswcode.decrastination.core.SlotState
+import com.thomaswcode.decrastination.core.Slotter
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.core.StepOrigin
 import com.thomaswcode.decrastination.core.SubStep
 import com.thomaswcode.decrastination.core.TaskItem
+import com.thomaswcode.decrastination.data.SlotOutcome
+import com.thomaswcode.decrastination.data.SlotRecord
 import java.time.Instant
 import kotlin.test.AfterTest
 import kotlin.test.Test
@@ -351,5 +355,51 @@ class LooksTest {
         assertEquals(1, felix.server.requestCount)
         assertTrue(stores.chat.value.messages.none { it.kind == MessageKind.SlotStart })
         assertNull(felix.ports.showing)
+    }
+
+    @Test
+    fun `his second nudge on a piece is kept at the level he wrote it at, a silence with none (D-119, Q6)`() = runBlocking {
+        val key = underWay()
+        // His first nudge on it, with words, a minute ago.
+        stores.chat.update { it.copy(messages = listOf(ChatMessage("n1", Speaker.Felix, "worksheet's on. starting?", felix.clock.time - 60_000L, About(taskId = "teams:sheet"), kind = MessageKind.SlotStart, pieceKey = key))) }
+        felix.answers("""{"message":"that's two nudges now. start it and i'll leave you to it.","replies":[],"nextCheckMin":10,"memories":[]}""")
+        felix.looks.check()
+        // Firm for a second nudge, and a step up as it's due tomorrow morning with nothing done on it: told so, and kept so.
+        assertTrue("How you feel, at most: let down, strongly" in felix.server.takeRequest().body.readUtf8())
+        assertEquals("Strong", stores.chat.value.messages.last().mood)
+        // At his next check he chooses not to write: a silence keeps none.
+        felix.clock.time += 11 * 60_000L
+        felix.answers("""{"message":"","replies":[],"nextCheckMin":10,"memories":[]}""")
+        felix.looks.check()
+        val silence = stores.chat.value.messages.last()
+        assertEquals(MessageKind.SlotStart to "", silence.kind to silence.text)
+        assertEquals("", silence.mood)
+    }
+
+    @Test
+    fun `a missed piece kept after his let-down about it is answered, its miss replaced as Focus keeps it (Q5, Q6)`() = runBlocking {
+        val key = underWay()
+        // More work tonight, so the day isn't done with it.
+        stores.tasks.update {
+            it.copy(tasks = it.tasks + TaskItem(id = "teams:essay", source = Source.Teams, sourceId = "essay", title = "Essay", dueAt = Fixtures.at("2026-10-20T08:30"), kind = Kind.Homework, sourceEffortMin = 60, firstSeenAt = now, lastSeenAt = now))
+        }
+        val slot = felix.planning.plan().todaySlots.first { it.chunk?.key == key }
+        val chunk = slot.chunk!!
+        // Gone by undone: its miss on record as the app writes it, and his let-down about it, kept on his message.
+        val today = Instant.ofEpochMilli(slot.start).atZone(Fixtures.LONDON).toLocalDate().toString()
+        stores.log.update {
+            it.copy(slots = it.slots + SlotRecord(today, key, "teams:sheet", Kind.Homework, label = chunk.label, plannedMin = chunk.minutes, start = slot.start, end = slot.end, window = slot.window, outcome = SlotOutcome.Missed, workedMin = 0, at = slot.end + Slotter.GRACE_MS))
+        }
+        stores.chat.update { it.copy(messages = listOf(ChatMessage("e1", Speaker.Felix, "worksheet's gone by. 19:00, you're on it.", slot.end + 5 * 60_000L, About(taskId = "teams:sheet"), kind = MessageKind.SlotEnd, pieceKey = key, mood = "Strong"))) }
+        // Kept later, as Day's Done keeps it: one record, kept late, in place of the miss.
+        felix.clock.time = slot.end + 40 * 60_000L
+        assertTrue(felix.focusKeep(key))
+        assertEquals(listOf(SlotOutcome.KeptLate), stores.log.value.slots.filter { it.key == key }.map { it.outcome })
+        felix.answers("""{"message":"there you go. knew you had it in you.","replies":[],"nextCheckMin":30,"memories":[]}""")
+        felix.looks.check()
+        // Answered, whether or not its key is one in three, and proud: a missed piece made up, no other miss today.
+        val said = stores.chat.value.messages.last()
+        assertEquals(MessageKind.SlotKept to key, said.kind to said.pieceKey)
+        assertEquals("Proud", said.mood)
     }
 }

@@ -18,7 +18,7 @@ data class ChatState(
     /** His state between looks (LR-03): his next check, what he wrote ahead, what waits to be asked, the check-in's answers so far. */
     val felix: FelixState = FelixState(),
     /** The shape this is in ([com.thomaswcode.decrastination.data.Migration]): raised with each change of it. */
-    val version: Int = 9,
+    val version: Int = 10,
 ) {
     /**
      * Your newest message still waiting for his answer: a message of his written since, unasked, doesn't
@@ -97,6 +97,12 @@ data class ChatMessage(
     /** Claude's: what he searched the web for to answer it, and the pages the searches found, the first few. */
     val searched: List<String> = emptyList(),
     val sources: List<WebSource> = emptyList(),
+    /**
+     * His, written unasked: how he felt as he wrote it (D-119), a level of the app's rule's ("Firm", "Strong", "Pleased",
+     * "Proud"); empty for neutral, for a silence and for every other message. Kept, as the records it rested on change once
+     * the piece is kept (Q6).
+     */
+    val mood: String = "",
 )
 
 /** A page a web search found ([ChatMessage.sources]): its title and where it is. */
@@ -111,7 +117,7 @@ data class WebSource(val title: String, val url: String)
 data class ChatArchive(
     val messages: List<ChatMessage> = emptyList(),
     /** The shape this is in ([com.thomaswcode.decrastination.data.Migration]): raised with each change of it. */
-    val version: Int = 8,
+    val version: Int = 9,
 )
 
 /** The conversation read as a thread. Pure. */
