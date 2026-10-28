@@ -798,7 +798,7 @@ class EvalRunTest {
         const val JUDGE = "claude-sonnet-5-5"
 
         /** What the judge is asked of each message, blind to the prompt that wrote it: one question, its answer a word and a giveaway. */
-        const val JUDGE_ASK = """A student in the UK gets texts about their homework. Some come from their closest mate, 22 and about their age, who has their planner open and keeps them on it; some are written by the planner app itself in a friendly style. Here is one, with what it was about.
+        const val JUDGE_ASK = """A student in the UK gets texts about their homework. Some come from their closest mate, who's about their age and has their planner open and keeps them on it; some are written by the planner app itself in a friendly style. Here is one, with what it was about.
 
 About: {what}
 Text, a line a message:
