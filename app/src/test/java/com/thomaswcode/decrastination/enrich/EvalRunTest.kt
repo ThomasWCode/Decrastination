@@ -350,7 +350,7 @@ class EvalRunTest {
         val task = (slot?.chunk?.taskId ?: record?.taskId ?: case.task)?.let { id -> case.tasks.firstOrNull { it.id == id } }
         val feeling = Mood.of(reason, today, record, Mood.nudges(messages, slot?.chunk?.key ?: record?.key, case.now, zone), task, messages, case.now, zone)
         val free = case.freeMin.takeIf { reason == FelixPrompts.Reason.DayDone || reason == FelixPrompts.Reason.SlotKept }
-        val user = FelixPrompts.describe(reason, plan, slot, task, today, messages, case.question, settings, case.now, zone,free, record, firstAction = case.firstAction, tasks = case.tasks, feeling = feeling)
+        val user = FelixPrompts.describe(reason, plan, slot, task, today, messages, case.question, settings, case.now, zone,free, record, firstAction = case.firstAction, reminder = case.reminder, tasks = case.tasks, feeling = feeling)
         if (dry) return MoodAnswer(feeling.level, user)
         val profile = Profile.block(settings, case.tasks, null, SchoolCalendar(), case.memory, case.now, zone)
         val max = if (reason == FelixPrompts.Reason.Morning) FelixAnswers.MAX_MORNING else FelixAnswers.MAX_MESSAGE
@@ -412,8 +412,9 @@ class EvalRunTest {
         val about = o.str("about")
         val firstAction = o.str("firstAction")
 
-        /** A Question's to put, in the app's words. */
+        /** A Question's to put, in the app's words; a Reminder's words, as they set it. */
         val question = o.str("question")
+        val reminder = o.str("reminder")
         val freeMin = o.int("freeMin") ?: 20
         val nickname = o.str("nickname")
         val planFrom = o.str("planFrom")?.let(::time) ?: now

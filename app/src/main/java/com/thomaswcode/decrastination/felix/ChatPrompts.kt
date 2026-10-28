@@ -180,6 +180,8 @@ object ChatPrompts {
 
         ${FelixPrompts.FEELING}
 
+        ${FelixPrompts.NOTE}
+
         The student's standing instructions on how you behave come before all of this.
 
         Examples (made up, to show the voice and the form of an answer; never words to reuse):
@@ -264,6 +266,8 @@ object ChatPrompts {
     )
 
     val SCHEMA: Map<String, Any> = InstructionPrompts.obj(
+        // His note to himself on how he feels, written before his reply and never kept (D-119): a plain string.
+        "feeling" to STRING,
         "reply" to STRING,
         "newTasks" to mapOf("type" to "array", "items" to TASK),
         "changes" to mapOf("type" to "array", "items" to CHANGE),
