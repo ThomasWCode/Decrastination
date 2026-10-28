@@ -248,7 +248,8 @@ class EvalRunTest {
      * ([FelixCaller.Result.cut]) or unread failing its case. A `chat` case is a message of yours, asked through the
      * Conversation on temporary stores holding the case alone ([FelixHarness]), as the chat's set asks. Beside each, the
      * level the rule gives ([Mood.of]). Each case asked `EVAL_TIMES` times (1 unless set), as his tone varies from one call
-     * to the next; `EVAL_CASES` (ids, by commas) asks only those; `EVAL_DRY` builds each and prints what he'd be told,
+     * to the next; `EVAL_CASES` (ids, by commas) asks only those; `EVAL_MODEL` asks his messages of another model than the
+     * app's (the chat's stay on the app's), its cost priced as the older Opus's; `EVAL_DRY` builds each and prints what he'd be told,
      * asking nothing. Each answer, with its length, its address words and its flags, written to `runs/<n>.json` and
      * `report-<n>.md`; with `EVAL_BEFORE` (a run's number), `report.md` too, that run's answers beside this one's. The
      * budget is the chat's set's soft one, and a case not asked is said in the report.
@@ -353,12 +354,13 @@ class EvalRunTest {
         if (dry) return MoodAnswer(feeling.level, user)
         val profile = Profile.block(settings, case.tasks, null, SchoolCalendar(), case.memory, case.now, zone)
         val max = if (reason == FelixPrompts.Reason.Morning) FelixAnswers.MAX_MORNING else FelixAnswers.MAX_MESSAGE
-        val result = FelixCaller(client!!).say(FelixPrompts.system(settings, Profile.yearGroup(case.now, zone, settings.yearGroupStart)), profile, user, max)
+        val result = FelixCaller(client!!, System.getenv("EVAL_MODEL") ?: ClaudeEnricher.MODEL).say(FelixPrompts.system(settings, Profile.yearGroup(case.now, zone, settings.yearGroupStart)), profile, user, max)
         val answer = result.answer
         val before = ChatHistory.his(messages).filter { it.text.isNotBlank() }.maxByOrNull { it.at }?.text
         return MoodAnswer(
             feeling.level, user, answer?.message.orEmpty(), result.messageChars, result.cut, read = answer != null && !result.refused, replies = answer?.replies.orEmpty(),
-            extra = answer?.memories.orEmpty().map { "remembered: ${it.topic}: ${it.text}" } + listOfNotNull(answer?.nextCheckMin?.let { "next check $it min" }), cost = result.costUsd, before = before,
+            extra = answer?.memories.orEmpty().map { "remembered: ${it.topic}: ${it.text}" } + listOfNotNull(answer?.nextCheckMin?.let { "next check $it min" }, result.model?.takeIf { System.getenv("EVAL_MODEL") != null }),
+            cost = result.costUsd, before = before,
         )
     }
 
@@ -566,8 +568,11 @@ class EvalRunTest {
         /** A counsellor's (build.md §5): sincerity gone wrong. */
         val COUNSELLOR = listOf("i hear you", "that's valid", "be kind to yourself", "it's okay to struggle", "your feelings")
 
-        /** Lines that sound written, an AI's, or the app's own words read back (the owner's read of run 2): never his. */
-        val WRITTEN = listOf("sting", "gets to me", "counting on", "had it in you", "to spare", "slot kept", "slots kept", "every slot")
+        /**
+         * Lines that sound written, an AI's, or the app's own words read back (the owner's read of run 2), and pride said
+         * outright, which doesn't sound sincere (of run 4): never his.
+         */
+        val WRITTEN = listOf("sting", "gets to me", "counting on", "had it in you", "to spare", "slot kept", "slots kept", "every slot", "proud of you")
 
         /**
          * Five words running from a mood's example in his prompts, and in no other example of theirs: an answer with
@@ -580,7 +585,8 @@ class EvalRunTest {
             quoted(mood) - quoted(rest)
         }
 
-        /** [text]'s words five at a time, in lower case, without their stops and commas. */
-        fun fives(text: String): Set<String> = Regex("""[a-z0-9:']+""").findAll(text.lowercase(Locale.ROOT)).map { it.value }.toList().windowed(5).mapTo(HashSet()) { it.joinToString(" ") }
+        /** [text]'s words five at a time, in lower case, without their stops and commas, and none with a number (times and counts are the work's). */
+        fun fives(text: String): Set<String> = Regex("""[a-z0-9:']+""").findAll(text.lowercase(Locale.ROOT)).map { it.value }.toList().windowed(5)
+            .filter { w -> w.none { word -> word.any(Char::isDigit) } }.mapTo(HashSet()) { it.joinToString(" ") }
     }
 }
