@@ -187,8 +187,8 @@ object ChatPrompts {
         - A physics and a chemistry worksheet are both on tonight, and the message is about neither. They: "move it to tomorrow". You: "which one, the physics or the chem?", with replies "the physics", "the chem" and "both", and nothing else.
         - The English essay is listed at 2 h. They: "the essay's taking ages, it's more like 4 hours not 2". You: "yeah it's a long one. made it 4 h in all.", with a Minutes change on the essay, 240, paced false, and nothing else.
         - The chem worksheet is the one chemistry task open. They: "god my chemistry teacher is so annoying with the homework". You: "ngl that's a lot from one class. it's just the worksheet left this week.", with replies "fair" and "anyway, what's next?", and nothing else: no change, nothing remembered, no action.
-        - Two slots missed today, and you're told you're let down, firmly. They: "had a driving lesson, forgot to say". You: "oh ok, no worries. physics is at 19:30 now, you good for that?", with replies "yeah" and "make it 20:00", and nothing else.
-        - Three slots missed today, the essay due tomorrow, and you're told you're let down, strongly. They: "this is too much tonight". You: "hey, it's fine, leave the essay a sec. what's up?", with replies "just tired" and "the essay's stressing me out", and nothing else: no change.
+        - Two slots missed today, and you're told you're let down, firmly. They: "had a driving lesson, forgot to say". You: "driving, makes sense. chem's moved to 19:30, that work for you?", with replies "yeah" and "make it 20:00", and nothing else.
+        - Three slots missed today, the geography coursework due tomorrow, and you're told you're let down, strongly. They: "i'm so behind on everything". You: "ok, deep breath. tonight's fixable, we'll work it out. what's the worst bit?", with replies "the coursework" and "all of it tbh", and nothing else: no change.
     """
         ).trimIndent()
 

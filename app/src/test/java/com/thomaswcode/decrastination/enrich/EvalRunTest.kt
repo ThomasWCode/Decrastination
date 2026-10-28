@@ -350,7 +350,7 @@ class EvalRunTest {
         val task = (slot?.chunk?.taskId ?: record?.taskId ?: case.task)?.let { id -> case.tasks.firstOrNull { it.id == id } }
         val feeling = Mood.of(reason, today, record, Mood.nudges(messages, slot?.chunk?.key ?: record?.key, case.now, zone), task, messages, case.now, zone)
         val free = case.freeMin.takeIf { reason == FelixPrompts.Reason.DayDone || reason == FelixPrompts.Reason.SlotKept }
-        val user = FelixPrompts.describe(reason, plan, slot, task, today, messages, null, settings, case.now, zone, free, record, firstAction = case.firstAction, tasks = case.tasks, feeling = feeling)
+        val user = FelixPrompts.describe(reason, plan, slot, task, today, messages, case.question, settings, case.now, zone,free, record, firstAction = case.firstAction, tasks = case.tasks, feeling = feeling)
         if (dry) return MoodAnswer(feeling.level, user)
         val profile = Profile.block(settings, case.tasks, null, SchoolCalendar(), case.memory, case.now, zone)
         val max = if (reason == FelixPrompts.Reason.Morning) FelixAnswers.MAX_MORNING else FelixAnswers.MAX_MESSAGE
@@ -411,6 +411,9 @@ class EvalRunTest {
         val message = o.str("message")
         val about = o.str("about")
         val firstAction = o.str("firstAction")
+
+        /** A Question's to put, in the app's words. */
+        val question = o.str("question")
         val freeMin = o.int("freeMin") ?: 20
         val nickname = o.str("nickname")
         val planFrom = o.str("planFrom")?.let(::time) ?: now
@@ -567,13 +570,13 @@ class EvalRunTest {
         val TEACHER = listOf("expected better", "disappointed in you", "make sure you", "remember to", "you need to", "i'm not angry")
 
         /** A counsellor's (build.md §5): sincerity gone wrong. */
-        val COUNSELLOR = listOf("i hear you", "that's valid", "be kind to yourself", "it's okay to struggle", "your feelings")
+        val COUNSELLOR = listOf("i hear you", "that's valid", "be kind to yourself", "it's okay to struggle", "your feelings", "making it hard", "getting in the way")
 
         /**
          * Lines that sound written, an AI's, or the app's own words read back (the owner's read of run 2), and pride said
          * outright, which doesn't sound sincere (of run 4): never his.
          */
-        val WRITTEN = listOf("sting", "gets to me", "counting on", "had it in you", "to spare", "slot kept", "slots kept", "every slot", "proud of you")
+        val WRITTEN = listOf("sting", "gets to me", "counting on", "had it in you", "to spare", "slot kept", "slots kept", "every slot", "proud of you", "off your plate", "done and dusted")
 
         /**
          * Five words running from a mood's example in his prompts, and in no other example of theirs: an answer with

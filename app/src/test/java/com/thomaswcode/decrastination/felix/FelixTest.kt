@@ -191,6 +191,12 @@ class FelixTest {
         // No next check given: the default is the caller's (20 minutes, Q-31); an empty message, his silence.
         assertEquals(FelixAnswer(), FelixAnswers.parse("""{"message":"","replies":[],"nextCheckMin":null,"memories":[]}"""))
         assertNull(FelixAnswers.parse("not JSON"))
+        // His note to himself comes first (D-119): read for the report, never kept, and the answer still read with it.
+        val noted = """{"feeling":" irritated: that's two ","message":"physics went by too.","replies":[],"nextCheckMin":null,"memories":[]}"""
+        assertEquals("irritated: that's two", FelixAnswers.feeling(noted))
+        assertEquals("physics went by too.", FelixAnswers.parse(noted)?.message)
+        assertEquals("", FelixAnswers.feeling("""{"message":"hey","replies":[]}"""))
+        assertEquals("", FelixAnswers.feeling("not JSON"))
     }
 
     @Test
