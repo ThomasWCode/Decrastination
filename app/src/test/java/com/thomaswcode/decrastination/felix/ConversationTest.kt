@@ -747,6 +747,33 @@ class ConversationTest {
     }
 
     @Test
+    fun `his message rated, held, in the chat or the archive, and taken off again, yours not, and none of it told him (D-119)`() = runBlocking {
+        stores.chat.update { it.copy(messages = listOf(ChatMessage("f1", Speaker.Felix, "that's two tonight.", now - 60_000L, kind = MessageKind.SlotEnd, feeling = "NOTE-MARKER"), ChatMessage("y1", Speaker.You, "sorry", now - 30_000L))) }
+        stores.chatArchive.update { it.copy(messages = listOf(ChatMessage("f0", Speaker.Felix, "physics done in the end.", now - 70 * 86_400_000L, kind = MessageKind.SlotKept))) }
+        conversation.rate("f1", up = false, feedback = "  FEEDBACK-MARKER  ")
+        val rated = stores.chat.value.messages.first { it.id == "f1" }
+        assertEquals(listOf(Conversation.RATED_DOWN, "FEEDBACK-MARKER", "NOTE-MARKER"), listOf(rated.rating, rated.feedback, rated.feeling))
+        assertEquals(felix.clock.now(), rated.ratedAt)
+        // One scrolled back to, in the archive; one of yours isn't rated.
+        conversation.rate("f0", up = true, feedback = "")
+        assertEquals(Conversation.RATED_UP, stores.chatArchive.value.messages.single().rating)
+        conversation.rate("y1", up = true, feedback = "mine")
+        assertEquals("", stores.chat.value.messages.first { it.id == "y1" }.rating)
+        // The chat's next turn tells him neither your words nor his note; his reply keeps its own note.
+        felix.answers("""{"feeling":"easy, glad they're back on it",""" + felix.chatAnswer("Fine, physics at 19:30 then.").removePrefix("{"))
+        assertTrue(conversation.ask("what's next?"))
+        felix.settle()
+        val sent = felix.server.takeRequest().body.readUtf8()
+        assertTrue("that's two tonight." in sent)
+        assertFalse("FEEDBACK-MARKER" in sent)
+        assertFalse("NOTE-MARKER" in sent)
+        assertEquals("easy, glad they're back on it", stores.chat.value.messages.last { it.from == Speaker.Felix }.feeling)
+        // Taken off, words and all.
+        conversation.rate("f1", up = null, feedback = "")
+        assertEquals(listOf("", "", "0"), stores.chat.value.messages.first { it.id == "f1" }.let { listOf(it.rating, it.feedback, it.ratedAt.toString()) })
+    }
+
+    @Test
     fun `an answer with no call from his notification, while a message of yours waits, asks for no work`() = runBlocking {
         stores.settings.update { it.copy(aiEnabled = false) }
         assertTrue(conversation.ask("What's due tomorrow?"))

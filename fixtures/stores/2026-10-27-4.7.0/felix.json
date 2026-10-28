@@ -64,7 +64,8 @@
                         "until": "",
                         "taskId": ""
                     }
-                ]
+                ],
+                "feeling": "a nudge at a good moment, nothing more"
             },
             "draftedAt": 1792279500000,
             "draftFor": 1792279800000
@@ -150,5 +151,5 @@
             "draftFor": null
         }
     ],
-    "version": 1
+    "version": 2
 }

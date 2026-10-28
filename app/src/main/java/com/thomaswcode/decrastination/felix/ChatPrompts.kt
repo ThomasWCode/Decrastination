@@ -266,7 +266,7 @@ object ChatPrompts {
     )
 
     val SCHEMA: Map<String, Any> = InstructionPrompts.obj(
-        // His note to himself on how he feels, written before his reply and never kept (D-119): a plain string.
+        // His note to himself on how he feels, written before his reply and kept with it (D-119): a plain string.
         "feeling" to STRING,
         "reply" to STRING,
         "newTasks" to mapOf("type" to "array", "items" to TASK),

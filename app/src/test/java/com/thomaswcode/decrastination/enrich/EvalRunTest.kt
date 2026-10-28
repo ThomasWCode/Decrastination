@@ -359,7 +359,7 @@ class EvalRunTest {
         val before = ChatHistory.his(messages).filter { it.text.isNotBlank() }.maxByOrNull { it.at }?.text
         return MoodAnswer(
             feeling.level, user, answer?.message.orEmpty(), result.messageChars, result.cut, read = answer != null && !result.refused, replies = answer?.replies.orEmpty(),
-            extra = listOfNotNull(result.feeling.takeIf { it.isNotEmpty() }?.let { "feeling: $it" }) + answer?.memories.orEmpty().map { "remembered: ${it.topic}: ${it.text}" } +
+            extra = listOfNotNull(answer?.feeling?.takeIf { it.isNotEmpty() }?.let { "feeling: $it" }) + answer?.memories.orEmpty().map { "remembered: ${it.topic}: ${it.text}" } +
                 listOfNotNull(answer?.nextCheckMin?.let { "next check $it min" }, result.model?.takeIf { System.getenv("EVAL_MODEL") != null }),
             cost = result.costUsd, before = before,
         )
@@ -385,7 +385,8 @@ class EvalRunTest {
         val before = ChatHistory.his(messages).filter { it.text.isNotBlank() }.maxByOrNull { it.at }?.text
         MoodAnswer(
             feeling.level, prompt, reply?.text.orEmpty(), reply?.text.orEmpty().length, read = reply != null && reply.text.isNotBlank(), replies = reply?.suggestedReplies.orEmpty(),
-            extra = made.map { "made: $it" } + reply?.acts.orEmpty().map { "act: ${it.line}" } + reply?.memoryEdits.orEmpty().map { "memory: ${it.line}" },
+            extra = listOfNotNull(reply?.feeling?.takeIf { it.isNotEmpty() }?.let { "feeling: $it" }) + made.map { "made: $it" } + reply?.acts.orEmpty().map { "act: ${it.line}" } +
+                reply?.memoryEdits.orEmpty().map { "memory: ${it.line}" },
             cost = h.stores.model.value.calls.sumOf { it.costUsd }, before = before,
         )
     }

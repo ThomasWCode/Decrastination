@@ -436,6 +436,8 @@ class Looks(
             kind = MessageKind.entries.firstOrNull { it.name == trigger.reason.name } ?: MessageKind.Chat, pieceKey = trigger.key, nextCheckAt = next, asks = trigger.asks, suggestedReplies = replies,
             // How he felt as he wrote it (D-119), kept (Q6): what a kept slot after a let-down is known by.
             mood = Mood.kept(feeling(trigger, now, task), text),
+            // His note on how he felt, kept with it (D-119): read beside your rating of it.
+            feeling = answer?.feeling.orEmpty(),
         )
         // Held or failed, or a question or completions with no answer it could read: nothing written,
         // tried again from his next look past the wait.

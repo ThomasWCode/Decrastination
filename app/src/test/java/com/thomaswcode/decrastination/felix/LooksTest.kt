@@ -358,6 +358,21 @@ class LooksTest {
     }
 
     @Test
+    fun `his note on how he felt is kept with his message, and neither a note nor your rating of one is told him again (D-119)`() = runBlocking {
+        val key = underWay()
+        // His first nudge, with his note on it, rated by you.
+        val rated = ChatMessage("n1", Speaker.Felix, "worksheet's on. starting?", felix.clock.time - 60_000L, About(taskId = "teams:sheet"), kind = MessageKind.SlotStart, pieceKey = key, feeling = "NOTE-MARKER", rating = Conversation.RATED_DOWN, feedback = "FEEDBACK-MARKER", ratedAt = 1)
+        stores.chat.update { it.copy(messages = listOf(rated)) }
+        felix.answers("""{"feeling":" not impressed: second nudge ","message":"still nothing on it. start it now.","replies":[],"nextCheckMin":10,"memories":[]}""")
+        felix.looks.check()
+        val asked = felix.server.takeRequest().body.readUtf8()
+        assertTrue("worksheet's on. starting?" in asked)
+        assertFalse("NOTE-MARKER" in asked)
+        assertFalse("FEEDBACK-MARKER" in asked)
+        assertEquals("not impressed: second nudge", stores.chat.value.messages.last().feeling)
+    }
+
+    @Test
     fun `his second nudge on a piece is kept at the level he wrote it at, a silence with none (D-119, Q6)`() = runBlocking {
         val key = underWay()
         // His first nudge on it, with words, a minute ago.

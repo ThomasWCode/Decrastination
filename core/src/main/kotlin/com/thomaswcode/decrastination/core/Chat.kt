@@ -103,6 +103,18 @@ data class ChatMessage(
      * the piece is kept (Q6).
      */
     val mood: String = "",
+    /**
+     * His, from a call: his note to himself on how he felt, written before the message (D-119), whole; kept so your
+     * rating of it can be read beside it, never shown in the chat but as you rate it, and never sent back to him.
+     */
+    val feeling: String = "",
+    /**
+     * His, as you rated it, holding it: "Up" or "Down", empty for none; what you wrote of it ([feedback]) and when
+     * ([ratedAt], 0 for never). Read off the phone to tune his prompts; never sent to him.
+     */
+    val rating: String = "",
+    val feedback: String = "",
+    val ratedAt: Long = 0,
 )
 
 /** A page a web search found ([ChatMessage.sources]): its title and where it is. */

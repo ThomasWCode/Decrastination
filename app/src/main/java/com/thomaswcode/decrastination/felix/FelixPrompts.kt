@@ -46,7 +46,7 @@ object FelixPrompts {
 
     /**
      * His note to himself before he writes (D-119), in both his prompts after [FEELING]: the `feeling` field, first in
-     * each answer, read for the scenarios' report and never kept.
+     * each answer, kept with his message, beside your rating of it.
      */
     const val NOTE = "Before you write, give feeling: a few words for yourself alone, never shown to them: how you honestly feel right now, as their mate, and what you want them to feel when they read it (them: never he or she). Then write from that feeling, not from a pattern; a message that only passes something on (a reminder, a question, the summary) stays plain whatever you feel."
 
@@ -256,7 +256,7 @@ object FelixPrompts {
         }
     }
 
-    /** His answer, [FEELING]'s note to himself first: how he feels, written before the message and dropped once read (D-119). */
+    /** His answer, [FEELING]'s note to himself first: how he feels, written before the message and kept with it (D-119). */
     val SCHEMA: Map<String, Any> = InstructionPrompts.obj(
         "feeling" to InstructionPrompts.STRING,
         "message" to InstructionPrompts.STRING,

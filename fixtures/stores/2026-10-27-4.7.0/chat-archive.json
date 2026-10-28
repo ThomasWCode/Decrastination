@@ -30,6 +30,10 @@
             "searched": [],
             "sources": [],
             "mood": "",
+            "feeling": "",
+            "rating": "",
+            "feedback": "",
+            "ratedAt": 0,
             "reminderId": null
         },
         {
@@ -64,6 +68,10 @@
             "searched": [],
             "sources": [],
             "mood": "",
+            "feeling": "",
+            "rating": "",
+            "feedback": "",
+            "ratedAt": 0,
             "reminderId": null
         }
     ],

@@ -20,10 +20,9 @@ class FelixCaller(private val client: AnthropicClient, val model: String = Claud
 
     /**
      * [model]: the model that answered, a fallback's if one did; [rebalances]: his steps rebalanced in a morning's answer (D-110), read beside [answer], which is kept, and never kept themselves;
-     * [messageChars]: his message's length as he wrote it, and [cut] where that was past its room, so [answer]'s is cut short; [feeling] his note
-     * to himself on how he felt, written before it (for the scenarios' report).
+     * [messageChars]: his message's length as he wrote it, and [cut] where that was past its room, so [answer]'s is cut short (for the scenarios' report).
      */
-    data class Result(val answer: FelixAnswer?, val costUsd: Double, val refused: Boolean = false, val model: String? = null, val usage: ModelCalls.Usage = ModelCalls.Usage.NONE, val rebalances: List<Rebalance.Given> = emptyList(), val messageChars: Int = 0, val cut: Boolean = false, val feeling: String = "")
+    data class Result(val answer: FelixAnswer?, val costUsd: Double, val refused: Boolean = false, val model: String? = null, val usage: ModelCalls.Usage = ModelCalls.Usage.NONE, val rebalances: List<Rebalance.Given> = emptyList(), val messageChars: Int = 0, val cut: Boolean = false)
 
 
     /** His message for [user] (from [FelixPrompts.describe]), with his [system] and the student's [profile]. */
@@ -48,6 +47,6 @@ class FelixCaller(private val client: AnthropicClient, val model: String = Claud
         }
         val text = message.content().mapNotNull { it.text().orElse(null)?.text() }.joinToString("")
         val chars = FelixAnswers.messageLength(text)
-        return Result(FelixAnswers.parse(text, maxMessage), cost, model = message.model().asString().ifBlank { null }, usage = usage, rebalances = FelixAnswers.rebalances(text), messageChars = chars, cut = chars > maxMessage, feeling = FelixAnswers.feeling(text))
+        return Result(FelixAnswers.parse(text, maxMessage), cost, model = message.model().asString().ifBlank { null }, usage = usage, rebalances = FelixAnswers.rebalances(text), messageChars = chars, cut = chars > maxMessage)
     }
 }

@@ -17,6 +17,9 @@ object FelixAnswers {
     private const val MAX_CHECK_MIN = 24 * 60
     private const val MAX_MEMORIES = 5
 
+    /** His note on how he felt (D-119), kept with his message: a few words asked for, this many characters at most. */
+    const val MAX_FEELING = 400
+
     private val json = Json { ignoreUnknownKeys = true }
 
     /** [text] as his answer, within bounds; null when it isn't one. */
@@ -27,12 +30,6 @@ object FelixAnswers {
 
     /** How long his message in [text] is as he wrote it, before it's held to its room ([message]): 0 when it isn't one. */
     fun messageLength(text: String): Int = runCatching { json.decodeFromString(FelixAnswer.serializer(), text).message.trim().length }.getOrDefault(0)
-
-    /** His note to himself on how he feels in [text] (FelixPrompts.SCHEMA), read for the scenarios' report and never kept: empty when there's none. */
-    fun feeling(text: String): String = runCatching { json.decodeFromString(Feeling.serializer(), text).feeling.trim() }.getOrDefault("")
-
-    @Serializable
-    private data class Feeling(val feeling: String = "")
 
     /**
      * The steps he rebalanced in [text], a morning's answer (D-110), every one: each is checked against what he
@@ -51,6 +48,7 @@ object FelixAnswers {
             replies = answer.replies.map { cut(it.trim(), MAX_REPLY) }.filter { it.isNotEmpty() }.distinct().take(MAX_REPLIES),
             nextCheckMin = answer.nextCheckMin?.coerceIn(MIN_CHECK_MIN, MAX_CHECK_MIN),
             memories = answer.memories.take(MAX_MEMORIES),
+            feeling = answer.feeling.trim().take(MAX_FEELING),
         )
     }
 

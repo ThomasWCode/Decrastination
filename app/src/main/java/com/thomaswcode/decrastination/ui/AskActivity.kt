@@ -796,12 +796,12 @@ private fun SwipeToReply(onReply: () -> Unit, content: @Composable () -> Unit) {
 }
 
 /**
- * A message's bubble, [colour] in [shape]: held, Reply and Copy, and Mark answered where it waits
- * for your answer ([onMarkAnswered], D-99); the one his notification opened the chat at ([flash]) tinted
- * for a moment.
+ * A message's bubble, [colour] in [shape]: held, Reply and Copy, Mark answered where it waits
+ * for your answer ([onMarkAnswered], D-99), and a thumb up or down on one of his ([onRate], D-119); the
+ * one his notification opened the chat at ([flash]) tinted for a moment.
  */
 @Composable
-private fun Bubble(message: ChatMessage, colour: Color, shape: Shape, flash: Boolean, onReply: () -> Unit, onTap: () -> Unit = {}, onMarkAnswered: (() -> Unit)? = null, content: @Composable ColumnScope.() -> Unit) {
+private fun Bubble(message: ChatMessage, colour: Color, shape: Shape, flash: Boolean, onReply: () -> Unit, onTap: () -> Unit = {}, onMarkAnswered: (() -> Unit)? = null, onRate: ((Boolean) -> Unit)? = null, content: @Composable ColumnScope.() -> Unit) {
     val context = LocalContext.current
     var menu by remember { mutableStateOf(false) }
     val tint by animateColorAsState(if (flash) MaterialTheme.colorScheme.tertiaryContainer else colour, label = "flash")
@@ -829,24 +829,88 @@ private fun Bubble(message: ChatMessage, colour: Color, shape: Shape, flash: Boo
                 menu = false
                 context.getSystemService(ClipboardManager::class.java)?.setPrimaryClip(ClipData.newPlainText("Message", message.text))
             })
+            onRate?.let { rate ->
+                listOf(true, false).forEach { up ->
+                    DropdownMenuItem(
+                        text = { Text(if (up) "Thumbs up" else "Thumbs down") },
+                        leadingIcon = { Icon(painterResource(if (up) R.drawable.ic_thumb_up else R.drawable.ic_thumb_down), contentDescription = null) },
+                        onClick = {
+                            menu = false
+                            rate(up)
+                        },
+                    )
+                }
+            }
         }
     }
 }
 
 /**
- * When [message] was sent, in small type under its bubble; and, while it waits for your answer
- * ([waiting], D-99), saying so, a tap on it the message's Reply ([onAnswer]).
+ * When [message] was sent, in small type under its bubble; while it waits for your answer
+ * ([waiting], D-99), saying so, a tap on it the message's Reply ([onAnswer]); and, rated, your thumb
+ * after it (D-119), a tap on it your rating to change ([onRated]).
  */
 @Composable
-private fun Time(message: ChatMessage, zone: ZoneId, waiting: Boolean = false, onAnswer: () -> Unit = {}) {
-    if (!waiting) {
-        Text(Format.time(message.at, zone), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
-        return
+private fun Time(message: ChatMessage, zone: ZoneId, waiting: Boolean = false, onAnswer: () -> Unit = {}, onRated: () -> Unit = {}) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        if (!waiting) {
+            Text(Format.time(message.at, zone), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+        } else {
+            Row(Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClickLabel = "Reply", onClick = onAnswer).padding(horizontal = 6.dp, vertical = 2.dp)) {
+                Text(Format.time(message.at, zone), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(" · waiting for your answer", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+            }
+        }
+        if (message.rating.isNotEmpty()) {
+            val up = message.rating == Conversation.RATED_UP
+            Icon(
+                painterResource(if (up) R.drawable.ic_thumb_up else R.drawable.ic_thumb_down),
+                contentDescription = if (up) "Rated thumbs up: change" else "Rated thumbs down: change",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.clip(CircleShape).clickable(onClick = onRated).padding(4.dp).size(14.dp),
+            )
+        }
     }
-    Row(Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClickLabel = "Reply", onClick = onAnswer).padding(horizontal = 6.dp, vertical = 2.dp)) {
-        Text(Format.time(message.at, zone), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(" · waiting for your answer", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-    }
+}
+
+/**
+ * Your rating of his [message] (D-119), from holding it: the thumb you chose ([up]), his message, his note
+ * on how he felt as he wrote it where one was kept, and what you'd say of it, which may be nothing. Saved,
+ * [onSave] with your thumb and words; Remove, on one already rated, with null, taking it off.
+ */
+@Composable
+private fun RateDialog(message: ChatMessage, up: Boolean, onDismiss: () -> Unit, onSave: (Boolean?, String) -> Unit) {
+    var words by remember { mutableStateOf(message.feedback) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Icon(painterResource(if (up) R.drawable.ic_thumb_up else R.drawable.ic_thumb_down), contentDescription = null) },
+        title = { Text(if (up) "Thumbs up" else "Thumbs down") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(message.text, style = MaterialTheme.typography.bodyMedium)
+                if (message.feeling.isNotEmpty()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text("His note as he wrote it", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                        Text(message.feeling, style = MaterialTheme.typography.bodyMedium, fontStyle = FontStyle.Italic, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+                OutlinedTextField(
+                    value = words,
+                    onValueChange = { words = it.take(Conversation.MAX_FEEDBACK) },
+                    label = { Text(if (up) "What was good? (optional)" else "What's off? (optional)") },
+                    minLines = 3,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        },
+        confirmButton = { TextButton(onClick = { onSave(up, words) }) { Text("Save") } },
+        dismissButton = {
+            Row {
+                if (message.rating.isNotEmpty()) TextButton(onClick = { onSave(null, "") }) { Text("Remove") }
+                TextButton(onClick = onDismiss) { Text("Cancel") }
+            }
+        },
+    )
 }
 
 /** The message a reply answers, over its words: who wrote it and its first line, in a tinted block; tapped, [onOpen] goes to it. */
@@ -960,16 +1024,24 @@ private const val DOT_STEP_MS = 200
 private fun Claudes(graph: AppGraph, screen: ChatScreenState, message: ChatMessage, tasks: Map<String, TaskItem>, flash: Boolean, now: Long, zone: ZoneId, onEdit: (String, String) -> Unit, live: Boolean, waiting: Boolean = false, onMarkAnswered: (() -> Unit)? = null, onReply: () -> Unit) {
     val folds = ChatSummary.folds(message)
     val open = message.id in screen.open
+    // Your rating of it being written (D-119): the thumb chosen, null while it isn't.
+    var rating by remember { mutableStateOf<Boolean?>(null) }
+    rating?.let { up ->
+        RateDialog(message, up, onDismiss = { rating = null }) { thumb, words ->
+            rating = null
+            graph.scope.launch { graph.conversation.rate(message.id, thumb, words) }
+        }
+    }
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Column {
             Labelled(screen, message) {
                 // A tap on the bubble opens or closes what's folded, as its chevron does: a bigger place to tap.
-                Bubble(message, MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(18.dp, 18.dp, 18.dp, 4.dp), flash, onReply, onTap = { if (folds) screen.toggle(message.id) }, onMarkAnswered = onMarkAnswered) {
+                Bubble(message, MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(18.dp, 18.dp, 18.dp, 4.dp), flash, onReply, onTap = { if (folds) screen.toggle(message.id) }, onMarkAnswered = onMarkAnswered, onRate = { rating = it }) {
                     Text(message.text, style = MaterialTheme.typography.bodyLarge)
                     if (folds) Chevron(open, ChatSummary.problems(message) > 0, Modifier.align(Alignment.End)) { screen.toggle(message.id) }
                 }
             }
-            Time(message, zone, waiting, onAnswer = onReply)
+            Time(message, zone, waiting, onAnswer = onReply, onRated = { rating = message.rating == Conversation.RATED_UP })
         }
         // A message in the app's words carries its own button: the week's review to open, its summary to send.
         Opens(message)

@@ -36,6 +36,10 @@
             "searched": [],
             "sources": [],
             "mood": "",
+            "feeling": "",
+            "rating": "",
+            "feedback": "",
+            "ratedAt": 0,
             "reminderId": null
         },
         {
@@ -68,6 +72,10 @@
             "searched": [],
             "sources": [],
             "mood": "",
+            "feeling": "",
+            "rating": "",
+            "feedback": "",
+            "ratedAt": 0,
             "reminderId": null
         },
         {
@@ -100,6 +108,10 @@
             "searched": [],
             "sources": [],
             "mood": "",
+            "feeling": "",
+            "rating": "",
+            "feedback": "",
+            "ratedAt": 0,
             "reminderId": null
         },
         {
@@ -142,6 +154,10 @@
             "searched": [],
             "sources": [],
             "mood": "",
+            "feeling": "",
+            "rating": "",
+            "feedback": "",
+            "ratedAt": 0,
             "reminderId": null
         },
         {
@@ -174,6 +190,10 @@
             "searched": [],
             "sources": [],
             "mood": "",
+            "feeling": "",
+            "rating": "",
+            "feedback": "",
+            "ratedAt": 0,
             "reminderId": null
         },
         {
@@ -206,6 +226,10 @@
             "searched": [],
             "sources": [],
             "mood": "",
+            "feeling": "",
+            "rating": "",
+            "feedback": "",
+            "ratedAt": 0,
             "reminderId": null
         },
         {
@@ -238,6 +262,10 @@
             "searched": [],
             "sources": [],
             "mood": "",
+            "feeling": "",
+            "rating": "",
+            "feedback": "",
+            "ratedAt": 0,
             "reminderId": null
         },
         {
@@ -270,6 +298,10 @@
             "searched": [],
             "sources": [],
             "mood": "",
+            "feeling": "",
+            "rating": "",
+            "feedback": "",
+            "ratedAt": 0,
             "reminderId": null
         },
         {
@@ -717,6 +749,10 @@
                 }
             ],
             "mood": "",
+            "feeling": "",
+            "rating": "",
+            "feedback": "",
+            "ratedAt": 0,
             "reminderId": null
         },
         {
@@ -749,6 +785,10 @@
             "searched": [],
             "sources": [],
             "mood": "",
+            "feeling": "",
+            "rating": "",
+            "feedback": "",
+            "ratedAt": 0,
             "reminderId": null
         },
         {
@@ -783,6 +823,10 @@
             "searched": [],
             "sources": [],
             "mood": "",
+            "feeling": "",
+            "rating": "",
+            "feedback": "",
+            "ratedAt": 0,
             "reminderId": null
         },
         {
@@ -817,6 +861,10 @@
             "searched": [],
             "sources": [],
             "mood": "",
+            "feeling": "",
+            "rating": "",
+            "feedback": "",
+            "ratedAt": 0,
             "reminderId": null
         },
         {
@@ -852,6 +900,10 @@
             "searched": [],
             "sources": [],
             "mood": "Firm",
+            "feeling": "annoyed: second nudge and nothing started",
+            "rating": "Down",
+            "feedback": "too sharp for a second nudge",
+            "ratedAt": 1793900000000,
             "reminderId": null
         },
         {
@@ -884,6 +936,10 @@
             "searched": [],
             "sources": [],
             "mood": "",
+            "feeling": "",
+            "rating": "",
+            "feedback": "",
+            "ratedAt": 0,
             "reminderId": null
         },
         {
@@ -918,6 +974,10 @@
             "searched": [],
             "sources": [],
             "mood": "",
+            "feeling": "",
+            "rating": "",
+            "feedback": "",
+            "ratedAt": 0,
             "reminderId": null
         },
         {
@@ -950,6 +1010,10 @@
             "searched": [],
             "sources": [],
             "mood": "",
+            "feeling": "",
+            "rating": "",
+            "feedback": "",
+            "ratedAt": 0,
             "reminderId": null
         },
         {
@@ -985,6 +1049,10 @@
             "searched": [],
             "sources": [],
             "mood": "",
+            "feeling": "",
+            "rating": "",
+            "feedback": "",
+            "ratedAt": 0,
             "reminderId": null
         },
         {
@@ -1017,6 +1085,10 @@
             "searched": [],
             "sources": [],
             "mood": "",
+            "feeling": "",
+            "rating": "",
+            "feedback": "",
+            "ratedAt": 0,
             "reminderId": null
         },
         {
@@ -1049,7 +1121,11 @@
             "suggestedReplies": [],
             "searched": [],
             "sources": [],
-            "mood": ""
+            "mood": "",
+            "feeling": "",
+            "rating": "",
+            "feedback": "",
+            "ratedAt": 0
         },
         {
             "id": "m410-answer",
@@ -1133,7 +1209,11 @@
             "suggestedReplies": [],
             "searched": [],
             "sources": [],
-            "mood": ""
+            "mood": "",
+            "feeling": "",
+            "rating": "",
+            "feedback": "",
+            "ratedAt": 0
         },
         {
             "id": "m410-move",
@@ -1165,7 +1245,11 @@
             "suggestedReplies": [],
             "searched": [],
             "sources": [],
-            "mood": ""
+            "mood": "",
+            "feeling": "",
+            "rating": "",
+            "feedback": "",
+            "ratedAt": 0
         },
         {
             "id": "m410-moved",
@@ -1268,7 +1352,11 @@
             "suggestedReplies": [],
             "searched": [],
             "sources": [],
-            "mood": ""
+            "mood": "",
+            "feeling": "",
+            "rating": "",
+            "feedback": "",
+            "ratedAt": 0
         },
         {
             "id": "m410-remind",
@@ -1304,7 +1392,11 @@
             ],
             "searched": [],
             "sources": [],
-            "mood": ""
+            "mood": "",
+            "feeling": "",
+            "rating": "",
+            "feedback": "",
+            "ratedAt": 0
         },
         {
             "id": "m410-snooze",
@@ -1336,7 +1428,11 @@
             "suggestedReplies": [],
             "searched": [],
             "sources": [],
-            "mood": ""
+            "mood": "",
+            "feeling": "",
+            "rating": "",
+            "feedback": "",
+            "ratedAt": 0
         },
         {
             "id": "m410-letgo",
@@ -1368,7 +1464,11 @@
             "suggestedReplies": [],
             "searched": [],
             "sources": [],
-            "mood": ""
+            "mood": "",
+            "feeling": "",
+            "rating": "",
+            "feedback": "",
+            "ratedAt": 0
         },
         {
             "id": "msg-stuck",
@@ -1400,6 +1500,10 @@
             "searched": [],
             "sources": [],
             "mood": "",
+            "feeling": "",
+            "rating": "",
+            "feedback": "",
+            "ratedAt": 0,
             "reminderId": null
         }
     ],
@@ -1432,7 +1536,8 @@
                         "until": "",
                         "taskId": ""
                     }
-                ]
+                ],
+                "feeling": "keen to get them going on the plan"
             },
             "at": 1792338720000
         },
