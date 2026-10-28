@@ -80,7 +80,7 @@ Recent, oldest first: [his last six, with their replies, as now]
 
 The story is built by `Looks` from what it already has: the chat's messages of the day (his and theirs, `kind` any), today's records, the timer, the task's deadline and the notes he wrote (`ChatMessage.feeling`). The mood ceiling in a person's words replaces `Mood.line`'s bracketed reasons; `Mood.Level` is unchanged. The diary's day lines come from `ActivityLog` (kept 120 days) with no call; the check-in from `CheckIn`; the memories from the profile's facts with their dates. The chat's `plan` gets the same story and diary under today's slots.
 
-The profile block in his calls (the chat's and the notifications') is his own: the first line is the subjects alone, without "Year N at a UK sixth form"; the hours line says "weekdays" and "days off", not "school days" and "No school"; the rest as now. The readings keep `Profile.block` as it is. So nothing he's sent names the student's year, and "about your age" has nothing to clash with. The subjects may still give it away, which the first run on the real profile line shows (§The harness).
+The profile block in his calls (the chat's and the notifications') differs from the readers' in one line: the first drops the year ("A UK sixth-form student. Subjects: …" in place of "Year N at a UK sixth form. Subjects: …", `Profile.kt:65`). Everything else stays as the app writes it: the subjects with their class codes, the school-day line ("School days: lessons …; break …; lunch …", `:119`), the hours and the days off ("Works school days …; No school: …", `:71`), the German textbook, the owner's own lines and the memories, which are sent as written (D-4). The readers keep `Profile.block` as it is. The owner's rule, at their word: only a line that states the year or an age ("Year 12", "16 years old") is filtered; the codes ("12X"), the word "school" and their own lines may imply it, and that's accepted. So nothing the app writes states the student's year, "about your age" clashes with no stated fact, and what the model still infers is for the first run on the real profile line to show (§The harness).
 
 ## The answer
 
@@ -137,7 +137,7 @@ Reported as the share judged "app" by prompt, with the giveaways tallied. The ol
 
 - `FelixPrompts`: `system` rewritten; `describe` reordered (story, diary, details); `SCHEMA` gains `texts` and `send`, loses `message`; the goldens rewritten.
 - `Mood.line`: the ceiling in a person's words, no reasons.
-- `Profile`: a second block for his calls, the year line and the word "school" out; `Conversation` and `ChatPrompts` send it where they send `block`; the readings keep `block`.
+- `Profile`: a second block for his calls, the year out of its first line and nothing else changed; `Conversation` and `ChatPrompts` send it where they send `block`; the readers keep `block`.
 - `Looks`: the story and the diary built; two bubbles sent; `nudges` and `said` count a look once.
 - `FelixAnswers`, `FelixCaller.Result`: `texts`, `send`, `unsent`; the newline split; the cut by line.
 - `Outbox`: a pair sent as two messages, one notification.
