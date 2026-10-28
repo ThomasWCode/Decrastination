@@ -493,6 +493,7 @@ class EvalRunTest {
         appendLine()
         appendLine("${results.size} answers, ${dollars(spent)}. Address words in $withWords of ${results.size} messages${if (results.isNotEmpty() && withWords * 3 > results.size) " (over a third: a fail)" else ""}.")
         if (notAsked.isNotEmpty()) appendLine("Not asked, past the budget: ${notAsked.joinToString()}.")
+        shared(results).takeIf { it.isNotEmpty() }?.let { appendLine("Phrases in three cases or more: ${it.joinToString("; ")}.") }
         for ((id, answers) in results.groupBy { it.s("id") }) {
             val first = answers.first()
             appendLine()
@@ -523,6 +524,7 @@ class EvalRunTest {
         if (notAsked.isNotEmpty()) appendLine("Not asked, past the budget: ${notAsked.joinToString()}.")
         val flagged = results.filter { it.getValue("flags").jsonArray.isNotEmpty() }
         appendLine("Flagged in run $after: ${flagged.size} of ${results.size}" + flagged.joinToString("") { "\n- ${it.s("id")}#${it.s("attempt")}: " + it.getValue("flags").jsonArray.joinToString { f -> f.jsonPrimitive.content } })
+        shared(results).takeIf { it.isNotEmpty() }?.let { appendLine("Phrases in three cases or more in run $after: ${it.joinToString("; ")}.") }
         val byBefore = earlier.groupBy { it.s("id") }
         for ((id, answers) in results.groupBy { it.s("id") }) {
             val first = answers.first()
@@ -537,6 +539,20 @@ class EvalRunTest {
             appendLine("Run $after:")
             answers.forEach { appendLine(answerLine(it)) }
         }
+    }
+
+    /**
+     * Phrases of four words or more that answers to three cases or more share, the longest kept and none with a number
+     * (times and counts are the work's): a stock line forming, which no list of known ones catches (the owner's read of run 3).
+     */
+    private fun shared(results: List<JsonObject>): List<String> {
+        val cases = HashMap<String, MutableSet<String>>()
+        for (a in results) {
+            val words = Regex("""[a-z0-9:']+""").findAll(a.getValue("text").jsonPrimitive.content.lowercase(Locale.ROOT)).map { it.value }.toList()
+            for (n in 4..8) words.windowed(n).filter { w -> w.none { word -> word.any(Char::isDigit) } }.forEach { cases.getOrPut(it.joinToString(" ")) { HashSet() } += a.getValue("id").jsonPrimitive.content }
+        }
+        val common = cases.filterValues { it.size >= 3 }
+        return common.filter { (p, ids) -> common.none { (q, others) -> q != p && p in q && others == ids } }.entries.sortedByDescending { it.value.size }.map { "“${it.key}” (${it.value.size})" }
     }
 
     private fun dollars(usd: Double) = "$" + String.format(Locale.UK, "%.3f", usd)
