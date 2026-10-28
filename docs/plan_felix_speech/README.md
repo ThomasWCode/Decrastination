@@ -88,35 +88,35 @@ The persona is lower case, "tbh", "ngl", "gonna", "mate". The owner's own chat m
 
 | | Change | Idea | What it fixes |
 |---|---|---|---|
-| 1 | Brief him as a person: the system prompt a page, in his register, who he is and what he's for, the voice described positively and shown by contrast pairs with reasons | I-01, I-02, I-04 | §1, §2, §5 |
+| 1 | Brief him as a person: the system prompt a page, in his register, who he is and what he's for (at the owner's word, 28 Oct: the shape of a stern boyfriend with the romance taken out, who cares how they're doing rather than instructs, is cheeky with them, and is the one in charge because they want it that way; nothing romantic or sexual in it), the voice described positively and shown by contrast pairs with reasons | I-01, I-02, I-04 | §1, §2, §5 |
 | 2 | The user turn a story: what's happened tonight in order (his nudges, their replies, the chat's last exchange, what got done, what slipped, what they'd said they'd do), then the mood ceiling in a person's words, then the details block as now | I-15 | §1, §6 |
 | 3 | A diary he reads: a line a day for the last seven (from `ActivityLog`, no call), the check-in's answers, the week's memories; his own notes from earlier today; the chat's last two exchanges in the notification prompt | I-14, I-16, I-03 | §3 |
 | 4 | The shape: one thought a text, a second text for a second thing (the outbox already shows several lines in one notification); the full stop as his cold register; a number only where it's the point | I-06, I-07, I-18 | §4 |
-| 5 | The morning: the app's list as the card it already is, his one line about the day on top | I-20 | the most app-shaped message of all |
+| 5 | The cheek: digs, wind-ups and a joke beside the answer, at every level but the coldest, never about who they are (decided, the owner's word, 28 Oct) | I-21 | a register with no humour in it |
+| 6 | The morning: the app's list as the card it already is, his one line about the day on top | I-20 | the most app-shaped message of all |
 
 **Tier 2: mechanics (small code, cents; a day).**
 
 | | Change | Idea | What it fixes |
 |---|---|---|---|
-| 6 | Three candidate texts in one answer, he sends one (`texts[3]`, `send`); the two unsent kept for the feedback dialog, where the owner can pick the one they'd rather have had | I-10, I-19 | §7, and a preference signal richer than a thumb |
-| 7 | Feedback into the prompt: a weekly digest of marked-down messages and reasons into the profile block as rules; marked-up messages as the pool his contrast pairs are drawn from | I-08 | the owner's taste, learned |
-| 8 | The harness: a Haiku 5.5 judge with one anchored question ("sent by a mate, or by an app?") and automatic measures (numbers a message, final full stops, shared n-grams across cases, overlap between attempts) in place of the hand-kept ban lists; a blind two-variant report for the owner | I-17 | the whack-a-mole |
+| 7 | Three candidate texts in one answer, he sends one (`texts[3]`, `send`); the two unsent kept for the feedback dialog, where the owner can pick the one they'd rather have had | I-10, I-19 | §7, and a preference signal richer than a thumb |
+| 8 | Feedback into the prompt: a weekly digest of marked-down messages and reasons into the profile block as rules; marked-up messages as the pool his contrast pairs are drawn from | I-08 | the owner's taste, learned |
+| 9 | The harness: a Haiku 5.5 judge with one anchored question ("sent by a mate, or by an app?") and automatic measures (numbers a message, final full stops, shared n-grams across cases, overlap between attempts) in place of the hand-kept ban lists; a blind two-variant report for the owner | I-17 | the whack-a-mole |
 
 **Tier 3: experiments, not decisions (an afternoon in the harness, about $5).**
 
 | | Experiment | Idea |
 |---|---|---|
-| 9 | Effort low, medium, high on the same prompt | I-13 |
-| 10 | Fable 5.1 at low effort beside Opus 5.5 at medium | I-13 |
-| 11 | A register variant mirroring the owner's own writing (capitals, full sentences, fewer textisms) | I-09 |
-| 12 | Examples: none, fixed pairs, rotated pairs | I-02 |
-| 13 | The voice reminder in the user turn rather than the system prompt | I-05 |
+| 10 | Effort low, medium, high on the same prompt | I-13 |
+| 11 | Fable 5.1 at low effort beside Opus 5.5 at medium | I-13 |
+| 12 | A register variant mirroring the owner's own writing (capitals, full sentences, fewer textisms) | I-09 |
+| 13 | Examples: none, fixed pairs, rotated pairs | I-02 |
+| 14 | The voice reminder in the user turn rather than the system prompt | I-05 |
 
 **Tier 4: behaviour, the owner's call after the fortnight.**
 
 | | Change | Idea |
 |---|---|---|
-| 14 | Light teasing and a joke beside the answer when he's warm; never when let down | I-21 |
 | 15 | A non-work line now and then, from what he knows (the match on the calendar, the cold) | I-22 |
 | 16 | Replying in kind: a one-line answer to a reply that needs nothing ("ok starting") | I-23 |
 
@@ -129,7 +129,7 @@ Each stands until the owner says otherwise; the proposal and why, so the answer 
 | D-57: "exact where it matters (dates, times, minutes)", carried into `REGISTER` | 45 of 59 notifications hold a clock time, 25 of 59 two or more numbers | A number only where it's the point ("in at 9 tomorrow"); the Day's cards carry the rest; never minutes, a time and a date in one text | Numbers are the app's voice; the owner's own texts hold a digit in a third |
 | `REGISTER`: "two or three short sentences", "a full stop between thoughts" | 2.7 sentences, 51 of 59 ending in a full stop | One thought a text, up to two texts; no final full stop unless he's cold | The owner's texts; the full-stop finding |
 | `REGISTER` and `FEELING`: about forty bans | | A short positive description, in his register, and contrast pairs with reasons | Literal instruction-following; each round's new stock line |
-| D-57: "no sarcasm at them"; `REGISTER`: "never a joke in place of the answer" | | No sarcasm when let down; teasing and a joke beside the answer allowed when warm | A mate; affiliative humour is what friends converge on |
+| D-57: "no sarcasm at them"; `REGISTER`: "never a joke in place of the answer" | | Digs, wind-ups and a joke beside the answer at every level but the coldest, never about who they are; no sarcasm at them still | Decided, the owner's word, 28 Oct: the fun and the digs of a relationship; affiliative humour is what friends converge on |
 | 4.7.0 plan, decided without asking, 10: "misses across days aren't told him" | Today's records only | He reads a week's diary; the level still resets at midnight | A friend knows; recall of facts, not of feelings about them, is what readers took well |
 | 4.7.0: `feeling`, `rating`, `feedback` "never sent to him" | | His own notes from today go back to him; the feedback goes in as a weekly digest and as the example pool, never raw | Continuity of mood within an evening; explanations carry most of personalisation's gain |
 | Q3: the app decides the level, told in one line with its reasons | "How you feel, at most: let down, firmly (2 slots missed today)" | The ceiling stays, in a person's words ("not impressed, at most"); the reasons replaced by the story | The counts leak ("that's two tonight") |
@@ -137,12 +137,12 @@ Each stands until the owner says otherwise; the proposal and why, so the answer 
 | D-57: lower case, a little slang | | Kept as the default; a mirror-the-owner variant tested blind | Style matching |
 | One message a look | | Up to two texts a look, sent as one notification | Texting's shape |
 | 4.7.0's harness: the hand-kept ban lists as what decides a run | | Kept for regressions; the judge and the counted measures decide | The lists only know what they were told |
-| 4.7.0 plan, answers §The age: "an older close friend is someone who'd naturally be the one in charge, so the age suits the imbalance" | `REGISTER`'s "early twenties"; both prompts name the student's year | He stays 22, and the two of them are about the same age; the imbalance is the relationship's (he's the one in charge, and they want it that way), not his seniority | Decided, the owner's word, 28 Oct: an older friend of a sixth-former reads as an older brother, and the dynamic wanted is between two of an age |
+| 4.7.0 plan, answers §The age: "an older close friend is someone who'd naturally be the one in charge, so the age suits the imbalance"; `REGISTER`: "a very close friend" | `REGISTER`'s "early twenties"; both prompts name the student's year | He stays 22, and the two of them are about the same age; the shape is a stern boyfriend's with the romance taken out: he cares how they're doing (not an instructor), he's cheeky with them, and he's the one in charge because they want it that way; nothing romantic or sexual in it, ever | Decided, the owner's word, 28 Oct: an older friend of a sixth-former reads as an older brother, and the dynamic wanted is a partner's care and cheek between two of an age, with the romance out |
 
 ## What stays
 
 - The app decides the facts and the ceiling: the planner, the records, `Mood.of`'s level (Q3), Q5's answered recovery, Q6's level kept on his message. Persona research finds persona-assigned models less consistent in judgement, so judgement stays out of the persona.
-- The limits on the let-down levels: about the choice, never the person; no insult, no threat; over the moment work starts; a reason, an illness or distress brings him down (D-119's draft, the shame research).
+- The limits on the let-down levels: about the choice, never the person; no insult, no threat; over the moment work starts; a reason, an illness or distress brings him down (D-119's draft, the shame research). And the line the owner drew with the new shape: nothing romantic or sexual between them, ever; no pet names, no affection put into words.
 - The cost rule: no new call a message. The diary and the story come from stores; the candidates cost output tokens (a message is about a cent with the cache; three texts add a fraction); the judge is Haiku 5.5 at a few thousandths of a cent a message; the feedback digest is one weekly call like memory-tidy's.
 - D-95 (the chat his one voice; two texts are two chat messages, one notification), D-61 (no blocker), D-4 (their minutes as given), D-79 (nothing personal in the repository: the diary is phone-local, the pairs made up until the owner's own rated lines replace them, which stay in `private/` and the phone).
 - "No praise for nothing", "no promise the app can't keep", the nickname via a memory, no emojis (the owner's taste; worth knowing it's a mild tell, as people his age use some).
@@ -180,3 +180,6 @@ Estimates are the old figures; the project's measured durations say code runs at
 - **The grammar.** `texts` as a plain list of strings and `send` as an integer add nothing nullable; `SchemaCompileTest` live before the PR all the same.
 - **Two texts and the notification's room.** 360 characters, lines newest first; two texts of one thought each fit. The chat shows them as two bubbles.
 - **Overfitting again.** The harness's judge can be gamed by the same tuning loop. That's why real use decides.
+- **The shape leaking.** A persona drawn from a partner's care can slide into a partner's words: pet names, affection, a kiss at the end. The prompt rules them out, the harness's flags gain them beside the teacher's and the counsellor's, and the owner's read decides.
+- **The model's caution.** Someone compared to a partner, texting about a person's evenings, is a shape the model handles carefully; the comparison says outright that nothing is romantic. The first run checks that no answer came back softened, or empty where one was due.
+- **The cheek as the next stock line.** A dig that lands once becomes the dig in every warm message, as "bang on" did; the shared-phrase measure is what catches it.
