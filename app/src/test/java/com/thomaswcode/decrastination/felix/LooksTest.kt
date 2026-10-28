@@ -193,13 +193,15 @@ class LooksTest {
     @Test
     fun `the morning's call may rebalance two of his steps to fit a free time at school, made at once with an Undo, and not asked about once taken back`() = runBlocking {
         worksheetInSteps()
-        felix.answers(REBALANCED)
+        felix.answers(REBALANCED.replaceFirst("{", """{"feeling":"easy morning, one thing to move","""))
         assertTrue(felix.looks.morning())
         val asked = felix.server.takeRequest().body.readUtf8()
         assertTrue("Steps you may rebalance" in asked && "teams:sheet | Forces worksheet | 0" in asked && "10:45, 30 min" in asked, asked)
         val message = stores.chat.value.messages.single()
         val proposal = message.proposals.single()
         assertEquals(MessageKind.Morning to ProposalState.Applied, message.kind to proposal.state)
+        // His note on how he felt, kept with it (D-119).
+        assertEquals("easy morning, one thing to move", message.feeling)
         // His change on the task, named by what it made, its two steps moved and their ids kept.
         val made = stores.instructions.value.instructions.single { it.id == proposal.made }
         assertEquals(By.Felix, made.by)
@@ -389,6 +391,23 @@ class LooksTest {
         val silence = stores.chat.value.messages.last()
         assertEquals(MessageKind.SlotStart to "", silence.kind to silence.text)
         assertEquals("", silence.mood)
+    }
+
+    @Test
+    fun `a nudge is kept at the level he was told, a piece kept while he was asked changing nothing of it (Q103)`() = runBlocking {
+        val key = underWay()
+        stores.chat.update { it.copy(messages = listOf(ChatMessage("n1", Speaker.Felix, "worksheet's on. starting?", felix.clock.time - 60_000L, About(taskId = "teams:sheet"), kind = MessageKind.SlotStart, pieceKey = key))) }
+        // Told strongly (a second nudge, its task due tomorrow morning with nothing done); kept as Day's Done keeps it while he's asked,
+        // which puts minutes on its task, so the same rule asked again after would say firmly.
+        felix.server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                runBlocking { felix.focusKeep(key) }
+                return felix.answer("""{"message":"that's two nudges now. start it.","replies":[],"nextCheckMin":10,"memories":[]}""")
+            }
+        }
+        felix.looks.check()
+        assertTrue("How you feel, at most: let down, strongly" in felix.server.takeRequest().body.readUtf8())
+        assertEquals("Strong", stores.chat.value.messages.last { it.kind == MessageKind.SlotStart }.mood)
     }
 
     @Test

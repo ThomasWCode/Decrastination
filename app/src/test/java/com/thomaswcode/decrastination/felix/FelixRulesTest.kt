@@ -136,6 +136,8 @@ class FelixRulesTest {
         assertNull(due(at("21:55"), emptyList()))
         // Said once; and not once it's stale.
         assertNull(due(at("21:57"), firm, sent = listOf(sent(Reason.SlotKept, key, at("21:55")))))
+        // The day done said about it answers it: not said again as a kept slot.
+        assertNull(due(at("21:57"), firm, sent = listOf(sent(Reason.DayDone, key, at("21:55")))))
         assertNull(due(at("22:25"), firm))
     }
 

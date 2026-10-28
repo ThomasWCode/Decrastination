@@ -199,6 +199,8 @@ class Looks(
         val message = ChatMessage(
             "reminder-${r.id}-$moment", Speaker.Felix, if (late) "$words ${FelixWords.late(time)}" else words, now, About(taskId = r.taskId, taskTitle = task?.title),
             kind = MessageKind.Reminder, byApp = draft == null, reminderId = r.id, suggestedReplies = FelixWords.REMINDER_REPLIES,
+            // His note on how he felt, where his words go (D-119): read beside your rating of it.
+            feeling = draft?.feeling.orEmpty(),
         )
         outbox.send(message)
         // Marked sent only as it was sent: moved, snoozed or cancelled while it went, it's another moment's, to come then.
@@ -350,7 +352,7 @@ class Looks(
             return@withLock false
         }
         // His message whole, with no list of the day beside it (D-65): the room is his.
-        val message = ChatMessage(UUID.randomUUID().toString(), Speaker.Felix, answer.message, now, kind = MessageKind.Morning, suggestedReplies = answer.replies, proposals = proposals)
+        val message = ChatMessage(UUID.randomUUID().toString(), Speaker.Felix, answer.message, now, kind = MessageKind.Morning, suggestedReplies = answer.replies, proposals = proposals, feeling = answer.feeling)
         outbox.send(message)
         // Made at once, each with its Undo, as his changes in the chat are.
         proposals.forEach { applyProposal(message.id, it.id) }
@@ -412,7 +414,11 @@ class Looks(
         // Written from the plan as it is now, its slot where it laid it: one moved since says what isn't so.
         val drafted = state.draft?.takeIf { FelixRules.fits(it, trigger, now, lastSaid(), laidOf(it), FelixRules.laid(focus.plan(now), trigger, today(now))) }
         if (state.draft != null) chat.update { it.copy(felix = it.felix.copy(draft = null)) }
-        val called = if (drafted != null) null else ask(caller, trigger, now, interactive = true)
+        val task = trigger.taskId?.let { id -> tasks.value.tasks.firstOrNull { it.id == id } }
+        // How he feels writing it (D-119), as he's told it: kept on the message as told (Q103), not worked out again once
+        // he's answered, as a piece kept during the call changes the records it rests on.
+        val mood = feeling(trigger, now, task)
+        val called = if (drafted != null) null else ask(caller, trigger, now, interactive = true, mood = mood)
         // A timer started on its task while he was asked (D-112): held now, so not sent; a slot's miss is said once
         // the hold lifts, asked afresh then.
         if (called != null && FelixRules.held(trigger, focus.timer, clock.now())) {
@@ -429,13 +435,13 @@ class Looks(
             FelixPrompts.Reason.Question -> emptyList()
             else -> answer?.replies.orEmpty()
         }
-        val task = trigger.taskId?.let { id -> tasks.value.tasks.firstOrNull { it.id == id } }
         val message = ChatMessage(
             UUID.randomUUID().toString(), Speaker.Felix, text, now, About(taskId = trigger.taskId, taskTitle = task?.title),
             // Why he wrote it, its kind (his answer, the chat's).
             kind = MessageKind.entries.firstOrNull { it.name == trigger.reason.name } ?: MessageKind.Chat, pieceKey = trigger.key, nextCheckAt = next, asks = trigger.asks, suggestedReplies = replies,
-            // How he felt as he wrote it (D-119), kept (Q103): what a kept slot after a let-down is known by.
-            mood = Mood.kept(feeling(trigger, now, task), text),
+            // How he felt as he wrote it (D-119), kept (Q103): what a kept slot after a let-down is known by. Written ahead,
+            // the level he was told then; a draft from before that was kept, as it is now.
+            mood = drafted?.mood ?: Mood.kept(mood, text),
             // His note on how he felt, kept with it (D-119): read beside your rating of it.
             feeling = answer?.feeling.orEmpty(),
         )
@@ -590,11 +596,12 @@ class Looks(
         task: TaskItem? = trigger.taskId?.let { id -> this.tasks.value.tasks.firstOrNull { it.id == id } },
         reminder: String? = slotReminder(trigger),
         notes: List<String> = task?.let(::notesOf).orEmpty(),
+        mood: Mood.Feeling = feeling(trigger, at, task),
     ): Called<FelixCaller.Result> {
         val settings = this.settings.value
         val profile = this.profile(at)
         val free = (focus.creditLeftMs(at) / 60_000L).toInt().takeIf { trigger.reason == FelixPrompts.Reason.DayDone || trigger.reason == FelixPrompts.Reason.SlotKept }
-        val user = FelixPrompts.describe(trigger.reason, planning.plan(), trigger.slot, task, today(at), chat.value.messages, trigger.question?.question, settings, at, clock.zone(), free, trigger.record, trigger.asks.map { it.title }, firstAction = trigger.slot?.chunk?.key?.let { model.value.microPlans[it] }?.first?.takeIf { it.isNotEmpty() }, reminder = reminder, notes = notes, tasks = planning.asPlanned(), timer = focus.timer, feeling = feeling(trigger, at, task))
+        val user = FelixPrompts.describe(trigger.reason, planning.plan(), trigger.slot, task, today(at), chat.value.messages, trigger.question?.question, settings, at, clock.zone(), free, trigger.record, trigger.asks.map { it.title }, firstAction = trigger.slot?.chunk?.key?.let { model.value.microPlans[it] }?.first?.takeIf { it.isNotEmpty() }, reminder = reminder, notes = notes, tasks = planning.asPlanned(), timer = focus.timer, feeling = mood)
         val called = gateway.call(interactive = interactive, record = ModelCalls.OnRecord(ModelEffort.Job.Felix, trigger.reason.name) { r: FelixCaller.Result -> r.usage to ModelCalls.outcome(r.refused, r.answer == null) }, cost = { r: FelixCaller.Result -> r.costUsd to r.refused }) { caller.say(FelixPrompts.system(settings, profile.year), profile.text, user) }
         if (called is Called.Failed) Log.w(AppGraph.TAG, "Felix's message failed", called.error)
         return called
@@ -730,11 +737,12 @@ class Looks(
         if (draftAsked == trigger.key to at) return
         if (!gateway.available()) return
         val caller = gateway.client(ModelEffort.Job.Felix)?.let { FelixCaller(it) } ?: return
-        val called = ask(caller, trigger, at, interactive = false) as? Called.Answered ?: return
+        val mood = feeling(trigger, at, trigger.taskId?.let { id -> tasks.value.tasks.firstOrNull { it.id == id } })
+        val called = ask(caller, trigger, at, interactive = false, mood = mood) as? Called.Answered ?: return
         // Once a moment: made stale since, it's written again at its moment ([write]), not again ahead.
         draftAsked = trigger.key to at
         val answer = called.value.answer ?: return
-        chat.update { it.copy(felix = it.felix.copy(draft = FelixDraft(trigger.reason.name, trigger.key, answer, now))) }
+        chat.update { it.copy(felix = it.felix.copy(draft = FelixDraft(trigger.reason.name, trigger.key, answer, now, Mood.kept(mood, answer.message)))) }
         draftLaid = now to FelixRules.laid(plan, trigger, today(at))
         Log.i(AppGraph.TAG, "Felix wrote ahead for ${trigger.key}, due at ${Instant.ofEpochMilli(at).atZone(clock.zone()).toLocalTime()}")
     }

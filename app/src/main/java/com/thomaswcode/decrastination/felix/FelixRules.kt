@@ -133,8 +133,8 @@ object FelixRules {
             return Trigger(Reason.DayDone, record = last)
         }
         // A slot kept of a task he was let down about today (Q102): always answered, not one in three, nor held by his
-        // check or the evening's work being over, so it's said that it's over.
-        kept.firstOrNull { fresh(it) && letDown(it.taskId) && said(Reason.SlotKept, it.key, it.start).isEmpty() && !waiting(Reason.SlotKept, it.key) }?.let {
+        // check or the evening's work being over, so it's said that it's over. The day done said about it answers it.
+        kept.firstOrNull { fresh(it) && letDown(it.taskId) && said(Reason.SlotKept, it.key, it.start).isEmpty() && said(Reason.DayDone, it.key, it.start).isEmpty() && !waiting(Reason.SlotKept, it.key) }?.let {
             return Trigger(Reason.SlotKept, record = it)
         }
         val paced = state.nextCheckAt?.let { now < it } == true
