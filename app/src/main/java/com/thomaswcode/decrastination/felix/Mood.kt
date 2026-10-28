@@ -16,7 +16,7 @@ import java.util.Locale
 /**
  * How Felix feels about today's work (D-119): let down by slots missed and nudges gone unanswered, pleased and proud by
  * work kept. Today's records alone, so each day starts neutral; the level a message of his was written at is kept on it
- * (Q6). A ceiling, not an order: his prompts bring him down from it where their words give a reason, an illness or a
+ * (Q103). A ceiling, not an order: his prompts bring him down from it where their words give a reason, an illness or a
  * hard time. Pure.
  */
 object Mood {
@@ -140,7 +140,7 @@ object Mood {
 
     /**
      * Whether he was let down (firmly or strongly) about [taskId] in a message of his today, by the level kept on it
-     * (Q6): a kept slot of that task is then always answered (Q5), so the let-down is never his last word on it. Read
+     * (Q103): a kept slot of that task is then always answered (Q102), so the let-down is never his last word on it. Read
      * from what was kept, not worked out again: keeping the piece has replaced its miss and added to its minutes.
      */
     fun letDown(taskId: String, messages: List<ChatMessage>, now: Long, zone: ZoneId): Boolean {

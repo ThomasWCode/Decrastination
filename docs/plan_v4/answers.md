@@ -1,6 +1,6 @@
 # The questions, and your answers
 
-Every question the 4.x plan put to you, and every one raised while it was built, in a line each: what was asked, what you answered, and where it's recorded; after it, the timer's (4.4.0), with the choices its building made without asking, then those of the Day as a calendar (4.5.0 to 4.6.0), the breaks outside (4.4.1 and 4.5.2) and your busy times in your calendar (4.5.3), each with the choices made without asking. A "(Q31: A)" in [decisions.md](../decisions.md) or [spec/](../spec/) points here; "C-Q" is the cleanup plan's, "M" a call the merge of the two plans made on its own (18 Oct 2026), and Q32 on were asked while building, each with a recommendation and your answer. Where a line gives only the letter, you took the recommendation. From Q32 on, a Q id is always one of these, with its letter or without, as "(Q83)"; below that, one written without its answer's letter, as "(Q13)", and the hyphenated ones, as "(Q-31)", are older requirement ids, not these ([spec/requirement-ids.md](../spec/requirement-ids.md) §Q).
+Every question the 4.x plan put to you, and every one raised while it was built, in a line each: what was asked, what you answered, and where it's recorded; after it, the timer's (4.4.0), with the choices its building made without asking, then those of the Day as a calendar (4.5.0 to 4.6.0), the breaks outside (4.4.1 and 4.5.2) and your busy times in your calendar (4.5.3) and Felix's moods (4.7.0), each with the choices made without asking. A "(Q31: A)" in [decisions.md](../decisions.md) or [spec/](../spec/) points here; "C-Q" is the cleanup plan's, "M" a call the merge of the two plans made on its own (18 Oct 2026), and Q32 on were asked while building, each with a recommendation and your answer. Where a line gives only the letter, you took the recommendation. From Q32 on, a Q id is always one of these, with its letter or without, as "(Q83)"; below that, one written without its answer's letter, as "(Q13)", and the hyphenated ones, as "(Q-31)", are older requirement ids, not these ([spec/requirement-ids.md](../spec/requirement-ids.md) §Q).
 
 ## The cleanup's questions (17 and 18 Oct)
 
@@ -363,3 +363,97 @@ You asked for the DO NOW card to show in full at the top, down the whole screen 
 
   The grid's scrolls only ever move its hours: they neither bring the card back, even at midnight, nor fold it as they go on to later hours (only ever the calendar, as you said). The day's header is the card's handle: dragged down it pushes the hours down and brings the card back, wherever they're scrolled; dragged up, the reverse you didn't name, it folds the card; flung, it goes on as any scroll does. The card's own drags and the tap on its line stay as they were.
 - **Decided without asking**: the card's own drags fold it, and unfold it while it's part-folded (folded, it's a line that takes a tap), since at the top the grid can be under the screen's edge, where it can't be scrolled. What it holds beyond its room scrolls to its end before it folds; once folding, it folds first. A drag on the card stops at its line rather than going on into the grid, which then shows from where it opened, an hour before now. For TalkBack, the card offers *Fold it* on its first line, as the grid has no room to be reached while the card fills the Day (from 4.6.2's review).
+
+## Felix's moods (4.7.0, 27 and 28 Oct)
+
+Your ask (27 Oct 2026): disappointment in Felix's personality, with an imbalance of power between him and you, Felix the one in charge and using it to get the work done; then the opposite too, proud and pleased. Your own words named the dynamic only as a rough example of it, and are left out of this public record. Before the first question you were told, and it was kept: the register said "no guilt" (D-57), so this reverses a decision rather than tuning one; shame tends to feed procrastination, so being let down helps only when it's about the broken commitment, with a way straight back; the dynamic's words go nowhere in the repository or the prompt (D-79), and in a prompt they would steer the model into a roleplay; and Felix's power stays what it is, the plan and the blocker he's told about, with no control of the blocker (D-61). The decision is D-119; how it works now is in [spec/felix.md](../spec/felix.md) §Who he is and §The chat.
+
+### Asked and answered
+
+**Q98. A trial first, or a release?** "No guilt" (D-57) would be reversed. Offered: a trial first, with no code, a standing instruction like "when I skip a slot without a reason, tell me you're disappointed" used for three to five school days (recommended: a standing instruction already overrides the tone rules, so it would cost nothing to learn whether it works on you); straight to 4.7.0; both at once.
+
+> When it goes into the app, it should be a release with the code change but first example outputs for different scenarios should be generated on this laptop before anything touches the phone.
+
+Applied: the scenarios' set (`EvalRunTest`, `-PrunEval=mood`, its made-up cases in the git-ignored `private/eval-felix-mood/`), each case asked as the app asks it, run sixteen times on the laptop and read by you before anything was installed.
+
+**Q99. How strong at its peak?** Offered: firm, aimed at the broken commitment (recommended: "that's the third one and it's due thu. kinda let down ngl, you said 19:30."); mild; strong, aimed at the person ("honestly expected better from you"), said to be the kind most likely to backfire into more avoidance.
+
+> It should vary depending on how many times per day and the severity. Starting at firm and going to strong. Also include the opposite: feeling proud of the user/happy/etc
+
+Applied: five levels, proud, pleased, neutral, firm and strong, by today's count and a real deadline's closeness; strong still about the choice, never about who you are.
+
+**Q100. Who decides the level?** Offered: the app, a pure rule with unit tests telling Felix his level in one line (recommended: the planner already decides and he voices; a level he counted for himself couldn't be tested and would drift); Felix himself; the app a range, Felix choosing within it.
+
+> The app (Recommended)
+
+Applied: `felix/Mood.kt`, `MoodTest`.
+
+**Q101. A name or a personal nickname?** Offered: through a memory, "call me …" in the chat, never in the repository (recommended); the generic words only; a setting.
+
+> Via a memory (Recommended)
+
+Applied: the register's "or what their memories say to call them"; no code.
+
+**Q102. A kept slot after a let-down** (from the plan's review, 28 Oct): a kept slot was answered about one time in three and nothing is sent when work starts, so after a firm or strong message the let-down would usually be his last word. Offered: always after a let-down (recommended: one more call a recovery, rare as it needs a let-down first); leave it; also on a start.
+
+> Always after a let-down (Recommended)
+
+Applied: `Mood.letDown` and its arm in `FelixRules.due`, above the early exits.
+
+**Q103. How the let-down is known afterwards** (from the review's second round): keeping a missed piece replaces its missed record with a kept-late one and adds to its minutes, so working the earlier mood out again mostly gives neutral. Offered: store it on his message (recommended); any nudge or miss message; rebuild the past state.
+
+> Store it on his message (Recommended)
+
+Applied: `ChatMessage.mood`; `chat.json` at 10 and the archive's months at 9, nothing migrated.
+
+**Q104. Which of Felix's feeling phrases sound like a middle-upper-class 22-year-old you'd know?** (28 Oct, the fourth run's, when he took his feelings from lists of suggested phrases). Offered, to tick: firm ("bit annoying tbh", "not ideal", "come on", "i want it done by then"), strong ("not happy about this tbh", "you said 19:00 and it didn't happen", "no moving it again"), pleased ("nice one", "that's more like it", "fair play"), proud ("genuinely proud of you mate", "really proud of you mate").
+
+> Firm let-down, Strong let-down, Pleased, The proud ones using the word 'proud' so explitically do not sound sincere.
+
+Applied: pride shown, never said; and then, at your next word (below), no lists of phrases at all.
+
+**Q105. Is the final set substantially better, and signed off?** (28 Oct, the fifteenth and sixteenth runs). Offered: signed off; the slips fixed first; still not right.
+
+> Although it is not perfect, accept this voice. Add a feature to the chat that allows me to seleted a thumbs up or down when I hold on the message. Then I can enter some feedback as well. When I replug the phone in, you can read the feedback.
+
+Applied: the voice as D-119 has it; a message of his held takes a thumb up or down and your words, read off the phone by `private/tools/felix_feedback.py` ([spec/felix.md](../spec/felix.md) §The chat).
+
+**Q106. Should his note be kept?** His note to himself on how he feels, written before each message, was read and let go. Offered: keep it on each message of his, beside your rating (recommended: why he wrote what you rate, the most useful thing for tuning his prompts); keep letting it go.
+
+> Store the whole of Felix's note.
+
+And, as it was built:
+
+> Show Felix's note when I am typing in my feedback. Keep it stored with the message.
+
+Applied: `ChatMessage.feeling`, and `FelixAnswer.feeling` for one written ahead, shown in the rating's box as you write.
+
+### Changed at your word
+
+- **A very close friend** (after Q100): "Bring the further such that there is less of a teacher feel and more of a very close friends feel. Words like nicknames/"bud," "bro," "dude," "mate". Keep the power imbalance from the previous part of this plan." An address word one a message at most, never in two of his running, none when he's let down strongly, as close friends show they're serious by taking the warmth away.
+- **Early twenties** (on a draft's "proper proud of you mate"): "Change the 'traditional londoner phase': 'proper proud of you mate' to something sweeter as I do not talk like that. Make it more sinscere, which will likely make it sound less like a teenager. Fine to increase the age to early 20s". No London slang; a counsellor's words as wrong as a teacher's.
+- **Not a system, not an AI** (your read of the second run): his copying the prompts' examples word for word and reading the rule's reasons back both to go; an address word fine; firm lines such as "i want the photo" very good; "In general, as well as sounding like a system, it also sounds like an AI, which I do not want. Phrases such as 'this one stings' are especially bot‑like and need to go."
+- **The feeling visible** (your read of the third): "M21 is too factual with no praise or emotion. There should still be emotion/feeling lines but they must be human - no ~22 year old would say 'this one stings' or other phrases like that. Overall, this round of responses has no emotion or demands or disappointment/praise.", in "phrases of a middle-upper class 22 year old".
+- **Tone, not phrases** (during the sixth run): "Note that stating the feeling like 'I am proud' or a set list of just a few phrases will always be worst than a less obvious tone around the messages. Think outside the box about how to make this work including whether other parts could be changed or whether there are specific known ways to generate realistic emotions in AI responses. Making it clear that the goal of the chat is just as much to convey the emotion etc as it is to get across the information may help. Also if you think a different model may be better suited, you could try it out." Applied: the feeling as much a message's job as what it says (`FelixPrompts.FEELING`), his note to himself written first (`FelixPrompts.NOTE`, a known way to have a model's feeling come through as what it picks out rather than as a statement), and the prompts' examples moved to situations no scenario uses. Fable 5.1, tried on the same prompt, was sharper when let down and flatter in praise, at about two and a half times the cost: Opus 5.5 stays.
+
+### Decided without asking
+
+1. The rule sits in `felix/`, not `:core`: its inputs are the app's types.
+2. Neutral prints no line, so a quiet day's messages read as before and cost no more.
+3. The morning and what he only passes on (a reminder, a reading's question, completions, the check-in, the summary) are always neutral, and the morning after a bad day doesn't bring it up: each day starts clean. His note's prompt says a message that only passes something on stays plain whatever he feels.
+4. "Nothing done on it" is no minutes worked, no photo's and no step ticked, a hand-ticked one included; a deadline that's only a plan never counts; a close deadline raises the level a step only on a day with a miss or a piece already nudged.
+5. The second nudge on a piece is the firm one, not the third, as there are three at most a slot; a silent nudge, his choice not to write, isn't counted.
+6. A missed piece made up is proud only with no other miss or make-up that day; "every slot kept" is said only on DayDone, with nothing left to come.
+7. The kept slot after a let-down is checked above `due`'s early exits, and still has to be fresh.
+8. An Anki piece counts like any other: a missed quota is a missed slot.
+9. No tone setting (D-57 has none): a standing instruction turns it down, the standing instructions coming after the register and the feelings in both prompts.
+10. Misses across days aren't told him: a follow-up, if real use shows one day isn't enough.
+11. A time is always as 09:00 in his words, never "at 9", once an example's "9 tomorrow" spread to fourteen answers.
+12. Ratings are on his messages only, and none of it, nor his note, is ever sent back to him; *Remove* takes one off; a message from before 4.7.0 has no note to show.
+13. His note is kept to 400 characters, your words to 1 000.
+14. `felix.json` raised to 2, its first migration, as a reminder's words written ahead keep his note; nothing migrated.
+15. The scenarios' harness flags lines that sound written, an example copied, phrases three cases share, pride said outright and a coach's questions, and can ask another model (`EVAL_MODEL`); the phrases it flags are in its test, not in his prompt.
+
+### What the plan couldn't check
+
+The levels can't be faked well on the phone: a few school days of use are the test, with your ratings and his notes read back.

@@ -240,8 +240,8 @@ class EvalRunTest {
     }
 
     /**
-     * Felix's moods' private set (`private/eval-felix-mood/cases.json`, never committed, every case made up;
-     * docs/plan_felix_mood/build.md §1), asked only with `-PrunEval=mood` and the key. A `felix` case is one message of
+     * Felix's moods' private set (`private/eval-felix-mood/cases.json`, never committed, every case made up,
+     * a case in the shape [MoodCase] reads), asked only with `-PrunEval=mood` and the key. A `felix` case is one message of
      * his, asked as [com.thomaswcode.decrastination.felix.Looks] asks it: [FelixPrompts.system] and [FelixPrompts.describe]
      * through [FelixCaller.say], today's plan laid by the [Planner] from the case's tasks and evening, its slots on record
      * and his recent messages as the app keeps them; his answer read by [FelixAnswers.parse], one cut to its room
@@ -391,7 +391,7 @@ class EvalRunTest {
         )
     }
 
-    /** One case of the mood set as the app would hold it (build.md §1): its times "HH:mm" on its day, or whole. */
+    /** One case of the mood set as the app would hold it: its times "HH:mm" on its day, or whole. */
     private inner class MoodCase(private val o: JsonObject) {
         private fun JsonObject.str(name: String): String? = this[name]?.jsonPrimitive?.contentOrNull
         private fun JsonObject.int(name: String): Int? = this[name]?.jsonPrimitive?.contentOrNull?.toIntOrNull()
@@ -471,7 +471,7 @@ class EvalRunTest {
 
     /**
      * What's wrong with [asked], in words: unread or cut, an address word at strong, or two of his messages running with
-     * one; a teacher's words, a counsellor's, or London slang (build.md §5); a line that sounds written or is the app's
+     * one; a teacher's words, a counsellor's, or London slang (D-119); a line that sounds written or is the app's
      * own, a mood's example copied, or yesterday brought up in the morning (the owner's read of run 2).
      */
     private fun flags(asked: MoodAnswer, words: List<String>, case: MoodCase): List<String> {
@@ -522,7 +522,7 @@ class EvalRunTest {
             flags.joinToString("") { " **[$it]**" } + extra.takeIf { it.isNotEmpty() }?.joinToString("; ", " _", "_").orEmpty()
     }
 
-    /** Run [before]'s answers beside run [after]'s, a case at a time, the rule's level with each: the owner's read (build.md §5). */
+    /** Run [before]'s answers beside run [after]'s, a case at a time, the rule's level with each: the owner's read (D-119). */
     private fun moodSideBySide(before: Int, earlier: List<JsonObject>, after: Int, results: List<JsonObject>, notAsked: List<String>): String = buildString {
         fun JsonObject.s(name: String) = getValue(name).jsonPrimitive.content
         fun rate(list: List<JsonObject>) = "${list.count { it.getValue("addressWords").jsonArray.isNotEmpty() }} of ${list.size}"
@@ -568,10 +568,10 @@ class EvalRunTest {
     internal companion object {
         const val KEY = "CLAUDE_DECRASTINATION_API_KEY"
 
-        /** A teacher's words (build.md §5): never his. */
+        /** A teacher's words (D-119): never his. */
         val TEACHER = listOf("expected better", "disappointed in you", "make sure you", "remember to", "you need to", "i'm not angry")
 
-        /** A counsellor's (build.md §5): sincerity gone wrong. */
+        /** A counsellor's (D-119): sincerity gone wrong. */
         val COUNSELLOR = listOf("i hear you", "that's valid", "be kind to yourself", "it's okay to struggle", "your feelings", "making it hard", "getting in the way")
 
         /**

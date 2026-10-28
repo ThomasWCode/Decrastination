@@ -100,7 +100,7 @@ data class ChatMessage(
     /**
      * His, written unasked: how he felt as he wrote it (D-119), a level of the app's rule's ("Firm", "Strong", "Pleased",
      * "Proud"); empty for neutral, for a silence and for every other message. Kept, as the records it rested on change once
-     * the piece is kept (Q6).
+     * the piece is kept (Q103).
      */
     val mood: String = "",
     /**

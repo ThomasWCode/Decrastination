@@ -93,7 +93,7 @@ object FelixRules {
      * slot just kept, every third one (SlotKept). [today]: today's slots on record; [sent]: his
      * messages today, the silent ones (he chose not to write, or the model couldn't be asked) too.
      * [timer]: the timer on a piece (D-112), whose task's SlotStart and SlotEnd wait while
-     * it [holds]. A slot kept of a task he was [letDown] about today (D-119, Q5) is answered after
+     * it [holds]. A slot kept of a task he was [letDown] about today (D-119, Q102) is answered after
      * DayDone, before the check he set and whatever's left today, so the let-down is never his last word.
      */
     fun due(
@@ -132,7 +132,7 @@ object FelixRules {
         if (plan.todayBucket?.chunks.orEmpty().isEmpty() && last != null && fresh(last) && sent.none { it.reason == Reason.DayDone.name } && !waiting(Reason.DayDone, last.key)) {
             return Trigger(Reason.DayDone, record = last)
         }
-        // A slot kept of a task he was let down about today (Q5): always answered, not one in three, nor held by his
+        // A slot kept of a task he was let down about today (Q102): always answered, not one in three, nor held by his
         // check or the evening's work being over, so it's said that it's over.
         kept.firstOrNull { fresh(it) && letDown(it.taskId) && said(Reason.SlotKept, it.key, it.start).isEmpty() && !waiting(Reason.SlotKept, it.key) }?.let {
             return Trigger(Reason.SlotKept, record = it)

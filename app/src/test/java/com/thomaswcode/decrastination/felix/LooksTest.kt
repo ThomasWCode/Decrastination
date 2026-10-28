@@ -373,7 +373,7 @@ class LooksTest {
     }
 
     @Test
-    fun `his second nudge on a piece is kept at the level he wrote it at, a silence with none (D-119, Q6)`() = runBlocking {
+    fun `his second nudge on a piece is kept at the level he wrote it at, a silence with none (D-119, Q103)`() = runBlocking {
         val key = underWay()
         // His first nudge on it, with words, a minute ago.
         stores.chat.update { it.copy(messages = listOf(ChatMessage("n1", Speaker.Felix, "worksheet's on. starting?", felix.clock.time - 60_000L, About(taskId = "teams:sheet"), kind = MessageKind.SlotStart, pieceKey = key))) }
@@ -392,7 +392,7 @@ class LooksTest {
     }
 
     @Test
-    fun `a missed piece kept after his let-down about it is answered, its miss replaced as Focus keeps it (Q5, Q6)`() = runBlocking {
+    fun `a missed piece kept after his let-down about it is answered, its miss replaced as Focus keeps it (Q102, Q103)`() = runBlocking {
         val key = underWay()
         // More work tonight, so the day isn't done with it.
         stores.tasks.update {

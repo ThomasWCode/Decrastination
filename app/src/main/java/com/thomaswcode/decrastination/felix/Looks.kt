@@ -391,7 +391,7 @@ class Looks(
             zone = zone,
             // A timer on a piece holds his slot-start and slot-over messages about its task (D-112).
             timer = focus.timer,
-            // A slot kept of a task he was let down about today is always answered (Q5).
+            // A slot kept of a task he was let down about today is always answered (Q102).
             letDown = { Mood.letDown(it, conversation.messages, now, zone) },
         )
     }
@@ -434,7 +434,7 @@ class Looks(
             UUID.randomUUID().toString(), Speaker.Felix, text, now, About(taskId = trigger.taskId, taskTitle = task?.title),
             // Why he wrote it, its kind (his answer, the chat's).
             kind = MessageKind.entries.firstOrNull { it.name == trigger.reason.name } ?: MessageKind.Chat, pieceKey = trigger.key, nextCheckAt = next, asks = trigger.asks, suggestedReplies = replies,
-            // How he felt as he wrote it (D-119), kept (Q6): what a kept slot after a let-down is known by.
+            // How he felt as he wrote it (D-119), kept (Q103): what a kept slot after a let-down is known by.
             mood = Mood.kept(feeling(trigger, now, task), text),
             // His note on how he felt, kept with it (D-119): read beside your rating of it.
             feeling = answer?.feeling.orEmpty(),

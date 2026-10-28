@@ -119,7 +119,7 @@ class FelixRulesTest {
     }
 
     @Test
-    fun `a kept slot of a task he was let down about today is always answered (Q5)`() {
+    fun `a kept slot of a task he was let down about today is always answered (Q102)`() {
         // A key that isn't one in three, kept late at 21:50 after the evening's work (the plan's slots over, a piece still in today's bucket).
         val key = (1..30).map { "teams:k$it#-1#1" }.first { Math.floorMod(it.hashCode(), 3) != 0 }
         val kept = record(key, SlotOutcome.KeptLate, at("17:00"), at("21:50"))

@@ -320,7 +320,7 @@ class BackupTest {
 
     @Test
     fun `format 7's chat with Felix's state, its earlier messages and today's slots are kept, and a newer format is refused`() {
-        // A message of his with the level he wrote it at (D-119, Q6), his note on how he felt, and your rating of it, kept with it.
+        // A message of his with the level he wrote it at (D-119, Q103), his note on how he felt, and your rating of it, kept with it.
         val firm = ChatMessage("m2", Speaker.Felix, "that's two today.", 6, kind = MessageKind.SlotEnd, mood = "Firm", feeling = "annoyed: two gone", rating = "Down", feedback = "too sharp", ratedAt = 7)
         val chat = ChatState(listOf(ChatMessage("m1", Speaker.You, "move the physics to Thursday", 5), firm), felix = FelixState(nextCheckAt = 42))
         val archive = ChatArchive(listOf(ChatMessage("m0", Speaker.You, "what's due?", 1), ChatMessage("m00", Speaker.Felix, "every slot today. really proud of you.", 2, kind = MessageKind.DayDone, mood = "Proud")))
