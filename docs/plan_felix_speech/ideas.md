@@ -4,7 +4,7 @@ Every idea considered on 28 Oct 2026, with what it rests on ([research.md](resea
 
 Cost figures: a Felix message costs about a cent with the cache (69 answers for $0.73, run 2); a chat answer $0.07 to $0.16; Haiku 5.5 is a fortieth of Opus 5.5's price.
 
-## A. The prompt
+## A. The prompt, what he's told, and the mechanics (I-01 to I-20)
 
 **I-01. Brief him as a person, not as the app's writer.** *Do.* The system prompt opens "You write the short messages the planner app sends…" and goes on to describe inputs and a schema; the user turn is a labelled form. Rewrite the opening as who he is and his situation (22, their closest mate, their planner open on his phone, texting them about it), and keep the app's facts as "the details" after the story (I-15). Evidence: Anthropic's role guidance; prompt style bleeds into output style. Code: `FelixPrompts.system` and `describe`; `ChatPrompts.system`'s first paragraph. No cost. Risk: none the harness won't show.
 
@@ -18,7 +18,7 @@ Cost figures: a Felix message costs about a cent with the cache (69 answers for 
 
 **I-06. The full stop as his cold register.** *Do.* Drop "a full stop between thoughts". Tell him a text ends with no full stop, and that the full stop is what he does when he's cold with them (firm and strong). Evidence: a one-word text ending in a full stop rated less sincere (Gunraj et al. 2016, small); the owner's own texts end in one a third of the time; 51 of 59 of his do. No cost. Risk: `FelixAnswers.message` cuts a long message at a sentence end; a message with no final full stop is cut at a word with "…" when over the limit, so the cut rule needs to accept a last line without one. Small.
 
-**I-07. One thought a text, up to two texts a look.** *Do.* The schema's one `message` becomes the sent text plus an optional second (`texts[send]` and `second`, or two of the candidates in I-10). The outbox sends both as chat messages and one notification (it already lays several lines newest first in 360 characters). Evidence: texts average about 35 characters (old, US); the owner's median 14 words; delays and bubbles raise perceived humanness (bubbles not isolated by any study). Code: `FelixAnswers`, `Outbox.send` twice with the same `kind` and `pieceKey`, `FelixRules.sent` counting the look once, the chat's history treating the pair as one nudge. Risk: his rules count messages (nudges, `said`); the pair must count as one. Medium code, no cost.
+**I-07. One thought a text, up to two texts a look.** *Do.* The schema's one `message` becomes the chosen one of three texts (I-10), `texts[send - 1]`, split at its newline into up to two bubbles: no new field, nothing nullable. The outbox sends both as chat messages and one notification (it already lays several lines newest first in 360 characters). Evidence: texts average about 35 characters (old, US); the owner's median 14 words; delays and bubbles raise perceived humanness (bubbles not isolated by any study). Code: `FelixAnswers`, `Outbox.send` twice with the same `kind` and `pieceKey`, `FelixRules.sent` counting the look once, the chat's history treating the pair as one nudge. Risk: his rules count messages (nudges, `said`); the pair must count as one. Medium code, no cost.
 
 **I-08. The owner's thumbs into the prompt, digested.** *Do, after a fortnight of ratings.* Raw feedback stays unseen (honest marking). A weekly call, shaped like `MemoryTidy`, reads the fortnight's rated messages (`felix_feedback.py` already gathers them) and writes at most five lines for the profile block under "What they've told you about how you text" ("the clock time in every kept message grates"; "the firm lines they liked said what they'd promised"), and picks the marked-up messages into the pair pool (I-02) with the owner's note as the reason. Evidence: TICL, explanations carry up to 77% of personalisation's gain; HyPerAlign. Cost: one call a week, Opus at a few cents, or Haiku. Code: a `FeedbackDigest` beside `MemoryTidy`, its golden, `Profile`'s block; `ArchitectureTest` names its writer. Risk: the digest overfits to one bad night; it's a ceiling of five lines, replaced weekly, and the owner reads it in Settings. D-79: the pool lives on the phone and in `private/`, never in the repository.
 
@@ -38,7 +38,7 @@ Cost figures: a Felix message costs about a cent with the cache (69 answers for 
 
 **I-16. The chat's last exchanges in the notification prompt.** *Do.* `ChatHistory.his` filters his chat answers out, so a notification doesn't know what they agreed an hour ago. Add the last two exchanges (their message, his answer) to the story. Code: `describe`'s recent block takes `kind == Chat` pairs too. No cost. Risk: none; the chat already sends his nudges the other way.
 
-**I-17. The harness's judge and measures.** *Do.* Replace the hand-kept lists as the deciders (keep them as regression flags): `run_stats.py`'s measures in `EvalRunTest`'s report (numbers a message, clock times, final full stops, shared 3- and 4-grams across cases, word overlap between attempts of a case, the commonest endings), and a Haiku 5.5 judge asked one anchored question per message, blind to the prompt. Evidence: stylometry (uniformity is the tell), judge research (short rubric, decomposed, deterministic checks keep authority). Cost: Haiku at a thirtieth of a cent a message. Code: `EvalRunTest`'s mood set.
+**I-17. The harness's judge and measures.** *Do.* Replace the hand-kept lists as the deciders (keep them as regression flags): `run_stats.py`'s measures in `EvalRunTest`'s report (numbers a message, clock times, final full stops, shared 3- and 4-grams across cases, word overlap between attempts of a case, the commonest endings), and a Haiku 5.5 judge asked one anchored question per message, blind to the prompt. Evidence: stylometry (uniformity is the tell), judge research (short rubric, decomposed, deterministic checks keep authority). Cost: Haiku at a few thousandths of a cent a message (about 200 tokens in, 15 out). Code: `EvalRunTest`'s mood set.
 
 **I-18. Numbers only where they're the point.** *Do (overturns D-57's "exact where it matters").* "in at 9 tomorrow" when the deadline is the thing; else "tonight", "the physics", "later"; never minutes, a time and a date in one text; the Day's cards carry the exact times (they do). Risk: the owner valued exactness (D-57); a time they gave ("at 7") is still said, as a promise is. The thumbs will say.
 
@@ -46,7 +46,7 @@ Cost figures: a Felix message costs about a cent with the cache (69 answers for 
 
 **I-20. The morning as the app's list and his one line.** *Owner.* The morning is "the whole briefing, with no list of the day beside it" (D-57), a 480-character list in his voice, the most app-shaped thing he writes. The app already has the list in its own words for when Claude's off (`FelixWords.morningList`). Show that as the card and have him add one line a person would ("two things tonight, both short. essay's the one"). Cost: the morning call gets cheaper. Risk: the owner chose the briefing as his; their call.
 
-## D. Behaviour
+## B. Behaviour (I-21 to I-28)
 
 **I-21. Teasing and a joke beside the answer, when warm.** *Owner.* "No sarcasm at them" and "never a joke in place of the answer" leave him no humour. Allow light teasing at neutral and pleased, never when let down, never about who they are; a joke beside the answer, not instead of it. Evidence: friends converge on affiliative humour (adolescents); no study on banter and intimacy among young men was found. Risk: a joke on a bad night reads as sarcasm; the level gates it. The owner's taste.
 
@@ -64,7 +64,7 @@ Cost figures: a Felix message costs about a cent with the cache (69 answers for 
 
 **I-28. The nickname and address words.** *Keep.* The owner said their rate isn't a problem; via a memory only (Q4).
 
-## E. Structure and calls
+## C. Structure and calls (I-29, I-30)
 
 **I-29. Shorter system prompts.** *Do, with I-01 and I-02.* The notification prompt is 1,914 words for a 240-character answer; the chat's 3,855, the voice a fifth of it and last. Halve the notification prompt (the capabilities list stays in the chat's). The cached prefix shrinks; literal over-application has less to over-apply.
 

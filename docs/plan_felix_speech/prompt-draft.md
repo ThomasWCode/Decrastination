@@ -50,13 +50,12 @@ The chat's prompt keeps its nine capabilities and its answer rules, and takes th
 ## The user turn: the story, then the diary, then the details
 
 ```
-Tonight (wed 4 nov, 19:40):
-- 17:00 physics worksheet. you texted at 17:10 ("physics worksheet's on till 17:30. you starting?"); no reply. it went by. it's back on at 19:40, the first 20 min of it.
-- 17:35 maths went by too; they'd said "at 7" in the chat at 16:50.
-- 18:30 in the chat they said "had football, forgot to say"; you moved maths to 19:30 and asked whether football's every wednesday (no answer yet).
-- 19:30 maths started (timer running, 12 min left).
+Tonight (wed 4 nov, 19:35):
+- 17:00 physics worksheet. you texted at 17:10 ("physics worksheet's on till 17:30. you starting?"); no reply. it went by. you texted at 17:35 ("physics went by. what happened?"); no reply. it's back on at 19:40, the first 20 min of it.
+- 18:20 in the chat they asked to push the maths to 19:00; you did, and they said "starting at 7".
+- 19:00 maths. you texted at 19:10 ("maths is on. you said 7"); no reply. it went by at 19:30, and it's back on at 20:00.
 - the history essay's in fri 09:00; nothing's done on it.
-- you felt, at 17:35: "irritated, two gone, and that one was 20 min of vocab".
+- you felt, at 17:35: "bit puzzled, no word back. want to know what happened, no fuss".
 At most: not impressed.
 
 Your diary:
@@ -68,11 +67,11 @@ Your diary:
 
 Details:
 Reason: SlotEnd
-Piece: Circular motion worksheet, 30 min, slot 17:00–17:30; it went by undone, and has been moved to later
-Its task's due: Fri 6 Nov, 09:00
-Its task's own text (an assignment's instructions): …
-Today: 0 kept, 2 missed, 2 to come; next: Matrices 4B at 19:30
-Left today: Circular motion worksheet 19:40–20:00; Matrices 4B 19:30–20:15
+Piece: Matrices 4B, 30 min, slot 19:00–19:30; it went by undone, and has been moved to later
+Its task's due: Mon 9 Nov, 09:00
+Its task's own text (a planner item's details): …
+Today: 0 kept, 2 missed, 2 to come; next: Circular motion worksheet at 19:40
+Left today: Circular motion worksheet 19:40–20:00; Matrices 4B 20:00–20:30
 Recent, oldest first: [his last six, with their replies, as now]
 ```
 
@@ -82,11 +81,11 @@ The story is built by `Looks` from what it already has: the chat's messages of t
 
 ```json
 {
-  "feeling": "irritated, two gone, and they'd said at 7 themselves. want them to feel it and just go",
+  "feeling": "irritated, two gone, and they'd said 7 themselves. want them to feel it and just go",
   "texts": [
-    "maths went too. you said 7.\nit's on now, 20 min",
-    "two gone tonight. not great\nphysics is back on now",
-    "you said 7 for the maths. it's on now, 20 min, go"
+    "maths went too. you said 7.\nphysics is on at 19:40, then maths at 8",
+    "two gone tonight. not great\nphysics is on at 19:40",
+    "you said 7 for the maths and nothing. physics at 19:40, maths after"
   ],
   "send": 1,
   "replies": ["on it", "give me 5", "can't tonight"],
@@ -112,7 +111,7 @@ One line a day for the last seven, from `ActivityLog.slots` by date (kept, misse
 
 **The measures** (`run_stats.py`, to move into `EvalRunTest`'s report): numbers a message; the share with a clock time; the share ending in a full stop; three- and four-word phrases shared by three or more cases; word overlap between attempts of one case; the commonest last four words. Targets for the first new run, against runs 15 and 16: a clock time in under a third of notifications (45 of 59 today); a final full stop only at firm and strong; no four-word phrase in more than two cases; attempts' overlap under 0.3 (0.45 today); no ending shared by more than two answers.
 
-**The judge** (Haiku 5.5, blind to the prompt, one question, about a thirtieth of a cent a message):
+**The judge** (Haiku 5.5, blind to the prompt, one question, a few thousandths of a cent a message: about 200 tokens in and 15 out):
 
 ```
 A Year 12 student in the UK gets texts about their homework. Some come from a close friend of theirs, 22, who has their planner open; some are written by the planner app itself in a friendly style. Here is one, with what it was about.

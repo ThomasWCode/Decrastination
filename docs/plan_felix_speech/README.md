@@ -142,7 +142,7 @@ Each stands until the owner says otherwise; the proposal and why, so the answer 
 
 - The app decides the facts and the ceiling: the planner, the records, `Mood.of`'s level (Q3), Q5's answered recovery, Q6's level kept on his message. Persona research finds persona-assigned models less consistent in judgement, so judgement stays out of the persona.
 - The limits on the let-down levels: about the choice, never the person; no insult, no threat; over the moment work starts; a reason, an illness or distress brings him down (D-119's draft, the shame research).
-- The cost rule: no new call a message. The diary and the story come from stores; the candidates cost output tokens (a message is about a cent with the cache; three texts add a fraction); the judge is Haiku 5.5 at about a thirtieth of a cent; the feedback digest is one weekly call like memory-tidy's.
+- The cost rule: no new call a message. The diary and the story come from stores; the candidates cost output tokens (a message is about a cent with the cache; three texts add a fraction); the judge is Haiku 5.5 at a few thousandths of a cent a message; the feedback digest is one weekly call like memory-tidy's.
 - D-95 (the chat his one voice; two texts are two chat messages, one notification), D-61 (no blocker), D-4 (their minutes as given), D-79 (nothing personal in the repository: the diary is phone-local, the pairs made up until the owner's own rated lines replace them, which stay in `private/` and the phone).
 - "No praise for nothing", "no promise the app can't keep", the nickname via a memory, no emojis (the owner's taste; worth knowing it's a mild tell, as people his age use some).
 - The goldens, `FelixInputsDocTest`, `SchemaCompileTest` live after the schema changes, the harness as the regression set.
@@ -169,7 +169,7 @@ After 4.7.0 ships as signed off (its thumbs collect what stage 6 needs), as 4.8.
 6. After the fortnight: the feedback digest call and the example pool (`MemoryTidy`-shaped; `Profile`): ~1.5 h.
 7. Docs (D-120, `docs/spec/felix.md`, `felix-inputs.md`, the answers from Q99), version, PR: ~30 min.
 
-Estimates are the old figures; the measured durations in memory say code runs at a third to a half of them.
+Estimates are the old figures; the project's measured durations say code runs at a third to a half of them.
 
 ## Risks
 

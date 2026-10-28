@@ -1,6 +1,6 @@
 # Felix's speech: what the review rests on
 
-Each claim in [README.md](README.md) and [ideas.md](ideas.md) about the code, the numbers and the runs, and where it was checked (28 Oct 2026; the `v4.7.0` branch as it stood in the checkout at f61b33b3 plus the uncommitted feedback feature; `main` at dcc041b7). The research is in [research.md](research.md). Read the code again before building: a claim goes stale with any release.
+Each claim in [README.md](README.md) and [ideas.md](ideas.md) about the code, the numbers and the runs, and where it was checked (28 Oct 2026; the `v4.7.0` branch as it stood in the checkout at f61b33b3 plus the uncommitted feedback feature; `main` at dcc041b7). The line numbers are that branch's, not `main`'s: `main` has no `felix/Mood.kt`, no mood line and no feedback fields yet, and its lines in `core/Chat.kt` and `FelixPrompts.kt` sit elsewhere (`ChatHistory.his` at `Chat.kt:123`, `RECENT` at `FelixPrompts.kt:43`). Each row names its symbol, which is what to search for once 4.7.0 has merged. The research is in [research.md](research.md). Read the code again before building: a claim goes stale with any release.
 
 ## The code
 
@@ -89,4 +89,4 @@ What the final report shows beyond the numbers (quotes are of made-up cases):
 
 - The next decision on `main` is D-120 (D-119 is 4.7.0's, not yet on `main`); the next question Q99 after 4.7.0's Q98 (the plan's own count: check `docs/plan_v4/answers.md` and `docs/decisions.md` when building).
 - 4.7.0 is version 87; this work would be 4.8.0, version 88, after it.
-- The worktree is `.claude/worktrees/felix-speech-review` on branch `worktree-felix-speech-review`, from `main`; nothing in the main checkout was changed.
+- Written on a branch from `main` (`docs-felix-speech`); nothing in the main checkout was changed.
