@@ -3,12 +3,13 @@ package com.thomaswcode.decrastination.ui
 import android.app.Activity
 import android.content.res.Configuration
 import android.os.SystemClock
+import androidx.compose.animation.core.animate
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.Orientation
-import androidx.compose.foundation.gestures.rememberScrollableState
-import androidx.compose.foundation.gestures.scrollable
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -81,6 +82,7 @@ import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -103,6 +105,7 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlin.math.roundToInt
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -115,13 +118,20 @@ private enum class DaySheet { WontFit, NoTime, Done, Said }
 /**
  * Today's DO NOW card's fold as a drag on the card reaches it: once it's folding, taken before what the card holds moves, so
  * it folds from its top down; before that, only what's left once what it holds has scrolled to its end. [at] says how far
- * it's folded; [by] folds it by what it can of a scroll and says what it took.
+ * it's folded; [by] folds it by what it can of a scroll and says what it took; [settle], given the fling's speed as it folds,
+ * settles a fold the drag moved and says whether there was one to settle.
  */
-internal class Folding(private val at: () -> Float, private val by: (Float) -> Float) : NestedScrollConnection {
+internal class Folding(private val at: () -> Float, private val by: (Float) -> Float, private val settle: (Float) -> Boolean = { false }) : NestedScrollConnection {
     override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset =
         if (at() > 0f) Offset(0f, by(available.y)) else Offset.Zero
 
     override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset = Offset(0f, by(available.y))
+
+    // Let go, a drag that moved the fold settles it and takes the fling; one that only scrolled what the card holds flings that.
+    override suspend fun onPreFling(available: Velocity): Velocity = if (settle(-available.y)) available else Velocity.Zero
+
+    // A fling that folded the card once what it holds reached its end settles it as it stops.
+    override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity = if (settle(-available.y)) available else Velocity.Zero
 }
 
 /**
@@ -292,23 +302,43 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
     // Today's DO NOW card shows in full, up to the whole Day under the strip (Q96). It folds into a line as it's dragged up, or
     // as the day's header is, and unfolds as the header's dragged down, wherever the grid's scrolled, as it's dragged down
     // while part-folded, or at a tap on the folded line; the grid's own scrolls only move its hours (your word, replacing
-    // Q97). In landscape it starts folded, so the grid has room.
+    // Q97). Let go part-folded, it settles folded or unfolded, as two screens (4.9.1). In landscape it starts folded, so the
+    // grid has room.
     var cardFull by remember { mutableIntStateOf(0) }
     // The card's cap (below) in pixels, as last laid out: the card folds from what it shows unfolded, its height or that cap.
     var cardCap by remember { mutableFloatStateOf(Float.MAX_VALUE) }
     val line = with(density) { 40.dp.toPx() }
     var fold by remember(landscape) { mutableFloatStateOf(if (landscape) Float.MAX_VALUE else 0f) }
     val foldMax = DayLayout.foldMax(cardFull.toFloat(), cardCap, line)
-    // The fold takes what it can of a scroll [dy], and says what it took.
+    // A flick fast enough to settle the fold its way, and how far a slower drag moves it to settle it on that way.
+    val flick = with(density) { 125.dp.toPx() }
+    val nudge = with(density) { 24.dp.toPx() }
+    // Where the fold was as the drag moving it began, while it's between unfolded and its line; and its settling, if it is.
+    var foldStart by remember { mutableStateOf<Float?>(null) }
+    var settling by remember { mutableStateOf<Job?>(null) }
+    // The fold takes what it can of a scroll [dy], and says what it took: a drag takes it from a settling under way.
     fun foldBy(dy: Float): Float {
-        if (cardFull == 0) return 0f
-        val was = fold.coerceAtMost(DayLayout.foldMax(cardFull.toFloat(), cardCap, line))
+        if (cardFull == 0 || dy == 0f) return 0f
+        settling?.cancel()
+        val most = DayLayout.foldMax(cardFull.toFloat(), cardCap, line)
+        val was = fold.coerceAtMost(most)
         fold = DayLayout.folded(was, dy, cardFull.toFloat(), cardCap, line)
+        // Unfolded, or at its line (where the card under the finger goes), there's nothing to settle.
+        foldStart = if (fold <= 0f || fold >= most) null else foldStart ?: was
         return was - fold
     }
-    val cardFolding = remember { Folding({ fold }, ::foldBy) }
-    // The day's header dragged, or flung, moves the fold itself: up folds the card, down pushes the hours down.
-    val pushing = rememberScrollableState { delta -> foldBy(delta) }
+    // Let go at [velocity] (folding, positive), a fold the drag left between settles at its line or unfolded; says if it did.
+    fun settle(velocity: Float): Boolean {
+        val start = foldStart ?: return false
+        foldStart = null
+        val most = DayLayout.foldMax(cardFull.toFloat(), cardCap, line)
+        val to = DayLayout.settled(fold, start, velocity, most, flick, nudge)
+        settling = scope.launch { animate(fold.coerceAtMost(most), to, velocity) { value, _ -> fold = value.coerceIn(0f, most) } }
+        return true
+    }
+    val cardFolding = remember { Folding({ fold }, ::foldBy, ::settle) }
+    // The day's header dragged, or flicked, moves the fold itself: up folds the card, down pushes the hours down.
+    val pushing = rememberDraggableState { delta -> foldBy(delta) }
 
     var rootAt by remember { mutableStateOf(Offset.Zero) }
     val card = rememberScrollState()
@@ -368,7 +398,7 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
             }
             // Laid at its own height, running on under the screen's edge rather than squeezed, while the card fills the Day; on
             // today, upright, dragged to fold the card or push the hours down, wherever they're scrolled.
-            Column(Modifier.wrapContentHeight(Alignment.Top, unbounded = true).then(if (today && !landscape) Modifier.scrollable(pushing, Orientation.Vertical) else Modifier)) {
+            Column(Modifier.wrapContentHeight(Alignment.Top, unbounded = true).then(if (today && !landscape) Modifier.draggable(pushing, Orientation.Vertical, onDragStopped = { velocity -> settle(-velocity) }) else Modifier)) {
                 DayHeader(model, plan, day, today, zone, instructions.applied.flatMap { it.changes }.count { c -> saysOf(c.type) && (c.date == day.toString() || (c.date == null && c.weekday == day.dayOfWeek.value)) }) { daySheet = it }
                 model.allDay.takeIf { it.isNotEmpty() }?.let { events ->
                     LazyRow(contentPadding = PaddingValues(start = GUTTER, end = 12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {

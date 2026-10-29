@@ -97,4 +97,23 @@ internal object DayLayout {
         val most = foldMax(full, cap, line)
         return (fold.coerceAtMost(most) - dy).coerceIn(0f, most)
     }
+
+    /**
+     * Where the DO NOW card settles as a drag that left it part-folded lets go (4.9.1): at its [most], its line, or unfolded,
+     * never between, so the card and the day's grid are two screens. A flick, its [velocity] (folding, positive) [flick] or
+     * more either way, goes its way; slower, a fold moved [nudge] or more from its [start] goes on the way it moved, and less
+     * goes back to the nearer of the two to where it started.
+     */
+    fun settled(fold: Float, start: Float, velocity: Float, most: Float, flick: Float, nudge: Float): Float {
+        val from = start.coerceAtMost(most)
+        val moved = fold.coerceAtMost(most) - from
+        return when {
+            velocity >= flick -> most
+            velocity <= -flick -> 0f
+            moved >= nudge -> most
+            moved <= -nudge -> 0f
+            from * 2 >= most -> most
+            else -> 0f
+        }
+    }
 }
