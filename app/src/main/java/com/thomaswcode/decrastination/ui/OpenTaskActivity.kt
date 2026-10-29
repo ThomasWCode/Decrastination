@@ -12,7 +12,7 @@ import kotlinx.coroutines.launch
 
 /**
  * Opens one task where it lives, then gets out of the way: what the widget and notifications
- * start, since only an activity may start another app's. Without a task, it opens the app.
+ * start, since only an activity may start another app's. Without a task, it opens the app at its home, the chat (Q115).
  */
 class OpenTaskActivity : ComponentActivity() {
 
@@ -21,7 +21,7 @@ class OpenTaskActivity : ComponentActivity() {
         val graph = AppGraph.get(this)
         val task = intent.getStringExtra(EXTRA_TASK_ID)?.let { id -> graph.tasks.value.tasks.firstOrNull { it.id == id && it.isOpen } }
         if (task == null) {
-            startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            startActivity(AskActivity.intent(this).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             finish()
             return
         }
