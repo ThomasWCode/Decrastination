@@ -4,8 +4,16 @@ import com.thomaswcode.decrastination.core.PpClass
 import com.thomaswcode.decrastination.core.PpSchedule
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.Timetable
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.KSerializer
+import kotlinx.serialization.encoding.Encoder
 import java.io.File
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import java.nio.file.AccessDeniedException
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
@@ -28,6 +36,35 @@ class StoresTest {
         JsonStore(file, Settings.serializer(), ::Settings, migrations = listOf(SettingsMigration.SETTINGS, ZoomMigration.SETTINGS, SpeechMigration.SETTINGS)).update { it.copy(ankiTextbook = 2) }
         assertEquals(2, JsonStore(file, Settings.serializer(), ::Settings, migrations = listOf(SettingsMigration.SETTINGS, ZoomMigration.SETTINGS, SpeechMigration.SETTINGS)).value.ankiTextbook)
         assertFalse(File(dir, "settings.json.tmp").exists())
+    }
+
+    @Test
+    fun `an update cancelled while its file is replaced still changes the state, so the next one keeps what reached the file`() = runBlocking {
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val pause = AtomicBoolean(false)
+        val plain = Settings.serializer()
+        // The write paused while it's encoding, and its caller cancelled meanwhile.
+        val paused = object : KSerializer<Settings> by plain {
+            override fun serialize(encoder: Encoder, value: Settings) {
+                if (pause.compareAndSet(true, false)) {
+                    entered.countDown()
+                    check(release.await(10, TimeUnit.SECONDS))
+                }
+                plain.serialize(encoder, value)
+            }
+        }
+        val file = File(dir, "settings.json")
+        val store = JsonStore(file, paused, ::Settings, migrations = listOf(SettingsMigration.SETTINGS, ZoomMigration.SETTINGS, SpeechMigration.SETTINGS))
+        pause.set(true)
+        val saving = launch(Dispatchers.Default) { store.update { it.copy(felixName = "A saved name") } }
+        check(entered.await(10, TimeUnit.SECONDS))
+        saving.cancel()
+        release.countDown()
+        saving.join()
+        assertEquals("A saved name", store.value.felixName)
+        store.update { it.copy(boxMin = 45) }
+        assertEquals("A saved name", JsonStore.json.decodeFromString(plain, file.readText()).felixName)
     }
 
     @Test
