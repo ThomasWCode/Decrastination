@@ -79,6 +79,7 @@ import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
@@ -302,13 +303,13 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
     // Today's DO NOW card shows in full, up to the whole Day under the strip (Q96). It folds into a line as it's dragged up, or
     // as the day's header is, and unfolds as the header's dragged down, wherever the grid's scrolled, as it's dragged down
     // while part-folded, or at a tap on the folded line; the grid's own scrolls only move its hours (your word, replacing
-    // Q97). Let go part-folded, it settles folded or unfolded, as two screens (4.9.1). In landscape it starts folded, so the
-    // grid has room.
+    // Q97). Let go part-folded, it settles folded or unfolded, as two screens; the Day opens on its calendar, the card folded
+    // (your word, 4.9.1).
     var cardFull by remember { mutableIntStateOf(0) }
     // The card's cap (below) in pixels, as last laid out: the card folds from what it shows unfolded, its height or that cap.
     var cardCap by remember { mutableFloatStateOf(Float.MAX_VALUE) }
     val line = with(density) { 40.dp.toPx() }
-    var fold by remember(landscape) { mutableFloatStateOf(if (landscape) Float.MAX_VALUE else 0f) }
+    var fold by remember(landscape) { mutableFloatStateOf(Float.MAX_VALUE) }
     val foldMax = DayLayout.foldMax(cardFull.toFloat(), cardCap, line)
     // A flick fast enough to settle the fold its way, and how far a slower drag moves it to settle it on that way.
     val flick = with(density) { 125.dp.toPx() }
@@ -370,7 +371,16 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
                 // With no room for the card, or on its side (Q92), it stays its line, and a tap on the line opens the piece's
                 // sheet (the card's actions) instead of unfolding it.
                 val roomless = landscape || cap < 40.dp
-                val folded = (cardFull > 0 && fold >= foldMax - 1f) || roomless
+                // Unmeasured, it's folded only as the Day opens folded, till then shown to be measured.
+                val folded = (fold >= foldMax - 1f && (cardFull > 0 || fold == Float.MAX_VALUE)) || roomless
+                val nextCard: @Composable () -> Unit = {
+                    NextCard(
+                        graph, activity, plan, zone, photo, ::messageOf, say,
+                        empty = if (unread.isNotEmpty()) "Nothing planned yet: ${unread.joinToString { it.label }} not read yet." else "No work is planned. New tasks appear as the sources are read.",
+                        // For TalkBack, folded by an action: while the card fills the Day, the grid has no room to be reached.
+                        actions = listOf(CustomAccessibilityAction("Fold it") { fold = Float.MAX_VALUE; true }),
+                    )
+                }
                 if (folded) {
                     val doing = plan.slotAt(plan.now)?.chunk ?: plan.next
                     val label = doing?.label ?: "nothing planned"
@@ -382,17 +392,17 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.fillMaxWidth().height(40.dp).clickable(enabled = !roomless || doing != null) { if (roomless) sheetFor = doing?.key else fold = 0f }.padding(horizontal = 16.dp, vertical = 10.dp),
                     )
+                    // Folded as the Day opens, the card's measured once out of sight, so the header dragged down unfolds it under
+                    // the finger.
+                    if (cardFull == 0 && !roomless) {
+                        Box(Modifier.fillMaxWidth().height(0.dp).clipToBounds().clearAndSetSemantics { }) {
+                            Box(Modifier.fillMaxWidth().wrapContentHeight(Alignment.Top, unbounded = true).onSizeChanged { cardFull = it.height }) { nextCard() }
+                        }
+                    }
                 } else {
                     val shown = if (cardFull == 0) cap else minOf(with(density) { (minOf(cardFull.toFloat(), cardCap) - fold.coerceAtMost(foldMax)).toDp() }, cap)
                     Box(Modifier.fillMaxWidth().heightIn(max = shown).nestedScroll(cardFolding).verticalScroll(card)) {
-                        Box(Modifier.fillMaxWidth().onSizeChanged { cardFull = it.height }) {
-                            NextCard(
-                                graph, activity, plan, zone, photo, ::messageOf, say,
-                                empty = if (unread.isNotEmpty()) "Nothing planned yet: ${unread.joinToString { it.label }} not read yet." else "No work is planned. New tasks appear as the sources are read.",
-                                // For TalkBack, folded by an action: while the card fills the Day, the grid has no room to be reached.
-                                actions = listOf(CustomAccessibilityAction("Fold it") { fold = Float.MAX_VALUE; true }),
-                            )
-                        }
+                        Box(Modifier.fillMaxWidth().onSizeChanged { cardFull = it.height }) { nextCard() }
                     }
                 }
             }
