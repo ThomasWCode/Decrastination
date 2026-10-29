@@ -90,7 +90,6 @@
         <activity
             android:name=".ui.AskActivity"
             android:exported="false"
-            android:label="Ask Claude"
             android:launchMode="singleTop"
             android:windowSoftInputMode="adjustResize" />
         <activity

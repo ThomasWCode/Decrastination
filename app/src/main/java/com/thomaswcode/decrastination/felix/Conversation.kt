@@ -1380,6 +1380,13 @@ class Conversation(
     var chatInFront = false
 
     /**
+     * Whether the chat on screen has been seen (Q120: 3 seconds on it, or a message of yours sent): only then is
+     * his notification taken away; till then it's kept, made again without a sound.
+     */
+    @Volatile
+    var chatSeen = false
+
+    /**
      * What's in the chat read up to [now] (docs/spec/felix.md §The chat): you've left the chat, or
      * opened it from his notification. His notification made again, with nothing older in it.
      */

@@ -75,6 +75,9 @@ class FelixHarness(
     /** Whether the chat is on screen, as its screen says so. */
     @Volatile var chatOnScreen = false
 
+    /** Whether the chat on screen has been seen (Q120): so, unless a test says otherwise, as on screen meant before. */
+    @Volatile var chatSeen = true
+
     /** His channel shown, as Android says. */
     @Volatile var shown = true
     val focus: Focus = Focus(stores.tasks, stores.settings, stores.session, stores.learning, stores.protection, stores.log, clock) { state, s, now -> planning.plan(state, s, now) }
@@ -89,7 +92,7 @@ class FelixHarness(
         onFailure = { throw it },
     )
     private val notices = Shown()
-    val outbox = Outbox(stores.chat, stores.chatArchive, stores.settings, notices, ports, { chatOnScreen }, clock)
+    val outbox = Outbox(stores.chat, stores.chatArchive, stores.settings, notices, ports, { chatOnScreen }, { chatSeen }, clock)
     val conversation: Conversation = Conversation(
         stores.tasks, stores.settings, stores.runtime, stores.learning, stores.log, stores.instructions, stores.chat, stores.school, stores.memory, stores.felix,
         clock, scope, gateway, notices, focus, planning, ports, outbox, owners,

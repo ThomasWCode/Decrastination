@@ -130,10 +130,11 @@ class ChatScreenState {
         offered = false
     }
 
-    /** Your message sent: the box replies to nothing till another's chosen or offered. */
+    /** Your message sent: the box replies to nothing till another's chosen or offered; and the visit's seen, as you've answered ([markSeen]). */
     fun sent() {
         replyingTo = null
         offered = false
+        markSeen()
     }
 
     /** His messages with what's under them open: none once the screen's paused ([paused]), so coming back finds every one closed. */
@@ -146,6 +147,21 @@ class ChatScreenState {
 
     /** When the chat was opened ([opened]): a message of his after it arrived while it was on screen. */
     private var since = Long.MAX_VALUE
+
+    /** This visit marked seen ([markSeen]) before its [READ_AFTER_MS] were up. */
+    private var markedSeen = false
+
+    /**
+     * Whether this visit has been seen at [now] (Q120): on screen [READ_AFTER_MS] since it [opened], unbroken, or
+     * marked so ([markSeen]: a message of yours sent, or opened from his notification). Only a seen visit reads
+     * what it showed, and takes his notification away; one passed through leaves both as they were.
+     */
+    fun seen(now: Long): Boolean = markedSeen || (since != Long.MAX_VALUE && now - since >= READ_AFTER_MS)
+
+    /** This visit seen now, whatever its time on screen. */
+    fun markSeen() {
+        markedSeen = true
+    }
 
     /** His messages unread when the chat was opened: each gets its label, once. */
     private var unreadOnOpen: Set<String> = emptySet()
@@ -171,6 +187,7 @@ class ChatScreenState {
         firstUnread = unread.firstOrNull()?.id
         unreadOnOpen = unread.mapTo(HashSet()) { it.id }
         since = now
+        markedSeen = false
         visit++
         scrollTo = at ?: firstUnread
         flash = at
@@ -199,7 +216,7 @@ class ChatScreenState {
         shownLabels += id
     }
 
-    /** The screen paused: every message closed again, and the visit's labels done with; what it showed read at [read], where it was. */
+    /** The screen paused: every message closed again, and the visit's labels done with; what it showed read at [read], where it was ([seen]). */
     fun paused(read: Long? = null) {
         open = emptySet()
         shownLabels.clear()
@@ -298,6 +315,9 @@ class ChatScreenState {
     companion object {
         /** The archive read back a page at a time. */
         const val PAGE = 100
+
+        /** How long the chat is on screen before a visit's seen (Q120): long enough to pass through to Day, short enough that a real look counts. */
+        const val READ_AFTER_MS = 3_000L
 
         private val DAY = DateTimeFormatter.ofPattern("EEEE d MMMM", Locale.UK)
         private val DAY_YEAR = DateTimeFormatter.ofPattern("EEEE d MMMM yyyy", Locale.UK)

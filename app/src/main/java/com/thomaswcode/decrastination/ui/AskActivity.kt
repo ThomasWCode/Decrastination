@@ -8,6 +8,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.speech.RecognizerIntent
 import androidx.activity.ComponentActivity
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -178,7 +179,9 @@ import kotlinx.coroutines.withTimeoutOrNull
  * with what it's about shown over the box. Each day's date over its first message, the time under each,
  * and a divider over what's new; scrolled back, the earlier messages; a message swiped or held to reply
  * to it ([ChatScreenState], docs/spec/felix.md §The chat). Opened from his notification, it opens
- * at the message it was for; left, what's in it is read ([Conversation.read]).
+ * at the message it was for; left once it's been seen (Q120: 3 seconds on screen, a message of yours
+ * sent, or at once from his notification), what's in it is read ([Conversation.read]). The app's home
+ * (D-121): the Plan button in its bar opens Day, and Back at its task's root sends the app to the back.
  */
 class AskActivity : ComponentActivity() {
 
@@ -200,10 +203,25 @@ class AskActivity : ComponentActivity() {
     /** Whether the Chat tab is the one showing, not Your changes: only then is the chat on screen. */
     private var chatTab by mutableStateOf(true)
 
+    /**
+     * Opened from the block screen ([EXTRA_BACK]): its bar keeps a Back arrow in place of the Plan button, and
+     * has neither Setup's mark nor Day's menu, as the block screen's own task mustn't hold Day or the app's pages.
+     */
+    private var back = false
+
+    /** Back on the chat at its task's root, the app's home, sends the app to the back rather than closing the chat (D-121). */
+    private val toBack = object : OnBackPressedCallback(false) {
+        override fun handleOnBackPressed() {
+            moveTaskToBack(true)
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         val graph = AppGraph.get(this)
+        back = (savedInstanceState ?: intent.extras)?.getBoolean(EXTRA_BACK, false) ?: false
+        onBackPressedDispatcher.addCallback(this, toBack)
         // Made again (turned, or brought back): what it's about kept, the words handed in already sent, and
         // the tab showing, the message being replied to and the archive's pages loaded, as they were.
         if (savedInstanceState == null) {
@@ -236,6 +254,7 @@ class AskActivity : ComponentActivity() {
         outState.putString(STATE_REPLYING, screen.replyingTo?.id)
         outState.putBoolean(STATE_OFFERED, screen.offered)
         outState.putBoolean(STATE_CHAT_TAB, chatTab)
+        outState.putBoolean(EXTRA_BACK, back)
     }
 
     /** What a message is about, from an intent's extras or a saved state's. */
@@ -272,15 +291,18 @@ class AskActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        // Not the block screen's chat: left alone in that task, Back closes it, as its arrow does.
+        toBack.isEnabled = isTaskRoot && !back
         // What waits for Claude (it was off, resting, or capped) is tried again on opening.
         val graph = AppGraph.get(this)
         // What's unread marked for this visit, for its divider: from his notification, as it was when it
         // opened; on Your changes, once the Chat tab's shown.
         if (!openedAt && chatTab) screen.opened(graph.chat.value, graph.clock.now())
+        // From his notification, seen at once: you read it there.
+        if (openedAt) screen.markSeen()
         openedAt = false
         graph.conversation.chatInFront = chatTab
-        // His notification taken away: what it held is on the screen.
-        graph.conversation.outbox.notify(graph.clock.now())
+        if (chatTab) watchSeen()
         graph.scope.launch {
             graph.conversation.answerChat()
             // On the screen they're shown on: you're waiting on them.
@@ -291,20 +313,54 @@ class AskActivity : ComponentActivity() {
     override fun onPause() {
         super.onPause()
         val graph = AppGraph.get(this)
+        seeing?.cancel()
         graph.conversation.chatInFront = false
+        graph.conversation.chatSeen = false
         val now = graph.clock.now()
-        // Every message closed again for the next visit, its labels done with, and what it showed read.
-        screen.paused(read = now.takeIf { chatTab })
+        // Every message closed again for the next visit, its labels done with, and what it showed read, where it was seen (Q120).
+        val read = chatTab && screen.seen(now)
+        screen.paused(read = now.takeIf { read })
         // What arrived while it was on screen was seen: read up to now, so only what comes after is his notification.
-        if (chatTab) graph.scope.launch { graph.conversation.read(now) }
+        // Passed through unseen, his notification's left as it is: nothing took it away, and one swiped off stays off.
+        if (read) graph.scope.launch { graph.conversation.read(now) }
+    }
+
+    /** Counting this visit's time on screen, till it's seen ([watchSeen]). */
+    private var seeing: Job? = null
+
+    /**
+     * The chat on screen, seen once it's been there [ChatScreenState.READ_AFTER_MS], unbroken (Q120), or at once
+     * where it's marked so already ([seen]).
+     */
+    private fun watchSeen() {
+        seeing?.cancel()
+        val graph = AppGraph.get(this)
+        seeing = lifecycleScope.launch {
+            if (!screen.seen(graph.clock.now())) delay(ChatScreenState.READ_AFTER_MS)
+            seen()
+        }
+    }
+
+    /** This visit seen: his notification taken away, as what it held is on the screen, and what it shows read as it's left. */
+    private fun seen() {
+        val graph = AppGraph.get(this)
+        screen.markSeen()
+        graph.conversation.chatSeen = true
+        graph.conversation.outbox.notify(graph.clock.now())
+    }
+
+    /** A message of yours sent from here: you've answered, so you've read (Q120), whatever the time on screen. */
+    private fun seenBySending() {
+        seeing?.cancel()
+        seen()
     }
 
     /**
      * The Chat tab shown, or Your changes ([chat] false): the chat's on screen only on its tab, so what
      * arrives while the other's showing is his notification. Left for it, the chat is left as the screen
-     * is (what it showed read, every message closed again); back on it, it's opened as the screen is, at
-     * what came meanwhile, and his notification's taken away. Called before the tab changes, so the chat
-     * is drawn knowing where it opens.
+     * is (what it showed read where it was seen, every message closed again); back on it, it's opened as
+     * the screen is, at what came meanwhile, and his notification's taken away once it's seen. Called
+     * before the tab changes, so the chat is drawn knowing where it opens.
      */
     private fun showingChat(chat: Boolean) {
         if (chatTab == chat) return
@@ -315,10 +371,13 @@ class AskActivity : ComponentActivity() {
         val now = graph.clock.now()
         if (chat) {
             screen.opened(graph.chat.value, now)
-            graph.conversation.outbox.notify(now)
+            watchSeen()
         } else {
-            screen.paused(read = now)
-            graph.scope.launch { graph.conversation.read(now) }
+            seeing?.cancel()
+            graph.conversation.chatSeen = false
+            val read = screen.seen(now)
+            screen.paused(read = now.takeIf { read })
+            if (read) graph.scope.launch { graph.conversation.read(now) }
         }
     }
 
@@ -381,6 +440,8 @@ class AskActivity : ComponentActivity() {
         val words = handed.value
         LaunchedEffect(words) {
             if (words != null) {
+                // Sent, they're your answer: the visit's seen. Only put in the box, they aren't.
+                if (sendHanded) seenBySending()
                 // Let go of once sent: cleared first, they recomposed this effect away, which cancelled
                 // the send halfway, its message saved to the file but neither shown nor answered.
                 val sent = sendHanded && graph.conversation.ask(words, about.value)
@@ -394,8 +455,20 @@ class AskActivity : ComponentActivity() {
             topBar = {
                 TopAppBar(
                     title = { Text(settings.felixName) },
-                    navigationIcon = { IconButton(onClick = { finish() }) { Icon(painterResource(R.drawable.ic_arrow_back), contentDescription = "Back") } },
+                    navigationIcon = {
+                        if (back) {
+                            IconButton(onClick = { finish() }) { Icon(painterResource(R.drawable.ic_arrow_back), contentDescription = "Back") }
+                        } else {
+                            // The plan (UI-16): a Day underneath shown on the tab it had, all over it closed; with none, a Day over the chat.
+                            IconButton(onClick = {
+                                startActivity(Intent(this@AskActivity, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
+                            }) { Icon(painterResource(R.drawable.ic_calendar), contentDescription = "Plan") }
+                        }
+                    },
                     actions = {
+                        // The home's bar (UI-18): Setup's mark, and Day's menu under the chat's own items. Not the
+                        // block screen's chat ([back]): what they open would go into the block screen's task.
+                        if (!back) SetupMark(graph, this@AskActivity)
                         Box {
                             IconButton(onClick = { menu = true }) { Icon(painterResource(R.drawable.ic_more_vert), contentDescription = "Menu") }
                             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
@@ -411,6 +484,15 @@ class AskActivity : ComponentActivity() {
                                     menu = false
                                     clearing = true
                                 })
+                                if (!back) {
+                                    HorizontalDivider()
+                                    MainActivity.MENU.forEach { (label, page) ->
+                                        DropdownMenuItem(text = { Text(label) }, onClick = {
+                                            menu = false
+                                            startActivity(Intent(this@AskActivity, page))
+                                        })
+                                    }
+                                }
                             }
                         }
                     },
@@ -446,6 +528,7 @@ class AskActivity : ComponentActivity() {
                                 SuggestionChip(onClick = {
                                     // Answered by it: the box replies to nothing, till his next question's offered.
                                     if (screen.replyingTo?.id == last.id) screen.sent()
+                                    seenBySending()
                                     graph.scope.launch { graph.conversation.ask(reply, replyTo = last.id) }
                                 }, label = { Text(reply) })
                             }
@@ -470,6 +553,7 @@ class AskActivity : ComponentActivity() {
                         draft = ""
                         about.value = About()
                         screen.sent()
+                        seenBySending()
                         graph.scope.launch {
                             // The box's own reply to his nudge takes none of its subject: your words go to him as they are.
                             if (!graph.conversation.ask(text, subject, replyTo = (replying ?: quiet)?.id, takeItsSubject = replying != null)) {
@@ -559,6 +643,7 @@ class AskActivity : ComponentActivity() {
         private const val EXTRA_EVENT_START = "eventStart"
         private const val EXTRA_DAY = "day"
         private const val EXTRA_OPEN_AT = "openAt"
+        private const val EXTRA_BACK = "back"
         private const val STATE_EARLIER = "earlier"
         private const val STATE_REPLYING = "replyingTo"
         private const val STATE_OFFERED = "offered"
@@ -567,10 +652,12 @@ class AskActivity : ComponentActivity() {
         /**
          * The chat, about [about], with [text] to send; with [send] false, only put in the box, to be
          * changed or sent. From his notification, opened at
-         * the message [openAt], what the notification held read.
+         * the message [openAt], what the notification held read. From the block screen ([back]), with a Back
+         * arrow in place of the Plan button.
          */
-        fun intent(context: Context, about: About = About(), text: String? = null, send: Boolean = true, openAt: String? = null): Intent = Intent(context, AskActivity::class.java)
+        fun intent(context: Context, about: About = About(), text: String? = null, send: Boolean = true, openAt: String? = null, back: Boolean = false): Intent = Intent(context, AskActivity::class.java)
             .putExtra(EXTRA_OPEN_AT, openAt)
+            .putExtra(EXTRA_BACK, back)
             .putExtra(EXTRA_TEXT, text)
             .putExtra(EXTRA_SEND, send)
             .putExtra(EXTRA_TASK, about.taskId)

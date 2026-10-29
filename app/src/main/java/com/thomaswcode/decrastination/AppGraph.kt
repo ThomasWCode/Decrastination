@@ -280,7 +280,7 @@ class AppGraph private constructor(context: Context) {
     private val felixPorts = AndroidFelixPorts(app)
 
     /** Where every message in Felix's name is written, the chat first, and his one notification made from it. */
-    private val outbox = Outbox(chat, stores.chatArchive, settings, notifier, felixPorts, chatOnScreen = { conversation.chatInFront }, clock)
+    private val outbox = Outbox(chat, stores.chatArchive, settings, notifier, felixPorts, chatOnScreen = { conversation.chatInFront }, chatSeen = { conversation.chatSeen }, clock)
 
     /** The voice of the app's messages (LR-03). */
     val looks: Looks = Looks(

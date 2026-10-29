@@ -3,6 +3,7 @@ package com.thomaswcode.decrastination.ui
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Box
@@ -10,8 +11,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Badge
-import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -39,14 +38,13 @@ import androidx.work.WorkManager
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.BuildConfig
 import com.thomaswcode.decrastination.R
-import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.sync.SyncWorker
-import com.thomaswcode.decrastination.core.GmailWrites
 
 /**
- * The app's screens: the plan, the tasks every source lists, and the stats. Setup, settings,
- * protection and the week's check-in are out of the way in the menu, which shows a dot when
- * something there needs you.
+ * The app's screens over the chat, its home (D-121): the plan, the tasks every source lists, and the
+ * stats, opened from the chat's Plan button. Setup, settings, protection and the week's check-in are
+ * out of the way in the menu, which shows a dot when something there needs you. The launcher's entry
+ * still, as the home-screen icon names it: a launcher start hands over to the chat ([Home.start]).
  */
 class MainActivity : ComponentActivity() {
 
@@ -56,9 +54,30 @@ class MainActivity : ComponentActivity() {
     /** A task to open in Tasks ([EXTRA_TASK]), till Tasks has opened it. */
     private val askedTask = mutableStateOf<String?>(null)
 
+    /** Back at the task's root opens the chat in Day's place (Q116); over the chat, it closes Day as usual. */
+    private val backToChat = object : OnBackPressedCallback(false) {
+        override fun handleOnBackPressed() {
+            startActivity(AskActivity.intent(this@MainActivity))
+            finish()
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        // The launcher's start hands over to the chat before anything's drawn, so Day never shows first (D-121).
+        val start = Home.start(
+            launcher = intent.action == Intent.ACTION_MAIN && intent.hasCategory(Intent.CATEGORY_LAUNCHER),
+            root = isTaskRoot,
+            restored = savedInstanceState != null,
+            asked = intent.hasExtra(EXTRA_TAB) || intent.hasExtra(EXTRA_TASK),
+        )
+        if (start != Home.Start.Stay) {
+            if (start == Home.Start.Chat) startActivity(AskActivity.intent(this).addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION))
+            finish()
+            return
+        }
+        onBackPressedDispatcher.addCallback(this, backToChat)
         val graph = AppGraph.get(this)
         if (savedInstanceState == null) {
             openSetupIfAsked(intent)
@@ -76,6 +95,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        backToChat.isEnabled = Home.backOpensChat(isTaskRoot)
         // Back from notification settings, say: alerts that couldn't be shown before can be now.
         AppGraph.get(this).gateway.reconcileAlerts()
     }
@@ -101,18 +121,6 @@ class MainActivity : ComponentActivity() {
         val syncs by remember { WorkManager.getInstance(this).getWorkInfosForUniqueWorkFlow(SyncWorker.NOW) }
             .collectAsStateWithLifecycle(emptyList())
         val syncing = syncs.any { !it.state.isFinished }
-        val tasks by graph.tasks.state.collectAsStateWithLifecycle()
-        val runtime by graph.runtime.state.collectAsStateWithLifecycle()
-        val model by graph.stores.model.state.collectAsStateWithLifecycle()
-        val protection by graph.stores.protection.state.collectAsStateWithLifecycle()
-        val settings by graph.settings.state.collectAsStateWithLifecycle()
-        val gmail by graph.gmailFinishes.state.collectAsStateWithLifecycle()
-        // What Setup would show in red, as a mark that opens it (UI-18): a source failing, Claude's key,
-        // protection, a file unreadable, a write to Gmail given up; and, the first run, no source read yet.
-        val attention = Source.SYNCED.any { tasks.status(it).error != null } || GmailWrites.givenUp(gmail.writes).isNotEmpty() ||
-            (model.aiUsage.keyProblem != null && settings.aiEnabled && settings.aiKeyActive) ||
-            protection.protection.problems.isNotEmpty() || runtime.unreadable.isNotEmpty() ||
-            Source.SYNCED.all { tasks.status(it).lastSuccessAt == null && tasks.status(it).error == null }
         var menu by remember { mutableStateOf(false) }
         // The very first email finished here waits for your OK: asked over whichever tab is open.
         GmailOkSheet(graph)
@@ -123,11 +131,7 @@ class MainActivity : ComponentActivity() {
                 TopAppBar(
                     title = { Text("Decrastination", fontWeight = FontWeight.Bold) },
                     actions = {
-                        if (attention) {
-                            IconButton(onClick = { startActivity(Intent(this@MainActivity, SetupActivity::class.java)) }) {
-                                BadgedBox(badge = { Badge() }) { Icon(painterResource(R.drawable.ic_error), contentDescription = "Setup needs you") }
-                            }
-                        }
+                        SetupMark(graph, this@MainActivity)
                         IconButton(enabled = !syncing, onClick = { SyncWorker.syncNow(this@MainActivity) }) {
                             Icon(painterResource(R.drawable.ic_refresh), contentDescription = "Sync now")
                         }
@@ -166,21 +170,24 @@ class MainActivity : ComponentActivity() {
     }
 
     companion object {
-        /** The tab to open on: [TAB_TASKS] from a dropped plan's alert; or [OPEN_SETUP], Setup over the plan, from a protection or key alert. */
+        /**
+         * The tab to open on: [TAB_TASKS] from a dropped plan's alert; or [OPEN_SETUP], Setup over the plan, from a
+         * protection or key alert. Asked for, a launcher start stays here rather than going to the chat ([Home.start]).
+         */
         const val EXTRA_TAB = "tab"
 
         /** A task to open in Tasks, by id: one of your own's Open. */
         const val EXTRA_TASK = "task"
         const val TAB_TASKS = 1
         const val OPEN_SETUP = 3
-        /** Day is when, Work is what (UI-17). */
+        /** Day is when, Work is what (UI-17), over the chat, the app's home. */
         private val TABS = listOf("Day", "Work", "Stats")
 
         /**
-         * The menu (UI-18): the week, the reviews (LR-01), and Settings, which has every page Setup and
-         * Protection had. Setup itself is the attention mark's.
+         * The menu (UI-18), on Day's bar and under the chat's own items: the week, the reviews (LR-01), and
+         * Settings, which has every page Setup and Protection had. Setup itself is the attention mark's.
          */
-        private val MENU = listOfNotNull(
+        internal val MENU = listOfNotNull(
             "This week" to CheckInActivity::class.java,
             "Reviews" to ReviewsActivity::class.java,
             "Settings" to SettingsActivity::class.java,

@@ -11,7 +11,7 @@ import com.thomaswcode.decrastination.data.HeldNotification
 import com.thomaswcode.decrastination.data.HeldReply
 import com.thomaswcode.decrastination.data.HeldTap
 import com.thomaswcode.decrastination.ui.Colours
-import com.thomaswcode.decrastination.ui.MainActivity
+import com.thomaswcode.decrastination.ui.AskActivity
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 
@@ -89,7 +89,8 @@ object Notify {
         val app = PendingIntent.getActivity(
             context,
             0,
-            Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            // No tap kept: the app, at its home, the chat (Q115).
+            AskActivity.intent(context).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
             FLAGS,
         )
         val made = builder(context, held.channel)

@@ -164,6 +164,8 @@ class BlockedActivity : ComponentActivity() {
             this@BlockedActivity,
             next?.let { About(taskId = it.taskId, taskTitle = it.title) } ?: About(),
             Modifier.align(Alignment.BottomEnd).safeDrawingPadding().padding(16.dp),
+            // Its chat keeps a Back arrow: this task mustn't hold Day (D-121).
+            back = true,
         )
         }
     }
