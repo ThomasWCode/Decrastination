@@ -60,7 +60,7 @@ Emails' and planner items' blocks follow the same rule: only separately dated pi
 - **Steps**: at most 12 (`ReadingAnswers.MAX_STEPS`). With more, the first eleven stay and the rest are folded, each run of plain steps into one "The rest: …" step, while vocabulary and dated steps keep their own (`ReadingAnswers.fold`).
 - They must add up to `effortMin` within a tenth or 10 minutes, whichever is more, both within 600 minutes. Otherwise the steps are dropped (below), and the task is planned as one piece at Claude's total, or at its own estimate where that total is out of range.
 - **Blocks**: at most 30 (`ReadingPrompts.MAX_BLOCKS`), 20 hours in all (`ReadingAnswers.MAX_BLOCKS_EFFORT`), adding up to `effortMin` as steps must. With blocks, the estimate is their total.
-- **Dates in order**: a step or block can't start after its own due, nor start or be due after the task's due (or the test), nor start after a later one's due; an email's block can't be due ahead of the email's start.
+- **Dates in order**: a step or block can't start after its own due, nor start or be due after the task's due (or the test; for an instruction or the chat, the due the same answer gives the task, where it gives one), nor start after a later one's due; an email's block can't be due ahead of the email's start.
 - Felix's steps have their own rule, AI-19 (below).
 
 **Put back once, then salvaged** (AI-01):
@@ -150,7 +150,7 @@ It runs again once Claude can be asked again (its rest over, `EnrichWorker.retry
 - The photo goes first in the item, Claude told it's the work itself, to estimate and split from, saying in `reason` what it saw (`ReadingPrompts.photo`). Such a reading is `fromPhoto`, and the sheet says "From your photo".
 - Photos no task holds are let go when the app starts (`Photos.sweepPhotos`), but for one a chat delete can still undo.
 - `Readings` and `Photos` are built like `Focus` (their stores, the clock, the gateway and small callbacks); `ReadingsTest` and `PhotosTest` drive them on temporary stores, Claude's API a stand-in.
-- A photo of homework, taken in Work, is read into tasks of your own instead (NF-01, `PhotoTasks`, `PhotoTaskReader`), each checked in the form (sources.md) and kept with the photo; or *Attach to an existing task instead* makes it the photo of a task Claude reads, read again with it.
+- A photo of homework, taken in Work, is read into tasks of your own instead (NF-01, `PhotoTasks`, `PhotoTaskReader`), at most six from one photo (any past them said under *Left out*), each checked in the form (sources.md) and kept with the photo; or *Attach to an existing task instead* makes it the photo of a task Claude reads, read again with it.
 
 ## The request
 
