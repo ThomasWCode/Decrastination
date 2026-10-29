@@ -171,7 +171,7 @@ fun WorkScreen(graph: AppGraph, activity: Activity, opening: String? = null, onO
             val pairs = Duplicates.candidates(state.tasks, settings.classMap, runtime.notSame)
             val alike = pairs.flatMap { (a, b) -> listOf(a.id to b, b.id to a) }.groupBy({ it.first }, { it.second })
             for ((title, tasks) in groups) {
-                val key = "group-$title"
+                val key = if (bySubject) Groups.subjectKey(title, tasks, settings.classMap) else "group-$title"
                 val expanded = key !in folded
                 item(key = key) { FoldingHeading(title, expanded, { toggle(key) }, summary = "${tasks.size}") }
                 if (expanded) itemsIndexed(tasks, key = { _, it -> it.id }) { index, task ->
