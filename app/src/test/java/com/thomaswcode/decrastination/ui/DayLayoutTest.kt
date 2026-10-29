@@ -2,6 +2,7 @@ package com.thomaswcode.decrastination.ui
 
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.unit.Velocity
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
 import com.thomaswcode.decrastination.ui.DayLayout.Box
@@ -10,6 +11,7 @@ import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlinx.coroutines.runBlocking
 
 /** The Day's grid, laid out (4.6.0, UI-17). */
 class DayLayoutTest {
@@ -79,11 +81,11 @@ class DayLayoutTest {
      */
     private fun drag(dy: Float, fold: Float, at: Float, range: Float): Pair<Float, Float> {
         var folded = fold
-        val folding = Folding({ folded }) { by ->
+        val folding = Folding({ folded }, by = { by ->
             val was = folded
             folded = DayLayout.folded(was, by, 600f, 1000f, 112f)
             was - folded
-        }
+        })
         var left = dy - folding.onPreScroll(Offset(0f, dy), NestedScrollSource.UserInput).y
         val scrolled = (at - left).coerceIn(0f, range)
         left -= at - scrolled
@@ -102,6 +104,39 @@ class DayLayoutTest {
         assertEquals(0f to 20f, drag(dy = 80f, fold = 60f, at = 40f, range = 90f))
         // Unfolded, dragged down: what it holds goes back to its top, and the fold's left alone.
         assertEquals(0f to 0f, drag(dy = 100f, fold = 0f, at = 40f, range = 40f))
+    }
+
+    @Test
+    fun `let go part-folded, the card settles at its line or unfolded, a small flick or drag enough to go either way`() {
+        // Folding 188 at most, a flick 300 px a second, a nudge 60.
+        fun settled(fold: Float, start: Float, velocity: Float) = DayLayout.settled(fold, start, velocity, 188f, 300f, 60f)
+        // A small flick up from unfolded folds it all; a small flick down from its line unfolds it.
+        assertEquals(188f, settled(fold = 20f, start = 0f, velocity = 400f))
+        assertEquals(0f, settled(fold = 170f, start = 188f, velocity = -400f))
+        // A flick goes its way, whichever way the drag went before it.
+        assertEquals(0f, settled(fold = 150f, start = 0f, velocity = -400f))
+        // Slower, it goes on the way it was moved, once moved the nudge; less goes back.
+        assertEquals(188f, settled(fold = 60f, start = 0f, velocity = 0f))
+        assertEquals(0f, settled(fold = 30f, start = 0f, velocity = 100f))
+        assertEquals(0f, settled(fold = 128f, start = 188f, velocity = 0f))
+        assertEquals(188f, settled(fold = 150f, start = 188f, velocity = 0f))
+        // From past its most (as landscape starts, or by TalkBack's Fold it), it's moved from its most.
+        assertEquals(188f, settled(fold = 150f, start = Float.MAX_VALUE, velocity = 0f))
+        // Caught while settling and let go barely moved, it goes to the nearer of the two.
+        assertEquals(188f, settled(fold = 110f, start = 100f, velocity = 0f))
+        assertEquals(0f, settled(fold = 80f, start = 90f, velocity = 0f))
+    }
+
+    @Test
+    fun `the card's fling is its own when the drag only scrolled what it holds, and taken to settle the fold when it moved it`() {
+        val settled = mutableListOf<Float>()
+        var moved = false
+        val folding = Folding({ 0f }, { 0f }) { velocity -> settled += velocity; moved }
+        // Flings up are negative as Compose passes them, folding positive as the fold takes them.
+        assertEquals(Velocity.Zero, runBlocking { folding.onPreFling(Velocity(0f, -500f)) })
+        moved = true
+        assertEquals(Velocity(0f, -500f), runBlocking { folding.onPreFling(Velocity(0f, -500f)) })
+        assertEquals(listOf(500f, 500f), settled)
     }
 
     @Test
