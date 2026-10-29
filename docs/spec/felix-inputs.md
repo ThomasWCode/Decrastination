@@ -12,7 +12,7 @@ The exact prompts and schemas are the golden copies in [`app/src/test/resources/
 |---|---|---|---|
 | [The chat](#the-chat) | you send a message, or reply to his notification | the chat's prompt, the profile, the conversation, and with your newest message what the app knows, each task's own text and what the message is about, in full | a reply, and what to make: tasks, changes, actions, memories; his messages your words answered |
 | [A web search](#a-web-search) | the chat's answer asks to look something up, with searches on | the search's prompt, what to look up, the web search tool | what it found, in words |
-| [His own messages](#his-own-messages) | around today's slots, in the morning, for a question, for the evening's completions, and just before a reminder of yours comes | his prompt, the profile, one message saying why and what's on | a message, replies, when to look again, memories |
+| [His own messages](#his-own-messages) | around today's slots, in the morning, for a question, for the evening's completions, and just before a reminder of yours comes | his prompt, the profile, one message: today's story, his diary, then why and what's on | how he feels, three texts and the one he sends, replies, when to look again, memories, the morning's rebalances |
 
 Messages in his name that no call writes, and what becomes of your replies, are [at the end](#in-his-name-but-not-his-words).
 
@@ -20,7 +20,7 @@ Messages in his name that no call writes, and what becomes of your replies, are 
 
 - **Model**: `claude-opus-5-5`, with the API's fallback to another model where it must (`fallbacks: default`, beta `server-side-fallback-2026-07-01`); its cost is reckoned at that model's rates (`Pricing.costUsd`). Which model gave his answer isn't kept: only a reading is credited to one (D-24).
 - **Effort**: medium, as for every answer someone waits for (AC-02, `ModelEffort`); at most 16,000 tokens out.
-- **System**: two blocks, the call's own prompt (cached for an hour), then [the profile](#the-profile) (not cached). The web search has no profile.
+- **System**: two blocks, the call's own prompt (cached for an hour), then [the profile](#the-profile) (not cached). The web search has no profile, and its prompt isn't cached.
 - **Input**: at most 40,000 characters (`Pricing.MAX_INPUT_CHARS`), as the cap's dearest call assumes.
 - **Answer**: JSON in a fixed schema for the chat and his own messages, which the API compiles into a grammar that holds the answer to it as it's written ([readings.md](readings.md#the-prompts-version-ac-06)); the search answers in words.
 - **Not asked at all** (`ModelHold`): with Claude off or no key; with this month's cap reached, where one is set; and while the model rests after a failure (five minutes to an hour, by what failed and how many in a row, AC-04). A rest holds what runs by itself (his morning message, one written ahead); the chat, a web search and a message of his due now are asked through it, as someone's waiting, unless the key is what failed.
@@ -28,7 +28,7 @@ Messages in his name that no call writes, and what becomes of your replies, are 
 ## The profile
 
 Who you are, the second system block of the chat and of his own messages (AI-05, `Profile.block`):
-- your year group (Year 12 from the September you set, 13 the next) and your subjects: the class names you've given, then the codes on open work you haven't named;
+- who you are: in his calls and the chat's, "A UK sixth-form student" with no year (D-120, `Profile.Block.felix`); in the others, your year group (Year 12 from the September you set, 13 the next); then your subjects: the class names you've given, then the codes on open work you haven't named;
 - the school day from the timetable: lessons, study periods, break and lunch;
 - your working hours, and the next three spells of no school;
 - your German textbook;
@@ -462,11 +462,12 @@ You look things up on the web for the assistant in a UK sixth-form student's (Ye
 Every half minute while the blocker runs, at each slot's alarm, and at the check he set, the rules look for a reason to write (`FelixRules.due`), in this order:
 1. **SlotEnd**: a slot of today's went by undone, or was ticked without the photo it needs to earn, its time over; once a slot, while it's fresh (30 minutes). One a timer on its task could have covered waits till 30 minutes after the timer's zero or its Stop, whichever came first, and is fresh from then (D-112).
 2. **DayDone**: today's last slot kept, with nothing left planned today; once a day.
-3. **Question**: a question from a reading (AI-10), the oldest first; not before his next check.
-4. **Completions**: from 19:00, work a source says is done that no kept slot saw that day (LR-05); once an evening, not before his next check.
-5. Then only while a slot of today's is under way or to come, and not before his next check:
+3. **SlotKept after a let-down**: a slot kept, while it's fresh, of a task he was let down about today (Q102, D-119), at once, his check or no; not one DayDone has answered already.
+4. **Question**: a question from a reading (AI-10), the oldest first; not before his next check.
+5. **Completions**: from 19:00, work a source says is done that no kept slot saw that day (LR-05); once an evening, not before his next check.
+6. Then only while a slot of today's is under way or to come, and not before his next check:
    - **SlotStart**: a slot under way past his grace (`felixGraceMin`, 10 minutes) with nothing done on its task since it began (a timer started on it among what's done), and no timer running on its task short of 30 minutes past its zero (D-112); up to three times a slot.
-   - **SlotKept**: about one kept slot in three, while it's fresh.
+   - **SlotKept**: about one kept slot in three, while it's fresh (one after a let-down is step 3's).
 
 He isn't asked in quiet hours, during a timed calendar event that takes its time, or with Claude off. His notifications off silence only them: what he writes is in the chat. A standing instruction can quiet him further: he gives an empty message.
 
@@ -480,21 +481,24 @@ Also:
 ### What's sent
 
 1. **System**: [his prompt](#his-prompt), with his name and line from Settings, then the profile.
-2. **One message** (`FelixPrompts.describe`), a line each:
-   - `Reason:` and `Now:`;
-   - the piece: for a slot under way, its label, minutes, times and what earns its free time, and its first action where one's written (AI-15); for a slot on record, whether it was missed, kept, or ticked without its photo; for a question, the task; for a Reminder, the slot then under way or next (`Slot then:`) and its task (`Task:`); a timer running on the task it's about at the piece's or task's line's end (", timer on it since …"), or one on another's in a line of its own (D-112);
+2. **One message** (`FelixPrompts.describe`, D-120), the story first, then the details:
+   - `Today so far (…):` the day in order as a person would know it (`felix/Story.kt`): today's slots kept and missed, and what was said in the chat, yours and his, his own feelings noted beside his messages; then how he may feel, at most, in a person's words (`Mood.line`, D-119);
+   - `Your first text in a while…`: with nothing said by either of you for three hours, so he opens with a greeting (4.3.11);
+   - `Your diary:` a line a day for the last seven, the week before in a line, and the week's check-in in your words (`Story`), which he knows and brings up only where it helps;
+   - `Details:` with `Reason:`; the piece: for a slot under way, its label, minutes, times and what earns its free time, and its first action where one's written (AI-15); for a slot on record, whether it was missed, kept, or ticked without its photo; for a question, the task; for a Reminder, the slot then under way or next (`Slot then:`) and its task (`Task:`); a timer running on the task it's about at the piece's or task's line's end (", timer on it since …"), or one on another's in a line of its own (D-112);
+   - `Its task's due:` as the app plans by it (yours where you gave one, D-4), but for a Reminder;
    - `Its task's own text`: up to 1,500 characters of it (a longer one as its reading's summary, else its start and end), with its attachments, links and an email's sender (D-93);
    - `Notes on it:` the notes kept with its task (4.1.0), its own and the standing ones it matches;
    - `Their reminder…`: for a Reminder, your words; for a SlotStart, your reminder that came at the slot's start, so he doesn't say it twice;
-   - `Today:` the slots kept, missed and to come, and the next; `Reminders today:` for the Morning, your reminders that come today; `Left today:` those to come;
+   - `Today:` the slots kept, missed and to come, and the next; `Reminders today:` for the Morning, your reminders that come today; `Left today:` those to come; `Breaks outside today:` those under way or to come (D-116);
+   - `Steps you may rebalance…`: for the Morning, the steps he may split (D-110);
    - `Free time now:` for SlotKept and DayDone;
    - `Done, as their sources say…`: for Completions, the tasks;
-   - `Done so far…`: what's done of today's tasks and of the ones his messages below are about, each finished, no longer due (an Anki quota gone by, not done), off the list as not a task or as the same work as another by your word, or with its steps ticked, the last three named (4.3.11);
-   - `Your first message in a while…`: with nothing said in the chat for three hours, so he opens with a greeting (4.3.11);
-   - `Recent, oldest first:` his last 6 messages of his own in the chat that said something, each with your reply to it (the message of yours answering it, or the next of yours within ten minutes);
+   - `Done so far…`: what's done of today's tasks and of the ones his texts are about, each finished, no longer due (an Anki quota gone by, not done), off the list as not a task or as the same work as another by your word, or with its steps ticked, the last three named (4.3.11);
+   - `Your texts before today, oldest first:` of his last six texts of his own that said something, those before today's story (none, with six or more today), each with your reply to it (the message of yours answering it, or the next of yours within ten minutes);
    - `Question:` for a Question, the question to put.
 
-Not sent: the task list, the calendar, your pace, any day but today, or the chat.
+Not sent: the task list, the calendar, your pace.
 
 ### For each reason
 
@@ -752,10 +756,13 @@ you starting
 
 | Field | What | Kept to |
 |---|---|---|
-| `message` | his message; empty, he'd rather not write now | 240 characters (the morning's 480), cut at its last whole sentence |
+| `feeling` | his note on how he feels as he writes it, kept with the message, never shown in it (D-119) | |
+| `texts` | three versions of his message, each a text or two (D-120); all empty, he'd rather not write now | each 240 characters (the morning's 480), cut at its last whole sentence; at most two lines, each a bubble |
+| `send` | which of the three he sends: that one is his message (`FelixAnswers.parse`), the other two kept beside it (`unsent`) | |
 | `replies` | replies he'd accept, in your words | 3, of 40 characters each; for Completions, the three answers instead; for a Question, none, as your answer is in your words |
 | `nextCheckMin` | when to look again | 5 minutes to a day; with none, `felixDefaultCheckMin` (20) |
 | `memories` | facts or standing instructions to keep, with `until` and a fact's `taskId` as the chat's (4.2.0) | 5 |
+| `rebalances` | in the morning, steps of today's split between school and home, from those listed (D-110) | those listed |
 
 ### His prompt
 
@@ -803,7 +810,7 @@ It names Summary and Reply among its reasons, but no message of his is asked for
 
 ## In his name, but not his words
 
-- **The Sunday check-in** (LR-02): its questions are the app's own text, sent as his messages; your answers go to the check-in, not to the model.
+- **The Sunday check-in** (LR-02): its questions are the app's own text, sent as his messages, with no call; your answers go to the check-in, and from it to him in his diary (above) and to the weekly review.
 - **The morning's list**, where he has no words for the morning; **the week's review's note**, with *Open the review*.
 - **A calendar event's question** (Q7): the app's own text, its answers (*All of it*, *A few hours*, *None*) kept for every event of its name, with no call.
 - **How work went, with Claude off** (LR-05): a message for each completion, its answers kept as below.

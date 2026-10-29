@@ -100,7 +100,7 @@ Small interfaces for what Android does, so services are tested without it:
 
 ### Files
 
-- **One top-level type a file**, named for it, but for a small sealed family or a type's private helpers. **One test class a file.**
+- **One top-level type a file**, named for it, but for a small sealed family or a type's private helpers. **One test class a file**, but for a file of small rule tests grouped by concern (`BlockingTest.kt`, `ProtectTest.kt`, `LearnTest.kt`, `DailyTest.kt`, `WidgetModelTest.kt`).
 - **Imports, not inline fully qualified names**, but where a name would be ambiguous (`java.time.Duration` beside `kotlin.time.Duration`).
 - **Classes Android holds by their name.** An activity or receiver a notification's tap names (posted, or held to be posted again) and a worker in WorkManager's queue (periodic work's, for good) are named by their class: a move leaves them pointing at nothing, unless the phone holds none under the old name when the build is installed (`private/tools/held_by_name.py` looks first), the old name stays (an `activity-alias`, a forwarding class), or a migration rewrites what names it.
 - **A package a concern**: Felix's code in `felix/`; Planning's in `plan/`; the platform's in `data/` (stores), `enrich/` (the gateway) and `notify/`; services in their concern's package; pure rules in `core/`.

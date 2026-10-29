@@ -128,10 +128,15 @@ def main() -> None:
             print("GetAgenda error:", agenda["Error"])
             failed = True
         else:
-            # Keys can be present with a null value, so `or []` rather than a .get default.
             print("GetAgenda response:", {k: type(v).__name__ + (f"[{len(v)}]" if isinstance(v, list) else "") for k, v in agenda.items()})
             classes = {c["Identifier"]: c.get("Name", "?") for c in class_list}
-            items = agenda.get("Items") or []
+            # A list, empty or not: one missing or null is an answer the app refuses ("the answer had no list of
+            # items", PowerPlannerApi), not an empty agenda.
+            items = agenda.get("Items")
+            if not isinstance(items, list):
+                print("GetAgenda error: the answer had no list of items")
+                failed = True
+                items = []
             print(f"\n{len(items)} agenda item(s):")
             for it in items:
                 print(
