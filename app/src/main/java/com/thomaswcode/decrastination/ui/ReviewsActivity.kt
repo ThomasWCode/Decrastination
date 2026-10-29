@@ -57,7 +57,8 @@ class ReviewsActivity : ComponentActivity() {
         setContent { AppTheme { Reviews(graph) } }
         // From the summary's notification (NF-02): its email opened over the page, once.
         if (savedInstanceState == null) intent.getStringExtra(EXTRA_SEND)?.let { week ->
-            graph.log.value.reviews.firstOrNull { it.week == week }?.summary?.let { text ->
+            // The week's latest summary: Sunday's, where a midweek review wrote one before it (D-123).
+            graph.log.value.reviews.filter { it.week == week && it.summary != null }.maxByOrNull { it.at }?.summary?.let { text ->
                 runCatching { startActivity(Summary.email(graph.settings.value.summaryEmail, week, text)) }
             }
         }

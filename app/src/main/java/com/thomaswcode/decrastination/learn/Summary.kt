@@ -44,7 +44,8 @@ object Summary {
         slots.filter { it.outcome == SlotOutcome.Missed }.takeIf { it.isNotEmpty() }?.let { missed ->
             appendLine("Missed: " + missed.joinToString("; ") { "${it.label.take(MAX_TITLE)} (${LocalDate.parse(it.date).format(DAY)})" })
         }
-        log.reviews.firstOrNull { it.week == week }?.let { review ->
+        // The week's latest: Sunday's, where a midweek one came before it (D-123).
+        log.reviews.filter { it.week == week }.maxByOrNull { it.at }?.let { review ->
             appendLine("The review's note: " + review.lines.joinToString(" ") { it.take(MAX_LINE) })
         }
         val felix = ChatHistory.his(messages).filter { inWeek(it.at) && it.text.isNotBlank() }

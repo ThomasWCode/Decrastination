@@ -80,16 +80,18 @@ class Learning(
         if (ifDue && Review.reviewed(log.value.reviews, week, Daily.lastCheckIn(now, zone, settings.value.checkInMin), zone)) return
         // A reset of the record while this is out (LR-08) lets what it makes go.
         val generation = resets()
-        val learned = Calibrator.learn(
+        // Before the week's Sunday, the week so far (D-123): read and noted, but nothing learned or changed, which Sunday's does once.
+        val soFar = now < LocalDate.parse(week).plusDays(6).atStartOfDay(zone).toInstant().toEpochMilli()
+        val learned = if (soFar) null else Calibrator.learn(
             log.value,
             learning.value.calibration,
             today = focus.today(now),
             zone = zone,
             defaultMargin = settings.value.marginDays,
         )
-        learning.update { it.copy(calibration = learned.calibration) }
-        val findings = learned.changes + listOfNotNull(Days.capacityAdvice(log.value.days, focus.today(now)))
-        val model = runCatching { modelReview(now, week, generation) }
+        learned?.let { l -> learning.update { it.copy(calibration = l.calibration) } }
+        val findings = learned?.changes.orEmpty() + listOfNotNull(Days.capacityAdvice(log.value.days, focus.today(now)))
+        val model = runCatching { modelReview(now, week, generation, changing = !soFar) }
             .onFailure { Log.w(AppGraph.TAG, "The model's weekly review failed; the rules' stands", it) }
             .getOrElse { Outcome(why = "Claude's call failed") }
         val tidy = runCatching { tidyMemory(now) }
@@ -115,7 +117,7 @@ class Learning(
         // Its note's first line in the chat, in Felix's name, with the button that opens the review.
         reviewed(review.lines.first())
         // The week's summary for home (NF-02), after its review: its own call, its failure the review's no matter.
-        runCatching { writeSummary(week) }.onFailure { Log.w(AppGraph.TAG, "The week's summary failed", it) }
+        runCatching { writeSummary(week, review.at) }.onFailure { Log.w(AppGraph.TAG, "The week's summary failed", it) }
     }
 
     /** The model's review, or why there's none (the rules' stands then, saying so). */
@@ -123,9 +125,10 @@ class Learning(
 
     /**
      * The model's review, while Claude is on and under its cap: a note and bounded changes, the
-     * changes applied through [com.thomaswcode.decrastination.protect.Protection.applyReviewChanges]. Otherwise why it couldn't be had.
+     * changes applied through [com.thomaswcode.decrastination.protect.Protection.applyReviewChanges], unless it isn't
+     * [changing] (the week so far, D-123: its note alone). Otherwise why it couldn't be had.
      */
-    private suspend fun modelReview(now: Long, week: String, generation: Int): Outcome {
+    private suspend fun modelReview(now: Long, week: String, generation: Int, changing: Boolean = true): Outcome {
         val reviewer = gateway.client(ModelEffort.Job.Review)?.let { ClaudeReviewer(it, profile = profile(clock.now(), memory.value)) } ?: return Outcome(why = because(ModelHold.Off))
         val zone = clock.zone()
         val input = ReviewInput.describe(log.value, learning.value.calibration, settings.value, now, zone, week, chat.value.messages)
@@ -139,7 +142,7 @@ class Learning(
         }
         val answer = result.answer ?: return Outcome(why = if (result.refused) "Claude declined to review it" else "Claude's answer couldn't be used")
         val asked = settings.value
-        val changes = answer.changes.filter { ReviewInput.allowed(it, asked) }
+        val changes = answer.changes.filter { changing && ReviewInput.allowed(it, asked) }
         // What each was, kept with the review (AI-18, LR-01): next week's reads it, and its page undoes it.
         val before = changes.mapNotNull { c -> ReviewInput.valueOf(asked, c.setting)?.let { c.setting to it } }.toMap()
         // Not after a reset of the record that came while Claude was asked (LR-08): the review's let go.
@@ -220,9 +223,10 @@ class Learning(
     /**
      * The [week]'s summary for home (NF-02), written by the model after its review and kept with it;
      * then Felix's offer to send it, in the chat with the button that opens it in an email. Nothing
-     * while Claude can't be asked, or the week has no review. The summary, or null.
+     * while Claude can't be asked, or the week has no review. Kept with the review made at [reviewAt], or, without one,
+     * the week's latest: a week with a midweek review as well as Sunday's (D-123) keeps each its own. The summary, or null.
      */
-    suspend fun writeSummary(week: String): String? {
+    suspend fun writeSummary(week: String, reviewAt: Long? = null): String? {
         val client = gateway.client(ModelEffort.Job.Summary) ?: return null
         if (log.value.reviews.none { it.week == week }) return null
         val zone = clock.zone()
@@ -234,7 +238,10 @@ class Learning(
             cost = { r: SummaryWriter.Result -> r.costUsd to r.refused },
         ) { at -> writer.write(profile(at, memory.value).text, input) }
         val text = (called as? Called.Answered)?.value?.text ?: return null
-        log.update { l -> l.copy(reviews = l.reviews.map { if (it.week == week) it.copy(summary = text) else it }) }
+        log.update { l ->
+            val at = reviewAt ?: l.reviews.filter { it.week == week }.maxOfOrNull { it.at }
+            l.copy(reviews = l.reviews.map { if (it.week == week && it.at == at) it.copy(summary = text) else it })
+        }
         // His offer in the chat, held from his notification in quiet hours till the morning (LR-07).
         summaryReady(week)
         return text
