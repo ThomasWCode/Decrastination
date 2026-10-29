@@ -136,7 +136,7 @@ data class Settings(
     /** How long a change that loosens blocking waits, once armed. */
     val loosenDelayHours: Int = 24,
     /** The shape this is in ([Migration]): raised with each change of it, a migration bringing older files to it. 2 from 4.3.0 ([gmailFinishes]), 3 from 4.6.0 ([dayHourDp]). */
-    val version: Int = 3,
+    val version: Int = 4,
 )
 
 /** A stretch of a day, in minutes after midnight; one that ends before it starts crosses midnight. */

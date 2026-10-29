@@ -46,17 +46,19 @@ class GoldenPromptsTest {
             put("enrich-${job.name.lowercase()}.schema.json", pretty(ReadingPrompts.schemaJson(job)))
         }
         put(PROFILE, Profile.block(SETTINGS, listOf(TASK), null, SCHOOL, MEMORY, NOW, Fixtures.LONDON))
+        // Felix's calls' (D-120): the year out of its first line, and nothing else changed.
+        put("profile-felix.txt", Profile.block(SETTINGS, listOf(TASK), null, SCHOOL, MEMORY, NOW, Fixtures.LONDON, year = false))
         fun prompt(name: String, system: String, schema: Map<String, Any>) {
             put("$name.txt", system)
             put("$name.schema.json", pretty(json(schema)))
         }
-        prompt("chat", ChatPrompts.system(SETTINGS, YEAR), ChatPrompts.SCHEMA)
+        prompt("chat", ChatPrompts.system(SETTINGS), ChatPrompts.SCHEMA)
         // With finishing emails in Gmail switched off: an email's done is then its source's, as Teams' is.
-        put("chat-gmail-off.txt", ChatPrompts.system(SETTINGS.copy(gmailFinishes = false), YEAR))
+        put("chat-gmail-off.txt", ChatPrompts.system(SETTINGS.copy(gmailFinishes = false)))
         prompt("instruction", InstructionPrompts.system(YEAR), InstructionPrompts.SCHEMA)
         prompt("photo-check", PhotoChecker.system(YEAR), PhotoChecker.SCHEMA)
         prompt("review", ReviewInput.system(YEAR), ReviewInput.schema())
-        prompt("felix", FelixPrompts.system(SETTINGS, YEAR), FelixPrompts.SCHEMA)
+        prompt("felix", FelixPrompts.system(SETTINGS), FelixPrompts.SCHEMA)
         prompt("micro-plan", MicroPlans.SYSTEM, MicroPlans.SCHEMA)
         prompt("photo-tasks", PhotoTasks.SYSTEM, PhotoTasks.SCHEMA)
         prompt("summary", SummaryPrompts.SYSTEM, SummaryPrompts.SCHEMA)

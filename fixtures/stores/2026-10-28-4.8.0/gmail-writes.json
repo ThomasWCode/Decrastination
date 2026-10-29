@@ -1,0 +1,45 @@
+{
+    "writes": [
+        {
+            "id": "w1",
+            "taskId": "gmail:thr-trip",
+            "title": "Signed form for the trip",
+            "threadId": "1780000000000000001",
+            "at": 1792519200000,
+            "notBefore": 1792519260000,
+            "reverseOf": null,
+            "explicit": true,
+            "flagged": [
+                "1780000000000000002"
+            ],
+            "inbox": [
+                "1780000000000000002",
+                "1780000000000000003"
+            ],
+            "unstarred": true,
+            "archived": true,
+            "tries": 1,
+            "lastError": "connection reset",
+            "doneAt": 1792519290000,
+            "gaveUp": false
+        },
+        {
+            "id": "w2",
+            "taskId": "gmail:thr-trip",
+            "title": "Signed form for the trip",
+            "threadId": "1780000000000000001",
+            "at": 1792520000000,
+            "notBefore": 1792520000000,
+            "reverseOf": "w1",
+            "explicit": false,
+            "flagged": null,
+            "inbox": null,
+            "unstarred": true,
+            "archived": false,
+            "tries": 5,
+            "lastError": "Gmail refused the login",
+            "doneAt": 1792530000000,
+            "gaveUp": true
+        }
+    ]
+}

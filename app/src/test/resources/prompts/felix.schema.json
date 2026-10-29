@@ -4,8 +4,14 @@
         "feeling": {
             "type": "string"
         },
-        "message": {
-            "type": "string"
+        "texts": {
+            "type": "array",
+            "items": {
+                "type": "string"
+            }
+        },
+        "send": {
+            "type": "integer"
         },
         "replies": {
             "type": "array",
@@ -96,7 +102,8 @@
     },
     "required": [
         "feeling",
-        "message",
+        "texts",
+        "send",
         "replies",
         "nextCheckMin",
         "memories",

@@ -9,8 +9,7 @@ Every Claude session in this repository reads this file: the reviewer GitHub Act
 - `docs/decisions.md`: the owner's decisions, numbered (D-1 on). The code follows them; something that goes against one is a question for the owner, not a bug to fix.
 - `docs/development.md`: how changes are made, tested, reviewed, checked on the phone and shipped; the public repository's rules.
 - `docs/spec/`: how each area works now, naming its code. A change in behaviour updates its file in the same PR.
-- `docs/plan_v4/`: the 4.x plan's record, done in Oct 2026. `README.md` says what was built, release by release, and what's left; `architecture.md` the structure the code has and the conventions it keeps to; `data-and-migrations.md` how stored data changes; `answers.md` the questions the plan asked and the owner's answers, and those asked since, from the timer (4.4.0) to Felix's moods (4.7.0), with the choices made in building them.
-- `docs/plan_felix_speech/`: the review of how to make Felix sound like a person rather than an app (28 Oct 2026), not yet built: the diagnosis, the ideas ranked and evaluated, a draft of the new briefing, the evidence from the code and the runs, and the research.
+- `docs/plan_v4/`: the 4.x plan's record, done in Oct 2026. `README.md` says what was built, release by release, and what's left; `architecture.md` the structure the code has and the conventions it keeps to; `data-and-migrations.md` how stored data changes; `answers.md` the questions the plan asked and the owner's answers, and those asked since, from the timer (4.4.0) to Felix's moods (4.7.0) and his speech (4.8.0, the speech review's plan folded into it), with the choices made in building them.
 - `docs/astra-review-4.3.13/`: the review of 4.3.13 and what became of each finding.
 
 ## What matters most here

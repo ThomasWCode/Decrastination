@@ -23,7 +23,7 @@ object Mood {
     /** How he feels, the warmest first. */
     enum class Level { Proud, Pleased, Neutral, Firm, Strong }
 
-    /** A [level], and what it rests on in words ([because]), for the line he's told. */
+    /** A [level], and what it rests on in words ([because]): beside the level in the scenarios' report, never told him (D-120). */
     data class Feeling(val level: Level, val because: List<String> = emptyList())
 
     val NEUTRAL = Feeling(Level.Neutral)
@@ -156,18 +156,18 @@ object Mood {
     fun kept(feeling: Feeling, text: String): String = if (feeling.level == Level.Neutral || text.isBlank()) "" else feeling.level.name
 
     /**
-     * The line he's told for [feeling], none at neutral: "How you feel, at most: let down, strongly (3 slots missed
-     * today; …)", "How you feel, at most: proud (every slot today kept, 4 of 4)".
+     * The line he's told for [feeling], none at neutral, in a person's words and with nothing of what it rests on, which
+     * his story of the day carries (D-120): "How you feel, at most: properly fed up", "How you feel, at most: really pleased".
      */
-    fun line(feeling: Feeling): String? {
-        val how = when (feeling.level) {
-            Level.Proud -> "proud"
-            Level.Pleased -> "pleased"
-            Level.Neutral -> return null
-            Level.Firm -> "let down, firmly"
-            Level.Strong -> "let down, strongly"
-        }
-        return "How you feel, at most: $how" + feeling.because.takeIf { it.isNotEmpty() }?.joinToString("; ", " (", ")").orEmpty()
+    fun line(feeling: Feeling): String? = words(feeling.level).takeIf { it.isNotEmpty() }?.let { "How you feel, at most: $it" }
+
+    /** [level] as a person would say it, as his prompts name the levels (D-120): empty for neutral. */
+    fun words(level: Level): String = when (level) {
+        Level.Proud -> "really pleased"
+        Level.Pleased -> "pleased"
+        Level.Neutral -> ""
+        Level.Firm -> "not impressed"
+        Level.Strong -> "properly fed up"
     }
 
     private fun dayOf(at: Long, zone: ZoneId): LocalDate = Instant.ofEpochMilli(at).atZone(zone).toLocalDate()

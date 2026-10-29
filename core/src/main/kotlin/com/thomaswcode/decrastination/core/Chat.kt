@@ -18,7 +18,7 @@ data class ChatState(
     /** His state between looks (LR-03): his next check, what he wrote ahead, what waits to be asked, the check-in's answers so far. */
     val felix: FelixState = FelixState(),
     /** The shape this is in ([com.thomaswcode.decrastination.data.Migration]): raised with each change of it. */
-    val version: Int = 10,
+    val version: Int = 11,
 ) {
     /**
      * Your newest message still waiting for his answer: a message of his written since, unasked, doesn't
@@ -105,7 +105,8 @@ data class ChatMessage(
     val mood: String = "",
     /**
      * His, from a call: his note to himself on how he felt, written before the message (D-119), whole; kept so your
-     * rating of it can be read beside it, never shown in the chat but as you rate it, and never sent back to him.
+     * rating of it can be read beside it, never shown in the chat but as you rate it; told him again beside his message
+     * in his story of that day (D-120), so an evening has a thread of how he's felt.
      */
     val feeling: String = "",
     /**
@@ -115,6 +116,12 @@ data class ChatMessage(
     val rating: String = "",
     val feedback: String = "",
     val ratedAt: Long = 0,
+    /**
+     * His, from a call: the texts he wrote beside it and didn't send (D-120), shown as you rate it, and the one of them
+     * you'd rather he had sent ([preferred], empty for none). Read off the phone with your rating; never sent to him.
+     */
+    val unsent: List<String> = emptyList(),
+    val preferred: String = "",
 )
 
 /** A page a web search found ([ChatMessage.sources]): its title and where it is. */
@@ -129,7 +136,7 @@ data class WebSource(val title: String, val url: String)
 data class ChatArchive(
     val messages: List<ChatMessage> = emptyList(),
     /** The shape this is in ([com.thomaswcode.decrastination.data.Migration]): raised with each change of it. */
-    val version: Int = 9,
+    val version: Int = 10,
 )
 
 /** The conversation read as a thread. Pure. */

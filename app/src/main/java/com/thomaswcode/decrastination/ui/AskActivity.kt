@@ -39,6 +39,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -56,6 +57,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -155,6 +157,7 @@ import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.felix.ChatPrompts
 import com.thomaswcode.decrastination.felix.Conversation
+import com.thomaswcode.decrastination.felix.FelixAnswers
 import com.thomaswcode.decrastination.felix.Replies
 import java.time.Instant
 import java.time.LocalDate
@@ -875,12 +878,14 @@ private fun Time(message: ChatMessage, zone: ZoneId, waiting: Boolean = false, o
 
 /**
  * Your rating of his [message] (D-119), from holding it: the thumb you chose ([up]), his message, his note
- * on how he felt as he wrote it where one was kept, and what you'd say of it, which may be nothing. Saved,
- * [onSave] with your thumb and words; Remove, on one already rated, with null, taking it off.
+ * on how he felt as he wrote it where one was kept, the texts he didn't send where he wrote some (D-120), one of
+ * which you may pick as the one you'd rather have had, and what you'd say of it, which may be nothing. Saved,
+ * [onSave] with your thumb, words and pick; Remove, on one already rated, with null, taking it off.
  */
 @Composable
-private fun RateDialog(message: ChatMessage, up: Boolean, onDismiss: () -> Unit, onSave: (Boolean?, String) -> Unit) {
+private fun RateDialog(message: ChatMessage, up: Boolean, onDismiss: () -> Unit, onSave: (Boolean?, String, String) -> Unit) {
     var words by remember { mutableStateOf(message.feedback) }
+    var preferred by remember { mutableStateOf(message.preferred) }
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = { Icon(painterResource(if (up) R.drawable.ic_thumb_up else R.drawable.ic_thumb_down), contentDescription = null) },
@@ -894,6 +899,22 @@ private fun RateDialog(message: ChatMessage, up: Boolean, onDismiss: () -> Unit,
                         Text(message.feeling, style = MaterialTheme.typography.bodyMedium, fontStyle = FontStyle.Italic, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
+                // What else he wrote and didn't send (D-120): tapped, the one you'd rather have had; tapped again, none.
+                if (message.unsent.isNotEmpty()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("He also wrote: tap one you'd rather have had", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                        message.unsent.forEach { text ->
+                            val picked = text == preferred
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = if (picked) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
+                                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).selectable(selected = picked, onClick = { preferred = if (picked) "" else text }),
+                            ) {
+                                Text(text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp))
+                            }
+                        }
+                    }
+                }
                 OutlinedTextField(
                     value = words,
                     onValueChange = { words = it.take(Conversation.MAX_FEEDBACK) },
@@ -903,10 +924,10 @@ private fun RateDialog(message: ChatMessage, up: Boolean, onDismiss: () -> Unit,
                 )
             }
         },
-        confirmButton = { TextButton(onClick = { onSave(up, words) }) { Text("Save") } },
+        confirmButton = { TextButton(onClick = { onSave(up, words, preferred) }) { Text("Save") } },
         dismissButton = {
             Row {
-                if (message.rating.isNotEmpty()) TextButton(onClick = { onSave(null, "") }) { Text("Remove") }
+                if (message.rating.isNotEmpty()) TextButton(onClick = { onSave(null, "", "") }) { Text("Remove") }
                 TextButton(onClick = onDismiss) { Text("Cancel") }
             }
         },
@@ -1027,17 +1048,25 @@ private fun Claudes(graph: AppGraph, screen: ChatScreenState, message: ChatMessa
     // Your rating of it being written (D-119): the thumb chosen, null while it isn't.
     var rating by remember { mutableStateOf<Boolean?>(null) }
     rating?.let { up ->
-        RateDialog(message, up, onDismiss = { rating = null }) { thumb, words ->
+        RateDialog(message, up, onDismiss = { rating = null }) { thumb, words, preferred ->
             rating = null
-            graph.scope.launch { graph.conversation.rate(message.id, thumb, words) }
+            graph.scope.launch { graph.conversation.rate(message.id, thumb, words, preferred) }
         }
     }
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Column {
+            // A look of his in two texts (D-120): each but the last in a bubble of its own above it, held as the message is.
+            val texts = FelixAnswers.texts(message)
+            texts.dropLast(1).forEach { text ->
+                Bubble(message, MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(18.dp, 18.dp, 18.dp, 4.dp), flash, onReply, onMarkAnswered = onMarkAnswered, onRate = { rating = it }) {
+                    Text(text, style = MaterialTheme.typography.bodyLarge)
+                }
+                Spacer(Modifier.height(4.dp))
+            }
             Labelled(screen, message) {
                 // A tap on the bubble opens or closes what's folded, as its chevron does: a bigger place to tap.
                 Bubble(message, MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(18.dp, 18.dp, 18.dp, 4.dp), flash, onReply, onTap = { if (folds) screen.toggle(message.id) }, onMarkAnswered = onMarkAnswered, onRate = { rating = it }) {
-                    Text(message.text, style = MaterialTheme.typography.bodyLarge)
+                    Text(texts.last(), style = MaterialTheme.typography.bodyLarge)
                     if (folds) Chevron(open, ChatSummary.problems(message) > 0, Modifier.align(Alignment.End)) { screen.toggle(message.id) }
                 }
             }

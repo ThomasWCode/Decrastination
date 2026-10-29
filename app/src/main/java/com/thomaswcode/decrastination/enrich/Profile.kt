@@ -40,8 +40,11 @@ object Profile {
 
     private val DAY = DateTimeFormatter.ofPattern("d MMM", Locale.UK)
 
-    /** What a call sends: the year group its prompt names, and the block. */
-    data class Block(val year: Int, val text: String) {
+    /**
+     * What a call sends: the year group its prompt names, and the block; Felix's calls, [felix], the block with the year
+     * out of its first line (D-120), as his prompts make the two of you about the same age.
+     */
+    data class Block(val year: Int, val text: String, val felix: String = text) {
         companion object {
             val NONE = Block(12, "")
         }
@@ -54,7 +57,11 @@ object Profile {
         return 12 + (schoolYear - yearGroupStart)
     }
 
-    fun block(settings: Settings, tasks: List<TaskItem>, timetable: Timetable?, school: SchoolCalendar, memory: MemoryState, now: Long, zone: ZoneId): String {
+    /**
+     * The block for a call at [now]; [year] false, Felix's (D-120): its first line says no year ("A UK sixth-form student."),
+     * all else as it is, the classes' codes, the school day and your own lines and memories among it, as you wrote them.
+     */
+    fun block(settings: Settings, tasks: List<TaskItem>, timetable: Timetable?, school: SchoolCalendar, memory: MemoryState, now: Long, zone: ZoneId, year: Boolean = true): String {
         val today = Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
         val lines = mutableListOf("About the student")
         // Subjects: the classes you've named, then any seen on open work that you haven't, by its code.
@@ -62,7 +69,7 @@ object Profile {
         val seen = tasks.asSequence().filter { it.isOpen }.mapNotNull { it.className?.trim()?.takeIf(String::isNotEmpty) }
             .filter { it !in settings.classMap.keys }.distinct().sorted().toList()
         val subjects = (mapped + seen).take(MAX_SUBJECTS)
-        lines += "Year ${yearGroup(now, zone, settings.yearGroupStart)} at a UK sixth form." + if (subjects.isEmpty()) "" else " Subjects: ${subjects.joinToString(", ")}."
+        lines += (if (year) "Year ${yearGroup(now, zone, settings.yearGroupStart)} at a UK sixth form." else "A UK sixth-form student.") + if (subjects.isEmpty()) "" else " Subjects: ${subjects.joinToString(", ")}."
         schoolDay(settings, timetable, today)?.let { lines += it }
         val off = school.noSchool.filter { it.to >= today.toString() }.take(MAX_OFF).map { entry ->
             val (from, to) = LocalDate.parse(entry.from) to LocalDate.parse(entry.to)

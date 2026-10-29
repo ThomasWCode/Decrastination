@@ -287,7 +287,7 @@ class NotesAndRemindersTest {
     }
 
     /** His answer for a reminder, as his calls give it. */
-    private fun his(message: String) = """{"message":"$message","replies":[],"nextCheckMin":null,"memories":[]}"""
+    private fun his(message: String) = """{"texts":["$message"],"send":1,"replies":[],"nextCheckMin":null,"memories":[]}"""
 
     @Test
     fun `a reminder set three minutes ahead is written for at once, with no plan or look between`() = runBlocking {

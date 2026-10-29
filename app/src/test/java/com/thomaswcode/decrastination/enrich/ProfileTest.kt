@@ -59,6 +59,10 @@ class ProfileTest {
             ),
             text.lines(),
         )
+        // Felix's calls' (D-120): the year out of its first line, and nothing else changed.
+        val his = Profile.block(settings, listOf(maths), null, school, memory, now, LONDON, year = false).lines()
+        assertEquals("A UK sixth-form student. Subjects: Physics (12.9-PH1), 12.1-MA2.", his[1])
+        assertEquals(text.lines().filterIndexed { i, _ -> i != 1 }, his.filterIndexed { i, _ -> i != 1 })
     }
 
     @Test

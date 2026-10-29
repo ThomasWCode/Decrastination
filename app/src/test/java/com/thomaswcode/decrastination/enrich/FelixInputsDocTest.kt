@@ -50,7 +50,10 @@ import com.thomaswcode.decrastination.data.SlotOutcome
 import com.thomaswcode.decrastination.data.SlotRecord
 import com.thomaswcode.decrastination.felix.ChatPrompts
 import com.thomaswcode.decrastination.felix.FelixPrompts
+import com.thomaswcode.decrastination.felix.Mood
+import com.thomaswcode.decrastination.felix.Story
 import com.thomaswcode.decrastination.learn.CalendarEvent
+import com.thomaswcode.decrastination.learn.CheckIn
 import com.thomaswcode.decrastination.learn.EventJudge
 import com.thomaswcode.decrastination.sources.gmail.GmailThreads
 import com.thomaswcode.decrastination.sources.gmail.Mime
@@ -169,7 +172,18 @@ class FelixInputsDocTest {
         val out = linkedMapOf<String, String>()
         val now = Fixtures.at("2026-10-13T17:20")
         val byId = tasks.associateBy { it.id }
-        out["profile"] = Profile.block(settings, tasks, null, school, memory, now, LONDON)
+        // His calls' (D-120): the year out of its first line.
+        out["profile"] = Profile.block(settings, tasks, null, school, memory, now, LONDON, year = false)
+        // His diary as of the 13th (D-120): yesterday's slots, his let-down kept on his message, the week's check-in.
+        fun past(taskId: String, label: String, outcome: SlotOutcome) = SlotRecord(
+            date = "2026-10-12", key = "$taskId#-1#1", taskId = taskId, kind = Kind.Homework, label = label, plannedMin = 30, start = Fixtures.at("2026-10-12T17:00"),
+            end = Fixtures.at("2026-10-12T17:30"), window = WindowKind.Evening, outcome = outcome, workedMin = if (outcome.kept) 30 else 0, at = Fixtures.at("2026-10-12T17:35"),
+        )
+        val yesterday = listOf(past(vectors.id, "Vectors exercise 4B: Questions 1 to 6", SlotOutcome.Kept), past(form.id, "Trip consent form", SlotOutcome.Missed))
+        val checkIn = CheckIn("2026-10-05", Fixtures.at("2026-10-11T18:00"), 3, "the statement", "football ran late", "start straight after school", "ok")
+        val letDown = ChatMessage("f0", Speaker.Felix, "form went by. tonight then", Fixtures.at("2026-10-12T17:40"), About(taskId = form.id, taskTitle = form.title), kind = MessageKind.SlotEnd, mood = "Firm")
+        val dayStart = Fixtures.at("2026-10-13T00:00")
+        val diary = Story.diary(yesterday, listOf(checkIn), listOf(letDown), LocalDate.parse("2026-10-13"), LONDON)
         // The chat: a message about a task, after an earlier exchange.
         val earlier = ChatMessage("m1", Speaker.You, "What's due this week?", Fixtures.at("2026-10-12T19:02"))
         val reply = ChatMessage(
@@ -193,6 +207,7 @@ class FelixInputsDocTest {
                 planned, LONDON, blocking = Focus.blockingLine(BlockPolicy.Verdict.Block(BlockPolicy.Reason.TodayUndone), planned.todayBucket?.chunks.orEmpty(), 0, 16 * 60 + 45, null), timer = timer,
                 only = InstructionRules.onlyDays(applied, planned.today, planned.today.plusDays(ChatPrompts.PLAN_DAYS.toLong())).mapValues { ChatPrompts.onlyLine(it.value, tasks.associateBy { t -> t.id }) },
                 placed = InstructionRules.outsideBy(applied, planned.today, planned.today.plusDays(ChatPrompts.PLAN_DAYS.toLong())),
+                story = Story.today(emptyList(), listOf(waiting), dayStart, LONDON, chat = true), diary = diary,
             ),
         )
         ChatPrompts.turns(listOf(earlier, reply, asked), context.known, byId, LONDON, plan = context.plan, events = events).forEachIndexed { i, (from, text) -> out["chat turn $i: $from"] = text }
@@ -224,23 +239,29 @@ class FelixInputsDocTest {
             start = slot.start, end = slot.end, window = WindowKind.Evening, outcome = outcome, workedMin = if (outcome.kept) chunk.minutes else 0, earned = earned, at = slot.end,
         )
         val at = slot.start + 10 * 60_000L
-        out["felix SlotStart"] = FelixPrompts.describe(FelixPrompts.Reason.SlotStart, p, slot, worksheet, emptyList(), recent, null, settings, at, LONDON, firstAction = "Read question 1 and underline what it asks", reminder = "Ask about question 7", notes = listOf(noteOnSheet.text))
+        out["felix SlotStart"] = FelixPrompts.describe(FelixPrompts.Reason.SlotStart, p, slot, worksheet, emptyList(), recent, null, settings, at, LONDON, firstAction = "Read question 1 and underline what it asks", reminder = "Ask about question 7", notes = listOf(noteOnSheet.text), diary = diary, since = dayStart)
+        // Today so far (D-120): his nudge, with his note on it, and your reply to it.
+        val nudged = recent + listOf(
+            ChatMessage("f2", Speaker.Felix, "worksheet's on\nyou starting", at, About(taskId = worksheet.id, taskTitle = worksheet.title), kind = MessageKind.SlotStart, feeling = "easy, just a nudge"),
+            ChatMessage("f2-reply", Speaker.You, "yeah in 5", at + 60_000L, replyTo = "f2", answeredAt = at + 60_000L),
+        )
+        fun story(today: List<SlotRecord>) = Story.today(today, nudged, dayStart, LONDON)
         val missed = record(SlotOutcome.Missed, false)
-        out["felix SlotEnd (missed)"] = FelixPrompts.describe(FelixPrompts.Reason.SlotEnd, p, null, worksheet, listOf(missed), recent, null, settings, slot.end + 6 * 60_000L, LONDON, record = missed)
+        out["felix SlotEnd (missed)"] = FelixPrompts.describe(FelixPrompts.Reason.SlotEnd, p, null, worksheet, listOf(missed), nudged, null, settings, slot.end + 6 * 60_000L, LONDON, record = missed, feeling = Mood.Feeling(Mood.Level.Firm), story = story(listOf(missed)), diary = diary, since = dayStart)
         val noPhoto = record(SlotOutcome.Kept, false)
-        out["felix SlotEnd (kept, photo needed)"] = FelixPrompts.describe(FelixPrompts.Reason.SlotEnd, p, null, worksheet, listOf(noPhoto), recent, null, settings, slot.end + 2 * 60_000L, LONDON, record = noPhoto)
+        out["felix SlotEnd (kept, photo needed)"] = FelixPrompts.describe(FelixPrompts.Reason.SlotEnd, p, null, worksheet, listOf(noPhoto), nudged, null, settings, slot.end + 2 * 60_000L, LONDON, record = noPhoto, story = story(listOf(noPhoto)), diary = diary, since = dayStart)
         val kept = record(SlotOutcome.Kept, true)
-        out["felix SlotKept"] = FelixPrompts.describe(FelixPrompts.Reason.SlotKept, p, null, worksheet, listOf(kept), recent, null, settings, slot.end + 60_000L, LONDON, freeMin = 15, record = kept)
-        out["felix DayDone"] = FelixPrompts.describe(FelixPrompts.Reason.DayDone, p, null, worksheet, listOf(kept), recent, null, settings, Fixtures.at("2026-10-13T21:40"), LONDON, freeMin = 25, record = kept)
+        out["felix SlotKept"] = FelixPrompts.describe(FelixPrompts.Reason.SlotKept, p, null, worksheet, listOf(kept), nudged, null, settings, slot.end + 60_000L, LONDON, freeMin = 15, record = kept, feeling = Mood.Feeling(Mood.Level.Pleased), story = story(listOf(kept)), diary = diary, since = dayStart)
+        out["felix DayDone"] = FelixPrompts.describe(FelixPrompts.Reason.DayDone, p, null, worksheet, listOf(kept), nudged, null, settings, Fixtures.at("2026-10-13T21:40"), LONDON, freeMin = 25, record = kept, story = story(listOf(kept)), diary = diary, since = dayStart)
         // The vectors' first questions ticked the night before, on their sheet: said as done.
         val ticked = vectors.copy(subSteps = vectors.subSteps.mapIndexed { i, step -> step.copy(done = i == 0) })
-        out["felix Morning"] = FelixPrompts.describe(FelixPrompts.Reason.Morning, plan("2026-10-13T07:00"), null, null, emptyList(), recent, null, settings, Fixtures.at("2026-10-13T07:00"), LONDON, reminders = listOf("17:00 Ask about question 7"), tasks = listOf(worksheet, ticked))
-        out["felix Question"] = FelixPrompts.describe(FelixPrompts.Reason.Question, p, null, worksheet, emptyList(), recent, "Does question 5 need Monday's results, or can it be done from the textbook?", settings, at, LONDON)
-        out["felix Completions"] = FelixPrompts.describe(FelixPrompts.Reason.Completions, p, null, null, emptyList(), recent, null, settings, Fixtures.at("2026-10-13T19:10"), LONDON, done = listOf(worksheet.title, vectors.title))
+        out["felix Morning"] = FelixPrompts.describe(FelixPrompts.Reason.Morning, plan("2026-10-13T07:00"), null, null, emptyList(), recent, null, settings, Fixtures.at("2026-10-13T07:00"), LONDON, reminders = listOf("17:00 Ask about question 7"), tasks = listOf(worksheet, ticked), diary = diary, since = dayStart)
+        out["felix Question"] = FelixPrompts.describe(FelixPrompts.Reason.Question, p, null, worksheet, emptyList(), recent, "Does question 5 need Monday's results, or can it be done from the textbook?", settings, at, LONDON, diary = diary, since = dayStart)
+        out["felix Completions"] = FelixPrompts.describe(FelixPrompts.Reason.Completions, p, null, null, emptyList(), nudged, null, settings, Fixtures.at("2026-10-13T19:10"), LONDON, done = listOf(worksheet.title, vectors.title), story = story(emptyList()), diary = diary, since = dayStart)
         // A reminder, written ten minutes before its moment, as of it: the slot then and its task, your words.
         val form8 = Fixtures.at("2026-10-14T08:00")
         val morning = plan("2026-10-14T07:50")
-        out["felix Reminder"] = FelixPrompts.describe(FelixPrompts.Reason.Reminder, morning, morning.slotAt(form8) ?: morning.nextSlot(form8), form, emptyList(), recent, null, settings, form8, LONDON, reminder = "Bring the signed consent form")
+        out["felix Reminder"] = FelixPrompts.describe(FelixPrompts.Reason.Reminder, morning, morning.slotAt(form8) ?: morning.nextSlot(form8), form, emptyList(), nudged, null, settings, form8, LONDON, reminder = "Bring the signed consent form", since = Fixtures.at("2026-10-14T00:00"))
         return out
     }
 
@@ -260,7 +281,7 @@ class FelixInputsDocTest {
             "<!-- $how: $name -->\n```text\n$body\n```"
         }
         // The one line of a prompt the doc quotes in its words: the chat's item 6 with searches off.
-        val searchesOff = ChatPrompts.system(settings.copy(felixSearches = false), 12).lines().first { it.startsWith("6.") }
+        val searchesOff = ChatPrompts.system(settings.copy(felixSearches = false)).lines().first { it.startsWith("6.") }
         assertTrue("“$searchesOff”" in written || "\"$searchesOff\"" in written, "The doc's words quote the chat's item 6 with searches off, now: $searchesOff")
         if (System.getProperty("updateDocs") == "true") {
             doc.writeText(written)

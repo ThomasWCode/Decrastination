@@ -166,7 +166,7 @@ class ConversationTest {
         fun missed(key: String, end: Long) = SlotRecord(today, key, key.substringBefore('#'), Kind.Homework, label = key, plannedMin = 30, start = end - 30 * 60_000L, end = end, window = WindowKind.Evening, outcome = SlotOutcome.Missed, workedMin = 0, at = end + 60_000L)
         assertFalse("How you feel" in conversation.chatContext().plan)
         stores.log.update { it.copy(slots = listOf(missed("teams:a#-1#1", now - 3 * 3_600_000L), missed("teams:b#-1#1", now - 3_600_000L))) }
-        assertTrue("How you feel, at most: let down, firmly (2 slots missed today)" in conversation.chatContext().plan.lines(), conversation.chatContext().plan)
+        assertTrue("How you feel, at most: not impressed" in conversation.chatContext().plan.lines(), conversation.chatContext().plan)
     }
 
     @Test
@@ -759,18 +759,32 @@ class ConversationTest {
         assertEquals(Conversation.RATED_UP, stores.chatArchive.value.messages.single().rating)
         conversation.rate("y1", up = true, feedback = "mine")
         assertEquals("", stores.chat.value.messages.first { it.id == "y1" }.rating)
-        // The chat's next turn tells him neither your words nor his note; his reply keeps its own note.
+        // The chat's next turn tells him none of your words, but his own note of today, beside his message (D-120); his reply keeps its own note.
         felix.answers("""{"feeling":"easy, glad they're back on it",""" + felix.chatAnswer("Fine, physics at 19:30 then.").removePrefix("{"))
         assertTrue(conversation.ask("what's next?"))
         felix.settle()
         val sent = felix.server.takeRequest().body.readUtf8()
         assertTrue("that's two tonight." in sent)
         assertFalse("FEEDBACK-MARKER" in sent)
-        assertFalse("NOTE-MARKER" in sent)
+        assertTrue("(you felt: “NOTE-MARKER”)" in sent, sent)
         assertEquals("easy, glad they're back on it", stores.chat.value.messages.last { it.from == Speaker.Felix }.feeling)
         // Taken off, words and all.
         conversation.rate("f1", up = null, feedback = "")
         assertEquals(listOf("", "", "0"), stores.chat.value.messages.first { it.id == "f1" }.let { listOf(it.rating, it.feedback, it.ratedAt.toString()) })
+    }
+
+    @Test
+    fun `of the texts he didn't send, the one you'd rather have had is kept with your rating, and only one of them (D-120)`() = runBlocking {
+        stores.chat.update { it.copy(messages = listOf(ChatMessage("f1", Speaker.Felix, "two tonight. come on", now - 60_000L, kind = MessageKind.SlotEnd, unsent = listOf("you said 7", "maths went too")))) }
+        conversation.rate("f1", up = false, feedback = "too flat", preferred = "you said 7")
+        assertEquals("you said 7", stores.chat.value.messages.single().preferred)
+        // A text that isn't one of his: none picked.
+        conversation.rate("f1", up = false, feedback = "too flat", preferred = "something else")
+        assertEquals("", stores.chat.value.messages.single().preferred)
+        // Taken off, the pick with it.
+        conversation.rate("f1", up = false, feedback = "", preferred = "maths went too")
+        conversation.rate("f1", up = null, feedback = "")
+        assertEquals("" to listOf("you said 7", "maths went too"), stores.chat.value.messages.single().let { it.preferred to it.unsent })
     }
 
     @Test
