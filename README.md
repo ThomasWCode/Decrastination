@@ -1,8 +1,8 @@
 # Decrastination
 
-An Android app that gathers everything outstanding (Teams assignments, Power Planner, starred Gmail conversations, AnkiDroid decks and tasks of your own), plans it into the days before each is due as timed slots, writes them to your calendar, shows the next thing to do on a home-screen widget, and, while work is due, replaces distracting apps with that next thing until it's done. Claude reads the work into steps and estimates, and Felix, a persona you chat with, makes changes and messages you about the day.
+An Android app that gathers everything outstanding (Teams assignments, Power Planner, starred Gmail conversations, AnkiDroid decks and tasks of your own), plans it into the days before each is due as timed slots, writes them to your calendar, shows the next thing to do on a home-screen widget, and, while work is due, replaces distracting apps with that next thing until it's done. Claude reads the work into steps and estimates, and Felix, a persona you chat with, makes changes and messages you about the day. The app opens on that chat, its home; Day, Work and Stats sit behind its Plan button.
 
-A personal, sideloaded app for one phone, version 4.6.2.
+A personal, sideloaded app for one phone, version 4.9.0.
 
 ## Documents
 
@@ -11,8 +11,7 @@ A personal, sideloaded app for one phone, version 4.6.2.
 | [`docs/spec/`](docs/spec/) | How the app works now, an area a file: sources, Claude's readings, the planner, slots and the calendar, the Day, blocking and protection, Felix (and everything he's sent), learning, storage and backups, privacy; and the requirement ids the code cites |
 | [`docs/decisions.md`](docs/decisions.md) | The owner's decisions that govern how the app is developed, numbered |
 | [`docs/development.md`](docs/development.md) | How changes are made, reviewed, checked on the phone and shipped; the public repository's rules |
-| [`docs/plan_v4/`](docs/plan_v4/README.md) | The 4.x plan's record (done, Oct 2026): what was built release by release and what's left to check; the structure the code has and its conventions; the stores and their migrations; the owner's answers to the plan's questions and to those asked since, from the timer (4.4.0) to Felix's moods (4.7.0) and his speech (4.8.0, the speech review's plan folded in) |
-| [`docs/plan_chat_home/`](docs/plan_chat_home/README.md) | The plan to open the app on the chat (29 Oct 2026), not yet built: every way into the app before and after, the owner's answers, and how it's built, tested and checked on the phone |
+| [`docs/plan_v4/`](docs/plan_v4/README.md) | The 4.x plan's record (done, Oct 2026): what was built release by release and what's left to check; the structure the code has and its conventions; the stores and their migrations; the owner's answers to the plan's questions and to those asked since, from the timer (4.4.0) to Felix's moods (4.7.0), his speech (4.8.0, the speech review's plan folded in) and the chat as the app's home (4.9.0, its plan folded in) |
 | [`docs/astra-review-4.3.13/`](docs/astra-review-4.3.13/README.md) | An outside review of 4.3.13 (23 Oct 2026), each finding with what became of it |
 | [`fixtures/README.md`](fixtures/README.md) | The test fixtures and where they came from |
 
