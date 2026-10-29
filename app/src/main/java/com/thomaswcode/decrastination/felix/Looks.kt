@@ -438,6 +438,13 @@ class Looks(
         val answer = drafted?.answer ?: (called as? Called.Answered)?.value?.answer
         val text = answer?.message.orEmpty()
         val next = now + (answer?.nextCheckMin ?: settings.felixDefaultCheckMin).coerceAtLeast(FelixAnswers.MIN_CHECK_MIN) * 60_000L
+        // Its work begun while he was asked (a piece kept from Day or the widget, a step ticked, the task opened): a nudge
+        // to start it isn't sent after (D-119), its look settled as one sent would be, so it isn't asked again.
+        if (called != null && !FelixRules.stillDue(trigger, chat.value.felix, today(clock.now()))) {
+            Log.i(AppGraph.TAG, "Felix, ${trigger.reason} about ${trigger.key}: its work began while he was asked, not sent")
+            chat.update { s -> s.copy(felix = s.felix.copy(nextCheckAt = next, retry = s.felix.retry?.takeUnless { it.reason == trigger.reason.name && it.key == trigger.key })) }
+            return null
+        }
         // Asking how the completions went, the replies are the three answers (LR-05).
         val replies = when (trigger.reason) {
             FelixPrompts.Reason.Completions -> FelixWords.HOW_IT_WENT_REPLIES

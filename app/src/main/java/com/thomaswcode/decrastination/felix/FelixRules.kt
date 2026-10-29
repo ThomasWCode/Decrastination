@@ -150,7 +150,7 @@ object FelixRules {
         if (paced) return null
         plan.slotAt(now)?.let { slot ->
             val chunk = slot.chunk!!
-            val done = (state.activity[chunk.taskId]?.let { it >= slot.start } == true) || kept.any { it.taskId == chunk.taskId && it.at >= slot.start }
+            val done = started(chunk.taskId, slot.start, state, today)
             // A timer running on its task is your word you're on it, up to its hold's lift.
             val timed = timer?.running == true && holds(timer, chunk.taskId, now)
             if (!done && !timed && now >= slot.start + settings.felixGraceMin * 60_000L && said(Reason.SlotStart, chunk.key, slot.start).size < MAX_PER_SLOT && !waiting(Reason.SlotStart, chunk.key)) {
@@ -187,6 +187,24 @@ object FelixRules {
         val slot = plan.todaySlots.filter { it.kind == SlotKind.Work && it.chunk != null }
             .firstOrNull { it.start + grace > now && !(timer?.running == true && holds(timer, it.chunk!!.taskId, it.start + grace)) } ?: return null
         return Trigger(Reason.SlotStart, slot = slot) to slot.start + grace
+    }
+
+    /**
+     * Whether work on [taskId] has begun since [since] (its slot's start): its task seen worked on ([FelixState.activity]),
+     * or a piece of it kept in [today]'s records. Once it has, a nudge to start it is over (D-119).
+     */
+    fun started(taskId: String, since: Long, state: FelixState, today: List<SlotRecord>): Boolean =
+        state.activity[taskId]?.let { it >= since } == true || today.any { it.outcome.kept && it.taskId == taskId && it.at >= since }
+
+    /**
+     * Whether [trigger]'s message is still to be sent once his call for it is back: a nudge at a slot's start not, where its
+     * work began while he was asked ([started]); anything else, as it was.
+     */
+    fun stillDue(trigger: Trigger, state: FelixState, today: List<SlotRecord>): Boolean {
+        if (trigger.reason != Reason.SlotStart) return true
+        val slot = trigger.slot ?: return true
+        val taskId = slot.chunk?.taskId ?: return true
+        return !started(taskId, slot.start, state, today)
     }
 
     /**

@@ -432,20 +432,35 @@ class LooksTest {
     }
 
     @Test
-    fun `a nudge is kept at the level he was told, a piece kept while he was asked changing nothing of it (Q103)`() = runBlocking {
+    fun `a nudge is kept at the level he was told, its task's records changing while he was asked changing nothing of it (Q103)`() = runBlocking {
         val key = underWay()
         stores.chat.update { it.copy(messages = listOf(ChatMessage("n1", Speaker.Felix, "worksheet's on. starting?", felix.clock.time - 60_000L, About(taskId = "teams:sheet"), kind = MessageKind.SlotStart, pieceKey = key))) }
-        // Told strongly (a second nudge, its task due tomorrow morning with nothing done); kept as Day's Done keeps it while he's asked,
-        // which puts minutes on its task, so the same rule asked again after would say firmly.
+        // Told strongly (a second nudge, its task due tomorrow morning with nothing done); its deadline moved a week on while
+        // he's asked, so the same rule asked again after would say less.
         felix.server.dispatcher = object : Dispatcher() {
             override fun dispatch(request: RecordedRequest): MockResponse {
-                runBlocking { felix.focusKeep(key) }
+                runBlocking { stores.tasks.update { s -> s.copy(tasks = s.tasks.map { t -> if (t.id == "teams:sheet") t.copy(dueAt = t.dueAt?.plus(7 * 86_400_000L)) else t }) } }
                 return felix.answer("""{"texts":["that's two nudges now. start it."],"send":1,"replies":[],"nextCheckMin":10,"memories":[]}""")
             }
         }
         felix.looks.check()
         assertTrue("How you feel, at most: properly fed up" in felix.server.takeRequest().body.readUtf8())
         assertEquals("Strong", stores.chat.value.messages.last { it.kind == MessageKind.SlotStart }.mood)
+    }
+
+    @Test
+    fun `a nudge to start a piece kept while he was asked isn't sent, and his next look is settled`() = runBlocking {
+        val key = underWay()
+        felix.server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                runBlocking { felix.focusKeep(key) }
+                return felix.answer("""{"texts":["worksheet. now."],"send":1,"replies":[],"nextCheckMin":10,"memories":[]}""")
+            }
+        }
+        felix.looks.check()
+        assertEquals(1, felix.server.requestCount)
+        assertTrue(stores.chat.value.messages.none { it.kind == MessageKind.SlotStart })
+        assertEquals(felix.clock.time + 10 * 60_000L, stores.chat.value.felix.nextCheckAt)
     }
 
     @Test
