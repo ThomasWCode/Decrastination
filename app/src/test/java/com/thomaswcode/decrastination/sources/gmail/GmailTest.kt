@@ -2,11 +2,16 @@ package com.thomaswcode.decrastination.sources.gmail
 
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
+import com.thomaswcode.decrastination.core.By
 import com.thomaswcode.decrastination.core.Enrichment
 import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.Invite
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Merge
+import com.thomaswcode.decrastination.core.Mine
+import com.thomaswcode.decrastination.core.SetBy
+import com.thomaswcode.decrastination.core.SubStep
+import com.thomaswcode.decrastination.core.withEnrichment
 import com.thomaswcode.decrastination.core.enriched
 import com.thomaswcode.decrastination.core.invite
 import com.thomaswcode.decrastination.core.Source
@@ -148,7 +153,7 @@ class GmailTest {
 
     /** [messages] as the task a read leaves, its text [body] (null: still to be fetched). */
     private fun stored(vararg messages: MailMessage, body: String? = "Body") =
-        read(*messages, body = body).let { (c, bodies) -> Merge.apply(emptyList(), Source.Gmail, GmailThreads.fetched(listOf(c), bodies, now, LONDON), now).tasks.single() }
+        read(*messages, body = body).let { (c, bodies) -> Merge.apply(emptyList(), Source.Gmail, GmailThreads.fetched(listOf(c), bodies, LONDON), now).tasks.single() }
 
     @Test
     fun `a conversation is one task, named by its newest message, with whoever it's with`() {
@@ -158,7 +163,7 @@ class GmailTest {
             body = "Sounds good",
         )
         val ticket = GmailThreads.conversation(listOf(message(3, "t2", 150, "Ticket", "Shop", "noreply@shop.example")), 11)
-        val tasks = GmailThreads.fetched(listOf(ticket, plans), bodies, now, LONDON)
+        val tasks = GmailThreads.fetched(listOf(ticket, plans), bodies, LONDON)
         assertEquals(listOf("t1", "t2"), tasks.map { it.sourceId })
         val thread = tasks.first()
         assertEquals("Re: Plans", thread.title)
@@ -181,7 +186,7 @@ class GmailTest {
         )
         assertTrue(note.sent)
         assertEquals("tom@example.com", note.fromAddress)
-        val task = GmailThreads.fetched(listOf(note), mapOf(note.version to GmailThreads.Body("Renew it")), now, LONDON).single()
+        val task = GmailThreads.fetched(listOf(note), mapOf(note.version to GmailThreads.Body("Renew it")), LONDON).single()
         assertEquals("true", task.extra[GmailThreads.EXTRA_SENT])
         assertEquals(10, task.sourceEffortMin)
     }
@@ -266,7 +271,7 @@ class GmailTest {
         assertEquals(listOf(conversation), read(stored("x".repeat(10_000), readTo = 10_000)))
         assertEquals(emptyList(), read(stored("x".repeat(5_000), readTo = 10_000)))
         // Read again, it's marked as read now.
-        val again = GmailThreads.fetched(listOf(conversation), mapOf(conversation.version to GmailThreads.Body("x".repeat(5_000))), now, LONDON).single()
+        val again = GmailThreads.fetched(listOf(conversation), mapOf(conversation.version to GmailThreads.Body("x".repeat(5_000))), LONDON).single()
         assertEquals("${GmailThreads.MAX_BODY_CHARS}", again.extra[GmailThreads.EXTRA_TEXT_READ_TO])
     }
 
@@ -288,7 +293,7 @@ class GmailTest {
         // A read with room for one: the newest conversation's text, never read, goes first.
         assertEquals(listOf(new), GmailThreads.toRead(listOf(new, cut), known, 1))
         // The cut one keeps its text, still marked as cut, so a later read takes it.
-        val task = GmailThreads.fetched(listOf(new, cut), known, now, LONDON).single { it.sourceId == "t2" }
+        val task = GmailThreads.fetched(listOf(new, cut), known, LONDON).single { it.sourceId == "t2" }
         assertEquals("x".repeat(4_000), task.detail)
         assertEquals("4000", task.extra[GmailThreads.EXTRA_TEXT_READ_TO])
         assertNull(task.extra[GmailThreads.EXTRA_TEXT_PENDING])
@@ -356,7 +361,7 @@ class GmailTest {
         val files = listOf(Mime.Attachment("consent-form.pdf", "application/pdf", 112_639), Mime.Attachment("Trip (final).docx", "application/msword"))
         val conversation = GmailThreads.conversation(listOf(message(1, "t1", 1, "Trip", "Mr Hughes", "hughes@school.example")), 11)
         val body = GmailThreads.Body("Sign it", attachments = files)
-        val task = Merge.apply(emptyList(), Source.Gmail, GmailThreads.fetched(listOf(conversation), mapOf(conversation.version to body), now, LONDON), now).tasks.single()
+        val task = Merge.apply(emptyList(), Source.Gmail, GmailThreads.fetched(listOf(conversation), mapOf(conversation.version to body), LONDON), now).tasks.single()
         assertEquals(files, GmailThreads.attachmentsOf(task))
         assertEquals(body, GmailThreads.knownBodies(listOf(task))[conversation.version])
         // None kept, none said.
@@ -408,7 +413,7 @@ class GmailTest {
         assertEquals(invite, GmailThreads.invite(listOf(invite.copy(summary = "Moved"), null, invite, null)))
         assertNull(GmailThreads.invite(listOf(invite, invite.copy(cancelled = true))))
         val (c, _) = read(message(1, "t1", 100, "Open evening", "School", "office@school.example"))
-        val task = Merge.apply(emptyList(), Source.Gmail, GmailThreads.fetched(listOf(c), mapOf(c.version to GmailThreads.Body("Come along", invite = invite)), now, LONDON), now).tasks.single()
+        val task = Merge.apply(emptyList(), Source.Gmail, GmailThreads.fetched(listOf(c), mapOf(c.version to GmailThreads.Body("Come along", invite = invite)), LONDON), now).tasks.single()
         assertEquals(Kind.Admin to invite.start, task.kind to task.dueAt)
         assertEquals(invite, task.invite)
         assertTrue(task.hardDeadline)
@@ -419,5 +424,36 @@ class GmailTest {
         assertEquals(Kind.Admin to invite.start, task.copy(enrichment = reading).enriched().let { it.kind to it.dueAt })
         val reply = reading.copy(kind = Kind.Admin, deadline = Fixtures.at("2026-10-12T23:59"))
         assertEquals(Kind.Admin to Fixtures.at("2026-10-12T23:59"), task.copy(enrichment = reply).enriched().let { it.kind to it.dueAt })
+    }
+
+    @Test
+    fun `an unchanged email polled again keeps its own subject under your rename, and its reading`() {
+        val now = Fixtures.at("2026-10-08T23:00")
+        val conversation = GmailThreads.conversation(listOf(MailMessage(1, "message-1", "123", now, "Original subject", "Sender", "sender@example.com", false)), 11)
+        val bodies = mapOf(conversation.version to GmailThreads.Body("Please return the form."))
+        val original = Merge.apply(emptyList(), Source.Gmail, GmailThreads.fetched(listOf(conversation), bodies, LONDON), now).tasks.single()
+        val renamed = original.copy(mine = Mine(title = SetBy("My short title", By.You))).enriched()
+        val hash = Enrichments.inputHash(renamed)
+        val cached = GmailThreads.stored(renamed, conversation.uids, conversation.uidValidity)!!
+        val polled = Merge.apply(listOf(renamed), Source.Gmail, GmailThreads.fetched(listOf(cached), bodies, LONDON), now).tasks.single()
+        assertEquals("Original subject", polled.sourceValues?.title)
+        assertEquals(hash, Enrichments.inputHash(polled))
+        // The rename taken back: the email's own subject again.
+        assertEquals("Original subject", polled.copy(mine = Mine()).enriched().title)
+    }
+
+    @Test
+    fun `a quoted deadline gone by stays, with the reading and its steps, as the email is read as of the day it came`() {
+        val before = Fixtures.at("2026-10-28T18:00")
+        val after = Fixtures.at("2026-10-29T08:00")
+        val email = Conversation("123", listOf(7), 1, "Return the form", "456", before, "Example", "office@example.com", false)
+        val bodies = mapOf(email.version to GmailThreads.Body("Please return the form by 28 October 2026."))
+        val first = Merge.apply(emptyList(), Source.Gmail, GmailThreads.fetched(listOf(email), bodies, LONDON), before).tasks.single()
+        val deadline = first.dueAt!!
+        val read = first.withEnrichment(Enrichment(Enrichments.inputHash(first), "a model", before, deadline = deadline, deadlineQuoted = true, effortMin = 30, subSteps = listOf(SubStep("Fill the form", 15), SubStep("Send the form", 15))))
+        val synced = Merge.apply(listOf(read), Source.Gmail, GmailThreads.fetched(listOf(email), bodies, LONDON), after).tasks.single()
+        assertEquals(deadline, synced.dueAt)
+        assertEquals(Enrichments.inputHash(read), Enrichments.inputHash(synced))
+        assertEquals(2, synced.subSteps.size)
     }
 }
