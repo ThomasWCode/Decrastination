@@ -470,8 +470,8 @@ object InstructionRules {
     private val DAY_TIME = DateTimeFormatter.ofPattern("EEE d MMM HH:mm", Locale.UK)
 
     /**
-     * [change] in words, as you check it before applying ([tasks]: to name them, and say what a
-     * date was before).
+     * [change] in words, as it's said once made, with its Undo (D-60, D-67) ([tasks]: to name them, and say
+     * what a date was before).
      */
     fun describe(change: Change, tasks: Map<String, TaskItem>, zone: ZoneId): String {
         fun title(id: String?) = "“" + (id?.let { tasks[it]?.title } ?: "a task no longer listed") + "”"
