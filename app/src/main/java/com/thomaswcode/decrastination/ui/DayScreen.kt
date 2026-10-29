@@ -337,6 +337,11 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
         settling = scope.launch { animate(fold.coerceAtMost(most), to, velocity) { value, _ -> fold = value.coerceIn(0f, most) } }
         return true
     }
+    // The fold set outright (the line's tap, TalkBack's Fold it), taken from a settling under way, which would set it back.
+    fun foldTo(to: Float) {
+        settling?.cancel()
+        fold = to
+    }
     val cardFolding = remember { Folding({ fold }, ::foldBy, ::settle) }
     // The day's header dragged, or flicked, moves the fold itself: up folds the card, down pushes the hours down.
     val pushing = rememberDraggableState { delta -> foldBy(delta) }
@@ -378,7 +383,7 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
                         graph, activity, plan, zone, photo, ::messageOf, say,
                         empty = if (unread.isNotEmpty()) "Nothing planned yet: ${unread.joinToString { it.label }} not read yet." else "No work is planned. New tasks appear as the sources are read.",
                         // For TalkBack, folded by an action: while the card fills the Day, the grid has no room to be reached.
-                        actions = listOf(CustomAccessibilityAction("Fold it") { fold = Float.MAX_VALUE; true }),
+                        actions = listOf(CustomAccessibilityAction("Fold it") { foldTo(Float.MAX_VALUE); true }),
                     )
                 }
                 if (folded) {
@@ -390,7 +395,7 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
                         color = MaterialTheme.colorScheme.primary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.fillMaxWidth().height(40.dp).clickable(enabled = !roomless || doing != null) { if (roomless) sheetFor = doing?.key else fold = 0f }.padding(horizontal = 16.dp, vertical = 10.dp),
+                        modifier = Modifier.fillMaxWidth().height(40.dp).clickable(enabled = !roomless || doing != null) { if (roomless) sheetFor = doing?.key else foldTo(0f) }.padding(horizontal = 16.dp, vertical = 10.dp),
                     )
                     // Folded as the Day opens, the card's measured once out of sight, so the header dragged down unfolds it under
                     // the finger.
