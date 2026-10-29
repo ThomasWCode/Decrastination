@@ -59,6 +59,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.graphics.createBitmap
 import androidx.core.graphics.set
 import androidx.core.net.toUri
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.qrcode.QRCodeWriter
@@ -112,6 +113,11 @@ fun ProtectionPanel(graph: AppGraph, activity: ComponentActivity) {
     val connected by FocusService.connected.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     var refresh by remember { mutableIntStateOf(0) }
+    // Looked at again on coming back (a channel switched on in Android's settings, a shortcut changed), as Setup is (U-04).
+    LifecycleResumeEffect(Unit) {
+        refresh++
+        onPauseOrDispose { }
+    }
     // Kept through the screen being recreated (turned): the wizard isn't left half-done unseen.
     var step by rememberSaveable { mutableStateOf(Step.None) }
     var codeFor by remember { mutableStateOf<CodeTarget?>(null) }
