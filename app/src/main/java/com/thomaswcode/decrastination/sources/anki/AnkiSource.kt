@@ -5,6 +5,7 @@ import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.os.RemoteException
 import androidx.core.net.toUri
 import com.thomaswcode.decrastination.core.AnkiRules
 import com.thomaswcode.decrastination.core.Deck
@@ -54,10 +55,20 @@ object AnkiProvider {
      * Cards in [deckName] never studied, by Anki's own search. The provider searches notes, so
      * each side is counted apart (`card:1`, the first template; `card:2`, a reversed card's), and a
      * note learnt both ways counts twice, as Anki shows it twice. The provider answers null for none.
+     * Asked through an unstable client, so AnkiDroid's process dying mid-count is a [RemoteException], the read
+     * failed, rather than a null read as none left, which would finish a deck's homework for good (I-03); a stable
+     * client would take this app down with it.
      */
     fun unseenCards(resolver: ContentResolver, deckName: String): Int {
         val deck = "deck:\"${deckName.replace("\"", "\\\"")}\""
-        return (1..MAX_TEMPLATES).sumOf { side -> resolver.query(notesUri, arrayOf("_id"), "$deck is:new card:$side", null, null)?.use { it.count } ?: 0 }
+        val client = resolver.acquireUnstableContentProviderClient(notesUri) ?: throw SourceUnavailable("AnkiDroid isn't answering (is it installed?)")
+        try {
+            return (1..MAX_TEMPLATES).sumOf { side -> client.query(notesUri, arrayOf("_id"), "$deck is:new card:$side", null, null)?.use { it.count } ?: 0 }
+        } catch (e: RemoteException) {
+            throw IOException("AnkiDroid stopped while its cards were counted", e)
+        } finally {
+            client.close()
+        }
     }
 
     /** The most cards a note in a vocabulary deck makes: one a side, and a spare. */
@@ -127,8 +138,10 @@ class AnkiSource(private val context: Context) : TaskSource {
         val count = { deck: Deck -> unseen.getOrPut(deck.id) { unseenAsked.get(deck, context.now) { AnkiProvider.unseenCards(resolver, deck.name) } } }
         val textbook = context.settings.ankiTextbook
         val homework = AnkiRules.homeworkDecks(decks, textbook, context.known, count, context.now, context.zone, context.ankiSecondsPerCard)
-        val homeworkDecks = homework.filter { !it.done }.mapNotNull { it.extra[AnkiRules.EXTRA_DECK_ID]?.toLongOrNull() }.toSet()
-        val reviewsOnly = AnkiRules.homeworkDueSoon(homework, context.now, context.zone)
+        // What the day's quota and its reviews-only switch go by: the decks an assignment you haven't marked not a task asks for (I-04).
+        val asked = AnkiRules.asked(homework, context.known)
+        val homeworkDecks = asked.filter { !it.done }.mapNotNull { it.extra[AnkiRules.EXTRA_DECK_ID]?.toLongOrNull() }.toSet()
+        val reviewsOnly = AnkiRules.homeworkDueSoon(asked, context.now, context.zone)
         val open = context.known.filter { it.source == Source.Anki && it.isOpen }.associate { it.sourceId to it.extra }
         val (quota, day) = AnkiRules.quota(decks, textbook, context.ankiDay, context.now, context.zone, context.settings.ankiDeadlineMin, homeworkDecks, reviewsOnly, context.ankiSecondsPerCard, open, count)
         SourceRead(items = listOfNotNull(quota) + homework, ankiDay = day, deckTopics = AnkiRules.topics(decks, textbook))
