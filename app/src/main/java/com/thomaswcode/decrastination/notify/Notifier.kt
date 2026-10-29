@@ -87,7 +87,22 @@ class Notifier(
         if (tray.allowed() && !held(id, tag, notification)) tray.notify(id.id, tag, notification)
     }
 
-    override fun cancel(id: NoticeId, tag: String?) = tray.cancel(id.id, tag)
+    /**
+     * [id]'s notification of [tag] taken away: from the tray, and, held back for the morning (LR-07), from
+     * what the briefing posts, so one out of date (a key mended, a task finished) doesn't come back then.
+     * Ordered with a hold still being written ([held]): one decided before this cancel isn't written after it.
+     */
+    override fun cancel(id: NoticeId, tag: String?) {
+        tray.cancel(id.id, tag)
+        val key = id.id to tag
+        synchronized(counting) { cancelled[key] = ++decisions }
+        if (runtime.value.heldNotifications.any { it.id == id.id && it.tag == tag }) {
+            scope.launch { runtime.update { s -> s.copy(heldNotifications = s.heldNotifications.filterNot { it.id == id.id && it.tag == tag }) } }
+        }
+    }
+
+    /** The tags of [id]'s notifications held back for the morning (LR-07). */
+    fun heldTags(id: NoticeId): List<String?> = runtime.value.heldNotifications.filter { it.id == id.id }.map { it.tag }
 
     /** Every notification of the app's gone (the debug `clean-up`). */
     fun cancelAll() = tray.cancelAll()
@@ -111,6 +126,12 @@ class Notifier(
     /** Today's count as this run has it: ahead of the file, which is written after. */
     private var count: Pair<String, Int>? = null
 
+    /** Each hold and cancel numbered as it's decided, under [counting], so a hold's write knows a cancel came after it. */
+    private var decisions = 0L
+
+    /** The number of the last cancel of each id and tag. */
+    private val cancelled = HashMap<Pair<Int, String?>, Long>()
+
     /**
      * Whether [notification] is held back (LR-07): one of the routine channels' in quiet hours, or
      * past today's ceiling, decided and counted in one step. Held, its words, tap and buttons are
@@ -126,16 +147,24 @@ class Notifier(
         val quiet = BlockPolicy.isQuiet(now, clock.zone(), settings.value)
         val goes: Boolean
         val sent: Int
+        val decided: Long
         synchronized(counting) {
             val before = count?.takeIf { it.first == date }?.second ?: (runtime.value.notifiedToday[date] ?: 0)
             goes = NotifyRules.goesNow(channel, before, quiet)
             sent = if (goes) before + 1 else before
             count = date to sent
+            decided = ++decisions
         }
         scope.launch {
             runtime.update { s ->
-                if (goes) s.copy(notifiedToday = mapOf(date to maxOf(sent, s.notifiedToday[date] ?: 0)))
-                else s.copy(heldNotifications = (s.heldNotifications.filterNot { it.id == id.id && it.tag == tag } + HeldNotification(channel, id.id, tag, now, read.title, read.text, read.taps)).takeLast(NotifyRules.MAX_HELD))
+                if (goes) {
+                    s.copy(notifiedToday = mapOf(date to maxOf(sent, s.notifiedToday[date] ?: 0)))
+                } else if (synchronized(counting) { (cancelled[id.id to tag] ?: 0L) > decided }) {
+                    // Cancelled since it was held: not kept for the morning.
+                    s
+                } else {
+                    s.copy(heldNotifications = (s.heldNotifications.filterNot { it.id == id.id && it.tag == tag } + HeldNotification(channel, id.id, tag, now, read.title, read.text, read.taps)).takeLast(NotifyRules.MAX_HELD))
+                }
             }
         }
         return !goes

@@ -109,6 +109,28 @@ class NotifierTest {
         assertEquals(listOf<String?>("teams:b"), notifier.showing(NoticeId.ModelDropped))
     }
 
+    @Test
+    fun `one held back and then cancelled doesn't come back at the briefing, whether its hold was written yet or not, and one held again after does`() {
+        clock.time = Fixtures.at("2026-10-14T23:30")
+        notifier.post(NoticeId.ModelKey, notice(Channels.MODEL, "Claude has stopped working"))
+        settle()
+        assertEquals(listOf<String?>(null), notifier.heldTags(NoticeId.ModelKey))
+        notifier.cancel(NoticeId.ModelKey)
+        settle()
+        assertTrue(runtime.value.heldNotifications.isEmpty())
+        // Cancelled before its hold is written: the write, coming after, keeps nothing.
+        notifier.post(NoticeId.ModelDropped, notice(Channels.MODEL), tag = "teams:a")
+        notifier.cancel(NoticeId.ModelDropped, "teams:a")
+        settle()
+        assertTrue(runtime.value.heldNotifications.isEmpty())
+        // Held again since its cancel: kept for the morning.
+        notifier.post(NoticeId.ModelDropped, notice(Channels.MODEL), tag = "teams:a")
+        settle()
+        clock.time = Fixtures.at("2026-10-15T07:00")
+        runBlocking { notifier.postHeld() }
+        assertEquals(listOf<Pair<Int, String?>>(NoticeId.ModelDropped.id to "teams:a"), tray.posted)
+    }
+
     /** A tray keeping a list: what's posted and showing, by id and tag. */
     private class FakeTray : Notifier.Tray {
         var allowed = true

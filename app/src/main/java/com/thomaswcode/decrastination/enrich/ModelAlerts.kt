@@ -68,11 +68,13 @@ object ModelAlerts {
 
     /**
      * Withdraws the warnings whose task no longer has a dropped plan: done or gone (a sync, which the
-     * enrichment loop never sees again), or changed or planned since. Those still standing stay.
+     * enrichment loop never sees again), or changed or planned since; showing, or held back for the morning
+     * (LR-07). Those still standing stay.
      */
     fun withdrawExcept(context: Context, standing: Set<String>) {
         val notifier = AppGraph.get(context).notifier
-        notifier.showing(NoticeId.ModelDropped).filter { it != null && it !in standing }.forEach { notifier.cancel(NoticeId.ModelDropped, it) }
+        (notifier.showing(NoticeId.ModelDropped) + notifier.heldTags(NoticeId.ModelDropped)).distinct()
+            .filter { it != null && it !in standing }.forEach { notifier.cancel(NoticeId.ModelDropped, it) }
     }
 
     private fun tab(context: Context, tab: Int): Intent =
