@@ -7,6 +7,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.speech.RecognizerIntent
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -556,7 +557,11 @@ class AskActivity : ComponentActivity() {
                         seenBySending()
                         graph.scope.launch {
                             // The box's own reply to his nudge takes none of its subject: your words go to him as they are.
-                            if (!graph.conversation.ask(text, subject, replyTo = (replying ?: quiet)?.id, takeItsSubject = replying != null)) {
+                            // One whose write failed (a full disk) is as one not sent: back in the box, to send again (U-05).
+                            val sent = runCatching { graph.conversation.ask(text, subject, replyTo = (replying ?: quiet)?.id, takeItsSubject = replying != null) }
+                                .onFailure { Log.w(AppGraph.TAG, "Your message couldn't be kept: it's back in the box", it) }
+                                .getOrDefault(false)
+                            if (!sent) {
                                 draft = text
                                 about.value = subject
                                 screen.replyingTo = replying
@@ -971,8 +976,9 @@ private fun Time(message: ChatMessage, zone: ZoneId, waiting: Boolean = false, o
  */
 @Composable
 private fun RateDialog(message: ChatMessage, up: Boolean, onDismiss: () -> Unit, onSave: (Boolean?, String, String) -> Unit) {
-    var words by remember { mutableStateOf(message.feedback) }
-    var preferred by remember { mutableStateOf(message.preferred) }
+    // Kept through a turn of the phone, as the chat's box is (U-03).
+    var words by rememberSaveable(message.id) { mutableStateOf(message.feedback) }
+    var preferred by rememberSaveable(message.id) { mutableStateOf(message.preferred) }
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = { Icon(painterResource(if (up) R.drawable.ic_thumb_up else R.drawable.ic_thumb_down), contentDescription = null) },
@@ -1132,8 +1138,8 @@ private const val DOT_STEP_MS = 200
 private fun Claudes(graph: AppGraph, screen: ChatScreenState, message: ChatMessage, tasks: Map<String, TaskItem>, flash: Boolean, now: Long, zone: ZoneId, onEdit: (String, String) -> Unit, live: Boolean, waiting: Boolean = false, onMarkAnswered: (() -> Unit)? = null, onReply: () -> Unit) {
     val folds = ChatSummary.folds(message)
     val open = message.id in screen.open
-    // Your rating of it being written (D-119): the thumb chosen, null while it isn't.
-    var rating by remember { mutableStateOf<Boolean?>(null) }
+    // Your rating of it being written (D-119): the thumb chosen, null while it isn't; kept through a turn of the phone (U-03).
+    var rating by rememberSaveable(message.id) { mutableStateOf<Boolean?>(null) }
     rating?.let { up ->
         RateDialog(message, up, onDismiss = { rating = null }) { thumb, words, preferred ->
             rating = null
