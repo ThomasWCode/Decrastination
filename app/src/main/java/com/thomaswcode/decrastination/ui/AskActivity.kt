@@ -8,6 +8,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.speech.RecognizerIntent
 import android.util.Log
+import java.util.UUID
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -557,10 +558,20 @@ class AskActivity : ComponentActivity() {
                         seenBySending()
                         graph.scope.launch {
                             // The box's own reply to his nudge takes none of its subject: your words go to him as they are.
-                            // One whose write failed (a full disk) is as one not sent: back in the box, to send again (U-05).
-                            val sent = runCatching { graph.conversation.ask(text, subject, replyTo = (replying ?: quiet)?.id, takeItsSubject = replying != null) }
-                                .onFailure { Log.w(AppGraph.TAG, "Your message couldn't be kept: it's back in the box", it) }
-                                .getOrDefault(false)
+                            // One whose write failed (a full disk) is as one not sent: back in the box, to send again (U-05). One
+                            // the chat kept before a later write failed went: its answer asked for, not sent again from the box.
+                            val id = UUID.randomUUID().toString()
+                            val sent = runCatching { graph.conversation.ask(text, subject, id = id, replyTo = (replying ?: quiet)?.id, takeItsSubject = replying != null) }
+                                .getOrElse { error ->
+                                    if (graph.chat.value.messages.any { it.id == id }) {
+                                        Log.w(AppGraph.TAG, "Your message was kept, a write after it failed: its answer asked for", error)
+                                        graph.conversation.answerChat()
+                                        true
+                                    } else {
+                                        Log.w(AppGraph.TAG, "Your message couldn't be kept: it's back in the box", error)
+                                        false
+                                    }
+                                }
                             if (!sent) {
                                 if (draft.isEmpty()) {
                                     draft = text

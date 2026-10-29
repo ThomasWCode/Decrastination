@@ -1,5 +1,6 @@
 package com.thomaswcode.decrastination.ui
 
+import android.util.Log
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -333,7 +334,7 @@ internal object FormSaves {
     fun start(scope: CoroutineScope, id: String, save: suspend () -> Boolean) {
         results.update { it + (id to null) }
         scope.launch {
-            val kept = runCatching { save() }.getOrDefault(false)
+            val kept = runCatching { save() }.onFailure { Log.w(AppGraph.TAG, "The task couldn't be saved: Save is back", it) }.getOrDefault(false)
             results.update { it + (id to kept) }
         }
     }
