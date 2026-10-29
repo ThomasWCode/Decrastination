@@ -3,6 +3,7 @@ package com.thomaswcode.decrastination.ui
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Box
@@ -44,9 +45,10 @@ import com.thomaswcode.decrastination.sync.SyncWorker
 import com.thomaswcode.decrastination.core.GmailWrites
 
 /**
- * The app's screens: the plan, the tasks every source lists, and the stats. Setup, settings,
- * protection and the week's check-in are out of the way in the menu, which shows a dot when
- * something there needs you.
+ * The app's screens over the chat, its home (D-121): the plan, the tasks every source lists, and the
+ * stats, opened from the chat's Plan button. Setup, settings, protection and the week's check-in are
+ * out of the way in the menu, which shows a dot when something there needs you. The launcher's entry
+ * still, as the home-screen icon names it: a launcher start hands over to the chat ([Home.start]).
  */
 class MainActivity : ComponentActivity() {
 
@@ -56,9 +58,30 @@ class MainActivity : ComponentActivity() {
     /** A task to open in Tasks ([EXTRA_TASK]), till Tasks has opened it. */
     private val askedTask = mutableStateOf<String?>(null)
 
+    /** Back at the task's root opens the chat in Day's place (Q116); over the chat, it closes Day as usual. */
+    private val backToChat = object : OnBackPressedCallback(false) {
+        override fun handleOnBackPressed() {
+            startActivity(AskActivity.intent(this@MainActivity))
+            finish()
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        // The launcher's start hands over to the chat before anything's drawn, so Day never shows first (D-121).
+        val start = Home.start(
+            launcher = intent.action == Intent.ACTION_MAIN && intent.hasCategory(Intent.CATEGORY_LAUNCHER),
+            root = isTaskRoot,
+            restored = savedInstanceState != null,
+            asked = intent.hasExtra(EXTRA_TAB) || intent.hasExtra(EXTRA_TASK),
+        )
+        if (start != Home.Start.Stay) {
+            if (start == Home.Start.Chat) startActivity(AskActivity.intent(this).addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION))
+            finish()
+            return
+        }
+        onBackPressedDispatcher.addCallback(this, backToChat)
         val graph = AppGraph.get(this)
         if (savedInstanceState == null) {
             openSetupIfAsked(intent)
@@ -76,6 +99,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        backToChat.isEnabled = Home.backOpensChat(isTaskRoot)
         // Back from notification settings, say: alerts that couldn't be shown before can be now.
         AppGraph.get(this).gateway.reconcileAlerts()
     }
@@ -166,21 +190,24 @@ class MainActivity : ComponentActivity() {
     }
 
     companion object {
-        /** The tab to open on: [TAB_TASKS] from a dropped plan's alert; or [OPEN_SETUP], Setup over the plan, from a protection or key alert. */
+        /**
+         * The tab to open on: [TAB_TASKS] from a dropped plan's alert; or [OPEN_SETUP], Setup over the plan, from a
+         * protection or key alert. Asked for, a launcher start stays here rather than going to the chat ([Home.start]).
+         */
         const val EXTRA_TAB = "tab"
 
         /** A task to open in Tasks, by id: one of your own's Open. */
         const val EXTRA_TASK = "task"
         const val TAB_TASKS = 1
         const val OPEN_SETUP = 3
-        /** Day is when, Work is what (UI-17). */
+        /** Day is when, Work is what (UI-17), over the chat, the app's home. */
         private val TABS = listOf("Day", "Work", "Stats")
 
         /**
-         * The menu (UI-18): the week, the reviews (LR-01), and Settings, which has every page Setup and
-         * Protection had. Setup itself is the attention mark's.
+         * The menu (UI-18), on Day's bar and under the chat's own items: the week, the reviews (LR-01), and
+         * Settings, which has every page Setup and Protection had. Setup itself is the attention mark's.
          */
-        private val MENU = listOfNotNull(
+        internal val MENU = listOfNotNull(
             "This week" to CheckInActivity::class.java,
             "Reviews" to ReviewsActivity::class.java,
             "Settings" to SettingsActivity::class.java,
