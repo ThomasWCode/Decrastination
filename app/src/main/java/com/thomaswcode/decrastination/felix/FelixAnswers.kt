@@ -34,12 +34,12 @@ object FelixAnswers {
     private data class Written(val feeling: String = "", val texts: List<String> = emptyList(), val send: Int = 1, val replies: List<String> = emptyList(), val nextCheckMin: Int? = null, val memories: List<Given> = emptyList())
 
     /**
-     * [text] as his answer, within bounds; null when it isn't one. His message is the text he chose to send, or, chosen
-     * past the three, the first; the others kept as [FelixAnswer.unsent] (D-120). All three empty, he'd rather not write.
+     * [text] as his answer, within bounds; null when it isn't one. His message is the text he chose to send ([chosen]); the
+     * others kept as [FelixAnswer.unsent] (D-120). All three empty, he'd rather not write.
      */
     fun parse(text: String, maxMessage: Int = MAX_MESSAGE): FelixAnswer? {
         val given = runCatching { json.decodeFromString(Written.serializer(), text) }.getOrNull() ?: return null
-        val chosen = (given.send - 1).takeIf { it in given.texts.indices } ?: 0
+        val chosen = chosen(given)
         val answer = FelixAnswer(
             message = given.texts.getOrNull(chosen).orEmpty(), replies = given.replies, nextCheckMin = given.nextCheckMin, memories = given.memories, feeling = given.feeling,
             unsent = given.texts.filterIndexed { i, _ -> i != chosen },
@@ -50,8 +50,19 @@ object FelixAnswers {
     /** How long the text he chose in [text] is as he wrote it, before it's held to its room ([message]): 0 when it isn't one. */
     fun messageLength(text: String): Int = runCatching {
         val given = json.decodeFromString(Written.serializer(), text)
-        given.texts.getOrNull((given.send - 1).takeIf { it in given.texts.indices } ?: 0).orEmpty().let(::lines).length
+        given.texts.getOrNull(chosen(given)).orEmpty().let(::lines).length
     }.getOrDefault(0)
+
+    /**
+     * Which of [given]'s texts is his message, by index: the one he chose to send, where it has words; else (chosen past the
+     * three, or a blank one beside others with words, which is a slip, not his choice not to write) the first with words;
+     * with none, the first, empty.
+     */
+    private fun chosen(given: Written): Int {
+        val sent = given.send - 1
+        if (sent in given.texts.indices && given.texts[sent].isNotBlank()) return sent
+        return given.texts.indexOfFirst { it.isNotBlank() }.takeIf { it >= 0 } ?: 0
+    }
 
     /**
      * The steps he rebalanced in [text], a morning's answer (D-110), every one: each is checked against what he

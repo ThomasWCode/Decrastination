@@ -28,7 +28,7 @@ object Story {
     /** The days the diary has a line each for, before today. */
     const val DAYS = 7
 
-    /** A check-in as old as this, or older, isn't this week's. */
+    /** A check-in from before the start of the day this many days back isn't this week's: Sunday's is told him till the next Sunday's, a day's slack beside it. */
     private const val CHECK_IN_DAYS = 8L
 
     private val CLOCK = DateTimeFormatter.ofPattern("HH:mm", Locale.UK)

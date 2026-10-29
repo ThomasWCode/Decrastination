@@ -215,6 +215,10 @@ class FelixTest {
         val chosen = FelixAnswers.parse(three)!!
         assertEquals("two gone tonight", chosen.message)
         assertEquals(listOf("maths went too\nphysics is on at 19:40", "you said 7 for the maths"), chosen.unsent)
+        // Chosen a blank one beside others with words: a slip, so the first with words, not a silence.
+        val slip = FelixAnswers.parse("""{"texts":["","physics went by","what happened"],"send":1,"replies":[]}""")!!
+        assertEquals("physics went by" to listOf("what happened"), slip.message to slip.unsent)
+        assertEquals("physics went by".length, FelixAnswers.messageLength("""{"texts":["","physics went by"],"send":1}"""))
         // Chosen past the three: the first. Lines past the second joined onto it; empty lines gone.
         val past = FelixAnswers.parse("""{"texts":["one\n\n two \nthree","b"],"send":7,"replies":[]}""")!!
         assertEquals("one\ntwo, three" to listOf("b"), past.message to past.unsent)
