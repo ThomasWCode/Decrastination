@@ -217,7 +217,7 @@ class FelixTest {
         assertEquals(listOf("maths went too\nphysics is on at 19:40", "you said 7 for the maths"), chosen.unsent)
         // Chosen past the three: the first. Lines past the second joined onto it; empty lines gone.
         val past = FelixAnswers.parse("""{"texts":["one\n\n two \nthree","b"],"send":7,"replies":[]}""")!!
-        assertEquals("one\ntwo three" to listOf("b"), past.message to past.unsent)
+        assertEquals("one\ntwo, three" to listOf("b"), past.message to past.unsent)
         // A text past its room ends at its first line's end where that leaves half the room used: the second text left out.
         val first = "word ".repeat(30).trim()
         assertEquals(first, FelixAnswers.message(first + "\n" + "more ".repeat(40).trim(), FelixAnswers.MAX_MESSAGE))

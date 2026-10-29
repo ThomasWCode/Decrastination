@@ -80,11 +80,11 @@ object FelixAnswers {
 
     /**
      * [text] as at most [MAX_TEXTS] lines, each a text of its own (D-120): each line trimmed, the empty ones gone, and
-     * any past the second joined onto it, so a look is never more than two texts.
+     * any past the second joined onto it after a comma, so a look is never more than two texts and still reads.
      */
     fun lines(text: String): String {
         val lines = text.lines().map { it.trim() }.filter { it.isNotEmpty() }
-        return (lines.take(MAX_TEXTS - 1) + listOfNotNull(lines.drop(MAX_TEXTS - 1).joinToString(" ").takeIf { it.isNotEmpty() })).joinToString("\n")
+        return (lines.take(MAX_TEXTS - 1) + listOfNotNull(lines.drop(MAX_TEXTS - 1).joinToString(", ").takeIf { it.isNotEmpty() })).joinToString("\n")
     }
 
     /** The texts a look of his is, at most (D-120): one thought each, the second for a second thing. */
