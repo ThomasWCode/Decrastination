@@ -270,6 +270,9 @@ class OwnTaskRulesTest {
         // Steps that already add up to the total are kept as they are.
         assertEquals(listOf(60, 2), shareOut(62, listOf(60, 2)))
         assertEquals(listOf(10, 10, 10), shareOut(30, listOf(10, 10, 10)))
+        // Raised, still in proportion: a one-minute step grows with the rest.
+        assertEquals(listOf(10, 20), shareOut(30, listOf(1, 2)))
+        assertEquals(listOf(10, 20, 30), shareOut(60, listOf(1, 2, 3)))
     }
 
     @Test

@@ -353,27 +353,28 @@ fun TaskItem.trimmed(bulky: Set<String>): TaskItem = copy(detail = "", enrichmen
 
 /**
  * [total] minutes shared over [parts] in proportion, in whole minutes that add up to exactly
- * [total]. Each gets its one minute first, and the rest is shared by what each has past its first
- * (all alike where none has more), the odd minutes going to the parts with most left over: so a short
- * part beside a long one isn't given a minute the total doesn't have, and parts that already add up to
- * [total] are kept as they are. A total smaller than the parts' number would come to more than it: it's
- * refused where it's given ([OwnTaskRules.minutesFor]), and each is given one. Your minutes over a task's steps.
+ * [total]: the odd minutes go to the parts with most left over. Each gets at least one, and the
+ * minutes that takes are taken back from the largest shares, so a short part beside a long one isn't
+ * given a minute the total doesn't have. A total smaller than the parts' number would come to more
+ * than it: it's refused where it's given ([OwnTaskRules.minutesFor]), and each is given one. Your
+ * minutes over a task's steps.
  */
 fun shareOut(total: Int, parts: List<Int>): List<Int> {
-    if (parts.isEmpty()) return emptyList()
+    val sum = parts.sum()
+    if (sum <= 0) return parts.map { 1 }
     if (total <= parts.size) return parts.map { 1 }
-    val weights = parts.map { (it - 1).coerceAtLeast(0) }.let { w -> if (w.sum() > 0) w else parts.map { 1 } }
-    val sum = weights.sum()
-    val rest = total - parts.size
-    val exact = weights.map { it.toDouble() * rest / sum }
+    val exact = parts.map { it.toDouble() * total / sum }
     val whole = exact.map { floor(it).toInt() }.toMutableList()
-    var odd = rest - whole.sum()
+    var odd = total - whole.sum()
     for (i in exact.indices.sortedByDescending { exact[it] - whole[it] }) {
         if (odd <= 0) break
         whole[i]++
         odd--
     }
-    return whole.map { it + 1 }
+    // At least a minute each, taken back from the largest, one at a time.
+    val shares = whole.map { it.coerceAtLeast(1) }.toMutableList()
+    repeat(shares.sum() - total) { shares[shares.indices.maxBy { shares[it] }]-- }
+    return shares
 }
 
 /**
