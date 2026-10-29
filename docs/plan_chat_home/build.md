@@ -1,6 +1,6 @@
 # Building it (4.9.0)
 
-How [the plan](README.md) is built: the steps in order, each a commit, then the tests, the docs and the phone check. Branch `v4.9.0` from `main` once #150 (4.8.0) is merged; `versionCode` 89, `versionName` "4.9.0" in `app/build.gradle.kts`; PR titled "4.9.0: the app opens on the chat". About 200 lines of Kotlin in eight files, and no store, prompt, schema or golden changed.
+How [the plan](README.md) is built: the steps in order, each a commit, then the tests, the docs and the phone check. Branch `v4.9.0` from `main`, which has 4.8.0 (#150) merged; `versionCode` 89, `versionName` "4.9.0" in `app/build.gradle.kts`; PR titled "4.9.0: the app opens on the chat". About 200 lines of Kotlin in eight files, and no store, prompt, schema or golden changed.
 
 ## The steps
 
@@ -41,7 +41,7 @@ object Home {
 ### 2. The launcher hands over (`MainActivity`)
 
 - In `onCreate`, before `AppGraph.get`, `openSetupIfAsked` (which takes `EXTRA_TAB` off the intent) and `setContent`: `Home.start(intent.action == Intent.ACTION_MAIN && intent.hasCategory(Intent.CATEGORY_LAUNCHER), isTaskRoot, savedInstanceState != null, intent.hasExtra(EXTRA_TAB) || intent.hasExtra(EXTRA_TASK))`.
-  - On `Chat`: start `AskActivity.intent(this)`, then `finish()`, with no transition (`overrideActivityTransition(OVERRIDE_TRANSITION_OPEN, 0, 0)`), and return.
+  - On `Chat`: start `AskActivity.intent(this).addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)`, then `finish()`, and return. The flag works from API 1, so it suits `minSdk` 26. `overrideActivityTransition` needs API 34, and its `OPEN` override would set this activity's own opening, not the chat's.
   - On `Leave`: `finish()` and return.
   - On `Stay`: go on as now.
 - Back: an `OnBackPressedCallback` added in `onCreate`. While `Home.backOpensChat(isTaskRoot)` holds, it starts `AskActivity.intent(this)` and finishes; otherwise it's disabled and Back closes Day as now. A sheet, a dialog or a menu open over Day takes Back itself, in its own window, so Back closes it first, as now.
@@ -89,9 +89,14 @@ Before this step, the chat on screen cancels his notification (`Outbox.notify` w
     - the job is cancelled;
     - the visit is read only if it's seen: `screen.paused(read = now.takeIf { chatTab && screen.seen(now) })` and `conversation.read(now)` only then;
     - `chatSeen = false`, `chatInFront = false`;
-    - for a visit that wasn't seen, `outbox.notify(now)` puts his notification back as it was (silently).
+    - a visit that wasn't seen leaves his notification alone, with no `notify`. Nothing took it away, and a call here would bring back one you'd swiped away.
   - **`showingChat`:** the same pair, for *Your changes* shown and the *Chat* tab back.
-  - **Sending:** the box's send and a reply chip call `screen.markSeen()`, set `chatSeen = true` and call `outbox.notify(now)`, so the notification goes at once.
+  - **Sending:** each of the three ways a message of yours leaves the chat calls `screen.markSeen()`, sets `chatSeen = true` and calls `outbox.notify(now)`, so the notification goes at once:
+    - the box's send;
+    - a reply chip;
+    - words handed in and sent as the chat opens: the `LaunchedEffect(words)` that sends `handed` with `sendHanded`, from the calendar's box through `sendInstruction`.
+
+    Words handed in only to go in the box (`send = false`) don't count, as nothing is sent.
 - **Nothing stored changes:** `readAt` is set as before, only later or not at all.
 
 ### 7. The icon, the version and the docs
@@ -139,7 +144,8 @@ The install kills the app, so the first launch after it is a fresh start. Each s
 3. **Where you left it.** Chat, Plan, Day, then Home, then the icon: Day. Back goes to the chat.
 4. **Felix's button on Day.** A chat opens over Day. Back returns to Day, and Back again to the home chat. Felix's button again, then that chat's Plan button: Day, with one chat under it (Back, then Back, leaves).
 5. **A task's sheet**, then *Ask Felix about it*: the chat, about the task. Back returns to the sheet.
-6. **Settings**, then Felix's button, then Plan: Day, Settings closed on the way.
+6. **Settings opened from Day,** then Felix's button, then Plan: Day, Settings closed on the way.
+6b. **Settings opened from the chat's menu,** with no Day in the task, then Felix's button, then Plan: Day opens over chat, Settings and chat (README §Decided without asking). Back walks down that stack, one screen a press.
 7. **The widget.** With the app's task gone (the owner swipes it from Recents, never `am force-stop`), a widget tap opens Day. Back opens the chat, and Back again leaves.
 8. **The chat's bar.** The Setup mark is absent while nothing needs you, and the menu lists Mark all answered, What Felix remembers, Clear the chat, then This week, Reviews, Settings and Debug.
 9. **Felix's notification.** Its tap opens the chat at its message, as before; his count on Felix's button reads 0 after it.
@@ -159,7 +165,13 @@ Afterwards:
 
 ## Risks
 
-- **A launcher that matches tasks by the root's component, not its affinity.** With `MainActivity` finished, the chat is the task's root. A launcher that looked for `MainActivity` would find no task and start a fresh one each tap, so the chat would always open, contrary to Q114. Step 3 of the phone check finds this. The fix would be to keep `MainActivity` as the task's root, finishing it only on Back, at the cost of a Day behind the chat that's never shown.
+- **A launcher that matches tasks by the root's component, not its affinity.** With `MainActivity` finished, the chat is the task's root. A launcher that looked for `MainActivity` would find no task and start a fresh one each tap, so the chat would always open, contrary to Q114.
+  - It's probably not a risk at all. By AOSP's default, a task keeps its identity, the launcher intent that made it, when its root finishes (unless `android:relinquishTaskIdentity` is set), so the launcher's tap finds it.
+  - If that holds, `Home.Start.Leave` is only the guard for a launcher or installer that starts `MainActivity` again on top. The label is probably the application's in Recents already, so dropping "Ask Claude" is harmless rather than needed.
+  - Steps 1 and 3 of the phone check settle both. The fix would be to keep `MainActivity` as the task's root, finishing it only on Back, at the cost of a Day behind the chat that's never shown.
 - **The notification's state while the chat's on screen** (step 6). Today it's simply cancelled. Kept for the first 3 seconds, every `notify` meanwhile (a message arriving, a reply from it) must keep it silent and up to date. `OutboxTest` pins the three branches; step 12 checks it on the phone.
 - **Predictive Back.** The callbacks take over Back at the root, so the system's "back to home" preview isn't shown there. That's accepted, as the chat at the root leaves anyway.
-- **The chat's `onResume` runs at every launch.** It costs nothing with nothing waiting (README §What you'll notice). With a message of yours waiting, it asks as opening the chat does now, and Claude being off, resting or capped holds it in `ModelGateway`, as it does today.
+- **The chat's `onResume` runs at every launch.** It costs nothing with nothing waiting (README §What you'll notice).
+  - With a message or a change of yours waiting, it asks Claude as opening the chat does now. Its calls are interactive, so they go through a rest (AC-04); only Claude being off or the cap holds them.
+  - So a launch during a rest, a quick pass to Day included, now asks for what you left waiting. Today that happened only when you opened the chat.
+  - It's kept in `onResume` rather than moved into the 3-second job. It's the same single call you'd make on your next look, made sooner, and your waiting words shouldn't wait on a look (Q120 is about his messages being read, not yours being answered).
