@@ -1,6 +1,6 @@
 # Screens, the blocker, protection and the widget
 
-Eleven findings, all standing; two narrower than written. Ids: max UI-, ultra UB-. The one probe, `AstraUiReviewTest` (U-01) and `ReviewUiBlockTest` (U-06), are in [evidence/](evidence/); the rest are source-traced, and none was run on the phone.
+Eleven findings, all standing; two narrower than written. Ids: max UI-, ultra UB-. The two probes, `AstraUiReviewTest` (U-01) and `ReviewUiBlockTest` (U-06), are in [evidence/](evidence/); the rest are source-traced, and none was run on the phone.
 
 ### U-01 · P1 · A subject named "No subject" crashes the Work list
 

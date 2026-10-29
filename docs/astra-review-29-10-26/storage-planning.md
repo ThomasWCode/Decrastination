@@ -1,6 +1,6 @@
 # Storage, planning, notifications and the release rehearsal
 
-Eleven findings, all confirmed against adfe71dc. Each names its reviewer ids (max R-, ultra CD-/UB-), what reproduces it, and what checking it changed. Probes are in [evidence/](evidence/): the max ones assert the behaviour wanted and fail; the ultra ones assert the behaviour seen and pass.
+Eleven findings, all confirmed against adfe71dc. Each names its reviewer ids (max R-, ultra CD-/UB-), what reproduces it, and what checking it changed. Probes are in [evidence/](evidence/): the max ones and ultra's `ReviewUiBlockTest` assert the behaviour wanted and fail; ultra's `AstraCoreDataProbeTest` asserts the behaviour seen and passes.
 
 ### S-01 · P1 · A store update cancelled during its write leaves disk and memory apart, and the next update overwrites what reached disk
 

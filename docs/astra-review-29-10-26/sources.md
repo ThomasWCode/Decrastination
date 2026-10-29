@@ -1,6 +1,6 @@
 # Sources: Gmail, Anki, and their records
 
-Seven findings: six stand (one narrower than written), one rejected. Ids: max INT-, ultra AS-/DH-. Probes in [evidence/](evidence/) assert the behaviour wanted and fail.
+Seven findings: six stand (two narrower than written), one rejected. Ids: max INT-, ultra AS-/DH-. Probes in [evidence/](evidence/) assert the behaviour wanted and fail.
 
 ### I-01 · P1 · An unchanged Gmail poll stores your rename as the email's own subject
 
@@ -39,7 +39,7 @@ Max INT-04. Reproduced: `AstraIntegrationsReviewTest` "an assignment marked not 
 
 ### I-05 · P3 · Five comments describe behaviour the code replaced
 
-Max INT-07 listed seven; five are stale, two only in their wording.
+Max INT-07 listed seven places; five are stale, and the two that said the email is the invite's event (the table's last row: four places in code comments and in DX-02) are stale only in their wording.
 
 | Where | Says | Code does |
 |---|---|---|

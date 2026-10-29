@@ -1,6 +1,6 @@
 # Scripts and local helpers
 
-Fifteen findings, all standing; four narrower than written. Three scripts are committed (`scripts/`); the twelve helpers are the git-ignored ones on this PC (`private/tools/`, `private/eval-chat/`, `private/felix-speech-review/`, `private/eval/`), reviewed from byte-identical copies. Ids: max PT-/EV-, ultra WT-. The two probes of the committed scripts are in [evidence/](evidence/) and assert the behaviour seen; the probes of the private helpers, and the copies they run, are in `evidence/private/`, git-ignored, on this PC only.
+Fifteen findings, all standing; three narrower than written (T-02, T-12, T-15), one smaller in effect than stated (T-10). Three scripts are committed (`scripts/`); the twelve helpers are the git-ignored ones on this PC (`private/tools/`, `private/eval-chat/`, `private/felix-speech-review/`, `private/eval/`), reviewed from byte-identical copies. Ids: max PT-/EV-, ultra WT-. The two probes of the committed scripts are in [evidence/](evidence/) and assert the behaviour seen; the probes of the private helpers, and the copies they run, are in `evidence/private/`, git-ignored, on this PC only.
 
 The rubric was applied to helpers as to the app: P1 destroys a backup, a fixture or data; P2 gives a wrong result you'd act on, or crashes instead of one; P3 is docs. Several P2s here are low in practice, and say so.
 

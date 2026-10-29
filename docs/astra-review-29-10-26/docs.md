@@ -1,6 +1,6 @@
 # Documentation drift
 
-Five findings: four stand, one rejected. All P3. Ids: max DOC-/INT-, ultra CD-/WT-/AS-. Each gives the wording the code supports, so a docs PR can take it as is.
+Five findings: four stand (two narrower than written, D-02 and D-04), one rejected. All P3. Ids: max DOC-/INT-, ultra CD-/WT-/AS-. Each gives the wording the code supports, so a docs PR can take it as is.
 
 ### D-01 · The storage reference's store versions are a release behind
 
