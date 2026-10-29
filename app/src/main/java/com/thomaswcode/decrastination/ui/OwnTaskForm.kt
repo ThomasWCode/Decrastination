@@ -22,9 +22,9 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -47,6 +47,10 @@ import java.time.Instant
 import java.time.LocalTime
 import java.util.UUID
 import androidx.compose.ui.draw.rotate
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
@@ -80,7 +84,12 @@ fun OwnTaskForm(graph: AppGraph, editing: TaskItem?, initial: OwnTask? = null, o
     var picking by rememberSaveable { mutableStateOf<String?>(null) }
     var problem by rememberSaveable { mutableStateOf<String?>(null) }
     var saving by rememberSaveable { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
+    // A save under way, this form's or the one before a turn of the phone: closed once it's kept, Save back if it isn't.
+    LaunchedEffect(saving) {
+        if (saving) {
+            if (FormSaves.result(id) == true) onClose() else saving = false
+        }
+    }
     val chosen = Kind.valueOf(kind)
     val event = chosen == Kind.Event
 
@@ -112,9 +121,9 @@ fun OwnTaskForm(graph: AppGraph, editing: TaskItem?, initial: OwnTask? = null, o
                         problem = OwnTaskRules.problem(made)
                         if (problem == null) {
                             saving = true
-                            scope.launch {
-                                if (onSave?.invoke(made) ?: graph.ownTasks.saveOwnTask(id, made)) onClose() else saving = false
-                            }
+                            // In the app's scope, past this form's: a turn of the phone mid-save doesn't stop it (a photo's
+                            // attaching with it), and the form made again waits for how it went (U-02).
+                            FormSaves.start(graph.scope, id) { onSave?.invoke(made) ?: graph.ownTasks.saveOwnTask(id, made) }
                         }
                     }) { Text("Save", fontWeight = FontWeight.Bold) }
                 }
@@ -309,6 +318,31 @@ private fun StepEditor(row: StepRow, first: Boolean, last: Boolean, onChange: (S
                 if (!first) FilterChip(selected = row.anyOrder, onClick = { onChange(row.copy(anyOrder = !row.anyOrder)) }, label = { Text("Any order") })
             }
         }
+    }
+}
+
+/**
+ * The task form's saves, by the task's id, run in the app's scope past the form (U-02): what each came to, true kept,
+ * false not, till the form made again after a turn of the phone has read it. None for an id means none is under way
+ * (the app was started afresh since), so the form's Save comes back.
+ */
+internal object FormSaves {
+    private val results = MutableStateFlow<Map<String, Boolean?>>(emptyMap())
+
+    /** [save] for the task [id] begun in [scope]; under way till it's done. */
+    fun start(scope: CoroutineScope, id: String, save: suspend () -> Boolean) {
+        results.update { it + (id to null) }
+        scope.launch {
+            val kept = runCatching { save() }.getOrDefault(false)
+            results.update { it + (id to kept) }
+        }
+    }
+
+    /** How [id]'s save went, once it's done (null: none was under way), let go of once read. */
+    suspend fun result(id: String): Boolean? {
+        val done = results.first { id !in it || it[id] != null }[id]
+        results.update { it - id }
+        return done
     }
 }
 
