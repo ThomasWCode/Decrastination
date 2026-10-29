@@ -179,7 +179,9 @@ import kotlinx.coroutines.withTimeoutOrNull
  * with what it's about shown over the box. Each day's date over its first message, the time under each,
  * and a divider over what's new; scrolled back, the earlier messages; a message swiped or held to reply
  * to it ([ChatScreenState], docs/spec/felix.md §The chat). Opened from his notification, it opens
- * at the message it was for; left, what's in it is read ([Conversation.read]).
+ * at the message it was for; left once it's been seen (Q120: 3 seconds on screen, a message of yours
+ * sent, or at once from his notification), what's in it is read ([Conversation.read]). The app's home
+ * (D-121): the Plan button in its bar opens Day, and Back at its task's root sends the app to the back.
  */
 class AskActivity : ComponentActivity() {
 
@@ -295,10 +297,11 @@ class AskActivity : ComponentActivity() {
         // What's unread marked for this visit, for its divider: from his notification, as it was when it
         // opened; on Your changes, once the Chat tab's shown.
         if (!openedAt && chatTab) screen.opened(graph.chat.value, graph.clock.now())
+        // From his notification, seen at once: you read it there.
+        if (openedAt) screen.markSeen()
         openedAt = false
         graph.conversation.chatInFront = chatTab
-        // His notification taken away: what it held is on the screen.
-        graph.conversation.outbox.notify(graph.clock.now())
+        if (chatTab) watchSeen()
         graph.scope.launch {
             graph.conversation.answerChat()
             // On the screen they're shown on: you're waiting on them.
@@ -309,20 +312,54 @@ class AskActivity : ComponentActivity() {
     override fun onPause() {
         super.onPause()
         val graph = AppGraph.get(this)
+        seeing?.cancel()
         graph.conversation.chatInFront = false
+        graph.conversation.chatSeen = false
         val now = graph.clock.now()
-        // Every message closed again for the next visit, its labels done with, and what it showed read.
-        screen.paused(read = now.takeIf { chatTab })
+        // Every message closed again for the next visit, its labels done with, and what it showed read, where it was seen (Q120).
+        val read = chatTab && screen.seen(now)
+        screen.paused(read = now.takeIf { read })
         // What arrived while it was on screen was seen: read up to now, so only what comes after is his notification.
-        if (chatTab) graph.scope.launch { graph.conversation.read(now) }
+        // Passed through unseen, his notification's left as it is: nothing took it away, and one swiped off stays off.
+        if (read) graph.scope.launch { graph.conversation.read(now) }
+    }
+
+    /** Counting this visit's time on screen, till it's seen ([watchSeen]). */
+    private var seeing: Job? = null
+
+    /**
+     * The chat on screen, seen once it's been there [ChatScreenState.READ_AFTER_MS], unbroken (Q120), or at once
+     * where it's marked so already ([seen]).
+     */
+    private fun watchSeen() {
+        seeing?.cancel()
+        val graph = AppGraph.get(this)
+        seeing = lifecycleScope.launch {
+            if (!screen.seen(graph.clock.now())) delay(ChatScreenState.READ_AFTER_MS)
+            seen()
+        }
+    }
+
+    /** This visit seen: his notification taken away, as what it held is on the screen, and what it shows read as it's left. */
+    private fun seen() {
+        val graph = AppGraph.get(this)
+        screen.markSeen()
+        graph.conversation.chatSeen = true
+        graph.conversation.outbox.notify(graph.clock.now())
+    }
+
+    /** A message of yours sent from here: you've answered, so you've read (Q120), whatever the time on screen. */
+    private fun seenBySending() {
+        seeing?.cancel()
+        seen()
     }
 
     /**
      * The Chat tab shown, or Your changes ([chat] false): the chat's on screen only on its tab, so what
      * arrives while the other's showing is his notification. Left for it, the chat is left as the screen
-     * is (what it showed read, every message closed again); back on it, it's opened as the screen is, at
-     * what came meanwhile, and his notification's taken away. Called before the tab changes, so the chat
-     * is drawn knowing where it opens.
+     * is (what it showed read where it was seen, every message closed again); back on it, it's opened as
+     * the screen is, at what came meanwhile, and his notification's taken away once it's seen. Called
+     * before the tab changes, so the chat is drawn knowing where it opens.
      */
     private fun showingChat(chat: Boolean) {
         if (chatTab == chat) return
@@ -333,10 +370,13 @@ class AskActivity : ComponentActivity() {
         val now = graph.clock.now()
         if (chat) {
             screen.opened(graph.chat.value, now)
-            graph.conversation.outbox.notify(now)
+            watchSeen()
         } else {
-            screen.paused(read = now)
-            graph.scope.launch { graph.conversation.read(now) }
+            seeing?.cancel()
+            graph.conversation.chatSeen = false
+            val read = screen.seen(now)
+            screen.paused(read = now.takeIf { read })
+            if (read) graph.scope.launch { graph.conversation.read(now) }
         }
     }
 
@@ -399,6 +439,8 @@ class AskActivity : ComponentActivity() {
         val words = handed.value
         LaunchedEffect(words) {
             if (words != null) {
+                // Sent, they're your answer: the visit's seen. Only put in the box, they aren't.
+                if (sendHanded) seenBySending()
                 // Let go of once sent: cleared first, they recomposed this effect away, which cancelled
                 // the send halfway, its message saved to the file but neither shown nor answered.
                 val sent = sendHanded && graph.conversation.ask(words, about.value)
@@ -482,6 +524,7 @@ class AskActivity : ComponentActivity() {
                                 SuggestionChip(onClick = {
                                     // Answered by it: the box replies to nothing, till his next question's offered.
                                     if (screen.replyingTo?.id == last.id) screen.sent()
+                                    seenBySending()
                                     graph.scope.launch { graph.conversation.ask(reply, replyTo = last.id) }
                                 }, label = { Text(reply) })
                             }
@@ -506,6 +549,7 @@ class AskActivity : ComponentActivity() {
                         draft = ""
                         about.value = About()
                         screen.sent()
+                        seenBySending()
                         graph.scope.launch {
                             // The box's own reply to his nudge takes none of its subject: your words go to him as they are.
                             if (!graph.conversation.ask(text, subject, replyTo = (replying ?: quiet)?.id, takeItsSubject = replying != null)) {

@@ -31,8 +31,10 @@ class Outbox(
     private val settings: JsonStore<Settings>,
     private val notices: Notices,
     private val ports: FelixPorts,
-    /** Whether the chat is on screen: nothing's posted then, as you're reading it. */
+    /** Whether the chat is on screen: nothing sounds then, as you're reading it. */
     private val chatOnScreen: () -> Boolean,
+    /** Whether the chat on screen has been seen (Q120): only then is his notification taken away. */
+    private val chatSeen: () -> Boolean,
     private val clock: WallClock,
 ) {
     /**
@@ -108,11 +110,13 @@ class Outbox(
 
     /**
      * His notification made again from the chat ([notice]), sounding for [alertFor] where it's in it; or
-     * taken away with nothing to show, his channel off, or the chat on screen, where you're reading them.
+     * taken away with nothing to show, his channel off, or the chat on screen and seen, where you're reading
+     * them. On screen and not seen yet (Q120), it's made again as it is, never sounding.
      */
     fun notify(now: Long, alertFor: String? = null) = synchronized(posting) {
         val quiet = BlockPolicy.isQuiet(now, clock.zone(), settings.value)
-        val notice = if (chatOnScreen() || !notices.shown(Channels.FELIX)) null else notice(chat.value, settings.value.felixName, quiet, alertFor)
+        val onScreen = chatOnScreen()
+        val notice = if ((onScreen && chatSeen()) || !notices.shown(Channels.FELIX)) null else notice(chat.value, settings.value.felixName, quiet, alertFor.takeUnless { onScreen })
         if (notice == null) ports.cancel() else ports.show(notice)
     }
 

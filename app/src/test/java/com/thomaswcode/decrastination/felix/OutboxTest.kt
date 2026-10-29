@@ -52,6 +52,7 @@ class OutboxTest {
     private val archive = ChatArchiveStore(dir)
     private val settings = JsonStore(File(dir, "settings.json"), Settings.serializer(), ::Settings, migrations = listOf(SettingsMigration.SETTINGS, ZoomMigration.SETTINGS, SpeechMigration.SETTINGS))
     private var onScreen = false
+    private var seen = true
     private var shown = true
     /** What his notification showed as each was made, with the chat as it was then. */
     private val made = mutableListOf<Pair<Outbox.Notice, ChatState>>()
@@ -61,7 +62,7 @@ class OutboxTest {
             super.show(notice)
         }
     }
-    private val outbox = Outbox(chat, archive, settings, Channel(), ports, { onScreen }, clock)
+    private val outbox = Outbox(chat, archive, settings, Channel(), ports, { onScreen }, { seen }, clock)
 
     @AfterTest
     fun clean() {
@@ -182,6 +183,30 @@ class OutboxTest {
         // Made again: the two unread with words, not sounding for a silence.
         assertEquals(listOf("a", "b"), ports.showing!!.lines.map { it.id })
         assertFalse(ports.showing!!.alert)
+    }
+
+    @Test
+    fun `on screen and not seen yet, his notification is kept and made again without a sound, a new message's too, and seen, it's taken away`() = runBlocking {
+        outbox.send(his("a", clock.now() - 60_000L))
+        assertTrue(ports.showing!!.alert)
+        // The chat opened, not seen yet (Q120): what's there stays, and one arriving now is added, silently.
+        onScreen = true
+        seen = false
+        outbox.notify(clock.now())
+        assertEquals(listOf("a"), ports.showing!!.lines.map { it.id })
+        assertFalse(ports.showing!!.alert)
+        outbox.send(his("b"))
+        assertEquals(listOf("a", "b"), ports.showing!!.lines.map { it.id })
+        assertFalse(ports.showing!!.alert)
+        // Seen: taken away.
+        seen = true
+        outbox.notify(clock.now())
+        assertNull(ports.showing)
+        // Off screen again, as before: made again from what's unread, sounding for a new one.
+        onScreen = false
+        outbox.send(his("c"))
+        assertEquals(listOf("a", "b", "c"), ports.showing!!.lines.map { it.id })
+        assertTrue(ports.showing!!.alert)
     }
 
     @Test

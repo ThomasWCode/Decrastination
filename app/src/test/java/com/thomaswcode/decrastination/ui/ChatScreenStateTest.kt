@@ -279,6 +279,48 @@ class ChatScreenStateTest {
     }
 
     @Test
+    fun `a visit is seen after 3 seconds on screen, or at once when marked or a message of yours is sent, and a new one starts unseen`() {
+        val opened = Fixtures.at("2026-10-18T18:00")
+        val screen = ChatScreenState()
+        assertFalse(screen.seen(opened))
+        screen.opened(ChatState(emptyList()), opened)
+        assertFalse(screen.seen(opened + ChatScreenState.READ_AFTER_MS - 1))
+        assertTrue(screen.seen(opened + ChatScreenState.READ_AFTER_MS))
+        // Opened again: unseen till its own 3 seconds are up.
+        val again = opened + 60_000L
+        screen.paused(read = again)
+        screen.opened(ChatState(emptyList()), again)
+        assertFalse(screen.seen(again + 1_000L))
+        screen.markSeen()
+        assertTrue(screen.seen(again + 1_000L))
+        // A message sent counts as seen at once.
+        val third = again + 60_000L
+        screen.paused(read = third)
+        screen.opened(ChatState(emptyList()), third)
+        assertFalse(screen.seen(third))
+        screen.sent()
+        assertTrue(screen.seen(third))
+        // Paused, nothing's on screen to be seen till it's opened again.
+        screen.paused()
+        screen.opened(ChatState(emptyList()), third + 60_000L)
+        assertFalse(screen.seen(third + 61_000L))
+    }
+
+    @Test
+    fun `a visit left unseen keeps the next visit's New messages line on the same messages`() {
+        val unread = his("unread", "2026-10-18T18:00")
+        val state = ChatState(listOf(unread), readAt = Fixtures.at("2026-10-18T17:00"))
+        val screen = ChatScreenState()
+        screen.opened(state, Fixtures.at("2026-10-18T18:05"))
+        assertEquals("unread", screen.firstUnread)
+        // Passed through in a second: nothing read.
+        val left = Fixtures.at("2026-10-18T18:05") + 1_000L
+        screen.paused(read = left.takeIf { screen.seen(left) })
+        screen.opened(state, Fixtures.at("2026-10-18T18:06"))
+        assertEquals("unread", screen.firstUnread)
+    }
+
+    @Test
     fun `his question still waiting, his last message, is offered to the box, unless you chose another or turned it down`() {
         val screen = ChatScreenState()
         val question = ChatMessage("q", Speaker.Felix, "What did you avoid, and why?", 1, kind = MessageKind.CheckIn, byApp = true)
