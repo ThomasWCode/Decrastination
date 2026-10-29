@@ -21,6 +21,7 @@ import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.core.TaskItem
+import com.thomaswcode.decrastination.learn.DayRecord
 import java.io.File
 import java.nio.file.Files
 import kotlin.test.Test
@@ -387,6 +388,13 @@ class BackupServiceTest {
         assertEquals(listOf(arrived), phone.stores.chat.value.messages)
         assertEquals(listOf(fact), phone.stores.memory.value.facts)
         assertTrue(phone.stores.chatArchive.value.messages.isEmpty() && phone.stores.log.value.completions.isEmpty())
+    }
+
+    @Test
+    fun `a reset of the record keeps what came after its copy, a day's record by its day however it changed`() {
+        val copied = ActivityLog(days = listOf(DayRecord("2026-10-17", plannedMin = 60, chunks = emptyList())))
+        val now = ActivityLog(days = listOf(DayRecord("2026-10-17", plannedMin = 90, chunks = emptyList(), doneMin = 30), DayRecord("2026-10-18", plannedMin = 45, chunks = emptyList())))
+        assertEquals(listOf("2026-10-18"), now.since(copied).days.map { it.date })
     }
 
     @Test

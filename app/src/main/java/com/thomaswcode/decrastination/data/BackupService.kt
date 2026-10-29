@@ -345,8 +345,9 @@ class BackupService(
             // The chat, its earlier messages, and his state with it: what he's waiting to say, the check-in's answers so far.
             val copied = (whole.chat.messages + whole.archive.messages).mapTo(HashSet()) { it.id }
             stores.replace(stores.chat) { c -> ChatState(messages = c.messages.filterNot { it.id in copied }) }
-            val archiveSince = stores.chatArchive.value.messages.filterNot { it.id in copied }
-            if (archiveSince.isEmpty()) stores.replace(stores.chatArchive, ChatArchive()) else stores.replace(stores.chatArchive) { ChatArchive(messages = archiveSince) }
+            // Read and written under the archive's own lock; cleared whole, its months' copies with it, where nothing's left.
+            val archiveSince = stores.replace(stores.chatArchive) { a -> a.copy(messages = a.messages.filterNot { it.id in copied }) }
+            if (archiveSince.messages.isEmpty()) stores.replace(stores.chatArchive, ChatArchive())
             // His notes and reminders (D-100), which the chat set.
             val notes = whole.felixStore.notes.mapTo(HashSet()) { it.id }
             val reminders = whole.felixStore.reminders.mapTo(HashSet()) { it.id }
