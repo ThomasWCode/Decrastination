@@ -196,7 +196,8 @@ class RehearsalTest {
 
     private fun rehearse(root: File, files: File, copy: File, reads: List<Read>) {
         // The stores alone, the archive's months among them: the folder can hold the debug commands' files too (ai-prompts.json, a list).
-        val kept = STORES + archiveFiles(files)
+        // Once each: the archive's one file from before its months is among the stores too.
+        val kept = (STORES + archiveFiles(files)).distinct()
         kept.map { File(files, it) }.filter { it.isFile }.forEach { it.copyTo(File(copy, it.name)) }
         val versions = copy.listFiles().orEmpty().mapNotNull { f -> runCatching { JsonStore.json.parseToJsonElement(f.readText()) as JsonObject }.getOrNull()?.let { f.name to Migration.versionOf(it) } }.toMap()
         // The files as the moves between stores leave them at a start, on a copy of their own (inside this one, which goes with it).
