@@ -29,8 +29,11 @@ class SettingsEffectsTest {
 
     @Test
     fun `the margin, the pieces, the ratio and the photo say what they do`() {
-        assertEquals("Work due Thursday 08:30 is planned by Tuesday", line("marginDays"))
+        // As the planner counts it: a day to spare is the day before; none, the day before too where the day's work starts after 08:30.
+        assertEquals("Work due Thursday 08:30 is planned by Wednesday", line("marginDays", settings.copy(marginDays = 1)))
+        assertEquals("Work due Thursday 08:30 is planned by Tuesday", line("marginDays", settings.copy(marginDays = 2)))
         assertEquals("Work due Thursday 08:30 is planned by Wednesday", line("marginDays", settings.copy(marginDays = 0)))
+        assertEquals("Work due Thursday 08:30 is planned by Thursday", line("marginDays", settings.copy(marginDays = 0, weekdayHours = Window(7 * 60, 21 * 60))))
         assertEquals("Work with no steps of its own is cut into 30-minute pieces", line("boxMin"))
         assertEquals("A 30-minute piece earns 10 min of free time", line("workMinPerFreeMin"))
         assertTrue(line("photoFromMin")!!.startsWith("Written work of 20 minutes or more earns its free time with a photo"))

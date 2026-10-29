@@ -33,10 +33,11 @@ object SettingsEffects {
         }
         "weekendHours" -> "${Format.minutes(settings.weekendHours.minutes)} on a weekend day or a day off"
         "marginDays" -> {
-            // A deadline before the day's work starts leaves its day out.
-            val usable = if (8 * 60 + 30 <= settings.weekdayHours.startMin) 1 else 0
-            val by = DayOfWeek.THURSDAY.minus((usable + settings.marginDays).toLong())
-            "Work due Thursday 08:30 is planned by ${day(by)}" + if (usable + settings.marginDays >= 7) " a week before" else ""
+            // As the planner counts it (Planner.lastUsableDay): with days to spare, that many before the deadline's day;
+            // with none, its own day only where the day's work starts before the deadline.
+            val back = if (settings.marginDays > 0) settings.marginDays else if (8 * 60 + 30 <= settings.weekdayHours.startMin) 1 else 0
+            val by = DayOfWeek.THURSDAY.minus(back.toLong())
+            "Work due Thursday 08:30 is planned by ${day(by)}" + if (back >= 7) " a week before" else ""
         }
         "boxMin" -> "Work with no steps of its own is cut into ${settings.boxMin}-minute pieces"
         "workMinPerFreeMin" -> {
