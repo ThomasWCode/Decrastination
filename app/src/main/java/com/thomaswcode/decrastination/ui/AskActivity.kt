@@ -204,8 +204,8 @@ class AskActivity : ComponentActivity() {
     private var chatTab by mutableStateOf(true)
 
     /**
-     * Opened from the block screen ([EXTRA_BACK]): its bar keeps a Back arrow in place of the Plan button, as
-     * the block screen's own task mustn't hold Day.
+     * Opened from the block screen ([EXTRA_BACK]): its bar keeps a Back arrow in place of the Plan button, and
+     * has neither Setup's mark nor Day's menu, as the block screen's own task mustn't hold Day or the app's pages.
      */
     private var back = false
 
@@ -291,7 +291,8 @@ class AskActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        toBack.isEnabled = isTaskRoot
+        // Not the block screen's chat: left alone in that task, Back closes it, as its arrow does.
+        toBack.isEnabled = isTaskRoot && !back
         // What waits for Claude (it was off, resting, or capped) is tried again on opening.
         val graph = AppGraph.get(this)
         // What's unread marked for this visit, for its divider: from his notification, as it was when it
@@ -465,8 +466,9 @@ class AskActivity : ComponentActivity() {
                         }
                     },
                     actions = {
-                        // The home's bar (UI-18): Setup's mark, and Day's menu under the chat's own items.
-                        SetupMark(graph, this@AskActivity)
+                        // The home's bar (UI-18): Setup's mark, and Day's menu under the chat's own items. Not the
+                        // block screen's chat ([back]): what they open would go into the block screen's task.
+                        if (!back) SetupMark(graph, this@AskActivity)
                         Box {
                             IconButton(onClick = { menu = true }) { Icon(painterResource(R.drawable.ic_more_vert), contentDescription = "Menu") }
                             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
@@ -482,12 +484,14 @@ class AskActivity : ComponentActivity() {
                                     menu = false
                                     clearing = true
                                 })
-                                HorizontalDivider()
-                                MainActivity.MENU.forEach { (label, page) ->
-                                    DropdownMenuItem(text = { Text(label) }, onClick = {
-                                        menu = false
-                                        startActivity(Intent(this@AskActivity, page))
-                                    })
+                                if (!back) {
+                                    HorizontalDivider()
+                                    MainActivity.MENU.forEach { (label, page) ->
+                                        DropdownMenuItem(text = { Text(label) }, onClick = {
+                                            menu = false
+                                            startActivity(Intent(this@AskActivity, page))
+                                        })
+                                    }
                                 }
                             }
                         }
