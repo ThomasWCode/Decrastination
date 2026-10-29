@@ -90,15 +90,16 @@ class Notifier(
     /**
      * [id]'s notification of [tag] taken away: from the tray, and, held back for the morning (LR-07), from
      * what the briefing posts, so one out of date (a key mended, a task finished) doesn't come back then.
-     * Ordered with a hold still being written ([held]): one decided before this cancel isn't written after it.
+     * Ordered with a hold still being written ([held]): one decided before this cancel and not yet written finds the
+     * cancel and writes nothing, and one being written as it comes (the file replaced, the state not yet changed) is
+     * taken out by this one's own write after it, which comes even when nothing's held yet, as the store's lock takes
+     * them in turn; a write that changes nothing writes nothing.
      */
     override fun cancel(id: NoticeId, tag: String?) {
         tray.cancel(id.id, tag)
         val key = id.id to tag
         synchronized(counting) { cancelled[key] = ++decisions }
-        if (runtime.value.heldNotifications.any { it.id == id.id && it.tag == tag }) {
-            scope.launch { runtime.update { s -> s.copy(heldNotifications = s.heldNotifications.filterNot { it.id == id.id && it.tag == tag }) } }
-        }
+        scope.launch { runtime.update { s -> s.copy(heldNotifications = s.heldNotifications.filterNot { it.id == id.id && it.tag == tag }) } }
     }
 
     /** The tags of [id]'s notifications held back for the morning (LR-07). */
