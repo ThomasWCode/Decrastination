@@ -166,7 +166,9 @@ object Memories {
             }
             if (g.kind == Given.RULE) {
                 if (text.isEmpty()) {
-                    val gone = rules.filter { same(it.text, topic) }
+                    // The rule's own words, as long as a rule's text may be: not cut to a fact's topic.
+                    val words = g.topic.trim().take(MAX_TEXT)
+                    val gone = rules.filter { same(it.text, words) }
                     if (gone.isNotEmpty()) {
                         rules = rules - gone.toSet()
                         edits += MemoryEdit("Felix won't any more: ${gone.first().text}", ruleBefore = gone.first())

@@ -132,8 +132,13 @@ class DailyTest {
     fun `a review is once a week, by the week, wherever the check-in is moved`() {
         val reviews = listOf(WeeklyReview(Fixtures.at("2026-10-11T21:00"), listOf("x"), "rules", week = "2026-10-05"))
         // The check-in moved to 23:00 after the review: the same week, reviewed.
-        assertTrue(Review.reviewed(reviews, "2026-10-05", Fixtures.at("2026-10-11T23:00")))
-        assertEquals(false, Review.reviewed(reviews, "2026-10-12", Fixtures.at("2026-10-18T19:30")))
+        assertTrue(Review.reviewed(reviews, "2026-10-05", Fixtures.at("2026-10-11T23:00"), LONDON))
+        assertEquals(false, Review.reviewed(reviews, "2026-10-12", Fixtures.at("2026-10-18T19:30"), LONDON))
+        // One made midweek is the week so far: Sunday's still comes, and then the week's had it.
+        val midweek = listOf(WeeklyReview(Fixtures.at("2026-10-15T17:00"), listOf("x"), "rules", week = "2026-10-12"))
+        assertEquals(false, Review.reviewed(midweek, "2026-10-12", Fixtures.at("2026-10-18T19:30"), LONDON))
+        assertEquals(false, Review.reviewed(midweek, "2026-10-12", Fixtures.at("2026-10-11T19:30"), LONDON))
+        assertTrue(Review.reviewed(midweek + WeeklyReview(Fixtures.at("2026-10-18T19:35"), listOf("y"), "rules", week = "2026-10-12"), "2026-10-12", Fixtures.at("2026-10-18T19:30"), LONDON))
     }
 }
 
@@ -158,6 +163,19 @@ class ReviewInputTest {
         val text = ReviewInput.describe(log, Calibration(), Settings(), Fixtures.at("2026-10-12T10:00"), LONDON, week = "2026-10-05")
         assertTrue("Monday morning's" in text, text)
         assertTrue("The next Monday's" !in text, text)
+    }
+
+    @Test
+    fun `a review run midweek counts the week's subjects so far, not the days before its Monday`() {
+        val log = ActivityLog(
+            completions = listOf(
+                CompletionRecord("teams:a", "Last Friday's", Source.Teams, Kind.Homework, "Previous week only", 30, 30, null, 0, Fixtures.at("2026-10-09T17:00")),
+                CompletionRecord("teams:b", "Tuesday's", Source.Teams, Kind.Homework, "This week's subject", 30, 30, null, 0, Fixtures.at("2026-10-13T17:00")),
+            ),
+        )
+        val text = ReviewInput.describe(log, Calibration(), Settings(), Fixtures.at("2026-10-15T12:00"), LONDON, week = "2026-10-12")
+        assertTrue("This week's subject" in text, text)
+        assertTrue("Previous week only" !in text, text)
     }
 
     @Test

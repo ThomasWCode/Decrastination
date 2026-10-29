@@ -78,7 +78,7 @@ Its tasks are derived from the counts (`core/AnkiRules.kt`), never listed by Ank
 - **A deck homework names** (`AnkiRules.homeworkDecks`), "Learn Anki deck x.y": Homework, due with the earliest open assignment naming it, by the deadline in force (its real deadline kept, PL-14). Done once it has no card never studied; missed if its assignments go first.
 - **Cards as steps.** A deck task's steps are "N new cards", sized by the deck's own New cards/day, the first what Anki will still show today; one a day (`stepsPerDay`). With today's new cards studied it waits for the next 04:00 (`notBefore`).
 - A deck allowing no new cards a day is one step of all its cards, and its text says to raise the limit or use Custom study.
-- **Minutes** go by the seconds a card learned for each deck (DX-11, `learn/AnkiProgress.kt`), else 8 s a review and 25 s a new card.
+- **Minutes** go by the seconds a card learned for each deck (DX-11, `learn/AnkiProgress.kt`), else 8 s a review and 25 s a new card. A pace learned while the counts stand still changes the steps' minutes too, their ticks kept (`Merge`).
 
 Which decks homework names (`AnkiRules.sectionsOf`), the first that finds any:
 - a section number in a vocabulary instruction ("learn vocabulary 2.3"), not part of a longer number (`linkedSections`);

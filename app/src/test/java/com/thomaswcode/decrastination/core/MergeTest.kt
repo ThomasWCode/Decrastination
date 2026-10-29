@@ -138,6 +138,20 @@ class MergeTest {
     }
 
     @Test
+    fun `the same steps from the source take its new minutes, keeping their ticks and ids`() {
+        fun deck(minutes: Int) = Fetched(sourceId = "deck:1", title = "Deck", kind = Kind.Homework, derived = true, sourceEffortMin = 2 * minutes, subSteps = listOf(SubStep("20 new cards", minutes), SubStep("20 new cards", minutes)))
+        val stored = Merge.apply(emptyList(), Source.Anki, listOf(deck(9)), t0).tasks
+        val ticked = stored.map { t -> t.copy(subSteps = t.subSteps.mapIndexed { i, s -> if (i == 0) s.copy(done = true, id = "s$i", timedMin = 7) else s.copy(id = "s$i") }) }
+        // A pace learned since: the counts haven't moved, the minutes have.
+        val again = Merge.apply(ticked, Source.Anki, listOf(deck(6)), t0 + 1).tasks.single()
+        assertEquals(listOf(6, 6), again.subSteps.map { it.minutes })
+        assertEquals(listOf(true, false), again.subSteps.map { it.done })
+        assertEquals(listOf("s0", "s1"), again.subSteps.map { it.id })
+        assertEquals(7, again.subSteps.first().timedMin)
+        assertEquals(12, again.sourceEffortMin)
+    }
+
+    @Test
     fun `a done task listed again reopens, as a snoozed email does`() {
         val done = Merge.apply(first(fetched("a")), Source.Teams, emptyList(), later).tasks
         val result = Merge.apply(done, Source.Teams, listOf(fetched("a")), later + 1)

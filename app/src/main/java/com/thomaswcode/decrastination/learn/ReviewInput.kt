@@ -13,6 +13,7 @@ import java.time.format.TextStyle
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit
 import java.util.Locale
 import kotlinx.serialization.Serializable
 
@@ -168,8 +169,11 @@ object ReviewInput {
             appendLine()
             appendLine("Felix: ${felix.size} messages, ${felix.count { ChatHistory.replyOf(it, messages) != null }} replied to; of the ${aboutSlots.size} about a slot, ${keptAfter} saw it kept after.")
         }
-        // The week by subject (PL-08).
-        val subjects = Stats.bySubject(log, settings.classMap, minOf(end - 1, now), zone, days = 7)
+        // The week by subject (PL-08): its own days, Monday to the last it's reached, not the seven before now,
+        // which midweek would reach into the week before.
+        val last = minOf(end - 1, now)
+        val reached = ChronoUnit.DAYS.between(monday, Instant.ofEpochMilli(last).atZone(zone).toLocalDate()).toInt() + 1
+        val subjects = Stats.bySubject(log, settings.classMap, last, zone, days = reached)
         if (subjects.isNotEmpty()) {
             appendLine()
             appendLine("By subject:")

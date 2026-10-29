@@ -94,8 +94,12 @@ object Merge {
                 continue
             }
             // The source's steps, unless they're the same as before: then the ones kept here, with
-            // what's ticked off here, until the source's counts catch up (Anki's cards).
+            // what's ticked off here, until the source's counts catch up (Anki's cards), each with what
+            // the source now says of it (its minutes by a pace learned since, DX-11) and what's of this
+            // phone kept: its id, tick and timed minutes.
             val sourceSteps = f.subSteps?.takeIf { new -> new.map { it.title } != old.subSteps.map { it.title } }
+            val keptSteps = f.subSteps?.takeIf { sourceSteps == null && it.size == old.subSteps.size }
+                ?.let { new -> old.subSteps.mapIndexed { i, s -> s.copy(minutes = new[i].minutes, ankiSections = new[i].ankiSections, from = new[i].from, dueAt = new[i].dueAt, where = new[i].where) } }
             val updated = old.copy(
                 title = f.title,
                 detail = f.detail,
@@ -107,7 +111,7 @@ object Merge {
                 sourceProgress = f.sourceProgress,
                 firstProgress = old.firstProgress ?: old.sourceProgress,
                 peakEffortMin = listOfNotNull(old.peakEffortMin, old.sourceEffortMin, f.sourceEffortMin).maxOrNull(),
-                subSteps = sourceSteps ?: old.subSteps,
+                subSteps = sourceSteps ?: keptSteps ?: old.subSteps,
                 // Fresh steps from the source's counts already leave out the work done so far.
                 stepsWorkedMin = if (sourceSteps != null) old.workedMin + old.photoMin else old.stepsWorkedMin,
                 stepsPerDay = f.stepsPerDay,

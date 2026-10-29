@@ -1312,19 +1312,21 @@ object Planner {
         }
     }
 
-    /** Why a time won't be kept for a task's next piece ([pinProblem]). */
+    /** Why a time won't be kept for a task's next piece ([pinProblem]); [DayGone] its time gone by, its day or its piece. */
     enum class PinProblem { DayGone, NotYet, PastDeadline }
 
     /**
      * Why [at] wouldn't be kept as a time for [task]'s next piece (PL-04), as [pinnedTime] has it:
-     * its day gone, before the task can start, or at or past its real deadline still to come, or, with
-     * its piece's [minutes], not over by then (D-114); null if it would (overdue work takes any time from
-     * now, D-30). Checked before a move by hand is made (UI-03, UI-04), so none is said done that the plan drops.
+     * its day gone, or, with its piece's [minutes], the piece and its grace over already (the plan lays
+     * such a pin as any piece, [Slotter]'s exact pins; one under way stays a time to keep); before the task
+     * can start; or at or past its real deadline still to come, or not over by then (D-114); null if it would
+     * (overdue work takes any time from now, D-30). Checked before a move by hand or the chat's is made
+     * (UI-03, UI-04), so none is said done that the plan drops.
      */
     fun pinProblem(task: TaskItem, at: Long, now: Long, zone: ZoneId, minutes: Int = 0): PinProblem? {
         val end = date(at, zone).plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli() - 1
         return when {
-            end < now -> PinProblem.DayGone
+            end < now || at + minutes * 60_000L + Slotter.GRACE_MS <= now -> PinProblem.DayGone
             task.notBefore?.let { at < it } == true -> PinProblem.NotYet
             task.realDeadline?.let { it > now && (at >= it || at + minutes * 60_000L > it) } == true -> PinProblem.PastDeadline
             else -> null

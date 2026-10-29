@@ -353,13 +353,16 @@ fun TaskItem.trimmed(bulky: Set<String>): TaskItem = copy(detail = "", enrichmen
 
 /**
  * [total] minutes shared over [parts] in proportion, in whole minutes that add up to exactly
- * [total]: the odd minutes go to the parts with most left over. Each gets at least one, so a total
- * smaller than the parts' number would come to more than it: it's refused where it's given
- * ([OwnTaskRules.minutesFor]). Your minutes over a task's steps.
+ * [total]: the odd minutes go to the parts with most left over. Each gets at least one, and the
+ * minutes that takes are taken back from the largest shares, so a short part beside a long one isn't
+ * given a minute the total doesn't have. A total smaller than the parts' number would come to more
+ * than it: it's refused where it's given ([OwnTaskRules.minutesFor]), and each is given one. Your
+ * minutes over a task's steps.
  */
 fun shareOut(total: Int, parts: List<Int>): List<Int> {
     val sum = parts.sum()
     if (sum <= 0) return parts.map { 1 }
+    if (total <= parts.size) return parts.map { 1 }
     val exact = parts.map { it.toDouble() * total / sum }
     val whole = exact.map { floor(it).toInt() }.toMutableList()
     var odd = total - whole.sum()
@@ -368,7 +371,10 @@ fun shareOut(total: Int, parts: List<Int>): List<Int> {
         whole[i]++
         odd--
     }
-    return whole.map { it.coerceAtLeast(1) }
+    // At least a minute each, taken back from the largest, one at a time.
+    val shares = whole.map { it.coerceAtLeast(1) }.toMutableList()
+    repeat(shares.sum() - total) { shares[shares.indices.maxBy { shares[it] }]-- }
+    return shares
 }
 
 /**
