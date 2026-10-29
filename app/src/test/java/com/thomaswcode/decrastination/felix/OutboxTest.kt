@@ -18,6 +18,7 @@ import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.OnlyMigration
 import com.thomaswcode.decrastination.data.MoodMigration
 import com.thomaswcode.decrastination.data.SpeechMigration
+import com.thomaswcode.decrastination.data.StepActionMigration
 import com.thomaswcode.decrastination.data.OutsideMigration
 import com.thomaswcode.decrastination.data.SettingsMigration
 import com.thomaswcode.decrastination.data.MemoryMigration
@@ -48,7 +49,7 @@ import kotlinx.coroutines.sync.Mutex
 class OutboxTest {
     private val dir: File = Files.createTempDirectory("outbox").toFile()
     private val clock = FixedClock(Fixtures.at("2026-10-19T18:00"), Fixtures.LONDON)
-    private val chat = JsonStore(File(dir, "chat.json"), ChatState.serializer(), ::ChatState, migrations = listOf(ChatMigration.CHAT, TasksMigration.CHAT, FelixStore.CHAT, FelixStore.CHAT_PIECES, MemoryMigration.CHAT, StepOrderMigration.CHAT, OnlyMigration.CHAT, OutsideMigration.CHAT, MoodMigration.CHAT, SpeechMigration.CHAT))
+    private val chat = JsonStore(File(dir, "chat.json"), ChatState.serializer(), ::ChatState, migrations = listOf(ChatMigration.CHAT, TasksMigration.CHAT, FelixStore.CHAT, FelixStore.CHAT_PIECES, MemoryMigration.CHAT, StepOrderMigration.CHAT, OnlyMigration.CHAT, OutsideMigration.CHAT, MoodMigration.CHAT, SpeechMigration.CHAT, StepActionMigration.CHAT))
     private val archive = ChatArchiveStore(dir)
     private val settings = JsonStore(File(dir, "settings.json"), Settings.serializer(), ::Settings, migrations = listOf(SettingsMigration.SETTINGS, ZoomMigration.SETTINGS, SpeechMigration.SETTINGS))
     private var onScreen = false

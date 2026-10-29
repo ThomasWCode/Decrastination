@@ -33,7 +33,8 @@ class ChatReader(
     private val settings: Settings = Settings(),
 ) {
 
-    data class Result(val reading: ChatAnswers.Reading?, val costUsd: Double, val refused: Boolean = false, val usage: ModelCalls.Usage = ModelCalls.Usage.NONE)
+    /** Its answer, with the ids of the messages that went in its turns ([sent], [ChatPrompts.sent]): only those are answered by it. */
+    data class Result(val reading: ChatAnswers.Reading?, val costUsd: Double, val refused: Boolean = false, val usage: ModelCalls.Usage = ModelCalls.Usage.NONE, val sent: Set<String>? = null)
 
 
     /**
@@ -53,7 +54,8 @@ class ChatReader(
             .outputConfig(OutputConfig.builder().effort(ModelEffort.of(ModelEffort.Job.Chat)).format(JsonOutputFormat.builder().schema(schema).build()).build())
             .putAdditionalHeader("anthropic-beta", ClaudeEnricher.FALLBACK_BETA)
             .putAdditionalBodyProperty("fallbacks", JsonValue.from("default"))
-        ChatPrompts.turns(messages, context.known, tasks.associateBy { it.id }, zone, plan = context.plan, found = found, read = read, events = events, quoted = quoted, brought = brought, lastRound = last, notLooked = notLooked).forEach { (from, text) ->
+        val sent = ChatPrompts.sent(messages, context.known, tasks.associateBy { it.id }, zone, plan = context.plan, found = found, read = read, events = events, quoted = quoted, brought = brought, lastRound = last, notLooked = notLooked)
+        sent.turns.forEach { (from, text) ->
             if (from == Speaker.You) builder.addUserMessage(text) else builder.addAssistantMessage(text)
         }
         val message = withContext(Dispatchers.IO) { client.messages().create(builder.build()) }
@@ -66,6 +68,6 @@ class ChatReader(
         }
         val text = message.content().mapNotNull { it.text().orElse(null)?.text() }.joinToString("")
         val about = messages.lastOrNull { it.from == Speaker.You }?.about ?: About()
-        return Result(ChatAnswers.parse(text, tasks, events, about, now, zone, settings, felix, context), cost, usage = usage)
+        return Result(ChatAnswers.parse(text, tasks, events, about, now, zone, settings, felix, context), cost, usage = usage, sent = sent.ids)
     }
 }

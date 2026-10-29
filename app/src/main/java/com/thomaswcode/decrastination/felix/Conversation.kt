@@ -772,6 +772,8 @@ class Conversation(
                 }
                 is Called.Answered -> called.value
             }
+            // The messages that went in the request answered: the budget can leave some of those waiting out (F-02).
+            var went = result.sent
             var reading = result.reading ?: run {
                 stuck = true
                 return@call if (result.refused) "Claude declined to answer that: Try again, or put it another way" else "Claude's answer couldn't be read: Try again"
@@ -837,6 +839,7 @@ class Conversation(
                     }
                     is Called.Answered -> again.value
                 }
+                went = second.sent ?: went
                 reading = second.reading ?: run {
                     stuck = true
                     return@call if (second.refused) "Claude declined to answer that: Try again, or put it another way" else "Claude's answer couldn't be read: Try again"
@@ -871,10 +874,10 @@ class Conversation(
                 ),
             )
             var kept = false
-            // What he was sent of the chat ([ChatPrompts.history]): yours before it that waited with it and went
-            // with it (one sent while he answered: D-98) are answered with it; one left out (more waited than go
-            // in one) says so, and waits for its Try again.
-            val sent = ChatPrompts.history(upTo(chat.value.messages)).mapTo(HashSet()) { it.id }
+            // What he was sent of the chat, as the request that was answered held it ([ChatPrompts.sent]): yours before it
+            // that waited with it and went with it (one sent while he answered: D-98) are answered with it; one left out
+            // (more waited than go in one, or than the input's budget holds) says so, and waits for its Try again.
+            val sent = went ?: ChatPrompts.history(upTo(chat.value.messages)).mapTo(HashSet()) { it.id }
             chat.update { s ->
                 // Only while it's still the one waiting: taken back meanwhile, the answer goes with it.
                 if (s.unanswered?.id != waiting.id) {
@@ -974,17 +977,21 @@ class Conversation(
                     if (opened) Act("Opened in ${t.source.label}: ${t.title}" + say?.let { ". $it" }.orEmpty() + if (left) ". The chat was left as it opened: its card's here if it didn't come up" else "")
                     else Act("Couldn't open “${t.title}” in ${t.source.label}" + say?.let { ": $it" }.orEmpty(), problem = true)
                 }
+                // The step he named, where it is now (F-01): its steps changed while he answered (edited on its form, read
+                // anew), one that's gone isn't ticked in its place, and that's said.
                 ChatAction.Type.TickStep -> {
-                    val index = a.stepIndex ?: return@mapNotNull null
-                    val step = task?.subSteps?.getOrNull(index)?.takeIf { !it.done } ?: return@mapNotNull null
+                    if (task == null) return@mapNotNull null
+                    val index = ChatActs.stepOf(Act("", a), task) ?: return@mapNotNull Act(Act.NOT_MADE + "the tick of “${a.stepTitle}”: ${task.title}'s steps changed as he answered.", problem = true)
+                    val step = task.subSteps[index].takeIf { !it.done } ?: return@mapNotNull null
                     // What its Undo is tied to: the record its piece's keep made, or a tick by hand ([ChatActs.tickedBy]).
                     val ticked = tick(task, index, step.title) ?: return@mapNotNull null
-                    Act("Ticked: ${step.title}, of ${task.title}", a, after = ticked)
+                    Act("Ticked: ${step.title}, of ${task.title}", a.copy(stepIndex = index), after = ticked)
                 }
                 ChatAction.Type.UntickStep -> {
-                    val index = a.stepIndex ?: return@mapNotNull null
-                    val step = task?.subSteps?.getOrNull(index)?.takeIf { it.done } ?: return@mapNotNull null
-                    said("To do again: ${step.title}, of ${task.title}", a).takeIf { focus.untickBlock(task.id, index, step.title) }
+                    if (task == null) return@mapNotNull null
+                    val index = ChatActs.stepOf(Act("", a), task) ?: return@mapNotNull Act(Act.NOT_MADE + "taking back the tick of “${a.stepTitle}”: ${task.title}'s steps changed as he answered.", problem = true)
+                    val step = task.subSteps[index].takeIf { it.done } ?: return@mapNotNull null
+                    said("To do again: ${step.title}, of ${task.title}", a.copy(stepIndex = index)).takeIf { focus.untickBlock(task.id, index, step.title) }
                 }
                 ChatAction.Type.Done -> {
                     if (task?.isOpen != true) return@mapNotNull null
@@ -1176,14 +1183,16 @@ class Conversation(
         val act = chat.value.messages.firstOrNull { it.id == messageId }?.acts?.getOrNull(index)?.takeIf { !it.undone } ?: return null
         val a = act.action ?: return null
         val task = tasks.value.tasks.firstOrNull { it.id == a.taskId }
-        val step = a.stepIndex?.let { i -> task?.subSteps?.getOrNull(i) }
+        // The step it named, where it is now; none where it's gone (F-01), so its Undo can't land on another.
+        val at = task?.let { ChatActs.stepOf(act, it) }
+        val step = at?.let { task.subSteps[it] }
         fun open(id: String) = tasks.value.tasks.firstOrNull { it.id == id }?.isOpen
         val undone = when (a.type) {
             // A task shown, a source read (G2): nothing to take back.
             ChatAction.Type.Open, ChatAction.Type.Sync -> false
             // The step that finished one of yours: open again with it to do.
-            ChatAction.Type.TickStep -> step?.done == true && ChatActs.tickedBy(act, task!!.id, a.stepIndex!!, step, keptAt()) && focus.untickBlock(task.id, a.stepIndex!!, step.title, reopen = true)
-            ChatAction.Type.UntickStep -> step?.done == false && task!!.isOpen && tick(task, a.stepIndex!!, step.title) != null
+            ChatAction.Type.TickStep -> step?.done == true && ChatActs.tickedBy(act, task!!.id, at!!, step, keptAt()) && focus.untickBlock(task.id, at, step.title, reopen = true)
+            ChatAction.Type.UntickStep -> step?.done == false && task!!.isOpen && tick(task, at!!, step.title) != null
             // A starred email's, its task here or not (a backup restored: no read brings back an email unstarred).
             ChatAction.Type.Done -> if (task?.source == Source.Gmail || task == null && act.after != null) owners.unfinishGmail(a.taskId, act.after) else task?.isOpen == false && (task.source == Source.Own || task.tickDone) && run { owners.reopenOwnTask(task.id); open(task.id) == true }
             ChatAction.Type.Reopen -> task?.isOpen == true && act.was.let { was -> was != null && refinish(was) }

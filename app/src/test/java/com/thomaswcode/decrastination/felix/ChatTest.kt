@@ -846,7 +846,7 @@ class ChatTest {
         )!!
         assertEquals(
             listOf(
-                ChatAction(ChatAction.Type.TickStep, essay.id, 0),
+                ChatAction(ChatAction.Type.TickStep, essay.id, 0, stepTitle = "Plan"),
                 ChatAction(ChatAction.Type.Open, essay.id),
             ),
             reading.actions,
@@ -881,7 +881,7 @@ class ChatTest {
         )!!
         assertEquals(
             listOf(
-                ChatAction(ChatAction.Type.UntickStep, essay.id, 0),
+                ChatAction(ChatAction.Type.UntickStep, essay.id, 0, stepTitle = essay.subSteps[0].title),
                 ChatAction(ChatAction.Type.Done, essay.id),
                 ChatAction(ChatAction.Type.Reopen, finished.id),
                 ChatAction(ChatAction.Type.Delete, finished.id),

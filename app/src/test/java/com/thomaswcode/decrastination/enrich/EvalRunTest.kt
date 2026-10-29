@@ -329,20 +329,28 @@ class EvalRunTest {
         }
         if (dry) return@runBlocking
         File(runs, "$run.json").writeText(JsonArray(results).toString())
-        File(dir, "report-$run.md").writeText(moodReport(run, results, notAsked, spent))
         System.getenv("EVAL_BEFORE")?.toIntOrNull()?.let { before ->
             val read = Json.parseToJsonElement(File(runs, "$before.json").readText()).jsonArray.map { it.jsonObject }
             // The earlier run's messages read by the judge too, where they weren't (one with words and no verdict, as a run with
             // the judge off writes it, "judge" empty), so the two runs' reads stand side by side; kept in its file, so they're read once.
             fun unjudged(a: JsonObject) = a.getValue("text").jsonPrimitive.content.isNotBlank() && a["judge"]?.jsonPrimitive?.contentOrNull.isNullOrEmpty()
+            // Each judge a paid call: within the run's budget, as its asks are; those past it left unjudged, and said.
+            var dearestJudge = 0.0
             val earlier = if (!judging || read.none(::unjudged)) read else read.map { a ->
                 if (!unjudged(a)) return@map a
+                if (spent + maxOf(0.05, dearestJudge * 2) > budget) {
+                    notAsked += "judge of run $before's ${a.getValue("id").jsonPrimitive.content}#${a["attempt"]?.jsonPrimitive?.contentOrNull.orEmpty()}"
+                    return@map a
+                }
                 val judged = judge(client!!, a.getValue("what").jsonPrimitive.content, a.getValue("text").jsonPrimitive.content)
                 spent += judged.third
+                dearestJudge = maxOf(dearestJudge, judged.third)
                 JsonObject(a + mapOf("judge" to JsonPrimitive(judged.first), "giveaway" to JsonPrimitive(judged.second)))
             }.also { File(runs, "$before.json").writeText(JsonArray(it).toString()) }
             File(dir, "report.md").writeText(moodSideBySide(before, earlier, run, results, notAsked))
         }
+        // Written after the comparison, so its cost and what the budget left out are in it.
+        File(dir, "report-$run.md").writeText(moodReport(run, results, notAsked, spent))
         println("Run $run: ${results.size} answers, ${dollars(spent)} in all${if (notAsked.isEmpty()) "" else "; not asked, past the budget: " + notAsked.joinToString()}: ${File(dir, "report-$run.md").path}")
     }
 
