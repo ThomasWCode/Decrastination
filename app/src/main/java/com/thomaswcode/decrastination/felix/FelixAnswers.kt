@@ -1,7 +1,11 @@
 package com.thomaswcode.decrastination.felix
 
+import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.core.FelixAnswer
+import com.thomaswcode.decrastination.core.Given
+import com.thomaswcode.decrastination.core.MessageKind
 import com.thomaswcode.decrastination.core.Rebalance
+import com.thomaswcode.decrastination.core.Speaker
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
@@ -22,14 +26,43 @@ object FelixAnswers {
 
     private val json = Json { ignoreUnknownKeys = true }
 
-    /** [text] as his answer, within bounds; null when it isn't one. */
+    /**
+     * His answer as the model gives it ([FelixPrompts.SCHEMA], D-120): his note, three texts he might send and which
+     * he'd send ([send], from 1), and the rest as kept.
+     */
+    @Serializable
+    private data class Written(val feeling: String = "", val texts: List<String> = emptyList(), val send: Int = 1, val replies: List<String> = emptyList(), val nextCheckMin: Int? = null, val memories: List<Given> = emptyList())
+
+    /**
+     * [text] as his answer, within bounds; null when it isn't one. His message is the text he chose to send ([chosen]); the
+     * others kept as [FelixAnswer.unsent] (D-120). All three empty, he'd rather not write.
+     */
     fun parse(text: String, maxMessage: Int = MAX_MESSAGE): FelixAnswer? {
-        val answer = runCatching { json.decodeFromString(FelixAnswer.serializer(), text) }.getOrNull() ?: return null
+        val given = runCatching { json.decodeFromString(Written.serializer(), text) }.getOrNull() ?: return null
+        val chosen = chosen(given)
+        val answer = FelixAnswer(
+            message = given.texts.getOrNull(chosen).orEmpty(), replies = given.replies, nextCheckMin = given.nextCheckMin, memories = given.memories, feeling = given.feeling,
+            unsent = given.texts.filterIndexed { i, _ -> i != chosen },
+        )
         return bounded(answer, maxMessage)
     }
 
-    /** How long his message in [text] is as he wrote it, before it's held to its room ([message]): 0 when it isn't one. */
-    fun messageLength(text: String): Int = runCatching { json.decodeFromString(FelixAnswer.serializer(), text).message.trim().length }.getOrDefault(0)
+    /** How long the text he chose in [text] is as he wrote it, before it's held to its room ([message]): 0 when it isn't one. */
+    fun messageLength(text: String): Int = runCatching {
+        val given = json.decodeFromString(Written.serializer(), text)
+        given.texts.getOrNull(chosen(given)).orEmpty().let(::lines).length
+    }.getOrDefault(0)
+
+    /**
+     * Which of [given]'s texts is his message, by index: the one he chose to send, where it has words; else (chosen past the
+     * three, or a blank one beside others with words, which is a slip, not his choice not to write) the first with words;
+     * with none, the first, empty.
+     */
+    private fun chosen(given: Written): Int {
+        val sent = given.send - 1
+        if (sent in given.texts.indices && given.texts[sent].isNotBlank()) return sent
+        return given.texts.indexOfFirst { it.isNotBlank() }.takeIf { it >= 0 } ?: 0
+    }
 
     /**
      * The steps he rebalanced in [text], a morning's answer (D-110), every one: each is checked against what he
@@ -44,21 +77,50 @@ object FelixAnswers {
     /** [answer] within the bounds his are kept to ([parse]'s): one kept from elsewhere, a restored backup's draft, held to them as it's used. */
     fun bounded(answer: FelixAnswer, maxMessage: Int = MAX_MESSAGE): FelixAnswer {
         return FelixAnswer(
-            message = message(answer.message.trim(), maxMessage),
+            message = message(lines(answer.message), maxMessage),
             replies = answer.replies.map { cut(it.trim(), MAX_REPLY) }.filter { it.isNotEmpty() }.distinct().take(MAX_REPLIES),
             nextCheckMin = answer.nextCheckMin?.coerceIn(MIN_CHECK_MIN, MAX_CHECK_MIN),
             memories = answer.memories.take(MAX_MEMORIES),
             feeling = answer.feeling.trim().take(MAX_FEELING),
+            unsent = answer.unsent.map { message(lines(it), maxMessage) }.filter { it.isNotEmpty() }.take(MAX_UNSENT),
         )
     }
 
+    /** The texts he didn't send kept with his message, at most (D-120): the two beside the one he chose. */
+    const val MAX_UNSENT = 2
+
     /**
-     * His message no longer than [max]: over it, ended at its last whole sentence that leaves at
-     * least half the room used, so it never stops mid-sentence (the morning's did); else cut
-     * at a word, with an ellipsis.
+     * [text] as at most [MAX_TEXTS] lines, each a text of its own (D-120): each line trimmed, the empty ones gone, and
+     * any past the second joined onto it after a comma, so a look is never more than two texts and still reads.
+     */
+    fun lines(text: String): String {
+        val lines = text.lines().map { it.trim() }.filter { it.isNotEmpty() }
+        return (lines.take(MAX_TEXTS - 1) + listOfNotNull(lines.drop(MAX_TEXTS - 1).joinToString(", ").takeIf { it.isNotEmpty() })).joinToString("\n")
+    }
+
+    /** The texts a look of his is, at most (D-120): one thought each, the second for a second thing. */
+    const val MAX_TEXTS = 2
+
+    /**
+     * [message]'s words as the texts they're shown as (D-120): each line a text of its own, for his messages written
+     * unasked from his prompt, the morning's greeting and its briefing among them; whole for the rest (his chat's answers,
+     * which can list, what's in the app's words, yours), which keep their lines in one.
+     */
+    fun texts(message: ChatMessage): List<String> =
+        if (message.from == Speaker.Felix && !message.byApp && message.kind in SPLIT) message.text.lines().filter { it.isNotBlank() }.ifEmpty { listOf(message.text) } else listOf(message.text)
+
+    /** The kinds of his messages written from his prompt as texts ([FelixPrompts.system]). */
+    private val SPLIT = setOf(MessageKind.Morning, MessageKind.SlotStart, MessageKind.SlotEnd, MessageKind.SlotKept, MessageKind.DayDone, MessageKind.Question, MessageKind.Completions, MessageKind.Reminder)
+
+    /**
+     * His message no longer than [max]: over it, ended at its first line's end where that leaves at least half the room
+     * used (the second text left out, D-120), else at its last whole sentence that does, so it never stops mid-sentence
+     * (the morning's did); else cut at a word, with an ellipsis.
      */
     internal fun message(text: String, max: Int): String {
         if (text.length <= max) return text
+        val first = text.substringBefore('\n')
+        if (first.length < text.length && first.length <= max && first.length >= max / 2) return first.trimEnd()
         val room = text.take(max)
         val end = SENTENCE_END.findAll(room).lastOrNull()?.let { it.range.first + 1 }
         return if (end != null && end >= max / 2) room.take(end).trimEnd() else cut(text, max)

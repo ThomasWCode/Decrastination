@@ -16,6 +16,7 @@ import com.thomaswcode.decrastination.data.ChatMigration
 import com.thomaswcode.decrastination.data.CreditMigration
 import com.thomaswcode.decrastination.data.OnlyMigration
 import com.thomaswcode.decrastination.data.MoodMigration
+import com.thomaswcode.decrastination.data.SpeechMigration
 import com.thomaswcode.decrastination.data.OutsideMigration
 import com.thomaswcode.decrastination.data.TimerMigration
 import com.thomaswcode.decrastination.data.MemoryMigration
@@ -59,14 +60,14 @@ class PhotosTest {
     private val dir: File = Files.createTempDirectory("photos").toFile()
     private val clock = FixedClock(Fixtures.at("2026-10-19T16:00"), LONDON)
     private val tasks = JsonStore(File(dir, "tasks.json"), TaskState.serializer(), ::TaskState, migrations = listOf(TasksMigration.TASKS, StepOrderMigration.TASKS))
-    private val settings = JsonStore(File(dir, "settings.json"), Settings.serializer(), ::Settings, migrations = listOf(SettingsMigration.SETTINGS, ZoomMigration.SETTINGS))
+    private val settings = JsonStore(File(dir, "settings.json"), Settings.serializer(), ::Settings, migrations = listOf(SettingsMigration.SETTINGS, ZoomMigration.SETTINGS, SpeechMigration.SETTINGS))
     private val runtime = JsonStore(File(dir, "runtime.json"), RuntimeState.serializer(), ::RuntimeState, migrations = listOf(ChatMigration.RUNTIME, RuntimeSplit.RUNTIME))
     private val learning = JsonStore(File(dir, "learning.json"), LearningState.serializer(), ::LearningState)
     private val model = JsonStore(File(dir, "model.json"), ModelState.serializer(), ::ModelState)
     private val protection = JsonStore(File(dir, "protection.json"), ProtectionState.serializer(), ::ProtectionState)
     private val session = JsonStore(File(dir, "session.json"), SessionState.serializer(), ::SessionState, migrations = listOf(CreditMigration.SESSION, TimerMigration.SESSION))
     private val log = JsonStore(File(dir, "log.json"), ActivityLog.serializer(), ::ActivityLog, migrations = listOf(ChatMigration.LOG, MemoryMigration.LOG, CreditMigration.LOG))
-    private val chat = JsonStore(File(dir, "chat.json"), ChatState.serializer(), ::ChatState, migrations = listOf(ChatMigration.CHAT, TasksMigration.CHAT, FelixStore.CHAT, FelixStore.CHAT_PIECES, MemoryMigration.CHAT, StepOrderMigration.CHAT, OnlyMigration.CHAT, OutsideMigration.CHAT, MoodMigration.CHAT))
+    private val chat = JsonStore(File(dir, "chat.json"), ChatState.serializer(), ::ChatState, migrations = listOf(ChatMigration.CHAT, TasksMigration.CHAT, FelixStore.CHAT, FelixStore.CHAT_PIECES, MemoryMigration.CHAT, StepOrderMigration.CHAT, OnlyMigration.CHAT, OutsideMigration.CHAT, MoodMigration.CHAT, SpeechMigration.CHAT))
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val gateway = ModelGateway(settings, { null }, model, tasks, clock, NoAlerts, scope) {}
     private val focus = Focus(tasks, settings, session, learning, protection, log, clock) { state, s, now -> Planner.plan(Planner.Input(state.tasks, now, LONDON, s)) }

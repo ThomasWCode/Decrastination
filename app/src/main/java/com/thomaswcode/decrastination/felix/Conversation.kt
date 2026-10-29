@@ -181,6 +181,8 @@ class Conversation(
         return Profile.Block(
             Profile.yearGroup(now, zone, s.yearGroupStart),
             Profile.block(s, state.tasks, state.timetable, school.value, live, now, zone),
+            // His calls' (D-120): the year out of its first line.
+            Profile.block(s, state.tasks, state.timetable, school.value, live, now, zone, year = false),
         )
     }
 
@@ -325,16 +327,17 @@ class Conversation(
 
     /**
      * His message [id] rated by you, held in the chat (D-119): [up] a thumb up or down with what you wrote of it
-     * ([feedback]), or null to take the rating off. In the live chat, or else in the archive's months; one of yours
-     * is left as it is. Nothing else follows: it isn't a turn of the chat, nor sent to him.
+     * ([feedback]) and the text of those he didn't send you'd rather he had ([preferred], D-120: one of its own, else
+     * none), or null to take the rating off, the pick with it. In the live chat, or else in the archive's months; one of
+     * yours is left as it is. Nothing else follows: it isn't a turn of the chat, nor sent to him.
      */
-    suspend fun rate(id: String, up: Boolean?, feedback: String): Unit = withContext(NonCancellable) {
+    suspend fun rate(id: String, up: Boolean?, feedback: String, preferred: String = ""): Unit = withContext(NonCancellable) {
         val now = clock.now()
         val rated = { m: ChatMessage ->
             when {
                 m.from != Speaker.Felix -> m
-                up == null -> m.copy(rating = "", feedback = "", ratedAt = 0)
-                else -> m.copy(rating = if (up) RATED_UP else RATED_DOWN, feedback = feedback.trim().take(MAX_FEEDBACK), ratedAt = now)
+                up == null -> m.copy(rating = "", feedback = "", ratedAt = 0, preferred = "")
+                else -> m.copy(rating = if (up) RATED_UP else RATED_DOWN, feedback = feedback.trim().take(MAX_FEEDBACK), ratedAt = now, preferred = preferred.takeIf { it in m.unsent }.orEmpty())
             }
         }
         chat.update { s -> s.copy(messages = s.messages.map { if (it.id == id) rated(it) else it }) }
@@ -588,6 +591,9 @@ class Conversation(
         // How he feels about today's work (D-119), as today's newest slot on record leans: what his messages are told, so the two agree.
         val todays = log.value.slots.filter { it.date == focus.today(now).toString() }
         val feeling = Mood.line(Mood.of(null, todays, null, 0, Mood.newest(todays)?.let { r -> state.tasks.firstOrNull { it.id == r.taskId } }, messages, now, clock.zone()))
+        // Today's story and his diary, as his messages are told them (D-120): the chat's own exchanges are its turns.
+        val story = Story.today(todays, messages, focus.today(now).atStartOfDay(clock.zone()).toInstant().toEpochMilli(), clock.zone(), chat = true)
+        val diary = log.value.let { Story.diary(it.slots, it.checkIns, messages, focus.today(now), clock.zone()) }
         val lessons = lessons(state, now)
         val waiting = waiting(now, messages)
         return ChatPrompts.Context(
@@ -597,6 +603,8 @@ class Conversation(
                 InstructionRules.onlyDays(applied, plan.today, plan.today.plusDays(ChatPrompts.PLAN_DAYS.toLong())).mapValues { ChatPrompts.onlyLine(it.value, byId) },
                 InstructionRules.outsideBy(applied, plan.today, plan.today.plusDays(ChatPrompts.PLAN_DAYS.toLong())),
                 feeling,
+                story,
+                diary,
             ),
             keepable = keepable,
             kept = keptToday.associate { it.key to it.taskId },

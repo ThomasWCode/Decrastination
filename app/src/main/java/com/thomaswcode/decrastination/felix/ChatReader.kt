@@ -49,7 +49,7 @@ class ChatReader(
         val builder = MessageCreateParams.builder()
             .model(model)
             .maxTokens(ClaudeEnricher.MAX_TOKENS)
-            .systemOfTextBlockParams(ModelCalls.systemBlocks(ChatPrompts.system(settings, profile.year), profile.text))
+            .systemOfTextBlockParams(ModelCalls.systemBlocks(ChatPrompts.system(settings), profile.felix))
             .outputConfig(OutputConfig.builder().effort(ModelEffort.of(ModelEffort.Job.Chat)).format(JsonOutputFormat.builder().schema(schema).build()).build())
             .putAdditionalHeader("anthropic-beta", ClaudeEnricher.FALLBACK_BETA)
             .putAdditionalBodyProperty("fallbacks", JsonValue.from("default"))

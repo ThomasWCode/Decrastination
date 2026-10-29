@@ -192,14 +192,14 @@ class MoodTest {
     }
 
     @Test
-    fun `his line, none at neutral, with what it rests on`() {
+    fun `his line, none at neutral, in a person's words with nothing of what it rests on (D-120)`() {
         val close = task(due = Fixtures.at("2026-11-05T09:00"))
         val strong = Mood.of(Reason.SlotEnd, listOf(missed("teams:a#-1#1", "16:30", "17:00"), missed("teams:essay#-1#1", "19:00", "19:30")), null, 0, close, emptyList(), now, LONDON)
-        assertEquals(
-            "How you feel, at most: let down, strongly (2 slots missed today; its task's due tomorrow 09:00, a real deadline, and nothing's done on it yet)",
-            Mood.line(strong),
-        )
-        assertEquals("How you feel, at most: let down, firmly (you've nudged them on this piece already, and nothing's started)", Mood.line(Mood.of(Reason.SlotStart, emptyList(), null, 1, null, emptyList(), now, LONDON)))
+        assertEquals("How you feel, at most: properly fed up", Mood.line(strong))
+        // What it rests on is kept for the scenarios' report, not told him.
+        assertEquals(listOf("2 slots missed today", "its task's due tomorrow 09:00, a real deadline, and nothing's done on it yet"), strong.because)
+        assertEquals("How you feel, at most: not impressed", Mood.line(Mood.of(Reason.SlotStart, emptyList(), null, 1, null, emptyList(), now, LONDON)))
+        assertEquals(listOf("really pleased", "pleased", "", "not impressed", "properly fed up"), Mood.Level.entries.map(Mood::words))
         assertNull(Mood.line(Mood.NEUTRAL))
         // Kept on his message: its level's name, none at neutral or for a silence.
         assertEquals("Strong", Mood.kept(strong, "three gone today."))

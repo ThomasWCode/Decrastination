@@ -17,6 +17,7 @@ import com.thomaswcode.decrastination.data.SlotOutcome
 import com.thomaswcode.decrastination.data.SlotRecord
 import com.thomaswcode.decrastination.data.StepOrderMigration
 import com.thomaswcode.decrastination.data.TaskState
+import com.thomaswcode.decrastination.data.SpeechMigration
 import com.thomaswcode.decrastination.data.ZoomMigration
 import com.thomaswcode.decrastination.data.TasksMigration
 import com.thomaswcode.decrastination.data.SettingsMigration
@@ -138,7 +139,7 @@ class PlanSnapshotTest {
     private val MIGRATIONS = mapOf(
         "runtime.json" to listOf(ChatMigration.RUNTIME), "log.json" to listOf(ChatMigration.LOG, MemoryMigration.LOG, CreditMigration.LOG), "session.json" to listOf(CreditMigration.SESSION, TimerMigration.SESSION),
         "tasks.json" to listOf(TasksMigration.TASKS, StepOrderMigration.TASKS), "instructions.json" to listOf(TasksMigration.INSTRUCTIONS, StepOrderMigration.INSTRUCTIONS, OnlyMigration.INSTRUCTIONS, OutsideMigration.INSTRUCTIONS),
-        "settings.json" to listOf(SettingsMigration.SETTINGS, ZoomMigration.SETTINGS),
+        "settings.json" to listOf(SettingsMigration.SETTINGS, ZoomMigration.SETTINGS, SpeechMigration.SETTINGS),
     )
 
     /** The plan as the app makes it ([Planning.plan]), from temporary stores holding the fixed state, and the calendar as last read. */

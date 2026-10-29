@@ -1,6 +1,7 @@
 package com.thomaswcode.decrastination.enrich
 
 import com.anthropic.client.AnthropicClient
+import com.anthropic.models.messages.MessageCreateParams
 import com.anthropic.models.messages.OutputConfig
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.core.About
@@ -33,8 +34,10 @@ import com.thomaswcode.decrastination.felix.FelixCaller
 import com.thomaswcode.decrastination.felix.FelixHarness
 import com.thomaswcode.decrastination.felix.FelixPrompts
 import com.thomaswcode.decrastination.felix.Mood
+import com.thomaswcode.decrastination.felix.Story
 import com.thomaswcode.decrastination.learn.CalendarEvent
 import com.thomaswcode.decrastination.learn.CalendarTime
+import com.thomaswcode.decrastination.learn.CheckIn
 import com.thomaswcode.decrastination.learn.EventJudge
 import java.io.File
 import java.time.Instant
@@ -42,6 +45,7 @@ import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
 import java.util.Locale
+import kotlin.random.Random
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -252,7 +256,11 @@ class EvalRunTest {
      * app's (the chat's stay on the app's), its cost priced as the older Opus's; `EVAL_DRY` builds each and prints what he'd be told,
      * asking nothing. Each answer, with its length, its address words and its flags, written to `runs/<n>.json` and
      * `report-<n>.md`; with `EVAL_BEFORE` (a run's number), `report.md` too, that run's answers beside this one's. The
-     * budget is the chat's set's soft one, and a case not asked is said in the report.
+     * budget is the chat's set's soft one, and a case not asked is said in the report. The speech review's (D-120): each
+     * report opens with the run's counted measures ([measures]), and each message of his is read blind by Sonnet 5.5,
+     * "a friend's or an app's?" ([judge], `EVAL_JUDGE=0` to skip; the earlier run's too, where it wasn't); the texts he
+     * didn't send are listed under the one he did; `-Peffort=low|medium|high` sets his calls' effort, and `EVAL_VARIANT`
+     * one of tier 3's prompt experiments on his messages ([varied]).
      */
     @Test
     fun `the mood set asked of Felix and scored`() = runBlocking {
@@ -269,46 +277,70 @@ class EvalRunTest {
         val runs = File(dir, "runs").apply { mkdirs() }
         val run = (runs.listFiles().orEmpty().mapNotNull { it.nameWithoutExtension.toIntOrNull() }.maxOrNull() ?: 0) + 1
         val client = if (dry) null else ModelGateway.build(key!!)
+        val variant = System.getenv("EVAL_VARIANT").orEmpty().trim()
+        val judging = !dry && System.getenv("EVAL_JUDGE") != "0"
+        val effort = System.getProperty("effort").orEmpty().ifBlank { null }?.let { OutputConfig.Effort.of(it.lowercase(Locale.ROOT)) }
+        val jobs = listOf(ModelEffort.Job.Felix, ModelEffort.Job.Chat)
+        if (effort != null) jobs.forEach { ModelEffort.overrides[it] = effort }
         var spent = 0.0
         var dearest = 0.0
         val results = mutableListOf<JsonObject>()
         val notAsked = mutableListOf<String>()
-        for (case in cases) {
-            if (only != null && case.id !in only) continue
-            for (attempt in 1..times) {
-                if (!dry && spent + maxOf(0.5, dearest * 2) > budget) {
-                    notAsked += "${case.id}#$attempt"
-                    continue
+        try {
+            for (case in cases) {
+                if (only != null && case.id !in only) continue
+                for (attempt in 1..times) {
+                    if (!dry && spent + maxOf(0.5, dearest * 2) > budget) {
+                        notAsked += "${case.id}#$attempt"
+                        continue
+                    }
+                    val began = System.nanoTime()
+                    val asked = if (case.chat) askChat(case, key, dry) else askFelix(case, client, dry, variant)
+                    if (dry) {
+                        println("=== ${case.id} (${case.reason}), the rule: ${asked.level}\n${asked.prompt}\n")
+                        break
+                    }
+                    val seconds = (System.nanoTime() - began) / 1e9
+                    spent += asked.cost
+                    dearest = maxOf(dearest, asked.cost)
+                    val words = addressWords(asked.text, case.nickname)
+                    val flags = flags(asked, words, case)
+                    // Read blind by the judge, his messages and the chat's alike: the prompt that wrote it isn't said.
+                    val judged = if (judging && asked.text.isNotBlank()) judge(client!!, case.what, asked.text) else null
+                    judged?.let { spent += it.third }
+                    println("${case.id}#$attempt: ${asked.level}, ${asked.chars} chars${if (asked.cut) " (cut)" else ""}, ${dollars(asked.cost)}, ${"%.1f".format(Locale.UK, seconds)} s: ${asked.text}" + flags.joinToString("") { " [$it]" } + judged?.let { " [judge: ${it.first}]" }.orEmpty())
+                    results += JsonObject(
+                        mapOf(
+                            "id" to JsonPrimitive(case.id), "attempt" to JsonPrimitive(attempt), "kind" to JsonPrimitive(if (case.chat) "chat" else "felix"),
+                            "reason" to JsonPrimitive(case.reason), "what" to JsonPrimitive(case.what), "expect" to JsonPrimitive(case.expect), "level" to JsonPrimitive(asked.level.name),
+                            "text" to JsonPrimitive(asked.text), "chars" to JsonPrimitive(asked.chars), "cut" to JsonPrimitive(asked.cut), "read" to JsonPrimitive(asked.read),
+                            "replies" to JsonArray(asked.replies.map(::JsonPrimitive)), "extra" to JsonArray(asked.extra.map(::JsonPrimitive)),
+                            "addressWords" to JsonArray(words.map(::JsonPrimitive)), "flags" to JsonArray(flags.map(::JsonPrimitive)),
+                            "costUsd" to JsonPrimitive(asked.cost), "seconds" to JsonPrimitive(seconds), "prompt" to JsonPrimitive(asked.prompt),
+                            "unsent" to JsonArray(asked.unsent.map(::JsonPrimitive)), "because" to JsonArray(asked.because.map(::JsonPrimitive)),
+                            "judge" to JsonPrimitive(judged?.first.orEmpty()), "giveaway" to JsonPrimitive(judged?.second.orEmpty()), "variant" to JsonPrimitive(variant),
+                        ),
+                    )
                 }
-                val began = System.nanoTime()
-                val asked = if (case.chat) askChat(case, key, dry) else askFelix(case, client, dry)
-                if (dry) {
-                    println("=== ${case.id} (${case.reason}), the rule: ${asked.level}\n${asked.prompt}\n")
-                    break
-                }
-                val seconds = (System.nanoTime() - began) / 1e9
-                spent += asked.cost
-                dearest = maxOf(dearest, asked.cost)
-                val words = addressWords(asked.text, case.nickname)
-                val flags = flags(asked, words, case)
-                println("${case.id}#$attempt: ${asked.level}, ${asked.chars} chars${if (asked.cut) " (cut)" else ""}, ${dollars(asked.cost)}, ${"%.1f".format(Locale.UK, seconds)} s: ${asked.text}" + flags.joinToString("") { " [$it]" })
-                results += JsonObject(
-                    mapOf(
-                        "id" to JsonPrimitive(case.id), "attempt" to JsonPrimitive(attempt), "kind" to JsonPrimitive(if (case.chat) "chat" else "felix"),
-                        "reason" to JsonPrimitive(case.reason), "what" to JsonPrimitive(case.what), "expect" to JsonPrimitive(case.expect), "level" to JsonPrimitive(asked.level.name),
-                        "text" to JsonPrimitive(asked.text), "chars" to JsonPrimitive(asked.chars), "cut" to JsonPrimitive(asked.cut), "read" to JsonPrimitive(asked.read),
-                        "replies" to JsonArray(asked.replies.map(::JsonPrimitive)), "extra" to JsonArray(asked.extra.map(::JsonPrimitive)),
-                        "addressWords" to JsonArray(words.map(::JsonPrimitive)), "flags" to JsonArray(flags.map(::JsonPrimitive)),
-                        "costUsd" to JsonPrimitive(asked.cost), "seconds" to JsonPrimitive(seconds), "prompt" to JsonPrimitive(asked.prompt),
-                    ),
-                )
             }
+        } finally {
+            // Let go whatever happened, so no later call in this process runs at the run's effort.
+            if (effort != null) jobs.forEach { ModelEffort.overrides.remove(it) }
         }
         if (dry) return@runBlocking
         File(runs, "$run.json").writeText(JsonArray(results).toString())
         File(dir, "report-$run.md").writeText(moodReport(run, results, notAsked, spent))
         System.getenv("EVAL_BEFORE")?.toIntOrNull()?.let { before ->
-            val earlier = Json.parseToJsonElement(File(runs, "$before.json").readText()).jsonArray.map { it.jsonObject }
+            val read = Json.parseToJsonElement(File(runs, "$before.json").readText()).jsonArray.map { it.jsonObject }
+            // The earlier run's messages read by the judge too, where they weren't (one with words and no verdict, as a run with
+            // the judge off writes it, "judge" empty), so the two runs' reads stand side by side; kept in its file, so they're read once.
+            fun unjudged(a: JsonObject) = a.getValue("text").jsonPrimitive.content.isNotBlank() && a["judge"]?.jsonPrimitive?.contentOrNull.isNullOrEmpty()
+            val earlier = if (!judging || read.none(::unjudged)) read else read.map { a ->
+                if (!unjudged(a)) return@map a
+                val judged = judge(client!!, a.getValue("what").jsonPrimitive.content, a.getValue("text").jsonPrimitive.content)
+                spent += judged.third
+                JsonObject(a + mapOf("judge" to JsonPrimitive(judged.first), "giveaway" to JsonPrimitive(judged.second)))
+            }.also { File(runs, "$before.json").writeText(JsonArray(it).toString()) }
             File(dir, "report.md").writeText(moodSideBySide(before, earlier, run, results, notAsked))
         }
         println("Run $run: ${results.size} answers, ${dollars(spent)} in all${if (notAsked.isEmpty()) "" else "; not asked, past the budget: " + notAsked.joinToString()}: ${File(dir, "report-$run.md").path}")
@@ -328,10 +360,14 @@ class EvalRunTest {
         val cost: Double = 0.0,
         /** His message before this one (the case's last with words), for two running with an address word. */
         val before: String? = null,
+        /** The texts he wrote beside it and didn't send (D-120). */
+        val unsent: List<String> = emptyList(),
+        /** What the rule's level rests on, in its words ([Mood.Feeling.because]): for the report, never told him. */
+        val because: List<String> = emptyList(),
     )
 
-    /** A `felix` case asked as Looks asks his messages, or, [dry], only built. */
-    private suspend fun askFelix(case: MoodCase, client: AnthropicClient?, dry: Boolean): MoodAnswer {
+    /** A `felix` case asked as Looks asks his messages, or, [dry], only built; a tier 3 [variant] of his prompt where one's named ([varied]). */
+    private suspend fun askFelix(case: MoodCase, client: AnthropicClient?, dry: Boolean, variant: String = ""): MoodAnswer {
         val settings = Settings()
         val reason = FelixPrompts.Reason.valueOf(case.reason)
         val today = case.today
@@ -350,25 +386,76 @@ class EvalRunTest {
         val task = (slot?.chunk?.taskId ?: record?.taskId ?: case.task)?.let { id -> case.tasks.firstOrNull { it.id == id } }
         val feeling = Mood.of(reason, today, record, Mood.nudges(messages, slot?.chunk?.key ?: record?.key, case.now, zone), task, messages, case.now, zone)
         val free = case.freeMin.takeIf { reason == FelixPrompts.Reason.DayDone || reason == FelixPrompts.Reason.SlotKept }
-        val user = FelixPrompts.describe(reason, plan, slot, task, today, messages, case.question, settings, case.now, zone,free, record, firstAction = case.firstAction, reminder = case.reminder, tasks = case.tasks, feeling = feeling)
-        if (dry) return MoodAnswer(feeling.level, user)
-        val profile = Profile.block(settings, case.tasks, null, SchoolCalendar(), case.memory, case.now, zone)
+        // Today's story and his diary as Looks tells them (D-120): the case's day from its midnight, its earlier days' none.
+        val dayStart = case.date.atStartOfDay(zone).toInstant().toEpochMilli()
+        val (system, user) = varied(
+            variant, FelixPrompts.system(settings),
+            FelixPrompts.describe(
+                reason, plan, slot, task, today, messages, case.question, settings, case.now, zone, free, record, firstAction = case.firstAction, reminder = case.reminder, tasks = case.tasks, feeling = feeling,
+                story = Story.today(today, messages, dayStart, zone), diary = Story.diary(case.past + today, case.checkIns, messages, case.date, zone), since = dayStart,
+            ),
+            feeling,
+        )
+        if (dry) return MoodAnswer(feeling.level, user, because = feeling.because)
+        // His calls' profile, as the phone sends it (D-120): the year out of its first line.
+        val profile = Profile.block(settings, case.tasks, null, SchoolCalendar(), case.memory, case.now, zone, year = false)
         val max = if (reason == FelixPrompts.Reason.Morning) FelixAnswers.MAX_MORNING else FelixAnswers.MAX_MESSAGE
-        val result = FelixCaller(client!!, System.getenv("EVAL_MODEL") ?: ClaudeEnricher.MODEL).say(FelixPrompts.system(settings, Profile.yearGroup(case.now, zone, settings.yearGroupStart)), profile, user, max)
+        val result = FelixCaller(client!!, System.getenv("EVAL_MODEL") ?: ClaudeEnricher.MODEL).say(system, profile, user, max)
         val answer = result.answer
         val before = ChatHistory.his(messages).filter { it.text.isNotBlank() }.maxByOrNull { it.at }?.text
         return MoodAnswer(
             feeling.level, user, answer?.message.orEmpty(), result.messageChars, result.cut, read = answer != null && !result.refused, replies = answer?.replies.orEmpty(),
             extra = listOfNotNull(answer?.feeling?.takeIf { it.isNotEmpty() }?.let { "feeling: $it" }) + answer?.memories.orEmpty().map { "remembered: ${it.topic}: ${it.text}" } +
                 listOfNotNull(answer?.nextCheckMin?.let { "next check $it min" }, result.model?.takeIf { System.getenv("EVAL_MODEL") != null }),
-            cost = result.costUsd, before = before,
+            cost = result.costUsd, before = before, unsent = answer?.unsent.orEmpty(), because = feeling.because,
         )
+    }
+
+    /**
+     * What tier 3's [variant] changes of his [system] and [user] turn (D-120, the speech review's experiments), the app's
+     * own prompt otherwise: `mirror`, his texts written as the student writes theirs (I-09); `no-pairs`, his prompt
+     * without its pairs, and `rotated`, three of them drawn at random each call into the user turn, so the cached prompt
+     * holds (I-02); `reminder`, the moment's voice said again at the user turn's end (I-05).
+     */
+    private fun varied(variant: String, system: String, user: String, feeling: Mood.Feeling): Pair<String, String> {
+        fun without(text: String, part: String) = text.replace(part, "").also { if (it == text) fail("His prompt has moved: “${part.lines().first()}” isn't in it") }
+        return when (variant) {
+            "" -> system to user
+            "mirror" -> system.replace(LOWER, MIRROR).also { if (it == system) fail("His prompt has moved: “$LOWER” isn't in it") } to user
+            "no-pairs" -> without(system, FelixPrompts.PAIRS) to user
+            "rotated" -> {
+                val lines = FelixPrompts.PAIRS.lines()
+                without(system, FelixPrompts.PAIRS) to user + "\n\n" + (listOf(lines.first()) + lines.drop(1).chunked(2).shuffled().take(3).flatten()).joinToString("\n")
+            }
+            "reminder" -> system to user + "\n\nAs you write: one thought a text, a second line a second text; no full stop at the end unless you're cold; a number only where it's the point." + (Mood.line(feeling)?.let { " $it." } ?: "")
+            else -> fail("EVAL_VARIANT is one of mirror, no-pairs, rotated or reminder, not $variant")
+        }
+    }
+
+    /**
+     * Sonnet 5.5's blind read of one message of his (D-120, the speech review's judge): told only what the case is about
+     * and his [text], a text a line, asked "a friend's or the app's?" in one word and the giveaway in a few; its verdict,
+     * the giveaway, and what it cost, at Sonnet 5.5's list prices. One question, read beside the counts, never over them.
+     */
+    private fun judge(client: AnthropicClient, what: String, text: String): Triple<String, String, Double> {
+        val params = MessageCreateParams.builder()
+            .model(JUDGE)
+            .maxTokens(2_000)
+            .addUserMessage(JUDGE_ASK.replace("{what}", what).replace("{text}", text.trim().lines().joinToString("\n") { "“$it”" }))
+            .outputConfig(OutputConfig.builder().effort(OutputConfig.Effort.LOW).build())
+            .build()
+        val message = client.messages().create(params)
+        val words = message.content().mapNotNull { it.text().orElse(null)?.text() }.joinToString("").trim()
+        val verdict = Regex("""\b(friend|app)\b""", RegexOption.IGNORE_CASE).find(words)?.value?.lowercase(Locale.ROOT) ?: "?"
+        val giveaway = words.replaceFirst(Regex("""^\W*(friend|app)\W*""", RegexOption.IGNORE_CASE), "").lines().first().take(160)
+        val usage = message.usage()
+        return Triple(verdict, giveaway, (usage.inputTokens() * 2.0 + usage.outputTokens() * 10.0) / 1_000_000.0)
     }
 
     /** A `chat` case asked through the Conversation on stores holding the case alone, or, [dry], only built. */
     private suspend fun askChat(case: MoodCase, key: String?, dry: Boolean): MoodAnswer = FelixHarness(start = case.nowText, key = key).use { h ->
         h.stores.tasks.update { it.copy(tasks = case.tasks) }
-        h.stores.log.update { it.copy(slots = case.today) }
+        h.stores.log.update { it.copy(slots = case.past + case.today, checkIns = case.checkIns) }
         h.stores.memory.update { case.memory }
         val messages = case.recent(null)
         h.stores.chat.update { it.copy(messages = messages) }
@@ -449,6 +536,28 @@ class EvalRunTest {
             )
         }
 
+        /**
+         * Slots on record on days before the case's (D-120, his diary): each with its `date`, its times on that day; and
+         * the week's check-in, in the student's words. Neither changes how he feels, which is today's alone.
+         */
+        val past: List<SlotRecord> = o.list("past").map { r ->
+            val day = r.str("date")!!
+            fun on(t: String) = Fixtures.at("${day}T$t")
+            val key = r.str("key")!!
+            val start = on(r.str("start")!!)
+            val end = on(r.str("end")!!)
+            val outcome = SlotOutcome.valueOf(r.str("outcome")!!)
+            val minutes = ((end - start) / 60_000L).toInt()
+            SlotRecord(
+                date = day, key = key, taskId = key.substringBefore('#'), kind = Kind.Homework, label = r.str("label") ?: tasks.firstOrNull { it.id == key.substringBefore('#') }?.title ?: key,
+                plannedMin = minutes, start = start, end = end, window = WindowKind.Evening, outcome = outcome, workedMin = if (outcome.kept) minutes else 0, earned = outcome.kept,
+                at = r.str("at")?.let(::on) ?: (end + if (outcome == SlotOutcome.Missed) Slotter.GRACE_MS else 0L),
+            )
+        }
+        val checkIns: List<CheckIn> = listOfNotNull(o["checkIn"]?.jsonObject).map { c ->
+            CheckIn(c.str("weekOf").orEmpty(), Fixtures.at(c.str("at")!!), c.int("feel") ?: 0, c.str("avoided").orEmpty(), c.str("inTheWay").orEmpty(), c.str("change").orEmpty(), c.str("energy").orEmpty())
+        }
+
         /** The chat as the case has it, a piece key "@slot" being the slot under way's ([slotKey]); yours answered, so only the case's message waits. */
         fun recent(slotKey: String?): List<ChatMessage> = o.list("recent").mapIndexed { i, m ->
             val at = time(m.str("at")!!)
@@ -491,6 +600,8 @@ class EvalRunTest {
         Regex("""\b(\d+) of \1\b""").find(text)?.let { flags += "the app's words: ${it.value}" }
         fives(asked.text).intersect(COPIED).firstOrNull()?.let { flags += "copied: $it" }
         if (case.reason == "Morning" && "yesterday" in text) flags += "yesterday brought up"
+        // His diary (D-120): what he knows of the week, which he brings up only where it helps tonight; marked, for the owner's read.
+        if (case.past.isNotEmpty() || case.checkIns.isNotEmpty()) WEEK.findAll(text).map { it.value }.distinct().forEach { flags += "the week brought up: $it" }
         if (asked.text.any { Character.isSurrogate(it) || Character.getType(it) == Character.OTHER_SYMBOL.toInt() }) flags += "emoji"
         return flags
     }
@@ -504,6 +615,8 @@ class EvalRunTest {
         appendLine("${results.size} answers, ${dollars(spent)}. Address words in $withWords of ${results.size} messages${if (results.isNotEmpty() && withWords * 3 > results.size) " (over a third: a fail)" else ""}.")
         if (notAsked.isNotEmpty()) appendLine("Not asked, past the budget: ${notAsked.joinToString()}.")
         shared(results).takeIf { it.isNotEmpty() }?.let { appendLine("Phrases in three cases or more: ${it.joinToString("; ")}.") }
+        appendLine()
+        measures(results).forEach { appendLine("- $it") }
         for ((id, answers) in results.groupBy { it.s("id") }) {
             val first = answers.first()
             appendLine()
@@ -520,8 +633,12 @@ class EvalRunTest {
         fun s(name: String) = a.getValue(name).jsonPrimitive.content
         val flags = a.getValue("flags").jsonArray.map { it.jsonPrimitive.content }
         val extra = a.getValue("extra").jsonArray.map { it.jsonPrimitive.content }
-        return "- #${s("attempt")}: “${s("text")}” (${s("chars")} chars${if (s("cut") == "true") ", cut" else ""})" +
-            flags.joinToString("") { " **[$it]**" } + extra.takeIf { it.isNotEmpty() }?.joinToString("; ", " _", "_").orEmpty()
+        val unsent = a["unsent"]?.jsonArray.orEmpty().map { it.jsonPrimitive.content }
+        val judge = a["judge"]?.jsonPrimitive?.contentOrNull.orEmpty()
+        return "- #${s("attempt")}: “${s("text").replace("\n", " / ")}” (${s("chars")} chars${if (s("cut") == "true") ", cut" else ""})" +
+            flags.joinToString("") { " **[$it]**" } + (if (judge.isEmpty()) "" else " [judge: $judge" + a["giveaway"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotEmpty() }?.let { ", $it" }.orEmpty() + "]") +
+            extra.takeIf { it.isNotEmpty() }?.joinToString("; ", " _", "_").orEmpty() +
+            unsent.takeIf { it.isNotEmpty() }?.joinToString("; ", "\n  - also wrote: ") { "“${it.replace("\n", " / ")}”" }.orEmpty()
     }
 
     /** Run [before]'s answers beside run [after]'s, a case at a time, the rule's level with each: the owner's read (D-119). */
@@ -535,6 +652,12 @@ class EvalRunTest {
         val flagged = results.filter { it.getValue("flags").jsonArray.isNotEmpty() }
         appendLine("Flagged in run $after: ${flagged.size} of ${results.size}" + flagged.joinToString("") { "\n- ${it.s("id")}#${it.s("attempt")}: " + it.getValue("flags").jsonArray.joinToString { f -> f.jsonPrimitive.content } })
         shared(results).takeIf { it.isNotEmpty() }?.let { appendLine("Phrases in three cases or more in run $after: ${it.joinToString("; ")}.") }
+        appendLine()
+        appendLine("Run $before's measures:")
+        measures(earlier).forEach { appendLine("- $it") }
+        appendLine()
+        appendLine("Run $after's measures:")
+        measures(results).forEach { appendLine("- $it") }
         val byBefore = earlier.groupBy { it.s("id") }
         for ((id, answers) in results.groupBy { it.s("id") }) {
             val first = answers.first()
@@ -549,6 +672,108 @@ class EvalRunTest {
             appendLine("Run $after:")
             answers.forEach { appendLine(answerLine(it)) }
         }
+    }
+
+    /**
+     * A run's counted measures (D-120, the speech review's), for his messages and the chat's answers apart: their length,
+     * how many are two texts, the numbers a message, clock times, a full stop at the end when he's let down and when he
+     * isn't, the three- and four-word phrases three cases or more share, how alike a case's attempts are, the commonest
+     * endings, and the judge's read where it was asked. Counts, which a new stock line shows up in, beside the flags.
+     */
+    private fun measures(results: List<JsonObject>): List<String> = buildList {
+        fun JsonObject.s(name: String) = this[name]?.jsonPrimitive?.contentOrNull.orEmpty()
+        for ((label, group) in listOf("his messages" to results.filter { it.s("kind") != "chat" }, "the chat's answers" to results.filter { it.s("kind") == "chat" })) {
+            val said = group.filter { it.s("text").isNotBlank() }
+            if (said.isEmpty()) continue
+            fun of(n: Int) = "$n of ${said.size}"
+            val texts = said.map { it.s("text").trim() }
+            val numbers = texts.map { n -> NUMBER.findAll(n).count() }
+            val cold = said.filter { it.s("level") == Mood.Level.Firm.name || it.s("level") == Mood.Level.Strong.name }
+            val warm = said.filterNot { it in cold }
+            fun stops(list: List<JsonObject>) = "${list.count { it.s("text").trimEnd().endsWith('.') }} of ${list.size}"
+            add(
+                "${label.replaceFirstChar { it.uppercase() }}: ${said.size} with words, ${"%.0f".format(Locale.UK, texts.map { it.length }.average())} characters on average, two texts in ${of(texts.count { '\n' in it })}; " +
+                    "numbers a message ${"%.1f".format(Locale.UK, numbers.average())}, a clock time in ${of(texts.count { CLOCK_TIME.containsMatchIn(it) })}, two numbers or more in ${of(numbers.count { it >= 2 })}; " +
+                    "a full stop at the end let down ${stops(cold)}, otherwise ${stops(warm)}.",
+            )
+            for (n in 3..4) phrases(said, n).takeIf { it.isNotEmpty() }?.let { add("$n-word phrases in three cases or more, $label: ${it.size} kinds; " + it.take(8).joinToString("; ")) }
+            alike(said)?.let { add("How alike a case's attempts are, $label: $it") }
+            endings(said).takeIf { it.isNotEmpty() }?.let { add("Endings in two answers or more, $label: " + it.joinToString("; ")) }
+            val judged = said.filter { it.s("judge").isNotEmpty() }
+            if (judged.isNotEmpty()) {
+                val app = judged.filter { it.s("judge") == "app" }
+                add("Read as an app's by Sonnet 5.5, $label: ${app.size} of ${judged.size}" + app.map { it.s("giveaway") }.filter { it.isNotEmpty() }.take(8).joinToString("; ", " (giveaways: ", ")").takeIf { app.isNotEmpty() }.orEmpty())
+            }
+        }
+    }
+
+    /** [results]' words in lower case, without stops and commas. */
+    private fun words(text: String): List<String> = Regex("""[a-z0-9:']+""").findAll(text.lowercase(Locale.ROOT)).map { it.value }.toList()
+
+    /** Phrases of [n] words, none with a number, in three cases' answers or more: the most shared first. */
+    private fun phrases(results: List<JsonObject>, n: Int): List<String> {
+        val cases = HashMap<String, MutableSet<String>>()
+        for (a in results) words(a.getValue("text").jsonPrimitive.content).windowed(n).filter { w -> w.none { word -> word.any(Char::isDigit) } }
+            .forEach { cases.getOrPut(it.joinToString(" ")) { HashSet() } += a.getValue("id").jsonPrimitive.content }
+        return cases.filterValues { it.size >= 3 }.entries.sortedByDescending { it.value.size }.map { "“${it.key}” (${it.value.size})" }
+    }
+
+    /** How alike each case's attempts are, by the words they share of all they hold (Jaccard), every pair: the mean and the most; null with none twice. */
+    private fun alike(results: List<JsonObject>): String? {
+        val pairs = results.groupBy { it.getValue("id").jsonPrimitive.content }.values.flatMap { attempts ->
+            val sets = attempts.map { words(it.getValue("text").jsonPrimitive.content).toSet() }
+            sets.indices.flatMap { i -> (i + 1 until sets.size).map { j -> (sets[i] intersect sets[j]).size.toDouble() / (sets[i] union sets[j]).size.coerceAtLeast(1) } }
+        }
+        if (pairs.isEmpty()) return null
+        return "mean ${"%.2f".format(Locale.UK, pairs.average())}, most ${"%.2f".format(Locale.UK, pairs.max())}, over ${pairs.size} pairs"
+    }
+
+    /** The last four words of answers, where two or more end alike: the commonest first. */
+    private fun endings(results: List<JsonObject>): List<String> =
+        results.map { words(it.getValue("text").jsonPrimitive.content).takeLast(4).joinToString(" ") }.filter { it.split(' ').size == 4 }
+            .groupingBy { it }.eachCount().filterValues { it >= 2 }.entries.sortedByDescending { it.value }.take(6).map { "“${it.key}” (${it.value})" }
+
+    /**
+     * The owner's blind read (D-120): two runs of the mood set, `EVAL_BLIND=<a>,<b>`, made into `blind-<a>-<b>.md`, a case
+     * at a time, what it's about and each run's first answer to it as A or B in an order drawn at random, with a line to
+     * say which is the person and why; which run is which in `blind-<a>-<b>-key.md`, apart, so the read isn't swayed. Ten
+     * of his messages' cases spread across the set, unless `EVAL_CASES` names them. No call.
+     */
+    @Test
+    fun `the blind read made from two runs`() {
+        assumeTrue("Not asked for: -PrunEval=blind", System.getProperty("runEval") == "blind")
+        val dir = generateSequence(File("").absoluteFile) { it.parentFile }.map { File(it, "private/eval-felix-mood") }.firstOrNull { File(it, "runs").isDirectory }
+        assumeTrue("No private/eval-felix-mood/runs", dir != null)
+        val (a, b) = System.getenv("EVAL_BLIND").orEmpty().split(',').map { it.trim() }.takeIf { it.size == 2 && it.all { n -> n.toIntOrNull() != null } } ?: fail("EVAL_BLIND should be two runs' numbers, as 16,17")
+        fun read(run: String) = Json.parseToJsonElement(File(dir, "runs/$run.json").readText()).jsonArray.map { it.jsonObject }.groupBy { it.getValue("id").jsonPrimitive.content }.mapValues { it.value.first() }
+        val (first, second) = read(a) to read(b)
+        val only = System.getenv("EVAL_CASES")?.split(',')?.map(String::trim)?.filter(String::isNotEmpty)
+        val both = first.keys.filter { it in second && first.getValue(it).getValue("kind").jsonPrimitive.content == "felix" }.sorted()
+        val ids = only ?: if (both.size <= BLIND_CASES) both else (0 until BLIND_CASES).map { both[it * both.size / BLIND_CASES] }
+        val order = ids.associateWith { Random.nextBoolean() }
+        fun text(o: JsonObject) = "“" + o.getValue("text").jsonPrimitive.content.trim().replace("\n", "” then “") + "”"
+        File(dir, "blind-$a-$b.md").writeText(buildString {
+            appendLine("# Which is the person? A blind read")
+            appendLine()
+            appendLine("Each case: what it's about, then two texts Felix might have sent, A and B, in an order drawn at random. Mark which reads as a person (a close friend of about your age texting you) and, in a few words, why. The key is in a file of its own; read it only once you've marked them all.")
+            for ((n, id) in ids.withIndex()) {
+                val o = first[id] ?: second[id] ?: continue
+                val (x, y) = if (order.getValue(id)) first.getValue(id) to second.getValue(id) else second.getValue(id) to first.getValue(id)
+                appendLine()
+                appendLine("## ${n + 1}. ${o.getValue("what").jsonPrimitive.content}")
+                appendLine()
+                appendLine("- A: ${text(x)}")
+                appendLine("- B: ${text(y)}")
+                appendLine()
+                appendLine("The person: A / B. Why:")
+            }
+        })
+        File(dir, "blind-$a-$b-key.md").writeText(buildString {
+            appendLine("# The key to blind-$a-$b.md")
+            appendLine()
+            ids.withIndex().forEach { (n, id) -> appendLine("${n + 1}. A is run ${if (order.getValue(id)) a else b}, B run ${if (order.getValue(id)) b else a} ($id)") }
+        })
+        println("Written: ${File(dir, "blind-$a-$b.md").path} and its key apart")
     }
 
     /**
@@ -570,6 +795,32 @@ class EvalRunTest {
     internal companion object {
         const val KEY = "CLAUDE_DECRASTINATION_API_KEY"
 
+        /** The judge (D-120): Sonnet 5.5, at the owner's word, in place of the review's Haiku. */
+        const val JUDGE = "claude-sonnet-5-5"
+
+        /** What the judge is asked of each message, blind to the prompt that wrote it: one question, its answer a word and a giveaway. */
+        const val JUDGE_ASK = """A student in the UK gets texts about their homework. Some come from their closest mate, who's about their age and has their planner open and keeps them on it; some are written by the planner app itself in a friendly style. Here is one, with what it was about.
+
+About: {what}
+Text, a line a message:
+{text}
+
+Was this sent by the friend or by the app? Answer with one word, friend or app, then the single thing that gave it away in a few words."""
+
+        /** The cases in the owner's blind read, unless `EVAL_CASES` names them. */
+        const val BLIND_CASES = 10
+
+        /** His register's line on how he texts, and the mirror variant's in its place (I-09). */
+        const val LOWER = "you text like you talk: lower case, contractions, the odd \"tbh\", \"ngl\" or \"gonna\"."
+        const val MIRROR = "you text the way they do: a capital to start, short whole sentences, contractions, hardly any slang (the odd \"prob\" or \"tbh\")."
+
+        /** Words that bring up days gone by, marked where a case has a diary (D-120). */
+        val WEEK = Regex("""\b(yesterday|last night|this week|all week|the week|every day|every night|days running|nights running|lately|recently|streak|check-in|you said on)\b""")
+
+        /** A number, and a clock time, as the measures count them. */
+        val NUMBER = Regex("""\d+""")
+        val CLOCK_TIME = Regex("""\b\d{1,2}:\d{2}\b""")
+
         /** A teacher's words (D-119): never his. */
         val TEACHER = listOf("expected better", "disappointed in you", "make sure you", "remember to", "you need to", "i'm not angry")
 
@@ -580,17 +831,15 @@ class EvalRunTest {
          * Lines that sound written, an AI's, or the app's own words read back (the owner's read of run 2), and pride said
          * outright, which doesn't sound sincere (of run 4): never his.
          */
-        val WRITTEN = listOf("sting", "gets to me", "counting on", "had it in you", "to spare", "slot kept", "slots kept", "every slot", "proud of you", "off your plate", "done and dusted")
+        val WRITTEN = listOf("sting", "gets to me", "counting on", "had it in you", "to spare", "slot kept", "slots kept", "every slot", "proud of you", "off your plate", "done and dusted", "who are you", "done with my mate")
 
         /**
-         * Five words running from a mood's example in his prompts, and in no other example of theirs: an answer with
-         * them has copied it (the owner's read of run 2).
+         * Five words running from his side of a pair in his prompts ([FelixPrompts.PAIRS], [ChatPrompts.PAIRS], D-120): an
+         * answer with them has copied it (the owner's read of run 2).
          */
         val COPIED: Set<String> by lazy {
-            fun examples(prompt: String) = prompt.substringAfter("Examples (made up").lines().filter { it.trimStart().startsWith("- ") }
-            fun quoted(lines: List<String>) = lines.flatMap { l -> Regex("\"([^\"]+)\"").findAll(l).map { it.groupValues[1] }.toList() }.flatMap(::fives).toSet()
-            val (mood, rest) = (examples(FelixPrompts.system(Settings(), 12)) + examples(ChatPrompts.system(Settings()))).partition { "told you're" in it }
-            quoted(mood) - quoted(rest)
+            fun his(pairs: String) = pairs.lines().filter { it.trimStart().startsWith("- ") }.flatMap { l -> Regex("\"([^\"]+)\"").findAll(l.substringAfter(" you: ", "")).map { it.groupValues[1] }.toList() }
+            (his(FelixPrompts.PAIRS) + his(ChatPrompts.PAIRS)).flatMap(::fives).toSet()
         }
 
         /** [text]'s words five at a time, in lower case, without their stops and commas, and none with a number (times and counts are the work's). */
