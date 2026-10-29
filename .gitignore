@@ -20,3 +20,6 @@ __pycache__/
 # Fixtures that go into git are redacted copies (see fixtures/README.md).
 /private/
 /dumps/
+
+# The 29 Oct 2026 review's probes of the git-ignored private/ helpers, and its copies of them: this PC only.
+/docs/astra-review-29-10-26/evidence/private/
