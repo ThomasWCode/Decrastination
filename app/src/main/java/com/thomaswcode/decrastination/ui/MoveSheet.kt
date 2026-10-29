@@ -32,10 +32,10 @@ import java.time.ZoneId
 private const val DAYS = 14L
 
 /**
- * A piece moved by hand (UI-04), from a long press on its slot: a day of the next fortnight, each with
- * its load (one after a real deadline still to come can't be picked: due before then; overdue work
- * can go to any, D-30), then this piece at a time, or all of its task that day; as a change of
- * yours, taken back in Your changes. No drag between rows: a sheet does it for less.
+ * A piece moved by hand (UI-04), from its piece's or its task's sheet (a long press drags it on the Day's grid, D-118, and
+ * TalkBack's *Move it* opens this): a day of the next fortnight, each with its load (one after a real deadline still to
+ * come can't be picked: due before then; overdue work can go to any, D-30), then this piece at a time, or all of its task
+ * that day; as a change of yours, taken back in Your changes.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

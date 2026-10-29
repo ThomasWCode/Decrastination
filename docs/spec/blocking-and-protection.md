@@ -57,7 +57,7 @@ There's no way through it. Back goes to the home screen. It closes itself once n
 `block/Credit.kt` keeps one day's ledger in `session.json`: minutes earned and spent, and whether the day's allowance is given. Every three minutes of work earn about one of free time (`workMinPerFreeMin`, 3). What's left at midnight is gone.
 
 It's spent only while a blocked app or site is on screen (in front, floating, or beside another app), timed on the phone's elapsed-time clock and saved every half minute; locking the phone stops it.
-While it's spent, a silent notification counts it down, and a heads-up comes in its last minute (IMP-P2-011, `block/FreeTimeNotice.kt`). Neither grants time; **Back to work** opens the app.
+While it's spent, a silent notification counts it down, and a heads-up comes in its last minute (IMP-P2-011, `block/FreeTimeNotice.kt`), once a spending period: one begun inside its last minute (an app opened again with under a minute left) is warned at once, with the seconds there are. Neither grants time; **Back to work** opens the app.
 
 **What a kept slot earns** (BL-08). A slot kept by its tick, its photo or its source (LR-09, [slots-and-calendar.md](slots-and-calendar.md)) earns a third of its piece's minutes, by `Chunk.earnsBy`:
 - a piece under `photoFromMin` (20 minutes) earns on its tick;
@@ -105,7 +105,7 @@ Nothing on an unrooted phone is unbypassable: the layers make every impulsive ro
 
 | Layer | What does it | What it stops |
 |---|---|---|
-| 1. No bypass | No override button: quiet hours and the time until blocking starts are the only release | "Just this once" |
+| 1. No bypass | No override button: the release is only what's above (a parent code's hour, quiet hours and the time until blocking starts, a gap after a kept slot, free time earned) | "Just this once" |
 | 2. Settings guard | `protect/GuardRules.kt`, run by the focus service once armed | Switching the service off, force-stopping, uninstalling, clearing data, resetting settings |
 | 3. Device admin | `protect/Watchdog.kt`'s `AdminReceiver`, asking for no powers | Uninstalling while armed |
 | 4. Delayed loosening | `protect/SettingsChanges.kt`: a change that loosens the blocker waits `loosenDelayHours` (24) | Rewriting the rules in a weak moment |
