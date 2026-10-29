@@ -716,6 +716,18 @@ private fun ColumnScope.Chat(
     val name = graph.settings.value.felixName
     val scope = rememberCoroutineScope()
     var lookup by remember { mutableStateOf<Job?>(null) }
+    // Your rating of one of his being written (D-119): its message and thumb, held here, not in the message's row,
+    // so a turn of the phone, which makes the screen again, keeps the box and what's in it (U-03).
+    var ratingId by rememberSaveable { mutableStateOf<String?>(null) }
+    var ratingUp by rememberSaveable { mutableStateOf(true) }
+    ratingId?.let { id ->
+        (all + archive).firstOrNull { it.id == id }?.let { message ->
+            RateDialog(message, ratingUp, onDismiss = { ratingId = null }) { thumb, words, preferred ->
+                ratingId = null
+                graph.scope.launch { graph.conversation.rate(message.id, thumb, words, preferred) }
+            }
+        }
+    }
     val rows = remember(all, archive, quotes, unread, screen.earlier, screen.firstUnread, zone) { screen.items(all, archive, zone, unread, quotes) }
     val shown = all.filter { it.from == Speaker.You || it.text.isNotBlank() }
     // Yours waiting for his answer, with nothing to say why (Claude off, resting, a failed call): he's
@@ -807,7 +819,7 @@ private fun ColumnScope.Chat(
                             }) { screen.replyTo(message) }
                         } else {
                             val markIt = if (!row.archived && message.id in markable) { { onMark(listOf(message.id)) } } else null
-                            Claudes(graph, screen, message, tasks, flash, now, zone, onEdit, live = !row.archived, waiting = !row.archived && message.id in awaiting, onMarkAnswered = markIt) { screen.replyTo(message) }
+                            Claudes(graph, screen, message, tasks, flash, now, zone, onEdit, live = !row.archived, waiting = !row.archived && message.id in awaiting, onMarkAnswered = markIt, onRate = { up -> ratingId = message.id; ratingUp = up }) { screen.replyTo(message) }
                         }
                     }
                 }
@@ -1135,35 +1147,27 @@ private const val DOT_STEP_MS = 200
  * Mark answered ([onMarkAnswered]) while it's [waiting] for your answer, which its time line says (D-99).
  */
 @Composable
-private fun Claudes(graph: AppGraph, screen: ChatScreenState, message: ChatMessage, tasks: Map<String, TaskItem>, flash: Boolean, now: Long, zone: ZoneId, onEdit: (String, String) -> Unit, live: Boolean, waiting: Boolean = false, onMarkAnswered: (() -> Unit)? = null, onReply: () -> Unit) {
+private fun Claudes(graph: AppGraph, screen: ChatScreenState, message: ChatMessage, tasks: Map<String, TaskItem>, flash: Boolean, now: Long, zone: ZoneId, onEdit: (String, String) -> Unit, live: Boolean, waiting: Boolean = false, onMarkAnswered: (() -> Unit)? = null, onRate: (Boolean) -> Unit = {}, onReply: () -> Unit) {
     val folds = ChatSummary.folds(message)
     val open = message.id in screen.open
-    // Your rating of it being written (D-119): the thumb chosen, null while it isn't; kept through a turn of the phone (U-03).
-    var rating by rememberSaveable(message.id) { mutableStateOf<Boolean?>(null) }
-    rating?.let { up ->
-        RateDialog(message, up, onDismiss = { rating = null }) { thumb, words, preferred ->
-            rating = null
-            graph.scope.launch { graph.conversation.rate(message.id, thumb, words, preferred) }
-        }
-    }
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Column {
             // A look of his in two texts (D-120): each but the last in a bubble of its own above it, held as the message is.
             val texts = FelixAnswers.texts(message)
             texts.dropLast(1).forEach { text ->
-                Bubble(message, MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(18.dp, 18.dp, 18.dp, 4.dp), flash, onReply, onMarkAnswered = onMarkAnswered, onRate = { rating = it }) {
+                Bubble(message, MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(18.dp, 18.dp, 18.dp, 4.dp), flash, onReply, onMarkAnswered = onMarkAnswered, onRate = onRate) {
                     Text(text, style = MaterialTheme.typography.bodyLarge)
                 }
                 Spacer(Modifier.height(4.dp))
             }
             Labelled(screen, message) {
                 // A tap on the bubble opens or closes what's folded, as its chevron does: a bigger place to tap.
-                Bubble(message, MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(18.dp, 18.dp, 18.dp, 4.dp), flash, onReply, onTap = { if (folds) screen.toggle(message.id) }, onMarkAnswered = onMarkAnswered, onRate = { rating = it }) {
+                Bubble(message, MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(18.dp, 18.dp, 18.dp, 4.dp), flash, onReply, onTap = { if (folds) screen.toggle(message.id) }, onMarkAnswered = onMarkAnswered, onRate = onRate) {
                     Text(texts.last(), style = MaterialTheme.typography.bodyLarge)
                     if (folds) Chevron(open, ChatSummary.problems(message) > 0, Modifier.align(Alignment.End)) { screen.toggle(message.id) }
                 }
             }
-            Time(message, zone, waiting, onAnswer = onReply, onRated = { rating = message.rating == Conversation.RATED_UP })
+            Time(message, zone, waiting, onAnswer = onReply, onRated = { onRate(message.rating == Conversation.RATED_UP) })
         }
         // A message in the app's words carries its own button: the week's review to open, its summary to send.
         Opens(message)
