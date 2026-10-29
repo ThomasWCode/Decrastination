@@ -221,10 +221,10 @@ class FelixTest {
         // A text past its room ends at its first line's end where that leaves half the room used: the second text left out.
         val first = "word ".repeat(30).trim()
         assertEquals(first, FelixAnswers.message(first + "\n" + "more ".repeat(40).trim(), FelixAnswers.MAX_MESSAGE))
-        // His messages from his prompt shown as texts, a line each; the morning, his chat's answers and yours whole.
+        // His messages from his prompt shown as texts, a line each, the morning's greeting and briefing too; his chat's answers and yours whole.
         fun said(kind: MessageKind, from: Speaker = Speaker.Felix, byApp: Boolean = false) = ChatMessage("m", from, "a\nb", now, kind = kind, byApp = byApp)
         assertEquals(listOf("a", "b"), FelixAnswers.texts(said(MessageKind.SlotEnd)))
-        assertEquals(listOf("a\nb"), FelixAnswers.texts(said(MessageKind.Morning)))
+        assertEquals(listOf("a", "b"), FelixAnswers.texts(said(MessageKind.Morning)))
         assertEquals(listOf("a\nb"), FelixAnswers.texts(said(MessageKind.Chat)))
         assertEquals(listOf("a\nb"), FelixAnswers.texts(said(MessageKind.Reminder, byApp = true)))
         assertEquals(listOf("a\nb"), FelixAnswers.texts(said(MessageKind.Chat, from = Speaker.You)))

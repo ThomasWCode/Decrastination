@@ -830,7 +830,7 @@ Was this sent by the friend or by the app? Answer with one word, friend or app, 
          * Lines that sound written, an AI's, or the app's own words read back (the owner's read of run 2), and pride said
          * outright, which doesn't sound sincere (of run 4): never his.
          */
-        val WRITTEN = listOf("sting", "gets to me", "counting on", "had it in you", "to spare", "slot kept", "slots kept", "every slot", "proud of you", "off your plate", "done and dusted")
+        val WRITTEN = listOf("sting", "gets to me", "counting on", "had it in you", "to spare", "slot kept", "slots kept", "every slot", "proud of you", "off your plate", "done and dusted", "who are you", "done with my mate")
 
         /**
          * Five words running from his side of a pair in his prompts ([FelixPrompts.PAIRS], [ChatPrompts.PAIRS], D-120): an

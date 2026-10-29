@@ -92,14 +92,14 @@ object FelixAnswers {
 
     /**
      * [message]'s words as the texts they're shown as (D-120): each line a text of its own, for his messages written
-     * unasked from his prompt; whole for the rest (his chat's answers, which can list, the morning's briefing, what's in
-     * the app's words, yours), which keep their lines in one.
+     * unasked from his prompt, the morning's greeting and its briefing among them; whole for the rest (his chat's answers,
+     * which can list, what's in the app's words, yours), which keep their lines in one.
      */
     fun texts(message: ChatMessage): List<String> =
         if (message.from == Speaker.Felix && !message.byApp && message.kind in SPLIT) message.text.lines().filter { it.isNotBlank() }.ifEmpty { listOf(message.text) } else listOf(message.text)
 
-    /** The kinds of his messages written from his prompt as texts ([FelixPrompts.system]), the morning's but, which is one briefing. */
-    private val SPLIT = setOf(MessageKind.SlotStart, MessageKind.SlotEnd, MessageKind.SlotKept, MessageKind.DayDone, MessageKind.Question, MessageKind.Completions, MessageKind.Reminder)
+    /** The kinds of his messages written from his prompt as texts ([FelixPrompts.system]). */
+    private val SPLIT = setOf(MessageKind.Morning, MessageKind.SlotStart, MessageKind.SlotEnd, MessageKind.SlotKept, MessageKind.DayDone, MessageKind.Question, MessageKind.Completions, MessageKind.Reminder)
 
     /**
      * His message no longer than [max]: over it, ended at its first line's end where that leaves at least half the room
