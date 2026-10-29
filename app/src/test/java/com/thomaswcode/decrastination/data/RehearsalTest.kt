@@ -82,6 +82,43 @@ class RehearsalTest {
         return Read(store.name, whole, store.problems.firstOrNull(), roundTrip = JsonStore.json.decodeFromString(ChatArchive.serializer(), written) == whole, dropped = dropped, lists = lists(writtenJson), json = writtenJson as? JsonObject)
     }
 
+    /**
+     * The chat's archive in [dir] as it is, as one: its months (4.0.4 on) and the one file from before, each decoded as
+     * written, their messages together; not read whole where one of them isn't.
+     */
+    private fun beforeArchive(dir: File): Read {
+        val files = archiveFiles(dir)
+        if (files.isEmpty()) return Read(ChatArchiveStore.NAME, null, null, roundTrip = true)
+        val reads = files.map { before(dir, it, ChatArchive.serializer()) }
+        val json = JsonObject(mapOf("messages" to JsonArray(reads.flatMap { it.json?.list("messages").orEmpty() })))
+        val problem = reads.firstNotNullOfOrNull { it.problem }?.copy(file = ChatArchiveStore.NAME)
+        val value = if (problem == null) ChatArchive(messages = reads.flatMap { (it.value as ChatArchive).messages }) else null
+        return Read(ChatArchiveStore.NAME, value, problem, roundTrip = reads.all { it.roundTrip }, lists = lists(json), json = json)
+    }
+
+    /** The JSON files in [dir] the rehearsal doesn't read: neither a store, a month of the archive, nor one of [NOT_STORES]. */
+    private fun unaccounted(dir: File): List<String> =
+        dir.listFiles { f -> f.isFile && f.name.endsWith(".json") }.orEmpty().map { it.name }
+            .filter { it !in STORES && it !in NOT_STORES && !ChatArchiveStore.isMonth(it) }.sorted()
+
+    @Test
+    fun `the rehearsal reads every store the app keeps, the archive's months and nothing else unread`() {
+        val dir = Files.createTempDirectory("rehearsal-stores").toFile()
+        try {
+            val stores = Stores(dir, NoKeystore)
+            assertEquals(stores.all.map { it.file }.filter { it != "secrets.bin" }.toSet(), STORES.toSet())
+            listOf("chat-archive-2026-09.json", "ai-prompts.json", "tasks.json", "tasks.json.v2", "notes-of-a-new-store.json").forEach { File(dir, it).writeText("{}") }
+            assertEquals(listOf("notes-of-a-new-store.json"), unaccounted(dir))
+            assertEquals(listOf("chat-archive-2026-09.json"), archiveFiles(dir))
+        } finally {
+            dir.deleteRecursively()
+        }
+    }
+
+    /** The archive's files in [dir]: its months, and the one file from before them, where it's still there. */
+    private fun archiveFiles(dir: File): List<String> =
+        dir.listFiles { f -> f.isFile && (ChatArchiveStore.isMonth(f.name) || f.name == ChatArchiveStore.NAME) }.orEmpty().map { it.name }.sorted()
+
     private fun <T> again(serializer: KSerializer<T>, value: T): T = JsonStore.json.decodeFromString(serializer, JsonStore.json.encodeToString(serializer, value))
 
     /**
@@ -137,12 +174,16 @@ class RehearsalTest {
             before(files, "log.json", ActivityLog.serializer()),
             before(files, "instructions.json", InstructionState.serializer()),
             before(files, "chat.json", ChatState.serializer()),
-            before(files, "chat-archive.json", ChatArchive.serializer()),
+            beforeArchive(files),
             before(files, "school.json", SchoolCalendar.serializer()),
             before(files, "memory.json", MemoryState.serializer()),
             before(files, "felix.json", FelixStore.serializer()),
             before(files, "calendar.json", CalendarState.serializer()),
+            before(files, "gmail-writes.json", GmailWriteStore.serializer()),
         )
+        // Every file the app keeps there is one of those read: a store added and not here would go unrehearsed.
+        val unread = unaccounted(files)
+        assertTrue(unread.isEmpty(), "The backup holds files this rehearsal doesn't read: $unread. Add each store to it")
         // As the app will read them, on a copy of the stores alone (the secrets can't be read off the phone),
         // the copy, the phone's own data, deleted once read.
         val copy = Files.createTempDirectory("rehearsal").toFile()
@@ -154,20 +195,29 @@ class RehearsalTest {
     }
 
     private fun rehearse(root: File, files: File, copy: File, reads: List<Read>) {
-        // The stores alone: the folder can hold the debug commands' files too (ai-prompts.json, a list).
-        STORES.map { File(files, it) }.filter { it.isFile }.forEach { it.copyTo(File(copy, it.name)) }
+        // The stores alone, the archive's months among them: the folder can hold the debug commands' files too (ai-prompts.json, a list).
+        // Once each: the archive's one file from before its months is among the stores too.
+        val kept = (STORES + archiveFiles(files)).distinct()
+        kept.map { File(files, it) }.filter { it.isFile }.forEach { it.copyTo(File(copy, it.name)) }
         val versions = copy.listFiles().orEmpty().mapNotNull { f -> runCatching { JsonStore.json.parseToJsonElement(f.readText()) as JsonObject }.getOrNull()?.let { f.name to Migration.versionOf(it) } }.toMap()
         // The files as the moves between stores leave them at a start, on a copy of their own (inside this one, which goes with it).
         val moved = File(copy, "moved").apply { mkdirs() }
-        STORES.map { File(files, it) }.filter { it.isFile }.forEach { it.copyTo(File(moved, it.name)) }
+        kept.map { File(files, it) }.filter { it.isFile }.forEach { it.copyTo(File(moved, it.name)) }
         Stores.MOVES.forEach { it.run(moved) }
         val stores = Stores(copy, NoKeystore)
-        fun there(name: String) = File(files, name).isFile || (name in SPLIT && File(files, "runtime.json").isFile)
+        fun there(name: String) = File(files, name).isFile || (name in SPLIT && File(files, "runtime.json").isFile) ||
+            (name == ChatArchiveStore.NAME && archiveFiles(files).isNotEmpty())
         // Each file as the moves and its migrations leave it: what the store decodes, and should write back whole.
-        fun migrated(name: String): JsonElement? = runCatching {
-            val json = JsonStore.json.parseToJsonElement(File(moved, name).readText()) as JsonObject
-            stores.shapes.getValue(name).let { Migration.upgrade(json, it.version, it.migrations) }
+        fun upgraded(file: String, shape: String): JsonObject? = runCatching {
+            val json = JsonStore.json.parseToJsonElement(File(moved, file).readText()) as JsonObject
+            stores.shapes.getValue(shape).let { Migration.upgrade(json, it.version, it.migrations) }
         }.getOrNull()
+        // The archive's months as one, as its store gives them.
+        fun migrated(name: String): JsonElement? = if (name != ChatArchiveStore.NAME) {
+            upgraded(name, name)
+        } else {
+            archiveFiles(moved).map { upgraded(it, name) ?: return null }.let { months -> JsonObject(mapOf("messages" to JsonArray(months.flatMap { it.list("messages") }))) }
+        }
         fun <T> after(store: JsonStore<T>, serializer: KSerializer<T>, name: String) = after(store, serializer, there(name), migrated(name))
         val migrated = listOf(
             after(stores.tasks, TaskState.serializer(), "tasks.json"), after(stores.settings, Settings.serializer(), "settings.json"),
@@ -179,6 +229,7 @@ class RehearsalTest {
             after(stores.chatArchive, there("chat-archive.json"), migrated("chat-archive.json")),
             after(stores.school, SchoolCalendar.serializer(), "school.json"), after(stores.memory, MemoryState.serializer(), "memory.json"),
             after(stores.felix, FelixStore.serializer(), "felix.json"), after(stores.calendar, CalendarState.serializer(), "calendar.json"),
+            after(stores.gmailWrites, GmailWriteStore.serializer(), "gmail-writes.json"),
         )
         val ran = stores.shapes.filter { (name, shape) -> (versions[name] ?: shape.version) < shape.version }.map { (name, shape) -> "$name ${versions[name]} to ${shape.version}" }
         val was = describe(reads)
@@ -368,8 +419,11 @@ class RehearsalTest {
         /** The stores the app writes at its first start: a backup without one isn't a phone's. */
         val REQUIRED = listOf("tasks.json", "settings.json", "runtime.json", "log.json")
 
-        /** Every store's file, the secrets aside (they can't be read off the phone). */
-        val STORES = REQUIRED + listOf("instructions.json", "chat.json", "chat-archive.json", "school.json", "memory.json", "calendar.json") + listOf("session.json", "protection.json", "model.json", "anki.json", "learning.json") + listOf("felix.json")
+        /** Every store's file, the secrets aside (they can't be read off the phone), the archive's months found as they're read. */
+        val STORES = REQUIRED + listOf("instructions.json", "chat.json", "chat-archive.json", "school.json", "memory.json", "calendar.json") + listOf("session.json", "protection.json", "model.json", "anki.json", "learning.json") + listOf("felix.json", "gmail-writes.json")
+
+        /** The JSON files in the folder that aren't stores: the debug commands' (`ai-prompts`, a list). */
+        val NOT_STORES = setOf("ai-prompts.json")
 
         /** The files runtime.json's split made (4.0.13): there, through it, wherever the runtime was. */
         val SPLIT = setOf("session.json", "protection.json", "model.json", "anki.json", "learning.json")

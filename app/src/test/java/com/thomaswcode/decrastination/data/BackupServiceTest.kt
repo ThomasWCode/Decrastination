@@ -21,6 +21,7 @@ import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.core.TaskItem
+import com.thomaswcode.decrastination.learn.DayRecord
 import java.io.File
 import java.nio.file.Files
 import kotlin.test.Test
@@ -348,6 +349,52 @@ class BackupServiceTest {
         assertEquals(BackupService.Nightly.TooBig, phone.service.backupNow())
         assertEquals(before, phone.folder.files)
         assertEquals(last, phone.stores.runtime.value.lastBackupAt)
+    }
+
+    @Test
+    fun `a nightly backup Import would refuse isn't written, and the older ones are kept`() = runTest {
+        val phone = Phone(full = true)
+        val far = Instruction("far-off", "the trip's form", at = clock.time, state = InstructionStatus.Applied, changes = listOf(Change(ChangeType.DueBy, taskId = "own:far", time = clock.time + 500 * 86_400_000L)))
+        phone.stores.replace(phone.stores.instructions) { it.copy(instructions = it.instructions + far) }
+        (1..15).forEach { phone.folder.files["decrastination-2026-09-%02d.json".format(it)] = "{}" }
+        val before = phone.folder.files.toMap()
+        assertEquals("it holds what this app never writes (an instruction)", phone.service.unrestorable(phone.service.exportBackup()))
+        assertEquals(BackupService.Nightly.Refused, phone.service.backupNow())
+        assertEquals(before, phone.folder.files)
+    }
+
+    @Test
+    fun `what comes while a reset's copy is saved isn't erased with what the copy holds`() = runTest {
+        val phone = Phone(full = true)
+        val copied = phone.stores.chat.value.messages.size
+        assertTrue(copied > 0)
+        val arrived = ChatMessage("during-the-copy", Speaker.Felix, "An answer landing while the copy is saved", clock.time, kind = MessageKind.Chat)
+        val fact = Fact("a topic", "remembered meanwhile", clock.time)
+        // The folder takes the copy as an answer, a fact and a completion land.
+        val folder = object : BackupService.Folder {
+            override val available = true
+            override fun write(name: String, text: String): Boolean = runBlocking {
+                phone.stores.replace(phone.stores.chat) { it.copy(messages = it.messages + arrived) }
+                phone.stores.replace(phone.stores.memory) { it.copy(facts = it.facts + fact) }
+                true
+            }
+            override fun names() = emptyList<String>()
+            override fun delete(name: String) = true
+        }
+        val service = BackupService(phone.stores, clock, scope, folder, File(phone.dir, "backups"), "test",
+            changeSettings = { change -> phone.stores.replace(phone.stores.settings, change) }, applying = Mutex(),
+            layInstructions = {}, layTaskOverrides = {}, schedule = {}, reread = {}, cancelFelix = {})
+        service.reset(Reset.Everything)
+        assertEquals(listOf(arrived), phone.stores.chat.value.messages)
+        assertEquals(listOf(fact), phone.stores.memory.value.facts)
+        assertTrue(phone.stores.chatArchive.value.messages.isEmpty() && phone.stores.log.value.completions.isEmpty())
+    }
+
+    @Test
+    fun `a reset of the record keeps what came after its copy, a day's record by its day however it changed`() {
+        val copied = ActivityLog(days = listOf(DayRecord("2026-10-17", plannedMin = 60, chunks = emptyList())))
+        val now = ActivityLog(days = listOf(DayRecord("2026-10-17", plannedMin = 90, chunks = emptyList(), doneMin = 30), DayRecord("2026-10-18", plannedMin = 45, chunks = emptyList())))
+        assertEquals(listOf("2026-10-18"), now.since(copied).days.map { it.date })
     }
 
     @Test

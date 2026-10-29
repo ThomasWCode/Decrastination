@@ -118,17 +118,21 @@ fun SetupScreen(graph: AppGraph, activity: Activity, parts: Set<SetupPart> = Set
         scope.launch {
             backupNote = runCatching {
                 // The chat's archive read whole for it: off the main thread.
-                withContext(Dispatchers.IO) {
+                val refused = withContext(Dispatchers.IO) {
                     val text = graph.backups.exportBackup()
-                    // One Import couldn't read back isn't saved as a backup: the empty file the picker made for it goes.
+                    // One too big for Import to read isn't saved as a backup: the empty file the picker made for it goes.
                     if (graph.backups.tooBig(text)) {
                         runCatching { DocumentsContract.deleteDocument(activity.contentResolver, uri) }
                         error("it's more than Import reads (8 MB), so it couldn't be restored")
                     }
                     val out = requireNotNull(activity.contentResolver.openOutputStream(uri, "wt")) { "no file to write" }
                     out.use { it.write(text.toByteArray()) }
+                    // One Import would refuse as it stands is saved all the same, so what the app keeps can still leave the
+                    // phone (a build that reads it could restore it), and said.
+                    graph.backups.unrestorable(text)
                 }
-                "Saved: the settings, the log, what the app has learned, your calendar answers and your instructions in use. No passwords or keys."
+                "Saved: the settings, the log, what the app has learned, your calendar answers and your instructions in use. No passwords or keys." +
+                    (refused?.let { " Import would refuse it as it stands ($it)." } ?: "")
             }.getOrElse { "Couldn't save it: ${it.message}" }
         }
     }

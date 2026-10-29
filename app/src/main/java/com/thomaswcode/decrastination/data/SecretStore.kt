@@ -3,6 +3,7 @@ package com.thomaswcode.decrastination.data
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -70,16 +71,21 @@ class SecretStore(
 
     fun has(secret: Secret): Boolean = !_values.value[secret].isNullOrEmpty()
 
-    /** Sets (or, with null or blank, removes) each of [values]. */
+    /**
+     * Sets (or, with null or blank, removes) each of [values]. The write and the values' change are one
+     * section a cancel can't split, as a store's update is ([JsonStore.update]).
+     */
     suspend fun put(values: Map<Secret, String?>) = mutex.withLock {
         val next = _values.value.toMutableMap()
         for ((key, value) in values) {
             if (value.isNullOrBlank()) next.remove(key) else next[key] = value
         }
         if (next != _values.value) {
-            withContext(Dispatchers.IO) { write(next) }
-            _values.value = next
-            _present.value = next.keys
+            withContext(NonCancellable + Dispatchers.IO) {
+                write(next)
+                _values.value = next
+                _present.value = next.keys
+            }
         }
     }
 

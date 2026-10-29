@@ -263,6 +263,9 @@ class ChatArchiveStore(private val dir: File, private val clock: () -> Long = Sy
         fun isOldShape(file: String): Boolean = file.substringAfterLast(".v").toIntOrNull() != null &&
             file.substringBeforeLast(".v").let { it == NAME || MONTH_FILE.matches(it) }
 
+        /** Whether [file] is a month's file of the archive, as [fileOf] names it. */
+        fun isMonth(file: String): Boolean = MONTH_FILE.matches(file)
+
         /** A copy kept of the archive: an older shape's ([isOldShape]), or one of a file of it that couldn't be read (`.unreadable-<when>`, [JsonStore]). */
         fun isCopy(file: String): Boolean = isOldShape(file) || file.substringBefore(".unreadable-").let { it != file && (it == NAME || MONTH_FILE.matches(it)) }
 

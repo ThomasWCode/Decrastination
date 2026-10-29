@@ -96,6 +96,15 @@ class BackupService(
      */
     fun tooBig(text: String): Boolean = text.toByteArray(Charsets.UTF_8).size > backupCap
 
+    /**
+     * Why [text], a backup ([exportBackup]), couldn't be restored, in words: more than Import reads ([tooBig]), or
+     * what Import refuses ([Backups.problem]), checked as Import checks. Null where it could be.
+     */
+    fun unrestorable(text: String): String? = when {
+        tooBig(text) -> "it's more than Import reads (8 MB)"
+        else -> Backups.decode(text, stores.shapes).let { decoded -> if (decoded == null) "it couldn't be read back" else Backups.problem(decoded) }
+    }
+
     /** All the app keeps, as a backup holds it, the chat's earlier messages whole. */
     private fun backupOf(every: Boolean = false): Backup =
         Backup(
@@ -129,6 +138,9 @@ class BackupService(
         /** More than Import reads even without the chat's earlier messages: not written, as it couldn't be restored. */
         TooBig,
 
+        /** What Import refuses ([Backups.problem]): not written, as it couldn't be restored either. */
+        Refused,
+
         /** Below Android 10, or where it can't be written. */
         NotWritten,
     }
@@ -146,6 +158,8 @@ class BackupService(
         // More than Import reads even without the chat's earlier messages, it couldn't be restored: not written,
         // and the older ones, which can be, not let go of for it (Settings → Backup says so).
         if (tooBig(text)) return@withContext Nightly.TooBig
+        // Nor one Import would refuse: the good ones it would prune are the ones that can be restored.
+        if (unrestorable(text) != null) return@withContext Nightly.Refused
         if (!folder.write(name, text)) return@withContext Nightly.NotWritten
         BackupFolder.toPrune(folder.names()).forEach { folder.delete(it) }
         stores.replace(stores.runtime) { it.copy(lastBackupAt = now) }
@@ -298,8 +312,7 @@ class BackupService(
                 // Over the cap even without the chat's earlier messages, it couldn't be read back: nothing's reset.
                 tooBig(fitted.first) -> "Nothing was reset: a copy of it would be too big to restore."
                 // Nor where Import would refuse it (a part it can't read, something the app never writes): checked as Import checks.
-                else -> Backups.decode(fitted.first, stores.shapes).let { decoded -> if (decoded == null) "it couldn't be read back" else Backups.problem(decoded) }
-                    ?.let { "Nothing was reset: a copy of it couldn't be restored ($it)." }
+                else -> unrestorable(fitted.first)?.let { "Nothing was reset: a copy of it couldn't be restored ($it)." }
             }
             Triple(whole, fitted, refused)
         }
@@ -316,27 +329,35 @@ class BackupService(
         } else {
             ""
         }
+        // What the copy holds is what's reset; what came while it was made and saved (an answer of Felix's landing, a
+        // completion, a note) is in no copy, so it's kept, not erased with the rest: the copy is the reset's undo.
         if (all || what == Reset.Stats) {
             resets.incrementAndGet()
-            stores.replace(stores.log, ActivityLog())
+            stores.replace(stores.log) { it.since(whole.log) }
             stores.replace(stores.learning) { it.copy(calibration = Calibration()) }
         }
         if (what == Reset.Calibration) stores.replace(stores.learning) { it.copy(calibration = Calibration(learnFrom = now)) }
         if (all || what == Reset.Memories) {
-            stores.replace(stores.memory, MemoryState())
+            stores.replace(stores.memory) { m -> MemoryState(facts = m.facts - whole.memory.facts.toSet(), rules = m.rules - whole.memory.rules.toSet()) }
             changeSettings { it.copy(profileLines = emptyList()) }
         }
         if (all || what == Reset.Chat) {
             // The chat, its earlier messages, and his state with it: what he's waiting to say, the check-in's answers so far.
-            stores.replace(stores.chat, ChatState())
-            stores.replace(stores.chatArchive, ChatArchive())
+            val copied = (whole.chat.messages + whole.archive.messages).mapTo(HashSet()) { it.id }
+            stores.replace(stores.chat) { c -> ChatState(messages = c.messages.filterNot { it.id in copied }) }
+            // Read and written under the archive's own lock; cleared whole, its months' copies with it, where nothing's left.
+            val archiveSince = stores.replace(stores.chatArchive) { a -> a.copy(messages = a.messages.filterNot { it.id in copied }) }
+            if (archiveSince.messages.isEmpty()) stores.replace(stores.chatArchive, ChatArchive())
             // His notes and reminders (D-100), which the chat set.
-            stores.replace(stores.felix, FelixStore())
+            val notes = whole.felixStore.notes.mapTo(HashSet()) { it.id }
+            val reminders = whole.felixStore.reminders.mapTo(HashSet()) { it.id }
+            stores.replace(stores.felix) { f -> FelixStore(notes = f.notes.filterNot { it.id in notes }, reminders = f.reminders.filterNot { it.id in reminders }) }
             // His notification too, a check-in's question among them: nothing's left to answer it.
             cancelFelix()
         }
         if (all || what == Reset.Instructions) {
-            stores.replace(stores.instructions, InstructionState())
+            val copied = whole.instructions.mapTo(HashSet()) { it.id }
+            stores.replace(stores.instructions) { i -> InstructionState(instructions = i.instructions.filterNot { it.id in copied }) }
             layInstructions()
         }
         // The copies kept of every store it cleared with them (D-94): what's reset isn't kept in one.

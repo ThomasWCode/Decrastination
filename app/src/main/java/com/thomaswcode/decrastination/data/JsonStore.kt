@@ -11,6 +11,7 @@ import java.time.LocalDateTime
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -105,13 +106,20 @@ class JsonStore<T>(
     /** Whether its file has been read: as it was made, unless [lazily]. */
     val isLoaded: Boolean get() = loaded.isInitialized()
 
-    /** Applies [transform] and saves the result, if it changed anything. Returns the new state. */
+    /**
+     * Applies [transform] and saves the result, if it changed anything. Returns the new state. The write and
+     * the state's change are one section a cancel can't split: a caller cancelled while the file is replaced
+     * would otherwise leave the file new and the state old, and the next update would write over what reached
+     * the file. A write that fails changes neither.
+     */
     suspend fun update(transform: (T) -> T): T = mutex.withLock {
         val next = onWrite(transform(_state.value))
         if (next != _state.value) {
-            withContext(Dispatchers.IO) { write(next) }
-            _state.value = next
-            unsaved = false
+            withContext(NonCancellable + Dispatchers.IO) {
+                write(next)
+                _state.value = next
+                unsaved = false
+            }
         }
         next
     }
