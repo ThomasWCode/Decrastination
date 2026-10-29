@@ -581,3 +581,20 @@ On the owner's phone, each step's stack read from `dumpsys activity`, every one 
 - **The chat's bar:** no Setup mark with nothing needing you, and its menu's three items, a divider, then This week, Reviews, Settings and Debug. A rotation kept the chat.
 - **Q120**, with two paid test messages, taken out after with `clean_test_chat.py`: opened from the icon and Plan tapped within a second, his notification and his count of 1 stayed and the read position didn't move; back on the chat, his notification was still there at 1 second and gone at 5, and leaving read it; opened with one unread, a reply sent and the chat left within 2 seconds, his notification went at once and the chat read up to the leaving, his answer to it then notifying alone.
 - **Not checked:** the block screen's chat (no block at the time), *Ask Felix about it* in a task's sheet, which starts the chat as Felix's button does, and his notification's tap, which reads at once as before (`markSeen` on resume); all left to real use.
+
+## The Day's two screens (4.9.1, 29 Oct)
+
+Your asks, with the phone connected, recorded as D-122. How the Day works is in [spec/day.md](../spec/day.md).
+
+- **The snap:**
+
+  > On the day screen, when I scroll the calendar up, over the DO NOW card, make it snap straight to the top after just a small flick. It should end up being like two screens that snap between instead of the calendar scrolling up over the DO NOW card.
+
+  Let go part-folded, the card settles at its line or unfolded, whether it was the card or the day's header that was dragged; the grid's own scrolls still never move it. Tried on the phone at once: all good.
+- **Opening on the calendar:**
+
+  > Another change: make the day page default to the calendar when opened, with the DO NOW card collaspsed as it does now.
+
+  The Day opens with the card folded to its line, upright as on its side; a tap on the line or the header dragged down brings it back, as before.
+- **The Plan button over a Day left open:** "Keep as it is (Recommended)": a chat opened from Day sits over it, and its Plan button brings that Day back as it was left, the card unfolded if it was, as it keeps the tab (D-121); only a fresh opening, or a tab switch, starts folded. Offered against folding at every tap of Plan.
+- **Decided without asking:** a flick is 125 dp a second, Material's own threshold for a snap between anchors, and a slower drag goes on once it's moved 24 dp, a fingertip; less goes back where it started. A fling of what the card holds goes on as before while it hasn't moved the fold. Folded as the Day opens, the card is measured once out of sight, so the header dragged down unfolds it under the finger rather than only at a tap.
