@@ -478,6 +478,12 @@ class Focus(
      * and with none to take back; with [reopen], one of your own, or one done by its tick (NF-06), that it
      * finished is open again, in the same write, as a tick's Undo opens one ([untickBlock]).
      */
+    suspend fun unkeepSlot(key: String, since: Long, now: Long = clock.now(), reopen: Boolean = false): Boolean {
+        val taken = keeping.withLock { unkeep(key, since, now, reopen) } ?: return false
+        onUnworked(taken)
+        return true
+    }
+
     /**
      * A keep of [key] since [since] taken back from its Undo (Day's, UI-03): a task of yours (or one done by its tick) that
      * this keep itself finished open again with it, as the chat's Undo opens one; finished another way since, it stays so,
@@ -487,12 +493,6 @@ class Focus(
         val record = log.value.slots.lastOrNull { it.key == key && it.outcome.kept && it.at >= since } ?: return false
         val reopen = tasks.value.tasks.firstOrNull { it.id == record.taskId }?.let { ChatActs.finishedBy(it, record.at) } == true
         return unkeepSlot(key, since, now, reopen = reopen)
-    }
-
-    suspend fun unkeepSlot(key: String, since: Long, now: Long = clock.now(), reopen: Boolean = false): Boolean {
-        val taken = keeping.withLock { unkeep(key, since, now, reopen) } ?: return false
-        onUnworked(taken)
-        return true
     }
 
     /** [unkeepSlot]'s work, under the keeping lock: the task whose slot it took back, or null where none. */

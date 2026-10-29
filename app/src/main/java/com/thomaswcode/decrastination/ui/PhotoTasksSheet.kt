@@ -16,6 +16,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -40,22 +41,23 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PhotoTasksSheet(graph: AppGraph, reading: PhotoTasks.Reading, jpeg: ByteArray, onClose: () -> Unit) {
-    // The task being checked in the form, by its place; those added; the list of tasks to attach to.
+    // The task being checked in the form, by its place; the id each place's task is saved under, chosen as this opens;
+    // those added, as the tasks hold them, so a save that finished across a turn of the phone shows as added; the list
+    // of tasks to attach to.
     var adding by rememberSaveable { mutableStateOf<Int?>(null) }
-    var added by rememberSaveable { mutableStateOf(listOf<Int>()) }
+    val ids = rememberSaveable { reading.tasks.map { UUID.randomUUID().toString() } }
+    val stored by graph.tasks.state.collectAsStateWithLifecycle()
+    val added = ids.indices.filter { i -> stored.tasks.any { it.id == TaskItem.id(Source.Own, ids[i]) } }
     var attaching by rememberSaveable { mutableStateOf(false) }
     val now = graph.clock.now()
     val zone = graph.clock.zone()
     adding?.let { i ->
         val task = reading.tasks.getOrNull(i)
         if (task != null) {
-            val id = rememberSaveable(i) { UUID.randomUUID().toString() }
+            val id = ids[i]
             OwnTaskForm(graph, editing = null, initial = task, onSave = { made ->
                 graph.ownTasks.saveOwnTask(id, made).also { saved ->
-                    if (saved) {
-                        graph.photos.attachPhoto(TaskItem.id(Source.Own, id), jpeg)
-                        added = added + i
-                    }
+                    if (saved) graph.photos.attachPhoto(TaskItem.id(Source.Own, id), jpeg)
                 }
             }) { adding = null }
             return
