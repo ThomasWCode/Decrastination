@@ -562,9 +562,14 @@ class AskActivity : ComponentActivity() {
                                 .onFailure { Log.w(AppGraph.TAG, "Your message couldn't be kept: it's back in the box", it) }
                                 .getOrDefault(false)
                             if (!sent) {
-                                draft = text
-                                about.value = subject
-                                screen.replyingTo = replying
+                                if (draft.isEmpty()) {
+                                    draft = text
+                                    about.value = subject
+                                    screen.replyingTo = replying
+                                } else {
+                                    // Typed again meanwhile: both kept, the one that didn't go first, the box's subject and reply as you've set them now.
+                                    draft = text + "\n\n" + draft
+                                }
                             }
                         }
                     }
