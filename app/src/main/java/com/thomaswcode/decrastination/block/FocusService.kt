@@ -89,6 +89,9 @@ class FocusService : AccessibilityService() {
     /** When the countdown shown says free time runs out (the wall clock), or 0 for none shown. */
     private var shownEndsAt = 0L
 
+    /** Whether this spending period has had its last minute's warning: once a period, a new one begun inside its last minute too. */
+    private var warned = false
+
     private var lastUrlCheckAt = 0L
     private var urlCheckPending: String? = null
 
@@ -314,7 +317,13 @@ class FocusService : AccessibilityService() {
         shownEndsAt = endsAt
         FreeTimeNotice.show(this, labelOf(target), endsAt)
         handler.removeCallbacks(warnEnding)
-        if (left > FreeTimeNotice.WARN_MS) handler.postDelayed(warnEnding, left - FreeTimeNotice.WARN_MS)
+        if (left > FreeTimeNotice.WARN_MS) {
+            handler.postDelayed(warnEnding, left - FreeTimeNotice.WARN_MS)
+        } else if (!warned) {
+            // Begun inside its last minute (an app opened again with under a minute left, or a slot that close): warned
+            // at once, with the time there really is (U-08).
+            handler.post(warnEnding)
+        }
     }
 
     private fun stopSpending() {
@@ -324,6 +333,7 @@ class FocusService : AccessibilityService() {
         handler.removeCallbacks(creditCheck)
         handler.removeCallbacks(warnEnding)
         shownEndsAt = 0L
+        warned = false
         if (was) FreeTimeNotice.cancel(this)
     }
 
@@ -335,7 +345,8 @@ class FocusService : AccessibilityService() {
             shownEndsAt = 0L
             return@Runnable countdown(target, left)
         }
-        FreeTimeNotice.warn(this, labelOf(target))
+        warned = true
+        FreeTimeNotice.warn(this, labelOf(target), left)
     }
 
     /** [target] in words: the app's name, or the site. */
