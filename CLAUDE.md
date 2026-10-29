@@ -10,6 +10,7 @@ Every Claude session in this repository reads this file: the reviewer GitHub Act
 - `docs/development.md`: how changes are made, tested, reviewed, checked on the phone and shipped; the public repository's rules.
 - `docs/spec/`: how each area works now, naming its code. A change in behaviour updates its file in the same PR.
 - `docs/plan_v4/`: the 4.x plan's record, done in Oct 2026. `README.md` says what was built, release by release, and what's left; `architecture.md` the structure the code has and the conventions it keeps to; `data-and-migrations.md` how stored data changes; `answers.md` the questions the plan asked and the owner's answers, and those asked since, from the timer (4.4.0) to Felix's moods (4.7.0) and his speech (4.8.0, the speech review's plan folded into it), with the choices made in building them.
+- `docs/plan_chat_home/`: the plan to open the app on the chat (29 Oct 2026), not yet built: every way into the app before and after, the owner's answers (Q113 to Q120), the decision to record (D-121), and how it's built, tested and checked on the phone.
 - `docs/astra-review-4.3.13/`: the review of 4.3.13 and what became of each finding.
 
 ## What matters most here
