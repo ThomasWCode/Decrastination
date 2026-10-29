@@ -462,6 +462,11 @@ class ReadingAnswersTest {
         assertEquals("Physics" to "Questions 1-6", read.tasks.single().className to read.tasks.single().notes)
         assertEquals(1, read.leftOut.size)
         assertEquals("Is it due Wednesday or Thursday?", read.question)
+        // A board of eight: six made, and the two past them said.
+        val eight = (1..8).joinToString(",") { """{"title":"Sheet $it","subject":"","dueDate":"","dueTime":"","instructions":"","minutes":20,"where":"anywhere","steps":[]}""" }
+        val board = PhotoTasks.parse("""{"tasks":[$eight],"question":""}""", NOW, LONDON)!!
+        assertEquals(PhotoTasks.MAX_TASKS, board.tasks.size)
+        assertEquals(listOf("2 more tasks than the app takes from one photo"), board.leftOut)
     }
 
     @Test

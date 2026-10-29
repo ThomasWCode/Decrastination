@@ -101,6 +101,8 @@ object PhotoTasks {
             if (problem != null) left += "“${g.title.trim().take(60)}” (${problem.replaceFirstChar(Char::lowercase)})"
             task.takeIf { problem == null }
         }
+        // Past the most one photo makes: said, as the chat says its own, so none goes unseen.
+        if (answer.tasks.size > MAX_TASKS) left += "${answer.tasks.size - MAX_TASKS} more tasks than the app takes from one photo"
         return Reading(tasks, left, answer.question?.trim()?.takeIf { it.isNotEmpty() })
     }
 
