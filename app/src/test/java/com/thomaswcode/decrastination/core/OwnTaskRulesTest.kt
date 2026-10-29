@@ -263,6 +263,13 @@ class OwnTaskRulesTest {
         assertEquals(100, plan(listOf(mine)).chunksOf(mine.id).sumOf { it.minutes })
         // Fewer minutes than steps can't be given: they couldn't add up to it.
         assertEquals(3..OwnTaskRules.MINUTES.last, OwnTaskRules.minutesFor(mine))
+        // A short step beside a long one, the total cut well below them: each its minute first, the total still yours.
+        assertEquals(listOf(8, 1, 1), shareOut(10, listOf(100, 1, 1)))
+        assertEquals(listOf(9, 1), shareOut(10, listOf(60, 2)))
+        assertEquals(listOf(1, 1, 1), shareOut(3, listOf(100, 1, 1)))
+        // Steps that already add up to the total are kept as they are.
+        assertEquals(listOf(60, 2), shareOut(62, listOf(60, 2)))
+        assertEquals(listOf(10, 10, 10), shareOut(30, listOf(10, 10, 10)))
     }
 
     @Test
