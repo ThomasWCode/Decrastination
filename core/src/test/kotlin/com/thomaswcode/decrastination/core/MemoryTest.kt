@@ -6,6 +6,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertSame
+import kotlin.test.assertTrue
 
 /** What Felix remembers (AI-21). */
 class MemoryTest {
@@ -37,6 +38,18 @@ class MemoryTest {
         val (still, refused) = Memories.apply(full, listOf(Given(text = "one more", kind = Given.RULE)), 99)
         assertEquals(Memories.RULE_MAX, still.rules.size)
         assertEquals(listOf("Too many standing instructions to add “one more”: drop one first"), refused)
+    }
+
+    @Test
+    fun `a rule longer than a fact's topic is forgotten by its whole words`() {
+        val words = "don't send me anything about homework before I've had my tea and an hour to myself"
+        assertTrue(words.length > Memories.MAX_TOPIC)
+        val (one, _) = Memories.apply(MemoryState(), listOf(Given(text = words, kind = Given.RULE)), 1)
+        val (none, lines) = Memories.apply(one, listOf(Given(topic = words, kind = Given.RULE)), 2)
+        assertEquals(emptyList(), none.rules)
+        assertEquals(listOf("Felix won't any more: $words"), lines)
+        // Its first sixty characters alone aren't its words: it stays.
+        assertEquals(one.rules, Memories.apply(one, listOf(Given(topic = words.take(Memories.MAX_TOPIC), kind = Given.RULE)), 3).first.rules)
     }
 
     @Test
