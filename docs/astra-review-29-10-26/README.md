@@ -38,7 +38,7 @@ The reviews were asked to rate data loss, crashes and UI bugs P1, other wrong be
 | I-06 | P3 | D-9 still gave a fixed twenty new cards and a reviews-only switch on the due day | 4.9.5: D-9 amended to the rule built |
 | U-01 | P1 | A subject named "No subject" crashed the Work list | 4.9.6: the no-subject group has a key of its own |
 | U-02 | P1 | Turning the phone during a task's save left the form open with Save disabled | 4.9.6: the save runs in the app's scope (`FormSaves`); the form made again closes or gives Save back |
-| U-03 | P1 | The rating box's words and pick were lost when the phone turned | 4.9.6: kept as saveable state |
+| U-03 | P1 | The rating box's words and pick were lost when the phone turned | 4.9.6: held by the chat screen as saveable state; checked on the phone, where the first fix, saveable state in the message's row, lost the box all the same |
 | U-04 | P1 | Protection went on saying its notification channel was off after you'd turned it on | 4.9.6: looked at again on resume |
 | U-05 | P1 | A chat message whose first write failed was gone from both the box and the chat | 4.9.6: back in the box |
 | U-06 | P2 | Day's Undo refused the swipe that finished a task of your own | 4.9.6: `Focus.undoKeep`, with the chat's guard (`ChatActs.finishedBy`) |
@@ -73,7 +73,8 @@ Rejected after checking: **DOC-03** (D-112's timer-stop sentence, misread: "30 m
 
 - **Checked**: every finding against the code at adfe71dc and the decisions; the 28 Kotlin and 5 Python probes re-run; the fixes against the probes' scenarios, each in a regression test; 4.9.4's migration rehearsed on a backup of the phone's data; each release's reviews (Codex until a round with at most one P2, then Claude's, every finding answered).
 - **Left out as settled** (your earlier calls): a process death between two stores' writes; the forecast across days and the rebalance refused for an earlier gap (Q61, Q62); a restore leaving out messages still waiting (D-111); the backup not carrying a source task's local ticks and photos (P01 of the 4.3.13 review); the fixtures' text under D-80; existing pins kept where you put them (D-114).
-- **Not checked by the review**: anything on the phone (the screen fixes, U-02 to U-08, are checked there with the releases); real Gmail, Teams, Power Planner or AnkiDroid behaviour; paid calls and prompt quality; a full disk.
+- **On the phone** (4.9.6 installed over 4.9.1, 29 Oct): the checks after an install all well, `chat.json` migrated to 12, Work by subject with its no-subject group (U-01), and the rating box through a turn (U-03). Not driven there: U-02 (a save's milliseconds), U-04 (it needs a channel switched in Android's settings), U-05 (a full disk), and U-06 to U-08 (they'd make records of keeps and free time), each held by its test.
+- **Not checked by the review**: real Gmail, Teams, Power Planner or AnkiDroid behaviour; paid calls and prompt quality; a full disk.
 
 ## What it taught
 
@@ -82,4 +83,5 @@ Rejected after checking: **DOC-03** (D-112's timer-stop sentence, misread: "30 m
 - **Choose the fix that needs no data release where one exists.** I-02's suggested fix changed the reading's hash, which five stores keep copies of; reading the email's dates as of the day it came made the hash stable with no migration. A stored field (F-01) still means a version raised and a fixture folder, though nothing migrates.
 - **Write and publish together; reset only what the copy holds.** A cancel between a file's write and the state's change (S-01), and writers landing during a reset's copy (S-02), were each a few milliseconds wide; the fixes make the window impossible rather than unlikely. Ordering a cancel against a pending write needs both decided under one lock and numbered (S-05), and the write that removes must come even when nothing's held yet (Claude's review of 4.9.2).
 - **A fix that makes a rare state normal needs its readers checked.** Letting Sunday's review run after a midweek one (D-123) made two reviews a week ordinary, and three places still took "the week's review" as the first (Claude's review of 4.9.3).
+- **State kept through a turn of the phone belongs above a lazy list's rows.** `rememberSaveable` inside a chat message's row passed every test and still lost the rating box when the activity was made again; held by the screen, it held. Screen fixes are checked on the phone, not by reading.
 - **Building the next release in a second worktree while CI runs on the first** kept five stacked releases moving; the full local run belongs on the stack's top before each push.
