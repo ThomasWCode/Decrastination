@@ -191,8 +191,8 @@ class ModelGateway(
     }
 
     /**
-     * Held for each call to the model, from checking it's under the cap to recording what it cost:
-     * the enrichment, the weekly review and the photo check can't together pass the cap.
+     * Held for each call to the model while its room is taken: the hold checked and the call counted
+     * in flight, at its dearest, in one step ([call]), so calls made together can't pass the cap.
      */
     private val calling = Mutex()
 

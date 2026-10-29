@@ -86,7 +86,7 @@ Grouped by prefix and sorted; where a later decision changed an item, its line g
 ## DX: reading the sources
 
 - DX-01: An email's attachments (name, type, size) are kept with its task, named to the model and shown on the sheet.
-- DX-02: A calendar invite in an email gives its task the invite's exact time and place, the email being that event unless Claude reads work to do by a date the email gives; the sheet shows it with *Add to calendar*.
+- DX-02: A calendar invite in an email gives its task the invite's exact time and place, the email something to see to (Admin) due at the invite's start unless Claude reads work to do by a date the email gives; the sheet shows it with *Add to calendar*.
 - DX-03: Only starred Gmail conversations are read: a starred message makes its whole conversation one task, its newest 20 messages read, starred or not, within 16,000 characters (those left out said), the student's own replies included; unstarring finishes it (the star is the state).
 - DX-06: In a conversation, each message after the oldest one read has its quotes of earlier messages and its signature cut before the model sees it, and the cut is said; the oldest, a single email among them, is read whole. A forward keeps what it forwards.
 - DX-07: A Gmail sync fetches only what's new: a known conversation with nothing new is built from what's stored, and a full read follows when the folder's validity changes.

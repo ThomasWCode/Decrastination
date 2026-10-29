@@ -54,8 +54,8 @@ class EnrichWorker(context: Context, params: WorkerParameters) : CoroutineWorker
 
         /** After each sync, and when the model is switched on or given its key; one run after another. */
         fun enqueue(context: Context) {
-            // With the model to ask, it waits for a connection: offline, a call would fail and rest
-            // the model for an hour. Without it, the rules need none.
+            // With the model to ask, it waits for a connection: offline, each call would fail, and enough
+            // failures in an hour rest the model. Without it, the rules need none.
             val online = AppGraph.get(context).gateway.available()
             val request = OneTimeWorkRequestBuilder<EnrichWorker>()
                 .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
