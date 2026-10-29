@@ -3,6 +3,8 @@ package com.thomaswcode.decrastination.learn
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.data.MemoryTidyRecord
 import com.thomaswcode.decrastination.data.WeeklyReview
+import java.time.LocalDate
+import java.time.ZoneId
 
 /**
  * The weekly review's pure parts (docs/spec/learning.md, item 7; [Learning.review] runs it): whether a
@@ -10,11 +12,14 @@ import com.thomaswcode.decrastination.data.WeeklyReview
  */
 object Review {
     /**
-     * Whether [week] has had its review: one marked with it, or (before reviews were marked) one
-     * since [lastCheckIn]. By the week, so moving the check-in later doesn't bring a second.
+     * Whether [week] has had its review: one marked with it made on its Sunday or after, or (before reviews were
+     * marked) one since [lastCheckIn]. By the week, so moving the check-in later doesn't bring a second; one made
+     * before its Sunday ("Save, and review the week" midweek) is the week so far, so Sunday's still comes.
      */
-    fun reviewed(reviews: List<WeeklyReview>, week: String, lastCheckIn: Long): Boolean =
-        reviews.any { it.week == week || (it.week == null && it.at >= lastCheckIn) }
+    fun reviewed(reviews: List<WeeklyReview>, week: String, lastCheckIn: Long, zone: ZoneId): Boolean {
+        val sunday = LocalDate.parse(week).plusDays(6).atStartOfDay(zone).toInstant().toEpochMilli()
+        return reviews.any { (it.week == week && it.at >= sunday) || (it.week == null && it.at >= lastCheckIn) }
+    }
 
     /** The tidy in the review's words. */
     fun tidyLine(tidy: MemoryTidyRecord): String = "Felix tidied what he remembers: ${tidy.before.size} facts into ${tidy.after.size}."

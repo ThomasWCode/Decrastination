@@ -77,7 +77,7 @@ class Learning(
         // before now, so an alarm after midnight still finds Sunday's.
         val zone = clock.zone()
         val week = Daily.checkInWeek(now, zone, settings.value.checkInMin)
-        if (ifDue && Review.reviewed(log.value.reviews, week, Daily.lastCheckIn(now, zone, settings.value.checkInMin))) return
+        if (ifDue && Review.reviewed(log.value.reviews, week, Daily.lastCheckIn(now, zone, settings.value.checkInMin), zone)) return
         // A reset of the record while this is out (LR-08) lets what it makes go.
         val generation = resets()
         val learned = Calibrator.learn(
