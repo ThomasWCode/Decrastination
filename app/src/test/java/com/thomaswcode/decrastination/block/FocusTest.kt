@@ -19,6 +19,8 @@ import com.thomaswcode.decrastination.core.DayWindow
 import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.FixedClock
 import com.thomaswcode.decrastination.core.Kind
+import com.thomaswcode.decrastination.core.OwnTask
+import com.thomaswcode.decrastination.core.OwnTaskRules
 import com.thomaswcode.decrastination.core.MissedSlot
 import com.thomaswcode.decrastination.core.OwnStep
 import com.thomaswcode.decrastination.core.Planner
@@ -1191,5 +1193,24 @@ class FocusTest {
         assertTrue(slotted.timer!!.stoppedAt != null)
         assertTrue(slotted.tickBlock("own:mine", 0, "A"))
         assertNull(slotted.timer)
+    }
+
+    @Test
+    fun `Day's Undo opens again a task of yours its keep finished, but not one finished another way since (U-06)`() = runTest {
+        val finishing = Focus(tasks, settings, session, learning, protection, log, clock, onOwnTaskDone = { id ->
+            tasks.update { s -> s.copy(tasks = s.tasks.map { if (it.id == id) it.copy(status = Status.Done, doneAt = clock.now()) else it }) }
+        }) { state, s, now -> Planner.plan(Planner.Input(state.tasks, now, LONDON, s)) }
+        val mine = OwnTaskRules.create(OwnTask(title = "A form", minutes = 15, dueAt = Fixtures.at("2026-10-10T23:59")), "form", clock.now())
+        tasks.update { it.copy(tasks = listOf(mine)) }
+        val piece = finishing.plan().ordered.single()
+        val since = clock.now()
+        assertTrue(finishing.keepSlot(piece.key, seenAt = clock.now()))
+        assertEquals(Status.Done, tasks.value.tasks.single().status)
+        assertTrue(finishing.undoKeep(piece.key, since))
+        assertTrue(tasks.value.tasks.single().isOpen)
+        // Kept again, then finished another way an hour on: its Undo leaves it finished.
+        assertTrue(finishing.keepSlot(piece.key, seenAt = clock.now()))
+        tasks.update { s -> s.copy(tasks = s.tasks.map { it.copy(status = Status.Done, doneAt = clock.now() + 3_600_000L) }) }
+        assertFalse(finishing.undoKeep(piece.key, since))
     }
 }
