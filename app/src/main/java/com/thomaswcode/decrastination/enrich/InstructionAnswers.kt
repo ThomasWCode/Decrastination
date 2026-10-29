@@ -99,8 +99,12 @@ object InstructionAnswers {
         val titles = events.associate { EventJudge.key(it) to it.title } + listOfNotNull(about.eventKey?.let { it to (about.eventTitle ?: it) })
         // A day's breaks as the changes before each leave them (D-116), so one can use time another frees.
         val breaks = Breaks(breaksOn)
-        val changes = answer.changes.map(Given::normalised).map { g ->
-            change(g, byId, titles, now, zone, breaks)?.also(breaks::take) ?: return Reading.Unclear("Claude's reading couldn't be used: ${problem(g, byId, titles, now, zone, breaks)}", answer.answersQuestion)
+        val given = answer.changes.map(Given::normalised)
+        // A task's steps checked against the deadline this same reading gives it (F-06).
+        val due = projected(given, byId, now, zone)
+        val changes = given.map { g ->
+            val against = if (g.type == ChangeType.Steps.name) due else byId
+            change(g, against, titles, now, zone, breaks)?.also(breaks::take) ?: return Reading.Unclear("Claude's reading couldn't be used: ${problem(g, against, titles, now, zone, breaks)}", answer.answersQuestion)
         }
         stepsProblem(changes, byId)?.let { return Reading.Unclear("Claude's reading couldn't be used: $it", answer.answersQuestion) }
         // Tasks waiting on each other in a circle within this one reading: none would ever be planned.
@@ -227,6 +231,18 @@ object InstructionAnswers {
             }
         }
     }
+
+    /**
+     * [tasks] with the due dates [given] sets them (the last for a task, where one reads), so a task's steps are checked
+     * against the deadline the same answer gives it: one it extends lets a step be dated inside the extension, and one it
+     * shortens refuses a step past it (F-06), as applying the two one after the other would.
+     */
+    internal fun projected(given: List<Given>, tasks: Map<String, TaskItem>, now: Long, zone: ZoneId): Map<String, TaskItem> =
+        given.filter { it.type == ChangeType.DueBy.name }.fold(tasks) { map, g ->
+            val due = change(g, map, emptyMap(), now, zone) ?: return@fold map
+            val id = due.taskId ?: return@fold map
+            map + (id to map.getValue(id).copy(dueAt = due.time))
+        }
 
     /**
      * Why a split among [changes] can't be taken (AI-19): its steps don't add up to its task's

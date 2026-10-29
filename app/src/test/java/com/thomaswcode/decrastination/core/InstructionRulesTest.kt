@@ -336,6 +336,17 @@ class InstructionRulesTest {
     private fun parse(json: String) = InstructionAnswers.parse(json, listOf(essay, prep), listOf(drums), About(), now, LONDON)
 
     @Test
+    fun `a step is dated against the deadline the same reading gives its task, extended or brought forward`() {
+        fun read(due: String, stepDue: String) = parse(
+            """{"understood":true,"question":null,"changes":[{"type":"DueBy","taskId":"teams:prep","date":"$due"},{"type":"Steps","taskId":"teams:prep","steps":[{"title":"All of it","minutes":60,"dueDate":"$stepDue"}]}]}""",
+        )
+        // Prep was due the 13th: moved to the 20th, a step due the 18th is inside it.
+        assertIs<InstructionAnswers.Reading.Changes>(read("2026-10-20", "2026-10-18"))
+        // Brought forward to the 12th, a step due the 13th is past it.
+        assertIs<InstructionAnswers.Reading.Unclear>(read("2026-10-12", "2026-10-13"))
+    }
+
+    @Test
     fun `a reading that names listed tasks, events and plausible dates is taken`() {
         val reading = parse(
             """{"understood":true,"question":null,"changes":[
