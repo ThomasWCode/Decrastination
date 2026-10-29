@@ -286,6 +286,17 @@ object AnkiRules {
     }
 
     /**
+     * Of [homework] ([homeworkDecks]'s), the decks some assignment still asks for: one each of whose assignments
+     * is marked not a task, or the same work as another (D-12, [TaskItem.hidden], as the planner holds them alike), is listed still, but neither withholds the day's new cards nor is
+     * counted as homework's in the quota (I-04). Filtered here, not in [homeworkDecks], so its task isn't missed
+     * and its ticks aren't reset should the mark be undone.
+     */
+    fun asked(homework: List<Fetched>, assignments: List<TaskItem>): List<Fetched> {
+        val hidden = assignments.filter { it.hidden }.mapTo(HashSet()) { it.id }
+        return homework.filter { deck -> deck.extra[EXTRA_FOR]?.split(",")?.filter { it.isNotEmpty() }.orEmpty().any { it !in hidden } }
+    }
+
+    /**
      * A task for each deck an open assignment names, due with the earliest such assignment: by the
      * deadlines in force now (a plan's gone by, the real one behind it, PL-14), the earliest of their
      * real deadlines kept with it ([EXTRA_REAL]) so its date is a deadline only where theirs is.

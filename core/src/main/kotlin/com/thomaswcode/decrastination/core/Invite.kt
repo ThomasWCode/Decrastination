@@ -9,7 +9,7 @@ import java.time.ZoneOffset
 /**
  * A calendar invite an email carries (DX-02): what it's called, when it starts and ends, and where,
  * from its `text/calendar` part ([com.thomaswcode.decrastination.sources.gmail.Mime.invite]). Its
- * start is the email's time, exact: the task is that event, unless Claude read work to do by a
+ * start is the email's time, exact: the task is due then, unless Claude read work to do by a
  * date the email gives ([enriched]). [cancelled]: the message calls it off, so the conversation has
  * none; never stored.
  */

@@ -217,7 +217,7 @@ class GmailSource(private val secrets: SecretStore) : TaskSource {
                     socket.soTimeout = LOGOUT_MS
                     runCatching { imap.logout() }
                 }
-                SourceRead(GmailThreads.fetched(conversations, bodies, context.now, context.zone))
+                SourceRead(GmailThreads.fetched(conversations, bodies, context.zone))
             }
         } finally {
             closer.cancel()

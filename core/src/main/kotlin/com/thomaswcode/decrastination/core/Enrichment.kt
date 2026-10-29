@@ -64,9 +64,10 @@ data class Enrichment(
 
 /**
  * The task with its enrichment laid over what the source says: the source's deadline wins, though
- * a test before it brings it forward and an email's own deadline counts where the source has none;
- * the later of the two start dates; the enrichment's estimate; an email's kind; and the steps,
- * where the source gives none.
+ * a test before it brings it forward and the reading's deadline counts where the source has none;
+ * for an email, whose date is only the rules' guess, the reading's deadline wins, and its start
+ * replaces theirs where it read the email (it gives a kind); else the later of the two start dates;
+ * the enrichment's estimate; an email's kind; and the steps, where the source gives none.
  */
 fun TaskItem.enriched(): TaskItem = enrichedOnly().let { t ->
     // Your instructions over both: the deadline you gave; your name for it and your steps,
@@ -123,7 +124,7 @@ private fun TaskItem.enrichedOnly(): TaskItem {
             aiEffortMin = null,
             subSteps = if (stepsFromEnrichment()) emptyList() else subSteps,
         )
-    // An invite's time is exact (DX-02): the email is that event, unless Claude read work to do by a
+    // An invite's time is exact (DX-02): the email is due at its start, unless Claude read work to do by a
     // date the email gives (a reply by Friday), when the invite stays on its sheet.
     val invited = invite?.takeIf { !(e.kind == Kind.Admin && e.deadlineQuoted && e.deadline != null) }
     val due = when {

@@ -180,7 +180,7 @@ class ImapTest {
     private fun storedConversation(vararg uids: Long): TaskItem {
         val messages = uids.map { MailMessage(it, "${1000 + it}", "100", it, "Trip", "Hughes", "hughes@example.com", sent = false) }
         val conversation = GmailThreads.conversation(messages, 11)
-        val fetched = GmailThreads.fetched(listOf(conversation), mapOf(conversation.version to GmailThreads.Body("Bring the form.")), 0, ZoneId.of("Europe/London"))
+        val fetched = GmailThreads.fetched(listOf(conversation), mapOf(conversation.version to GmailThreads.Body("Bring the form.")), ZoneId.of("Europe/London"))
         return Merge.apply(emptyList(), Source.Gmail, fetched, 0).tasks.single()
     }
 

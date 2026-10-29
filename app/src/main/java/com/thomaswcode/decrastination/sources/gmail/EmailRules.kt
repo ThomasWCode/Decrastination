@@ -20,8 +20,8 @@ import java.util.Locale
  *   work, so it isn't hidden as an event or a notification (BUG-P1-003).
  * - Notifications and newsletters (no-reply senders, LinkedIn, an unsubscribe link): read it and
  *   decide, 5 minutes. Starred, nothing is only to read (AI-02).
- * - A ticket, booking or open day with a date ahead: an event. It appears the day before, and
- *   wants unstarring by the day after.
+ * - A ticket, booking or open day with a date ahead: what it needs of you before the day, 5
+ *   minutes, due at that day's start, with no start date of its own.
  * - Anything else: read it and decide, 15 minutes.
  *
  * The enrichment does this better when it's on; these are the floor.

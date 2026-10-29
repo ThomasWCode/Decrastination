@@ -207,7 +207,8 @@ object GmailThreads {
             threadId = task.sourceId,
             uids = uids.sorted(),
             uidValidity = uidValidity,
-            subject = task.title,
+            // The email's own subject, as the source last gave it: not a rename of yours or Felix's laid over it (I-01).
+            subject = task.sourceValues?.title ?: task.title,
             messageId = messageId,
             receivedAt = received,
             fromName = task.extra[EXTRA_FROM_NAME],
@@ -281,14 +282,16 @@ object GmailThreads {
     /**
      * The tasks a read ends with, newest conversation first: each named, dated and triaged as the
      * rules read it, with its text from [bodies] (by [Conversation.version]), or marked to be
-     * fetched where there's none. One with an invite is that event, at its time (DX-02).
+     * fetched where there's none. One with an invite is due at its start (DX-02).
      */
-    fun fetched(conversations: List<Conversation>, bodies: Map<String, Body>, now: Long, zone: ZoneId): List<Fetched> =
+    fun fetched(conversations: List<Conversation>, bodies: Map<String, Body>, zone: ZoneId): List<Fetched> =
         conversations.sortedByDescending { it.receivedAt }.map { conversation ->
             val body = bodies[conversation.version]
             val text = body?.text.orEmpty()
             val subject = conversation.subject.ifBlank { "(no subject)" }
-            val triage = EmailRules.triage(EmailRules.Email(conversation.fromName, conversation.fromAddress, subject, text, conversation.sent), now, zone)
+            // Read as of the day it came, not today: its dates are then of the email alone, so the deadline it quotes stays
+            // once it's passed (shown missed, readings.md) and an unchanged email's reading stays its own (I-02).
+            val triage = EmailRules.triage(EmailRules.Email(conversation.fromName, conversation.fromAddress, subject, text, conversation.sent), conversation.receivedAt, zone)
             val from = listOfNotNull(conversation.fromName, conversation.fromAddress?.let { "<$it>" }).joinToString(" ")
             val invite = body?.invite
             Fetched(

@@ -4,6 +4,9 @@ import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
 import com.thomaswcode.decrastination.core.AnkiDay
 import com.thomaswcode.decrastination.core.AnkiRules
+import com.thomaswcode.decrastination.core.By
+import com.thomaswcode.decrastination.core.Mine
+import com.thomaswcode.decrastination.core.SetBy
 import com.thomaswcode.decrastination.core.Deck
 import com.thomaswcode.decrastination.core.Enrichment
 import com.thomaswcode.decrastination.core.Enrichments
@@ -133,6 +136,28 @@ class AnkiRulesTest {
         assertTrue(AnkiRules.homeworkDueSoon(listOf(deck("2026-10-01T08:30")), NOW, LONDON))
         assertTrue(!AnkiRules.homeworkDueSoon(listOf(deck("2026-10-10T08:30")), NOW, LONDON))
         assertTrue(!AnkiRules.homeworkDueSoon(listOf(deck("2026-10-09T08:30", done = true)), NOW, LONDON))
+    }
+
+    @Test
+    fun `a deck only an assignment marked not a task asks for is listed, but doesn't make the day reviews only`() {
+        val vocab = TaskItem(
+            id = "teams:vocab", source = Source.Teams, sourceId = "vocab", title = "Learn vocabulary 1.2", kind = Kind.Homework,
+            dueAt = Fixtures.at("2026-10-09T08:30"), firstSeenAt = NOW, lastSeenAt = NOW, mine = Mine(notATask = SetBy(true, By.You)),
+        )
+        val decks = listOf(Deck(1, "Textbook 1", learn = 0, review = 5, new = 20), Deck(12, "Textbook 1::1.2", learn = 0, review = 5, new = 20))
+        val homework = AnkiRules.homeworkDecks(decks, 1, listOf(vocab), unseen = { 40 }, now = NOW, zone = LONDON)
+        assertEquals(listOf("deck:12"), homework.map { it.sourceId })
+        assertEquals(emptyList(), AnkiRules.asked(homework, listOf(vocab)))
+        assertFalse(AnkiRules.homeworkDueSoon(AnkiRules.asked(homework, listOf(vocab)), NOW, LONDON))
+        // The quota as AnkiSource asks for it: the day's new cards come.
+        val asked = AnkiRules.asked(homework, listOf(vocab))
+        val ids = asked.filter { !it.done }.mapNotNull { it.extra[AnkiRules.EXTRA_DECK_ID]?.toLongOrNull() }.toSet()
+        val (quota, day) = AnkiRules.quota(decks, 1, null, NOW, LONDON, 21 * 60 + 30, ids, AnkiRules.homeworkDueSoon(asked, NOW, LONDON)) { 40 }
+        assertTrue("new" in quota!!.title, quota.title)
+        assertFalse(day.reviewsOnly)
+        // The mark taken back: asked for again.
+        val again = vocab.copy(mine = Mine())
+        assertEquals(homework, AnkiRules.asked(homework, listOf(again)))
     }
 
     private fun quota(decks: List<Deck>, previous: AnkiDay? = null, at: String = "2026-10-08T17:00") =
