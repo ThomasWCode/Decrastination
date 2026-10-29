@@ -462,11 +462,12 @@ You look things up on the web for the assistant in a UK sixth-form student's (Ye
 Every half minute while the blocker runs, at each slot's alarm, and at the check he set, the rules look for a reason to write (`FelixRules.due`), in this order:
 1. **SlotEnd**: a slot of today's went by undone, or was ticked without the photo it needs to earn, its time over; once a slot, while it's fresh (30 minutes). One a timer on its task could have covered waits till 30 minutes after the timer's zero or its Stop, whichever came first, and is fresh from then (D-112).
 2. **DayDone**: today's last slot kept, with nothing left planned today; once a day.
-3. **Question**: a question from a reading (AI-10), the oldest first; not before his next check.
-4. **Completions**: from 19:00, work a source says is done that no kept slot saw that day (LR-05); once an evening, not before his next check.
-5. Then only while a slot of today's is under way or to come, and not before his next check:
+3. **SlotKept after a let-down**: a slot kept, while it's fresh, of a task he was let down about today (Q102, D-119), at once, his check or no; not one DayDone has answered already.
+4. **Question**: a question from a reading (AI-10), the oldest first; not before his next check.
+5. **Completions**: from 19:00, work a source says is done that no kept slot saw that day (LR-05); once an evening, not before his next check.
+6. Then only while a slot of today's is under way or to come, and not before his next check:
    - **SlotStart**: a slot under way past his grace (`felixGraceMin`, 10 minutes) with nothing done on its task since it began (a timer started on it among what's done), and no timer running on its task short of 30 minutes past its zero (D-112); up to three times a slot.
-   - **SlotKept**: about one kept slot in three, and always one whose task he was let down about today (Q102), while it's fresh.
+   - **SlotKept**: about one kept slot in three, while it's fresh (one after a let-down is step 3's).
 
 He isn't asked in quiet hours, during a timed calendar event that takes its time, or with Claude off. His notifications off silence only them: what he writes is in the chat. A standing instruction can quiet him further: he gives an empty message.
 
@@ -494,7 +495,7 @@ Also:
    - `Free time now:` for SlotKept and DayDone;
    - `Done, as their sources say…`: for Completions, the tasks;
    - `Done so far…`: what's done of today's tasks and of the ones his texts are about, each finished, no longer due (an Anki quota gone by, not done), off the list as not a task or as the same work as another by your word, or with its steps ticked, the last three named (4.3.11);
-   - `Your texts before today, oldest first:` his own texts before today's story that said something, each with your reply to it (the message of yours answering it, or the next of yours within ten minutes);
+   - `Your texts before today, oldest first:` of his last six texts of his own that said something, those before today's story (none, with six or more today), each with your reply to it (the message of yours answering it, or the next of yours within ten minutes);
    - `Question:` for a Question, the question to put.
 
 Not sent: the task list, the calendar, your pace.
