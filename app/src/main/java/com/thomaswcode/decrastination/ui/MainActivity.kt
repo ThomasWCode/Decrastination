@@ -11,8 +11,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Badge
-import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -40,9 +38,7 @@ import androidx.work.WorkManager
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.BuildConfig
 import com.thomaswcode.decrastination.R
-import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.sync.SyncWorker
-import com.thomaswcode.decrastination.core.GmailWrites
 
 /**
  * The app's screens over the chat, its home (D-121): the plan, the tasks every source lists, and the
@@ -125,18 +121,6 @@ class MainActivity : ComponentActivity() {
         val syncs by remember { WorkManager.getInstance(this).getWorkInfosForUniqueWorkFlow(SyncWorker.NOW) }
             .collectAsStateWithLifecycle(emptyList())
         val syncing = syncs.any { !it.state.isFinished }
-        val tasks by graph.tasks.state.collectAsStateWithLifecycle()
-        val runtime by graph.runtime.state.collectAsStateWithLifecycle()
-        val model by graph.stores.model.state.collectAsStateWithLifecycle()
-        val protection by graph.stores.protection.state.collectAsStateWithLifecycle()
-        val settings by graph.settings.state.collectAsStateWithLifecycle()
-        val gmail by graph.gmailFinishes.state.collectAsStateWithLifecycle()
-        // What Setup would show in red, as a mark that opens it (UI-18): a source failing, Claude's key,
-        // protection, a file unreadable, a write to Gmail given up; and, the first run, no source read yet.
-        val attention = Source.SYNCED.any { tasks.status(it).error != null } || GmailWrites.givenUp(gmail.writes).isNotEmpty() ||
-            (model.aiUsage.keyProblem != null && settings.aiEnabled && settings.aiKeyActive) ||
-            protection.protection.problems.isNotEmpty() || runtime.unreadable.isNotEmpty() ||
-            Source.SYNCED.all { tasks.status(it).lastSuccessAt == null && tasks.status(it).error == null }
         var menu by remember { mutableStateOf(false) }
         // The very first email finished here waits for your OK: asked over whichever tab is open.
         GmailOkSheet(graph)
@@ -147,11 +131,7 @@ class MainActivity : ComponentActivity() {
                 TopAppBar(
                     title = { Text("Decrastination", fontWeight = FontWeight.Bold) },
                     actions = {
-                        if (attention) {
-                            IconButton(onClick = { startActivity(Intent(this@MainActivity, SetupActivity::class.java)) }) {
-                                BadgedBox(badge = { Badge() }) { Icon(painterResource(R.drawable.ic_error), contentDescription = "Setup needs you") }
-                            }
-                        }
+                        SetupMark(graph, this@MainActivity)
                         IconButton(enabled = !syncing, onClick = { SyncWorker.syncNow(this@MainActivity) }) {
                             Icon(painterResource(R.drawable.ic_refresh), contentDescription = "Sync now")
                         }
