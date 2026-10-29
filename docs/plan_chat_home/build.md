@@ -1,6 +1,6 @@
 # Building it (4.9.0)
 
-How [the plan](README.md) is built: the steps in order, each a commit, then the tests, the docs and the phone check. Branch `v4.9.0` from `main` once #150 (4.8.0) is merged; `versionCode` 89, `versionName` "4.9.0" in `app/build.gradle.kts`; PR titled "4.9.0: the app opens on the chat". About 150 lines of Kotlin in six files, and no store, prompt, schema or golden changed.
+How [the plan](README.md) is built: the steps in order, each a commit, then the tests, the docs and the phone check. Branch `v4.9.0` from `main` once #150 (4.8.0) is merged; `versionCode` 89, `versionName` "4.9.0" in `app/build.gradle.kts`; PR titled "4.9.0: the app opens on the chat". About 200 lines of Kotlin in eight files, and no store, prompt, schema or golden changed.
 
 ## The steps
 
@@ -65,7 +65,36 @@ object Home {
 - `OpenTaskActivity` with no task: the same intent.
 - Unchanged, by Q115: `NextWidget`'s taps and `FreeTimeNotice.backToWork` (Day), `ModelAlerts`, `Watchdog`, `GmailWriteWorker`, `TimerAlarms` and `TaskOpener` (their tab or Setup). Their Back reaches the chat through step 2.
 
-### 6. The icon, the version and the docs
+### 6. Read once seen (`ChatScreenState`, `AskActivity`, `Conversation`, `Outbox`; Q120)
+
+Before this step, the chat on screen cancels his notification (`Outbox.notify` with `chatOnScreen()`), and leaving it reads up to then. After it, both wait till the visit is *seen*.
+
+- **`ChatScreenState`:**
+  - `const val READ_AFTER_MS = 3_000L`.
+  - A visit's `seen` flag, false from `opened`.
+  - `seen(now)`, true once `now - since >= READ_AFTER_MS` or once `markSeen()` has been called. `since` is already the visit's start.
+  - `markSeen()` sets the flag, and `sent()` calls it.
+  - `paused(read)` is unchanged, but its callers pass `read` only for a seen visit, so `leftAt` moves only then, and a quick visit's *New messages* line comes back next time.
+- **`Conversation`:** `var chatSeen = false` beside `chatInFront`. `Outbox` is given `chatSeen = { conversation.chatSeen }` from `AppGraph`, as it's given `chatOnScreen`.
+- **`Outbox.notify`:**
+  - with the chat seen, his notification is cancelled (today's on-screen branch);
+  - with the chat on screen but not yet seen, it's made as usual with `alertFor` dropped, so it's updated and never sounds;
+  - off screen, as now.
+- **`AskActivity`:**
+  - **`onResume`,** with the *Chat* tab showing:
+    - `chatInFront = true`, as now;
+    - in place of `outbox.notify(now)`, a job on `lifecycleScope` waits `READ_AFTER_MS`, then marks the visit seen, sets `chatSeen = true` and calls `outbox.notify(clock.now())`;
+    - opened from his notification (`openedAt`), it's seen at once, as that open reads already.
+  - **`onPause`:**
+    - the job is cancelled;
+    - the visit is read only if it's seen: `screen.paused(read = now.takeIf { chatTab && screen.seen(now) })` and `conversation.read(now)` only then;
+    - `chatSeen = false`, `chatInFront = false`;
+    - for a visit that wasn't seen, `outbox.notify(now)` puts his notification back as it was (silently).
+  - **`showingChat`:** the same pair, for *Your changes* shown and the *Chat* tab back.
+  - **Sending:** the box's send and a reply chip call `screen.markSeen()`, set `chatSeen = true` and call `outbox.notify(now)`, so the notification goes at once.
+- **Nothing stored changes:** `readAt` is set as before, only later or not at all.
+
+### 7. The icon, the version and the docs
 
 - `res/drawable/ic_calendar.xml`: Material Symbols' *calendar_today*, 24 dp, tinted `?android:attr/colorControlNormal` over a white fill, with its name in a comment, as `ic_chat.xml` is.
 - The version, and the docs listed in [README.md](README.md) §The docs the build changes, in the same PR.
@@ -73,13 +102,24 @@ object Home {
 ## Tests
 
 - New: `HomeTest` (step 1).
+- Added to `ChatScreenStateTest` (step 6):
+  - a visit is not seen at 2,999 ms and seen at 3,000;
+  - `markSeen()` makes it seen at once;
+  - `sent()` marks it seen;
+  - a new `opened` starts unseen;
+  - a visit paused unseen keeps the next visit's *New messages* line on the same messages.
+- Added to `OutboxTest` (step 6):
+  - on screen and not seen, `notify` keeps his notification and never alerts, a new message included;
+  - seen, it's cancelled;
+  - off screen, it's as before.
+- Added to `ConversationTest`: `read` isn't called for a visit left unseen. Where that's in `AskActivity` alone, the phone check covers it instead.
 - Unchanged and run: `ArchitectureTest` (no store gains a writer; `SetupMark` reads flows only), `ChatScreenStateTest`, the goldens (no prompt changes).
 - No Robolectric in the project, so the activities' wiring (the hand-over, the callbacks, the flags) is checked on the phone, below. The decisions they act on are `Home`'s, and those are tested.
 
 To run them:
 
 - `./gradlew compileDebugUnitTestKotlin`
-- `./gradlew testDebugUnitTest --tests '*HomeTest*' --tests '*ArchitectureTest*'`
+- `./gradlew testDebugUnitTest --tests '*HomeTest*' --tests '*ChatScreenStateTest*' --tests '*OutboxTest*' --tests '*ConversationTest*' --tests '*ArchitectureTest*'`
 - before the push, CI's own: `./gradlew testDebugUnitTest lintDebug assembleDebug`
 
 ## The phone check
@@ -105,6 +145,10 @@ The install kills the app, so the first launch after it is a fresh start. Each s
 9. **Felix's notification.** Its tap opens the chat at its message, as before; his count on Felix's button reads 0 after it.
 10. **Rotation** on the home chat keeps the chat (it isn't handed over again); the rotation is restored after.
 11. **The block screen**, if blocking is on at the time, else left to real use. Felix's button there opens a chat with a Back arrow, and Back returns to the block screen.
+12. **A quick pass isn't reading** (Q120). This needs one of his messages unread with his notification showing; one written for the test is taken out afterwards with `clean_test_chat.py`.
+    - Open from the icon and tap Plan within about a second: his notification is still there, and his count on Felix's button is unchanged.
+    - Back to the chat, then stay 5 seconds: the notification goes. Leave, and the count reads 0.
+13. **Sending reads at once.** With one unread, open the chat, send a reply at once and leave within 3 seconds: no notification comes back, and the count reads 0.
 
 Afterwards:
 - the services are bound and the list is unchanged;
@@ -116,5 +160,6 @@ Afterwards:
 ## Risks
 
 - **A launcher that matches tasks by the root's component, not its affinity.** With `MainActivity` finished, the chat is the task's root. A launcher that looked for `MainActivity` would find no task and start a fresh one each tap, so the chat would always open, contrary to Q114. Step 3 of the phone check finds this. The fix would be to keep `MainActivity` as the task's root, finishing it only on Back, at the cost of a Day behind the chat that's never shown.
+- **The notification's state while the chat's on screen** (step 6). Today it's simply cancelled. Kept for the first 3 seconds, every `notify` meanwhile (a message arriving, a reply from it) must keep it silent and up to date. `OutboxTest` pins the three branches; step 12 checks it on the phone.
 - **Predictive Back.** The callbacks take over Back at the root, so the system's "back to home" preview isn't shown there. That's accepted, as the chat at the root leaves anyway.
 - **The chat's `onResume` runs at every launch.** It costs nothing with nothing waiting (README §What you'll notice). With a message of yours waiting, it asks as opening the chat does now, and Claude being off, resting or capped holds it in `ModelGateway`, as it does today.
