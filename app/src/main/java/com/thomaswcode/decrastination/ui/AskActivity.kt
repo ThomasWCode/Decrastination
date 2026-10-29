@@ -423,6 +423,8 @@ class AskActivity : ComponentActivity() {
                         }
                     },
                     actions = {
+                        // The home's bar (UI-18): Setup's mark, and Day's menu under the chat's own items.
+                        SetupMark(graph, this@AskActivity)
                         Box {
                             IconButton(onClick = { menu = true }) { Icon(painterResource(R.drawable.ic_more_vert), contentDescription = "Menu") }
                             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
@@ -438,6 +440,13 @@ class AskActivity : ComponentActivity() {
                                     menu = false
                                     clearing = true
                                 })
+                                HorizontalDivider()
+                                MainActivity.MENU.forEach { (label, page) ->
+                                    DropdownMenuItem(text = { Text(label) }, onClick = {
+                                        menu = false
+                                        startActivity(Intent(this@AskActivity, page))
+                                    })
+                                }
                             }
                         }
                     },
