@@ -332,13 +332,14 @@ class EvalRunTest {
         File(dir, "report-$run.md").writeText(moodReport(run, results, notAsked, spent))
         System.getenv("EVAL_BEFORE")?.toIntOrNull()?.let { before ->
             val read = Json.parseToJsonElement(File(runs, "$before.json").readText()).jsonArray.map { it.jsonObject }
-            // The earlier run's messages read by the judge too, where they weren't, so the two runs' reads stand side by side;
-            // kept in its file, so they're read once.
-            val earlier = if (!judging || read.all { "judge" in it }) read else read.map { a ->
-                val text = a.getValue("text").jsonPrimitive.content
-                val judged = if (text.isBlank()) null else judge(client!!, a.getValue("what").jsonPrimitive.content, text)
-                judged?.let { spent += it.third }
-                JsonObject(a + mapOf("judge" to JsonPrimitive(judged?.first.orEmpty()), "giveaway" to JsonPrimitive(judged?.second.orEmpty())))
+            // The earlier run's messages read by the judge too, where they weren't (one with words and no verdict, as a run with
+            // the judge off writes it, "judge" empty), so the two runs' reads stand side by side; kept in its file, so they're read once.
+            fun unjudged(a: JsonObject) = a.getValue("text").jsonPrimitive.content.isNotBlank() && a["judge"]?.jsonPrimitive?.contentOrNull.isNullOrEmpty()
+            val earlier = if (!judging || read.none(::unjudged)) read else read.map { a ->
+                if (!unjudged(a)) return@map a
+                val judged = judge(client!!, a.getValue("what").jsonPrimitive.content, a.getValue("text").jsonPrimitive.content)
+                spent += judged.third
+                JsonObject(a + mapOf("judge" to JsonPrimitive(judged.first), "giveaway" to JsonPrimitive(judged.second)))
             }.also { File(runs, "$before.json").writeText(JsonArray(it).toString()) }
             File(dir, "report.md").writeText(moodSideBySide(before, earlier, run, results, notAsked))
         }
