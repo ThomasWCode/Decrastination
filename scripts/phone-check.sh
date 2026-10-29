@@ -108,8 +108,17 @@ adb exec-out run-as $PKG sh -c 'ls -l files/crashes 2>/dev/null' | tr -d '\r' | 
 # The app's own records (data/Crashes.kt) outlast the crash buffer turning over: one from after the
 # install is this build's. Without the install's time, every record counts.
 SINCE=$(date -d "$INSTALLED" +%s 2>/dev/null || echo 0)
-KEPT=$(adb exec-out run-as $PKG sh -c 'stat -c %Y files/crashes/* 2>/dev/null' | tr -d '\r' | awk -v since="$SINCE" '$1 ~ /^[0-9]+$/ && $1 >= since' | grep -c .)
-echo "  the app's own records since the install: $KEPT"
+# Said in the output, as exec-out passes on no exit status: NONE, no folder (the app makes it only with a crash's
+# record), a pass; READ, its records' times follow; neither, the folder couldn't be read, which isn't all well.
+RECORDS=$(adb exec-out run-as $PKG sh -c 'if [ ! -e files/crashes ]; then echo NONE; elif ls files/crashes >/dev/null 2>&1; then echo READ; stat -c %Y files/crashes/* 2>/dev/null; fi' | tr -d '\r')
+case "$RECORDS" in
+  NONE*|READ*)
+    KEPT=$(echo "$RECORDS" | awk -v since="$SINCE" 'NR > 1 && $1 ~ /^[0-9]+$/ && $1 >= since' | grep -c .)
+    echo "  the app's own records since the install: $KEPT" ;;
+  *)
+    KEPT=unread
+    echo "  CAN'T READ the app's own crash records" ;;
+esac
 [ "$CRASHES" = "0" ] && [ "$KEPT" = "0" ] || FAILED=1
 
 echo "== In front"
