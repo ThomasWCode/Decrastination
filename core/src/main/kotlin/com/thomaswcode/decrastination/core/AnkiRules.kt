@@ -287,7 +287,7 @@ object AnkiRules {
 
     /**
      * Of [homework] ([homeworkDecks]'s), the decks some assignment still asks for: one each of whose assignments
-     * is marked not a task ([TaskItem.hidden]) is listed still, but neither withholds the day's new cards nor is
+     * is marked not a task, or the same work as another (D-12, [TaskItem.hidden], as the planner holds them alike), is listed still, but neither withholds the day's new cards nor is
      * counted as homework's in the quota (I-04). Filtered here, not in [homeworkDecks], so its task isn't missed
      * and its ticks aren't reset should the mark be undone.
      */

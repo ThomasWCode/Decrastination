@@ -149,6 +149,12 @@ class AnkiRulesTest {
         assertEquals(listOf("deck:12"), homework.map { it.sourceId })
         assertEquals(emptyList(), AnkiRules.asked(homework, listOf(vocab)))
         assertFalse(AnkiRules.homeworkDueSoon(AnkiRules.asked(homework, listOf(vocab)), NOW, LONDON))
+        // The quota as AnkiSource asks for it: the day's new cards come.
+        val asked = AnkiRules.asked(homework, listOf(vocab))
+        val ids = asked.filter { !it.done }.mapNotNull { it.extra[AnkiRules.EXTRA_DECK_ID]?.toLongOrNull() }.toSet()
+        val (quota, day) = AnkiRules.quota(decks, 1, null, NOW, LONDON, 21 * 60 + 30, ids, AnkiRules.homeworkDueSoon(asked, NOW, LONDON)) { 40 }
+        assertTrue("new" in quota!!.title, quota.title)
+        assertFalse(day.reviewsOnly)
         // The mark taken back: asked for again.
         val again = vocab.copy(mine = Mine())
         assertEquals(homework, AnkiRules.asked(homework, listOf(again)))
