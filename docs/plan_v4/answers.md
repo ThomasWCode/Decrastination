@@ -457,3 +457,68 @@ Applied: `ChatMessage.feeling`, and `FelixAnswer.feeling` for one written ahead,
 ### What the plan couldn't check
 
 The levels can't be faked well on the phone: a few school days of use are the test, with your ratings and his notes read back.
+
+## Felix's speech (4.8.0, 28 and 29 Oct)
+
+Your ask (28 Oct 2026), after signing off 4.7.0's voice ("not perfect, accept this voice"): ideas for a substantial improvement in how Felix speaks, from prompts, models, code or what he's told, researched and evaluated, any earlier decision open to be overturned. The review (PR #147, #148) found him briefed as the app's writer and fed a form: his system prompt opening "You write the short messages the planner app sends", his user turn labelled fields, the voice about forty prohibitions that a literal model collapses onto the few moves left (in the final 4.7.0 runs 45 of 59 messages carried a clock time, 51 of 59 ended in a full stop, seven of eight day-done messages ended "N min of free time's yours"), and nothing he knew of yesterday, the week, the chat or his own notes. Its plan, ranked, became 4.8.0 at your word ("Fully build and implement the plan", 28 Oct, the review's folder folded into this section and D-120 as built). How it works now is in [spec/felix.md](../spec/felix.md) §Who he is and §His messages.
+
+### Asked and answered
+
+**Q107. How should 4.7.0 ship, with 4.8.0 built on it?** Offered: push 4.7.0 now as its own PR, its reviews running while 4.8.0 is built (recommended); both at the end; one PR for both.
+
+> Push 4.7.0 now (Recommended)
+
+Applied: #149, merged 28 Oct after three Codex rounds and a Claude review, its final build checked on the phone.
+
+**Q108. Which of the decisions the plan would overturn should 4.8.0 build?** The cheek and the age settled already (your word on #148). Offered, to pick any: the voice and shape (a number only where it's the point, one thought a text and up to two texts a look, no full stop at a text's end but when he's cold, the bans replaced by a description and pairs); what he's told (the story of the day, a week's diary, the check-in's answers, the chat's exchanges, his own notes, the ceiling in a person's words); the morning as the app's list with his one line on top (I-20); the harness deciding by measures.
+
+> Voice and shape, What he's told, Harness decides by measures
+
+Applied: all three; the morning stays his whole briefing (D-57).
+
+**Q109. When should the weekly digest of your ratings be built** (the plan's stage 6: a call turning your thumbs and notes into lines in his profile and his examples)? Offered: after a fortnight of ratings (recommended, as its prompt can only be judged on real ratings); now, switched off till there are enough.
+
+> Remove that from the plan. The thumbs up, thumbs down, and my comments should only ever be acted upon when I plug my phone into my laptop and let an agent, like you, read them and act on them.
+
+Applied: no digest, no example pool from your ratings; they're read off the phone (`private/tools/felix_feedback.py`) and acted on by an agent at the laptop, never by the app.
+
+**Q110. The harness's judge** (said unasked, while it was built):
+
+> Use sonnet everywhere that haiku is used.
+
+Applied: Sonnet 5.5 reads each message blind, in place of the plan's Haiku 5.5.
+
+**Q111. Felix's line on the phone.** Your phone kept the app's very first default, "a strict friend who knows your week and wants the work done", as a default is written to the file once the settings are saved; every scenario run uses the current one, and in 4.8.0 the line sits in his first sentence. Offered: 4.8.0 replaces an old default with the current one, a line you typed kept (recommended); you change it in Settings; the runs use the phone's line.
+
+> 4.8.0 replaces old defaults (Recommended)
+
+Applied: `SpeechMigration.SETTINGS`, `settings.json` 4.
+
+**Q112. How cold can he go when he's properly fed up?** On your blind read you'd suggested "keep ghosting me and you'll be in big trouble bud" for a strong let-down, which breaks two rules of D-119: never a threat, and no "mate" or "bud" when he's let down strongly, its absence how you know he's serious. Offered: mock threats, still no address word; both; D-119 as it was (recommended).
+
+> Mock threats ok, still no 'bud'
+
+And, as it was written:
+
+> In terms of threats, any mock threat short of anything physical is ok.
+
+Applied: properly fed up, the only cheek left is a mock threat nobody would take as real, never anything physical; never an insult or a real threat; no address word at that level.
+
+### Changed at your word
+
+- **Your blind reads** (29 Oct, each case's two texts in an order drawn at random, the key apart): the new voice over 4.7.0's in 9 of 10 cases ("'You went quiet on me' is closer to how people I know may text", "the shorter times are good", "B is nice and short with no generic phrases"), the morning the one it lost; the new voice in lower case over the mirror of your own capitals and whole sentences in 7 of 10, the mirror in 2, one tied: no mirror. From your notes:
+  - **The morning:** "the morning briefing should be informative, although still not a list. Maybe it can send the greeting which is just nice chat and then something closer to A, which actually gives the information." Now two texts, a greeting, then the day's shape with its times.
+  - **"who are you and what've you done with my mate"** ("quite cringe and generic", twice): named among the lines you've said grate, with 4.7.0's "knew you had it in you", "off your plate" and "done and dusted"; the only lines his prompt names not to say.
+  - **A plain word of praise:** "better if followed with ', nice' or ', well done'", after the particular thing.
+  - **His steps not read back:** "B mentioning sources is not good."
+  - **The check-in's worries:** "'what's going on at home, you alright?' is not too intrusive: I can always ignore it. Don't encourage that but no need to change anything to prevent it." Nothing changed.
+- **The diary tested** (a side agent's note, passed on: "Assess if there is a way to correctly test the diary"): the scenarios' cases held only one day, so the diary came out empty in every one. The cases now take days before theirs, a check-in and dated messages; five made-up cases put a bad or a good week behind a miss, a kept slot, the morning and the chat; a mark shows where an answer brings the week up; and `LooksTest` checks the app's own call carries the diary from the stores.
+
+### Decided without asking
+
+1. A look of two texts is one message holding two lines, drawn as two bubbles in the chat and two lines of his notification, not two messages: his rules count his messages (his nudges on a piece, a reply's message, what waits for an answer), and two would count a look twice.
+2. The diary's memories aren't listed again: the profile every call sends has them.
+3. The chat keeps its one reply (its schema unchanged): three candidates there would triple a dearer call, and the chat's answers can list.
+4. Two of the five pairs are a single text, and the phrase the first run copied most was replaced, after run 17 came back with nearly every look as two texts and "look at you" in four cases; the morning's reason says a day starts clean, after run 17's morning brought up yesterday.
+5. Tier 3's experiments (once each on his 26 cases, beside the fixed voice): low effort wrote about as well as medium at half the cost of a message; high added nothing; Fable 5.1 at low was harsher at neutral ("half an hour and you couldn't give it that" at a first miss) at about twice the cost; no pairs, pairs drawn at random each call and the voice said again at the user turn's end read much as the fixed pairs. Opus 5.5 at medium and the fixed pairs stay; the mirror was yours to judge (above).
+6. Not built from the plan: the morning as the app's list (Q108), the digest (Q109), and tier 4 (a non-work line now and then, replying in kind), which is for after real use.
