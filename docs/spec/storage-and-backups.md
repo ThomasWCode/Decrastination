@@ -76,11 +76,13 @@ Secrets that can't be decrypted are told apart from none saved (`SecretStore`): 
 
 Never the passwords or keys, nor the sources' tasks, which the next sync reads again; nor what only this phone knows of them (their steps' ticks, the minutes worked and found done by a photo, your answers to Felix's questions), so restored onto an empty phone they come back from their sources without it. Keeping that by each task's id, laid on it when its source lists it again (never the task whole, which the next sync would close as gone and give free time for), is planned for later ([plan_v4/README.md](../plan_v4/README.md) §After the plan).
 
-A backup that's more than Import reads even with all the chat's earlier messages left out couldn't be restored, so it isn't kept as one (`BackupService.tooBig`): the nightly isn't written (nor tried again that day, as it would be as big) and the older ones stay, Settings → Backup says so, and Export refuses it, the empty file the picker made for it deleted.
+A backup that's more than Import reads even with all the chat's earlier messages left out couldn't be restored, so it isn't kept as one (`BackupService.tooBig`): the nightly isn't written (nor tried again that day, as it would be as big) and the older ones stay, Settings → Backup says so, and Export refuses it, the empty file the picker made for it deleted. The same goes for one Import would refuse (`BackupService.unrestorable`, checked as Import checks it): neither written nor pruned for, and said.
+
+An instruction's dates and times in a backup are checked against when it was made, not the backup's date (within two years before and 400 days after its making): one kept in use for years is in every backup since, and each restores.
 
 **Each day** (AR-07): `data/BackupWorker.kt`, a daily job, writes all of it to `Documents/Decrastination/decrastination-<date>.json` (`data/BackupService.kt`, `BackupService.backupNow`).
 - It goes through MediaStore (`data/BackupFolder.kt`, Android 10 and later), with no folder to pick and no permission, and outlasts clearing the app's data.
-- It replaces that day's file, keeps the newest 14, and notes the time for Settings → Backup; a failed write is tried again up to three times. One too big to restore isn't written, nor are the 14 let go of for it.
+- It replaces that day's file, keeps the newest 14, and notes the time for Settings → Backup; a failed write is tried again up to three times. One too big to restore, or that Import would refuse, isn't written, nor are the 14 let go of for it.
 
 **Export** writes the same to a file you choose, and **Import** reads one back (Settings → Backup, or Setup).
 A copy off the phone is yours to make: a sync app mirroring the folder, or Export. Android's own backup is off (`allowBackup` false; the extraction rules exclude everything).
@@ -101,7 +103,7 @@ It then says what came back, and what waits.
 ## Resets
 
 Settings → Reset (LR-08, `BackupService.reset`) clears one part, after saving a copy of everything as `reset-<date>-<time>.json` in `Documents/Decrastination` (in the app's own `backups/` where that can't be written, which Settings → Backup restores from). Where the chat goes and that copy has no room for its earliest messages (past 8 MB), they're kept whole beside it as `chat-archive-<date>-<time>.json`, so none is lost; it isn't a backup to import. Restored, a copy leaves out your messages still waiting for an answer, as any restore does (above): the copy holds them, but one kept in the app's own files can't be opened on the phone. A copy over 8 MB even without them couldn't be read back, so then nothing is reset; nor where Import would refuse the copy (something in it the app never writes), checked as Import checks it.
-Nothing goes until its copy is saved. None needs the parent code, and none touches Claude's key, the sources or protection.
+Nothing goes until its copy is saved. What the copy holds is what goes: what lands while it's made and saved (an answer of Felix's to a call in flight, a completion, a note, a fact) is in no copy, so it stays, record by record, rather than being erased unrecoverably. None needs the parent code, and none touches Claude's key, the sources or protection.
 
 | Reset | What goes |
 |---|---|

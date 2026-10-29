@@ -105,6 +105,19 @@ data class ActivityLog(
         )
     }
 
+    /** What's here that [copied] doesn't hold, record for record: what came after a reset's copy was made, which the reset keeps. */
+    fun since(copied: ActivityLog): ActivityLog = ActivityLog(
+        slots = slots - copied.slots.toSet(),
+        completions = completions - copied.completions.toSet(),
+        blocks = blocks - copied.blocks.toSet(),
+        protection = protection - copied.protection.toSet(),
+        days = days - copied.days.toSet(),
+        checkIns = checkIns - copied.checkIns.toSet(),
+        reviews = reviews - copied.reviews.toSet(),
+        weeks = weeks - copied.weeks.toSet(),
+        version = version,
+    )
+
     companion object {
         const val KEEP_DAYS = 120L
 

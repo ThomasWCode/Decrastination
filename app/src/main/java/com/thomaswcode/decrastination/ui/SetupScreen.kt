@@ -121,9 +121,9 @@ fun SetupScreen(graph: AppGraph, activity: Activity, parts: Set<SetupPart> = Set
                 withContext(Dispatchers.IO) {
                     val text = graph.backups.exportBackup()
                     // One Import couldn't read back isn't saved as a backup: the empty file the picker made for it goes.
-                    if (graph.backups.tooBig(text)) {
+                    graph.backups.unrestorable(text)?.let { why ->
                         runCatching { DocumentsContract.deleteDocument(activity.contentResolver, uri) }
-                        error("it's more than Import reads (8 MB), so it couldn't be restored")
+                        error("$why, so it couldn't be restored")
                     }
                     val out = requireNotNull(activity.contentResolver.openOutputStream(uri, "wt")) { "no file to write" }
                     out.use { it.write(text.toByteArray()) }

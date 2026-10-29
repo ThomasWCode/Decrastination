@@ -343,17 +343,19 @@ object Backups {
     /**
      * Whether [instruction] is one this app could have made: an id, and each change of its kind with
      * what it needs, in range (times within a day, a weekday 1 to 7, a date that reads, a date and
-     * time within a couple of years of [exportedAt]). The tasks and events it names aren't checked:
-     * on a phone just set up, their sources haven't been read yet.
+     * time within a couple of years of when the instruction was made, which is no later than [exportedAt]):
+     * its own making, not the backup's, as an instruction in use stays in use, and every backup holds it,
+     * however old. The tasks and events it names aren't checked: on a phone just set up, their sources
+     * haven't been read yet.
      */
     private fun wellFormed(instruction: Instruction, exportedAt: Long): Boolean {
-        if (instruction.id.isBlank() || instruction.changes.size > MAX_CHANGES) return false
+        if (instruction.id.isBlank() || instruction.changes.size > MAX_CHANGES || instruction.at > exportedAt + DAY_MS) return false
         fun named(id: String?) = !id.isNullOrBlank()
         fun day(change: Change) = when {
             change.date != null -> change.weekday == null && runCatching { LocalDate.parse(change.date) }.isSuccess
             else -> change.weekday in 1..7
         }
-        fun time(at: Long?) = at != null && at in (exportedAt - 730 * DAY_MS)..(exportedAt + 400 * DAY_MS)
+        fun time(at: Long?) = at != null && at in (instruction.at - 730 * DAY_MS)..(instruction.at + 400 * DAY_MS)
         return instruction.changes.all { change ->
             when (change.type) {
                 ChangeType.NotATask -> named(change.taskId)

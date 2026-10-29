@@ -351,6 +351,45 @@ class BackupServiceTest {
     }
 
     @Test
+    fun `a nightly backup Import would refuse isn't written, and the older ones are kept`() = runTest {
+        val phone = Phone(full = true)
+        val far = Instruction("far-off", "the trip's form", at = clock.time, state = InstructionStatus.Applied, changes = listOf(Change(ChangeType.DueBy, taskId = "own:far", time = clock.time + 500 * 86_400_000L)))
+        phone.stores.replace(phone.stores.instructions) { it.copy(instructions = it.instructions + far) }
+        (1..15).forEach { phone.folder.files["decrastination-2026-09-%02d.json".format(it)] = "{}" }
+        val before = phone.folder.files.toMap()
+        assertEquals("it holds what this app never writes (an instruction)", phone.service.unrestorable(phone.service.exportBackup()))
+        assertEquals(BackupService.Nightly.Refused, phone.service.backupNow())
+        assertEquals(before, phone.folder.files)
+    }
+
+    @Test
+    fun `what comes while a reset's copy is saved isn't erased with what the copy holds`() = runTest {
+        val phone = Phone(full = true)
+        val copied = phone.stores.chat.value.messages.size
+        assertTrue(copied > 0)
+        val arrived = ChatMessage("during-the-copy", Speaker.Felix, "An answer landing while the copy is saved", clock.time, kind = MessageKind.Chat)
+        val fact = Fact("a topic", "remembered meanwhile", clock.time)
+        // The folder takes the copy as an answer, a fact and a completion land.
+        val folder = object : BackupService.Folder {
+            override val available = true
+            override fun write(name: String, text: String): Boolean = runBlocking {
+                phone.stores.replace(phone.stores.chat) { it.copy(messages = it.messages + arrived) }
+                phone.stores.replace(phone.stores.memory) { it.copy(facts = it.facts + fact) }
+                true
+            }
+            override fun names() = emptyList<String>()
+            override fun delete(name: String) = true
+        }
+        val service = BackupService(phone.stores, clock, scope, folder, File(phone.dir, "backups"), "test",
+            changeSettings = { change -> phone.stores.replace(phone.stores.settings, change) }, applying = Mutex(),
+            layInstructions = {}, layTaskOverrides = {}, schedule = {}, reread = {}, cancelFelix = {})
+        service.reset(Reset.Everything)
+        assertEquals(listOf(arrived), phone.stores.chat.value.messages)
+        assertEquals(listOf(fact), phone.stores.memory.value.facts)
+        assertTrue(phone.stores.chatArchive.value.messages.isEmpty() && phone.stores.log.value.completions.isEmpty())
+    }
+
+    @Test
     fun `a restore brings back none of yours that waited for an answer, or for its Try again, and says how many it left out`() = runTest {
         val from = Phone(full = false)
         val nudge = ChatMessage("n1", Speaker.Felix, "Ten minutes in: starting?", 100, kind = MessageKind.SlotStart)

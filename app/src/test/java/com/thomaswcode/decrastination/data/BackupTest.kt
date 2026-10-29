@@ -256,6 +256,19 @@ class BackupTest {
     }
 
     @Test
+    fun `an instruction's times are held to its own making, not the backup's, so one kept in use for years still restores`() {
+        val day = 86_400_000L
+        fun with(at: Long, change: Change) = backup().copy(instructions = listOf(Instruction("i", "i", at = at, state = InstructionStatus.Applied, changes = listOf(change), appliedAt = at)))
+        // Made three years ago, its time then: every backup since holds it, and each restores.
+        val old = now - 3 * 365 * day
+        assertNull(Backups.problem(with(old, Change(ChangeType.AtTime, taskId = "own:a", time = old + day, date = "2023-10-19", startMin = 720))))
+        assertNull(Backups.problem(with(old, Change(ChangeType.DueBy, taskId = "teams:a", time = old + 30 * day))))
+        // A time far from its own making, or an instruction made after the backup: not one the app made.
+        assertNotNull(Backups.problem(with(old, Change(ChangeType.DueBy, taskId = "teams:a", time = now))))
+        assertNotNull(Backups.problem(with(now + 2 * day, Change(ChangeType.DueBy, taskId = "teams:a", time = now + 3 * day))))
+    }
+
+    @Test
     fun `a backup keeps your own tasks, and a restore adds those not here`() {
         val mine = OwnTaskRules.create(OwnTask(title = "UCAS statement", dueAt = now + 86_400_000L, minutes = 120), "u1", now)
         val read = Backups.decode(Backups.encode(backup().copy(ownTasks = listOf(mine))), emptyMap())!!
