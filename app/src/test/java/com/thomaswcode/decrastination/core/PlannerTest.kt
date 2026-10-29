@@ -1673,6 +1673,10 @@ class PlannerTest {
         assertNull(Planner.pinProblem(task, Fixtures.at("2026-10-12T16:30"), now, LONDON, minutes = 30))
         // Overdue work takes any time from now, whatever its minutes (D-30).
         assertNull(Planner.pinProblem(task, Fixtures.at("2026-10-12T19:00"), Fixtures.at("2026-10-12T18:00"), LONDON, minutes = 30))
+        // Earlier today, the piece and its grace over: gone, as the plan would lay it as any piece; one under way still kept.
+        val evening = Fixtures.at("2026-10-12T20:00")
+        assertEquals(Planner.PinProblem.DayGone, Planner.pinProblem(task, Fixtures.at("2026-10-12T17:00"), evening, LONDON, minutes = 30))
+        assertNull(Planner.pinProblem(task, Fixtures.at("2026-10-12T19:45"), evening, LONDON, minutes = 30))
     }
 
     // --- A time you give, kept to the minute (D-114) ---
