@@ -8,6 +8,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.speech.RecognizerIntent
 import androidx.activity.ComponentActivity
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -200,10 +201,25 @@ class AskActivity : ComponentActivity() {
     /** Whether the Chat tab is the one showing, not Your changes: only then is the chat on screen. */
     private var chatTab by mutableStateOf(true)
 
+    /**
+     * Opened from the block screen ([EXTRA_BACK]): its bar keeps a Back arrow in place of the Plan button, as
+     * the block screen's own task mustn't hold Day.
+     */
+    private var back = false
+
+    /** Back on the chat at its task's root, the app's home, sends the app to the back rather than closing the chat (D-121). */
+    private val toBack = object : OnBackPressedCallback(false) {
+        override fun handleOnBackPressed() {
+            moveTaskToBack(true)
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         val graph = AppGraph.get(this)
+        back = (savedInstanceState ?: intent.extras)?.getBoolean(EXTRA_BACK, false) ?: false
+        onBackPressedDispatcher.addCallback(this, toBack)
         // Made again (turned, or brought back): what it's about kept, the words handed in already sent, and
         // the tab showing, the message being replied to and the archive's pages loaded, as they were.
         if (savedInstanceState == null) {
@@ -236,6 +252,7 @@ class AskActivity : ComponentActivity() {
         outState.putString(STATE_REPLYING, screen.replyingTo?.id)
         outState.putBoolean(STATE_OFFERED, screen.offered)
         outState.putBoolean(STATE_CHAT_TAB, chatTab)
+        outState.putBoolean(EXTRA_BACK, back)
     }
 
     /** What a message is about, from an intent's extras or a saved state's. */
@@ -272,6 +289,7 @@ class AskActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        toBack.isEnabled = isTaskRoot
         // What waits for Claude (it was off, resting, or capped) is tried again on opening.
         val graph = AppGraph.get(this)
         // What's unread marked for this visit, for its divider: from his notification, as it was when it
@@ -394,7 +412,16 @@ class AskActivity : ComponentActivity() {
             topBar = {
                 TopAppBar(
                     title = { Text(settings.felixName) },
-                    navigationIcon = { IconButton(onClick = { finish() }) { Icon(painterResource(R.drawable.ic_arrow_back), contentDescription = "Back") } },
+                    navigationIcon = {
+                        if (back) {
+                            IconButton(onClick = { finish() }) { Icon(painterResource(R.drawable.ic_arrow_back), contentDescription = "Back") }
+                        } else {
+                            // The plan (UI-16): a Day underneath shown on the tab it had, all over it closed; with none, a Day over the chat.
+                            IconButton(onClick = {
+                                startActivity(Intent(this@AskActivity, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
+                            }) { Icon(painterResource(R.drawable.ic_calendar), contentDescription = "Plan") }
+                        }
+                    },
                     actions = {
                         Box {
                             IconButton(onClick = { menu = true }) { Icon(painterResource(R.drawable.ic_more_vert), contentDescription = "Menu") }
@@ -559,6 +586,7 @@ class AskActivity : ComponentActivity() {
         private const val EXTRA_EVENT_START = "eventStart"
         private const val EXTRA_DAY = "day"
         private const val EXTRA_OPEN_AT = "openAt"
+        private const val EXTRA_BACK = "back"
         private const val STATE_EARLIER = "earlier"
         private const val STATE_REPLYING = "replyingTo"
         private const val STATE_OFFERED = "offered"
@@ -567,10 +595,12 @@ class AskActivity : ComponentActivity() {
         /**
          * The chat, about [about], with [text] to send; with [send] false, only put in the box, to be
          * changed or sent. From his notification, opened at
-         * the message [openAt], what the notification held read.
+         * the message [openAt], what the notification held read. From the block screen ([back]), with a Back
+         * arrow in place of the Plan button.
          */
-        fun intent(context: Context, about: About = About(), text: String? = null, send: Boolean = true, openAt: String? = null): Intent = Intent(context, AskActivity::class.java)
+        fun intent(context: Context, about: About = About(), text: String? = null, send: Boolean = true, openAt: String? = null, back: Boolean = false): Intent = Intent(context, AskActivity::class.java)
             .putExtra(EXTRA_OPEN_AT, openAt)
+            .putExtra(EXTRA_BACK, back)
             .putExtra(EXTRA_TEXT, text)
             .putExtra(EXTRA_SEND, send)
             .putExtra(EXTRA_TASK, about.taskId)

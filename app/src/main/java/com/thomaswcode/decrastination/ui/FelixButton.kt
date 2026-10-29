@@ -20,14 +20,15 @@ import com.thomaswcode.decrastination.core.About
 /**
  * Felix on every screen (UI-16): his chat, about [about] (the task a screen is about, if it's one),
  * from a button of Material's standard size, 56 dp (the small one was 40), wearing
- * how many of his messages are unread (docs/spec/felix.md §Who he is).
+ * how many of his messages are unread (docs/spec/felix.md §Who he is). From the block screen ([back]),
+ * a chat with a Back arrow in place of the Plan button.
  */
 @Composable
-fun FelixFab(activity: Activity, about: About = About(), modifier: Modifier = Modifier) {
+fun FelixFab(activity: Activity, about: About = About(), modifier: Modifier = Modifier, back: Boolean = false) {
     val graph = AppGraph.get(activity)
     val settings by graph.settings.state.collectAsStateWithLifecycle()
     val unread by graph.conversation.unread.collectAsStateWithLifecycle(0)
-    FloatingActionButton(onClick = { activity.startActivity(AskActivity.intent(activity, about)) }, modifier = modifier) {
+    FloatingActionButton(onClick = { activity.startActivity(AskActivity.intent(activity, about, back = back)) }, modifier = modifier) {
         BadgedBox(badge = { if (unread > 0) Badge { Text("$unread") } }) {
             Icon(painterResource(R.drawable.ic_chat), contentDescription = if (unread > 0) "${settings.felixName}, $unread unread" else settings.felixName, modifier = Modifier.size(28.dp))
         }
