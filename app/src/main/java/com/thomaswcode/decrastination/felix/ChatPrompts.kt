@@ -327,14 +327,34 @@ object ChatPrompts {
         brought: List<String> = emptyList(),
         lastRound: Boolean = false,
         notLooked: String? = null,
-    ): List<Pair<Speaker, String>> {
+    ): List<Pair<Speaker, String>> = sent(messages, context, tasks, zone, budget, plan, found, read, events, quoted, brought, lastRound, notLooked).turns
+
+    /** [turns], and the ids of the messages they hold: those the budget left out aren't among them, so they aren't answered by it. */
+    class Sent(val turns: List<Pair<Speaker, String>>, val ids: Set<String>)
+
+    /** [turns] as it's sent, with the ids of the messages that went in it ([Sent]). */
+    fun sent(
+        messages: List<ChatMessage>,
+        context: String,
+        tasks: Map<String, TaskItem>,
+        zone: ZoneId,
+        budget: Int = Pricing.MAX_INPUT_CHARS,
+        plan: String = "",
+        found: Found? = null,
+        read: List<TaskItem> = emptyList(),
+        events: List<CalendarEvent> = emptyList(),
+        quoted: List<ChatMessage> = emptyList(),
+        brought: List<String> = emptyList(),
+        lastRound: Boolean = false,
+        notLooked: String? = null,
+    ): Sent {
         val last = history(messages)
         // Before any of yours: an answer cut off from its question by the window goes; a message of
         // Felix's own (one he wrote unasked, [ChatMessage.kind]) is said in your first turn, as the
         // conversation has to start with one of yours.
         val lead = last.takeWhile { it.from != Speaker.You }.filter { it.kind != MessageKind.Chat }
         val recent = last.dropWhile { it.from != Speaker.You }
-        if (recent.isEmpty()) return emptyList()
+        if (recent.isEmpty()) return Sent(emptyList(), emptySet())
         // What a message of yours replies to, where it isn't the message before it: quoted, from the
         // whole chat, as the window may not hold it, nor the window the archive's [quoted].
         val byId = quoted.associateBy { it.id } + messages.associateBy { it.id }
@@ -377,7 +397,12 @@ object ChatPrompts {
                 context.take(room - PLAN_GAP.length - planRoom) + PLAN_GAP + plan.take(planRoom)
             }
         }
-        return earlier + (Speaker.You to known + "\n\n" + newest)
+        // The messages in each turn, as [folded] put them together (the lead in the first), and so those that went: the
+        // turns kept before the newest, and the newest.
+        val groups = mutableListOf(lead.mapTo(mutableListOf()) { it.id })
+        recent.forEachIndexed { i, m -> if (i > 0 && recent[i - 1].from == m.from) groups.last() += m.id else if (i == 0) groups.last() += m.id else groups += mutableListOf(m.id) }
+        val went = groups.drop(groups.size - 1 - earlier.size).flatten().toSet()
+        return Sent(earlier + (Speaker.You to known + "\n\n" + newest), went)
     }
 
     private const val PLAN_GAP = "\n\n"
