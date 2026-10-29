@@ -107,7 +107,7 @@ In quiet hours a reminder opens the form instead (`Conversation.remindCheckIn`),
 
 ## The weekly review
 
-`Learning.review` runs 90 minutes after the check-in's time (21:00), answered or not, or as soon as the last answer is in; once a week (`Review.reviewed`). One asked for before the week's Sunday ("Save, and review the week" midweek) reviews the week so far, its days Monday to then; Sunday's still runs, and is the week's (the owner's call on S-09 of the review of 4.9.1).
+`Learning.review` runs 90 minutes after the check-in's time (21:00), answered or not, or as soon as the last answer is in; once a week (`Review.reviewed`). One asked for before the week's Sunday ("Save, and review the week" midweek) reviews the week so far, its days Monday to then, its note and its summary its own, with nothing learned or changed by it; Sunday's still runs, learns as ever, and is the week's: the one the next week's review and the summary page read (D-123).
 It runs as a job (`ReviewWorker`), which waits for a connection while Claude is on.
 
 The rules' part always runs:

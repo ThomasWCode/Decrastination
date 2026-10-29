@@ -114,6 +114,20 @@ class LearningTest {
     }
 
     @Test
+    fun `a review of the week so far learns nothing, and Sunday's still comes and learns (D-123)`() = runBlocking {
+        stores.log.update { it.copy(completions = listOf(done("a", 30, 45, "2026-10-13T18:00"), done("b", 40, 60, "2026-10-14T18:00"), done("c", 20, 30, "2026-10-14T19:00"))) }
+        val before = stores.learning.value.calibration
+        clock.time = Fixtures.at("2026-10-15T17:00")
+        learning.review(ifDue = true)
+        assertEquals(before, stores.learning.value.calibration)
+        assertEquals(listOf(week), stores.log.value.reviews.map { it.week })
+        clock.time = Fixtures.at("2026-10-18T21:00")
+        learning.review(ifDue = true)
+        assertEquals(2, stores.log.value.reviews.size)
+        assertTrue(stores.learning.value.calibration != before, "Sunday's learned")
+    }
+
+    @Test
     fun `a review's change is put back as a change of yours, and its tidy undone, while each is as the review left it`() = runBlocking {
         stores.settings.update { it.copy(softMinPerDay = 90) }
         val change = ReviewInput.Change("softMinPerDay", 90, "made up")
