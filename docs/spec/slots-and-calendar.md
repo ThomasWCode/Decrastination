@@ -86,7 +86,7 @@ A stop part-way is finished at the next start (`Focus.finishKeeps`), before an e
 
 ## Undo
 
-`Focus.unkeepSlot` takes back a piece's last keep (Day's *Undo*; Felix's untick through `Focus.untickBlock`, his `unkeepPiece` and his keep's Undo), unless its task is finished, but for one of your own, or one done by its tick (NF-06), that the keep itself finished, which Felix's opens again:
+`Focus.unkeepSlot` takes back a piece's last keep (Day's *Undo*; Felix's untick through `Focus.untickBlock`, his `unkeepPiece` and his keep's Undo), unless its task is finished, but for one of your own, or one done by its tick (NF-06), that the keep itself finished, which Day's and Felix's open again (`ChatActs.finishedBy`; one finished another way since stays so):
 - its record goes; one kept late becomes a miss again, on record and in today's misses;
 - a step's key unticks its step, and its minutes come off the task; a sitting before its step's last, or a box, gives back its minutes only;
 - kept in its slot today, its start is kept again, so the next plan lays it at that start again;

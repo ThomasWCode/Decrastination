@@ -44,16 +44,19 @@ object FreeTimeNotice {
     }
 
     /** A minute left: said once, where it'll be seen. */
-    fun warn(context: Context, what: String) {
+    fun warn(context: Context, what: String, leftMs: Long = WARN_MS) {
+        // Under a minute where a spending period began that close to its end (U-08): the seconds there are.
+        val short = leftMs < WARN_MS - 5_000L
+        val seconds = (leftMs / 1000).coerceAtLeast(1)
         AppGraph.get(context).notifier.post(
             NoticeId.FreeTimeEnding,
             Notify.builder(context, Channels.FREE_TIME_ENDING)
                 .setSmallIcon(R.drawable.ic_focus)
-                .setContentTitle("A minute of free time left")
-                .setContentText("$what is covered again in a minute.")
+                .setContentTitle(if (short) "Under a minute of free time left" else "A minute of free time left")
+                .setContentText(if (short) "$what is covered again in $seconds seconds." else "$what is covered again in a minute.")
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .setCategory(NotificationCompat.CATEGORY_REMINDER)
-                .setTimeoutAfter(WARN_MS)
+                .setTimeoutAfter(leftMs.coerceIn(1_000L, WARN_MS))
                 .setAutoCancel(true)
                 .setContentIntent(backToWork(context, NoticeId.FreeTimeEnding))
                 .addAction(0, "Back to work", backToWork(context, NoticeId.FreeTimeEnding))

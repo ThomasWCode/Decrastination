@@ -137,7 +137,7 @@ internal class Folding(private val at: () -> Float, private val by: (Float) -> F
 
 /**
  * The Day (UI-17, 4.6.0): the week ahead in a strip, each day with its load (UI-02) and a mark where work is behind; today's
- * DO NOW card, folding to a line as the grid scrolls on to later hours; the chosen day's header (its date, load, all-day events,
+ * DO NOW card, folded to its line or open, by its own drag and fling (D-122), the grid's scrolls never folding it; the chosen day's header (its date, load, all-day events,
  * and chips for what won't fit, the pieces with no time, what's done and its instructions); and the day as a calendar
  * ([DayGrid]), a piece held to be dragged to a time or onto a day above ([DayDrag]). What the plan leaves out, and the
  * sources, are on Work.
@@ -278,7 +278,7 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
                     if (!graph.focus.keepSlot(chunk.key, seenAt = now)) {
                         snackbar.showSnackbar("That piece has changed since (done, or planned again).")
                     } else if (snackbar.showSnackbar(listOfNotNull("Done: ${chunk.label}", stillPlanned(graph, chunk.taskId)).joinToString(". "), actionLabel = "Undo", duration = SnackbarDuration.Short) == SnackbarResult.ActionPerformed) {
-                        if (!graph.focus.unkeepSlot(chunk.key, since)) snackbar.showSnackbar("It can't be taken back now: its task is finished.")
+                        if (!graph.focus.undoKeep(chunk.key, since)) snackbar.showSnackbar("It can't be taken back now: its task is finished.")
                     }
                 }
             }

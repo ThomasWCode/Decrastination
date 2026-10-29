@@ -30,4 +30,13 @@ class GroupsBySubjectTest {
         assertEquals(listOf("teams:a", "teams:b"), groups[1].second.map { it.id })
         assertEquals(listOf("teams:d", "teams:e"), groups[2].second.map { it.id })
     }
+
+    @Test
+    fun `a subject called No subject and the work with none are two groups, told apart by their keys (U-01)`() {
+        val tasks = listOf(task("a", "No subject", "2026-10-13T09:00"), task("b", null, "2026-10-14T09:00"))
+        val groups = Groups.bySubject(tasks, emptyMap(), now)
+        assertEquals(listOf(Groups.NO_SUBJECT, Groups.NO_SUBJECT), groups.map { it.first })
+        val keys = groups.map { (title, group) -> Groups.subjectKey(title, group, emptyMap()) }
+        assertEquals(listOf("group-No subject", "no-subject"), keys)
+    }
 }

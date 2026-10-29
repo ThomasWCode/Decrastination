@@ -61,14 +61,24 @@ object Groups {
      * else its code, those with none last; each soonest due first, at [now].
      */
     fun bySubject(tasks: List<TaskItem>, classMap: Map<String, String>, now: Long): List<Pair<String, List<TaskItem>>> {
-        fun subject(task: TaskItem): String? = task.className?.trim()?.takeIf { it.isNotEmpty() }?.let { code -> classMap[code]?.trim()?.takeIf { it.isNotEmpty() } ?: code }
-        val grouped = tasks.groupBy(::subject)
+        val grouped = tasks.groupBy { subjectOf(it, classMap) }
         val order = compareBy<TaskItem, Long?>(nullsLast()) { it.deadlineAt(now) ?: it.dueAt }.thenBy { it.title.lowercase() }
         return grouped.keys.filterNotNull().sortedBy { it.lowercase() }.map { it to grouped.getValue(it).sortedWith(order) } +
             listOfNotNull(grouped[null]?.let { NO_SUBJECT to it.sortedWith(order) })
     }
 
+    /** [task]'s subject as [bySubject] groups it: Settings' name for its class, else its code; null for none. */
+    fun subjectOf(task: TaskItem, classMap: Map<String, String>): String? =
+        task.className?.trim()?.takeIf { it.isNotEmpty() }?.let { code -> classMap[code]?.trim()?.takeIf { it.isNotEmpty() } ?: code }
+
     const val NO_SUBJECT = "No subject"
+
+    /**
+     * The key a [bySubject] group of [tasks] titled [title] is told apart by, on screen and in what's folded: the work with
+     * no subject has one of its own, as a subject may be called "No subject" too (U-01).
+     */
+    fun subjectKey(title: String, tasks: List<TaskItem>, classMap: Map<String, String>): String =
+        if (tasks.firstOrNull()?.let { subjectOf(it, classMap) } == null) "no-subject" else "group-$title"
 }
 
 /** One task's pieces on one day of the widget's list: a row that opens into them. */

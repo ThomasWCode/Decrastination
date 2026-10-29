@@ -60,7 +60,7 @@ fun InstructionDialog(what: String, initial: String = "", onDismiss: () -> Unit,
                 Text(what, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
                 OutlinedTextField(text, { text = it }, label = { Text("In your words") }, minLines = 3, modifier = Modifier.fillMaxWidth())
                 Text(
-                    "Claude reads it, then you check what it understood before anything changes. $INSTRUCTION_EXAMPLES",
+                    "Claude reads it and makes the changes at once, each said with its Undo. $INSTRUCTION_EXAMPLES",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
