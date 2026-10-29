@@ -571,3 +571,13 @@ Each question was asked on its own, with a recommendation; each answer is the op
 ### What the plan couldn't check
 
 - **A launcher that matches tasks by the root's component, not its affinity.** With `MainActivity` finished, the chat is the task's root; a launcher that looked for `MainActivity` would start a fresh task each tap, so the chat would always open, contrary to Q114. By AOSP's rules it isn't a risk: a task keeps the intent that made it when its root finishes (unless `android:relinquishTaskIdentity` is set), and a launcher's tap (`FLAG_ACTIVITY_RESET_TASK_IF_NEEDED`) into a task of the same affinity brings it forward with nothing new started. The fix, had it been one, was to keep `MainActivity` as the task's root, finishing it only on Back. Checked on the phone (below).
+
+### The phone check (29 Oct)
+
+On the owner's phone, each step's stack read from `dumpsys activity`, every one as planned:
+- **The icon:** a fresh start opened the chat alone in its task, no Day drawn first; with the task alive, Android brought it forward with nothing new started ("its current task has been brought to the front"), so the launcher risk above isn't one; Chat, Plan, Home, then the icon showed Day, and Back the chat.
+- **The Plan button and Back:** Day over the chat, Back to the chat, Back again home with the chat kept; Felix's button on Day, then that chat's Plan, closed back down to Day; from Settings opened from Day, Settings closed on the way; from Settings opened from the chat's menu, Day over chat, Settings and chat, Back walking down it.
+- **The widget** with the task swiped from Recents: Day alone in a fresh task, Back the chat, Back again home.
+- **The chat's bar:** no Setup mark with nothing needing you, and its menu's three items, a divider, then This week, Reviews, Settings and Debug. A rotation kept the chat.
+- **Q120**, with two paid test messages, taken out after with `clean_test_chat.py`: opened from the icon and Plan tapped within a second, his notification and his count of 1 stayed and the read position didn't move; back on the chat, his notification was still there at 1 second and gone at 5, and leaving read it; opened with one unread, a reply sent and the chat left within 2 seconds, his notification went at once and the chat read up to the leaving, his answer to it then notifying alone.
+- **Not checked:** the block screen's chat (no block at the time), *Ask Felix about it* in a task's sheet, which starts the chat as Felix's button does, and his notification's tap, which reads at once as before (`markSeen` on resume); all left to real use.
