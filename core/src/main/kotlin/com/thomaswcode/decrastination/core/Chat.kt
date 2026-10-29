@@ -18,7 +18,7 @@ data class ChatState(
     /** His state between looks (LR-03): his next check, what he wrote ahead, what waits to be asked, the check-in's answers so far. */
     val felix: FelixState = FelixState(),
     /** The shape this is in ([com.thomaswcode.decrastination.data.Migration]): raised with each change of it. */
-    val version: Int = 11,
+    val version: Int = 12,
 ) {
     /**
      * Your newest message still waiting for his answer: a message of his written since, unasked, doesn't
@@ -136,7 +136,7 @@ data class WebSource(val title: String, val url: String)
 data class ChatArchive(
     val messages: List<ChatMessage> = emptyList(),
     /** The shape this is in ([com.thomaswcode.decrastination.data.Migration]): raised with each change of it. */
-    val version: Int = 10,
+    val version: Int = 11,
 )
 
 /** The conversation read as a thread. Pure. */
@@ -208,10 +208,20 @@ data class Proposal(
  * [setting] to [value] ([FelixSettings]; [taskId] empty); a reminder set, moved or cancelled, and a note
  * added or deleted, the reminder's or the note's id its [value] ([taskId] its task's, or empty); a piece
  * kept as Day's Done keeps it, or kept no more, its key its [value] (G1); and a source
- * asked to read, its name its [setting], the task asked about its [taskId] (G2: said, with no Undo).
+ * asked to read, its name its [setting], the task asked about its [taskId] (G2: said, with no Undo). A step's
+ * action names the step as he was shown it: its place then ([stepIndex]), its [stepTitle], and its [stepId]
+ * where it had one, so it lands on that step, wherever it is now, or on none ([ChatActs.stepOf]).
  */
 @Serializable
-data class ChatAction(val type: Type, val taskId: String, val stepIndex: Int? = null, val setting: String? = null, val value: String? = null) {
+data class ChatAction(
+    val type: Type,
+    val taskId: String,
+    val stepIndex: Int? = null,
+    val setting: String? = null,
+    val value: String? = null,
+    val stepTitle: String? = null,
+    val stepId: String? = null,
+) {
     enum class Type { TickStep, Open, UntickStep, Done, Reopen, Delete, Setting, SetReminder, MoveReminder, CancelReminder, AddNote, DeleteNote, KeepPiece, UnkeepPiece, Sync }
 }
 
@@ -327,12 +337,13 @@ object ChatActs {
         if (act.undone) return false
         val a = act.action ?: return false
         val task = tasks.firstOrNull { it.id == a.taskId }
-        val step = a.stepIndex?.let { task?.subSteps?.getOrNull(it) }
+        val at = task?.let { stepOf(act, it) }
+        val step = at?.let { task.subSteps[it] }
         val reminder = reminders.firstOrNull { it.id == a.value }
         val note = notes.firstOrNull { it.id == a.value }
         return when (a.type) {
             ChatAction.Type.Open -> false
-            ChatAction.Type.TickStep -> task != null && step?.done == true && (task.isOpen || task.source == Source.Own || task.tickDone) && tickedBy(act, task.id, a.stepIndex!!, step, kept)
+            ChatAction.Type.TickStep -> task != null && step?.done == true && (task.isOpen || task.source == Source.Own || task.tickDone) && tickedBy(act, task.id, at!!, step, kept)
             ChatAction.Type.UntickStep -> task?.isOpen == true && step?.done == false
             // A starred email's finish while it, the act's own ([Act.after]), stands in the journal ([finishing], by id),
             // its task here or not (a backup restored brings back the receipt, but no read brings back an email unstarred).
@@ -382,6 +393,26 @@ object ChatActs {
 
     /** A tick's [Act.after] where it was by hand, not a keep of its piece ([tickedBy]). */
     const val TICKED_BY_HAND = "hand"
+
+    /**
+     * Where the step [act] names is in [task] now: by its id where it had one and still has it, else by its title, at
+     * its old place or, moved, the only one of that title; null where it's gone or can't be told, so nothing's done to
+     * another step that took its place. An act from before steps were named (4.9.4) names its place alone: that place,
+     * only while its step is the one its line says.
+     */
+    fun stepOf(act: Act, task: TaskItem): Int? {
+        val a = act.action ?: return null
+        val i = a.stepIndex ?: return null
+        val steps = task.subSteps
+        if (a.stepTitle == null && a.stepId == null) {
+            val step = steps.getOrNull(i) ?: return null
+            return i.takeIf { act.line.startsWith("Ticked: ${step.title}, of ") || act.line.startsWith("To do again: ${step.title}, of ") }
+        }
+        a.stepId?.let { id -> steps.indexOfFirst { it.id == id }.takeIf { it >= 0 }?.let { return it } }
+        val title = a.stepTitle ?: return null
+        if (steps.getOrNull(i)?.title == title) return i
+        return steps.indices.filter { steps[it].title == title }.singleOrNull()
+    }
 
     /**
      * Whether a message after the one holding [act] in [messages] ([messageId], else the first holding one

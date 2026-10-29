@@ -238,10 +238,14 @@ object ChatAnswers {
         val (kept, given) = answer.changes.take(MAX_CHANGES).map(InstructionAnswers.Given::normalised).partition { it.type == ChatPrompts.REMIND_TYPE || it.type == ChatPrompts.NOTE_TYPE }
         // A day's breaks as the changes before each leave them (D-116), so one can use time another frees.
         val breaks = InstructionAnswers.Breaks(context?.breaksOn ?: { DayBreaks.NONE })
-        var changes = given.map { lessonOf(it, context, now, zone) ?: it }.mapNotNull { g ->
+        val lessoned = given.map { lessonOf(it, context, now, zone) ?: it }
+        // A task's steps checked against the deadline this same answer gives it (F-06), a lesson's once it's found.
+        val due = InstructionAnswers.projected(lessoned.filter { it.lesson.isBlank() }, byId, now, zone)
+        var changes = lessoned.mapNotNull { g ->
             // A due date at a class's next lesson it can't be set from (G8): refused, saying why, so he asks.
             if (g.type == ChangeType.DueBy.name && g.lesson.isNotBlank()) return@mapNotNull null.also { leftOut += "a change (${lessonProblem(g.lesson, context, zone)})" }
-            InstructionAnswers.change(g, byId, titles, now, zone, breaks).also { if (it == null) leftOut += "a change (${InstructionAnswers.problem(g, byId, titles, now, zone, breaks)})" else breaks.take(it) }
+            val against = if (g.type == ChangeType.Steps.name) due else byId
+            InstructionAnswers.change(g, against, titles, now, zone, breaks).also { if (it == null) leftOut += "a change (${InstructionAnswers.problem(g, against, titles, now, zone, breaks)})" else breaks.take(it) }
         }
         if (answer.changes.size > MAX_CHANGES) leftOut += "${answer.changes.size - MAX_CHANGES} more changes than the app takes at once"
         // A split whose steps don't come to its task's minutes, its total not said to change (AI-19): left out.
@@ -470,8 +474,9 @@ object ChatAnswers {
         return when (a.type) {
             // Shown here, on a card; or where it lives (G3), at once: your own live here only.
             "open" -> if (a.value.trim() == OPEN_SOURCE && !own) ChatAction(ChatAction.Type.Open, task.id, value = OPEN_SOURCE) else act(ChatAction.Type.Open, task.id)
-            "tickStep" -> if (task.isOpen && step?.done == false) act(ChatAction.Type.TickStep, task.id, a.stepIndex) else no("a step to tick that isn't one of $name's still to do")
-            "untickStep" -> if (task.isOpen && step?.done == true) act(ChatAction.Type.UntickStep, task.id, a.stepIndex) else no("a step to untick that isn't one of $name's done")
+            // The step named as he was shown it, so it's that one that's ticked, wherever it is by then (F-01).
+            "tickStep" -> if (task.isOpen && step?.done == false) act(ChatAction.Type.TickStep, task.id, a.stepIndex).copy(stepTitle = step.title, stepId = step.id.ifEmpty { null }) else no("a step to tick that isn't one of $name's still to do")
+            "untickStep" -> if (task.isOpen && step?.done == true) act(ChatAction.Type.UntickStep, task.id, a.stepIndex).copy(stepTitle = step.title, stepId = step.id.ifEmpty { null }) else no("a step to untick that isn't one of $name's done")
             // Done by you: your own, or one done by its tick (NF-06), or a starred email, unstarred and archived in Gmail
             // (with the switch on); another is done when its source says.
             "done" -> when {
