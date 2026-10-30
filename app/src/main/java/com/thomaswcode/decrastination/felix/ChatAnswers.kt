@@ -245,7 +245,7 @@ object ChatAnswers {
             // A due date at a class's next lesson it can't be set from (G8): refused, saying why, so he asks.
             if (g.type == ChangeType.DueBy.name && g.lesson.isNotBlank()) return@mapNotNull null.also { leftOut += "a change (${lessonProblem(g.lesson, context, zone)})" }
             val against = if (g.type == ChangeType.Steps.name) due else byId
-            InstructionAnswers.change(g, against, titles, now, zone, breaks).also { if (it == null) leftOut += "a change (${InstructionAnswers.problem(g, against, titles, now, zone, breaks)})" else breaks.take(it) }
+            InstructionAnswers.change(g, against, titles, now, zone, breaks, context?.weekly.orEmpty()).also { if (it == null) leftOut += "a change (${InstructionAnswers.problem(g, against, titles, now, zone, breaks)})" else breaks.take(it) }
         }
         if (answer.changes.size > MAX_CHANGES) leftOut += "${answer.changes.size - MAX_CHANGES} more changes than the app takes at once"
         // A split whose steps don't come to its task's minutes, its total not said to change (AI-19): left out.

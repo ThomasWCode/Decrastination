@@ -8,6 +8,8 @@ import com.thomaswcode.decrastination.data.SlotOutcome
 import com.thomaswcode.decrastination.data.SlotRecord
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.SettingsLimits
+import com.thomaswcode.decrastination.core.TaskItem
+import com.thomaswcode.decrastination.core.WeeklyRules
 import java.time.Instant
 import java.time.format.TextStyle
 import java.time.LocalDate
@@ -101,7 +103,7 @@ object ReviewInput {
      * if it had one: a review run late, on the Monday after, doesn't take that Monday's work in, nor
      * leave the week's own Monday out.
      */
-    fun describe(log: ActivityLog, calibration: Calibration, settings: Settings, now: Long, zone: ZoneId, week: String, messages: List<ChatMessage> = emptyList()): String = buildString {
+    fun describe(log: ActivityLog, calibration: Calibration, settings: Settings, now: Long, zone: ZoneId, week: String, messages: List<ChatMessage> = emptyList(), tasks: List<TaskItem> = emptyList()): String = buildString {
         val monday = LocalDate.parse(week)
         val start = monday.atStartOfDay(zone).toInstant().toEpochMilli()
         val end = minOf(monday.plusDays(7).atStartOfDay(zone).toInstant().toEpochMilli(), now + 1)
@@ -180,6 +182,12 @@ object ReviewInput {
             subjects.forEach { s ->
                 appendLine("- ${s.subject.take(MAX_TITLE)}: ${s.minutes} min in ${s.pieces} pieces" + (if (s.dated > 0) ", ${s.onTime} of ${s.dated} on time" else "") + (s.ratio?.let { ", %.2f× the estimates (from %d)".format(Locale.UK, it, s.timed) } ?: ""))
             }
+        }
+        // Weekly work (D-124): the week's minutes against what was asked of it. What fell short is dropped, so it's said here.
+        WeeklyRules.weekLines(tasks, monday).takeIf { it.isNotEmpty() }?.let { lines ->
+            appendLine("Weekly work, as far as it's got:")
+            lines.forEach { appendLine("- ${it.take(MAX_TITLE)}") }
+            appendLine()
         }
         // The reviewed week's answers only: last week's, answered late, aren't this week's.
         log.checkIns.filter { it.weekOf == week }.maxByOrNull { it.at }?.let { c ->
