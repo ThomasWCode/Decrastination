@@ -117,7 +117,7 @@ The rules' part always runs:
 
 With Claude on, the week goes to the model too (`enrich/ClaudeReviewer.kt`, `ReviewInput.describe`).
 It's given the work finished, against its estimates, with your answers; the slots by hour, day and window; each day's plan and what got done; the blocks; Felix's messages and what followed them.
-And the week by subject, the check-in, last week's review and its changes, the settings and the calibration.
+And the week by subject, weekly work's minutes against what each week asked (D-124: what falls short is dropped, so it's said here), the check-in, last week's review and its changes, the settings and the calibration.
 It writes a note of at most five lines, opening on how last week's change went, and may change, where the week gives a reason (`ReviewInput.bounds`):
 - `marginDays`, 0 to 3; `softMinPerDay`, 30 to 120; `workMinPerFreeMin`, 2 to 5;
 - a school day's start and end (`weekdayHoursStart`, `weekdayHoursEnd`), each within an hour of where it is.

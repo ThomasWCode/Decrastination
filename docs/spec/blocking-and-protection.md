@@ -63,7 +63,7 @@ While it's spent, a silent notification counts it down, and a heads-up comes in 
 - a piece under `photoFromMin` (20 minutes) earns on its tick;
 - a longer piece of written homework earns when its photo check passes, once, or on the photo itself if the photo comes first;
 - a longer piece no photo can check (revision, admin, a deck) earns by its source: AnkiDroid's cards counted as you leave it (NF-03), or its task confirmed done by its source the same day;
-- a longer piece of one of your own that isn't written work earns nothing, and its **Done** says so.
+- a longer piece of one of your own that isn't written work, weekly work's among them (D-124), earns nothing, and its **Done** says so.
 
 What today's slots earn is at most today's plan's share at the ratio: the pieces left today and those kept today, less what kept slots have earned (`Focus.slotRoomMin`). A piece ticked ahead of its day, or work past the day's plan, earns nothing more today.
 
