@@ -80,6 +80,13 @@ class ChatWeeklyTest {
     fun `no more rules than the app takes`() {
         val full = List(WeeklyRules.MAX_RULES) { guitar.copy(id = "r$it") }
         assertTrue(read(answer(weekly()), full).changes.isEmpty())
+        // Counted as they come: one answer can't go past it, though a listed rule can still change.
+        val nearly = full.drop(1)
+        val reading = read(answer(weekly("One"), weekly("Two"), weekly(title = "", minutes = 60, id = "r1")), nearly)
+        assertEquals(listOf("One", "Guitar practice"), reading.changes.map { it.weekly?.title })
+        assertEquals(1, reading.leftOut.size)
+        val json = """{"understood":true,"question":null,"changes":[${weekly("One")},${weekly("Two")}]}"""
+        assertIs<InstructionAnswers.Reading.Unclear>(InstructionAnswers.parse(json, emptyList(), emptyList(), About(), now, LONDON, rules = nearly))
     }
 
     @Test

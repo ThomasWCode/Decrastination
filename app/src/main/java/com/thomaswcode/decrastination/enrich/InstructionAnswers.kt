@@ -105,9 +105,11 @@ object InstructionAnswers {
         val given = answer.changes.map(Given::normalised)
         // A task's steps checked against the deadline this same reading gives it (F-06).
         val due = projected(given, byId, now, zone)
+        // Its new weekly rules counted as they come, so one reading can't go past the most there can be.
+        val soFar = rules.toMutableList()
         val changes = given.map { g ->
             val against = if (g.type == ChangeType.Steps.name) due else byId
-            change(g, against, titles, now, zone, breaks, rules)?.also(breaks::take) ?: return Reading.Unclear("Claude's reading couldn't be used: ${problem(g, against, titles, now, zone, breaks)}", answer.answersQuestion)
+            change(g, against, titles, now, zone, breaks, soFar)?.also(breaks::take)?.also { counted(soFar, it) } ?: return Reading.Unclear("Claude's reading couldn't be used: ${problem(g, against, titles, now, zone, breaks)}", answer.answersQuestion)
         }
         stepsProblem(changes, byId)?.let { return Reading.Unclear("Claude's reading couldn't be used: $it", answer.answersQuestion) }
         // Tasks waiting on each other in a circle within this one reading: none would ever be planned.
@@ -236,6 +238,14 @@ object InstructionAnswers {
             ChangeType.Weekly -> weeklyRule(g, rules, now)?.let { Change(type, weekly = it) }
             ChangeType.WeeklyEnd -> rules.firstOrNull { it.id == g.afterTaskId }?.let { Change(type, weekly = it) }
         }
+    }
+
+    /** [change] counted among the [rules] so far, where it's a weekly rule, replacing the one of that id. */
+    internal fun counted(rules: MutableList<WeeklyRule>, change: Change) {
+        if (change.type != ChangeType.Weekly) return
+        val rule = change.weekly ?: return
+        rules.removeAll { it.id == rule.id }
+        rules += rule
     }
 
     /** The days a Weekly's `days` names, by a day's first three letters; `every` for all of them; `none` for the planner's choice again; null if one doesn't read. */
