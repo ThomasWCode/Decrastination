@@ -55,7 +55,7 @@ class ChatWeeklyTest {
 
     @Test
     fun `what can't be kept is left out and said`() {
-        for (bad in listOf(weekly(title = " "), weekly(minutes = 2), weekly(key = "days:someday"), weekly(key = "session:1"), weekly(key = "where:school"), weekly(key = "at:18:00"), weekly(id = "gone"))) {
+        for (bad in listOf(weekly(title = " "), weekly(minutes = 2), weekly(minutes = 5, key = "days:every"), weekly(key = "days:someday"), weekly(key = "session:1"), weekly(key = "where:school"), weekly(key = "at:18:00"), weekly(id = "gone"))) {
             val reading = read(answer(bad))
             assertTrue(reading.changes.isEmpty(), bad)
             assertTrue(reading.leftOut.single().contains("weekly rule"), bad)

@@ -257,7 +257,8 @@ object InstructionAnswers {
         if (said.keys.any { it !in setOf("days", "session", "where", "subject") }) return null
         val title = g.title.trim().take(WeeklyRules.MAX_TITLE).ifEmpty { old?.title ?: return null }
         val minutes = (g.minutes ?: old?.minutes)?.takeIf { it in WeeklyRules.MINUTES } ?: return null
-        val days = said["days"]?.let { weekdays(it) ?: return null } ?: old?.days.orEmpty()
+        // At least a minute for each day named, as a backup's rule is held to.
+        val days = (said["days"]?.let { weekdays(it) ?: return null } ?: old?.days.orEmpty()).takeIf { it.size <= minutes } ?: return null
         val session = said["session"]?.let { it.toIntOrNull()?.takeIf { min -> min in WeeklyRules.SESSION } ?: return null } ?: old?.sessionMin ?: 0
         val where = said["where"]?.takeIf { it == "home" || it == "anywhere" } ?: if ("where" in said) return null else old?.where ?: "anywhere"
         val subject = said["subject"]?.take(OwnTaskRules.MAX_CLASS)?.takeIf { it.isNotEmpty() } ?: old?.subject
