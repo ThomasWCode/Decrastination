@@ -76,11 +76,15 @@ object WeeklyRules {
     /** A week's task's own id, the same each time, so a rule's week is only ever one task. */
     fun sourceId(rule: String, week: LocalDate): String = "weekly-$rule-$week"
 
-    /** What's been done of [task], in minutes: its timed minutes, and each step ticked with none of its own. */
+    /** What's been done of [task], in minutes: its timed minutes, and each step ticked with none of its own; all of it, once it's done. */
     fun doneMin(task: TaskItem): Int {
         val ticked = task.subSteps.filter { it.done }.sumOf { (it.minutes - it.timedMin).coerceAtLeast(0) }
-        return task.workedMin + task.photoMin + ticked
+        val worked = task.workedMin + task.photoMin + ticked
+        return if (task.status == Status.Done) maxOf(worked, task.effortMin) else worked
     }
+
+    /** The sessions of [sessionMin] minutes [minutes] come to, at least one. A rule of more than a task's steps can hold isn't kept. */
+    fun sessions(minutes: Int, sessionMin: Int): Int = ((minutes + sessionMin / 2) / sessionMin).coerceAtLeast(1)
 
     /** [week]'s work (its Monday) as it stands, a line each: "Guitar practice: 60 of 180 min". */
     fun weekLines(tasks: List<TaskItem>, week: LocalDate): List<String> =
@@ -116,8 +120,7 @@ object WeeklyRules {
         val firstWeek = mondayOf(rule.setAt, zone) == week && week <= today
         val whole = if (firstWeek && rule.days.isEmpty()) share(rule.minutes, DayOfWeek.SUNDAY.value + 1 - today.dayOfWeek.value) else rule.minutes
         val sessions = if (rule.days.isEmpty() && rule.sessionMin > 0) {
-            val count = ((whole + rule.sessionMin / 2) / rule.sessionMin).coerceIn(1, OwnTaskRules.MAX_STEPS)
-            shareOut(whole, List(count) { 1 }).mapIndexed { i, minutes -> OwnStep("Session ${i + 1}", minutes, anyOrder = true) }
+            shareOut(whole, List(sessions(whole, rule.sessionMin).coerceAtMost(OwnTaskRules.MAX_STEPS)) { 1 }).mapIndexed { i, minutes -> OwnStep("Session ${i + 1}", minutes, anyOrder = true) }
         } else {
             steps
         }

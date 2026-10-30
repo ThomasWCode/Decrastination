@@ -55,7 +55,7 @@ class ChatWeeklyTest {
 
     @Test
     fun `what can't be kept is left out and said`() {
-        for (bad in listOf(weekly(title = " "), weekly(minutes = 2), weekly(minutes = 5, key = "days:every"), weekly(key = "days:someday"), weekly(key = "session:1"), weekly(key = "where:school"), weekly(key = "at:18:00"), weekly(id = "gone"))) {
+        for (bad in listOf(weekly(title = " "), weekly(minutes = 2), weekly(minutes = 5, key = "days:every"), weekly(key = "days:someday"), weekly(key = "session:1"), weekly(key = "where:school"), weekly(minutes = 3600, key = "session:45"), weekly(key = "at:18:00"), weekly(id = "gone"))) {
             val reading = read(answer(bad))
             assertTrue(reading.changes.isEmpty(), bad)
             assertTrue(reading.leftOut.single().contains("weekly rule"), bad)
@@ -66,6 +66,14 @@ class ChatWeeklyTest {
     fun `a change to a listed rule keeps its id and all it doesn't say`() {
         val changed = rule(answer(weekly(title = "", minutes = 240, id = "g1")), listOf(guitar))
         assertEquals(guitar.copy(minutes = 240, setAt = now), changed)
+    }
+
+    @Test
+    fun `a listed rule's days can go back to the app, and a change can't leave too many sessions`() {
+        val days = guitar.copy(sessionMin = 45)
+        assertEquals(emptyList(), rule(answer(weekly(title = "", minutes = 180, key = "days:none", id = "g1")), listOf(days)).days)
+        val long = guitar.copy(minutes = 900, days = emptyList(), sessionMin = 45)
+        assertTrue(read(answer(weekly(title = "", minutes = 3000, id = "g1")), listOf(long)).changes.isEmpty())
     }
 
     @Test

@@ -238,10 +238,14 @@ object InstructionAnswers {
         }
     }
 
-    /** The days a Weekly's `days` names, by a day's first three letters; `every` for all of them; null if one doesn't read. */
-    private fun weekdays(text: String): List<Int>? = if (text.trim().equals("every", ignoreCase = true)) (1..7).toList() else text.split(',').map { name ->
-        DayOfWeek.entries.firstOrNull { it.name.take(3).equals(name.trim().take(3), ignoreCase = true) && name.trim().length >= 3 }?.value ?: return null
-    }.distinct().sorted()
+    /** The days a Weekly's `days` names, by a day's first three letters; `every` for all of them; `none` for the planner's choice again; null if one doesn't read. */
+    private fun weekdays(text: String): List<Int>? = when (text.trim().lowercase()) {
+        "every" -> (1..7).toList()
+        "none" -> emptyList()
+        else -> text.split(',').map { name ->
+            DayOfWeek.entries.firstOrNull { it.name.take(3).equals(name.trim().take(3), ignoreCase = true) && name.trim().length >= 3 }?.value ?: return null
+        }.distinct().sorted()
+    }
 
     /**
      * [g], a Weekly change, as a rule: its [Given.title] and [Given.minutes] the week's whole, and in its [Given.eventKey] what
@@ -260,6 +264,8 @@ object InstructionAnswers {
         // At least a minute for each day named, as a backup's rule is held to.
         val days = (said["days"]?.let { weekdays(it) ?: return null } ?: old?.days.orEmpty()).takeIf { it.size <= minutes } ?: return null
         val session = said["session"]?.let { it.toIntOrNull()?.takeIf { min -> min in WeeklyRules.SESSION } ?: return null } ?: old?.sessionMin ?: 0
+        // No more sessions than a task's steps: a session stretched to fit isn't the one asked for.
+        if (days.isEmpty() && session > 0 && WeeklyRules.sessions(minutes, session) > OwnTaskRules.MAX_STEPS) return null
         val where = said["where"]?.takeIf { it == "home" || it == "anywhere" } ?: if ("where" in said) return null else old?.where ?: "anywhere"
         val subject = said["subject"]?.take(OwnTaskRules.MAX_CLASS)?.takeIf { it.isNotEmpty() } ?: old?.subject
         return WeeklyRule(old?.id ?: newStepId(), title, minutes, days, session, where, subject, setAt = now)

@@ -175,6 +175,14 @@ class WeeklyRulesTest {
     }
 
     @Test
+    fun `a week you say is all done counts as all of it`() {
+        val task = roll().tasks.first()
+        assertEquals(75, WeeklyRules.doneMin(task.copy(status = Status.Done, doneAt = friday)))
+        assertEquals(90, WeeklyRules.doneMin(task.copy(status = Status.Done, doneAt = friday, workedMin = 90)))
+        assertEquals(0, WeeklyRules.doneMin(task.copy(status = Status.Missed)))
+    }
+
+    @Test
     fun `done minutes count time kept and steps ticked once each`() {
         val task = roll().tasks.first().copy(workedMin = 40, subSteps = listOf(SubStep("a", 45, done = true, timedMin = 40), SubStep("b", 30, done = true, byHand = true), SubStep("c", 45)))
         assertEquals(75, WeeklyRules.doneMin(task))
