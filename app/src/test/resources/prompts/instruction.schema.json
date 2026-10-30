@@ -40,7 +40,9 @@
                             "DayOnly",
                             "OutsideAt",
                             "NoOutside",
-                            "OutsideAdded"
+                            "OutsideAdded",
+                            "Weekly",
+                            "WeeklyEnd"
                         ]
                     },
                     "taskId": {

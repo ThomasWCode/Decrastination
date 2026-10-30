@@ -24,6 +24,7 @@ import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.SlotState
 import com.thomaswcode.decrastination.core.Slotter
 import com.thomaswcode.decrastination.core.WallClock
+import com.thomaswcode.decrastination.core.WeeklyRules
 import com.thomaswcode.decrastination.core.withMine
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.SessionState
@@ -210,7 +211,7 @@ class Instructions(
             val waiting = run call@{
                 val reader = gateway.client(ModelEffort.Job.Instruction)?.let { InstructionReader(it, clock.zone(), profile = profile()) } ?: return@call gateway.because(ModelHold.Off)
                 // Through a rest only for you waiting on it (AC-04): after a sync or an enrichment it waits.
-                val result = when (val called = gateway.call(interactive = interactive, record = ModelCalls.OnRecord(ModelEffort.Job.Instruction, next.text) { r: InstructionReader.Result -> r.usage to ModelCalls.outcome(r.refused, r.reading == null) }, cost = { r: InstructionReader.Result -> r.costUsd to r.refused }) { at -> reader.read(next, tasks.value.tasks, calendarTime().events, at, question = if (next.answer) answering[next.id] ?: question(next) else null, breaksOn = { planning.breaksOn(it) }) }) {
+                val result = when (val called = gateway.call(interactive = interactive, record = ModelCalls.OnRecord(ModelEffort.Job.Instruction, next.text) { r: InstructionReader.Result -> r.usage to ModelCalls.outcome(r.refused, r.reading == null) }, cost = { r: InstructionReader.Result -> r.costUsd to r.refused }) { at -> reader.read(next, tasks.value.tasks, calendarTime().events, at, question = if (next.answer) answering[next.id] ?: question(next) else null, breaksOn = { planning.breaksOn(it) }, rules = WeeklyRules.inForce(instructions.value.applied)) }) {
                     is Called.Held -> return@call gateway.because(called.hold)
                     is Called.Failed -> {
                         Log.w(AppGraph.TAG, "Reading an instruction failed", called.error)

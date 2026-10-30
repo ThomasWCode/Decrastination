@@ -128,6 +128,7 @@ class BackupService(
             archive = stores.chatArchive.value,
             felixStore = stores.felix.value,
             gmailWrites = GmailWrites.receipts(stores.gmailWrites.value.writes),
+            weeksDeleted = stores.tasks.value.weeksDeleted,
             versions = stores.shapes.mapValues { it.value.version },
         )
 
@@ -179,11 +180,17 @@ class BackupService(
         val backup = Backups.decode(text, stores.shapes) ?: return "That isn't a Decrastination backup (or it's from a newer version)."
         Backups.problem(backup)?.let { return "Nothing was restored: $it." }
         changeSettings { Backups.importedSettings(it, backup) }
+        // Before the rules, so a week deleted isn't made again from them as they come back (D-124).
+        stores.replace(stores.tasks) { it.copy(weeksDeleted = Backups.mergedWeeks(it.weeksDeleted, backup.weeksDeleted)) }
         val (restored, unclear, asTheyWere) = restoreInstructions(backup.instructions)
         // Your own tasks not here already: no source can give them back. The instructions' say is laid
         // over them afresh, from those in use here.
         val ownAdded = Backups.restoredOwnTasks(backup.ownTasks, stores.tasks.value.tasks).map { it.id }.toSet()
-        stores.replace(stores.tasks) { state -> state.copy(tasks = state.tasks + Backups.restoredOwnTasks(backup.ownTasks, state.tasks)) }
+        stores.replace(stores.tasks) { state ->
+            val back = Backups.restoredOwnTasks(backup.ownTasks, state.tasks)
+            val ids = back.mapTo(HashSet()) { it.id }
+            state.copy(tasks = state.tasks.filterNot { it.id in ids } + back)
+        }
         if (ownAdded.isNotEmpty()) layTaskOverrides()
         // The backup's days off and half-days beside those here (PL-16).
         stores.replace(stores.school) { it.withAll(backup.school) }

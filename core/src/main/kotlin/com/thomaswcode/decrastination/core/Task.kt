@@ -196,6 +196,8 @@ data class TaskItem(
      * ticks kept by name; its name its source's, which is kept ([SourceValues.title]).
      */
     val mine: Mine = Mine(),
+    /** The week of a rule of weekly work it is (D-124); null for any other task. */
+    val weekly: WeeklyMark? = null,
 ) {
     val isOpen: Boolean get() = status == Status.Open
 
@@ -228,6 +230,8 @@ data class TaskItem(
             // one, as read with them (the planner reads them through it), as its date may be a test
             // date Claude read, a plan.
             Source.Anki if extra[AnkiRules.EXTRA_FOR] != null -> extra[AnkiRules.EXTRA_REAL]?.toLongOrNull()
+            // A week of weekly work's Sunday is a plan: it's never overdue, and the week closes as it stands (D-124).
+            Source.Own if weekly != null -> null
             // Your own task's date is yours; a source's, its own (one kept from before source values were kept has none).
             else -> if (sourceValues != null) sourceValues.dueAt else dueAt
         }

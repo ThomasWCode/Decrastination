@@ -53,7 +53,8 @@ How the app works in detail is in [spec/](spec/); how the work is done is in [de
 - **D-35. The learned pace stretches only the app's own estimates** (2.0.0; 17 Oct): your minutes, your own tasks and steps you or Felix gave are planned as given (`Calibration.multiplierFor`).
 - **D-36. What isn't planned is listed with why** (*Not planned*, on Work, below the tasks); there's no forecasting of work not yet open.
 - **D-37. Days off and half-days are told to Felix** (or set in Settings): a day off takes the weekend's rules, a half-day's evening starts at the early finish.
-- **D-38. No exams page, recurring work or streaks.**
+- **D-38. No exams page or streaks.** Recurring work was out too, till D-124.
+- **D-124. Work that comes round every week** (4.10.0, 30 Oct; Q121 to Q126 in [plan_v4/answers.md](plan_v4/answers.md) §Weekly work), reversing D-38 and D-90 on it. You tell Felix ("3 hours of guitar a week"), or write an instruction: a rule of a week's total and, if you say, the days or the length of a session, never a clock time. Each week's work is a task of your own, made from the rule a week ahead, which blocks as any work does and earns as your own do (D-54). It gives way to all that's dated. The week it's set in takes a share of the days left, and a change to a rule leaves what you or Felix set on a week (D-4). Work the app placed moves on through the week when it's missed; a session on a day you named can go later that day, and is dropped once the day's gone. At the week's end what's left is dropped, never carried over: the week closes as missed with its minutes kept. Its Sunday is a plan, never a deadline, so it's never overdue and stays out of the record of deadlines met and the margins. Applies: `core/WeeklyRules.kt`, `Planner`, `OwnTasks.rollWeeks`.
 
 ## Slots and the calendar
 
@@ -164,7 +165,7 @@ How the app works in detail is in [spec/](spec/); how the work is done is in [de
 - **D-87. A prompt or schema change updates the golden copies; one to what a reading is made by raises `ReadingPrompts.VERSION`.** A changed schema is compiled by the API before it's released (`SchemaCompileTest`, 17 Oct), and a list's fields are never nullable.
 - **D-88. A new setting needs a default, a range, a label and a field on its screen**, and its place in protection's list if it can loosen blocking.
 - **D-89. The docs change with the code**, in the same PR: the spec for behaviour, this file for decisions. Comments say what and why, and cite requirement ids and decisions.
-- **D-90. Not built:** focus sessions, streaks, an exams page, recurring work, rules by sender, two weekend windows, task search, a free-time ledger, reviews that only propose. A rewrite of the app isn't wanted; it was restructured in place instead ([plan_v4/](plan_v4/README.md)).
+- **D-90. Not built:** focus sessions, streaks, an exams page, rules by sender, two weekend windows, task search, a free-time ledger, reviews that only propose. A rewrite of the app isn't wanted; it was restructured in place instead ([plan_v4/](plan_v4/README.md)).
 - **D-107. The structure as Stage 12 left it** (4.3.2, 21 Oct; Q48: A, Q49: A, Q50): each store is updated only by the files the architecture test names for it, its owner first, each writing its own part of it (one writer where there's one, as `gmail-writes.json`'s), and no screen updates a store; a single writer for every store isn't planned. `AppGraph` holds the wiring (the stores and the services made, and the flows that join them), whatever its length: 537 lines at 4.3.2, not the plan's 400. The plan's folder was cut to its record once the plan was done (24 Oct). Applies: `ArchitectureTest`, `AppGraph`, [plan_v4/architecture.md](plan_v4/architecture.md).
 
 ## Costs

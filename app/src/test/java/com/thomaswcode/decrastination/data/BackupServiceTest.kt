@@ -194,7 +194,7 @@ class BackupServiceTest {
     @Test
     fun `a reset of the chat whose copy has no room for its earliest messages keeps them whole beside it`() = runTest {
         // Room for all but the archive's earliest messages: the rest of the copy fits, as it must to be read back.
-        val small = Phone(full = true, cap = 114_000)
+        val small = Phone(full = true, cap = 122_000)
         val archive = ChatArchive((1..80).map { ChatMessage("a$it", Speaker.You, "x".repeat(1_000), it.toLong(), answeredAt = it.toLong()) })
         small.stores.replace(small.stores.chatArchive, archive)
         val said = small.service.reset(Reset.Chat)

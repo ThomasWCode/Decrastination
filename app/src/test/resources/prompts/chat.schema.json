@@ -120,6 +120,8 @@
                             "OutsideAt",
                             "NoOutside",
                             "OutsideAdded",
+                            "Weekly",
+                            "WeeklyEnd",
                             "Remind",
                             "Note"
                         ]

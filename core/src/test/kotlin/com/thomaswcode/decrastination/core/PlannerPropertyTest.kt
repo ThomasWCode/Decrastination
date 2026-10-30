@@ -120,6 +120,28 @@ class PlannerPropertyTest {
     }
 
     /** Builds [seed]'s input, plans it, and checks every invariant, naming the seed if one fails. */
+    /**
+     * Weekly work gives way to all that's dated (D-124): with two rules added, what's dated stays on its days, and no piece
+     * of theirs is behind or outside its own week.
+     */
+    @Test
+    fun `weekly work leaves dated work where it was, and stays in its week`() {
+        for (seed in 0L until ITERATIONS) {
+            val input = Gen(seed).input
+            val rules = listOf(WeeklyRule("a", "a", 300, where = "home", setAt = input.now - 30 * DAY), WeeklyRule("b", "b", 200, days = listOf(2, 4, 7), setAt = input.now))
+            val monday = WeeklyRules.mondayOf(input.now, LONDON)
+            val weeks = rules.flatMap { r -> listOf(monday, monday.plusWeeks(1)).mapNotNull { WeeklyRules.make(r, it, input.now, LONDON) } }
+            val plan = Planner.plan(input.copy(tasks = input.tasks + weeks))
+            fun dated(p: Plan) = p.buckets.flatMap { b -> b.chunks.filter { c -> !c.soft && !c.taskId.contains("weekly-") }.map { (it.taskId to it.part) to b.date } }.toMap()
+            assertEquals(dated(Planner.plan(input)), dated(plan), "seed $seed: dated work moved")
+            for (bucket in plan.buckets) for (chunk in bucket.chunks.filter { it.taskId.contains("weekly-") }) {
+                val mark = weeks.first { it.id == chunk.taskId }.weekly!!
+                assertTrue(bucket.date in LocalDate.parse(mark.week)..mark.lastDay, "seed $seed: ${chunk.key} on ${bucket.date} is outside ${mark.week}")
+                assertTrue(!chunk.behind, "seed $seed: ${chunk.key} is behind")
+            }
+        }
+    }
+
     private fun check(seed: Long) {
         val input = Gen(seed).input
         val plan = Planner.plan(input)

@@ -598,3 +598,33 @@ Your asks, with the phone connected, recorded as D-122. How the Day works is in 
   The Day opens with the card folded to its line, upright as on its side; a tap on the line or the header dragged down brings it back, as before.
 - **The Plan button over a Day left open:** "Keep as it is (Recommended)": a chat opened from Day sits over it, and its Plan button brings that Day back as it was left, the card unfolded if it was, as it keeps the tab (D-121); only a fresh opening, or a tab switch, starts folded. Offered against folding at every tap of Plan.
 - **Decided without asking:** a flick is 125 dp a second, Material's own threshold for a snap between anchors, and a slower drag goes on once it's moved 24 dp, a fingertip; less goes back where it started. A fling of what the card holds goes on as before while it hasn't moved the fold. Folded as the Day opens, the card is measured once out of sight, so the header dragged down unfolds it under the finger rather than only at a tap.
+
+## Weekly work (4.10.0, 30 Oct)
+
+You asked for things like "I need to do 3 hours of guitar practice a week" to be told to Felix and added every week: D-124, reversing D-38 and D-90 on recurring work.
+
+### Asked and answered
+
+**Q121. What can he be told?** Offered: a weekly total, with days or a session's length if you say (recommended: both are steps with dates, which the planner already handles); a total alone; those and fixed clock times. Your pick: **a total, days and a session's length**. No clock times.
+
+**Q122. How seriously is it taken?** Any piece of today's blocks, and a piece of your own of 20 minutes or more that isn't written work earns nothing (D-54). Offered: blocks and earns nothing (recommended: no change to the blocker, and a tick on guitar proves nothing); blocks and earns on a tick; doesn't block. Your pick: **blocks, earns nothing**, with his nudges and misses as for any work.
+
+**Q123. In a tight week?** Dated work goes earliest first, so a Sunday's guitar would go ahead of homework due on Tuesday. Offered: gives way to dated work (recommended); as any dated task; goes first. Your pick: **gives way to dated work**.
+
+**Q124. What's left at the week's end?** Offered: dropped, the record kept (recommended: no debt can build up); carried over; carried over, capped. Your pick: **dropped, the record kept**.
+
+**Q125. The first week, set midweek?** Offered: a share of the days left (recommended); the whole total; from next Monday. Your pick: **a share of the days left**.
+
+**Q126. A session on a day you named, missed.** Your word, as it was being built: a day you named is yours, so a session on it is dropped once it's missed, and it can only go later that day; work moves on through the week only where the app put it on its day.
+
+### Decided without asking
+
+1. **Next week's task is made ahead**, so the calendar has it a week ahead (D-39) and "no guitar next week" has something to delete; Work lists both.
+2. **Always `Kind.Revision`:** it earns nothing, as Q122 chose, and its pieces are spaced a day apart. Homework would ask for a photo.
+3. **The rule is a change of yours**, as `BusyTime` is every weekday, so *Your changes* is its list and *Take back* ends it, with no screen of its own.
+4. **A change to a rule holds from next week.** This week's is a task you or Felix can change as any (D-4), and so is a week not begun: one you or he changed stays as it is when the rule changes.
+5. **A rule's fields go in `eventKey`**, as a reminder's do (Q13: B), so the chat's grammar gains two names and no field.
+
+### Not built
+
+Fixed clock times, end dates ("until Christmas"), pausing a rule, rules by the month. A week ended short isn't carried over.

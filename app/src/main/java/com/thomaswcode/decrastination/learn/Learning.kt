@@ -8,6 +8,7 @@ import com.thomaswcode.decrastination.core.InstructionState
 import com.thomaswcode.decrastination.core.MemoryState
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.SettingsLimits
+import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.WallClock
 import com.thomaswcode.decrastination.data.ActivityLog
 import com.thomaswcode.decrastination.data.JsonStore
@@ -61,6 +62,8 @@ class Learning(
     private val reviewed: suspend (String) -> Unit,
     /** His offer to send the week's summary ([com.thomaswcode.decrastination.felix.Conversation.summaryReady]). */
     private val summaryReady: suspend (String) -> Unit,
+    /** The tasks as they stand, read for how the week's weekly work went (D-124). */
+    private val tasks: () -> List<TaskItem> = { emptyList() },
 ) {
     /**
      * The weekly review (docs/spec/learning.md, item 7), unless [ifDue] and the week has had it: on
@@ -131,7 +134,7 @@ class Learning(
     private suspend fun modelReview(now: Long, week: String, generation: Int, changing: Boolean = true): Outcome {
         val reviewer = gateway.client(ModelEffort.Job.Review)?.let { ClaudeReviewer(it, profile = profile(clock.now(), memory.value)) } ?: return Outcome(why = because(ModelHold.Off))
         val zone = clock.zone()
-        val input = ReviewInput.describe(log.value, learning.value.calibration, settings.value, now, zone, week, chat.value.messages)
+        val input = ReviewInput.describe(log.value, learning.value.calibration, settings.value, now, zone, week, chat.value.messages, tasks())
         // Its room taken with every other model call's, then sent (AC-05). A failure is recorded
         // (Setup shows it; the model rests), then the rules' review stands.
         val current = gateway.client(ModelEffort.Job.Review)?.let { ClaudeReviewer(it, profile = profile(clock.now(), memory.value)) } ?: return Outcome(why = because(ModelHold.Off))

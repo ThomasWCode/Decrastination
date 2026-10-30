@@ -43,6 +43,7 @@ import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.WallClock
+import com.thomaswcode.decrastination.core.WeeklyRules
 import com.thomaswcode.decrastination.data.ActivityLog
 import com.thomaswcode.decrastination.data.FelixStore
 import com.thomaswcode.decrastination.data.JsonStore
@@ -611,6 +612,7 @@ class Conversation(
             lessons = lessons,
             waiting = waiting.mapTo(HashSet()) { it.id },
             breaksOn = { planning.breaksOn(it, applied) },
+            weekly = WeeklyRules.inForce(applied),
         )
     }
 

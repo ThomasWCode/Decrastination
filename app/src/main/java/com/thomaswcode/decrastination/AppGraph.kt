@@ -374,6 +374,7 @@ class AppGraph private constructor(context: Context) {
         forgetExpired = { now -> conversation.forgetExpired(now) },
         reviewed = { line -> conversation.reviewed(line) },
         summaryReady = { week -> conversation.summaryReady(week) },
+        tasks = { tasks.value.tasks },
     )
 
     init {
@@ -402,6 +403,7 @@ class AppGraph private constructor(context: Context) {
         syncer.addAfterEverySync { instructions.layTaskOverrides() }
         // Your own tasks long done trimmed to their record, as a source's are.
         syncer.addAfterEverySync { ownTasks.pruneOwn() }
+        syncer.addAfterEverySync { ownTasks.rollWeeks() }
         // Gmail's journal settled after each read: receipts let go once old, or once the read finds their email starred again.
         syncer.addAfterEverySync { gmailFinishes.settle() }
         // A question of yours still waiting (Claude was off, resting, or the app stopped): tried again.

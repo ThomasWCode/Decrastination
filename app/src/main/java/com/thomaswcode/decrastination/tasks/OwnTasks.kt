@@ -12,6 +12,7 @@ import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.WallClock
+import com.thomaswcode.decrastination.core.WeeklyRules
 import com.thomaswcode.decrastination.core.longFinished
 import com.thomaswcode.decrastination.core.trimmed
 import com.thomaswcode.decrastination.core.withMine
@@ -87,14 +88,18 @@ class OwnTasks(
     suspend fun reopenOwnTask(taskId: String) {
         tasks.update { state ->
             // Or one done by its tick (NF-06), which only you say is done: a sync leaves it open again.
-            state.copy(tasks = state.tasks.map { t -> if (t.id == taskId && (t.source == Source.Own || t.tickDone) && !t.isOpen) OwnTaskRules.reopened(t) else t })
+            state.copy(tasks = state.tasks.map { t -> if (t.id == taskId && (t.source == Source.Own || t.tickDone) && t.status == Status.Done) OwnTaskRules.reopened(t) else t })
         }
     }
 
     /** Your own task [taskId] gone, as if it never was. */
     suspend fun deleteOwnTask(taskId: String) {
         // A task linked to it as the same work (DX-15) is back: the work it stood for has gone.
-        tasks.update { state -> state.copy(tasks = Duplicates.linksPresent(state.tasks.filterNot { it.id == taskId && it.source == Source.Own })) }
+        tasks.update { state ->
+            // A week of weekly work stays gone (D-124), whatever becomes of its rule.
+            val week = state.tasks.firstOrNull { it.id == taskId && it.source == Source.Own }?.weekly
+            state.copy(tasks = Duplicates.linksPresent(state.tasks.filterNot { it.id == taskId && it.source == Source.Own }), weeksDeleted = state.weeksDeleted + listOfNotNull(week))
+        }
         forgetCards(setOf(taskId))
     }
 
@@ -117,13 +122,30 @@ class OwnTasks(
         tasks.update { state -> state.copy(tasks = state.tasks.map { if (it.source == Source.Own && it.longFinished(now)) it.trimmed(emptySet()) else it }) }
     }
 
-    /** One of your own whose steps are all done finished, from the app's start. */
+    /**
+     * Weekly work's tasks made what the rules in force say at this moment (D-124): this week's and next week's made, a week
+     * gone by closed, a rule ended let go. Each time is safe, as each week is one task; so it's done at a start, whenever a
+     * rule changes, after every sync and before each morning's briefing.
+     */
+    suspend fun rollWeeks(): Unit = withContext(NonCancellable) {
+        val rules = WeeklyRules.inForce(instructions.value.applied)
+        val now = clock.now()
+        tasks.update { state ->
+            val rolled = WeeklyRules.roll(state.tasks, state.weeksDeleted, rules, now, clock.zone())
+            state.copy(tasks = Duplicates.linksPresent(rolled.tasks), weeksDeleted = rolled.weeksDeleted)
+        }
+    }
+
+    /** One of your own whose steps are all done finished, and weekly work kept to its rules, from the app's start. */
     fun start() {
         // One of your own whose steps are all done (ticked, or kept in their slots) is finished; and one
         // done by its tick (NF-06) given steps of yours by the chat.
         scope.launch {
             tasks.state.map { s -> s.tasks.filter { (it.source == Source.Own || it.tickDone) && it.isOpen && it.subSteps.isNotEmpty() && it.subSteps.all { st -> st.done } }.map { it.id } }
                 .distinctUntilChanged().collect { ids -> ids.forEach { finishOwnTask(it) } }
+        }
+        scope.launch {
+            instructions.state.map { WeeklyRules.inForce(it.applied) }.distinctUntilChanged().collect { rollWeeks() }
         }
     }
 }

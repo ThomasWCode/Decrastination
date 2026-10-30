@@ -143,6 +143,9 @@ object Planner {
             Item(task, deadline, soft, chunks, hard, home, notBefore, dueAt, windowed, run, offset, taskParts, taskMinutes, pinnedDay = day)
 
         val minutes = chunks.sumOf { it.minutes }
+
+        /** A week of weekly work's Sunday (D-124): it's done by then, and no piece of it goes past. */
+        val weekEnd: LocalDate? = task.weekly?.lastDay
     }
 
     /**
@@ -248,7 +251,7 @@ object Planner {
         /** A deck task stays on the plan while any of its assignments does. */
         fun keptOn(task: TaskItem) = linked(task).let { a -> a.isEmpty() || !a.all(::heldBack) }
         val (events, work) = input.tasks
-            .filter { it.isOpen && it.isAvailable(input.now) && !heldBack(it) && keptOn(it) }
+            .filter { it.isOpen && it.isAvailable(input.now) && !heldBack(it) && keptOn(it) && !WeeklyRules.over(it, today) }
             .partition { it.kind == Kind.Event }
         val decks = AnkiRules.heldDecks(input.tasks, input.settings.ankiTextbook)
         val held = decks.mapValues { it.value.keys }
@@ -328,7 +331,7 @@ object Planner {
             val planned = (if (due == task.dueAt) task else task.copy(dueAt = due))
                 .let { t -> if (at != null && due != null && due < input.now) t.copy(notBefore = maxOf(t.notBefore ?: at, at)) else t }
             // A step's own dates gone by were a plan's too: it's done with its task's own.
-            val pieces = pieces(task, input, held[task.id].orEmpty()).map { p -> if (p.due != null && p.due < input.now) p.undated() else p }
+            val pieces = openPieces(task, pieces(task, input, held[task.id].orEmpty()), at, input.now).map { p -> if (p.due != null && p.due < input.now) p.undated() else p }
             val deadline = due ?: softWeek(at ?: task.dueAt ?: task.firstSeenAt, input)
             keptTo(task, windows(planned, deadline, soft = due == null, hard = due != null && due == real, pinnedAt(task, pieces, real)) { start -> softWeek(start, input) }, real)
         }.filter { it.chunks.isNotEmpty() }
@@ -452,7 +455,7 @@ object Planner {
         // Every other run ranks by its own, so tomorrow's doesn't go ahead of tonight's either.
         val tomorrow = today.plusDays(1)
         val soonBy = HashMap<String, Long>()
-        items.filter { !it.soft && it.deadline >= input.now && date(it.deadline, zone) <= tomorrow }
+        items.filter { !it.soft && it.weekEnd == null && it.deadline >= input.now && date(it.deadline, zone) <= tomorrow }
             .forEach { soonBy.merge(it.task.id, it.deadline, ::minOf) }
         fun soon(item: Item) = !item.soft && item.task.id in soonBy && date(item.deadline, zone) <= tomorrow
         // Pieces at a time you gave (PL-04), by [Chunk.key], for the slotter, with their tasks, by which they're laid in
@@ -494,7 +497,7 @@ object Planner {
                 dueToday = item.hard && !overdue && date(item.deadline, zone) == today,
                 dueSoon = soon(item),
                 rankedBy = rankedBy(item),
-                behind = behind && !overdue,
+                behind = behind && !overdue && item.weekEnd == null,
                 part = part,
                 parts = item.taskParts,
                 taskMinutes = item.taskMinutes,
@@ -647,7 +650,9 @@ object Planner {
         // before it, and no later than the first day of one after it, where those are placed.
         val runDays = HashMap<String, MutableMap<Int, Pair<LocalDate, LocalDate>>>()
         fun floorOf(item: Item): LocalDate? = runDays[item.task.id]?.filterKeys { it < item.run }?.values?.maxOfOrNull { it.second }
-        fun ceilingOf(item: Item): LocalDate? = runDays[item.task.id]?.filterKeys { it > item.run }?.values?.minOfOrNull { it.first }
+        // Weekly work ends with its week, and a session on a day named with that day (D-124).
+        fun ceilingOf(item: Item): LocalDate? =
+            listOfNotNull(runDays[item.task.id]?.filterKeys { it > item.run }?.values?.minOfOrNull { it.first }, item.weekEnd, item.weekEnd?.let { date(item.deadline, zone) }).minOrNull()
         fun note(item: Item, assigned: Array<LocalDate?>) {
             val days = assigned.filterNotNull()
             if (item.windowed && days.isNotEmpty()) runDays.getOrPut(item.task.id) { HashMap() }[item.run] = days.min() to days.max()
@@ -663,7 +668,9 @@ object Planner {
         }
         // Work you put on a day or at a time (PL-04) is placed first: it has its day's time before the rest.
         val (pinned, unpinned) = placeable.partition { it.pinnedDay != null }
-        val (urgent, later) = unpinned.partition { date(it.deadline, zone) <= today }
+        // Weekly work gives way to all that's dated (D-124), whatever its own days say: it's placed after it.
+        val (everyWeek, ordinary) = unpinned.partition { it.weekEnd != null }
+        val (urgent, later) = ordinary.partition { date(it.deadline, zone) <= today }
 
         // Work with a real deadline its days can't hold (PL-02): said, once a task, with the numbers:
         // a task in runs (its blocks' dates) for all of its runs with the deadline, against the time free
@@ -796,7 +803,7 @@ object Planner {
             // and behind; except for undated work and a task limited per day, below.
             // Nor can work behind crowd into a first day you've limited: it too is done in order from
             // the first day with the time, so its steps keep their order.
-            val carriesOn = perDay != null || item.soft || earliest in limited
+            val carriesOn = perDay != null || item.soft || earliest in limited || item.weekEnd != null
             for (i in item.chunks.indices.reversed()) {
                 if (assigned[i] != null) continue
                 val day = latest(assigned.getOrNull(i + 1) ?: lastUsable, i)
@@ -1000,13 +1007,14 @@ object Planner {
         val order = compareBy<Item>({ it.soft }, { lastUsableDay(it, input) }, { it.deadline }, { if (it.windowed) it.task.id else "" }, { -it.run })
         // Work due soon takes today's time first: what's due by today (a soon task's overdue blocks
         // among it), then what's due tomorrow; then what's overdue; then dated work spread over its
-        // window; then undated work, backwards from its soft week.
+        // window; then weekly work, over what's left of its week; then undated work, backwards from its soft week.
         pinned.sortedWith(byDeadline).forEach { if (date(it.deadline, zone) <= today) placeNow(it) else placeBack(it, Why.Pinned) }
         urgent.filter(::soon).sortedWith(byDeadline).forEach(::placeNow)
         later.filter(::soon).sortedWith(order).forEach { placeBack(it, Why.DueSoon) }
         urgent.filterNot(::soon).sortedWith(byDeadline).forEach(::placeNow)
         val (undated, dated) = later.filterNot(::soon).partition { it.soft }
         dated.sortedWith(order).forEach(::placeSpread)
+        everyWeek.sortedWith(order).forEach(::placeSpread)
         undated.sortedWith(order).forEach { placeBack(it, Why.Soft) }
 
         // Work not open yet with a real deadline: said not to fit where even its days from its opening,
@@ -1094,7 +1102,8 @@ object Planner {
     /** The deadline's day less the margin; with no margin, a morning deadline's day is never usable. */
     private fun lastUsableDay(item: Item, input: Input): LocalDate = item.pinnedDay ?: run {
         val margin = input.calibration.marginDays[item.task.kind] ?: input.settings.marginDays
-        if (margin == 0) lastDayBefore(item, input) else lastUsableDay(item.deadline, item.task.kind, input)
+        // Weekly work has no margin: its Sunday is a day of its week, not a deadline to keep clear of (D-124).
+        if (margin == 0 || item.weekEnd != null) lastDayBefore(item, input) else lastUsableDay(item.deadline, item.task.kind, input)
     }
 
     /** [day]'s time for work before [deadline] (on that day): its windows, or your hours, cut at the deadline's minute. */
@@ -1149,6 +1158,16 @@ object Planner {
         val baseline = minOf(task.firstProgress ?: task.sourceProgress, task.sourceProgress)
         val bySessions = whole * (1 - baseline.coerceIn(0.0, 1.0)) - task.workedMin - task.photoMin
         return minOf(bySource, bySessions)
+    }
+
+    /**
+     * Of [task]'s [pieces], those still to do at [now]: a week's session on a day named goes with that day, missed, not
+     * moved on, as you chose the day (D-124). A time given it since ([at]) keeps the last, with none to come to lay it on.
+     */
+    private fun openPieces(task: TaskItem, pieces: List<Piece>, at: Long?, now: Long): List<Piece> {
+        if (task.weekly == null) return pieces
+        val open = pieces.filter { it.due == null || it.due >= now }
+        return open.ifEmpty { listOfNotNull(pieces.lastOrNull().takeIf { at != null }) }
     }
 
     /**

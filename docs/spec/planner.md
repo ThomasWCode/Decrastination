@@ -88,7 +88,7 @@ Claude's reading cuts a long step when it's read (`ReadingAnswers.fitParts`), bu
 `TaskItem.realDeadline` is yours (`mine.dueAt`); an email's own words as Claude quoted them (`deadlineQuoted`, AI-12), or an invite's start (DX-02); a homework deck's assignments' earliest real one; else the source's own.
 `TaskItem.hardDeadline` says the date in force is that one.
 
-- Any other date is a plan: one Claude read without quoting it, the rules' guess, a test date before the source's deadline, a step's own dates. It orders the work and can leave a piece behind, but it's never overdue or due today.
+- Any other date is a plan: one Claude read without quoting it, the rules' guess, a test date before the source's deadline, a step's own dates, a week of weekly work's Sunday ([Weekly work](#weekly-work)). It orders the work and can leave a piece behind, but it's never overdue or due today.
 - Gone by, a plan gives way to the real deadline behind it (`TaskItem.deadlineAt`); with none, the work is undated again, its week counted on from that date. A step's own dates gone by are dropped.
 - Undated work has a soft deadline (`Planner.softWeek`): `softDeadlineDays` (7) after it's first seen, and as many days more at a time once that's gone by, so it still comes round by its week's end.
 - Only a real deadline can be overdue, or count as met or missed in Stats and the margins.
@@ -99,6 +99,7 @@ A task's last usable day is its deadline's date less its kind's margin (`Calibra
 - With a margin of 0 it's the deadline's own day, where a window the work can use starts at least 5 minutes before the deadline (for work for home, an evening window); else the day before (`Planner.lastDayBefore`). So for a morning deadline a margin of 0 and of 1 are the same day; Settings' line under the field says so as the planner counts it (`SettingsEffects`, the owner's call on S-06 of the review of 4.9.1).
 - On a real deadline's own day, a piece has only the time before the deadline, as its slot must end by then.
 - A day you put a task on (PL-04) is its last usable day, whatever the margin.
+- Weekly work has no margin: its Sunday, or a session's named day, is a day it can use.
 
 ## Placing the pieces
 
@@ -109,7 +110,8 @@ Work is placed in this order, each taking its days' time before the next:
 2. Work dated later today, then tomorrow: those deadlines can still be met. A task with some brings its overdue blocks along, ahead of it, ranked by the task's soonest deadline to come rather than their own.
 3. Overdue work, the oldest deadline first, into today; then undated work whose week ends today.
 4. Dated work due after tomorrow, spread over its window (PL-01), the earliest last usable day first.
-5. Undated work, backwards from its soft week.
+5. Weekly work, over what's left of its week ([Weekly work](#weekly-work)), whatever its own dates say.
+6. Undated work, backwards from its soft week.
 
 Work due by today goes on the first day it can (`placeNow`): today, unless a per-day limit, undated work's allowance or a day's limit sends a piece on to the next day with the time. What fits nowhere in the plan's days is left out rather than break a limit.
 
@@ -136,6 +138,15 @@ Spreading gives today a fair share of each task's days, not a far task's whole w
 
 Undated work goes after everything dated, backwards from its soft week, at most `softMinPerDay` (60) minutes of it a day. On the day its week ends, it goes into today with the overdue work, before dated work is spread.
 A day's first undated piece may be longer than that, never longer than the day's time, so no piece is too big for every day. A batch first seen together spreads over its week instead of filling one evening.
+
+## Weekly work
+
+A rule of weekly work (D-124, PL-17) comes in as a week's task of your own ([slots-and-calendar.md](slots-and-calendar.md) has how it's laid, as any piece): `TaskItem.weekly` marks it, its kind is Revision, so its pieces are spaced a day apart and earn as your own do, and it starts on its Monday and is planned to its Sunday.
+- It's placed after all that's dated, at the fifth place above, and never in the `soon` or overdue ones: a session due today doesn't go ahead of homework due next week. With it or without it, dated work is on the same days (`PlannerPropertyTest`).
+- No piece goes past its Sunday, nor is any behind, nor crowded onto today (`Item.weekEnd`, `carriesOn`). What doesn't fit is left out, and said under *Not planned* as `NoRoom`.
+- A rule's total alone is boxes, and a session length steps with no dates: the planner chooses their days, and a piece missed moves on through the week.
+- A rule's named days are steps dated to each day. Such a session can go later on its day, as a missed slot does (PL-13), and no later: once the day's gone it's dropped (`Planner.openPieces`), its step left undone, not moved on as a step's own dates gone by otherwise are. A time you gave its task since keeps the last of them, where no session of the week's still to come would take the time instead.
+- A week over isn't planned, even before it's closed (`WeeklyRules.over`).
 
 ## Anki decks
 
@@ -188,7 +199,7 @@ Day shows "6 h left, 4 h free before Sat 09:00", with *What gives?* to ask Felix
 - `NotOpen`: its source, or Claude's reading, says it can't start yet;
 - `Waits`: you said it waits for another task still open;
 - `OpensLater`: it, or a run of its blocks, opens after the plan's last day;
-- `NoRoom`: there's no room for it by the plan's last day within each day's limits (a deck past its 90 days, undated work past its allowance).
+- `NoRoom`: there's no room for it by the plan's last day within each day's limits (a deck past its 90 days, undated work past its allowance), or, of weekly work, by its Sunday or its named day.
 
 A task's runs left out for the same reason are one line. Hidden tasks and events aren't listed, nor Anki's derived tasks as not open or waiting (one with no room, or opening after the plan's last day, is). The list only explains: it changes neither the days nor blocking.
 
