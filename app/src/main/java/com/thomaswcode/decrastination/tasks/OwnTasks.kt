@@ -95,7 +95,11 @@ class OwnTasks(
     /** Your own task [taskId] gone, as if it never was. */
     suspend fun deleteOwnTask(taskId: String) {
         // A task linked to it as the same work (DX-15) is back: the work it stood for has gone.
-        tasks.update { state -> state.copy(tasks = Duplicates.linksPresent(state.tasks.filterNot { it.id == taskId && it.source == Source.Own })) }
+        tasks.update { state ->
+            // A week of weekly work stays gone (D-124), whatever becomes of its rule.
+            val week = state.tasks.firstOrNull { it.id == taskId && it.source == Source.Own }?.weekly
+            state.copy(tasks = Duplicates.linksPresent(state.tasks.filterNot { it.id == taskId && it.source == Source.Own }), weeksDeleted = state.weeksDeleted + listOfNotNull(week))
+        }
         forgetCards(setOf(taskId))
     }
 
@@ -127,8 +131,8 @@ class OwnTasks(
         val rules = WeeklyRules.inForce(instructions.value.applied)
         val now = clock.now()
         tasks.update { state ->
-            val rolled = WeeklyRules.roll(state.tasks, state.weeksMade, rules, now, clock.zone())
-            state.copy(tasks = Duplicates.linksPresent(rolled.tasks), weeksMade = rolled.weeksMade)
+            val rolled = WeeklyRules.roll(state.tasks, state.weeksDeleted, rules, now, clock.zone())
+            state.copy(tasks = Duplicates.linksPresent(rolled.tasks), weeksDeleted = rolled.weeksDeleted)
         }
     }
 

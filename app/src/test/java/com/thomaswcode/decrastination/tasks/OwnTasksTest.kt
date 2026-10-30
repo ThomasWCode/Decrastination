@@ -125,12 +125,10 @@ class OwnTasksTest {
         h.ownTasks.rollWeeks()
         // A Monday's rule: the whole of it, this week and next.
         assertEquals(listOf("2026-10-19" to 180, "2026-10-26" to 180), weeks().map { it.weekly!!.week to it.effortMin })
-        assertEquals("2026-10-26", h.stores.tasks.value.weeksMade["g"])
         // Taken back with nothing done: they go, and made again with it, they come back.
         h.instructions.deleteInstruction("weekly-g")
         h.ownTasks.rollWeeks()
         assertEquals(emptyList(), weeks())
-        assertEquals(emptyMap(), h.stores.tasks.value.weeksMade)
         rule(guitar)
         h.ownTasks.rollWeeks()
         assertEquals(2, weeks().size)
@@ -145,6 +143,7 @@ class OwnTasksTest {
         h.ownTasks.deleteOwnTask(next.id)
         h.ownTasks.rollWeeks()
         assertEquals(listOf(first.id), weeks().map { it.id })
+        assertEquals(listOf(next.weekly), h.stores.tasks.value.weeksDeleted)
         h.stores.tasks.update { s -> s.copy(tasks = s.tasks.map { if (it.id == first.id) it.copy(workedMin = 60) else it }) }
         h.clock.time = Fixtures.at("2026-10-26T07:00")
         h.ownTasks.rollWeeks()

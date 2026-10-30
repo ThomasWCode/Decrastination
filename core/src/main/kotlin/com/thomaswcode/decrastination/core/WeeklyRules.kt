@@ -29,15 +29,18 @@ data class WeeklyRule(
     val setAt: Long = 0,
 )
 
-/** What marks a task as a week of [rule]: [week] is its Monday, and [setAt] the rule's when the task was made from it. */
+/**
+ * What marks a task as a week of [rule]: [week] is its Monday, [setAt] the rule's when the task was made from it, and
+ * [drafted] the shape it was made in ([WeeklyRules.shape]), which tells a week still as it was made from one changed since.
+ */
 @Serializable
-data class WeeklyMark(val rule: String, val week: String, val setAt: Long = 0) {
+data class WeeklyMark(val rule: String, val week: String, val setAt: Long = 0, val drafted: String = "") {
     /** The week's Sunday: no piece of it goes past that. */
     val lastDay: LocalDate get() = LocalDate.parse(week).plusDays(6)
 }
 
-/** The tasks and the weeks made, as [WeeklyRules.roll] leaves them. */
-data class Rolled(val tasks: List<TaskItem>, val weeksMade: Map<String, String>)
+/** The tasks and the weeks you've deleted, as [WeeklyRules.roll] leaves them. */
+data class Rolled(val tasks: List<TaskItem>, val weeksDeleted: List<WeeklyMark>)
 
 /** Weekly work's rules (D-124), pure: what's in force, and each week's task from it. */
 object WeeklyRules {
@@ -72,6 +75,12 @@ object WeeklyRules {
 
     /** [task]'s week is over by [today]: it's planned no more, and closed as it is ([roll]). */
     fun over(task: TaskItem, today: LocalDate): Boolean = task.weekly?.let { it.lastDay < today } == true
+
+    /** What [draft] comes to, to tell a week still as it was made from one you or Felix changed since (D-4). */
+    fun shape(draft: OwnTask): String = listOf(
+        draft.title, draft.notes, draft.className, draft.dueAt, draft.startFrom, draft.minutes, draft.where,
+        draft.steps.map { listOf(it.title, it.minutes, it.from, it.dueAt) },
+    ).toString().hashCode().toString(16)
 
     /** A week's task's own id, the same each time, so a rule's week is only ever one task. */
     fun sourceId(rule: String, week: LocalDate): String = "weekly-$rule-$week"
@@ -141,16 +150,17 @@ object WeeklyRules {
      * ([TaskItem.realDeadline]): it's never overdue, and stays out of the record of deadlines met and the margins learned.
      */
     fun make(rule: WeeklyRule, week: LocalDate, now: Long, zone: ZoneId): TaskItem? = draft(rule, week, now, zone)?.let {
-        OwnTaskRules.create(it, sourceId(rule.id, week), now).copy(weekly = WeeklyMark(rule.id, week.toString(), rule.setAt))
+        OwnTaskRules.create(it, sourceId(rule.id, week), now).copy(weekly = WeeklyMark(rule.id, week.toString(), rule.setAt, shape(it)))
     }
 
     /**
-     * [tasks] as [rules] leave them at [now], [made] each rule's last week made, so a week you've deleted stays gone. A week
-     * that's over closes as it stands, its minutes kept; a rule ended takes its weeks with it, those with work done closed
-     * and the rest gone. A week not begun follows a rule changed since, unless it's been worked on; the week under way
-     * stays as it is, as what's set on it is kept (D-4). Each rule then has this week's task and next week's.
+     * [tasks] as [rules] leave them at [now]; a week in [deleted] stays gone, as you deleted it, and those gone by are let
+     * go. A week that's over closes as it stands, its minutes kept; a rule ended takes its weeks with it, those with work
+     * done closed and the rest gone, to come back with it. A week not begun follows a rule changed since while it's still
+     * as it was made; one worked on or changed, and the week under way, stay as they are, as what's set on them is kept
+     * (D-4). Each rule then has this week's task and next week's.
      */
-    fun roll(tasks: List<TaskItem>, made: Map<String, String>, rules: List<WeeklyRule>, now: Long, zone: ZoneId): Rolled {
+    fun roll(tasks: List<TaskItem>, deleted: List<WeeklyMark>, rules: List<WeeklyRule>, now: Long, zone: ZoneId): Rolled {
         val thisWeek = mondayOf(now, zone)
         val byRule = rules.associateBy { it.id }
         val kept = tasks.mapNotNull { task ->
@@ -163,7 +173,7 @@ object WeeklyRules {
                 else -> closed(task, now)
             }
         }.toMutableList()
-        val weeks = made.filterKeys { it in byRule }.toMutableMap()
+        fun gone(rule: WeeklyRule, week: LocalDate) = deleted.any { it.rule == rule.id && it.week == week.toString() }
         for (rule in rules) {
             for (week in (0 until WEEKS).map { thisWeek.plusWeeks(it) }) {
                 val id = TaskItem.id(Source.Own, sourceId(rule.id, week))
@@ -173,17 +183,16 @@ object WeeklyRules {
                     when {
                         // Ended and brought back within its week: open again as it was.
                         week == thisWeek && old.status == Status.Missed -> kept[at] = old.copy(status = Status.Open, doneAt = null)
-                        week > thisWeek && old.isOpen && old.weekly?.setAt != rule.setAt && untouched(old) -> draft(rule, week, now, zone)?.let { draft ->
-                            kept[at] = OwnTaskRules.edited(old, draft).copy(weekly = old.weekly?.copy(setAt = rule.setAt))
+                        week > thisWeek && old.isOpen && old.weekly?.setAt != rule.setAt && untouched(old) && old.weekly?.drafted == shape(OwnTaskRules.draftOf(old)) -> draft(rule, week, now, zone)?.let { draft ->
+                            kept[at] = OwnTaskRules.edited(old, draft).copy(weekly = old.weekly?.copy(setAt = rule.setAt, drafted = shape(draft)))
                         }
                     }
-                } else if (weeks[rule.id]?.let { it >= week.toString() } != true) {
+                } else if (!gone(rule, week)) {
                     make(rule, week, now, zone)?.let { kept += it }
                 }
-                weeks[rule.id] = maxOf(weeks[rule.id] ?: "", week.toString())
             }
         }
-        return Rolled(kept, weeks)
+        return Rolled(kept, deleted.filter { it.week >= thisWeek.toString() })
     }
 
     private fun closed(task: TaskItem, at: Long): TaskItem = task.copy(status = Status.Missed, doneAt = at)

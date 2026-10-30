@@ -22,7 +22,7 @@ class WeeklyRulesTest {
 
     private fun applied(vararg changes: Change) = changes.mapIndexed { i, c -> Instruction("i$i", "", at = i.toLong(), state = InstructionStatus.Applied, changes = listOf(c), appliedAt = i.toLong()) }
 
-    private fun roll(tasks: List<TaskItem> = emptyList(), made: Map<String, String> = emptyMap(), rules: List<WeeklyRule> = listOf(guitar), now: Long = friday) = WeeklyRules.roll(tasks, made, rules, now, LONDON)
+    private fun roll(tasks: List<TaskItem> = emptyList(), deleted: List<WeeklyMark> = emptyList(), rules: List<WeeklyRule> = listOf(guitar), now: Long = friday) = WeeklyRules.roll(tasks, deleted, rules, now, LONDON)
 
     @Test
     fun `a rule changed later replaces it, and one ended is gone`() {
@@ -101,21 +101,38 @@ class WeeklyRulesTest {
     @Test
     fun `a week's task is one task however often it's rolled`() {
         val first = roll()
-        assertEquals(first, roll(first.tasks, first.weeksMade))
+        assertEquals(first, roll(first.tasks, first.weeksDeleted))
     }
 
     @Test
     fun `a week you've deleted stays gone`() {
         val first = roll()
-        val rolled = roll(first.tasks.drop(1), first.weeksMade)
+        val rolled = roll(first.tasks.drop(1), listOf(first.tasks.first().weekly!!))
         assertEquals(listOf(nextWeek.toString()), rolled.tasks.map { it.weekly?.week })
+    }
+
+    @Test
+    fun `a week you've deleted stays gone when its rule ends and comes back, and the week the app let go comes back`() {
+        val (first, next) = roll().tasks
+        val deleted = listOf(next.weekly!!)
+        val ended = roll(listOf(first), deleted, rules = emptyList())
+        assertEquals(emptyList(), ended.tasks)
+        assertEquals(deleted, ended.weeksDeleted)
+        assertEquals(listOf(thisWeek.toString()), roll(ended.tasks, ended.weeksDeleted).tasks.map { it.weekly?.week })
+    }
+
+    @Test
+    fun `a deleted week gone by is let go`() {
+        val first = roll()
+        val rolled = roll(first.tasks, listOf(first.tasks.first().weekly!!), now = Fixtures.at("2026-11-02T09:00"))
+        assertEquals(emptyList(), rolled.weeksDeleted)
     }
 
     @Test
     fun `a week that's over closes as missed with its minutes kept, and the next is made`() {
         val first = roll()
         val worked = first.tasks.map { if (it.weekly?.week == thisWeek.toString()) it.copy(workedMin = 60) else it }
-        val rolled = roll(worked, first.weeksMade, now = Fixtures.at("2026-11-02T00:10"))
+        val rolled = roll(worked, first.weeksDeleted, now = Fixtures.at("2026-11-02T00:10"))
         val closed = rolled.tasks.first { it.weekly?.week == thisWeek.toString() }
         assertEquals(Status.Missed, closed.status)
         assertEquals(60, closed.workedMin)
@@ -126,7 +143,7 @@ class WeeklyRulesTest {
     @Test
     fun `no week's made for the weeks the phone was off`() {
         val first = roll()
-        val rolled = roll(first.tasks, first.weeksMade, now = Fixtures.at("2026-11-18T09:00"))
+        val rolled = roll(first.tasks, first.weeksDeleted, now = Fixtures.at("2026-11-18T09:00"))
         assertEquals(listOf("2026-11-16", "2026-11-23"), rolled.tasks.filter { it.isOpen }.map { it.weekly?.week })
     }
 
@@ -134,17 +151,16 @@ class WeeklyRulesTest {
     fun `a rule ended closes a week worked on and lets the rest go`() {
         val first = roll()
         val worked = first.tasks.map { if (it.weekly?.week == thisWeek.toString()) it.copy(workedMin = 30) else it }
-        val rolled = roll(worked, first.weeksMade, rules = emptyList())
+        val rolled = roll(worked, first.weeksDeleted, rules = emptyList())
         assertEquals(listOf(Status.Missed), rolled.tasks.map { it.status })
-        assertEquals(emptyMap(), rolled.weeksMade)
     }
 
     @Test
     fun `a rule brought back opens its week again and makes the next again`() {
         val first = roll()
         val worked = first.tasks.map { if (it.weekly?.week == thisWeek.toString()) it.copy(workedMin = 30) else it }
-        val ended = roll(worked, first.weeksMade, rules = emptyList())
-        val back = roll(ended.tasks, ended.weeksMade)
+        val ended = roll(worked, first.weeksDeleted, rules = emptyList())
+        val back = roll(ended.tasks, ended.weeksDeleted)
         assertEquals(listOf(Status.Open, Status.Open), back.tasks.map { it.status })
         assertEquals(30, back.tasks.first().workedMin)
         assertNull(back.tasks.first().doneAt)
@@ -153,8 +169,28 @@ class WeeklyRulesTest {
     @Test
     fun `a rule changed moves the week not begun, not the week under way`() {
         val first = roll()
-        val rolled = roll(first.tasks, first.weeksMade, rules = listOf(guitar.copy(minutes = 240, setAt = friday + 1)))
+        val rolled = roll(first.tasks, first.weeksDeleted, rules = listOf(guitar.copy(minutes = 240, setAt = friday + 1)))
         assertEquals(listOf(75, 240), rolled.tasks.map { it.sourceEffortMin })
+    }
+
+    @Test
+    fun `a rule changed leaves a week not begun that you or Felix changed`() {
+        val first = roll()
+        val next = first.tasks.last()
+        val edited = first.tasks.dropLast(1) + OwnTaskRules.edited(next, OwnTaskRules.draftOf(next).copy(minutes = 60))
+        val rolled = roll(edited, first.weeksDeleted, rules = listOf(guitar.copy(minutes = 240, setAt = friday + 1)))
+        assertEquals(60, rolled.tasks.last().sourceEffortMin)
+    }
+
+    @Test
+    fun `a week as it was made shows as made, with steps too, and follows a later change again`() {
+        val rule = rule(180, days = listOf(2, 4), setAt = friday)
+        val once = roll(rules = listOf(rule))
+        val changed = rule.copy(minutes = 120, setAt = friday + 1)
+        val twice = roll(once.tasks, once.weeksDeleted, rules = listOf(changed))
+        assertEquals(listOf(60, 60), twice.tasks.last().subSteps.map { it.minutes })
+        val thrice = roll(twice.tasks, twice.weeksDeleted, rules = listOf(changed.copy(minutes = 90, setAt = friday + 2)))
+        assertEquals(listOf(45, 45), thrice.tasks.last().subSteps.map { it.minutes })
     }
 
     @Test
@@ -162,7 +198,7 @@ class WeeklyRulesTest {
         val first = roll()
         val next = first.tasks.last()
         val edited = first.tasks.dropLast(1) + OwnTaskRules.edited(next, OwnTaskRules.draftOf(next).copy(minutes = 60))
-        assertEquals(60, roll(edited, first.weeksMade).tasks.last().sourceEffortMin)
+        assertEquals(60, roll(edited, first.weeksDeleted).tasks.last().sourceEffortMin)
     }
 
     @Test

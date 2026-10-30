@@ -36,6 +36,7 @@ import com.thomaswcode.decrastination.core.SlotState
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.core.Status
+import com.thomaswcode.decrastination.core.WeeklyMark
 import com.thomaswcode.decrastination.core.WeeklyRule
 import com.thomaswcode.decrastination.core.WeeklyRules
 import com.thomaswcode.decrastination.core.Window
@@ -303,10 +304,12 @@ class BackupTest {
         val backed = WeeklyRules.make(WeeklyRule("g", "Guitar practice", 180, setAt = now), LocalDate.parse("2026-10-05"), now, ZoneId.of("UTC"))!!.copy(workedMin = 60)
         assertEquals(listOf(60), Backups.restoredOwnTasks(listOf(backed), listOf(backed.copy(workedMin = 0))).map { it.workedMin })
         assertEquals(emptyList(), Backups.restoredOwnTasks(listOf(backed), listOf(backed.copy(workedMin = 30))))
-        // The weeks made go with it, the later for each rule, and only Mondays.
-        assertEquals(mapOf("g" to "2026-10-12"), Backups.decode(Backups.encode(backup().copy(weeksMade = mapOf("g" to "2026-10-12"))), emptyMap())!!.weeksMade)
-        assertEquals(mapOf("g" to "2026-10-12", "r" to "2026-10-05"), Backups.mergedWeeks(mapOf("g" to "2026-10-05", "r" to "2026-10-05"), mapOf("g" to "2026-10-12")))
-        assertNotNull(Backups.problem(backup().copy(weeksMade = mapOf("g" to "2026-10-13"))))
+        // The weeks deleted go with it, from either side, and only Mondays.
+        val skipped = WeeklyMark("g", "2026-10-12")
+        assertEquals(listOf(skipped), Backups.decode(Backups.encode(backup().copy(weeksDeleted = listOf(skipped))), emptyMap())!!.weeksDeleted)
+        val other = WeeklyMark("r", "2026-10-05")
+        assertEquals(listOf(other, skipped), Backups.mergedWeeks(listOf(other), listOf(skipped, other)))
+        assertNotNull(Backups.problem(backup().copy(weeksDeleted = listOf(WeeklyMark("g", "2026-10-13")))))
         // A rule in use is one the app could have made.
         fun rule(rule: WeeklyRule) = backup().copy(instructions = listOf(Instruction("i", "weekly", at = now, state = InstructionStatus.Applied, changes = listOf(Change(ChangeType.Weekly, weekly = rule)), appliedAt = now)))
         assertNull(Backups.problem(rule(WeeklyRule("g", "Guitar practice", 180, listOf(2, 4), where = "home"))))

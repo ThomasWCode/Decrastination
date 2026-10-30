@@ -622,7 +622,7 @@ You asked for things like "I need to do 3 hours of guitar practice a week" to be
 1. **Next week's task is made ahead**, so the calendar has it a week ahead (D-39) and "no guitar next week" has something to delete; Work lists both.
 2. **Always `Kind.Revision`:** it earns nothing, as Q122 chose, and its pieces are spaced a day apart. Homework would ask for a photo.
 3. **The rule is a change of yours**, as `BusyTime` is every weekday, so *Your changes* is its list and *Take back* ends it, with no screen of its own.
-4. **A change to a rule holds from next week.** This week's is a task you or Felix can change as any (D-4).
+4. **A change to a rule holds from next week.** This week's is a task you or Felix can change as any (D-4), and so is a week not begun: one you or he changed stays as it is when the rule changes.
 5. **A rule's fields go in `eventKey`**, as a reminder's do (Q13: B), so the chat's grammar gains two names and no field.
 
 ### Not built

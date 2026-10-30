@@ -26,6 +26,7 @@ import com.thomaswcode.decrastination.core.SlotState
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.core.TaskItem
+import com.thomaswcode.decrastination.core.WeeklyMark
 import com.thomaswcode.decrastination.core.WeeklyRule
 import com.thomaswcode.decrastination.core.WeeklyRules
 import com.thomaswcode.decrastination.core.enriched
@@ -86,8 +87,8 @@ data class Backup(
     val felixStore: FelixStore = FelixStore(),
     /** The receipts of writes made to Gmail (4.3.0), while their Undo can stand, as the chat restored may undo them: none in a backup from before. */
     val gmailWrites: List<GmailWrite> = emptyList(),
-    /** Each rule of weekly work's last week made (D-124), so a week you deleted stays gone: none in a backup from before. */
-    val weeksMade: Map<String, String> = emptyMap(),
+    /** The weeks of weekly work you've deleted (D-124), so each stays gone: none in a backup from before. */
+    val weeksDeleted: List<WeeklyMark> = emptyList(),
     /**
      * The version of each store its parts come from, by file (docs/plan_v4/data-and-migrations.md §Versions and migrations): an
      * older one's parts are brought to this build's shapes as it's read ([Backups.decode]). None in a
@@ -105,7 +106,7 @@ data class Backup(
          * 4 since slots replaced sessions in the log (LR-09, AR-09), 5 with what's remembered
          * (AI-21), 6 with Felix's state, today's slots and the chat (AR-07), 7 with the chat's earlier
          * messages (4.0.0), 8 with Felix's notes and reminders (4.1.0), 9 with the receipts of writes to
-         * Gmail (4.3.0), 10 with the weeks of weekly work made (4.10.0): an older app refuses it rather than losing them.
+         * Gmail (4.3.0), 10 with the weeks of weekly work deleted (4.10.0): an older app refuses it rather than losing them.
          */
         const val FORMAT = 10
     }
@@ -262,7 +263,7 @@ object Backups {
                         w.onTime > w.finished || w.dated > w.finished || w.fullDays > 7 || w.minutes > 7 * DAY_MIN
                 } || log.weeks.map { it.week }.toSet().size != log.weeks.size
             ) add("a week's totals")
-            if (backup.weeksMade.any { (rule, week) -> rule.isBlank() || runCatching { LocalDate.parse(week) }.getOrNull()?.dayOfWeek != DayOfWeek.MONDAY }) add("a week of weekly work")
+            if (backup.weeksDeleted.any { it.rule.isBlank() || runCatching { LocalDate.parse(it.week) }.getOrNull()?.dayOfWeek != DayOfWeek.MONDAY }) add("a week of weekly work")
             val calibration = backup.calibration
             if (calibration.multipliers.values.any { !it.isFinite() || it !in Calibrator.MIN_MULTIPLIER..Calibrator.MAX_MULTIPLIER }) add("what the app learned about estimates")
             if (calibration.marginDays.values.any { it !in SettingsLimits.MARGIN_DAYS }) add("what the app learned about margins")
@@ -344,9 +345,9 @@ object Backups {
         backed.filter { b -> here.none { it.id == b.id && !(b.weekly != null && it.isOpen && WeeklyRules.doneMin(it) == 0) } }
             .map { it.copy(mine = Mine(sameAs = it.mine.sameAs)).enriched() }
 
-    /** [here] with [backed]'s weeks of weekly work made, the later of the two for each rule: a week deleted either side stays gone. */
-    fun mergedWeeks(here: Map<String, String>, backed: Map<String, String>): Map<String, String> =
-        (here.keys + backed.keys).associateWith { maxOf(here[it].orEmpty(), backed[it].orEmpty()) }
+    /** [here] with [backed]'s weeks of weekly work deleted: one deleted on either side stays gone. */
+    fun mergedWeeks(here: List<WeeklyMark>, backed: List<WeeklyMark>): List<WeeklyMark> =
+        (here + backed).distinctBy { it.rule to it.week }
 
     /** The most changes one instruction holds, as Claude's reading of one is held to. */
     private const val MAX_CHANGES = 40

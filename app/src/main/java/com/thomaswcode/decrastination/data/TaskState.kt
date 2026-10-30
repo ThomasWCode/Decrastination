@@ -4,6 +4,7 @@ import com.thomaswcode.decrastination.core.AnkiDay
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.Timetable
+import com.thomaswcode.decrastination.core.WeeklyMark
 import com.thomaswcode.decrastination.core.withIds
 import kotlinx.serialization.Serializable
 
@@ -27,8 +28,8 @@ data class TaskState(
      * come from it, and a failed read leaves it as it was.
      */
     val timetable: Timetable? = null,
-    /** Each rule of weekly work's last week made, its Monday (D-124): so a week you've deleted stays gone. */
-    val weeksMade: Map<String, String> = emptyMap(),
+    /** The weeks of weekly work you've deleted, still to come or under way (D-124): each stays gone, whatever becomes of its rule. */
+    val weeksDeleted: List<WeeklyMark> = emptyList(),
     /** The shape this is in ([Migration]): raised with each change of it, a migration bringing older files to it. */
     val version: Int = 4,
 ) {

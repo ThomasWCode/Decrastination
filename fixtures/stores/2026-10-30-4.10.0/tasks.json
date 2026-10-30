@@ -1109,7 +1109,8 @@
       "weekly": {
         "rule": "rule-1",
         "week": "2026-10-26",
-        "setAt": 1792083780000
+        "setAt": 1792083780000,
+        "drafted": "5e1f2a"
       }
     }
   ],
@@ -1270,8 +1271,13 @@
       }
     ]
   },
-  "weeksMade": {
-    "rule-1": "2026-11-02"
-  },
+  "weeksDeleted": [
+    {
+      "rule": "rule-1",
+      "week": "2026-11-02",
+      "setAt": 1792083780000,
+      "drafted": "5e1f2a"
+    }
+  ],
   "version": 4
 }
