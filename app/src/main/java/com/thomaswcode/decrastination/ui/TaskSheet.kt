@@ -60,6 +60,7 @@ import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.core.TaskItem
+import com.thomaswcode.decrastination.core.WeeklyRules
 import com.thomaswcode.decrastination.core.invite
 import com.thomaswcode.decrastination.enrich.Readings
 import com.thomaswcode.decrastination.enrich.RuleEnricher
@@ -208,7 +209,11 @@ fun TaskSheet(
             )
             if (!task.isOpen) {
                 Text(
-                    if (task.status == Status.Done) "Done ${task.doneAt?.let { Format.at(it, now, zone) }.orEmpty()}" else "Missed",
+                    when {
+                        task.status == Status.Done -> "Done ${task.doneAt?.let { Format.at(it, now, zone) }.orEmpty()}"
+                        task.weekly != null -> "Week over: ${Format.minutes(WeeklyRules.doneMin(task))} of ${Format.minutes(task.effortMin)}"
+                        else -> "Missed"
+                    },
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.Medium,
                 )
@@ -260,7 +265,7 @@ fun TaskSheet(
                 }
                 when {
                     own && task.isOpen -> Button(onClick = { scope.launch { sheet.finish(task) } }) { Text("All of it done") }
-                    own -> Button(onClick = { scope.launch { sheet.reopen(task) } }) { Text("Not done") }
+                    own && task.status == Status.Done -> Button(onClick = { scope.launch { sheet.reopen(task) } }) { Text("Not done") }
                 }
             }
             when {

@@ -13,12 +13,14 @@ import com.thomaswcode.decrastination.core.Proposal
 import com.thomaswcode.decrastination.core.ProposalState
 import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.core.Status
+import com.thomaswcode.decrastination.core.WeeklyRule
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 
 /**
@@ -104,6 +106,64 @@ class OwnTasksTest {
         h.ownTasks.saveOwnTask("mine", OwnTask(title = "Revise"))
         assertTrue(own().mine.notATask != null)
         assertNull(own().doneAt)
+    }
+
+    /** A rule of weekly work in use, as a card of Felix's leaves it. */
+    private suspend fun rule(rule: WeeklyRule, type: ChangeType = ChangeType.Weekly, id: String = "weekly-${rule.id}") {
+        h.stores.instructions.update { state ->
+            state.copy(instructions = state.instructions + Instruction(id, "weekly", at = h.clock.now(), state = InstructionStatus.Applied, changes = listOf(Change(type, weekly = rule)), appliedAt = h.clock.now()))
+        }
+    }
+
+    private fun weeks() = h.stores.tasks.value.tasks.filter { it.weekly != null }
+
+    @Test
+    fun `weekly work is made as its rule says, once, and goes when it's taken back`() = runBlocking {
+        val guitar = WeeklyRule("g", "Guitar practice", 180, setAt = h.clock.now())
+        rule(guitar)
+        h.ownTasks.rollWeeks()
+        h.ownTasks.rollWeeks()
+        // A Monday's rule: the whole of it, this week and next.
+        assertEquals(listOf("2026-10-19" to 180, "2026-10-26" to 180), weeks().map { it.weekly!!.week to it.effortMin })
+        assertEquals("2026-10-26", h.stores.tasks.value.weeksMade["g"])
+        // Taken back with nothing done: they go, and made again with it, they come back.
+        h.instructions.deleteInstruction("weekly-g")
+        h.ownTasks.rollWeeks()
+        assertEquals(emptyList(), weeks())
+        assertEquals(emptyMap(), h.stores.tasks.value.weeksMade)
+        rule(guitar)
+        h.ownTasks.rollWeeks()
+        assertEquals(2, weeks().size)
+    }
+
+    @Test
+    fun `a week's task deleted stays gone, and a week ended short is kept, closed, with no way to open it`() = runBlocking {
+        val guitar = WeeklyRule("g", "Guitar practice", 180, setAt = h.clock.now())
+        rule(guitar)
+        h.ownTasks.rollWeeks()
+        val (first, next) = weeks()
+        h.ownTasks.deleteOwnTask(next.id)
+        h.ownTasks.rollWeeks()
+        assertEquals(listOf(first.id), weeks().map { it.id })
+        h.stores.tasks.update { s -> s.copy(tasks = s.tasks.map { if (it.id == first.id) it.copy(workedMin = 60) else it }) }
+        h.clock.time = Fixtures.at("2026-10-26T07:00")
+        h.ownTasks.rollWeeks()
+        val closed = weeks().single { it.id == first.id }
+        assertEquals(Status.Missed, closed.status)
+        assertEquals(60, closed.workedMin)
+        h.ownTasks.reopenOwnTask(first.id)
+        assertEquals(Status.Missed, weeks().single { it.id == first.id }.status)
+        // The week deleted isn't made again; the one after it is.
+        assertEquals(listOf("2026-11-02"), weeks().filter { it.isOpen }.map { it.weekly!!.week })
+    }
+
+    @Test
+    fun `a rule's change comes in from the app's start`() = runBlocking {
+        h.ownTasks.start()
+        rule(WeeklyRule("g", "Guitar practice", 180, setAt = h.clock.now()))
+        val until = System.currentTimeMillis() + 5_000
+        while (weeks().size < 2 && System.currentTimeMillis() < until) delay(10)
+        assertEquals(2, weeks().size)
     }
 
     private companion object {
