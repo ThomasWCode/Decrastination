@@ -136,6 +136,12 @@ enum class ChangeType {
 
     /** A break outside at [Change.startMin] on [Change.date], whatever kind of day it is (D-116). */
     OutsideAdded,
+
+    /** Work every week, as [Change.weekly] says (D-124): a rule of that id already there is replaced. */
+    Weekly,
+
+    /** [Change.weekly]'s rule ended (D-124). */
+    WeeklyEnd,
 }
 
 /** One change an instruction makes. Which fields mean anything depends on [type]. */
@@ -182,6 +188,8 @@ data class Change(
     val alsoAllow: String? = null,
     /** [ChangeType.OutsideAt]'s and [ChangeType.NoOutside]'s break, by its own time (its `outsideTimes` minute); -1, none, or all of a NoOutside's day. */
     val outsideMin: Int = -1,
+    /** [ChangeType.Weekly]'s rule, or the one [ChangeType.WeeklyEnd] ends, as it was (D-124). */
+    val weekly: WeeklyRule? = null,
 )
 
 /** Your instructions. Kept in `instructions.json`. */
@@ -189,7 +197,7 @@ data class Change(
 data class InstructionState(
     val instructions: List<Instruction> = emptyList(),
     /** The shape this is in ([com.thomaswcode.decrastination.data.Migration]): raised with each change of it. */
-    val version: Int = 5,
+    val version: Int = 6,
 ) {
     /** Every step a change holds with an id ([withIds]): given as it's first stored, so the task steps it's laid as keep it. */
     fun withStepIds(): InstructionState {
@@ -550,6 +558,8 @@ object InstructionRules {
             ChangeType.OutsideAt -> "${day(change)}: the ${clock(change.outsideMin)} break outside at ${clock(change.startMin)}"
             ChangeType.NoOutside -> if (change.outsideMin < 0) "${day(change)}: no breaks outside" else "${day(change)}: no ${clock(change.outsideMin)} break outside"
             ChangeType.OutsideAdded -> "${day(change)}: a break outside at ${clock(change.startMin)}"
+            ChangeType.Weekly -> change.weekly?.let(::weeklyLine) ?: "Work every week"
+            ChangeType.WeeklyEnd -> "“${change.weekly?.title ?: "A weekly rule"}” no longer comes round every week"
         }
     }
 
@@ -573,6 +583,14 @@ object InstructionRules {
         ChangeType.NoSchool -> change.date?.let { from -> NoSchool(from, maxOf(from, change.endDate ?: from)) }
         ChangeType.HalfDay -> change.date?.let { date -> change.endMin?.let { HalfDay(date, it) } }
         else -> null
+    }
+
+    /** [rule] in a line: what, how much a week, on which days or in what sessions, and where. */
+    fun weeklyLine(rule: WeeklyRule): String = buildString {
+        append("“${rule.title}”: ${hours(rule.minutes)} a week")
+        if (rule.days.isNotEmpty()) append(", " + rule.days.joinToString(", ") { DayOfWeek.of(it).getDisplayName(TextStyle.SHORT, Locale.UK) })
+        else if (rule.sessionMin > 0) append(", in ${hours(rule.sessionMin)} sessions")
+        if (rule.where == "home") append(", at home")
     }
 
     private fun clock(minutes: Int?): String = minutes?.let { "%02d:%02d".format(Locale.UK, it / 60, it % 60) } ?: "?"

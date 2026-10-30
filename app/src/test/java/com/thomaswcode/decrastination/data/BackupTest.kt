@@ -35,12 +35,16 @@ import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.SlotState
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Speaker
+import com.thomaswcode.decrastination.core.Status
+import com.thomaswcode.decrastination.core.WeeklyRule
+import com.thomaswcode.decrastination.core.WeeklyRules
 import com.thomaswcode.decrastination.core.Window
 import com.thomaswcode.decrastination.core.WindowKind
 import com.thomaswcode.decrastination.core.yours
 import com.thomaswcode.decrastination.enrich.AiUsage
 import java.io.ByteArrayInputStream
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -290,6 +294,19 @@ class BackupTest {
         assertNotNull(Backups.problem(backup().copy(ownTasks = listOf(mine.copy(stepsPerDay = 0)))))
         assertNotNull(Backups.problem(backup().copy(ownTasks = listOf(mine.copy(derived = true)))))
         assertNotNull(Backups.problem(backup().copy(ownTasks = listOf(mine.copy(extra = mapOf("from" to "x"))))))
+        // A week of weekly work closed short is the one miss of yours there is (D-124); its week has to read.
+        val week = WeeklyRules.make(WeeklyRule("g", "Guitar practice", 180, setAt = now), LocalDate.parse("2026-10-05"), now, ZoneId.of("UTC"))!!.copy(status = Status.Missed, doneAt = now)
+        assertNull(Backups.problem(backup().copy(ownTasks = listOf(week))))
+        assertNotNull(Backups.problem(backup().copy(ownTasks = listOf(week.copy(weekly = week.weekly!!.copy(week = "soon"))))))
+        assertNotNull(Backups.problem(backup().copy(ownTasks = listOf(mine.copy(status = Status.Missed)))))
+        // A rule in use is one the app could have made.
+        fun rule(rule: WeeklyRule) = backup().copy(instructions = listOf(Instruction("i", "weekly", at = now, state = InstructionStatus.Applied, changes = listOf(Change(ChangeType.Weekly, weekly = rule)), appliedAt = now)))
+        assertNull(Backups.problem(rule(WeeklyRule("g", "Guitar practice", 180, listOf(2, 4), where = "home"))))
+        assertNotNull(Backups.problem(rule(WeeklyRule("g", " ", 180))))
+        assertNotNull(Backups.problem(rule(WeeklyRule("g", "Guitar practice", 0))))
+        assertNotNull(Backups.problem(rule(WeeklyRule("g", "Guitar practice", 180, listOf(8)))))
+        assertNotNull(Backups.problem(rule(WeeklyRule("g", "Guitar practice", 180, sessionMin = 1))))
+        assertNotNull(Backups.problem(backup().copy(instructions = listOf(Instruction("i", "weekly", at = now, state = InstructionStatus.Applied, changes = listOf(Change(ChangeType.Weekly)), appliedAt = now)))))
         // A backup of this version is one an older version refuses whole, not one it restores without them.
         assertTrue(Backup.FORMAT > 1)
         val laid = mine.yours(dueAt = now + 3 * 86_400_000L, notATask = true).let { it.copy(dueAt = it.mine.dueAt?.value) }

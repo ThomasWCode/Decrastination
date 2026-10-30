@@ -27,8 +27,10 @@ data class TaskState(
      * come from it, and a failed read leaves it as it was.
      */
     val timetable: Timetable? = null,
+    /** Each rule of weekly work's last week made, its Monday (D-124): so a week you've deleted stays gone. */
+    val weeksMade: Map<String, String> = emptyMap(),
     /** The shape this is in ([Migration]): raised with each change of it, a migration bringing older files to it. */
-    val version: Int = 3,
+    val version: Int = 4,
 ) {
     val open: List<TaskItem> get() = tasks.filter { it.isOpen }
 

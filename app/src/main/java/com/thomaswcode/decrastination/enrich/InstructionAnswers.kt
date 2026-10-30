@@ -10,6 +10,9 @@ import com.thomaswcode.decrastination.core.OwnStep
 import com.thomaswcode.decrastination.core.OwnTaskRules
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
+import com.thomaswcode.decrastination.core.WeeklyRule
+import com.thomaswcode.decrastination.core.WeeklyRules
+import com.thomaswcode.decrastination.core.newStepId
 import com.thomaswcode.decrastination.learn.CalendarEvent
 import com.thomaswcode.decrastination.learn.EventJudge
 import java.time.DayOfWeek
@@ -87,7 +90,7 @@ object InstructionAnswers {
      * listed, the [events] too, and every date and time must read and be plausible. One change that
      * can't be made and none are: you're told why, and can write it again.
      */
-    fun parse(text: String, tasks: List<TaskItem>, events: List<CalendarEvent>, about: About, now: Long, zone: ZoneId, breaksOn: (LocalDate) -> DayBreaks = { DayBreaks.NONE }): Reading {
+    fun parse(text: String, tasks: List<TaskItem>, events: List<CalendarEvent>, about: About, now: Long, zone: ZoneId, breaksOn: (LocalDate) -> DayBreaks = { DayBreaks.NONE }, rules: List<WeeklyRule> = emptyList()): Reading {
         val answer = runCatching { json.decodeFromString(Answer.serializer(), text) }.getOrNull()
             ?: return Reading.Unclear("Claude's answer couldn't be read")
         if (!answer.understood || answer.changes.isEmpty()) {
@@ -104,7 +107,7 @@ object InstructionAnswers {
         val due = projected(given, byId, now, zone)
         val changes = given.map { g ->
             val against = if (g.type == ChangeType.Steps.name) due else byId
-            change(g, against, titles, now, zone, breaks)?.also(breaks::take) ?: return Reading.Unclear("Claude's reading couldn't be used: ${problem(g, against, titles, now, zone, breaks)}", answer.answersQuestion)
+            change(g, against, titles, now, zone, breaks, rules)?.also(breaks::take) ?: return Reading.Unclear("Claude's reading couldn't be used: ${problem(g, against, titles, now, zone, breaks)}", answer.answersQuestion)
         }
         stepsProblem(changes, byId)?.let { return Reading.Unclear("Claude's reading couldn't be used: $it", answer.answersQuestion) }
         // Tasks waiting on each other in a circle within this one reading: none would ever be planned.
@@ -114,9 +117,9 @@ object InstructionAnswers {
 
     /**
      * [g] as a change the app can make, checked against the [tasks] and [events] there are, and for a day's breaks outside
-     * against those it has ([breaksOn]); null if it can't be.
+     * against those it has ([breaksOn]), and a weekly rule against the [rules] in force; null if it can't be.
      */
-    internal fun change(g: Given, tasks: Map<String, TaskItem>, events: Map<String, String>, now: Long, zone: ZoneId, breaksOn: (LocalDate) -> DayBreaks = { DayBreaks.NONE }): Change? {
+    internal fun change(g: Given, tasks: Map<String, TaskItem>, events: Map<String, String>, now: Long, zone: ZoneId, breaksOn: (LocalDate) -> DayBreaks = { DayBreaks.NONE }, rules: List<WeeklyRule> = emptyList()): Change? {
         val type = ChangeType.entries.firstOrNull { it.name == g.type } ?: return null
         val task = g.taskId?.takeIf { it in tasks }
         return when (type) {
@@ -229,7 +232,36 @@ object InstructionAnswers {
                 } ?: return null
                 Change(type, taskId = id, steps = steps)
             }
+            // Work every week (D-124), a new rule or a listed one changed; and a listed one ended.
+            ChangeType.Weekly -> weeklyRule(g, rules, now)?.let { Change(type, weekly = it) }
+            ChangeType.WeeklyEnd -> rules.firstOrNull { it.id == g.afterTaskId }?.let { Change(type, weekly = it) }
         }
+    }
+
+    /** The days a Weekly's `days` names, by a day's first three letters; `every` for all of them; null if one doesn't read. */
+    private fun weekdays(text: String): List<Int>? = if (text.trim().equals("every", ignoreCase = true)) (1..7).toList() else text.split(',').map { name ->
+        DayOfWeek.entries.firstOrNull { it.name.take(3).equals(name.trim().take(3), ignoreCase = true) && name.trim().length >= 3 }?.value ?: return null
+    }.distinct().sorted()
+
+    /**
+     * [g], a Weekly change, as a rule: its [Given.title] and [Given.minutes] the week's whole, and in its [Given.eventKey] what
+     * else was said, as kind:value joined by semicolons (`days`, `session`, `where`, `subject`). With [Given.afterTaskId] it
+     * changes that listed rule, keeping all it doesn't say. Null if it can't be kept.
+     */
+    private fun weeklyRule(g: Given, rules: List<WeeklyRule>, now: Long): WeeklyRule? {
+        val old = g.afterTaskId?.let { id -> rules.firstOrNull { it.id == id } ?: return null }
+        if (old == null && rules.size >= WeeklyRules.MAX_RULES) return null
+        val said = g.eventKey.orEmpty().split(';').map { it.trim() }.filter { it.isNotEmpty() }.associate { part ->
+            part.substringBefore(':').trim().lowercase() to part.substringAfter(':', "").trim()
+        }
+        if (said.keys.any { it !in setOf("days", "session", "where", "subject") }) return null
+        val title = g.title.trim().take(WeeklyRules.MAX_TITLE).ifEmpty { old?.title ?: return null }
+        val minutes = (g.minutes ?: old?.minutes)?.takeIf { it in WeeklyRules.MINUTES } ?: return null
+        val days = said["days"]?.let { weekdays(it) ?: return null } ?: old?.days.orEmpty()
+        val session = said["session"]?.let { it.toIntOrNull()?.takeIf { min -> min in WeeklyRules.SESSION } ?: return null } ?: old?.sessionMin ?: 0
+        val where = said["where"]?.takeIf { it == "home" || it == "anywhere" } ?: if ("where" in said) return null else old?.where ?: "anywhere"
+        val subject = said["subject"]?.take(OwnTaskRules.MAX_CLASS)?.takeIf { it.isNotEmpty() } ?: old?.subject
+        return WeeklyRule(old?.id ?: newStepId(), title, minutes, days, session, where, subject, setAt = now)
     }
 
     /**
@@ -267,6 +299,8 @@ object InstructionAnswers {
     /** Why [g] couldn't be used, in words. */
     internal fun problem(g: Given, tasks: Map<String, TaskItem>, events: Map<String, String>, now: Long = 0, zone: ZoneId = ZoneId.of("UTC"), breaksOn: (LocalDate) -> DayBreaks = { DayBreaks.NONE }): String = when {
         g.type in setOf("OutsideAt", "NoOutside", "OutsideAdded") -> breakProblem(g, now, zone, breaksOn)
+        g.type == "Weekly" -> "a weekly rule needs a name, its week's minutes (5 minutes to 60 hours) and days or sessions that read, and any it changes listed, with at most ${WeeklyRules.MAX_RULES} of them"
+        g.type == "WeeklyEnd" -> "it names a weekly rule that isn't listed"
         ChangeType.entries.none { it.name == g.type } -> "a change of a kind the app doesn't make"
         g.type in setOf("NotATask", "StartFrom", "DueBy", "Minutes", "After", "OnDay", "AtTime", "Steps", "SameAs", "Rename", "DayOnly") && g.taskId !in tasks -> "it names a task that isn't listed"
         g.type == "DayOnly" && g.date == null -> "a day only for some tasks takes a date"

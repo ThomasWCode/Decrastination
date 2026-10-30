@@ -26,6 +26,8 @@ import com.thomaswcode.decrastination.core.SlotState
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.core.TaskItem
+import com.thomaswcode.decrastination.core.WeeklyRule
+import com.thomaswcode.decrastination.core.WeeklyRules
 import com.thomaswcode.decrastination.core.enriched
 import com.thomaswcode.decrastination.enrich.AiUsage
 import com.thomaswcode.decrastination.learn.AnkiProgress
@@ -319,11 +321,11 @@ object Backups {
             task.sourceProgress == 0.0 && (task.firstProgress ?: 0.0) == 0.0 &&
             task.availableFrom == null && task.sourceValues?.availableFrom == null &&
             // Nor anything else only a source gives (an Anki deck's day's cards, the enrichment's
-            // estimate, a source's extras), nor a miss, which only a source's counts can make.
+            // estimate, a source's extras), nor a miss, which only a source's counts and a week's end can make (D-124).
             task.stepsPerDay == null && !task.derived && task.aiEffortMin == null &&
             // Its one extra of yours: where it's done, when that's at home (PL-15).
             task.extra.keys.all { it == OwnTaskRules.EXTRA_WHERE } && task.extra[OwnTaskRules.EXTRA_WHERE].let { it == null || it == "home" } &&
-            task.status != Status.Missed && task.photosCounted.values.all { it in minutes } &&
+            (task.status != Status.Missed || task.weekly != null) && task.weekly?.let { runCatching { LocalDate.parse(it.week) }.isSuccess } != false && task.photosCounted.values.all { it in minutes } &&
             task.subSteps.all { it.timedMin in minutes } &&
             task.enrichment == null &&
             OwnTaskRules.problem(OwnTaskRules.draftOf(task)) == null
@@ -384,9 +386,17 @@ object Backups {
                 ChangeType.OutsideAt -> isDate(change.date) && change.outsideMin in 0 until DAY_MIN && change.startMin in 0 until DAY_MIN
                 ChangeType.NoOutside -> isDate(change.date) && (change.outsideMin == -1 || change.outsideMin in 0 until DAY_MIN)
                 ChangeType.OutsideAdded -> isDate(change.date) && change.startMin in 0 until DAY_MIN
+                // Work every week (D-124): a rule as the app makes one, or the one ended.
+                ChangeType.Weekly, ChangeType.WeeklyEnd -> change.weekly?.let(::wellFormed) == true
             }
         }
     }
+
+    /** Whether [rule] is one this app could have made: an id, a name, a week's minutes, days of the week and a session in range. */
+    private fun wellFormed(rule: WeeklyRule): Boolean =
+        rule.id.isNotBlank() && rule.title.isNotBlank() && rule.title.length <= WeeklyRules.MAX_TITLE && rule.minutes in WeeklyRules.MINUTES &&
+            rule.days.all { it in 1..7 } && rule.days.size <= rule.minutes && (rule.sessionMin == 0 || rule.sessionMin in WeeklyRules.SESSION) &&
+            rule.where in setOf("anywhere", "home") && (rule.subject?.length ?: 0) <= OwnTaskRules.MAX_CLASS
 
     private fun isDate(text: String?): Boolean = text != null && runCatching { LocalDate.parse(text) }.isSuccess
 
