@@ -20,7 +20,8 @@ test("the grid keeps your place when the page is asked for again", async ({ page
   await expect(grid).toBeVisible();
   const line = grid.locator("i.now");
   const before = await line.evaluate((element) => (element as HTMLElement).style.top);
-  await grid.evaluate((element) => element.scrollTo({ top: 7 }));
+  // At once: the grid scrolls smoothly, and a test reading it mid-way reads neither end.
+  await grid.evaluate((element) => element.scrollTo({ top: 7, behavior: "instant" }));
   await page.clock.runFor(61_000);
   // The new minute drawn, so the page has taken the new answer in.
   await expect.poll(() => line.evaluate((element) => (element as HTMLElement).style.top)).not.toBe(before);
