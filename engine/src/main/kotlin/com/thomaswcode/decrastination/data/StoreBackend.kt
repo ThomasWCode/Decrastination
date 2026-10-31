@@ -1,0 +1,68 @@
+package com.thomaswcode.decrastination.data
+
+import java.io.File
+
+/**
+ * Where a store's text is kept: a file a store on the phone ([FileBackend]), a row on the server. A
+ * [JsonStore] holds the state, its version and its migrations; this holds the text, and the copies of it
+ * that outlast a change (docs/plan_web/data-and-sync.md §The store backend).
+ */
+interface StoreBackend {
+    /** Store [name]'s text: null where it has none, a failure where it can't be read. */
+    fun read(name: String): String?
+
+    /** [text], of the state's [version], as store [name]'s, whole or not at all. */
+    fun write(name: String, version: Int, text: String)
+
+    /** The stores it holds, by name. */
+    fun names(): List<String>
+
+    /** Store [name]'s text as it is, kept under older shape [from] before a migration writes over it, dated [now]. */
+    fun keepShape(name: String, from: Int, now: Long)
+
+    /** A copy set aside already of store [name] that holds what it holds now: it's been kept, and said. Its name, or null. */
+    fun alreadyAside(name: String): String?
+
+    /** Store [name]'s text set aside as one that can't be read, dated [now]. The copy's name, or null if it couldn't be made. */
+    fun setAside(name: String, now: Long): String?
+
+    /** The copies kept of store [name] let go, an older shape's and those that couldn't be read, so what's cleared can't come back from one. */
+    fun letGoOfCopies(name: String)
+}
+
+/** The stores as files in [dir], each written to a temporary file that's renamed over the real one. */
+class FileBackend(private val dir: File) : StoreBackend {
+    private fun fileOf(name: String) = File(dir, name)
+
+    override fun read(name: String): String? = fileOf(name).takeIf { it.exists() }?.readText()
+
+    override fun write(name: String, version: Int, text: String) {
+        val file = fileOf(name)
+        val parent = requireNotNull(file.absoluteFile.parentFile) { "A store needs a parent directory" }
+        parent.mkdirs()
+        val tmp = File(parent, "$name.tmp")
+        tmp.writeText(text)
+        JsonStore.moveOver(tmp, file)
+    }
+
+    override fun names(): List<String> = dir.list().orEmpty().filter { it.endsWith(".json") }
+
+    override fun keepShape(name: String, from: Int, now: Long) {
+        val file = fileOf(name)
+        val old = File(file.absoluteFile.parentFile, "$name.v$from")
+        if (!old.exists()) {
+            file.copyTo(old)
+            old.setLastModified(now)
+        }
+    }
+
+    override fun alreadyAside(name: String): String? = JsonStore.alreadyAside(fileOf(name))?.name
+
+    override fun setAside(name: String, now: Long): String? = JsonStore.setAside(fileOf(name), now)?.name
+
+    override fun letGoOfCopies(name: String) {
+        fileOf(name).absoluteFile.parentFile?.listFiles { f -> f.isFile && JsonStore.isCopy(name, f.name) }.orEmpty().forEach { f ->
+            if (!f.delete() && f.exists()) runCatching { f.writeText("") }
+        }
+    }
+}

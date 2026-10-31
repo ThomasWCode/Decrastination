@@ -25,8 +25,8 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 
 /**
- * One piece of the app's state, kept in a JSON file and exposed as a [StateFlow], the way the
- * Teams widget keeps its own (its `AssignmentStore`).
+ * One piece of the app's state, kept as JSON by a [StoreBackend] (a file on the phone) and exposed as a
+ * [StateFlow], the way the Teams widget keeps its own (its `AssignmentStore`).
  *
  * Everything that reads or changes it (the sync, the focus service, the widget, the screens)
  * runs in the app's one process and shares one instance. [update] serialises changes; each is
@@ -45,7 +45,9 @@ import kotlinx.serialization.json.jsonObject
  * Read as it's made, unless [lazily]: then when it's first wanted.
  */
 class JsonStore<T>(
-    private val file: File,
+    private val backend: StoreBackend,
+    /** Its name there: `tasks.json`. */
+    val name: String,
     private val serializer: KSerializer<T>,
     private val default: () -> T,
     /** Tidies a state as loaded: drops what has expired, fixes what a crash left half done. */
@@ -63,14 +65,24 @@ class JsonStore<T>(
      */
     private val lazily: Boolean = false,
 ) {
-    /** Its file's name: `tasks.json`. */
-    val name: String get() = file.name
+    /** Kept in [file], as every store on the phone is. */
+    constructor(
+        file: File,
+        serializer: KSerializer<T>,
+        default: () -> T,
+        onLoad: (T) -> T = { it },
+        onWrite: (T) -> T = { it },
+        unreadable: () -> T = default,
+        clock: () -> Long = System::currentTimeMillis,
+        migrations: List<Migration> = emptyList(),
+        lazily: Boolean = false,
+    ) : this(requireNotNull(file.absoluteFile.parentFile) { "A store needs a parent directory" }.let(::FileBackend), file.name, serializer, default, onLoad, onWrite, unreadable, clock, migrations, lazily)
 
     /** The state's version now: its default's (1 for a state that keeps none). */
     val version: Int = (json.encodeToJsonElement(serializer, default()) as? JsonObject)?.let(Migration::versionOf) ?: 1
 
     init {
-        require(Migration.complete(version, migrations)) { "${file.name}: migrations from 1 to $version, each once, not ${migrations.map { it.from }}" }
+        require(Migration.complete(version, migrations)) { "$name: migrations from 1 to $version, each once, not ${migrations.map { it.from }}" }
     }
 
     private val mutex = Mutex()
@@ -130,9 +142,7 @@ class JsonStore<T>(
      * deleted, or, where that fails, emptied, as the archive's months are, so what's cleared can't come back from it.
      */
     suspend fun letGoOfCopies(): Unit = withContext(Dispatchers.IO) {
-        file.absoluteFile.parentFile?.listFiles { f -> f.isFile && isCopy(file.name, f.name) }.orEmpty().forEach { f ->
-            if (!f.delete() && f.exists()) runCatching { f.writeText("") }
-        }
+        backend.letGoOfCopies(name)
     }
 
     /**
@@ -148,8 +158,7 @@ class JsonStore<T>(
     }
 
     private fun load(): T {
-        if (!file.exists()) return default()
-        val text = runCatching { file.readText() }.getOrNull()
+        val text = runCatching { backend.read(name) ?: return default() }.getOrNull()
         val tree = text?.let { runCatching { json.parseToJsonElement(it) as? JsonObject }.getOrNull() }
         // An older shape brought to this one first; null where it's newer, a step is missing, or one fails
         // on what the file holds (it's then set aside, as any file that can't be read, not a crash at every start).
@@ -162,10 +171,10 @@ class JsonStore<T>(
         }
         // Set aside under its own name, so a second time can't overwrite the first; not again where
         // it's there already as it is (a start cut short before it was said).
-        val aside = alreadyAside(file) ?: setAside(file, clock())
+        val aside = backend.alreadyAside(name) ?: backend.setAside(name, clock())
         // What can be kept: of the shape it was brought to, or, newer than this build, of itself.
         val salvaged = (upgraded ?: tree)?.let(::salvage)
-        problem = Unreadable(file.name, aside?.name, kept = salvaged != null, at = clock())
+        problem = Unreadable(name, aside, kept = salvaged != null, at = clock())
         // What was kept replaces it once it's safe beside it, and said ([keepRecovered]). Only where it
         // was read and couldn't be decoded, which would happen again: not where reading it failed
         // (that can pass, and the file is then still good), nor where the copy failed (then the bad
@@ -181,12 +190,8 @@ class JsonStore<T>(
      * leaves the file as it was: the next update writes the new shape, and it's brought again till then.
      */
     private fun keepOldShape(from: Int, loaded: T) {
-        val old = File(file.absoluteFile.parentFile, "${file.name}.v$from")
         runCatching {
-            if (!old.exists()) {
-                file.copyTo(old)
-                old.setLastModified(clock())
-            }
+            backend.keepShape(name, from, clock())
             write(loaded)
         }
     }
@@ -207,13 +212,7 @@ class JsonStore<T>(
         return if (kept == base) null else json.decodeFromJsonElement(serializer, kept)
     }
 
-    private fun write(value: T) {
-        val dir = requireNotNull(file.absoluteFile.parentFile) { "A store needs a parent directory" }
-        dir.mkdirs()
-        val tmp = File(dir, "${file.name}.tmp")
-        tmp.writeText(json.encodeToString(serializer, value))
-        moveOver(tmp, file)
-    }
+    private fun write(value: T) = backend.write(name, version, json.encodeToString(serializer, value))
 
     /** A file that couldn't be read whole: its name, its copy's (null if even that failed), and whether some of it was kept. */
     @Serializable
