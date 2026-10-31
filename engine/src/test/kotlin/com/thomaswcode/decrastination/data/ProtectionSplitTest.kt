@@ -119,6 +119,14 @@ class ProtectionSplitTest {
     }
 
     @Test
+    fun `pairs with no tasks file yet go into a new one, which every migration then brings on`() {
+        file("runtime.json").writeText("""{"notSame":["a|b"],"version":3}""")
+        val stores = stores()
+        assertEquals(listOf("a|b"), stores.tasks.value.notSame)
+        assertEquals(5, stores.tasks.value.version)
+    }
+
+    @Test
     fun `no pairs leave the tasks as they are`() {
         file("runtime.json").writeText("""{"notSame":[],"version":3}""")
         file("tasks.json").writeText("""{"tasks":[],"version":4}""")
