@@ -1,0 +1,72 @@
+# The whole deployment: the server, Caddy in front of it with the website, and Litestream beside it.
+#
+# Lives at /opt/decrastination on the box, next to .env (its secrets), litestream.yml and data/.
+# The images are built by GitHub Actions and pulled here by a systemd timer, so a merge to main
+# becomes a running server without anybody logging in. Each service is given only the secrets it uses.
+services:
+  server:
+    image: ghcr.io/thomaswcode/decrastination-server:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN in .env}
+      DATA_DIR: /data
+      PORT: "8080"
+      MASTER_KEY: ${MASTER_KEY:?set MASTER_KEY in .env}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:?set GITHUB_CLIENT_ID in .env}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:?set GITHUB_CLIENT_SECRET in .env}
+      ALLOWED_GITHUB_USER_ID: ${ALLOWED_GITHUB_USER_ID:?set ALLOWED_GITHUB_USER_ID in .env}
+    expose:
+      - "8080"
+    volumes:
+      - ./data:/data
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+    # -Xmx1g in the image, with room for its metaspace, threads and SQLite.
+    mem_limit: 1536m
+    stop_grace_period: 30s
+
+  web:
+    image: ghcr.io/thomaswcode/decrastination-web:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    user: "1000:1000"
+    depends_on:
+      - server
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN in .env}
+    volumes:
+      - ./caddy/data:/data
+      - ./caddy/config:/config
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
+    mem_limit: 128m
+
+  # The sidecar pattern: both see the same local volume and kernel, so SQLite's locks hold between them.
+  litestream:
+    image: litestream/litestream:0.5
+    restart: unless-stopped
+    user: "1000:1000"
+    command: replicate
+    environment:
+      R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:?set R2_ACCOUNT_ID in .env}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:?set R2_ACCESS_KEY_ID in .env}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:?set R2_SECRET_ACCESS_KEY in .env}
+      R2_BUCKET: ${R2_BUCKET:?set R2_BUCKET in .env}
+    volumes:
+      - ./data:/data
+      - ./litestream.yml:/etc/litestream.yml:ro
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
+    mem_limit: 128m
