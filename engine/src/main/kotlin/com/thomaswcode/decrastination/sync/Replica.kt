@@ -111,9 +111,10 @@ class Replica(
 
     /**
      * The commands waiting sent, in order, and the stores changed since the last pull taken in their place (docs/spec/sync.md).
-     * What's been answered leaves the outbox; a command the server dropped is said. A pull that follows no answer isn't made,
-     * so what's still waiting can't be applied on top of a state that already holds it. A store newer than this build
-     * can read stops the pull whole: the stores change together, and half of them new is worse than all of them old.
+     * What's been answered leaves the outbox; a command the server dropped is said. A pull that follows no answer isn't made, and
+     * one that finds a command made meanwhile isn't taken: stores are replaced only with nothing waiting ([Commands.replacing]).
+     * A store newer than this build can read stops the pull whole: the stores change together, and half of them new is worse than
+     * all of them old.
      */
     private suspend fun exchange(): Boolean {
         val token = stores.secrets[Secret.DeviceToken] ?: return false
@@ -146,7 +147,8 @@ class Replica(
                     if (ChatArchiveStore.isMonth(store.name)) stores.chatArchive.adopt(store.name, store.version, text) else here.getValue(store.name).adopt(store.version, text)
                 }
             }
-            if (commands != null) commands.replacing(adopt) else adopt()
+            // A command made since this began: its turn first, and this pull's asked for again after it.
+            if (commands == null) adopt() else if (!commands.replacing(adopt)) return true
             sync.update { it.copy(revision = pulled.revision, lastSyncAt = clock.now(), lastError = null, refused = emptyList()) }
             return true
         } catch (failed: IOException) {

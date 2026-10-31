@@ -1,6 +1,13 @@
 package com.thomaswcode.decrastination.server
 
+import com.thomaswcode.decrastination.core.About
+import com.thomaswcode.decrastination.core.Change
+import com.thomaswcode.decrastination.core.ChangeType
+import com.thomaswcode.decrastination.core.ChatArchive
+import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.core.OwnTask
+import com.thomaswcode.decrastination.core.Speaker
+import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.SecretCipher
 import com.thomaswcode.decrastination.data.Secret
 import com.thomaswcode.decrastination.data.CalendarRead
@@ -9,6 +16,8 @@ import com.thomaswcode.decrastination.data.SyncState
 import com.thomaswcode.decrastination.net.Http
 import com.thomaswcode.decrastination.net.HttpResponse
 import com.thomaswcode.decrastination.sync.Replica
+import com.thomaswcode.decrastination.sync.protocol.AddOwnChange
+import com.thomaswcode.decrastination.sync.protocol.ClearChat
 import com.thomaswcode.decrastination.sync.protocol.Command
 import com.thomaswcode.decrastination.sync.protocol.CommandBatch
 import com.thomaswcode.decrastination.sync.protocol.DeleteOwnTask
@@ -188,6 +197,41 @@ class SyncHarnessTest {
         assertTrue(phone.replica.upload())
         assertEquals(setOf("Essay", "Maths"), serverTitles)
         assertEquals(0, phone.waiting)
+    }
+
+    @Test
+    fun `a pull isn't taken over a command waiting, which it couldn't take out, and comes in once that's gone`() = runBlocking {
+        val one = phone("one")
+        val two = phone("two")
+        one.h.commands.act(own("Essay"))
+        one.replica.upload()
+        two.replica.upload()
+        one.h.commands.act(own("Maths"))
+        one.replica.upload()
+        val revision = two.h.stores.sync.value.revision
+        // A store the pull doesn't hold, and a change that adds a row each time it's applied.
+        val change = AddOwnChange("i", "words", About(taskId = "own:s-Essay"), Change(ChangeType.OnDay, taskId = "own:s-Essay", date = "2026-11-02"))
+        two.wire.duringPull = { runBlocking { two.h.commands.act(change) } }
+        assertTrue(two.replica.upload())
+        assertEquals(setOf("Essay"), two.titles, "not taken yet")
+        assertEquals(1, two.h.stores.instructions.value.instructions.size, "made once")
+        assertEquals(revision, two.h.stores.sync.value.revision, "so it's asked for again")
+        assertTrue(two.replica.upload())
+        assertEquals(setOf("Essay", "Maths"), two.titles)
+        assertEquals(1, two.h.stores.instructions.value.instructions.size)
+    }
+
+    @Test
+    fun `a chat cleared on the server goes from a phone, and leaves it no empty month`() = runBlocking {
+        val phone = phone()
+        val month = "chat-archive-2026-10.json"
+        val words = ChatArchive(listOf(ChatMessage("a", Speaker.Felix, "words", 1_792_000_000_000L)))
+        graph.backend.keep(month, words.version, JsonStore.json.encodeToString(ChatArchive.serializer(), words))
+        assertTrue(phone.replica.upload())
+        assertEquals(listOf(month), phone.h.stores.chatArchive.texts().map { it.name })
+        graph.applier.apply(CommandBatch(listOf(Command("clear", 1_792_000_000_000L, ClearChat))), "website")
+        assertTrue(phone.replica.upload())
+        assertEquals(emptyList(), phone.h.stores.chatArchive.texts().map { it.name })
     }
 
     @Test

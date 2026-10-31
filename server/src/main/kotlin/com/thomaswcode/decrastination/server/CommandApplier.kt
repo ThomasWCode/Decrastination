@@ -35,10 +35,12 @@ class CommandApplier(
     suspend fun apply(batch: CommandBatch, device: String): List<Outcome> = withContext(NonCancellable) { batch.commands.map { one(it, device) } }
 
     private suspend fun one(command: Command, device: String): Outcome {
-        recorded(command.id)?.let { return it }
-        val before = db.currentRevision()
+        var before = 0L
         val outcome = try {
             db.command {
+                before = db.currentRevision()
+                // Inside, not ahead of it: a retry racing its first send waits here, and finds what came of it.
+                recorded(command.id)?.let { return@command it }
                 backend.cause = command.id
                 val stale = command.action.stale(owners)
                 if (stale == null) commands.apply(command)
@@ -50,10 +52,12 @@ class CommandApplier(
         } catch (failed: Exception) {
             // What it left in memory goes with the rollback, and it's on record as dropped, so a retry isn't tried again for ever.
             Log.w(Log.TAG, "A command failed: ${failed::class.simpleName} at ${failed.stackTrace.firstOrNull { it.className.startsWith("com.thomaswcode") }}")
-            reload()
-            Outcome(command.id, Outcome.DROPPED, "It couldn't be applied", db.currentRevision()).also { record(command, device, it) }
+            db.command {
+                reload()
+                recorded(command.id) ?: Outcome(command.id, Outcome.DROPPED, "It couldn't be applied", db.currentRevision()).also { record(command, device, it) }
+            }
         }
-        if (outcome.revision != before) committed(outcome.revision)
+        if (outcome.revision > before) committed(outcome.revision)
         return outcome
     }
 

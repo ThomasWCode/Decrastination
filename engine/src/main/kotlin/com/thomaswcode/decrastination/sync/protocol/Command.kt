@@ -115,12 +115,15 @@ class Commands(
         }
     }
 
-    /** [replace] with no command let in, then every command still waiting applied again on top, so a pull takes nothing you've done from the screen. */
-    suspend fun replacing(replace: suspend () -> Unit) {
-        gate.withLock {
-            replace()
-            outbox?.value?.commands?.forEach { apply(it.command) }
-        }
+    /**
+     * [replace] with no command let in, and only with none waiting; whether it ran. What's waiting is already in the stores, and
+     * a pull that doesn't touch a store it changed couldn't take it out, so applying it again on top would make it twice: it
+     * goes first, at the next upload, and the pull after it lands on an empty outbox.
+     */
+    suspend fun replacing(replace: suspend () -> Unit): Boolean = gate.withLock {
+        if (outbox?.value?.commands?.isNotEmpty() == true) return@withLock false
+        replace()
+        true
     }
 
     /** [block] reading [command]'s moment, and drawing its ids from its own. */

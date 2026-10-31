@@ -47,9 +47,9 @@ The website shows a six-digit code; a phone that gives it back within five minut
 
 SQLite, one file, in WAL mode (`server/Database.kt`), the server its only writer. `SqliteBackend` is the `StoreBackend` that `Stores` runs on here, as `FileBackend` is on the phone, so a store has the same shape, migrations and versions on both.
 
-- `stores`: each store's JSON, its version and the revision that last wrote it. A revision is one transaction.
+- `stores`: each store's JSON, its version and the revision that last wrote it. A revision is one transaction. No row goes: `/api/state` can't say what isn't there, so what's deleted (a month of a cleared chat) stays as an empty row at a new revision, and clients take that as any change.
 - `store_history`: each store's every text, with what caused it, kept 90 days and at least the last 20 of each, let go of at each start and daily after (`ServerGraph.tidy`).
-- `commands`: every command received, whose it was, and what came of it. A repeat of an id answers from here.
+- `commands`: every command received, whose it was, and what came of it. A repeat of an id answers from here, looked up inside the command's lock, so a retry racing its first send waits and finds what came of it.
 - `devices`, `pairing_codes`, `sessions`, `meta`.
 
 A command is one transaction, all of it or none (`CommandApplier`, `Database.command`), one at a time, in the order they arrive. The owners suspend and change thread on the way, so it's held by a coroutine's lock, and reads that mustn't see it half-way go through a second connection (`Database.read`), which in WAL mode sees only what's committed. One that fails is rolled back, the stores read again from what's committed, and it's on record as dropped.

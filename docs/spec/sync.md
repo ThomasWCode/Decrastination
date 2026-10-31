@@ -54,7 +54,7 @@ Built and tested in 5.2.0, and dormant: `SyncState.mode` stays `mirror`, and the
 
 - **A change** is recorded in `outbox.json` before it's applied (`Commands.act`), so a process stopped between the two applies it at its next start (`Commands.resume`), once. The screens show it at once.
 - **An upload** posts what's waiting, in order, to `POST /api/commands`, and each that's answered leaves the outbox. A command the server dropped is said on Setup (`SyncState.dropped`).
-- **Then a pull**: `GET /api/state?since=` for every store changed since the last, each taken whole (`JsonStore.adopt`), and whatever's still waiting applied again on top (`Commands.replacing`), so a pull takes nothing you've just done from the screen. No command is applied while the stores are replaced.
+- **Then a pull**: `GET /api/state?since=` for every store changed since the last, each taken whole (`JsonStore.adopt`). Only with nothing waiting (`Commands.replacing`): a command made since the upload began is already in the stores, and applying it again on top would make it twice, so it goes first, and the pull's asked for again after it. No command is applied while the stores are replaced. A month of the chat's archive that comes empty is a chat cleared elsewhere, and goes here with its copies (`ChatArchiveStore.adopt`).
 - A pull follows only an answer. With none, what's waiting may already be on the server, and it mustn't be applied twice over.
 - A store newer than this build can read stops the pull whole, and Setup says to install: the stores change together, and half of them new is worse than all of them old.
 
