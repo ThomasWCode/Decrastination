@@ -115,6 +115,9 @@ class JsonStore<T>(
 
     val value: T get() = _state.value
 
+    /** Its state as its file holds it. */
+    fun text(): String = json.encodeToString(serializer, value)
+
     /** Whether its file has been read: as it was made, unless [lazily]. */
     val isLoaded: Boolean get() = loaded.isInitialized()
 

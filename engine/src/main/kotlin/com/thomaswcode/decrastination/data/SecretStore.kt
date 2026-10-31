@@ -26,6 +26,9 @@ enum class Secret {
 
     /** The parent override's authenticator secret (Q17). */
     TotpSecret,
+
+    /** What this phone shows the server it's paired with (docs/plan_web/architecture.md §Sign-in). */
+    DeviceToken,
 }
 
 /** Encrypts the secrets file. The real one keeps its key in the Android Keystore. */

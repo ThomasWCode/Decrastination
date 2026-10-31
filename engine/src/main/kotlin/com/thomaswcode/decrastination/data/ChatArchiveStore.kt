@@ -216,6 +216,12 @@ class ChatArchiveStore(private val backend: StoreBackend, private val clock: () 
         return next
     }
 
+    /** What's held of the months read let go, as their rows have been written from elsewhere: each read again when it's wanted. */
+    fun forget() {
+        synchronized(reading) { months.clear() }
+        _changes.update { it + 1 }
+    }
+
     /** Its months' files that couldn't be read whole, of those read so far. */
     val problems: List<JsonStore.Unreadable> get() = months.values.mapNotNull { it.problem }
 

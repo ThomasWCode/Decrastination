@@ -159,6 +159,9 @@ class Stores(
         json.filter { it.name in files }.forEach { it.letGoOfCopies() }
     }
 
+    /** The stores the server keeps a copy of ([MIRRORED]), as they are. */
+    val mirrored: List<JsonStore<*>> get() = json.filter { it.name in MIRRORED }
+
     /** Each JSON store's shape now, by file: what a backup's parts from it are brought to ([Backups.decode]). */
     val shapes: Map<String, Shape> get() = json.associate { it.name to Shape(it.version, it.migrations) } + (chatArchive.name to Shape(chatArchive.version, ChatArchiveStore.MIGRATIONS))
 
@@ -208,6 +211,12 @@ class Stores(
          * the pairs that aren't the same work to the tasks (4.13.0).
          */
         val MOVES: List<Move> = listOf(ChatMigration.MOVE, ChatArchiveStore.SPLIT, TasksMigration.MOVE, RuntimeSplit.MOVE, ProtectionSplit.MOVE, NotSameMigration.MOVE)
+
+        /**
+         * What the server holds a copy of (docs/plan_web/inventory.md §Stores), the chat's archive's months among them: not
+         * `runtime.json`, `device.json` and `calendar.json`, which are this phone's, nor the sync's own, nor the Gmail journal yet.
+         */
+        val MIRRORED: Set<String> = setOf("tasks.json", "settings.json", "session.json", "protection.json", "model.json", "anki.json", "learning.json", "log.json", "instructions.json", "chat.json", "school.json", "memory.json", "felix.json")
 
         /** How long the file an older shape came from is kept after its migration. */
         const val OLD_SHAPE_KEPT_MS = 7 * 24 * 3_600_000L

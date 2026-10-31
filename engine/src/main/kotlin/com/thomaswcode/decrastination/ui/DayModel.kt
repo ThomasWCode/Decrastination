@@ -5,6 +5,7 @@ import com.thomaswcode.decrastination.core.Chunk
 import com.thomaswcode.decrastination.core.DayWindow
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Slot
+import com.thomaswcode.decrastination.core.WindowKind
 import com.thomaswcode.decrastination.data.SlotOutcome
 import com.thomaswcode.decrastination.data.SlotRecord
 import com.thomaswcode.decrastination.learn.CalendarEvent
@@ -123,4 +124,20 @@ fun blockKey(block: DayModel.Block): String = when (val item = block.item) {
     is DayModel.Row.Planned -> "slot-${item.slot.key}-${item.slot.start}"
     is DayModel.Row.Recorded -> "record-${item.record.key}-${item.record.start}-${item.record.outcome}-${item.record.at}"
     is DayModel.Row.Busy -> "busy-${item.block.date}-${item.block.key}"
+}
+
+/** A window's name, as its band says it. */
+fun windowName(kind: WindowKind): String = when (kind) {
+    WindowKind.Evening -> "Your time"
+    WindowKind.Study -> "Study period"
+    WindowKind.Break -> "Break"
+    WindowKind.Lunch -> "Lunch"
+}
+
+/** A slot's outcome, in a word or two. */
+fun outcomeWords(outcome: SlotOutcome): String = when (outcome) {
+    SlotOutcome.Kept -> "Kept"
+    SlotOutcome.KeptLate -> "Kept late"
+    SlotOutcome.Missed -> "Missed"
+    SlotOutcome.Moved -> "Moved"
 }
