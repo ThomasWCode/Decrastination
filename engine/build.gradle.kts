@@ -24,6 +24,17 @@ kotlin {
     }
 }
 
+// The golden prompts written again (AR-01, GoldenPromptsTest): ./gradlew :engine:test -PupdateGolden=true --tests '*GoldenPromptsTest*'
+// The scored eval run through the API (AR-02, EvalRunTest, docs/development.md), only when asked:
+// ./gradlew :engine:test --tests '*EvalRunTest*' -PrunEval=true [-Peffort=high]  (the chat's set: -PrunEval=chat --rerun)
+// Every schema compiled by the API, after a schema changes (SchemaCompileTest), only when asked:
+// ./gradlew :engine:test --tests '*SchemaCompileTest*' -PcheckSchemas=true
+// docs/spec/felix-inputs.md written again from what the app sends (FelixInputsDocTest):
+// ./gradlew :engine:test --tests '*FelixInputsDocTest*' -PupdateDocs=true
+// The plan snapshot written again (PlanSnapshotTest), only on purpose:
+// ./gradlew :engine:test --tests '*PlanSnapshotTest*' -PupdateSnapshots=true
+// A phone backup's stores read and migrated (RehearsalTest), as scripts/rehearse.sh runs it:
+// ./gradlew :engine:test --tests '*RehearsalTest*' --rerun -PrehearseFrom=<the unpacked files/ folder>
 tasks.withType<Test>().configureEach {
     systemProperty("updateGolden", providers.gradleProperty("updateGolden").getOrElse("false"))
     systemProperty("runEval", providers.gradleProperty("runEval").getOrElse("false"))

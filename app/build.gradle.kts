@@ -12,8 +12,8 @@ android {
         applicationId = "com.thomaswcode.decrastination"
         minSdk = 26
         targetSdk = 36
-        versionCode = 98
-        versionName = "4.12.0"
+        versionCode = 99
+        versionName = "4.12.1"
     }
 
     signingConfigs {
@@ -59,34 +59,14 @@ android {
         unitTests.isReturnDefaultValues = true
     }
 
-    // core's code linted with the app's, against its minSdk (:core is plain Kotlin, with Android's lint applied).
+    // core's and the engine's code linted with the app's, against its minSdk (they're plain Kotlin, with Android's lint applied).
     lint {
         checkDependencies = true
     }
 }
 
-// The golden prompts written again (AR-01, GoldenPromptsTest): ./gradlew testDebugUnitTest -PupdateGolden=true
-// The scored eval run through the API (AR-02, EvalRunTest, docs/development.md), only when asked:
-// ./gradlew testDebugUnitTest --tests '*EvalRunTest*' -PrunEval=true [-Peffort=high]  (the chat's set: -PrunEval=chat --rerun)
-// Every schema compiled by the API, after a schema changes (SchemaCompileTest), only when asked:
-// ./gradlew testDebugUnitTest --tests '*SchemaCompileTest*' -PcheckSchemas=true
-// docs/spec/felix-inputs.md written again from what the app sends (FelixInputsDocTest):
-// ./gradlew testDebugUnitTest --tests '*FelixInputsDocTest*' -PupdateDocs=true
-// The plan snapshot written again (PlanSnapshotTest), only on purpose:
-// ./gradlew testDebugUnitTest --tests '*PlanSnapshotTest*' -PupdateSnapshots=true
-// A phone backup's stores read and migrated (RehearsalTest), as scripts/rehearse.sh runs it:
-// ./gradlew :engine:test --tests '*RehearsalTest*' --rerun -PrehearseFrom=<the unpacked files/ folder>
 tasks.withType<Test>().configureEach {
-    systemProperty("updateGolden", providers.gradleProperty("updateGolden").getOrElse("false"))
-    systemProperty("runEval", providers.gradleProperty("runEval").getOrElse("false"))
-    systemProperty("checkSchemas", providers.gradleProperty("checkSchemas").getOrElse("false"))
-    systemProperty("effort", providers.gradleProperty("effort").getOrElse(""))
-    systemProperty("updateDocs", providers.gradleProperty("updateDocs").getOrElse("false"))
-    systemProperty("updateSnapshots", providers.gradleProperty("updateSnapshots").getOrElse("false"))
-    systemProperty("rehearseFrom", providers.gradleProperty("rehearseFrom").getOrElse(""))
-    // The doc FelixInputsDocTest holds to the code: a change to it alone runs the tests again.
-    inputs.file(layout.projectDirectory.file("../docs/spec/felix-inputs.md")).withPropertyName("felixInputsDoc").withPathSensitivity(PathSensitivity.RELATIVE)
-    // The stores' shapes and the plan's snapshot (StoresDecodeTest, PlanSnapshotTest): a change to them alone runs the tests again.
+    // The fixtures this module's tests read: a change to them alone runs the tests again.
     inputs.dir(layout.projectDirectory.dir("../fixtures")).withPropertyName("fixtures").withPathSensitivity(PathSensitivity.RELATIVE)
     // core's build, which ArchitectureTest holds free of Android and of the app: a change to it alone runs the tests again.
     inputs.file(layout.projectDirectory.file("../core/build.gradle.kts")).withPropertyName("coreBuild").withPathSensitivity(PathSensitivity.RELATIVE)

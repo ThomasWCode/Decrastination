@@ -70,7 +70,7 @@ import kotlin.test.fail
  * `docs/spec/felix-inputs.md`, everything Felix is sent: its examples made by the app's own code
  * from the made-up data here, and its prompts the golden copies, each in the fence after its
  * `<!-- generated: … -->` or `<!-- golden: … -->` mark. One out of date fails here;
- * `./gradlew testDebugUnitTest --tests '*FelixInputsDocTest*' -PupdateDocs=true` writes them again.
+ * `./gradlew :engine:test --tests '*FelixInputsDocTest*' -PupdateDocs=true` writes them again.
  * The words around them are the doc's own.
  */
 class FelixInputsDocTest {

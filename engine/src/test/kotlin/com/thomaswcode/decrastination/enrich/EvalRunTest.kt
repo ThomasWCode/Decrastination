@@ -125,7 +125,7 @@ class EvalRunTest {
      * The chat's private set (`private/eval-chat`, never committed; docs/spec/readings.md §The evaluation set),
      * asked only with `-PrunEval=chat` and the key: each case a message of yours to Felix on a copy of the phone's
      * stores (`state/files/`, the chat and the record of calls left out, so each case starts a chat of its own) and
-     * calendar (`state/events.json`, as `CalendarTime.read` gives it), at the set's `now`, asked through the
+     * calendar (`state/events.json`, as the phone's `CalendarReader.read` gives it), at the set's `now`, asked through the
      * Conversation as the app asks it, rounds included ([FelixHarness] on Claude's API), each paid for. Its answer
      * is scored by the case's labels, each a check: `reads`, what its rounds brought (a task's id, `stats`,
      * `calendar` or `calendar:yyyy-MM`, said under his answer); `says`, groups of words of which the reply holds one

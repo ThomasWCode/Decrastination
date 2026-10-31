@@ -31,7 +31,7 @@ import kotlin.test.fail
 /**
  * Golden copies of what the model is sent (AR-01): every system prompt and schema, made from fixed
  * inputs, against `src/test/resources/prompts/`. A change to one fails here with its diff, so no
- * prompt changes unseen; when it's meant, `./gradlew testDebugUnitTest -PupdateGolden=true` writes
+ * prompt changes unseen; when it's meant, `./gradlew :engine:test -PupdateGolden=true` writes
  * them again, to commit with it. A change to what a reading is made by (the `enrich-` files and the
  * profile) wants [ReadingPrompts.VERSION] raised as well, so the readings made by the old ones are made again.
  */

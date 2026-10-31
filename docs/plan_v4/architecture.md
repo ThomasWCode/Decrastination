@@ -79,7 +79,8 @@ Small interfaces for what Android does, so services are tested without it:
 
 | Port | What | Real one | In tests |
 |---|---|---|---|
-| `Notices` | post, cancel, whether a channel's shown, post what was held | `Notifier` | a list of what was posted |
+| `Notices` | cancel, whether a channel's shown, post what was held (`Posts` adds a notification Android made, on the phone alone) | `Notifier` | a list of what was posted |
+| `Log` (`ports/`) | the log, in `android.util.Log`'s calls | `AndroidLog` | nothing |
 | `CalendarProvider` | read and write the calendar's events | `SlotCalendar` | events in memory |
 | `FelixPorts` | his notification, his look's alarm, the work that outlives what asked, a task opened where it lives | `AndroidFelixPorts` | `FelixHarness`'s |
 | `SyncPorts` | a sync as a job, the Teams widget asked and watched, the calendar read, the widget drawn | `AndroidSyncPorts` | `SyncTest`'s |

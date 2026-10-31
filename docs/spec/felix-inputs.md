@@ -2,9 +2,9 @@
 
 Everything the app sends the model as Felix, call by call, and how it changes with the circumstances. How he behaves is in [felix.md](felix.md).
 
-The exact prompts and schemas are the golden copies in [`app/src/test/resources/prompts/`](../../app/src/test/resources/prompts/), which `GoldenPromptsTest` holds the code to; the prompts below are those copies, with his default name and line, but the web search's, which has none: it's written from the code (`FelixInputsDocTest`). Every other example here is made up, as the repository is public, but each was made by the app's own code from that made-up data, so its shape is exact.
+The exact prompts and schemas are the golden copies in [`engine/src/test/resources/prompts/`](../../engine/src/test/resources/prompts/), which `GoldenPromptsTest` holds the code to; the prompts below are those copies, with his default name and line, but the web search's, which has none: it's written from the code (`FelixInputsDocTest`). Every other example here is made up, as the repository is public, but each was made by the app's own code from that made-up data, so its shape is exact.
 
-`FelixInputsDocTest` writes every example and prompt here, each into the fence after its `<!-- generated: … -->` or `<!-- golden: … -->` mark, and fails when one is out of date. After a change to what Felix is sent, `./gradlew testDebugUnitTest --tests '*FelixInputsDocTest*' -PupdateDocs=true` writes them again; the words around them are edited here.
+`FelixInputsDocTest` writes every example and prompt here, each into the fence after its `<!-- generated: … -->` or `<!-- golden: … -->` mark, and fails when one is out of date. After a change to what Felix is sent, `./gradlew :engine:test --tests '*FelixInputsDocTest*' -PupdateDocs=true` writes them again; the words around them are edited here.
 
 ## The calls
 
@@ -321,7 +321,7 @@ The whole text of the tasks you asked to read (answer and act on it, and leave d
 
 ### What comes back
 
-[`chat.schema.json`](../../app/src/test/resources/prompts/chat.schema.json): every field is given, those not used empty (an empty string, -1 for a number). None is nullable: unions in its lists made its grammar too large for the API to compile.
+[`chat.schema.json`](../../engine/src/test/resources/prompts/chat.schema.json): every field is given, those not used empty (an empty string, -1 for a number). None is nullable: unions in its lists made its grammar too large for the API to compile.
 
 | Field | What | Kept to |
 |---|---|---|
@@ -756,7 +756,7 @@ you starting
 
 ### What comes back
 
-[`felix.schema.json`](../../app/src/test/resources/prompts/felix.schema.json):
+[`felix.schema.json`](../../engine/src/test/resources/prompts/felix.schema.json):
 
 | Field | What | Kept to |
 |---|---|---|

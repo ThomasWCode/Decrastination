@@ -45,7 +45,7 @@ import kotlinx.serialization.KSerializer
  * from every source, steps of each kind (the source's, a reading's, the rules', yours, Felix's, your
  * own task's), instructions in use with a pin, a school calendar, busy time and a learned pace, made
  * into a plan as the app makes one. Any move that changes a plan shows here, to the piece and the
- * minute. Written again only on purpose: `./gradlew testDebugUnitTest -PupdateSnapshots=true`.
+ * minute. Written again only on purpose: `./gradlew :engine:test -PupdateSnapshots=true`.
  */
 class PlanSnapshotTest {
     private val file = listOf(File("../fixtures"), File("fixtures")).firstOrNull { it.isDirectory }?.let { File(it, "snapshots/plan.txt") }
