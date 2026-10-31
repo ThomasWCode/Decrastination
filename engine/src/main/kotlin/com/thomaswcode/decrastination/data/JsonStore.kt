@@ -137,12 +137,22 @@ class JsonStore<T>(
     }
 
     /**
+     * The state read again from its backend, where something else has written it: a client's whole store
+     * mirrored into the server's. As at a start: its migrations run on what's there, what can't be read set aside.
+     */
+    suspend fun reload(): T = mutex.withLock {
+        val read = load()
+        _state.value = read
+        read
+    }
+
+    /**
      * The copies kept beside its file let go: an older shape's (`<name>.v<n>`) and those of a file that couldn't be
      * read (`<name>.unreadable-<when>`), so what *Clear the chat* or a reset takes isn't kept in one (D-94). Each is
      * deleted, or, where that fails, emptied, as the archive's months are, so what's cleared can't come back from it.
      */
     suspend fun letGoOfCopies(): Unit = withContext(Dispatchers.IO) {
-        backend.letGoOfCopies(name)
+        backend.letGoOfCopies { it == name }
     }
 
     /**

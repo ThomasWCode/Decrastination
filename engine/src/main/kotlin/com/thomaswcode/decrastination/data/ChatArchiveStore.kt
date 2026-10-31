@@ -28,7 +28,10 @@ import kotlinx.coroutines.withContext
  * backup, a restore, a reset and the export all of them. As a whole it's still `chat-archive.json`
  * ([NAME]): one [ChatArchive] in a backup, in the shape it had.
  */
-class ChatArchiveStore(private val dir: File, private val clock: () -> Long = System::currentTimeMillis) {
+class ChatArchiveStore(private val backend: StoreBackend, private val clock: () -> Long = System::currentTimeMillis) {
+    /** Kept in [dir], as every store on the phone is. */
+    constructor(dir: File, clock: () -> Long = System::currentTimeMillis) : this(FileBackend(dir), clock)
+
     /** What it is as a whole, in a backup and among the stores' shapes. */
     val name: String = NAME
 
@@ -56,14 +59,14 @@ class ChatArchiveStore(private val dir: File, private val clock: () -> Long = Sy
     var onProblem: ((JsonStore.Unreadable) -> Unit)? = null
 
     /** Its months' files, oldest first, by their names: none read. */
-    private fun files(): List<String> = dir.listFiles { f -> f.isFile && MONTH_FILE.matches(f.name) }.orEmpty().map { it.name }
+    private fun files(): List<String> = backend.names().filter { MONTH_FILE.matches(it) }
         .sortedWith(compareBy({ yearOf(it) }, { it.substringAfterLast('-') }))
 
     /** The year in month [file]'s name: by number, so a year past 9999 (written with its sign) comes after the rest. */
     private fun yearOf(file: String): Long = file.removePrefix("chat-archive-").substringBeforeLast('-').removePrefix("+").toLong()
 
     private fun month(file: String): JsonStore<ChatArchive> = months.computeIfAbsent(file) {
-        JsonStore(File(dir, file), ChatArchive.serializer(), ::ChatArchive, clock = clock, migrations = MIGRATIONS, lazily = true).also { store -> store.onProblem = { onProblem?.invoke(it) } }
+        JsonStore(backend, file, ChatArchive.serializer(), ::ChatArchive, clock = clock, migrations = MIGRATIONS, lazily = true).also { store -> store.onProblem = { onProblem?.invoke(it) } }
     }
 
     /**
@@ -184,7 +187,7 @@ class ChatArchiveStore(private val dir: File, private val clock: () -> Long = Sy
                 // What's held of each month read goes with its file, so none of it can be written back.
                 months.clear()
                 files().forEach(::letGo)
-                dir.listFiles { f -> f.isFile && isCopy(f.name) }.orEmpty().forEach { letGo(it.name) }
+                backend.letGoOfCopies { it == NAME || MONTH_FILE.matches(it) }
             }
         }
         _changes.update { it + 1 }
@@ -238,10 +241,7 @@ class ChatArchiveStore(private val dir: File, private val clock: () -> Long = Sy
      * Month [file] let go: deleted, or, where that fails, written empty, so what was cleared can't come
      * back (it then shows nothing, and goes at the next clear). With [reading] held.
      */
-    private fun letGo(file: String) {
-        val f = File(dir, file)
-        if (!f.delete() && f.exists()) runCatching { f.writeText(JsonStore.json.encodeToString(ChatArchive.serializer(), ChatArchive())) }
-    }
+    private fun letGo(file: String) = backend.delete(file, JsonStore.json.encodeToString(ChatArchive.serializer(), ChatArchive()))
 
     companion object {
         /** The archive as a whole: in a backup, and the one file 4.0.0 to 4.0.3 kept it in. */

@@ -18,26 +18,36 @@ import kotlinx.serialization.KSerializer
  * one way round a store's owner, for a restore or a reset ([BackupService]).
  */
 class Stores(
-    private val dir: File,
-    cipher: SecretCipher,
+    private val backend: StoreBackend,
+    val secrets: SecretStore,
     private val clock: () -> Long = System::currentTimeMillis,
     /** Whether settings that can't be read at all start armed: while the device admin is on, as only arming turns it on (IMP-P1-003). */
     armedIfUnreadable: () -> Boolean = { false },
+    /** The folder a phone's stores are files in: its moves and its one file of the archive from before are the phone's alone. */
+    dir: File? = null,
     /** Fields moved between stores, run before any is read ([Move]). */
-    moves: List<Move> = MOVES,
+    moves: List<Move> = emptyList(),
 ) {
+    /** Kept as files in [dir], as a phone keeps them: its moves made first, the secrets beside them under [cipher]. */
+    constructor(
+        dir: File,
+        cipher: SecretCipher,
+        clock: () -> Long = System::currentTimeMillis,
+        armedIfUnreadable: () -> Boolean = { false },
+        moves: List<Move> = MOVES,
+    ) : this(FileBackend(dir), SecretStore(File(dir, "secrets.bin"), cipher, clock), clock, armedIfUnreadable, dir, moves)
+
     /** What the moves found they couldn't read, set aside before they wrote over it: said at this start as a store's file is ([problems]). */
-    private val movedAside: List<JsonStore.Unreadable> = moves.flatMap { it.run(dir) }
+    private val movedAside: List<JsonStore.Unreadable> = dir?.let { folder -> moves.flatMap { it.run(folder) } }.orEmpty()
 
     private fun <T> store(name: String, serializer: KSerializer<T>, default: () -> T, unreadable: () -> T = default, migrations: List<Migration> = emptyList(), onWrite: (T) -> T = { it }) =
-        JsonStore(File(dir, name), serializer, default, unreadable = unreadable, clock = clock, migrations = migrations, onWrite = onWrite)
+        JsonStore(backend, name, serializer, default, unreadable = unreadable, clock = clock, migrations = migrations, onWrite = onWrite)
 
     val tasks = store("tasks.json", TaskState.serializer(), ::TaskState, migrations = listOf(TasksMigration.TASKS, StepOrderMigration.TASKS, WeeklyMigration.TASKS, NotSameMigration.TASKS), onWrite = TaskState::withStepIds)
 
     // A file that can't be read at all starts armed while the device admin is on, as only arming
     // turns it on: a bad file never disarms protection (IMP-P1-003).
     val settings = store("settings.json", Settings.serializer(), ::Settings, unreadable = { Settings(armed = armedIfUnreadable()) }, migrations = listOf(SettingsMigration.SETTINGS, ZoomMigration.SETTINGS, SpeechMigration.SETTINGS))
-    val secrets = SecretStore(File(dir, "secrets.bin"), cipher, clock)
     val runtime = store("runtime.json", RuntimeState.serializer(), ::RuntimeState, migrations = listOf(ChatMigration.RUNTIME, RuntimeSplit.RUNTIME, NotSameMigration.RUNTIME))
 
     /** What the blocker keeps from moment to moment, changing every half minute (Focus's). */
@@ -69,14 +79,14 @@ class Stores(
      * The chat's messages past its window, oldest first, a month a file: each read only when it's wanted
      * (scrolling back, a reply to one of them, the window's next move, a backup, the export), not at a start.
      */
-    val chatArchive = ChatArchiveStore(dir, clock)
+    val chatArchive = ChatArchiveStore(backend, clock)
 
     /**
      * 4.0.3's one archive file, still here where the split couldn't read it ([ChatArchiveStore.SPLIT]):
      * read as any store is, so it's set aside as `chat-archive.json.unreadable-<when>` and said at this
      * start ([problems]), and what could be kept of it goes into its months; let go once its copy is made.
      */
-    private val unsplit: JsonStore.Unreadable? = File(dir, ChatArchiveStore.NAME).takeIf { it.isFile }?.let { file ->
+    private val unsplit: JsonStore.Unreadable? = dir?.let { File(it, ChatArchiveStore.NAME) }?.takeIf { it.isFile }?.let { file ->
         val whole = JsonStore(file, ChatArchive.serializer(), ::ChatArchive, clock = clock, migrations = ChatArchiveStore.MIGRATIONS)
         runBlocking {
             chatArchive.add(whole.value.messages)
@@ -156,7 +166,7 @@ class Stores(
     val problems: List<JsonStore.Unreadable> get() = json.mapNotNull { it.problem } + movedAside + chatArchive.problems + listOfNotNull(unsplit, secrets.problem)
 
     /** Whether [file] is in the stores' folder: a copy one of [problems] named, which a clear or a reset may have taken since. */
-    fun holds(file: String): Boolean = File(dir, file).isFile
+    fun holds(file: String): Boolean = backend.holds(file)
 
     /** What was kept of each file that didn't read whole written over it, now its problem is on record ([JsonStore.keepRecovered]). */
     suspend fun keepRecovered() {
@@ -187,10 +197,7 @@ class Stores(
      */
     fun letGoOfOldShapes(now: Long = clock()) {
         val names = json.map { it.name }.toSet()
-        fun oldShape(name: String) = name.substringBeforeLast(".v") in names && name.substringAfterLast(".v").toIntOrNull() != null || ChatArchiveStore.isOldShape(name)
-        dir.listFiles { f -> f.isFile && oldShape(f.name) }.orEmpty()
-            .filter { now - it.lastModified() >= OLD_SHAPE_KEPT_MS }
-            .forEach { it.delete() }
+        backend.letGoOfOldShapes(now - OLD_SHAPE_KEPT_MS) { it in names || it == ChatArchiveStore.NAME || ChatArchiveStore.isMonth(it) }
     }
 
     companion object {
