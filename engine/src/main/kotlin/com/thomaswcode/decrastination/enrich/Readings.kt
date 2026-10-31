@@ -37,7 +37,7 @@ class Readings(
     private val profile: () -> Profile.Block,
     /** A question a reading couldn't settle (AI-10), for Felix to put ([com.thomaswcode.decrastination.felix.Looks.queueQuestion]). */
     private val queueQuestion: suspend (taskId: String, question: String?, now: Long) -> Unit,
-    /** Anki read again now, its decks' sections or deadline changed by a reading ([com.thomaswcode.decrastination.sync.SyncWorker.syncNow]). */
+    /** Anki read again now, its decks' sections or deadline changed by a reading (`SyncWorker.syncNow`). */
     private val readDecks: () -> Unit,
 ) {
     /** The rules' enrichment: always there, and the fallback for the model. */

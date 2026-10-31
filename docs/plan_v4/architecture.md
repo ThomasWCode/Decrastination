@@ -25,7 +25,7 @@ The app's structure as the 4.x plan left it (4.3.2, D-107), and the conventions 
  AppGraph: makes the platform, then the services, and wires their flows. Nothing else.
 ```
 
-Three Gradle modules hold this: `:core` the pure rules and types; `:engine` every line of the app that needs nothing of Android, in the packages it had, what it needs of a platform a port (D-125); `:app` the screens, the Android entry points, the device adapters and the ports' Android implementations, with `AppGraph`. So a package can be split across two modules, its Android-free part in `engine/src/main/kotlin` and the rest in `app/src/main/java`; the classes Android holds by name are in `:app`, under the names they always had.
+Three Gradle modules hold this: `:core` the pure rules and types; `:engine` every line of the app that needs nothing of Android, in the packages it had, what it needs of a platform a port (D-125); `:app` the screens and their state holders, the Android entry points, the device adapters and the ports' Android implementations, with `AppGraph`; no owner, prompt or migration (`ArchitectureTest`). So a package can be split across two modules, its Android-free part in `engine/src/main/kotlin` and the rest in `app/src/main/java`; the classes Android holds by name are in `:app`, under the names they always had.
 
 ## The rules
 
@@ -57,7 +57,7 @@ Makes the stores (through `Stores`), the gateway, the notifier and the services;
 | **Learning** (`learn/`) | `log.json`, `learning.json` (the calibration) | workers, screens, the Conversation's replies |
 | **Backups** (`data/BackupService`) | the backup folder, reset copies | screens, the backup worker |
 
-Each service is a class in the package that holds its concern. Felix's has a package of its own, `felix/`: the service (`Conversation`), his looks (`Looks`), his rules, how he feels (`Mood`, D-119), prompts and caller, the check-in's flow, the chat's prompts, answers, rounds and reader, the outbox and his words (`FelixWords`), the replies' routing (`Replies`), his notification and his port to Android (`FelixPorts`), and the receiver and workers that carry a reply or a look.
+Each service is a class in the package that holds its concern; `Slots`, `AnkiWatch`, `Briefing` and `Moves`, smaller, are built the same way. All are in `:engine`. Felix's has a package of its own, `felix/`: the service (`Conversation`), his looks (`Looks`), his rules, how he feels (`Mood`, D-119), prompts and caller, the check-in's flow, the chat's prompts, answers, rounds and reader, the outbox and his words (`FelixWords`), the replies' routing (`Replies`), his notification and his port to Android (`FelixPorts`), and the receiver and workers that carry a reply or a look.
 
 ## The platform
 

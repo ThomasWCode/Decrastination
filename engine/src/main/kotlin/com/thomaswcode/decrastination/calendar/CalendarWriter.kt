@@ -40,7 +40,7 @@ import kotlinx.coroutines.withContext
  * ([clearOldCalendars]); the calendar watched for changes ([watchCalendar], [calendarChanged]); and your
  * answers about its events ([answer]). Built like [com.thomaswcode.decrastination.block.Focus]: its
  * stores, the clock and small callbacks in its constructor, the calendar provider behind a port
- * ([CalendarProvider]: [SlotCalendar] on the phone).
+ * ([CalendarProvider]: `SlotCalendar` on the phone).
  */
 @OptIn(FlowPreview::class)
 class CalendarWriter(
@@ -53,7 +53,7 @@ class CalendarWriter(
     private val scope: CoroutineScope,
     /** The calendar's events, read and written. */
     private val provider: CalendarProvider,
-    /** A move of yours written back, and why, said ([SlotCalendar.sayRefused]). */
+    /** A move of yours written back, and why, said (`SlotCalendar.sayRefused`). */
     private val sayRefused: (move: SlotCalendarDiff.HandMove, zone: ZoneId, why: String) -> Unit,
     /** A move of yours taken as your time: a change of yours, kept and applied at once ([com.thomaswcode.decrastination.tasks.Instructions.addOwnChange]). */
     private val addOwnChange: suspend (id: String, text: String, about: About, change: Change) -> Unit,
@@ -65,7 +65,7 @@ class CalendarWriter(
     private val reread: suspend () -> Unit,
     /** Your busy times from one day to another, as the instructions in use give them ([InstructionRules.busyBlocks]): each written as its own event (D-117). */
     private val busyTimes: (from: LocalDate, to: LocalDate) -> List<BusyBlock>,
-    /** A busy time's event you [deleted] or changed, put back, and why, said ([SlotCalendar.sayPutBack]). */
+    /** A busy time's event you [deleted] or changed, put back, and why, said (`SlotCalendar.sayPutBack`). */
     private val sayPutBack: (want: SlotCalendarDiff.Desired, deleted: Boolean, why: String) -> Unit,
     /** How long plans are quiet before the calendar's written: [CALENDAR_WRITE_QUIET_MS], but in a test. */
     private val quietMs: Long = CALENDAR_WRITE_QUIET_MS,

@@ -21,7 +21,7 @@ import kotlinx.coroutines.flow.StateFlow
 
 /**
  * Finishing a starred email here (docs/spec/sources.md §Gmail, D-7 as amended): the write to Gmail journaled
- * first, in `gmail-writes.json` ([writes], which this alone writes); made after its grace by [GmailWriteWorker]
+ * first, in `gmail-writes.json` ([writes], which this alone writes); made after its grace by `GmailWriteWorker`
  * through a [GmailWriter], each command's success kept as it comes; taken back within the grace by dropping it,
  * after it by a write that puts back what it took; given up after [GmailWrites.MAX_TRIES] tries and said in the
  * app's own notification. Nothing is marked done here: a Gmail-only read after the write closes the task, as an

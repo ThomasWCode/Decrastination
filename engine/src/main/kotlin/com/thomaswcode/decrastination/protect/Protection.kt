@@ -32,7 +32,7 @@ class Protection(
     private val secrets: SecretStore,
     private val clock: WallClock,
     private val scope: CoroutineScope,
-    /** Whether the device admin is on ([Watchdog.isAdminActive]). */
+    /** Whether the device admin is on (`Watchdog.isAdminActive`). */
     private val adminActive: () -> Boolean,
     /** The device admin given up, so uninstalling is allowed again. */
     private val removeAdmin: () -> Unit,

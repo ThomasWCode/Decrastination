@@ -244,7 +244,7 @@ class Looks(
 
     /**
      * Your reminders whose moment has come and whose words are to be asked for afresh ([sweepReminders] leaves them
-     * to this, as work of its own: [ReminderWorker]): his asked for each as of its moment, outside the sweep's lock,
+     * to this, as work of its own: `ReminderWorker`): his asked for each as of its moment, outside the sweep's lock,
      * so a sweep from an alarm or a plan never waits on a call; kept on the reminder as asked for that moment, words
      * or none, unless it changed meanwhile (a cancel, a move, a snooze); then the sweep, which sends them as they now
      * are. One whose call is held or fails, or comes back with none, goes in your words.
