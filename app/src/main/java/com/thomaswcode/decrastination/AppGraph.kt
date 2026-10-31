@@ -47,7 +47,7 @@ import com.thomaswcode.decrastination.learn.Assessment
 import com.thomaswcode.decrastination.learn.Briefing
 import com.thomaswcode.decrastination.learn.Calibrator
 import com.thomaswcode.decrastination.learn.CheckIn
-import com.thomaswcode.decrastination.learn.Daily
+import com.thomaswcode.decrastination.learn.DailyAlarms
 import com.thomaswcode.decrastination.learn.Learning
 import com.thomaswcode.decrastination.net.UrlConnectionHttp
 import com.thomaswcode.decrastination.notify.AndroidTray
@@ -469,7 +469,7 @@ class AppGraph private constructor(context: Context) {
         // A note added or deleted: the plan made again, so the first steps of its task's pieces are written with it ([Ahead]).
         scope.launch { stores.felix.state.map { it.notes }.distinctUntilChanged().drop(1).collect { planning.watcher.poke() } }
         // A day off added or taken away: the briefing's next time with it, as a day off has the weekends' (D-74).
-        scope.launch { school.state.drop(1).collect { runCatching { Daily.schedule(app) }.onFailure { e -> Log.w(TAG, "Setting the daily alarms failed", e) } } }
+        scope.launch { school.state.drop(1).collect { runCatching { DailyAlarms.schedule(app) }.onFailure { e -> Log.w(TAG, "Setting the daily alarms failed", e) } } }
         // The files older shapes came from, a week after their migration, at a start that's got this far.
         scope.launch(Dispatchers.IO) { runCatching { stores.letGoOfOldShapes() }.onFailure { Log.w(TAG, "Letting go of old shapes failed", it) } }
         // Gmail's journal settled (receipts let go once old, or once their email's starred again), and a write due
@@ -514,7 +514,7 @@ class AppGraph private constructor(context: Context) {
      */
     private suspend fun settleCompletions() {
         focus.rewardCompletions { completed ->
-            runCatching { Assessment.ask(app, completed) }.onFailure { Log.w(TAG, "Couldn't ask how the work went", it) }
+            runCatching { conversation.askHowItWent(Assessment.asks(completed, log.value)) }.onFailure { Log.w(TAG, "Couldn't ask how the work went", it) }
         }
     }
 
@@ -526,7 +526,7 @@ class AppGraph private constructor(context: Context) {
             applying = instructions.applying,
             layInstructions = { instructions.layInstructions() },
             layTaskOverrides = { instructions.layTaskOverrides() },
-            schedule = { Daily.schedule(app) },
+            schedule = { DailyAlarms.schedule(app) },
             reread = {
                 sync.refreshCalendar()
                 Briefing.replanToday(app)

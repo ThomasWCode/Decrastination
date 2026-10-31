@@ -63,6 +63,7 @@ import com.thomaswcode.decrastination.enrich.AiUsage
 import com.thomaswcode.decrastination.enrich.ModelEffort
 import com.thomaswcode.decrastination.learn.AnkiProgress
 import com.thomaswcode.decrastination.learn.Daily
+import com.thomaswcode.decrastination.learn.DailyAlarms
 import com.thomaswcode.decrastination.learn.SummaryEmail
 import com.thomaswcode.decrastination.protect.ProtectionPanel
 import com.thomaswcode.decrastination.protect.SettingsChanges
@@ -130,7 +131,7 @@ class SettingsActivity : ComponentActivity() {
                         enabled = screen.canSave,
                         onClick = {
                             // The reminders' alarms, at their new times.
-                            scope.launch { screen.save(graph.protection) { Daily.schedule(this@SettingsActivity) } }
+                            scope.launch { screen.save(graph.protection) { DailyAlarms.schedule(this@SettingsActivity) } }
                         },
                         modifier = Modifier.fillMaxWidth(),
                     ) { Text("Save") }

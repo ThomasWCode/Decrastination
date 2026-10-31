@@ -26,7 +26,7 @@ import com.thomaswcode.decrastination.block.FocusService
 import com.thomaswcode.decrastination.core.Blocklist
 import com.thomaswcode.decrastination.data.ProtectionRecord
 import com.thomaswcode.decrastination.data.WatchdogState
-import com.thomaswcode.decrastination.learn.Daily
+import com.thomaswcode.decrastination.learn.DailyAlarms
 import com.thomaswcode.decrastination.notify.Channels
 import com.thomaswcode.decrastination.notify.NoticeId
 import com.thomaswcode.decrastination.notify.Notify
@@ -320,7 +320,7 @@ class BootReceiver : BroadcastReceiver() {
             try {
                 SyncWorker.schedule(context)
                 WatchdogWorker.schedule(context)
-                Daily.schedule(context)
+                DailyAlarms.schedule(context)
                 Watchdog.check(context, repair = true)
             } finally {
                 pending.finish()

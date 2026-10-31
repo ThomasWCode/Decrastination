@@ -33,8 +33,8 @@ class ArchitectureTest {
 
     @Test
     fun `only the notifier posts`() {
-        // Android's notification manager, called by Notifier's tray alone; Channels makes the channels.
-        val stray = outside(Regex("""\bNotificationManager(Compat)?\b"""), setOf("notify/Notifier.kt", "notify/Channels.kt"))
+        // Android's notification manager, called by Notifier's tray alone; AndroidChannels makes the channels.
+        val stray = outside(Regex("""\bNotificationManager(Compat)?\b"""), setOf("notify/Notifier.kt", "notify/AndroidChannels.kt"))
         assertTrue(stray.isEmpty(), "Android's notification manager is called outside notify/Notifier.kt: $stray")
     }
 
@@ -111,7 +111,7 @@ class ArchitectureTest {
         val WRITERS: Map<String, Set<String>> = mapOf(
             "tasks" to setOf("sync/Sync.kt", "sync/Syncer.kt", "enrich/Readings.kt", "tasks/Instructions.kt", "tasks/OwnTasks.kt", "block/Focus.kt", "block/Photos.kt", "felix/Conversation.kt", "felix/Looks.kt"),
             "settings" to setOf("protect/Protection.kt"),
-            "runtime" to setOf("notify/Notifier.kt", "AppGraph.kt", "block/FocusService.kt", "learn/Briefing.kt", "learn/Daily.kt"),
+            "runtime" to setOf("notify/Notifier.kt", "AppGraph.kt", "block/FocusService.kt", "learn/Briefing.kt", "learn/DailyAlarms.kt"),
             "session" to setOf("block/Focus.kt", "block/SlotAlarms.kt", "plan/Planning.kt", "tasks/Instructions.kt"),
             "protection" to setOf("protect/Protection.kt", "protect/Watchdog.kt"),
             "model" to setOf("enrich/ModelGateway.kt", "plan/Ahead.kt"),

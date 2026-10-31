@@ -22,7 +22,7 @@ Why a table of JSON documents and not a table a type: the stores are already the
 
 ## The store backend
 
-`JsonStore` gains a `StoreBackend` interface in stage 0 with three operations: read a store's text, write it (with its version), list the stores. `FileBackend` is today's behaviour (write `.tmp`, rename) and the phone keeps it. `SqliteBackend` on the server writes `stores` and `store_history` in the enclosing transaction. Everything above the backend (the `StateFlow`, the version check, the migrations run on the text before decoding, the `.v<n>` keeping) stays as it is; the phone's files keep the `.v<n>` and unreadable copies, the server keeps `store_history`.
+`JsonStore` holds a `StoreBackend` (4.12.1): read a store's text, write it (with its version), list the stores, and four operations for the copies that outlast a change: keep an older shape's text, find a copy already set aside, set one aside, let the copies go. `FileBackend` is the phone's, the files as they have always been (`.tmp` and a rename, `.v<n>`, `.unreadable-<when>`). `SqliteBackend` on the server writes `stores` and `store_history` in the enclosing transaction, and a row of `store_history` is its copy: keeping a shape writes nothing more, as the row before the migration's is there; setting one aside adds a row with the cause `unreadable`; letting go deletes the store's rows, which a clear or a reset asks for (D-94). Everything above the backend (the `StateFlow`, the version check, the migrations run on the text before decoding) stays as it is.
 
 ## Revisions
 

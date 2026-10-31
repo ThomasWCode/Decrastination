@@ -15,7 +15,7 @@ import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.SlotKind
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.learn.CalendarTime
-import com.thomaswcode.decrastination.learn.Daily
+import com.thomaswcode.decrastination.learn.DailyAlarms
 import java.time.DayOfWeek
 import java.time.ZoneId
 import kotlinx.coroutines.CoroutineScope
@@ -107,7 +107,7 @@ class NextWidgetReceiver : GlanceAppWidgetReceiver() {
         // No sync, just draw the plan again: at midnight or a deadline, or because the time zone
         // or clock changed, which moves both the day boundaries and the next alarm.
         // The zone or the clock moved: the daily alarms are wall-clock times, so they're set again.
-        if (intent.action != WidgetUpdater.ACTION_REDRAW) Daily.schedule(context)
+        if (intent.action != WidgetUpdater.ACTION_REDRAW) DailyAlarms.schedule(context)
         val pending = goAsync()
         CoroutineScope(Dispatchers.Default).launch {
             try {

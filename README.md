@@ -2,7 +2,7 @@
 
 An Android app that gathers everything outstanding (Teams assignments, Power Planner, starred Gmail conversations, AnkiDroid decks and tasks of your own), plans it into the days before each is due as timed slots, writes them to your calendar, shows the next thing to do on a home-screen widget, and, while work is due, replaces distracting apps with that next thing until it's done. Claude reads the work into steps and estimates, and Felix, a persona you chat with, makes changes and messages you about the day. The app opens on that chat, its home; Day, Work and Stats sit behind its Plan button.
 
-A personal, sideloaded app for one phone, version 4.12.0.
+A personal, sideloaded app for one phone, version 4.12.1.
 
 ## Documents
 
@@ -27,16 +27,16 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 Install over the app with `-r`, never uninstalling it, and keep a backup first ([development.md](docs/development.md#the-phone)).
 
-Every prompt and schema Claude is sent has a golden copy in `app/src/test/resources/prompts/`, but the web search's prompt, which `FelixInputsDocTest` holds in [`docs/spec/felix-inputs.md`](docs/spec/felix-inputs.md); the tests fail on any difference, with its diff. When a change is meant, write them again and commit them with it; where a reading's prompt or the profile changed, raise `ReadingPrompts.VERSION` too (a test asks for it), so the readings made by the old ones are made again:
+Every prompt and schema Claude is sent has a golden copy in `engine/src/test/resources/prompts/`, but the web search's prompt, which `FelixInputsDocTest` holds in [`docs/spec/felix-inputs.md`](docs/spec/felix-inputs.md); the tests fail on any difference, with its diff. When a change is meant, write them again and commit them with it; where a reading's prompt or the profile changed, raise `ReadingPrompts.VERSION` too (a test asks for it), so the readings made by the old ones are made again:
 
 ```bash
-./gradlew testDebugUnitTest -PupdateGolden=true --tests '*GoldenPromptsTest*'
+./gradlew :engine:test -PupdateGolden=true --tests '*GoldenPromptsTest*'
 ```
 
 The API compiles every schema into a grammar and refuses one too large, which no test can tell from the schema alone. After any change to a schema, have it compile them all before merging (the week's summary's, one plain string, isn't among them; one call for each schema, about a cent each; a refused one costs nothing; the key from the environment):
 
 ```bash
-./gradlew testDebugUnitTest --tests '*SchemaCompileTest*' -PcheckSchemas=true
+./gradlew :engine:test --tests '*SchemaCompileTest*' -PcheckSchemas=true
 ```
 
 Debug builds are signed with a copy of the widget's committed `app/debug.keystore`. Sharing its key is what grants this app the widget's signature-level permission to read the assignments, so don't change it.

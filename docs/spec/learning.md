@@ -142,7 +142,7 @@ The Reviews page (LR-01) lists each review with its note, each change with *Undo
 
 ## The daily jobs
 
-`learn/Daily.kt` keeps three alarms, each set again once it has run: one that ran today stands for today, and one that failed is tried again 10 minutes later, up to three times (`Daily.failed`).
+`learn/DailyAlarms.kt` keeps three alarms at the times `learn/Daily.kt` works out, each set again once it has run: one that ran today stands for today, and one that failed is tried again 10 minutes later, up to three times (`Daily.failed`).
 - **The morning briefing** (`learn/Briefing.kt`): 07:00 on a school day by the school calendar, 08:30 on any other, a weekday off included (`briefingWeekdayMin`, `briefingWeekendMin`; D-74); set again when the school calendar changes. A change that moves today's time to one already gone by, its briefing not yet run (a day off taken out after 07:15 and before its 08:30, or the time set earlier in Settings), leaves today without one: the next is tomorrow's; one gone by within the last quarter of an hour runs at once (`Daily.from`, D-104).
   What's run out of what Felix remembers is let go of first (`Conversation.forgetExpired`, D-103); then it posts what the night held back, reads the calendar, finishes yesterday's day record and makes today's, offers the morning's Teams sync for 90 minutes, then sends Felix's message or the day's list; after it, Felix's notes and reminders no longer wanted are let go (`Conversation.pruneFelix`).
 - **The check-in**, on Sundays at `checkInMin`, above.

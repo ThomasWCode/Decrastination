@@ -57,7 +57,7 @@ import com.thomaswcode.decrastination.felix.FelixCaller
 import com.thomaswcode.decrastination.felix.FelixPrompts
 import com.thomaswcode.decrastination.learn.Assessment
 import com.thomaswcode.decrastination.learn.Briefing
-import com.thomaswcode.decrastination.learn.CalendarTime
+import com.thomaswcode.decrastination.learn.CalendarReader
 import com.thomaswcode.decrastination.learn.EventJudge
 import com.thomaswcode.decrastination.protect.Watchdog
 import com.thomaswcode.decrastination.sources.anki.AnkiProvider
@@ -358,11 +358,11 @@ class CommandActivity : Activity() {
                 val time = graph.sync.calendarTime
                 // How far it was read (DX-14: as far as the plan reaches).
                 val last = time.events.maxOfOrNull { it.start }?.let { Instant.ofEpochMilli(it).atZone(graph.clock.zone()).toLocalDate() }
-                Log.i(TAG, "Calendar: ${time.events.size} events, the last on $last; ${time.busy.size} busy, loads ${time.dayLoads}, ${time.toAsk.size} to ask about; allowed ${CalendarTime.allowed(this)}")
+                Log.i(TAG, "Calendar: ${time.events.size} events, the last on $last; ${time.busy.size} busy, loads ${time.dayLoads}, ${time.toAsk.size} to ask about; allowed ${CalendarReader.allowed(this)}")
             }
             "assess" -> {
                 val task = graph.tasks.value.tasks.firstOrNull { it.id == intent.getStringExtra("task") }
-                if (task == null) Log.w(TAG, "assess needs --es task <id>") else Assessment.ask(this, listOf(task.copy(kind = Kind.Homework)))
+                if (task == null) Log.w(TAG, "assess needs --es task <id>") else graph.conversation.askHowItWent(Assessment.asks(listOf(task.copy(kind = Kind.Homework)), graph.log.value))
             }
             "ai-prompts" -> {
                 val count = intent.getIntExtra("count", 6)

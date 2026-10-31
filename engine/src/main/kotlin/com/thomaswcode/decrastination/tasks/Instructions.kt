@@ -1,0 +1,514 @@
+package com.thomaswcode.decrastination.tasks
+
+import com.thomaswcode.decrastination.block.Focus
+import com.thomaswcode.decrastination.core.About
+import com.thomaswcode.decrastination.core.Change
+import com.thomaswcode.decrastination.core.ChangeType
+import com.thomaswcode.decrastination.core.ChatState
+import com.thomaswcode.decrastination.core.Duplicates
+import com.thomaswcode.decrastination.core.HalfDay
+import com.thomaswcode.decrastination.core.Instruction
+import com.thomaswcode.decrastination.core.InstructionRules
+import com.thomaswcode.decrastination.core.InstructionState
+import com.thomaswcode.decrastination.core.InstructionStatus
+import com.thomaswcode.decrastination.core.Mine
+import com.thomaswcode.decrastination.core.NoSchool
+import com.thomaswcode.decrastination.core.OwnTaskRules
+import com.thomaswcode.decrastination.core.Planner
+import com.thomaswcode.decrastination.core.ProposalState
+import com.thomaswcode.decrastination.core.SchoolCalendar
+import com.thomaswcode.decrastination.core.SchoolDays
+import com.thomaswcode.decrastination.core.Settings
+import com.thomaswcode.decrastination.core.SlotState
+import com.thomaswcode.decrastination.core.Slotter
+import com.thomaswcode.decrastination.core.WallClock
+import com.thomaswcode.decrastination.core.WeeklyRules
+import com.thomaswcode.decrastination.core.withMine
+import com.thomaswcode.decrastination.data.JsonStore
+import com.thomaswcode.decrastination.data.SessionState
+import com.thomaswcode.decrastination.data.TaskState
+import com.thomaswcode.decrastination.enrich.Called
+import com.thomaswcode.decrastination.enrich.InstructionAnswers
+import com.thomaswcode.decrastination.enrich.InstructionPrompts
+import com.thomaswcode.decrastination.enrich.InstructionReader
+import com.thomaswcode.decrastination.enrich.ModelCalls
+import com.thomaswcode.decrastination.enrich.ModelEffort
+import com.thomaswcode.decrastination.enrich.ModelGateway
+import com.thomaswcode.decrastination.enrich.ModelHold
+import com.thomaswcode.decrastination.enrich.Profile
+import com.thomaswcode.decrastination.learn.EventJudge
+import com.thomaswcode.decrastination.plan.Planning
+import com.thomaswcode.decrastination.ports.Log
+import java.time.Instant
+import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
+
+/**
+ * Your instructions (docs/plan_v4/architecture.md §The rules): written and read by Claude
+ * ([addInstruction], [readInstructions]), or made yourself as quick changes ([addOwnChange],
+ * [laterToday], [takeBackQuick]); applied at once once read, or refused saying why ([applyInstruction]);
+ * deleted or taken back ([deleteInstruction]); and laid over everything they change ([layInstructions],
+ * [layTaskOverrides]). The rest of the app reads `instructions.json` here ([value], [state]); a card of
+ * Felix's adds the instruction it makes itself, then has it applied here.
+ * Built like [com.thomaswcode.decrastination.block.Focus]: its stores, the clock, the gateway, the focus
+ * and the plan, and small callbacks. Their pure rules are [InstructionRules]'s,
+ * named in full here, as this class has their name.
+ */
+class Instructions(
+    private val instructions: JsonStore<InstructionState>,
+    private val tasks: JsonStore<TaskState>,
+    private val settings: JsonStore<Settings>,
+    private val session: JsonStore<SessionState>,
+    private val school: JsonStore<SchoolCalendar>,
+    /** The chat, whose card that made an instruction is told when it's taken back. */
+    private val chat: JsonStore<ChatState>,
+    private val clock: WallClock,
+    private val scope: CoroutineScope,
+    private val gateway: ModelGateway,
+    private val focus: Focus,
+    private val planning: Planning,
+    /** The calendar's busy time and events, as last read and judged. */
+    private val calendarTime: () -> EventJudge.Time,
+    /** Who the student is, as each call sends it (AI-05). */
+    private val profile: () -> Profile.Block,
+    /** The calendar read again with its answers, and today's record made again with it. */
+    private val reread: suspend () -> Unit,
+    /** The widget drawn again. */
+    private val redraw: suspend () -> Unit,
+    /**
+     * Your reply to Felix's question about a task (AI-10), read: whether it answers the question, and
+     * whether a change of it was made, for him to keep it as the task's answer or take it on in the chat.
+     */
+    private val answerRead: suspend (Instruction, Boolean, Boolean) -> Unit = { _, _, _ -> },
+    /** His question, as he put it, that a reply of yours ([Instruction.answer]) answers: shown to its reading. */
+    private val question: (Instruction) -> String? = { null },
+) {
+    /** Your instructions as they are now. */
+    val value: InstructionState get() = instructions.value
+
+    /** Your instructions as they change. */
+    val state: StateFlow<InstructionState> get() = instructions.state
+
+    /** Held while instructions are read, so each is read once. */
+    private val readingInstructions = Mutex()
+
+    /**
+     * His question as he put it that a reply of yours, by its instruction's id, answers ([addInstruction]): given its
+     * first read, which begins as the reply's kept and may come before the chat has it. Let go once read.
+     */
+    private val answering = ConcurrentHashMap<String, String>()
+
+    /**
+     * Writes down a new instruction about [about] and has Claude read it: applied once it's read
+     * (D-67), and taken back under Your changes. Your [answer] to his [question], it's read shown that.
+     */
+    suspend fun addInstruction(text: String, about: About, answer: Boolean = false, question: String? = null): String {
+        val id = UUID.randomUUID().toString()
+        if (answer && question != null) answering[id] = question
+        instructions.update { it.copy(instructions = it.instructions + Instruction(id, text.trim().take(InstructionPrompts.MAX_TEXT), about, clock.now(), answer = answer)) }
+        scope.launch { readInstructions(interactive = true) }
+        return id
+    }
+
+    /**
+     * A change you made yourself, with no Claude (IMP-P2-001: a task isn't one, can't start before
+     * a day, is due on another): kept as an instruction already read, [text] its words, and applied
+     * as you'd apply one, under [id]. Saved and applied together: the screen that asked going
+     * meanwhile (turned, closed) can't leave it saved and not applied.
+     */
+    suspend fun addOwnChange(id: String, text: String, about: About, change: Change): Unit = withContext(NonCancellable) {
+        val instruction = Instruction(id, text, about, clock.now(), state = InstructionStatus.Understood, changes = listOf(change), quick = true)
+        instructions.update { state ->
+            // An earlier quick change of the same kind to the same task is replaced, not piled under
+            // this one; the new one is laid in its place as it's applied. A break outside's, which has no task, is the same
+            // break's that day (D-116).
+            state.copy(instructions = state.instructions.filterNot { it.id != id && replaces(it, change) } + instruction)
+        }
+        applyInstruction(id)
+    }
+
+    /**
+     * [key]'s piece later today (UI-03): to the first time after its slot (or now, or when its task
+     * can start) with its minutes free, around today's other slots and busy times, as a time you
+     * gave it (a change of yours, taken back in Your changes). Its task's next piece only, as a time
+     * pins that one (PL-04), and only a time the plan keeps (before its real deadline). The start, or
+     * null when today has none.
+     */
+    suspend fun laterToday(key: String): Long? {
+        val now = clock.now()
+        val zone = clock.zone()
+        val plan = planning.plan(now = now)
+        val chunk = plan.ordered.firstOrNull { it.key == key } ?: return null
+        if (plan.chunksOf(chunk.taskId).firstOrNull()?.key != key) return null
+        val task = tasks.value.tasks.firstOrNull { it.id == chunk.taskId } ?: return null
+        val own = plan.todaySlots.firstOrNull { it.chunk?.key == key }
+        val windows = SchoolDays.windows(plan.today, settings.value, tasks.value.timetable, school.value)
+        val busy = calendarTime().busy + InstructionRules.busy(instructions.value.applied, zone, plan.today, plan.today)
+        val from = listOfNotNull(now, own?.end, task.notBefore).max()
+        val start = Slotter.firstFreeAfter(
+            plan.todaySlots.filter { it.chunk?.key != key }, windows, busy, from, chunk.minutes, chunk.where, plan.today, zone, settings.value.slotBreakMin,
+        )?.takeIf { Planner.pinProblem(task, it, now, zone, chunk.minutes) == null } ?: return null
+        val at = Instant.ofEpochMilli(start).atZone(zone)
+        addOwnChange(
+            UUID.randomUUID().toString(),
+            "Later today",
+            About(taskId = chunk.taskId, taskTitle = chunk.title),
+            Change(ChangeType.AtTime, taskId = chunk.taskId, date = at.toLocalDate().toString(), startMin = at.hour * 60 + at.minute, time = start),
+        )
+        return start
+    }
+
+    /** Whether [change], a quick change of yours, takes [instruction]'s place: of its kind to its task; a break's, that break's that day. */
+    private fun replaces(instruction: Instruction, change: Change): Boolean =
+        isQuick(instruction, change.taskId, change.type) &&
+            (change.type != ChangeType.OutsideAt || instruction.changes.single().let { it.date == change.date && it.outsideMin == change.outsideMin })
+
+    /** Whether [instruction] is a quick change of [type] to [taskId] alone. */
+    private fun isQuick(instruction: Instruction, taskId: String?, type: ChangeType): Boolean =
+        instruction.quick && instruction.changes.singleOrNull()?.let { it.type == type && it.taskId == taskId } == true
+
+    /**
+     * Takes back your quick changes of [type] to [taskId]: what its source says (or an instruction of
+     * Claude's reading) stands again.
+     */
+    suspend fun takeBackQuick(taskId: String, type: ChangeType): Unit = applying.withLock {
+        val gone = instructions.value.instructions.filter { isQuick(it, taskId, type) }.map { it.id }.toSet()
+        if (gone.isEmpty()) return@withLock
+        instructions.update { state -> state.copy(instructions = state.instructions.filterNot { it.id in gone }) }
+        layInstructions()
+    }
+
+    /**
+     * Whether what's in force for [taskId]'s [type] is a quick change of yours: the last applied
+     * instruction that changes it. One of Claude's applied since wins, and *Undo* would take back
+     * nothing you'd see.
+     */
+    fun quickInForce(taskId: String, type: ChangeType): Boolean = InstructionRules.quickInForce(instructions.value.applied, taskId, type)
+
+    /** Has Claude read [id] again (written again, or after it found it unclear). */
+    suspend fun rereadInstruction(id: String, text: String) {
+        instructions.update { state ->
+            state.copy(instructions = state.instructions.map { if (it.id == id && it.state != InstructionStatus.Applied) it.copy(text = text.trim().take(InstructionPrompts.MAX_TEXT), state = InstructionStatus.Reading, changes = emptyList(), note = null) else it })
+        }
+        scope.launch { readInstructions(interactive = true) }
+    }
+
+    /**
+     * Reads the instructions waiting for Claude, one call each, as the enrichment's calls are made:
+     * under the cap, and resting after a failure. While Claude can't be asked, each says why.
+     */
+    suspend fun readInstructions(interactive: Boolean = false) = readingInstructions.withLock {
+        while (true) {
+            val next = instructions.value.instructions.firstOrNull { it.state == InstructionStatus.Reading } ?: return@withLock
+            val waiting = run call@{
+                val reader = gateway.client(ModelEffort.Job.Instruction)?.let { InstructionReader(it, clock.zone(), profile = profile()) } ?: return@call gateway.because(ModelHold.Off)
+                // Through a rest only for you waiting on it (AC-04): after a sync or an enrichment it waits.
+                val result = when (val called = gateway.call(interactive = interactive, record = ModelCalls.OnRecord(ModelEffort.Job.Instruction, next.text) { r: InstructionReader.Result -> r.usage to ModelCalls.outcome(r.refused, r.reading == null) }, cost = { r: InstructionReader.Result -> r.costUsd to r.refused }) { at -> reader.read(next, tasks.value.tasks, calendarTime().events, at, question = if (next.answer) answering[next.id] ?: question(next) else null, breaksOn = { planning.breaksOn(it) }, rules = WeeklyRules.inForce(instructions.value.applied)) }) {
+                    is Called.Held -> return@call gateway.because(called.hold)
+                    is Called.Failed -> {
+                        Log.w(Log.TAG, "Reading an instruction failed", called.error)
+                        return@call "Claude's call failed: ${gateway.retryWords()}"
+                    }
+                    is Called.Answered -> called.value
+                }
+                // Not read (refused, cut off, or not usable): a reply to his question is still taken as its answer, as most are.
+                val reading = result.reading ?: InstructionAnswers.Reading.Unclear(if (result.refused) "Claude declined to read it" else "Claude's answer couldn't be used")
+                // Taken, made and handed on together, the app's scope going or not: a reply taken is handed on.
+                withContext(NonCancellable) {
+                    // Whether this reading took the instruction as it was sent, in the same write: one discarded meanwhile isn't answered for.
+                    var taken = false
+                    instructions.update { state ->
+                        taken = false
+                        state.copy(
+                            instructions = state.instructions.mapNotNull { i ->
+                                // Only as it was sent: written again meanwhile, it's read again.
+                                if (i.id != next.id || i.state != InstructionStatus.Reading || i.text != next.text) {
+                                    i
+                                } else {
+                                    taken = true
+                                    when (reading) {
+                                        // A reply is read as one once, handed on below: written again, it's an instruction of yours.
+                                        is InstructionAnswers.Reading.Changes -> i.copy(state = InstructionStatus.Understood, changes = reading.changes, note = null, answer = false)
+                                        // A reply to his question that changes nothing goes: kept with its task, or taken on in the chat ([answerRead]).
+                                        is InstructionAnswers.Reading.Unclear -> if (i.answer) null else i.copy(state = InstructionStatus.Unclear, changes = emptyList(), note = reading.why)
+                                    }
+                                }
+                            },
+                        )
+                    }
+                    // Let go once it's read as it was sent; written again meanwhile, the next read still needs it.
+                    if (taken) answering.remove(next.id)
+                    // Made as soon as it's read (D-67: nothing of his waits for Apply), as the
+                    // chat's are; one that can't be is marked unclear, saying why. Taken back under Your changes.
+                    val made = taken && reading is InstructionAnswers.Reading.Changes && applyInstruction(next.id)
+                    // Your reply to his question: his to keep as the task's answer, or, one that isn't, to answer in the chat
+                    // where nothing of it was made (a change refused is none).
+                    if (next.answer && taken) answerRead(next, reading.answers, made)
+                }
+                null
+            }
+            if (waiting != null) {
+                // Not now: each still waiting says why, and they're read when Claude can be asked.
+                instructions.update { state -> state.copy(instructions = state.instructions.map { if (it.state == InstructionStatus.Reading) it.copy(note = waiting) else it }) }
+                return@withLock
+            }
+        }
+    }
+
+    /** Held from checking an instruction to applying it, so two applied at once can't both pass the check. */
+    val applying = Mutex()
+
+    /**
+     * Applies [id], once read (D-67), at once, armed or not: what an instruction changes is
+     * the work, yours to change, never the blocker. Whether it was: one refused is marked unclear, saying why.
+     */
+    suspend fun applyInstruction(id: String): Boolean = applying.withLock {
+        val instruction = instructions.value.instructions.firstOrNull { it.id == id && it.state == InstructionStatus.Understood } ?: return@withLock false
+        if (refuseCircle(instruction)) return@withLock false
+        if (refuseOnOwnTasks(instruction)) return@withLock false
+        if (refuseLate(instruction)) return@withLock false
+        setApplied(id)
+        true
+    }
+
+    /**
+     * [instruction] would put a task's work after its real deadline (PL-04): it's marked unclear,
+     * saying so, rather than applied.
+     */
+    private suspend fun refuseLate(instruction: Instruction): Boolean {
+        val byId = tasks.value.tasks.associateBy { it.id }
+        if (instruction.changes.none { c -> c.taskId?.let(byId::get)?.let { InstructionRules.latePin(c, it, clock.zone(), clock.now()) } == true }) return false
+        instructions.update { state ->
+            state.copy(instructions = state.instructions.map { if (it.id == instruction.id) it.copy(state = InstructionStatus.Unclear, note = "It's due before then") else it })
+        }
+        return true
+    }
+
+    /**
+     * [instruction] would leave one of your own tasks as the form wouldn't take it (a start after its
+     * due date): it's marked unclear, saying why, rather than applied, as nothing of it would be.
+     */
+    private suspend fun refuseOnOwnTasks(instruction: Instruction): Boolean {
+        val problem = OwnTaskRules.problemWith(tasks.value.tasks, instruction.changes) ?: return false
+        instructions.update { state ->
+            state.copy(instructions = state.instructions.map { if (it.id == instruction.id) it.copy(state = InstructionStatus.Unclear, note = problem) else it })
+        }
+        return true
+    }
+
+    /**
+     * [instruction] would have tasks wait for each other in a circle, with those applied: it's
+     * marked unclear, saying so, rather than applied.
+     */
+    private suspend fun refuseCircle(instruction: Instruction): Boolean {
+        if (!InstructionRules.makesCircle(instruction.changes, instructions.value.applied)) return false
+        instructions.update { state ->
+            state.copy(
+                instructions = state.instructions.map {
+                    if (it.id == instruction.id) it.copy(state = InstructionStatus.Unclear, note = "It would have tasks wait for each other in a circle, so none would ever be planned") else it
+                },
+            )
+        }
+        return true
+    }
+
+    private suspend fun setApplied(id: String) {
+        // The tasks it gives new steps, and what those leave of each one's as they were, read before your own task takes
+        // them: its change is then made on it and gone from the instruction.
+        val restepped = instructions.value.instructions.firstOrNull { it.id == id }?.changes.orEmpty().filter { it.type == ChangeType.Steps }.mapNotNull { it.taskId }
+        val unchanged = unchangedSteps(id)
+        makeOnSchool(id)
+        makeOnOwnTasks(id)
+        // A time, a day or a start you gave a task moves it on purpose: its slots today are recorded
+        // moved (LR-09), as they were, and its missed slots forgotten (PL-13).
+        val moved = instructions.value.instructions.firstOrNull { it.id == id }?.changes.orEmpty()
+            .filter { it.type == ChangeType.AtTime || it.type == ChangeType.OnDay || it.type == ChangeType.StartFrom }.mapNotNull { it.taskId }
+        if (moved.isNotEmpty()) {
+            val changes = instructions.value.instructions.firstOrNull { it.id == id }?.changes.orEmpty()
+            InstructionRules.movedSlots(changes, focus.plan()).forEach { slot -> focus.moveSlot(slot.key, Focus.Laid(slot.start, slot.end, slot.window)) }
+            session.update { state -> state.copy(slots = moved.fold(state.slots) { s, taskId -> s.moved(taskId) }) }
+        }
+        // New steps on a task, a rebalance's among them (D-110), are laid afresh: its starts kept today were its
+        // old steps', and a step kept at one would stay there, shorter or longer. One begun stays where it is, and
+        // one as it was keeps its start, so the times said of it still hold.
+        if (restepped.isNotEmpty()) {
+            val now = clock.now()
+            session.update { state -> state.copy(slots = restepped.fold(state.slots) { s, taskId -> s.released(taskId, now, unchanged[taskId].orEmpty()) }) }
+        }
+        instructions.update { state ->
+            state.copy(instructions = state.instructions.map { if (it.id == id && it.state == InstructionStatus.Understood) it.copy(state = InstructionStatus.Applied, appliedAt = clock.now()) else it })
+        }
+        layInstructions()
+    }
+
+    /** Days off added to the school calendar (PL-16), as Settings → School adds them. */
+    suspend fun addSchoolDays(entry: NoSchool) {
+        school.update { it.with(entry) }
+    }
+
+    /** A half-day added to the school calendar (PL-16), as Settings → School adds one. */
+    suspend fun addSchoolDays(entry: HalfDay) {
+        school.update { it.with(entry) }
+    }
+
+    /** Days off taken out of the school calendar, as Settings → School deletes them. */
+    suspend fun deleteSchoolDays(entry: NoSchool) {
+        school.update { it.without(entry) }
+    }
+
+    /** A half-day taken out of the school calendar, as Settings → School deletes one. */
+    suspend fun deleteSchoolDays(entry: HalfDay) {
+        school.update { it.without(entry) }
+    }
+
+    /** For each task [id] gives new steps, the places where they're its steps as they were ([SlotState.unchanged]), as the plan takes it now. */
+    private fun unchangedSteps(id: String): Map<String, Set<Int>> {
+        val instruction = instructions.value.instructions.firstOrNull { it.id == id } ?: return emptyMap()
+        val changes = instruction.changes.filter { it.type == ChangeType.Steps }
+        if (changes.isEmpty()) return emptyMap()
+        val calibration = planning.calibration()
+        // Each task as it is, and as it will be with [instruction]: a total you gave shares its steps' minutes out.
+        val before = planning.asPlanned().associateBy { it.id }
+        val after = planning.asPlanned(applied = instructions.value.applied + instruction).associateBy { it.id }
+        return changes.mapNotNull { c ->
+            val was = c.taskId?.let(before::get) ?: return@mapNotNull null
+            val will = after[was.id] ?: return@mapNotNull null
+            was.id to SlotState.unchanged(was, c.steps.orEmpty(), was.plannedStepMinutes(calibration.multiplierFor(was)), will.plannedStepMinutes(calibration.multiplierFor(will)))
+        }.toMap()
+    }
+
+    /**
+     * [id]'s days off and half-days put in the school calendar (PL-16), and taken out of it: Settings
+     * lists them, and deleting one there is how one is taken back. One left with nothing else to do
+     * is done with, and goes.
+     */
+    private suspend fun makeOnSchool(id: String) {
+        val instruction = instructions.value.instructions.firstOrNull { it.id == id } ?: return
+        val made = instruction.changes.filter { InstructionRules.schoolEntry(it) != null }
+        if (made.isEmpty()) return
+        school.update { calendar ->
+            made.mapNotNull(InstructionRules::schoolEntry).fold(calendar) { c, entry ->
+                when (entry) {
+                    is NoSchool -> c.with(entry)
+                    is HalfDay -> c.with(entry)
+                    else -> c
+                }
+            }
+        }
+        instructions.update { state ->
+            state.copy(instructions = state.instructions.mapNotNull { i -> if (i.id != id) i else i.copy(changes = i.changes - made.toSet()).takeIf { it.changes.isNotEmpty() } })
+        }
+    }
+
+    /**
+     * [id]'s due dates, starts and minutes for your own tasks made on them ([OwnTaskRules.changed]), and
+     * taken out of it: there's no source's value for taking it back to return to, and the form can
+     * change them again. One left with nothing else to do is done with, and goes.
+     */
+    private suspend fun makeOnOwnTasks(id: String) {
+        val instruction = instructions.value.instructions.firstOrNull { it.id == id } ?: return
+        // Each task's together, as one draft: only those the form would take are made (a restored
+        // instruction's others stay in it, laid over the task as any instruction is).
+        val made = OwnTaskRules.madeOn(tasks.value.tasks, instruction.changes)
+        if (made.isEmpty()) return
+        tasks.update { state ->
+            state.copy(tasks = state.tasks.map { t -> made.filter { it.taskId == t.id }.takeIf { it.isNotEmpty() }?.let { OwnTaskRules.draftWithAll(t, it) }?.let { OwnTaskRules.edited(t, it) } ?: t })
+        }
+        instructions.update { state ->
+            state.copy(
+                instructions = state.instructions.mapNotNull { i ->
+                    if (i.id != id) i else i.copy(changes = i.changes - made.toSet()).takeIf { it.changes.isNotEmpty() }
+                },
+            )
+        }
+    }
+
+    /** Deletes [id]: discarded if it wasn't applied, taken back if it was. */
+    suspend fun deleteInstruction(id: String): Unit = applying.withLock {
+        val instruction = instructions.value.instructions.firstOrNull { it.id == id } ?: return@withLock
+        if (instruction.state == InstructionStatus.Applied && refuseTakingBack(instruction)) return@withLock
+        remove(id)
+    }
+
+    /**
+     * Taking [instruction] back would leave tasks waiting for each other in a circle (an older
+     * instruction it replaced coming back into force): it stays, saying so.
+     */
+    private suspend fun refuseTakingBack(instruction: Instruction): Boolean {
+        val rest = instructions.value.applied.filterNot { it.id == instruction.id }
+        if (!InstructionRules.makesCircle(emptyList(), rest)) return false
+        instructions.update { state ->
+            state.copy(
+                instructions = state.instructions.map {
+                    if (it.id == instruction.id) it.copy(note = "Taking this back would bring back an earlier instruction that has tasks waiting for each other in a circle: take that one back first") else it
+                },
+            )
+        }
+        return true
+    }
+
+    private suspend fun remove(id: String) {
+        answering.remove(id)
+        val was = instructions.value.instructions.firstOrNull { it.id == id }
+        instructions.update { state -> state.copy(instructions = state.instructions.filterNot { it.id == id }) }
+        if (was?.state == InstructionStatus.Applied) layInstructions()
+        // A chat card that made it, taken back here (under Your changes): the card says so, and the chat
+        // recalls it. What it made on your own tasks, and its days off, stand, still undone from the card.
+        if (chat.value.messages.any { m -> m.proposals.any { it.made == id } }) {
+            chat.update { s ->
+                s.copy(
+                    messages = s.messages.map { m ->
+                        m.copy(proposals = m.proposals.map { p ->
+                            when {
+                                p.made != id -> p
+                                // Its days off stand too, still undone from the card.
+                                p.before.isEmpty() && p.schoolBefore == null -> p.copy(state = ProposalState.Proposed, made = null)
+                                else -> p.copy(made = null)
+                            }
+                        })
+                    },
+                )
+            }
+        }
+    }
+
+    /**
+     * The applied instructions laid over everything they change: each task's overrides (on the
+     * task, so syncs keep them), the calendar's answers, and the plan, with today's record made
+     * again as an answer about an event does.
+     */
+    suspend fun layInstructions() {
+        layTaskOverrides()
+        focus.forgetPlan()
+        reread()
+        // A day's or time's instruction changes no store the widget watches, and the calendar's read
+        // (which redraws it) is skipped without its permission: so it's redrawn here.
+        runCatching { redraw() }.onFailure { Log.w(Log.TAG, "Widget update failed", it) }
+    }
+
+    /**
+     * Each task's overrides made what the applied instructions say: the instructions are what's
+     * kept, the tasks follow. Done at start as well, so a stop between writing the one and the other
+     * (an instruction applied but not yet laid, or taken back with its override still on the task)
+     * is put right.
+     */
+    suspend fun layTaskOverrides() {
+        val overrides = InstructionRules.taskOverrides(instructions.value.applied)
+        tasks.update { state ->
+            state.copy(
+                tasks = state.tasks.map { task ->
+                    val o = overrides[task.id] ?: Mine.NONE
+                    val now = task.mine
+                    if (o == now) task else task.withMine(o)
+                }.let(Duplicates::linksPresent),
+            )
+        }
+    }
+}

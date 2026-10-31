@@ -19,21 +19,9 @@ import java.time.Instant
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
-/**
- * What a service needs of notifications (docs/plan_v4/architecture.md §Ports): one posted
- * or cancelled by its [NoticeId], one of many of a kind told apart by a tag; whether a channel's reach
- * the screen; and what was held back posted. [Notifier] is the app's; a test's keeps a list.
- */
-interface Notices {
+/** [Notices], with what only the phone can do: a notification Android made, posted by its [NoticeId], one of many of a kind told apart by a tag. */
+interface Posts : Notices {
     fun post(id: NoticeId, notification: Notification, tag: String? = null)
-
-    fun cancel(id: NoticeId, tag: String? = null)
-
-    /** Whether [channel]'s notifications reach the screen: allowed, and the channel not switched off. */
-    fun shown(channel: String): Boolean
-
-    /** What was held back (LR-07), posted now, as it was made. */
-    suspend fun postHeld()
 }
 
 /**
@@ -49,7 +37,7 @@ class Notifier(
     private val clock: WallClock,
     /** Where the count and the held list are written, after the decision. */
     private val scope: CoroutineScope,
-) : Notices {
+) : Posts {
 
     /** What Android does with notifications: [AndroidTray] on the phone, a list in a test. */
     interface Tray {

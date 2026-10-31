@@ -14,7 +14,7 @@ import android.provider.CalendarContract.Calendars
 import android.provider.CalendarContract.Events
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.R
-import com.thomaswcode.decrastination.learn.CalendarTime
+import com.thomaswcode.decrastination.learn.CalendarReader
 import com.thomaswcode.decrastination.notify.Channels
 import com.thomaswcode.decrastination.notify.NoticeId
 import com.thomaswcode.decrastination.notify.Notify
@@ -115,7 +115,7 @@ class SlotCalendar(private val context: Context) : CalendarProvider {
     }
 
     override fun watch(onChange: () -> Unit): Boolean {
-        if (!CalendarTime.allowed(context)) return false
+        if (!CalendarReader.allowed(context)) return false
         context.contentResolver.registerContentObserver(
             Events.CONTENT_URI,
             true,
