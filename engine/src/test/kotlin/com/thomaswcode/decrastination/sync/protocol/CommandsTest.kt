@@ -1,5 +1,6 @@
 package com.thomaswcode.decrastination.sync.protocol
 
+import com.thomaswcode.decrastination.block.Focus
 import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.Change
 import com.thomaswcode.decrastination.core.ChangeType
@@ -15,11 +16,19 @@ import com.thomaswcode.decrastination.core.Replay
 import com.thomaswcode.decrastination.core.ReplayClock
 import com.thomaswcode.decrastination.core.Rule
 import com.thomaswcode.decrastination.core.newStepId
+import com.thomaswcode.decrastination.data.SecretCipher
+import com.thomaswcode.decrastination.data.Stores
 import com.thomaswcode.decrastination.data.WeeklyReview
 import com.thomaswcode.decrastination.felix.Conversation
+import com.thomaswcode.decrastination.felix.Looks
 import com.thomaswcode.decrastination.learn.CheckIn
+import com.thomaswcode.decrastination.learn.Learning
 import com.thomaswcode.decrastination.learn.ReviewInput
+import com.thomaswcode.decrastination.protect.Protection
+import com.thomaswcode.decrastination.tasks.Instructions
+import com.thomaswcode.decrastination.tasks.OwnTasks
 import com.thomaswcode.decrastination.tasks.TasksHarness
+import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
@@ -27,6 +36,8 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.asContextElement
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.descriptors.elementNames
@@ -36,6 +47,12 @@ import kotlinx.serialization.json.JsonPrimitive
 
 /** A screen's change as data (D-140): every action goes and comes back whole, and a command's time and ids are its own on either side. */
 class CommandsTest {
+    private object Plain : SecretCipher {
+        override fun encrypt(plain: ByteArray) = plain
+
+        override fun decrypt(sealed: ByteArray) = sealed
+    }
+
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     private val review = WeeklyReview(at = 1L, lines = listOf("a line"), by = "rules", week = "2026-W44")
 
@@ -111,6 +128,30 @@ class CommandsTest {
         assertEquals(5L, first.first)
         assertEquals(first, again)
         assertEquals(7L, clock.now())
+    }
+
+    @Test
+    fun `settings changes that overlap, each building on the last, lose none`() = runBlocking {
+        val dir = Files.createTempDirectory("settings").toFile()
+        try {
+            val clock = FixedClock(1_000L)
+            val stores = Stores(dir, Plain)
+            val made = Protection(stores.settings, stores.protection, stores.device, stores.secrets, clock, this, adminActive = { false }) {}
+            val owners = object : Owners {
+                override val ownTasks: OwnTasks get() = error("not here")
+                override val instructions: Instructions get() = error("not here")
+                override val focus: Focus get() = error("not here")
+                override val conversation: Conversation get() = error("not here")
+                override val looks: Looks get() = error("not here")
+                override val protection = made
+                override val learning: Learning get() = error("not here")
+            }
+            val commands = Commands(owners, clock)
+            (1..30).map { i -> async(Dispatchers.Default) { commands.changeSettings { it.copy(hintsSeen = it.hintsSeen + "hint $i") } } }.awaitAll()
+            assertEquals(30, stores.settings.value.hintsSeen.size)
+        } finally {
+            dir.deleteRecursively()
+        }
     }
 
     @Test

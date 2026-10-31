@@ -13,6 +13,8 @@ import com.thomaswcode.decrastination.protect.SettingsChanges
 import com.thomaswcode.decrastination.tasks.Instructions
 import com.thomaswcode.decrastination.tasks.OwnTasks
 import kotlinx.coroutines.asContextElement
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 
@@ -54,6 +56,9 @@ interface Owners {
  * No screen calls an owner's change itself (`ArchitectureTest`).
  */
 class Commands(private val owners: Owners, private val clock: WallClock) {
+    /** Held across a change to the settings: [changeSettings]. */
+    private val changingSettings = Mutex()
+
     suspend fun <R, A> act(action: A): R where A : Action, A : Answers<R> {
         val command = Command(Ids.next(), clock.now(), action)
         return replaying(command) { action.run(owners) }
@@ -66,8 +71,11 @@ class Commands(private val owners: Owners, private val clock: WallClock) {
     private suspend fun <T> replaying(command: Command, block: suspend () -> T): T =
         withContext(Replay.current.asContextElement(Replay(command.at, command.id))) { block() }
 
-    /** Settings as [change] leaves what's been asked for, as a change of those fields alone. */
-    suspend fun changeSettings(change: (Settings) -> Settings) {
+    /**
+     * Settings as [change] leaves what's been asked for, as a change of those fields alone. Read and applied as one, as [change]
+     * may build on what's there, a list added to: another read between the two would lose this one's addition or that one's.
+     */
+    suspend fun changeSettings(change: (Settings) -> Settings) = changingSettings.withLock {
         val asked = owners.protection.asked
         act(ChangeSettings(SettingsChanges.changed(asked, change(asked))))
     }
