@@ -95,6 +95,14 @@ class DayViewTest {
     }
 
     @Test
+    fun `an event of no length stays at its moment, and one past midnight runs to the day's end`() {
+        val at = Fixtures.at("2026-10-12T12:00")
+        val late = CalendarEvent(2, "Late film", Fixtures.at("2026-10-12T23:00"), Fixtures.at("2026-10-13T01:00"), false)
+        val blocks = view(events = listOf(CalendarEvent(1, "A reminder", at, at, false), late)).blocks.filter { it.kind == "event" }
+        assertEquals(listOf(720 to 720, 1380 to 1440), blocks.map { it.startMin to it.endMin })
+    }
+
+    @Test
     fun `what's on record says how it went`() {
         val slot = plan().todaySlots.first { it.kind == SlotKind.Work }
         fun record(key: String, outcome: SlotOutcome, hours: Long) = SlotRecord(
