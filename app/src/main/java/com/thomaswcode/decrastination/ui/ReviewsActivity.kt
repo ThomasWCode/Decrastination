@@ -36,7 +36,7 @@ import com.thomaswcode.decrastination.learn.CheckIn
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.data.WeeklyReview
 import com.thomaswcode.decrastination.learn.ReviewInput
-import com.thomaswcode.decrastination.learn.Summary
+import com.thomaswcode.decrastination.learn.SummaryEmail
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -59,7 +59,7 @@ class ReviewsActivity : ComponentActivity() {
         if (savedInstanceState == null) intent.getStringExtra(EXTRA_SEND)?.let { week ->
             // The week's latest summary: Sunday's, where a midweek review wrote one before it (D-123).
             graph.log.value.reviews.filter { it.week == week && it.summary != null }.maxByOrNull { it.at }?.summary?.let { text ->
-                runCatching { startActivity(Summary.email(graph.settings.value.summaryEmail, week, text)) }
+                runCatching { startActivity(SummaryEmail.email(graph.settings.value.summaryEmail, week, text)) }
             }
         }
     }
@@ -125,7 +125,7 @@ private fun ReviewCard(review: WeeklyReview, checkIn: CheckIn?, settings: Settin
                 Text("The week's summary", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(text, style = MaterialTheme.typography.bodyMedium)
                 val context = LocalContext.current
-                review.week?.let { week -> TextButton(onClick = { runCatching { context.startActivity(Summary.email(settings.summaryEmail, week, text)) } }) { Text("Send it") } }
+                review.week?.let { week -> TextButton(onClick = { runCatching { context.startActivity(SummaryEmail.email(settings.summaryEmail, week, text)) } }) { Text("Send it") } }
             }
             checkIn?.let { c ->
                 fun said(text: String) = text.ifBlank { "-" }

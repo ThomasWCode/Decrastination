@@ -25,9 +25,11 @@ The app's structure as the 4.x plan left it (4.3.2, D-107), and the conventions 
  AppGraph: makes the platform, then the services, and wires their flows. Nothing else.
 ```
 
+Three Gradle modules hold this: `:core` the pure rules and types; `:engine` every line of the app that needs nothing of Android, in the packages it had, what it needs of a platform a port (D-125); `:app` the screens, the Android entry points, the device adapters and the ports' Android implementations, with `AppGraph`. So a package can be split across two modules, its Android-free part in `engine/src/main/kotlin` and the rest in `app/src/main/java`; the classes Android holds by name are in `:app`, under the names they always had.
+
 ## The rules
 
-1. **`core` stays pure**: no Android, no stores, no services. It's a module of its own (`:core`, `core/`), so the compiler holds it; a rule or a type that needs neither goes there, tested there.
+1. **`core` stays pure**: no Android, no stores, no services. It's a module of its own (`:core`, `core/`), so the compiler holds it; a rule or a type that needs neither goes there, tested there. **`:engine` is free of Android** the same way: plain Kotlin, held by its build, which is why code in it can run on the server.
 2. **A store is written only by its named writers.** Each store belongs to one service, which calls `update` on it; others read its `StateFlow`, or call the service. Where several services each write their own part of one store (the tasks', the chat's, the log's, the half-minute state's), `ArchitectureTest` names each with what it writes, so no other can start to. `Stores.replace` is the one way round an owner, for a restore or a reset, called by the backup service and nothing else; the test names it. A single writer for every store isn't planned (D-107).
 3. **Services are built like `Focus`**: stores, the clock and small interfaces for Android's effects (notifications, the calendar provider, work, alarms, content resolvers) in the constructor. `AppGraph` passes the real ones; tests pass fakes and stores on temporary files.
 4. **Screens call services.** A composable may read flows and call a service's function; it never calls `update` on a store. The largest screens (the chat, Settings, the task sheet) have a state holder, a plain class tested without Compose (`ChatScreenState`, `SettingsScreenState`, `TaskSheetState`); the composables only draw.

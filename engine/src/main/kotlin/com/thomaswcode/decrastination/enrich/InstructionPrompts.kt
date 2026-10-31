@@ -36,10 +36,10 @@ object InstructionPrompts {
     private const val MAX_TITLE = 100
 
     // Before the schemas that use it: an object's properties are made in order.
-    internal val STRING = mapOf("type" to "string")
+    val STRING = mapOf("type" to "string")
 
     /** The changes Claude can make, and how it reads dates for them: an instruction's and the chat's. */
-    internal val CHANGE_TYPES = """
+    val CHANGE_TYPES = """
         - NotATask: the task isn't work to plan (an email that only needs reading, something already dealt with). Needs taskId.
         - StartFrom: the task can't be started before a date. Needs taskId, date, and time if it gives one (else empty: the start of that day).
         - After: the task can't be started until another listed task is done. Needs taskId and afterTaskId.
@@ -84,10 +84,10 @@ object InstructionPrompts {
         ).trimIndent()
 
     /** A date's field, empty for none (no format: an empty one wouldn't be a date). */
-    internal val DATE = mapOf("type" to "string", "description" to "YYYY-MM-DD, or empty")
+    val DATE = mapOf("type" to "string", "description" to "YYYY-MM-DD, or empty")
 
     /** A time's field, empty for none. */
-    internal val TIME = mapOf("type" to "string", "description" to "HH:MM, 24-hour, or empty")
+    val TIME = mapOf("type" to "string", "description" to "HH:MM, 24-hour, or empty")
 
     /**
      * A change's fields, as [CHANGE] has them; the chat's has one more ([ChatPrompts]). None is
@@ -95,7 +95,7 @@ object InstructionPrompts {
      * unions in a list of changes make the chat's grammar too large to compile. An unused string
      * is empty and a number -1, read as none ([InstructionAnswers.Given.normalised]).
      */
-    internal val CHANGE_FIELDS: List<Pair<String, Any>> = listOf(
+    val CHANGE_FIELDS: List<Pair<String, Any>> = listOf(
         "type" to mapOf("type" to "string", "enum" to ChangeType.entries.map { it.name }),
         "taskId" to STRING,
         "afterTaskId" to STRING,
@@ -123,7 +123,7 @@ object InstructionPrompts {
         "outsideTime" to TIME,
     )
 
-    internal val CHANGE = obj(*CHANGE_FIELDS.toTypedArray())
+    val CHANGE = obj(*CHANGE_FIELDS.toTypedArray())
 
     val SCHEMA: Map<String, Any> = obj(
         "understood" to mapOf("type" to "boolean"),
@@ -206,12 +206,12 @@ object InstructionPrompts {
         }
     }.trimEnd()
 
-    internal fun obj(vararg properties: Pair<String, Any>): Map<String, Any> = mapOf(
+    fun obj(vararg properties: Pair<String, Any>): Map<String, Any> = mapOf(
         "type" to "object",
         "properties" to properties.toMap(),
         "required" to properties.map { it.first },
         "additionalProperties" to false,
     )
 
-    internal fun nullable(schema: Map<String, Any>): Map<String, Any> = mapOf("anyOf" to listOf(schema, mapOf("type" to "null")))
+    fun nullable(schema: Map<String, Any>): Map<String, Any> = mapOf("anyOf" to listOf(schema, mapOf("type" to "null")))
 }

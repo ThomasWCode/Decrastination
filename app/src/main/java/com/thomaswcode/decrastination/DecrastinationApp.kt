@@ -5,12 +5,15 @@ import com.thomaswcode.decrastination.data.BackupWorker
 import com.thomaswcode.decrastination.data.Crashes
 import com.thomaswcode.decrastination.learn.Daily
 import com.thomaswcode.decrastination.notify.Channels
+import com.thomaswcode.decrastination.ports.Log
 import com.thomaswcode.decrastination.protect.WatchdogWorker
 import com.thomaswcode.decrastination.sync.SyncWorker
 
 class DecrastinationApp : Application() {
     override fun onCreate() {
         super.onCreate()
+        // The engine's log, before anything writes to it.
+        Log.sink = AndroidLog
         // A crash written down before the app goes (AR-06), then handed on as it would have been.
         val previous = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, error ->

@@ -1,9 +1,8 @@
 package com.thomaswcode.decrastination.sources.gmail
 
-import android.util.Log
-import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.data.Secret
 import com.thomaswcode.decrastination.data.SecretStore
+import com.thomaswcode.decrastination.ports.Log
 import com.thomaswcode.decrastination.sources.SourceUnavailable
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.awaitCancellation
@@ -59,7 +58,7 @@ class ImapGmailWriter(private val secrets: SecretStore) : GmailWriter {
         }
         try {
             // Each command by its name and UIDs (the login's without its address), at info level: a write is worth seeing.
-            val imap = ImapClient(socket.inputStream, socket.outputStream) { Log.i(AppGraph.TAG, "IMAP $it") }
+            val imap = ImapClient(socket.inputStream, socket.outputStream) { Log.i(Log.TAG, "IMAP $it") }
             imap.greeting()
             imap.login(address, password)
             val writer = ImapWriter(imap)

@@ -75,7 +75,7 @@ class ImapWriterTest {
 
     @Test
     fun `the reader's own commands only read, none opening a mailbox for writing or storing anything`() {
-        val source = listOf(File("src/main/java"), File("app/src/main/java")).first { it.isDirectory }
+        val source = listOf(File("src/main/kotlin"), File("engine/src/main/kotlin")).first { it.isDirectory }
             .resolve("com/thomaswcode/decrastination/sources/gmail/Imap.kt").readText()
         // No command of its own opens a mailbox for writing, or stores anything.
         assertFalse("\"SELECT" in source)

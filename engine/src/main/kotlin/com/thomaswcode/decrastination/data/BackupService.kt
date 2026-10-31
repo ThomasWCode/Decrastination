@@ -44,7 +44,7 @@ class BackupService(
     private val stores: Stores,
     private val clock: WallClock,
     private val scope: CoroutineScope,
-    /** Where backups go ([AndroidBackupFolder] on the phone). */
+    /** Where backups go. */
     private val folder: Folder,
     /** Where a reset's copy goes when [folder] can't take it: the app's own files. */
     private val copies: File,
@@ -67,7 +67,7 @@ class BackupService(
     /** What a backup holds at most, as Import reads it ([Backups.MAX_BYTES]; smaller in a test). */
     private val backupCap: Int = Backups.MAX_BYTES,
 ) {
-    /** Where backups go: Documents/Decrastination, through MediaStore on the phone ([BackupFolder]); a map in a test. */
+    /** Where backups go: Documents/Decrastination, through MediaStore on the phone; a map in a test. */
     interface Folder {
         /** Whether it can be written here (Android 10 and later). */
         val available: Boolean
@@ -154,7 +154,7 @@ class BackupService(
     suspend fun backupNow(): Nightly = withContext(NonCancellable + Dispatchers.IO) {
         if (!folder.available) return@withContext Nightly.NotWritten
         val now = clock.now()
-        val name = BackupFolder.nightlyName(Instant.ofEpochMilli(now).atZone(clock.zone()).toLocalDate().toString())
+        val name = BackupNames.nightlyName(Instant.ofEpochMilli(now).atZone(clock.zone()).toLocalDate().toString())
         val text = exportBackup()
         // More than Import reads even without the chat's earlier messages, it couldn't be restored: not written,
         // and the older ones, which can be, not let go of for it (Settings → Backup says so).
@@ -162,7 +162,7 @@ class BackupService(
         // Nor one Import would refuse: the good ones it would prune are the ones that can be restored.
         if (unrestorable(text) != null) return@withContext Nightly.Refused
         if (!folder.write(name, text)) return@withContext Nightly.NotWritten
-        BackupFolder.toPrune(folder.names()).forEach { folder.delete(it) }
+        BackupNames.toPrune(folder.names()).forEach { folder.delete(it) }
         stores.replace(stores.runtime) { it.copy(lastBackupAt = now) }
         Nightly.Written
     }

@@ -47,6 +47,8 @@ jobs:
             app/build/test-results/
             core/build/reports/
             core/build/test-results/
+            engine/build/reports/
+            engine/build/test-results/
           if-no-files-found: ignore
 
       - name: Upload debug APK

@@ -18,11 +18,6 @@ object BackupFolder {
     /** Where, on the phone's shared storage. */
     const val PATH = "Documents/Decrastination/"
 
-    /** How many nightly backups are kept: two weeks of them. */
-    const val KEEP = 14
-
-    private val NIGHTLY = Regex("""decrastination-(\d{4}-\d{2}-\d{2})\.json""")
-
     @get:ChecksSdkIntAtLeast(api = Build.VERSION_CODES.Q)
     val available: Boolean get() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
 
@@ -72,13 +67,6 @@ object BackupFolder {
     /** [uri], one of the app's there, deleted. */
     @RequiresApi(Build.VERSION_CODES.Q)
     fun delete(resolver: ContentResolver, uri: Uri): Boolean = runCatching { resolver.delete(uri, null, null) > 0 }.getOrDefault(false)
-
-    /** Of [names], the nightly backups past the newest [keep], by the date in each name: a reset's copy never. Pure. */
-    fun toPrune(names: List<String>, keep: Int = KEEP): List<String> =
-        names.mapNotNull { name -> NIGHTLY.matchEntire(name)?.let { name to it.groupValues[1] } }.sortedByDescending { it.second }.drop(keep).map { it.first }
-
-    /** The nightly backup's name for [date] (`yyyy-MM-dd`). */
-    fun nightlyName(date: String): String = "decrastination-$date.json"
 
     @RequiresApi(Build.VERSION_CODES.Q)
     private fun collection(): Uri = MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)

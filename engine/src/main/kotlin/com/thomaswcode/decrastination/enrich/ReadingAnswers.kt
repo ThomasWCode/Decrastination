@@ -113,7 +113,7 @@ object ReadingAnswers {
      * [step] in even sittings no longer than [MAX_PART_MIN]: the first the step itself, then
      * "Continue: …", and the last "Continue and finish: …" ([Sittings], which the planner cuts by too).
      */
-    internal fun fitParts(step: SubStep): List<SubStep> {
+    fun fitParts(step: SubStep): List<SubStep> {
         val parts = Sittings.count(step.minutes)
         if (parts <= 1) return listOf(step)
         val minutes = Sittings.even(step.minutes, parts)

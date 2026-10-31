@@ -99,7 +99,7 @@ class GoldenPromptsTest {
             head != null && head.replace("\r\n", "\n") != text + "\n"
         }.keys
         if (changed.isEmpty()) return
-        val prompts = File(root!!, "app/src/main/java/com/thomaswcode/decrastination/enrich/ReadingPrompts.kt").canonicalFile.relativeTo(File(root).canonicalFile).invariantSeparatorsPath
+        val prompts = File(root!!, "engine/src/main/kotlin/com/thomaswcode/decrastination/enrich/ReadingPrompts.kt").canonicalFile.relativeTo(File(root).canonicalFile).invariantSeparatorsPath
         val before = git(File(root), "show", "HEAD:$prompts")?.let { Regex("""const val VERSION = (\d+)""").find(it)?.groupValues?.get(1)?.toInt() }
         assertNotEquals(before, ReadingPrompts.VERSION, "${changed.sorted().joinToString()} changed since HEAD, where ReadingPrompts.VERSION was $before too: raise it, so the readings by the old prompts are made again")
     }

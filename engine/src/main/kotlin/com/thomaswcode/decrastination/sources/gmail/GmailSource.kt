@@ -1,20 +1,15 @@
 package com.thomaswcode.decrastination.sources.gmail
 
-import android.util.Log
-import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.core.Invite
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.data.Secret
 import com.thomaswcode.decrastination.data.SecretStore
+import com.thomaswcode.decrastination.ports.Log
 import com.thomaswcode.decrastination.sources.ReadContext
 import com.thomaswcode.decrastination.sources.SourceRead
 import com.thomaswcode.decrastination.sources.SourceUnavailable
 import com.thomaswcode.decrastination.sources.TaskSource
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.awaitCancellation
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import java.io.IOException
 import java.net.InetSocketAddress
 import java.net.Socket
@@ -24,6 +19,10 @@ import java.util.Locale
 import javax.net.ssl.HttpsURLConnection
 import javax.net.ssl.SSLSocket
 import javax.net.ssl.SSLSocketFactory
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /** One message's envelope, as Gmail's IMAP gives it. */
 data class MailMessage(
@@ -162,7 +161,7 @@ class GmailSource(private val secrets: SecretStore) : TaskSource {
             socket.use {
                 // Each command at debug level, the login's left out: how a read with nothing new
                 // fetching no envelope is checked by hand (DX-07).
-                val imap = ImapClient(socket.inputStream, socket.outputStream) { Log.d(AppGraph.TAG, "IMAP $it") }
+                val imap = ImapClient(socket.inputStream, socket.outputStream) { Log.d(Log.TAG, "IMAP $it") }
                 imap.greeting()
                 imap.login(address, password)
                 val (conversations, envelopes, stored) = StarredConversations.list(imap, context.known)
