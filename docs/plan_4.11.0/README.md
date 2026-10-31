@@ -3,23 +3,17 @@
 The plan for one release, written before it's built (31 Oct 2026). Nothing here is built yet; the specs say how the app works now.
 
 - [chat-draft.md](chat-draft.md): what's typed in the chat's box is kept when you go to the plan and come back.
-- [day-menus.md](day-menus.md): a missed slot on Day opens a sheet with *Done*, *Open*, *Check it's done* and *Ask Felix about it*; *Ask Felix about it* is on every sheet Day opens.
+- [day-menus.md](day-menus.md): a missed slot on Day opens a sheet with *Done*, *Open*, *Check it's done* and *Ask Felix about it*; *Ask Felix about it* is on each of Day's sheets for one task, event or day.
 
 ## What you've answered
 
 - The kept draft doesn't outlive the app's process: it's held in memory, not written to a file (no store, no migration).
-- A missed slot's sheet holds *Done*, *Open*, *Check it's done* and *Ask Felix about it*.
-- *Ask Felix about it*, as the Work tab's task sheet has it, goes on all of Day's sheets.
+- Words handed in to a box that holds words you typed earlier: both kept, the handed words first, a blank line, then yours ([chat-draft.md §Words handed in](chat-draft.md#words-handed-in), A).
+- The block screen's chat shares the kept draft with the app's chat.
+- A missed slot's sheet holds *Done*, *Open*, *Check it's done* and *Ask Felix about it*. *Open* opens the task in its source, as *Open* on a piece's sheet does; for one of your own, *All of it done* stands in place of *Check it's done*, as on a piece's sheet.
+- *Ask Felix about it*, as the Work tab's task sheet has it, goes on Day's sheets: the piece's, the missed slot's, the event's and the day's *Instructions* ([day-menus.md §Ask Felix about it](day-menus.md#ask-felix-about-it-on-every-day-sheet)). Not on the list sheets (*Won't fit* has *What gives?*; *No time*'s rows open the piece's sheet; *Done* is a record), nor on the DO NOW card or the block screen.
 
-These go into `docs/plan_v4/answers.md` as Q127 and Q128 when the release is built.
-
-## Still to answer
-
-1. **Words handed in to the box** ([chat-draft.md §Words handed in](chat-draft.md#words-handed-in)): when the chat opens with words put in its box for you (*Split with Felix*, *What gives?*) while it still holds words you typed earlier, which goes where? Recommended: both kept, the handed words first.
-2. **The block screen's chat**: it shares the kept draft with the app's chat, as one holder for the app does. Recommended: yes.
-3. **Open** on a missed slot's sheet: the task in its source (Teams, Gmail…), as *Open* on a piece's sheet does, or the piece's own sheet? Recommended: in its source, as everywhere else that says *Open*.
-4. **One of your own tasks**: a piece's sheet has *All of it done* in place of *Check it's done*, as there's no source to ask. Recommended: the missed slot's sheet does the same.
-5. **Where on Day *Ask Felix about it* goes** ([day-menus.md §Ask Felix about it](day-menus.md#ask-felix-about-it-on-every-day-sheet)): the piece's, the missed slot's, the event's and the day's *Instructions* sheets. Not the lists (*Won't fit* has *What gives?*; *No time*'s rows open the piece's sheet; *Done* is a record), nor the DO NOW card or the block screen, which share the piece's buttons but aren't Day's sheets. Recommended: as listed.
+These go into `docs/plan_v4/answers.md` as Q127 and Q128 when the release is built. Nothing is left to answer before building.
 
 ## The release
 

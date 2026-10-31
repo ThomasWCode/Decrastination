@@ -10,8 +10,8 @@ A tap on a missed slot opens its sheet (a `ModalBottomSheet`, as every other tap
 
 - its label, and "Missed, 16:00–16:45";
 - **Done**: keeps it, late. `Focus.keepSlot` already does this for a piece missed today and still in the plan under the same key: the record is *Kept late*, in the missed slot's place and times, and the miss gives way (`Focus.keep`, LR-09); its free time is earned as a Done on its piece planned again would (BL-08's limits). It's Day's own Done (`DayActions.onDone`), so the sheet closes and Day's bar says it with an Undo, which makes it *Missed* again (`Focus.unkeep`). Shown only while its piece is still in the plan;
-- **Open**: the task in its source (`TaskOpener.open`), as *Open* on a piece's sheet (question 3 in the [README](README.md));
-- **Check it's done**: asks its source (a sync of that source alone), and says whether it agrees, as on a piece's sheet; for one of your own, *All of it done* in its place (question 4). Shown while its task is open;
+- **Open**: the task in its source (`TaskOpener.open`), as *Open* on a piece's sheet;
+- **Check it's done**: asks its source (a sync of that source alone), and says whether it agrees, as on a piece's sheet; for one of your own, *All of it done* in its place, as on a piece's sheet. Shown while its task is open;
 - **Ask Felix about it** (below). Shown while its task is open.
 
 Where its task is done since, or its piece is no longer in the plan (ticked in the chat, changed), the sheet says "Done since, or planned again" and has only *Open*.
@@ -43,7 +43,7 @@ The Work tab's task sheet has *Ask Felix about it* (`TaskSheet.kt`, `onInstruct`
 | An event's (`EventSheet`), all-day ones in the header too | the event (`About(eventKey, eventTitle, eventStart)`, as *An instruction about it* has) | always |
 | The day's *Instructions* (`DaySheet.Said`) | the day (`About(day)`, as *An instruction about this day…* has) | always |
 
-- Not on the list sheets (*Won't fit* has *What gives?*, which asks him already; *No time*'s rows open a piece's sheet, which has it; *Done* lists records), nor on the DO NOW card or the block screen, which use `PieceActions` but aren't Day's sheets (question 5). It goes on `PieceSheet` itself, not into `PieceActions`, so those two are left as they are.
+- Not on the list sheets (*Won't fit* has *What gives?*, which asks him already; *No time*'s rows open a piece's sheet, which has it; *Done* lists records), nor on the DO NOW card or the block screen, which use `PieceActions` but aren't Day's sheets, as you answered. It goes on `PieceSheet` itself, not into `PieceActions`, so those two are left as they are.
 - `PieceSheet` is opened from Day alone, so the chat it opens is the app's, never the block screen's (`back` stays false).
 
 ## Tests

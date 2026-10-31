@@ -20,25 +20,25 @@ Changing *Plan*'s `CLEAR_TOP` to `REORDER_TO_FRONT` would keep the first chat fo
 - **Sending**: the box is cleared at once, as now (`draft.value = ""`). A message that couldn't be kept goes back into the holder, not the screen, so it's there wherever you are: into an empty box as it was, or before what you've typed since, as now (`text + "\n\n" + draft`).
 - **What it's about and what it replies to** aren't kept with it: they stay as each opening of the chat sets them (`about`, `ChatScreenState.replyingTo`), as now.
 - **Clear chat** leaves the draft alone: it clears the messages, not the box.
-- **The block screen's chat** (`EXTRA_BACK`) shares the holder (question 2 in the [README](README.md)).
+- **The block screen's chat** (`EXTRA_BACK`) shares the holder, as you answered.
 
 ## Words handed in
 
 Some buttons open the chat with words already put in its box for you to change or send: *Split with Felix* on a task's sheet ("Split this into steps"), *What gives?* on a deadline that won't fit (PL-02). Today they replace what's in the box (`if (!sent) draft = words`), which loses nothing, as each such opening is a new, empty chat. Once the box's words are kept, that same line would replace words you'd typed earlier and left.
 
-For example, you type "can I do the essay on Saturday instead", tap *Plan*, open a task's sheet and tap *Split with Felix*. The chat opens with "Split this into steps" in its box. Your earlier words could be:
+For example, you type "can I do the essay on Saturday instead", tap *Plan*, open a task's sheet and tap *Split with Felix*. The chat opens with "Split this into steps" in its box. Your earlier words could be (you answered A):
 
-- **A. Kept, after the handed words** (recommended): "Split this into steps", a blank line, then "can I do the essay on Saturday instead". Nothing's lost, and what you just asked for comes first, as a failed send's words come first now.
+- **A. Kept, after the handed words** (your answer): "Split this into steps", a blank line, then "can I do the essay on Saturday instead". Nothing's lost, and what you just asked for comes first, as a failed send's words come first now.
 - **B. Kept, before them**: your words first, then "Split this into steps".
 - **C. Replaced**: the box holds only "Split this into steps", and your earlier words are gone (as now).
 
 Words handed in to be sent at once (an instruction about an event or a day) don't touch the box, as now.
 
-A is a pure function beside the chat screen's state (`ChatScreenState.withHanded(draft, words)`), so it's tested on its own.
+A is built as a pure function beside the chat screen's state (`ChatScreenState.withHanded(draft, words)`), so it's tested on its own.
 
 ## Tests
 
-- `ChatScreenStateTest`: words handed in to an empty box are the box's; to a box holding words, both, as the answer to the question above says; blank words handed in leave the box as it is.
+- `ChatScreenStateTest`: words handed in to an empty box are the box's; to a box holding words, the handed words, a blank line, then the box's (A); blank words handed in leave the box as it is.
 - The holder itself is a `MutableStateFlow` with no rule of its own: there's nothing more to test without a screen, so the phone's steps 1 to 4 ([README](README.md#at-the-phone)) hold it.
 
 ## Spec
