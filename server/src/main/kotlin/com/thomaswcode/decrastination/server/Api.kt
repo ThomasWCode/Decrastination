@@ -29,6 +29,9 @@ import io.ktor.server.response.respond
 import io.ktor.server.response.respondRedirect
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
+import io.ktor.server.routing.RouteSelector
+import io.ktor.server.routing.RouteSelectorEvaluation
+import io.ktor.server.routing.RoutingResolveContext
 import io.ktor.server.routing.delete
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
@@ -78,6 +81,11 @@ private fun cookie(web: Web, name: String) = if (web.secure) name else name.remo
 
 private val AUTH_LIMIT = RateLimitName("auth")
 private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
+
+/** A branch of the routes that adds nothing to their path: `route("")` would be its parent, and what's installed there would hold for the open routes too. */
+private object SignedInSelector : RouteSelector() {
+    override suspend fun evaluate(context: RoutingResolveContext, segmentIndex: Int): RouteSelectorEvaluation = RouteSelectorEvaluation.Transparent
+}
 
 /** Every route but the few that are open needs a client: a session, or a device's token (W-3, W-16). */
 private fun signedIn(web: Web) = createRouteScopedPlugin("SignedIn") {
@@ -183,7 +191,7 @@ fun Application.api(web: Web) {
                 call.respond(Me(false))
             }
 
-            route("") {
+            createChild(SignedInSelector).apply {
                 install(signedIn(web))
                 signedInRoutes(web)
             }
