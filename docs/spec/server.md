@@ -52,7 +52,7 @@ SQLite, one file, in WAL mode (`server/Database.kt`), the server its only writer
 - `commands`: every command received, whose it was, and what came of it. A repeat of an id answers from here, looked up inside the command's lock, so a retry racing its first send waits and finds what came of it.
 - `devices`, `pairing_codes`, `sessions`, `meta`.
 
-A command is one transaction, all of it or none (`CommandApplier`, `Database.command`), one at a time, in the order they arrive. The owners suspend and change thread on the way, so it's held by a coroutine's lock, and reads that mustn't see it half-way go through a second connection (`Database.read`), which in WAL mode sees only what's committed. One that fails is rolled back, the stores read again from what's committed, and it's on record as dropped.
+A command is one transaction, all of it or none (`CommandApplier`, `Database.command`), one at a time, in the order they arrive. The owners suspend and change thread on the way, so it's held by a coroutine's lock, and reads that mustn't see it half-way go through a second connection (`Database.read`), which in WAL mode sees only what's committed. One that fails is rolled back, the stores read again from what's committed, and it's on record as dropped, all before another's let in (`Database.commandOr`): what it left in memory mustn't be built on.
 
 The owners are `ServerOwners`, wired as `AppGraph` wires the phone's, what touches the device left out. None is started: nothing on the server watches a store or runs by itself.
 

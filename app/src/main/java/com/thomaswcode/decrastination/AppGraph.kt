@@ -416,8 +416,6 @@ class AppGraph private constructor(context: Context) : Owners {
         }
         // Any a stop left ungiven: slots being kept, photo checks and completions; and a day with nothing to do's free time (BL-07).
         scope.launch {
-            // A command a stopped process recorded and never applied.
-            commands.resume()
             focus.finishKeeps()
             focus.finishPhotos()
             settleCompletions()
