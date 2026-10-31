@@ -3,6 +3,7 @@ package com.thomaswcode.decrastination.sync
 import com.thomaswcode.decrastination.core.GmailFinish
 import com.thomaswcode.decrastination.core.GmailWrite
 import com.thomaswcode.decrastination.core.GmailWrites
+import com.thomaswcode.decrastination.core.Ids
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.WallClock
@@ -15,7 +16,6 @@ import java.io.IOException
 import java.net.ConnectException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
-import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.StateFlow
 
@@ -38,7 +38,7 @@ class GmailFinishes(
     private val ports: Ports,
     /** When the last Gmail read that worked began: a finish made before it, its task open after it, was starred again. */
     private val readAt: () -> Long? = { null },
-    private val newId: () -> String = { UUID.randomUUID().toString() },
+    private val newId: () -> String = { Ids.next() },
 ) {
     /** What Android does for it. */
     interface Ports {

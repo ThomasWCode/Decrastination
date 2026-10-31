@@ -27,6 +27,10 @@ import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.R
 import com.thomaswcode.decrastination.core.HalfDay
 import com.thomaswcode.decrastination.core.NoSchool
+import com.thomaswcode.decrastination.sync.protocol.AddHalfDay
+import com.thomaswcode.decrastination.sync.protocol.AddNoSchool
+import com.thomaswcode.decrastination.sync.protocol.DeleteHalfDay
+import com.thomaswcode.decrastination.sync.protocol.DeleteNoSchool
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
@@ -62,12 +66,12 @@ fun SchoolSection(graph: AppGraph) {
         school.noSchool.forEach { entry ->
             val days = if (entry.from == entry.to) day(entry.from) else "${day(entry.from)} to ${day(entry.to)}"
             Entry("No school, $days" + entry.label.takeIf { it.isNotBlank() }?.let { " · $it" }.orEmpty()) {
-                scope.launch { graph.instructions.deleteSchoolDays(entry) }
+                scope.launch { graph.act(DeleteNoSchool(entry)) }
             }
         }
         school.halfDays.forEach { entry ->
             Entry("Half-day, ${day(entry.date)}: ends %02d:%02d".format(Locale.UK, entry.endsAtMin / 60, entry.endsAtMin % 60)) {
-                scope.launch { graph.instructions.deleteSchoolDays(entry) }
+                scope.launch { graph.act(DeleteHalfDay(entry)) }
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -83,7 +87,7 @@ fun SchoolSection(graph: AppGraph) {
     when {
         adding == "half" -> DateTimeDialog("Half-day", initialDay = today, initialTime = LocalTime.of(12, 30), earliest = today, onClose = { adding = null }) { date, time ->
             val end = time ?: LocalTime.of(12, 30)
-            scope.launch { graph.instructions.addSchoolDays(HalfDay(date.toString(), end.hour * 60 + end.minute)) }
+            scope.launch { graph.act(AddHalfDay(HalfDay(date.toString(), end.hour * 60 + end.minute))) }
             adding = null
         }
         step.firstOrNull() == "off" && step.size == 1 -> DateTimeDialog("First day off", initialDay = today, initialTime = null, earliest = today, onClose = { adding = null }) { first, _ ->
@@ -104,7 +108,7 @@ fun SchoolSection(graph: AppGraph) {
             confirmButton = {
                 TextButton(onClick = {
                     val entry = NoSchool(step[1], step[2], label.trim())
-                    scope.launch { graph.instructions.addSchoolDays(entry) }
+                    scope.launch { graph.act(AddNoSchool(entry)) }
                     adding = null
                 }) { Text("Add") }
             },

@@ -31,7 +31,7 @@ import kotlinx.coroutines.runBlocking
  */
 class TaskSheetStateTest {
     private val h = TasksHarness()
-    private val sheet = TaskSheetState(h.instructions, h.ownTasks)
+    private val sheet = TaskSheetState(h.commands)
 
     @AfterTest
     fun cleanUp() = h.close()
@@ -42,7 +42,7 @@ class TaskSheetStateTest {
     fun `your note goes to the notes' owner, its box shut once kept, what's wrong said, and one deleted`() = runBlocking {
         val asked = mutableListOf<Pair<String, String>>()
         val deleted = mutableListOf<String>()
-        val noting = TaskSheetState(h.instructions, h.ownTasks, addNote = { id, text -> asked += id to text; "It has 10 notes already: delete one first".takeIf { text == "eleventh" } }, deleteNote = { deleted += it })
+        val noting = TaskSheetState(h.commands, addNote = { id, text -> asked += id to text; "It has 10 notes already: delete one first".takeIf { text == "eleventh" } }, deleteNote = { deleted += it })
         val sheet = OwnTaskRules.create(OwnTask(title = "Essay"), "e", Fixtures.at("2026-10-12T18:00"))
         noting.noting = true
         noting.note(sheet, "eleventh")
@@ -135,7 +135,7 @@ class TaskSheetStateTest {
         sheet.message = "Couldn't read the photo."
         sheet.said = "Read again by Claude"
         sheet.showInstructions = true
-        val saver = TaskSheetState.saver(h.instructions, h.ownTasks)
+        val saver = TaskSheetState.saver(h.commands)
         val again = saver.restore(with(saver) { SaverScope { true }.save(sheet) }!!)
         assertNotNull(again)
         assertEquals(OwnChange.Minutes, again.picking)
@@ -144,7 +144,7 @@ class TaskSheetStateTest {
         assertEquals("Read again by Claude", again.said)
         assertTrue(again.showInstructions)
         // Nothing open, nothing said: nothing comes back.
-        val fresh = TaskSheetState(h.instructions, h.ownTasks)
+        val fresh = TaskSheetState(h.commands)
         val none = saver.restore(with(saver) { SaverScope { true }.save(fresh) }!!)!!
         assertNull(none.picking)
         assertNull(none.confirming)

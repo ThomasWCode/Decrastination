@@ -21,6 +21,7 @@ import com.thomaswcode.decrastination.core.Notes
 import com.thomaswcode.decrastination.core.OwnTask
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Reminders
+import com.thomaswcode.decrastination.core.ReplayClock
 import com.thomaswcode.decrastination.core.SchoolDays
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.Source
@@ -72,6 +73,10 @@ import com.thomaswcode.decrastination.sync.ReplicaWorker
 import com.thomaswcode.decrastination.sync.Sync
 import com.thomaswcode.decrastination.sync.SyncWorker
 import com.thomaswcode.decrastination.sync.Syncer
+import com.thomaswcode.decrastination.sync.protocol.Action
+import com.thomaswcode.decrastination.sync.protocol.Answers
+import com.thomaswcode.decrastination.sync.protocol.Commands
+import com.thomaswcode.decrastination.sync.protocol.Owners
 import com.thomaswcode.decrastination.tasks.Instructions
 import com.thomaswcode.decrastination.tasks.OwnTasks
 import com.thomaswcode.decrastination.ui.Moves
@@ -96,9 +101,9 @@ import kotlinx.coroutines.runBlocking
  * app's one process and share them, so every part sees the same stores.
  */
 @OptIn(FlowPreview::class)
-class AppGraph private constructor(context: Context) {
+class AppGraph private constructor(context: Context) : Owners {
     val app: Context = context.applicationContext
-    val clock: WallClock = DeviceClock(app)
+    val clock: WallClock = ReplayClock(DeviceClock(app))
 
     /** Work that outlives the screen or receiver that started it; a failure is logged, not fatal. */
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default + CoroutineExceptionHandler { _, error -> Log.e(TAG, "Background work failed", error) })
@@ -244,7 +249,7 @@ class AppGraph private constructor(context: Context) {
     )
 
     /** The blocker's state and decisions (block/Focus.kt). */
-    val focus = Focus(
+    override val focus = Focus(
         tasks, settings, stores.session, stores.learning, stores.protection, log, clock,
         onOwnTaskDone = { ownTasks.finishOwnTask(it) },
         // An email's work all done by a keep or a tick is finished in Gmail; taken back, so is its finish, once its work isn't all done.
@@ -291,7 +296,7 @@ class AppGraph private constructor(context: Context) {
     private val outbox = Outbox(chat, stores.chatArchive, settings, notifier, felixPorts, chatOnScreen = { conversation.chatInFront }, chatSeen = { conversation.chatSeen }, clock)
 
     /** The voice of the app's messages (LR-03). */
-    val looks: Looks = Looks(
+    override val looks: Looks = Looks(
         tasks, settings, stores.model, log, chat, stores.felix, clock, scope, gateway, focus, planning, felixPorts, outbox,
         calendarTime = { sync.calendarTime },
         profile = { conversation.profile(it) },
@@ -305,7 +310,7 @@ class AppGraph private constructor(context: Context) {
      * Felix's conversation ([Conversation]): the chat, his answers and what they make, what he
      * remembers, the replies from his notification, the week's check-in, and what the app says in his name.
      */
-    val conversation: Conversation = Conversation(
+    override val conversation: Conversation = Conversation(
         tasks, settings, stores.learning, log, stores.instructions, chat, school, memory, stores.felix, clock, scope, gateway, notifier, focus, planning, felixPorts, outbox,
         owners = object : Conversation.Owners {
             override suspend fun saveOwnTask(sourceId: String, task: OwnTask): Boolean = ownTasks.saveOwnTask(sourceId, task)
@@ -338,7 +343,7 @@ class AppGraph private constructor(context: Context) {
      * Your instructions ([Instructions]): written and read by Claude, or quick changes of yours; applied,
      * refused, taken back, and laid over everything they change. Made after the plan and the focus, which it uses.
      */
-    val instructions: Instructions = Instructions(
+    override val instructions: Instructions = Instructions(
         stores.instructions, tasks, settings, stores.session, school, chat, clock, scope, gateway, focus, planning,
         calendarTime = { sync.calendarTime },
         profile = { conversation.profile() },
@@ -351,11 +356,17 @@ class AppGraph private constructor(context: Context) {
         question = { looks.questionFor(it) },
     )
 
+    /** Where a screen's changes go (D-140): each a command, applied through its owner. */
+    val commands = Commands(this, clock)
+
+    /** [action] applied as a command, its answer the owner's. */
+    suspend fun <R, A> act(action: A): R where A : Action, A : Answers<R> = commands.act(action)
+
     /** A piece moved by hand ([Moves]). */
-    val moves: Moves = Moves(tasks, instructions, planning, clock, scope)
+    val moves: Moves = Moves(tasks, instructions, commands, planning, clock, scope)
 
     /** Your own tasks ([OwnTasks]): kept, finished, opened again, deleted, and trimmed to their record once long done. */
-    val ownTasks: OwnTasks = OwnTasks(tasks, stores.instructions, chat, clock, scope) { settleCompletions() }
+    override val ownTasks: OwnTasks = OwnTasks(tasks, stores.instructions, chat, clock, scope) { settleCompletions() }
 
     /** The phone and the server ([Replica]): this phone paired, and what's changed sent. */
     val replica: Replica = Replica(stores, UrlConnectionHttp(), clock, BuildConfig.VERSION_NAME, calendar = { sync.calendarRead() })
@@ -376,7 +387,7 @@ class AppGraph private constructor(context: Context) {
     )
 
     /** Protection ([Protection]): settings changes, waiting once armed if they loosen blocking; the parent code; the device admin. */
-    val protection = Protection(settings, stores.protection, stores.device, secrets, clock, scope, adminActive = { Watchdog.isAdminActive(app) }) {
+    override val protection = Protection(settings, stores.protection, stores.device, secrets, clock, scope, adminActive = { Watchdog.isAdminActive(app) }) {
         app.getSystemService(DevicePolicyManager::class.java)?.removeActiveAdmin(Watchdog.admin(app))
     }
 
@@ -384,7 +395,7 @@ class AppGraph private constructor(context: Context) {
      * What's learned from the log ([Learning]): the week's review, a figure forgotten, a review's change
      * or tidy put back, the week's summary; and the check-ins and completions' answers recorded.
      */
-    val learning: Learning = Learning(
+    override val learning: Learning = Learning(
         log, stores.learning, settings, memory, chat, stores.instructions, clock, gateway, focus, protection,
         resets = { backups.resets.get() },
         profile = { now, remembered -> conversation.profile(now, remembered) },

@@ -146,6 +146,7 @@ import com.thomaswcode.decrastination.core.GmailWrites
 import com.thomaswcode.decrastination.core.ChatArchive
 import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.core.ChatSummary
+import com.thomaswcode.decrastination.core.Ids
 import com.thomaswcode.decrastination.core.Instruction
 import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.InstructionStatus
@@ -165,6 +166,19 @@ import com.thomaswcode.decrastination.felix.Draft
 import com.thomaswcode.decrastination.felix.FelixAnswers
 import com.thomaswcode.decrastination.felix.Replies
 import com.thomaswcode.decrastination.felix.Unsent
+import com.thomaswcode.decrastination.sync.protocol.ApplyProposal
+import com.thomaswcode.decrastination.sync.protocol.CancelAnswer
+import com.thomaswcode.decrastination.sync.protocol.ClearChat
+import com.thomaswcode.decrastination.sync.protocol.DiscardProposal
+import com.thomaswcode.decrastination.sync.protocol.MarkAnswered
+import com.thomaswcode.decrastination.sync.protocol.RateMessage
+import com.thomaswcode.decrastination.sync.protocol.ReadChat
+import com.thomaswcode.decrastination.sync.protocol.SendMessage
+import com.thomaswcode.decrastination.sync.protocol.UndoAct
+import com.thomaswcode.decrastination.sync.protocol.UndoMemory
+import com.thomaswcode.decrastination.sync.protocol.UndoProposal
+import com.thomaswcode.decrastination.sync.protocol.UnmarkAnswered
+import com.thomaswcode.decrastination.sync.protocol.WithdrawQuestion
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -322,7 +336,7 @@ class AskActivity : ComponentActivity() {
             screen.opened(graph.chat.value, graph.clock.now(), at = id)
             openedAt = true
             val now = graph.clock.now()
-            graph.scope.launch { graph.conversation.read(now) }
+            graph.scope.launch { graph.act(ReadChat(now)) }
         }
     }
 
@@ -359,7 +373,7 @@ class AskActivity : ComponentActivity() {
         screen.paused(read = now.takeIf { read })
         // What arrived while it was on screen was seen: read up to now, so only what comes after is his notification.
         // Passed through unseen, his notification's left as it is: nothing took it away, and one swiped off stays off.
-        if (read) graph.scope.launch { graph.conversation.read(now) }
+        if (read) graph.scope.launch { graph.act(ReadChat(now)) }
     }
 
     /** Counting this visit's time on screen, till it's seen ([watchSeen]). */
@@ -414,7 +428,7 @@ class AskActivity : ComponentActivity() {
             graph.conversation.chatSeen = false
             val read = screen.seen(now)
             screen.paused(read = now.takeIf { read })
-            if (read) graph.scope.launch { graph.conversation.read(now) }
+            if (read) graph.scope.launch { graph.act(ReadChat(now)) }
         }
     }
 
@@ -467,11 +481,11 @@ class AskActivity : ComponentActivity() {
         val snackbar = remember { SnackbarHostState() }
         fun mark(ids: Collection<String>) {
             scope.launch {
-                val marked = graph.conversation.markAnswered(ids)
+                val marked = graph.act(MarkAnswered(ids.toList()))
                 if (marked.ids.isEmpty()) return@launch
                 val said = if (marked.ids.size == 1) "Marked answered" else "${marked.ids.size} marked answered"
                 val undo = withTimeoutOrNull(UNDO_BAR_MS) { snackbar.showSnackbar(said, actionLabel = "Undo", duration = SnackbarDuration.Indefinite) }
-                if (undo == SnackbarResult.ActionPerformed) graph.conversation.unmarkAnswered(marked)
+                if (undo == SnackbarResult.ActionPerformed) graph.act(UnmarkAnswered(marked))
             }
         }
 
@@ -483,7 +497,7 @@ class AskActivity : ComponentActivity() {
                 if (sendHanded) seenBySending()
                 // Let go of once sent: cleared first, they recomposed this effect away, which cancelled
                 // the send halfway, its message saved to the file but neither shown nor answered.
-                val sent = sendHanded && graph.conversation.ask(words, about.value)
+                val sent = sendHanded && graph.act(SendMessage(words, about.value, Ids.next()))
                 handed.value = null
                 if (!sent) setDraft(graph, ChatScreenState.withHanded(graph.conversation.draft.value.text, words)) else about.value = About()
             }
@@ -568,7 +582,7 @@ class AskActivity : ComponentActivity() {
                                     // Answered by it: the box replies to nothing, till his next question's offered.
                                     if (screen.replyingTo?.id == last.id) screen.sent()
                                     seenBySending()
-                                    graph.scope.launch { graph.conversation.ask(reply, replyTo = last.id) }
+                                    graph.scope.launch { graph.act(SendMessage(reply, id = Ids.next(), replyTo = last.id)) }
                                 }, label = { Text(reply) })
                             }
                         }
@@ -598,7 +612,7 @@ class AskActivity : ComponentActivity() {
                             // One whose write failed (a full disk) is as one not sent: back in the box, to send again (U-05). One
                             // the chat kept before a later write failed went: its answer asked for, not sent again from the box.
                             val id = UUID.randomUUID().toString()
-                            val sent = runCatching { graph.conversation.ask(text, subject, id = id, replyTo = (replying ?: quiet)?.id, takeItsSubject = replying != null) }
+                            val sent = runCatching { graph.act(SendMessage(text, subject, id, (replying ?: quiet)?.id, replying != null)) }
                                 .getOrElse { error ->
                                     if (graph.chat.value.messages.any { it.id == id }) {
                                         Log.w(AppGraph.TAG, "Your message was kept, a write after it failed: its answer asked for", error)
@@ -643,7 +657,7 @@ class AskActivity : ComponentActivity() {
                 LaunchedEffect(editing) { editing = null }
             } else {
                 OwnTaskForm(graph, editing = null, initial = task, onSave = { changed ->
-                    graph.conversation.applyProposal(messageId, proposalId, changed)
+                    graph.act(ApplyProposal(messageId, proposalId, changed))
                     graph.chat.value.messages.firstOrNull { it.id == messageId }?.proposals?.firstOrNull { it.id == proposalId }?.state == ProposalState.Applied
                 }) { editing = null }
             }
@@ -667,7 +681,7 @@ class AskActivity : ComponentActivity() {
                     TextButton(onClick = {
                         clearing = false
                         screen.cleared()
-                        scope.launch { graph.conversation.clearChat() }
+                        scope.launch { graph.act(ClearChat) }
                     }) { Text("Clear") }
                 },
                 dismissButton = { TextButton(onClick = { clearing = false }) { Text("Cancel") } },
@@ -771,7 +785,7 @@ private fun ColumnScope.Chat(
         (all + archive).firstOrNull { it.id == id }?.let { message ->
             RateDialog(message, ratingUp, onDismiss = { ratingId = null }) { thumb, words, preferred ->
                 ratingId = null
-                graph.scope.launch { graph.conversation.rate(message.id, thumb, words, preferred) }
+                graph.scope.launch { graph.act(RateMessage(message.id, thumb, words, preferred)) }
             }
         }
     }
@@ -1122,7 +1136,7 @@ private fun Yours(graph: AppGraph, message: ChatMessage, quote: ChatMessage?, na
             Text(note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 6.dp))
             Row {
                 TextButton(onClick = { graph.scope.launch { graph.conversation.answerChat(retry = true) } }) { Text("Try again") }
-                TextButton(onClick = { scope.launch { graph.conversation.withdrawQuestion() } }) { Text("Take back") }
+                TextButton(onClick = { scope.launch { graph.act(WithdrawQuestion) } }) { Text("Take back") }
             }
         }
     }
@@ -1149,7 +1163,7 @@ private fun Typing(graph: AppGraph) {
         Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, shape = RoundedCornerShape(18.dp, 18.dp, 18.dp, 4.dp)) {
             Dots(Modifier.padding(horizontal = 16.dp, vertical = 15.dp).semantics { contentDescription = "$name is typing" })
         }
-        if (long) TextButton(onClick = { graph.conversation.cancelAnswer() }) { Text("Cancel") }
+        if (long) TextButton(onClick = { graph.scope.launch { graph.act(CancelAnswer) } }) { Text("Cancel") }
     }
 }
 
@@ -1394,7 +1408,7 @@ private fun Remembered(graph: AppGraph, message: ChatMessage, live: Boolean) {
             when {
                 edit.undone -> Text("Undone", style = MaterialTheme.typography.labelMedium, color = quiet, modifier = Modifier.padding(horizontal = 12.dp))
                 // From the archive, nothing to do: only the window's are acted on.
-                live && Memories.undo(memory, edit) != null -> TextButton(onClick = { scope.launch { said = graph.conversation.undoMemory(message.id, i) } }) { Text("Undo") }
+                live && Memories.undo(memory, edit) != null -> TextButton(onClick = { scope.launch { said = graph.act(UndoMemory(message.id, i)) } }) { Text("Undo") }
             }
         }
     }
@@ -1445,7 +1459,7 @@ private fun Acts(graph: AppGraph, message: ChatMessage, live: Boolean) {
             )
             when {
                 act.undone -> Text("Undone", style = MaterialTheme.typography.labelMedium, color = quiet, modifier = Modifier.padding(horizontal = 12.dp))
-                live && ChatActs.canUndo(act, tasks.tasks, settings, chat.messages, felix.notes, felix.reminders, kept, messageId = message.id, now = graph.clock.now(), dayStart = dayStart, finishing = GmailWrites.standing(gmail.writes), readAt = { s -> tasks.status(s).lastSuccessAt }) -> TextButton(onClick = { scope.launch { said = graph.conversation.undoAct(message.id, i) } }) { Text("Undo") }
+                live && ChatActs.canUndo(act, tasks.tasks, settings, chat.messages, felix.notes, felix.reminders, kept, messageId = message.id, now = graph.clock.now(), dayStart = dayStart, finishing = GmailWrites.standing(gmail.writes), readAt = { s -> tasks.status(s).lastSuccessAt }) -> TextButton(onClick = { scope.launch { said = graph.act(UndoAct(message.id, i)) } }) { Text("Undo") }
             }
         }
     }
@@ -1532,25 +1546,25 @@ private fun ProposalCard(graph: AppGraph, messageId: String, proposal: Proposal,
                             color = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.align(Alignment.CenterVertically),
                         )
-                        if (proposal.made != null || proposal.before.isNotEmpty() || proposal.schoolBefore != null) TextButton(onClick = { scope.launch { graph.conversation.undoProposal(messageId, proposal.id) } }) { Text("Undo") }
+                        if (proposal.made != null || proposal.before.isNotEmpty() || proposal.schoolBefore != null) TextButton(onClick = { scope.launch { graph.act(UndoProposal(messageId, proposal.id)) } }) { Text("Undo") }
                         // A task it added is yours to change, in the form, from here too.
                         if (proposal.task != null && proposal.made in tasks) TextButton(onClick = { onEdit(messageId, proposal.id) }) { Text("Change") }
                     }
                     discarded -> {
                         Text("Set aside", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.align(Alignment.CenterVertically))
-                        TextButton(onClick = { scope.launch { graph.conversation.discardProposal(messageId, proposal.id, discarded = false) } }) { Text("Bring back") }
+                        TextButton(onClick = { scope.launch { graph.act(DiscardProposal(messageId, proposal.id, discarded = false)) } }) { Text("Bring back") }
                     }
                     // Made as it came, and since undone, or not made (its note says why): made again here.
                     proposal.instant -> {
                         if (proposal.note == null) Text("Undone", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.align(Alignment.CenterVertically))
-                        TextButton(onClick = { scope.launch { graph.conversation.applyProposal(messageId, proposal.id) } }) { Text(if (proposal.note == null) "Redo" else "Try again") }
+                        TextButton(onClick = { scope.launch { graph.act(ApplyProposal(messageId, proposal.id)) } }) { Text(if (proposal.note == null) "Redo" else "Try again") }
                         if (proposal.task != null) TextButton(onClick = { onEdit(messageId, proposal.id) }) { Text("Change first") }
                     }
                     // From before everything was made as it came (D-60): still to add or apply.
                     else -> {
-                        Button(onClick = { scope.launch { graph.conversation.applyProposal(messageId, proposal.id) } }) { Text(if (task != null) "Add" else "Apply") }
+                        Button(onClick = { scope.launch { graph.act(ApplyProposal(messageId, proposal.id)) } }) { Text(if (task != null) "Add" else "Apply") }
                         if (task != null) OutlinedButton(onClick = { onEdit(messageId, proposal.id) }) { Text("Change first") }
-                        TextButton(onClick = { scope.launch { graph.conversation.discardProposal(messageId, proposal.id) } }) { Text("Set aside") }
+                        TextButton(onClick = { scope.launch { graph.act(DiscardProposal(messageId, proposal.id)) } }) { Text("Set aside") }
                     }
                 }
             }

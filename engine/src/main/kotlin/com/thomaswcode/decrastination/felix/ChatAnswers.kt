@@ -11,6 +11,7 @@ import com.thomaswcode.decrastination.core.Due
 import com.thomaswcode.decrastination.core.DueKind
 import com.thomaswcode.decrastination.core.FelixSettings
 import com.thomaswcode.decrastination.core.Given
+import com.thomaswcode.decrastination.core.Ids
 import com.thomaswcode.decrastination.core.Instruction
 import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.Kind
@@ -42,7 +43,6 @@ import java.time.LocalTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
-import java.util.UUID
 import kotlin.math.abs
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -119,7 +119,7 @@ object ChatAnswers {
      * then its new tasks, a card each; then a card for each task to show (AI-14), with its Open;
      * one opened where it lives (G3) has none.
      */
-    fun cards(reading: Reading, tasks: Map<String, TaskItem>, zone: ZoneId, id: () -> String = { UUID.randomUUID().toString() }): List<Proposal> {
+    fun cards(reading: Reading, tasks: Map<String, TaskItem>, zone: ZoneId, id: () -> String = { Ids.next() }): List<Proposal> {
         val changes = reading.changes.takeIf { it.isNotEmpty() }?.let {
             Proposal(id(), changes = it, lines = it.map { c -> InstructionRules.describe(c, tasks, zone) }, instant = true)
         }
@@ -364,7 +364,7 @@ object ChatAnswers {
             } else {
                 if (room <= 0) return@mapNotNull no("“${words.take(60)}”: ${Reminders.MAX_PENDING} are still to come already")
                 room--
-                Reminder(UUID.randomUUID().toString(), words, now, By.Felix, dueTask, due)
+                Reminder(Ids.next(), words, now, By.Felix, dueTask, due)
             }
         }
     }
@@ -394,13 +394,13 @@ object ChatAnswers {
                 if (given(g.taskId) != null) return@mapNotNull no("“${words.take(60)}” on a task and for every task of a kind, both")
                 if (standing >= Notes.MAX_STANDING) return@mapNotNull no("“${words.take(60)}”: ${Notes.MAX_STANDING} notes for every task of a kind are kept already")
                 standing++
-                return@mapNotNull Note(UUID.randomUUID().toString(), words, now, By.Felix, scope = scope)
+                return@mapNotNull Note(Ids.next(), words, now, By.Felix, scope = scope)
             }
             val task = byId[g.taskId.trim()] ?: return@mapNotNull no("“${words.take(60)}” on a task that isn't listed")
             val count = Notes.on(task.id, felix.notes).count { it.id !in deleted } + (added[task.id] ?: 0)
             if (count >= Notes.PER_TASK) return@mapNotNull no("“${words.take(60)}”: “${task.title.take(60)}” has ${Notes.PER_TASK} already")
             added[task.id] = (added[task.id] ?: 0) + 1
-            Note(UUID.randomUUID().toString(), words, now, By.Felix, taskId = task.id)
+            Note(Ids.next(), words, now, By.Felix, taskId = task.id)
         }
     }
 

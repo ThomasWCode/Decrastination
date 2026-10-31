@@ -12,6 +12,7 @@ import com.thomaswcode.decrastination.core.FelixAnswer
 import com.thomaswcode.decrastination.core.FelixDraft
 import com.thomaswcode.decrastination.core.FelixRetry
 import com.thomaswcode.decrastination.core.Given
+import com.thomaswcode.decrastination.core.Ids
 import com.thomaswcode.decrastination.core.Instruction
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.MemoryEdit
@@ -47,7 +48,6 @@ import com.thomaswcode.decrastination.ports.Log
 import java.time.Instant
 import java.time.format.DateTimeFormatter
 import java.util.Locale
-import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CompletableDeferred
@@ -343,7 +343,7 @@ class Looks(
             val tried = Rebalance.instruction(task, candidate, steps, back)
             if (!Rebalance.laidAsOffered(planning.plan(now = back, trying = made + tried, settings = settingsBack), candidate, settingsBack)) return@mapNotNull null
             made += tried
-            Proposal(UUID.randomUUID().toString(), changes = tried.changes, lines = listOf(Rebalance.line(candidate, given)), instant = true)
+            Proposal(Ids.next(), changes = tried.changes, lines = listOf(Rebalance.line(candidate, given)), instant = true)
         }
         // One he gave that isn't made, his message would still say it was: the day's list in the app's words
         // instead ([Briefing]), what he remembered kept all the same.
@@ -352,7 +352,7 @@ class Looks(
             return@withLock false
         }
         // His message whole, with no list of the day beside it (D-65): the room is his.
-        val message = ChatMessage(UUID.randomUUID().toString(), Speaker.Felix, answer.message, now, kind = MessageKind.Morning, suggestedReplies = answer.replies, proposals = proposals, feeling = answer.feeling, unsent = answer.unsent)
+        val message = ChatMessage(Ids.next(), Speaker.Felix, answer.message, now, kind = MessageKind.Morning, suggestedReplies = answer.replies, proposals = proposals, feeling = answer.feeling, unsent = answer.unsent)
         outbox.send(message)
         // Made at once, each with its Undo, as his changes in the chat are.
         proposals.forEach { applyProposal(message.id, it.id) }
@@ -452,7 +452,7 @@ class Looks(
             else -> answer?.replies.orEmpty()
         }
         val message = ChatMessage(
-            UUID.randomUUID().toString(), Speaker.Felix, text, now, About(taskId = trigger.taskId, taskTitle = task?.title),
+            Ids.next(), Speaker.Felix, text, now, About(taskId = trigger.taskId, taskTitle = task?.title),
             // Why he wrote it, its kind (his answer, the chat's).
             kind = MessageKind.entries.firstOrNull { it.name == trigger.reason.name } ?: MessageKind.Chat, pieceKey = trigger.key, nextCheckAt = next, asks = trigger.asks, suggestedReplies = replies,
             // How he felt as he wrote it (D-119), kept (Q103): what a kept slot after a let-down is known by. Written ahead,

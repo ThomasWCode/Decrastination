@@ -69,7 +69,7 @@ internal fun GmailOkSheet(graph: AppGraph) {
         confirmButton = {
             TextButton(onClick = {
                 scope.launch {
-                    graph.protection.changeSettings { it.copy(hintsSeen = (it.hintsSeen + GmailWrites.OK_HINT).distinct().takeLast(SettingsLimits.MAX_HINTS)) }
+                    graph.commands.changeSettings { it.copy(hintsSeen = (it.hintsSeen + GmailWrites.OK_HINT).distinct().takeLast(SettingsLimits.MAX_HINTS)) }
                     graph.gmailFinishes.confirm()
                 }
             }) { Text("Carry on") }
@@ -79,7 +79,7 @@ internal fun GmailOkSheet(graph: AppGraph) {
                 TextButton(onClick = {
                     scope.launch {
                         graph.gmailFinishes.refuse()
-                        graph.protection.changeSettings { it.copy(gmailFinishes = false) }
+                        graph.commands.changeSettings { it.copy(gmailFinishes = false) }
                     }
                 }) { Text("Turn this off") }
                 TextButton(onClick = { scope.launch { graph.gmailFinishes.refuse() } }) { Text("Not this time") }

@@ -7,6 +7,7 @@ import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.ChatState
 import com.thomaswcode.decrastination.core.Duplicates
 import com.thomaswcode.decrastination.core.HalfDay
+import com.thomaswcode.decrastination.core.Ids
 import com.thomaswcode.decrastination.core.Instruction
 import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.InstructionState
@@ -40,7 +41,6 @@ import com.thomaswcode.decrastination.learn.EventJudge
 import com.thomaswcode.decrastination.plan.Planning
 import com.thomaswcode.decrastination.ports.Log
 import java.time.Instant
-import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.NonCancellable
@@ -110,7 +110,7 @@ class Instructions(
      * (D-67), and taken back under Your changes. Your [answer] to his [question], it's read shown that.
      */
     suspend fun addInstruction(text: String, about: About, answer: Boolean = false, question: String? = null): String {
-        val id = UUID.randomUUID().toString()
+        val id = Ids.next()
         if (answer && question != null) answering[id] = question
         instructions.update { it.copy(instructions = it.instructions + Instruction(id, text.trim().take(InstructionPrompts.MAX_TEXT), about, clock.now(), answer = answer)) }
         scope.launch { readInstructions(interactive = true) }
@@ -157,7 +157,7 @@ class Instructions(
         )?.takeIf { Planner.pinProblem(task, it, now, zone, chunk.minutes) == null } ?: return null
         val at = Instant.ofEpochMilli(start).atZone(zone)
         addOwnChange(
-            UUID.randomUUID().toString(),
+            Ids.next(),
             "Later today",
             About(taskId = chunk.taskId, taskTitle = chunk.title),
             Change(ChangeType.AtTime, taskId = chunk.taskId, date = at.toLocalDate().toString(), startMin = at.hour * 60 + at.minute, time = start),

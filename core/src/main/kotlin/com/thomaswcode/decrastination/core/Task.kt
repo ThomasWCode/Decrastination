@@ -94,8 +94,8 @@ data class SubStep(
 @Serializable
 enum class StepOrigin { Source, Reading, Rules, Yours, Felix, OwnTask }
 
-/** A step's new id: eight random hex characters. */
-fun newStepId(): String = "%08x".format(Random.nextInt())
+/** A step's new id: eight hex characters, random, or a command's own while one's applied ([Replay]). */
+fun newStepId(): String = Replay.current.get()?.nextId()?.take(8) ?: "%08x".format(Random.nextInt())
 
 /** [this] with each step that has no id, or one a step before it has, given a new one. */
 fun List<SubStep>.withIds(): List<SubStep> {

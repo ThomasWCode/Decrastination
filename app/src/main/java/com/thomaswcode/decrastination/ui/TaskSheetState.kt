@@ -9,14 +9,20 @@ import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.Change
 import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.Chunk
+import com.thomaswcode.decrastination.core.Ids
 import com.thomaswcode.decrastination.core.OwnTaskRules
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
-import com.thomaswcode.decrastination.tasks.Instructions
-import com.thomaswcode.decrastination.tasks.OwnTasks
+import com.thomaswcode.decrastination.sync.protocol.AddOwnChange
+import com.thomaswcode.decrastination.sync.protocol.Commands
+import com.thomaswcode.decrastination.sync.protocol.DeleteOwnTask
+import com.thomaswcode.decrastination.sync.protocol.FinishOwnTask
+import com.thomaswcode.decrastination.sync.protocol.LaterToday
+import com.thomaswcode.decrastination.sync.protocol.ReopenOwnTask
+import com.thomaswcode.decrastination.sync.protocol.SaveOwnTask
+import com.thomaswcode.decrastination.sync.protocol.TakeBackQuick
 import java.time.LocalDate
 import java.time.ZoneId
-import java.util.UUID
 
 /**
  * What a task's sheet holds (docs/plan_v4/architecture.md §The rules; C-Q11), beside what it says ([TaskSheetModel]):
@@ -27,8 +33,7 @@ import java.util.UUID
  * sheet keeps one through a turn of the phone ([saver]) and draws from it.
  */
 class TaskSheetState(
-    private val instructions: Instructions,
-    private val ownTasks: OwnTasks,
+    private val commands: Commands,
     /** Your note on a task kept, or why it can't be ([com.thomaswcode.decrastination.felix.Conversation.addNote]). */
     private val addNote: suspend (taskId: String, text: String) -> String? = { _, _ -> null },
     /** A note deleted ([com.thomaswcode.decrastination.felix.Conversation.deleteNote]). */
@@ -69,57 +74,56 @@ class TaskSheetState(
         if (task.source == Source.Own) {
             val draft = OwnTaskRules.draftWith(task, change) ?: return
             message = OwnTaskRules.problem(draft)
-            if (message == null) ownTasks.saveOwnTask(task.sourceId, draft)
+            if (message == null) commands.act(SaveOwnTask.of(task.sourceId, draft))
         } else {
-            instructions.addOwnChange(UUID.randomUUID().toString(), text, About(taskId = task.id, taskTitle = task.title), change)
+            commands.act(AddOwnChange(Ids.next(), text, About(taskId = task.id, taskTitle = task.title), change))
         }
     }
 
     /** Your quick change of [type] to [task] taken back: what its source says stands again. */
-    suspend fun undo(task: TaskItem, type: ChangeType) = instructions.takeBackQuick(task.id, type)
+    suspend fun undo(task: TaskItem, type: ChangeType) = commands.act(TakeBackQuick(task.id, type))
 
     /** [piece] later today (UI-03), at the first free time after it, as it's said; or that today has none. */
     suspend fun later(piece: Chunk, now: Long, zone: ZoneId) {
-        said = instructions.laterToday(piece.key)?.let { "Later today, at ${Format.at(it, now, zone)}: undone in the chat's Your changes" } ?: "No time left today for it"
+        said = commands.act(LaterToday(piece.key))?.let { "Later today, at ${Format.at(it, now, zone)}: undone in the chat's Your changes" } ?: "No time left today for it"
     }
 
     /** [task]'s work on [tomorrow], as a change of yours. */
     suspend fun tomorrow(task: TaskItem, tomorrow: LocalDate) {
-        instructions.addOwnChange(UUID.randomUUID().toString(), "Tomorrow", About(taskId = task.id, taskTitle = task.title), Change(ChangeType.OnDay, taskId = task.id, date = tomorrow.toString()))
+        commands.act(AddOwnChange(Ids.next(), "Tomorrow", About(taskId = task.id, taskTitle = task.title), Change(ChangeType.OnDay, taskId = task.id, date = tomorrow.toString())))
         said = "Tomorrow: undone in the chat's Your changes"
     }
 
     /** [task] not a task, as a change of yours, made on [today]. */
     suspend fun notATask(task: TaskItem, today: LocalDate, zone: ZoneId) {
         val (change, text) = ownChange(task, OwnChange.NotATask, today, zone)
-        instructions.addOwnChange(UUID.randomUUID().toString(), text, About(taskId = task.id, taskTitle = task.title), change)
+        commands.act(AddOwnChange(Ids.next(), text, About(taskId = task.id, taskTitle = task.title), change))
     }
 
     /** [task], yours, all done, as you say. */
-    suspend fun finish(task: TaskItem) = ownTasks.finishOwnTask(task.id)
+    suspend fun finish(task: TaskItem) = commands.act(FinishOwnTask(task.id))
 
     /** [task], yours and done, open again. */
-    suspend fun reopen(task: TaskItem) = ownTasks.reopenOwnTask(task.id)
+    suspend fun reopen(task: TaskItem) = commands.act(ReopenOwnTask(task.id))
 
     /** [task], yours, gone. */
-    suspend fun delete(task: TaskItem) = ownTasks.deleteOwnTask(task.id)
+    suspend fun delete(task: TaskItem) = commands.act(DeleteOwnTask(task.id))
 
     /** Where [task], yours, can be done (PL-15): at home only ([on]), or anywhere, a free period at school too. */
     suspend fun homeOnly(task: TaskItem, on: Boolean) {
-        ownTasks.saveOwnTask(task.sourceId, OwnTaskRules.draftOf(task).copy(where = if (on) "home" else "anywhere"))
+        commands.act(SaveOwnTask.of(task.sourceId, OwnTaskRules.draftOf(task).copy(where = if (on) "home" else "anywhere")))
     }
 
     companion object {
-        /** The sheet's state through its being made again, [instructions], [ownTasks] and the notes' owner's [addNote] and [deleteNote] given to it again. */
+        /** The sheet's state through its being made again, [commands] and the notes' [addNote] and [deleteNote] given to it again. */
         fun saver(
-            instructions: Instructions,
-            ownTasks: OwnTasks,
+            commands: Commands,
             addNote: suspend (String, String) -> String? = { _, _ -> null },
             deleteNote: suspend (String) -> Unit = {},
         ): Saver<TaskSheetState, Any> = listSaver(
             save = { listOf(it.picking?.name.orEmpty(), it.confirming.orEmpty(), it.message.orEmpty(), it.said.orEmpty(), it.showInstructions, it.noting) },
             restore = { saved ->
-                TaskSheetState(instructions, ownTasks, addNote, deleteNote).apply {
+                TaskSheetState(commands, addNote, deleteNote).apply {
                     picking = (saved[0] as String).takeIf { it.isNotEmpty() }?.let(OwnChange::valueOf)
                     confirming = (saved[1] as String).ifEmpty { null }
                     message = (saved[2] as String).ifEmpty { null }

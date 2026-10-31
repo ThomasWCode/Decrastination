@@ -33,6 +33,9 @@ import com.thomaswcode.decrastination.core.Instruction
 import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.InstructionStatus
 import com.thomaswcode.decrastination.core.TaskItem
+import com.thomaswcode.decrastination.sync.protocol.ApplyInstruction
+import com.thomaswcode.decrastination.sync.protocol.DeleteInstruction
+import com.thomaswcode.decrastination.sync.protocol.RereadInstruction
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -118,21 +121,21 @@ fun InstructionContent(graph: AppGraph, instruction: Instruction, tasks: Map<Str
     Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         when (instruction.state) {
             InstructionStatus.Understood -> {
-                Button(onClick = { scope.launch { graph.instructions.applyInstruction(instruction.id) } }) { Text("Apply") }
-                OutlinedButton(onClick = { scope.launch { graph.instructions.deleteInstruction(instruction.id) } }) { Text("Discard") }
+                Button(onClick = { scope.launch { graph.act(ApplyInstruction(instruction.id)) } }) { Text("Apply") }
+                OutlinedButton(onClick = { scope.launch { graph.act(DeleteInstruction(instruction.id)) } }) { Text("Discard") }
             }
             InstructionStatus.Unclear -> {
                 Button(onClick = { rewriting = true }) { Text("Write again") }
-                OutlinedButton(onClick = { scope.launch { graph.instructions.deleteInstruction(instruction.id) } }) { Text("Discard") }
+                OutlinedButton(onClick = { scope.launch { graph.act(DeleteInstruction(instruction.id)) } }) { Text("Discard") }
             }
-            InstructionStatus.Reading -> OutlinedButton(onClick = { scope.launch { graph.instructions.deleteInstruction(instruction.id) } }) { Text("Discard") }
-            InstructionStatus.Applied -> OutlinedButton(onClick = { scope.launch { graph.instructions.deleteInstruction(instruction.id) } }) { Text("Take back") }
+            InstructionStatus.Reading -> OutlinedButton(onClick = { scope.launch { graph.act(DeleteInstruction(instruction.id)) } }) { Text("Discard") }
+            InstructionStatus.Applied -> OutlinedButton(onClick = { scope.launch { graph.act(DeleteInstruction(instruction.id)) } }) { Text("Take back") }
         }
     }
     if (rewriting) {
         InstructionDialog(aboutLine(instruction.about, now, zone), initial = instruction.text, onDismiss = { rewriting = false }) { text ->
             rewriting = false
-            scope.launch { graph.instructions.rereadInstruction(instruction.id, text) }
+            scope.launch { graph.act(RereadInstruction(instruction.id, text)) }
         }
     }
 }

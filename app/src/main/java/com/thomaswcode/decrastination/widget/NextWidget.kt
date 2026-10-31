@@ -50,6 +50,7 @@ import androidx.glance.text.TextStyle
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.R
 import com.thomaswcode.decrastination.block.TimerAlarms
+import com.thomaswcode.decrastination.sync.protocol.KeepSlot
 import com.thomaswcode.decrastination.ui.Colours
 import com.thomaswcode.decrastination.ui.MainActivity
 import com.thomaswcode.decrastination.ui.OpenTaskActivity
@@ -445,7 +446,7 @@ class TickAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
         val key = parameters[KEY] ?: return
         // Kept since it was shown (a second tap before it's drawn again): nothing more.
-        AppGraph.get(context).focus.keepSlot(key, seenAt = parameters[SEEN])
+        AppGraph.get(context).act(KeepSlot(key, parameters[SEEN]))
         WidgetUpdater.update(context)
     }
 

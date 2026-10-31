@@ -37,6 +37,8 @@ import com.thomaswcode.decrastination.learn.CheckIn
 import com.thomaswcode.decrastination.learn.Daily
 import com.thomaswcode.decrastination.learn.ReviewWorker
 import com.thomaswcode.decrastination.notify.NoticeId
+import com.thomaswcode.decrastination.sync.protocol.EndCheckInFlow
+import com.thomaswcode.decrastination.sync.protocol.RecordCheckIn
 import kotlinx.coroutines.launch
 
 /** The five questions, and below them the latest weekly review. */
@@ -86,10 +88,10 @@ class CheckInActivity : ComponentActivity() {
                             scope.launch {
                                 val now = graph.clock.now()
                                 // Once a week: a second tap (or another screen) finds it there already.
-                                val added = graph.learning.recordCheckIn(CheckIn(week, now, feel, avoided.trim(), inTheWay.trim(), change.trim(), energy.trim()), now)
+                                val added = graph.act(RecordCheckIn(CheckIn(week, now, feel, avoided.trim(), inTheWay.trim(), change.trim(), energy.trim()), now))
                                 AppGraph.get(this@CheckInActivity).notifier.cancel(NoticeId.CheckIn)
                                 // Felix's questions, should he have begun them: the form has the answers.
-                                if (added) graph.conversation.endCheckInFlow()
+                                if (added) graph.act(EndCheckInFlow)
                                 if (!added) return@launch
                                 // As a job: it can outlast this screen.
                                 // Unless the week has had its review already (the evening's ran first).

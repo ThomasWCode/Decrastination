@@ -4,6 +4,7 @@ import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.BusyBlock
 import com.thomaswcode.decrastination.core.Change
 import com.thomaswcode.decrastination.core.ChangeType
+import com.thomaswcode.decrastination.core.Ids
 import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Settings
@@ -17,7 +18,6 @@ import com.thomaswcode.decrastination.ports.Log
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
-import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
@@ -153,7 +153,7 @@ class CalendarWriter(
         lastWritten = calendarId to desired
         for (move in written.taken) {
             val taskId = move.desired.taskId ?: continue
-            addOwnChange(UUID.randomUUID().toString(), "Moved in the calendar", About(taskId = taskId, taskTitle = byId[taskId]?.title), change(move, zone))
+            addOwnChange(Ids.next(), "Moved in the calendar", About(taskId = taskId, taskTitle = byId[taskId]?.title), change(move, zone))
             calendar.update { it.copy(calendarWritten = it.calendarWritten + (move.desired.uri to move.existing.start)) }
         }
     }

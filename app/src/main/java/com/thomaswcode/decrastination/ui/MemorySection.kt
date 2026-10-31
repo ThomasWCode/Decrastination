@@ -23,6 +23,9 @@ import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.core.Given
 import com.thomaswcode.decrastination.core.Memories
 import com.thomaswcode.decrastination.enrich.MemoryTidy
+import com.thomaswcode.decrastination.sync.protocol.DeleteFact
+import com.thomaswcode.decrastination.sync.protocol.DeleteRule
+import com.thomaswcode.decrastination.sync.protocol.Remember
 import kotlinx.coroutines.launch
 
 /**
@@ -51,9 +54,9 @@ fun MemorySection(graph: AppGraph) {
         // Each with how long it holds: till when, or with which task.
         val zone = graph.clock.zone()
         val titles = graph.tasks.value.tasks.associate { it.id to it.title }
-        memory.rules.forEach { r -> Entry(r.text + (Memories.held(r.until, null, { null }, zone)?.let { " ($it)" } ?: ""), "Delete") { scope.launch { graph.conversation.deleteRule(r) } } }
+        memory.rules.forEach { r -> Entry(r.text + (Memories.held(r.until, null, { null }, zone)?.let { " ($it)" } ?: ""), "Delete") { scope.launch { graph.act(DeleteRule(r)) } } }
         if (memory.facts.isNotEmpty()) Text("Remembered, newest first", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 8.dp))
-        memory.facts.asReversed().forEach { f -> Entry("${f.topic}: ${f.text}" + (Memories.held(f.until, f.taskId, titles::get, zone)?.let { " ($it)" } ?: ""), "Delete") { scope.launch { graph.conversation.deleteFact(f) } } }
+        memory.facts.asReversed().forEach { f -> Entry("${f.topic}: ${f.text}" + (Memories.held(f.until, f.taskId, titles::get, zone)?.let { " ($it)" } ?: ""), "Delete") { scope.launch { graph.act(DeleteFact(f)) } } }
         if (memory.facts.isNotEmpty()) {
             val used = Memories.chars(memory.facts) * 100 / Memories.FACT_BUDGET_CHARS
             Text("$used% of the room for facts used. Past ${(MemoryTidy.DUE_SHARE * 100).toInt()}%, Sunday's review tidies them into fewer lines; past it all, the oldest go.", style = small, color = quiet)
@@ -69,7 +72,7 @@ fun MemorySection(graph: AppGraph) {
             TextButton(enabled = rule.isNotBlank(), onClick = {
                 val text = rule.trim()
                 rule = ""
-                scope.launch { said = graph.conversation.remember(listOf(Given(text = text, kind = Given.RULE))).joinToString("\n") { it.line }.ifEmpty { null } }
+                scope.launch { said = graph.act(Remember(listOf(Given(text = text, kind = Given.RULE)))).joinToString("\n") { it.line }.ifEmpty { null } }
             }) { Text("Add") }
         }
         said?.let { Text(it, style = small, color = quiet) }

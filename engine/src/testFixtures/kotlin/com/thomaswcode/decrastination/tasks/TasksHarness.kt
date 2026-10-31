@@ -5,6 +5,7 @@ import com.thomaswcode.decrastination.Fixtures.LONDON
 import com.thomaswcode.decrastination.block.Focus
 import com.thomaswcode.decrastination.core.FixedClock
 import com.thomaswcode.decrastination.core.Kind
+import com.thomaswcode.decrastination.core.ReplayClock
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.data.SecretCipher
@@ -12,8 +13,14 @@ import com.thomaswcode.decrastination.data.Stores
 import com.thomaswcode.decrastination.enrich.KeyProblem
 import com.thomaswcode.decrastination.enrich.ModelGateway
 import com.thomaswcode.decrastination.enrich.Profile
+import com.thomaswcode.decrastination.felix.Conversation
+import com.thomaswcode.decrastination.felix.Looks
 import com.thomaswcode.decrastination.learn.EventJudge
+import com.thomaswcode.decrastination.learn.Learning
 import com.thomaswcode.decrastination.plan.Planning
+import com.thomaswcode.decrastination.protect.Protection
+import com.thomaswcode.decrastination.sync.protocol.Commands
+import com.thomaswcode.decrastination.sync.protocol.Owners
 import java.nio.file.Files
 import java.util.Collections
 import java.util.concurrent.TimeUnit
@@ -37,19 +44,22 @@ import okhttp3.mockwebserver.MockWebServer
  * by a stand-in for Claude's API ([answers]); and what Android does (the calendar read again, the widget,
  * a finish's completions) and what's handed to Felix are counted.
  */
-class TasksHarness(start: String = "2026-10-19T16:00", private val claude: Boolean = false) : AutoCloseable {
+class TasksHarness(start: String = "2026-10-19T16:00", private val claude: Boolean = false) : AutoCloseable, Owners {
     private val dir = Files.createTempDirectory("tasks").toFile()
     val clock = FixedClock(Fixtures.at(start), LONDON)
+
+    /** What the owners read, as `AppGraph`'s do: a command's own moment while one's applied. */
+    private val owners = ReplayClock(clock)
     val stores = Stores(dir, Reverse, { clock.now() })
     private val job = SupervisorJob()
     val scope = CoroutineScope(job + Dispatchers.Default)
     /** The stand-in for Claude's API, started only with [claude]. */
     val server = MockWebServer().apply { if (claude) start() }
-    private val gateway = ModelGateway(stores.settings, { "test-key".takeIf { claude } }, stores.model, stores.tasks, clock, NoAlerts, scope) {}
+    private val gateway = ModelGateway(stores.settings, { "test-key".takeIf { claude } }, stores.model, stores.tasks, owners, NoAlerts, scope) {}
         .also { if (claude) it.endpoint = server.url("").toString().trimEnd('/') }
-    val focus: Focus = Focus(stores.tasks, stores.settings, stores.session, stores.learning, stores.protection, stores.log, clock) { state, s, now -> planning.plan(state, s, now) }
+    override val focus: Focus = Focus(stores.tasks, stores.settings, stores.session, stores.learning, stores.protection, stores.log, owners) { state, s, now -> planning.plan(state, s, now) }
     val planning: Planning = Planning(
-        stores.tasks, stores.settings, stores.session, stores.learning, stores.model, stores.log, stores.instructions, stores.school, clock, scope, gateway,
+        stores.tasks, stores.settings, stores.session, stores.learning, stores.model, stores.log, stores.instructions, stores.school, owners, scope, gateway,
         calendarTime = { NO_CALENDAR },
         calendarChanges = emptyFlow<Unit>(),
         sweep = {},
@@ -67,8 +77,8 @@ class TasksHarness(start: String = "2026-10-19T16:00", private val claude: Boole
     /** Your replies to his questions, read, as they're handed to Felix: each's words, whether it answers his question, and whether a change of it was made. */
     val answersRead: MutableList<Triple<String, Boolean, Boolean>> = Collections.synchronizedList(mutableListOf())
 
-    val instructions = Instructions(
-        stores.instructions, stores.tasks, stores.settings, stores.session, stores.school, stores.chat, clock, scope, gateway, focus, planning,
+    override val instructions = Instructions(
+        stores.instructions, stores.tasks, stores.settings, stores.session, stores.school, stores.chat, owners, scope, gateway, focus, planning,
         calendarTime = { NO_CALENDAR },
         profile = { Profile.Block.NONE },
         reread = { rereads.incrementAndGet() },
@@ -98,7 +108,16 @@ class TasksHarness(start: String = "2026-10-19T16:00", private val claude: Boole
         )
         server.enqueue(MockResponse().setHeader("Content-Type", "application/json").setBody(body.toString()).setHeadersDelay(delayMs, TimeUnit.MILLISECONDS))
     }
-    val ownTasks = OwnTasks(stores.tasks, stores.instructions, stores.chat, clock, scope) { settled.incrementAndGet() }
+    override val ownTasks = OwnTasks(stores.tasks, stores.instructions, stores.chat, owners, scope) { settled.incrementAndGet() }
+
+    override val conversation: Conversation get() = error("No conversation here")
+    override val looks: Looks get() = error("No looks here")
+    override val protection: Protection get() = error("No protection here")
+    override val learning: Learning get() = error("No learning here")
+
+    /** A screen's changes, as `AppGraph`'s: only the owners here have any. */
+    val commands = Commands(this, owners)
+
 
     /** A source's task, made up: Teams homework due on [due], taking [minutes]. */
     fun teams(id: String, due: Long? = Fixtures.at("2026-10-23T09:00"), minutes: Int = 60) = TaskItem(

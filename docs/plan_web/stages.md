@@ -59,6 +59,8 @@ The estimates are hours of sessions, from the durations measured over the 4.x re
 
 ## Stage 2: commands
 
+**The order changed in building it (W-25).** Everything below is built here, dormant, and the switch itself (step 2's `commands` mode, step 6's clock) is the last release, not this stage's. 5.1.0 is the command layer on the phone with nothing behaving differently.
+
 **Goal.** Every change is a command the server applies through the owners; the phone's outbox and offline rules; the website live. Release 5.1.0.
 
 **Work.**

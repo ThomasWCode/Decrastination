@@ -37,6 +37,8 @@ import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.data.WeeklyReview
 import com.thomaswcode.decrastination.learn.ReviewInput
 import com.thomaswcode.decrastination.learn.SummaryEmail
+import com.thomaswcode.decrastination.sync.protocol.UndoReviewChange
+import com.thomaswcode.decrastination.sync.protocol.UndoTidy
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -91,8 +93,8 @@ private fun Reviews(graph: AppGraph) {
                     settings,
                     tidyUndoable = review.memoryTidy?.let { memory.facts == it.after } == true,
                     zone = zone,
-                    onUndo = { change -> scope.launch { said = graph.learning.undoReviewChange(review, change) } },
-                    onUndoTidy = { scope.launch { said = graph.learning.undoTidy(review) } },
+                    onUndo = { change -> scope.launch { said = graph.act(UndoReviewChange(review, change)) } },
+                    onUndoTidy = { scope.launch { said = graph.act(UndoTidy(review)) } },
                 )
             }
         }

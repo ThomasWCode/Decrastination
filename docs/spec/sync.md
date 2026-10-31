@@ -35,6 +35,19 @@ Nothing's lost: what wasn't accepted stays unsent, and goes next time. Setup say
 
 **A store the server refuses.** A store of a newer version than the server can read is left out of the batch's commit, and said in `refused`, and Setup says the server is behind this app; it goes again until it's taken. A release that raises a store's version is installed on the phone before its merge deploys the server, so this lasts only as long as the deploy (D-138).
 
+## Commands
+
+A screen's change is a command (D-140): an action, one owner's operation with its arguments as data (`sync/protocol/Actions.kt`), with an id and the moment it was done (`Command`). `graph.act(FinishOwnTask(id))` makes one and applies it through its owner; no screen calls an owner's change itself, which `ArchitectureTest` holds to. In 5.1.0 that's all it does: what's changed goes to the server as it did, whole, and nothing behaves differently. It's the shape the switch to commands needs (D-141).
+
+So that the same command does the same on the phone and the server, each is applied inside a `Replay` of it (`core/Ids.kt`):
+
+- The owners read its moment, not the time it's applied (`ReplayClock`), so one that arrives late says when it happened.
+- Every id made on the way is drawn from its own (`Ids.next`, `newStepId`), so both ends make the same ones, and a later command can name them.
+- What a change to the settings carries is the fields it touched (`SettingsChanges.changed`), laid over whatever's there when it lands, so a change made elsewhere to any other field stands. `Commands.changeSettings` makes one from a change as a screen writes it.
+- `OwnTask` keeps two things only in memory, which of its steps each was and that it came from the form. `SaveOwnTask` carries them, so a renamed step keeps its tick across the wire.
+
+What isn't a command, and why: a change that's only of this phone (its pairing, the parent code's secret, its calendar's answers), one that starts a job rather than changes the state (a sync, a reading), housekeeping that runs by itself (what Felix remembers past its date let go as its page opens), and what's reached only through Claude until that moves to the server.
+
 ## Testing
 
 `ReplicaTest`, on temporary stores and a stand-in server. From a PC, on the phone (`adb reverse`, then these debug commands): `sync-server` with `url`, a test server's address (`http://127.0.0.1:<port>`, the one address `res/xml/network_security.xml` allows in plain HTTP), `sync-pair` with `code`, `sync-send` and `sync-state`.

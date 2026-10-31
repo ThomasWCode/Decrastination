@@ -13,6 +13,7 @@ import com.thomaswcode.decrastination.core.Timetable
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.protect.Protection
 import com.thomaswcode.decrastination.protect.SettingsChanges
+import kotlinx.serialization.json.JsonElement
 
 /**
  * What the Settings screen holds (docs/plan_v4/architecture.md §The rules; C-Q11): your edits ([draft]) over what the
@@ -145,10 +146,8 @@ class SettingsScreenState(asked: Settings) {
      * reminders' alarms set at their new times), what happened said, and the screen begun again from
      * what's asked for now.
      */
-    suspend fun save(protection: Protection, saved: () -> Unit) {
-        val began = base
-        val wanted = draft
-        protection.changeSettings { latest -> SettingsChanges.edited(began, wanted, latest) }
+    suspend fun save(protection: Protection, change: suspend (Map<String, JsonElement>) -> Unit, saved: () -> Unit) {
+        change(SettingsChanges.changed(base, draft))
         saved()
         val waiting = protection.pending
         message = if (waiting.isEmpty()) {

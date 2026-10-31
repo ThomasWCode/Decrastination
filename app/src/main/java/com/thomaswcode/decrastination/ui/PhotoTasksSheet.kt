@@ -30,6 +30,7 @@ import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.enrich.PhotoTasks
 import com.thomaswcode.decrastination.sources.gmail.GmailThreads
+import com.thomaswcode.decrastination.sync.protocol.SaveOwnTask
 import java.util.UUID
 import kotlinx.coroutines.launch
 
@@ -56,7 +57,7 @@ fun PhotoTasksSheet(graph: AppGraph, reading: PhotoTasks.Reading, jpeg: ByteArra
         if (task != null) {
             val id = ids[i]
             OwnTaskForm(graph, editing = null, initial = task, onSave = { made ->
-                graph.ownTasks.saveOwnTask(id, made).also { saved ->
+                graph.act(SaveOwnTask.of(id, made)).also { saved ->
                     if (saved) graph.photos.attachPhoto(TaskItem.id(Source.Own, id), jpeg)
                 }
             }) { adding = null }

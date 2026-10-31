@@ -105,6 +105,18 @@ class ArchitectureTest {
     }
 
     @Test
+    fun `a screen's change goes through the commands, never to an owner itself`() {
+        // Each is an action (D-140), so that one change is the same on the phone and on the server. AppGraph wires the owners together,
+        // and the debug commands are a PC's.
+        val direct = Regex("""\.(saveOwnTask|finishOwnTask|reopenOwnTask|deleteOwnTask|addOwnChange|laterToday|takeBackQuick|applyInstruction|deleteInstruction|rereadInstruction|notSame|addSchoolDays|deleteSchoolDays|keepSlot|undoKeep|tickBlock|startTimer|stopTimer|replyFromNotification|withdrawQuestion|cancelAnswer|markAnswered|unmarkAnswered|clearChat|applyProposal|undoProposal|discardProposal|undoAct|undoMemory|remember|deleteRule|deleteFact|addNote|deleteNote|endCheckInFlow|noteActivity|useParentCode|applyNow|cancelChange|recordCheckIn|forgetCalibration|undoReviewChange|undoTidy)\(|protection\.changeSettings|conversation\.(ask|rate|read)\(""")
+        val app = roots.filter { it.invariantSeparatorsPath.endsWith("src/main/java") }.flatMap { root ->
+            root.walkTopDown().filter { it.isFile && it.extension == "kt" }.map { it.relativeTo(root).invariantSeparatorsPath.removePrefix("com/thomaswcode/decrastination/") }.toList()
+        }.toSet()
+        val stray = sources.filterKeys { it in app && it != "AppGraph.kt" && !it.startsWith("debug/") }.filterValues { direct.containsMatchIn(it) }.keys
+        assertTrue(stray.isEmpty(), "A screen calls an owner's change, not a command: $stray")
+    }
+
+    @Test
     fun `only the backup service replaces a store whole`() {
         // Stores.replace goes round a store's owner: for a backup restored or a reset, and nothing else.
         val replaces = Regex("""\bstores\.replace\(""")
