@@ -523,6 +523,7 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
                             daySheet = null
                             writingDay = true
                         }, modifier = Modifier.padding(horizontal = 12.dp)) { Text("An instruction about this day…") }
+                        Box(Modifier.padding(horizontal = 24.dp)) { AskFelixButton(activity, About(day = day.toString())) }
                     }
                 }
             }
@@ -620,6 +621,7 @@ private fun MissedSheet(
                 if (can.open) Button(onClick = onOpen) { Text("Open") }
                 if (can.check) OutlinedButton(onClick = onCheck) { Text("Check it's done") }
                 if (can.allDone) OutlinedButton(onClick = onAllDone) { Text("All of it done") }
+                if (can.ask) AskFelixButton(activity, About(taskId = record.taskId, taskTitle = row.piece?.title))
             }
         }
     }
@@ -744,7 +746,7 @@ private fun verdict(judgement: EventJudge.Judgement, asked: Boolean): String = w
 
 /**
  * An event's sheet (UI-17, UI-11): when and where, what it says, how
- * the plan counts it, its answers (for every event of that name), and an instruction about it.
+ * the plan counts it, its answers (for every event of that name), an instruction about it, and Felix asked about it.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -775,6 +777,7 @@ internal fun EventSheet(graph: AppGraph, activity: Activity, event: CalendarEven
                 Text("For every event of that name.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             TextButton(onClick = { writing = true }) { Text("An instruction about it") }
+            AskFelixButton(activity, About(eventKey = key, eventTitle = event.title, eventStart = event.start))
         }
     }
     if (writing) {

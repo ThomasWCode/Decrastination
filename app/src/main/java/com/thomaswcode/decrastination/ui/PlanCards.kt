@@ -45,6 +45,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.thomaswcode.decrastination.AppGraph
+import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.Chunk
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Source
@@ -204,6 +205,8 @@ internal fun PieceSheet(
             // Its first steps in full (AI-15).
             graph.stores.model.value.microPlans[chunk.key]?.let(MicroPlans::lines)?.forEach { Text(it, style = MaterialTheme.typography.bodyMedium) }
             PieceActions(graph, activity, chunk, now, photo, say)
+            // On this sheet alone, not in PieceActions: the DO NOW card and the block screen use those too.
+            AskFelixButton(activity, About(taskId = chunk.taskId, taskTitle = chunk.title))
             // Its due date, minutes or start: on the task's own sheet.
             TextButton(onClick = onChange) { Text("Change its due date, minutes…") }
             message?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.secondary) }
