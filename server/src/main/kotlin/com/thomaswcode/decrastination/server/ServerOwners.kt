@@ -1,7 +1,10 @@
 package com.thomaswcode.decrastination.server
 
 import com.thomaswcode.decrastination.block.Focus
+import com.thomaswcode.decrastination.block.Slots
 import com.thomaswcode.decrastination.core.DayKind
+import com.thomaswcode.decrastination.core.Enrichments
+import com.thomaswcode.decrastination.core.InstructionStatus
 import com.thomaswcode.decrastination.core.OwnTask
 import com.thomaswcode.decrastination.core.SchoolDays
 import com.thomaswcode.decrastination.core.Settings
@@ -11,19 +14,30 @@ import com.thomaswcode.decrastination.data.Stores
 import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.enrich.ModelGateway
+import com.thomaswcode.decrastination.enrich.ReadingPrompts
+import com.thomaswcode.decrastination.enrich.Readings
+import com.thomaswcode.decrastination.enrich.RuleEnricher
 import com.thomaswcode.decrastination.felix.Conversation
 import com.thomaswcode.decrastination.felix.FelixPorts
 import com.thomaswcode.decrastination.felix.Looks
 import com.thomaswcode.decrastination.felix.Outbox
 import com.thomaswcode.decrastination.learn.Assessment
+import com.thomaswcode.decrastination.learn.Briefing
 import com.thomaswcode.decrastination.learn.CheckIn
 import com.thomaswcode.decrastination.learn.EventJudge
 import com.thomaswcode.decrastination.learn.Learning
+import com.thomaswcode.decrastination.net.UrlConnectionHttp
 import com.thomaswcode.decrastination.notify.NoticeId
 import com.thomaswcode.decrastination.notify.Notices
 import com.thomaswcode.decrastination.plan.Planning
+import com.thomaswcode.decrastination.ports.Log
 import com.thomaswcode.decrastination.protect.Protection
+import com.thomaswcode.decrastination.sources.gmail.GmailSource
+import com.thomaswcode.decrastination.sources.gmail.GmailThreads
+import com.thomaswcode.decrastination.sources.powerplanner.PowerPlannerApi
+import com.thomaswcode.decrastination.sources.powerplanner.PowerPlannerSource
 import com.thomaswcode.decrastination.sync.GmailFinishes
+import com.thomaswcode.decrastination.sync.Syncer
 import com.thomaswcode.decrastination.sync.protocol.Owners
 import com.thomaswcode.decrastination.tasks.Instructions
 import com.thomaswcode.decrastination.tasks.OwnTasks
@@ -141,6 +155,49 @@ class ServerOwners(
         summaryReady = { week -> conversation.summaryReady(week) },
         tasks = { stores.tasks.value.tasks },
     )
+
+    /** The tasks' readings, by Claude while it can be asked, by the rules otherwise. */
+    val readings: Readings = Readings(
+        stores.tasks, stores.model, clock, scope, gateway,
+        profile = { conversation.profile() },
+        queueQuestion = { taskId, question, now -> looks.queueQuestion(taskId, question, now) },
+        readDecks = {},
+    )
+
+    /** Today's slots as they pass. */
+    val slots: Slots = Slots(stores.session, stores.settings, stores.tasks, stores.school, clock, planning, focus)
+
+    /** The morning, its calendar what the phone last sent. */
+    val briefing: Briefing = Briefing(planning, stores.log, stores.runtime, stores.school, clock, NoNotices, readCalendar = {}, looks, conversation)
+
+    /** The sources that need no phone (D-133): read here, merged as the phone merges them. */
+    val syncer: Syncer = Syncer(
+        stores.tasks, stores.settings, listOf(PowerPlannerSource(PowerPlannerApi(UrlConnectionHttp()), stores.secrets), GmailSource(stores.secrets)), clock,
+        onFailure = { source, error -> Log.w(Log.TAG, "Reading ${source.label} failed: ${error::class.simpleName}") },
+        ankiRates = { stores.learning.value.calibration.ankiSecondsPerCard },
+    )
+
+    init {
+        // What follows a read, as `AppGraph` has it, less what's the phone's: its calendar, its notifications.
+        syncer.addListener { settleCompletions() }
+        syncer.addAfterEverySync { conversation.afterSync() }
+        syncer.addAfterEverySync { conversation.askKept() }
+        syncer.addAfterEverySync { instructions.layTaskOverrides() }
+        syncer.addAfterEverySync { ownTasks.pruneOwn() }
+        syncer.addAfterEverySync { ownTasks.rollWeeks() }
+        syncer.addAfterEverySync { answerWhatWaits() }
+        syncer.addAfterEverySync {
+            val on = gateway.available()
+            val off = gateway.claudeKey() == null
+            if (stores.tasks.value.tasks.any { Enrichments.jobFor(it, GmailThreads::textRead) != null && Enrichments.stale(it, on, RuleEnricher.BY, ReadingPrompts.VERSION, off) }) readings.enrichNow()
+        }
+    }
+
+    /** A message or an instruction waiting for Claude: asked now. Never inside a command: a call mustn't hold the state's write lock. */
+    suspend fun answerWhatWaits() {
+        if (stores.chat.value.unanswered != null) conversation.answerChat()
+        if (stores.instructions.value.instructions.any { it.state == InstructionStatus.Reading }) instructions.readInstructions()
+    }
 
     /** Work a task's finish completes, earning its free time and asked about, as `AppGraph` settles it. */
     private suspend fun settleCompletions() {

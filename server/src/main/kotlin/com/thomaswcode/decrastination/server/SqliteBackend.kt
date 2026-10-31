@@ -29,9 +29,13 @@ class SqliteBackend(private val db: Database, private val clock: () -> Long = Sy
         if (writable) keep(name, version, text)
     }
 
+    /** A revision made by a job, outside any command: heard by the website as a command's is. */
+    @Volatile
+    var written: (Long) -> Unit = {}
+
     /** [text] kept as [name], with its history, whatever [writable] says: a seed's. */
     fun keep(name: String, version: Int, text: String) {
-        db.transaction { c ->
+        val revision = db.transaction { c ->
             val revision = db.revision()
             val now = clock()
             c.prepareStatement(
@@ -46,7 +50,9 @@ class SqliteBackend(private val db: Database, private val clock: () -> Long = Sy
                 q.executeUpdate()
             }
             history(c, revision, name, version, text, cause, now)
+            revision
         }
+        if (!db.inACommand && db.notNested) written(revision)
     }
 
     override fun names(): List<String> = db.transactionless { c ->

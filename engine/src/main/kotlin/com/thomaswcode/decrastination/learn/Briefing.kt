@@ -12,7 +12,6 @@ import com.thomaswcode.decrastination.felix.Looks
 import com.thomaswcode.decrastination.notify.Notices
 import com.thomaswcode.decrastination.plan.Planning
 import com.thomaswcode.decrastination.ports.Log
-import com.thomaswcode.decrastination.sync.Sync
 import com.thomaswcode.decrastination.ui.Format
 
 /**
@@ -28,7 +27,8 @@ class Briefing(
     private val school: JsonStore<SchoolCalendar>,
     private val clock: WallClock,
     private val notices: Notices,
-    private val sync: Sync,
+    /** The calendar read first, where it can be: the phone's. */
+    private val readCalendar: suspend () -> Unit,
     private val looks: Looks,
     private val conversation: Conversation,
 ) {
@@ -52,7 +52,7 @@ class Briefing(
         // What the night held back (LR-07), first thing.
         runCatching { notices.postHeld() }.onFailure { Log.w(Log.TAG, "Posting what was held back failed", it) }
         // The calendar read first: woken by its alarm, the app has had no time to read it yet.
-        sync.refreshCalendar()
+        readCalendar()
         val now = clock.now()
         val zone = clock.zone()
         val plan = planning.plan()

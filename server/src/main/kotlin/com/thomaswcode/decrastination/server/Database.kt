@@ -4,8 +4,10 @@ import java.sql.Connection
 import java.sql.DriverManager
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
+import kotlinx.coroutines.asContextElement
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 /**
  * The state's one file (docs/plan_web/data-and-sync.md §The database): SQLite in WAL mode, as Litestream needs it, written
@@ -23,6 +25,15 @@ class Database(path: String) : AutoCloseable {
 
     /** One [command] at a time: held across suspensions, which the [lock] can't be, being its thread's. */
     private val commanding = Mutex()
+
+    /** Whether a [command]'s transaction is open. What's written by anything else waits for it: a job's write mustn't go with a command that's rolled back. */
+    private var commandOpen = false
+
+    /** A command's own coroutine, on whichever thread it's reached: its writes are the transaction's. */
+    private val inCommand = ThreadLocal<Boolean?>()
+
+    /** Signalled as a command closes. */
+    private val closed = lock.newCondition()
 
     /** The revision the open transaction has taken, if it's taken one. */
     private var taken: Long? = null
@@ -50,9 +61,10 @@ class Database(path: String) : AutoCloseable {
         lock.withLock {
             connection.autoCommit = false
             depth = 1
+            commandOpen = true
         }
         try {
-            val result = block()
+            val result = withContext(inCommand.asContextElement(true)) { block() }
             lock.withLock { connection.commit() }
             result
         } catch (failed: Throwable) {
@@ -62,10 +74,18 @@ class Database(path: String) : AutoCloseable {
             lock.withLock {
                 taken = null
                 depth = 0
+                commandOpen = false
                 connection.autoCommit = true
+                closed.signalAll()
             }
         }
     }
+
+    /** Whether no transaction is open: what's just been written has been committed. */
+    val notNested: Boolean get() = lock.withLock { depth == 0 }
+
+    /** Whether the caller's inside a [command]: its writes reach the world as that commits. */
+    val inACommand: Boolean get() = inCommand.get() == true
 
     /** [block] on what's committed, one moment's view however many statements it runs. */
     fun <T> read(block: (Connection) -> T): T = if (reader === connection) {
@@ -84,6 +104,7 @@ class Database(path: String) : AutoCloseable {
 
     /** [block] with the connection, all of it committed or, if it throws, none of it. Inside another, it's part of that one. */
     fun <T> transaction(block: (Connection) -> T): T = lock.withLock {
+        while (commandOpen && !inACommand) closed.await()
         if (depth > 0) return block(connection)
         connection.autoCommit = false
         depth = 1
@@ -129,6 +150,26 @@ class Database(path: String) : AutoCloseable {
         Unit
     }
 
+    /** The sealed bytes kept as [name]. */
+    fun credentials(name: String): ByteArray? = read { c ->
+        c.prepareStatement("SELECT ciphertext FROM credentials WHERE name = ?").use { q ->
+            q.setString(1, name)
+            q.executeQuery().use { if (it.next()) it.getBytes(1) else null }
+        }
+    }
+
+    /** [sealed] kept as [name], taking a revision so Litestream's stream carries it as it does a store. */
+    fun setCredentials(name: String, sealed: ByteArray, now: Long) {
+        transaction { c ->
+            c.prepareStatement("INSERT INTO credentials(name, ciphertext, updated_at) VALUES(?, ?, ?) ON CONFLICT(name) DO UPDATE SET ciphertext = excluded.ciphertext, updated_at = excluded.updated_at").use { q ->
+                q.setString(1, name)
+                q.setBytes(2, sealed)
+                q.setLong(3, now)
+                q.executeUpdate()
+            }
+        }
+    }
+
     /** [block] with the connection, in the open transaction if there's one. */
     fun <T> transactionless(block: (Connection) -> T): T = lock.withLock { block(connection) }
 
@@ -150,6 +191,7 @@ class Database(path: String) : AutoCloseable {
                 id TEXT PRIMARY KEY, name TEXT NOT NULL, token_hash TEXT NOT NULL UNIQUE, created_at INTEGER NOT NULL, last_seen_at INTEGER, revoked_at INTEGER)""",
             "CREATE TABLE IF NOT EXISTS sessions(id TEXT PRIMARY KEY, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, last_seen_at INTEGER NOT NULL)",
             "CREATE TABLE IF NOT EXISTS pairing_codes(code_hash TEXT PRIMARY KEY, expires_at INTEGER NOT NULL)",
+            "CREATE TABLE IF NOT EXISTS credentials(name TEXT PRIMARY KEY, ciphertext BLOB NOT NULL, updated_at INTEGER NOT NULL)",
             """CREATE TABLE IF NOT EXISTS commands(
                 id TEXT PRIMARY KEY, device TEXT NOT NULL, protocol INTEGER NOT NULL, payload TEXT NOT NULL,
                 received_at INTEGER NOT NULL, at INTEGER NOT NULL, outcome TEXT NOT NULL, why TEXT, revision INTEGER NOT NULL)""",

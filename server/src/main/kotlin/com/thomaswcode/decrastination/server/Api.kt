@@ -79,6 +79,10 @@ private data class Me(val signedIn: Boolean)
 @Serializable
 private data class StoreOut(val name: String, val version: Int, val revision: Long, val json: JsonElement)
 
+/** Which credentials the server holds, by name: never a value. */
+@Serializable
+private data class Credentials(val held: Set<String>)
+
 @Serializable
 private data class StateOut(val revision: Long, val stores: List<StoreOut>)
 
@@ -251,7 +255,20 @@ private fun Route.signedInRoutes(web: Web) {
         // Mirror mode's writer is the phone, by its seeds: a command now would be undone by the next one.
         if (graph.mode != ServerGraph.COMMANDS) return@post call.respond(HttpStatusCode.Conflict, Problem("The server is mirroring the phone"))
         val device = (call.client as? Client.Phone)?.id ?: Client.WEBSITE
-        call.respond(graph.applier.apply(call.receive<CommandBatch>(), device))
+        val outcomes = graph.applier.apply(call.receive<CommandBatch>(), device)
+        // Felix's answer, on its own time: the phone's message is in, whenever he gets to it.
+        graph.answerSoon()
+        call.respond(outcomes)
+    }
+
+    get("/credentials") {
+        if (call.client !is Client.Website) return@get call.respond(HttpStatusCode.Forbidden, Problem("Credentials are the website's"))
+        call.respond(Credentials(graph.credentials()))
+    }
+    post("/credentials") {
+        if (call.client !is Client.Website) return@post call.respond(HttpStatusCode.Forbidden, Problem("Credentials are the website's"))
+        graph.setCredentials(call.receive<Map<String, String>>())
+        call.respond(Credentials(graph.credentials()))
     }
 
     get("/views/day") {

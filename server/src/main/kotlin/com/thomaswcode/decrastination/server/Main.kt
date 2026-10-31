@@ -12,6 +12,8 @@ import javax.crypto.Cipher
 import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
 import kotlin.system.exitProcess
+import kotlinx.coroutines.DelicateCoroutinesApi
+import kotlinx.coroutines.GlobalScope
 import kotlinx.serialization.json.JsonPrimitive
 
 /** AES-256-GCM under a key from the environment (`MASTER_KEY`, base64, 32 bytes), for what the server holds encrypted. */
@@ -53,6 +55,7 @@ private fun env(name: String): String = System.getenv(name)?.takeIf { it.isNotBl
     exitProcess(1)
 }
 
+@OptIn(DelicateCoroutinesApi::class)
 fun main() {
     Log.sink = StdoutLog
     val testing = System.getenv("DECRASTINATION_TEST") == "1"
@@ -64,7 +67,7 @@ fun main() {
     val dataDir = File(System.getenv("DATA_DIR") ?: "/data").apply { mkdirs() }
     val db = Database(File(dataDir, "decrastination.db").path)
     val version = System.getenv("APP_VERSION") ?: "dev"
-    val graph = ServerGraph(db, dataDir, MasterKeyCipher(if (testing) Base64.getEncoder().encodeToString(ByteArray(32)) else env("MASTER_KEY")), version)
+    val graph = ServerGraph(db, dataDir, MasterKeyCipher(if (testing) Base64.getEncoder().encodeToString(ByteArray(32)) else env("MASTER_KEY")), version, claudeKey = System.getenv("ANTHROPIC_API_KEY")?.takeIf { it.isNotBlank() }, heartbeatUrl = System.getenv("HEARTBEAT_URL")?.takeIf { it.isNotBlank() })
     val github: GitHub = if (testing) {
         object : GitHub {
             override fun authorizeUrl(state: String, challenge: String) = "/"
@@ -77,5 +80,6 @@ fun main() {
     val sessions = Sessions(db, if (testing) 0 else env("ALLOWED_GITHUB_USER_ID").toLong())
     val web = Web(graph, github, sessions, secure = !testing, testing = testing)
     Log.i(Log.TAG, "Starting $version in ${graph.mode} mode")
+    graph.jobs.start(GlobalScope)
     embeddedServer(Netty, port = (System.getenv("PORT") ?: "8080").toInt(), host = "0.0.0.0") { api(web) }.start(wait = true)
 }

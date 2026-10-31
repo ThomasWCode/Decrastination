@@ -338,7 +338,7 @@ class AppGraph private constructor(context: Context) : Owners {
     )
 
     /** The morning: the day's record, what the night held back, and his message on the day ([Briefing]). */
-    val briefing: Briefing = Briefing(planning, log, runtime, school, clock, notifier, sync, looks, conversation)
+    val briefing: Briefing = Briefing(planning, log, runtime, school, clock, notifier, { sync.refreshCalendar() }, looks, conversation)
 
     /**
      * Your instructions ([Instructions]): written and read by Claude, or quick changes of yours; applied,

@@ -3,17 +3,22 @@ package com.thomaswcode.decrastination.server
 import com.thomaswcode.decrastination.core.Notes
 import com.thomaswcode.decrastination.core.ReplayClock
 import com.thomaswcode.decrastination.core.SchoolDays
+import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.WallClock
 import com.thomaswcode.decrastination.data.CalendarRead
 import com.thomaswcode.decrastination.data.JsonStore
+import com.thomaswcode.decrastination.data.Secret
 import com.thomaswcode.decrastination.data.SecretCipher
 import com.thomaswcode.decrastination.data.SecretStore
 import com.thomaswcode.decrastination.data.Stores
 import com.thomaswcode.decrastination.enrich.KeyProblem
 import com.thomaswcode.decrastination.enrich.ModelGateway
 import com.thomaswcode.decrastination.enrich.Profile
+import com.thomaswcode.decrastination.learn.Daily
 import com.thomaswcode.decrastination.learn.EventJudge
+import com.thomaswcode.decrastination.net.Http
+import com.thomaswcode.decrastination.net.UrlConnectionHttp
 import com.thomaswcode.decrastination.plan.Planning
 import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.ports.Log
@@ -27,6 +32,7 @@ import com.thomaswcode.decrastination.views.DayViews
 import com.thomaswcode.decrastination.views.WorkView
 import com.thomaswcode.decrastination.views.WorkViews
 import java.io.File
+import java.io.IOException
 import java.sql.SQLException
 import java.time.Instant
 import java.time.LocalDate
@@ -72,7 +78,17 @@ class ServerClock(private val db: Database) : WallClock {
  * phone's. The same stores, on rows; the same plan, from them. In mirror mode (stage 1) the phone is the only writer: a
  * whole store comes in, and nothing here changes one.
  */
-class ServerGraph(val db: Database, dataDir: File, cipher: SecretCipher, private val version: String) {
+class ServerGraph(
+    val db: Database,
+    dataDir: File,
+    cipher: SecretCipher,
+    private val version: String,
+    /** Claude's key, from the box's `.env` (W-12): none, and the rules do what they can. */
+    private val claudeKey: String? = null,
+    /** Where a minute's heartbeat is sent (healthchecks.io), if anywhere. */
+    private val heartbeatUrl: String? = null,
+    private val http: Http = UrlConnectionHttp(),
+) {
     /** The clock the phone's zone is told to. */
     val serverClock = ServerClock(db)
 
@@ -81,11 +97,20 @@ class ServerGraph(val db: Database, dataDir: File, cipher: SecretCipher, private
     val backend = SqliteBackend(db).apply { writable = (db.meta("mode") ?: MIRROR) != MIRROR }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
-    val stores = Stores(backend, SecretStore(File(dataDir, "secrets.bin"), cipher))
+    /**
+     * The credentials, sealed under `MASTER_KEY` (W-19), in the database as well as beside it, so a restore carries them: a
+     * file on a rebuilt box comes back from there before it's read.
+     */
+    private val secrets: SecretStore = File(dataDir, SECRETS).let { file ->
+        if (!file.exists()) db.credentials(SECRETS)?.let(file::writeBytes)
+        SecretStore(file, cipher, saved = { db.setCredentials(SECRETS, it, serverClock.now()) })
+    }
+
+    val stores = Stores(backend, secrets)
     val calendarRead = JsonStore(backend, CalendarRead.NAME, CalendarRead.serializer(), ::CalendarRead)
     val devices = Devices(db)
 
-    private val gateway = ModelGateway(stores.settings, { null }, stores.model, stores.tasks, clock, NoAlerts, scope) {}
+    private val gateway = ModelGateway(stores.settings, { claudeKey }, stores.model, stores.tasks, clock, NoAlerts, scope) {}
 
     val planning = Planning(
         stores.tasks, stores.settings, stores.session, stores.learning, stores.model, stores.log, stores.instructions, stores.school, clock, scope, gateway,
@@ -99,7 +124,11 @@ class ServerGraph(val db: Database, dataDir: File, cipher: SecretCipher, private
         notes = { task: TaskItem -> Notes.forTask(task, stores.felix.value.notes, stores.settings.value.classMap).map { it.text } },
     )
 
-    /** The owners, none of them started: what they do is what a command asks. */
+    init {
+        backend.written = { _revisions.tryEmit(it) }
+    }
+
+    /** The owners, none of them started: what they do is what a command asks, and a job. */
     val owners = ServerOwners(stores, clock, scope, gateway, planning, calendarTime = { calendarTime() })
 
     private val commands = Commands(owners, clock)
@@ -173,6 +202,50 @@ class ServerGraph(val db: Database, dataDir: File, cipher: SecretCipher, private
     /** Commands applied as they arrive, one at a time. */
     val applier = CommandApplier(db, backend, commands, owners, clock, reload = { reloadAll() }, committed = { _revisions.tryEmit(it) })
 
+    /** Each minute, what's due, once the server applies commands (docs/spec/server.md §Jobs). */
+    val jobs = ServerJobs(
+        db, clock, running = { mode == COMMANDS },
+        listOf(
+            ServerJob.every("slots", MINUTE_MS) {
+                owners.slots.sweep()
+                owners.protection.applyDueChanges()
+            },
+            ServerJob.every("looks", MINUTE_MS) {
+                owners.looks.check()
+                owners.looks.sweepReminders()
+            },
+            ServerJob.every("sources", SOURCES_EVERY_MS) { owners.syncer.sync(setOf(Source.PowerPlanner, Source.Gmail)) },
+            ServerJob("morning", due = { last, now -> Daily.nextBriefing(last ?: (now - DAY_MS), clock.zone(), stores.settings.value, stores.school.value) <= now }) {
+                owners.conversation.forgetExpired()
+                owners.ownTasks.rollWeeks()
+                owners.briefing.run()
+                owners.conversation.pruneFelix()
+            },
+            ServerJob("check-in", due = { last, now -> Daily.nextSunday(last ?: (now - DAY_MS), clock.zone(), stores.settings.value.checkInMin) <= now }) { owners.conversation.remindCheckIn() },
+            ServerJob("review", due = { last, now -> Daily.nextSunday(last ?: (now - DAY_MS), clock.zone(), stores.settings.value.checkInMin + Daily.REVIEW_AFTER_MIN) <= now }) { owners.learning.review(ifDue = true) },
+            ServerJob.every("heartbeat", MINUTE_MS) { heartbeatUrl?.let { http.get(it, emptyMap()) } },
+        ),
+    )
+
+    /** What waits for Claude asked for, after a command's landed: on its own time, as a call can take a minute. */
+    fun answerSoon() {
+        scope.launch {
+            try {
+                owners.answerWhatWaits()
+            } catch (failed: IOException) {
+                Log.w(Log.TAG, "Asking Claude failed: ${failed::class.simpleName}")
+            }
+        }
+    }
+
+    /** The credentials held, by name. Never their values. */
+    fun credentials(): Set<String> = stores.secrets.present.value.map { it.name }.toSet()
+
+    /** Credentials as the website's given them: those it may set, a blank one taken away. */
+    suspend fun setCredentials(given: Map<String, String>) {
+        stores.secrets.put(CREDENTIALS.filter { it.name in given }.associateWith { given[it.name] })
+    }
+
     /** Every store read again from what's committed. */
     private suspend fun reloadAll() {
         byName.values.forEach { it.reload() }
@@ -219,6 +292,13 @@ class ServerGraph(val db: Database, dataDir: File, cipher: SecretCipher, private
     companion object {
         /** The mode where commands apply: `meta.mode`, one way, from mirror mode. */
         const val COMMANDS = "commands"
+        private const val SECRETS = "secrets.bin"
+        private const val MINUTE_MS = 60_000L
+        private const val SOURCES_EVERY_MS = 15 * MINUTE_MS
+        private const val DAY_MS = 24 * 3_600_000L
+
+        /** What the website can set: the sources' sign-ins, entered there (W-19). Claude's key is the box's, and the parent code's the phone's. */
+        private val CREDENTIALS = setOf(Secret.PowerPlannerUsername, Secret.PowerPlannerPassword, Secret.GmailAddress, Secret.GmailAppPassword)
         private const val MIRROR = "mirror"
         private const val TIDY_EVERY_MS = 24 * 3_600_000L
     }

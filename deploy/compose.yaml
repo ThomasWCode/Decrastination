@@ -15,6 +15,9 @@ services:
       GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:?set GITHUB_CLIENT_ID in .env}
       GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:?set GITHUB_CLIENT_SECRET in .env}
       ALLOWED_GITHUB_USER_ID: ${ALLOWED_GITHUB_USER_ID:?set ALLOWED_GITHUB_USER_ID in .env}
+      # Used once the server applies commands: empty till then, and the jobs don't run.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      HEARTBEAT_URL: ${HEARTBEAT_URL:-}
     expose:
       - "8080"
     volumes:
