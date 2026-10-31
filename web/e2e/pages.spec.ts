@@ -7,6 +7,26 @@ test("signed in, the Day shows the plan's grid and what to do now", async ({ pag
   await expect(page.getByTestId("grid")).toBeVisible();
 });
 
+test("the grid keeps your place when the page is asked for again", async ({ page }) => {
+  await page.clock.install();
+  // Each answer a minute on from the last, as the server's would be: the mocked clock doesn't reach it.
+  let minute = 600;
+  await page.route("**/api/views/day**", async (route) => {
+    const response = await route.fetch();
+    await route.fulfill({ response, json: { ...(await response.json()), nowMin: minute++ } });
+  });
+  await page.goto("/");
+  const grid = page.getByTestId("grid");
+  await expect(grid).toBeVisible();
+  const line = grid.locator("i.now");
+  const before = await line.evaluate((element) => (element as HTMLElement).style.top);
+  await grid.evaluate((element) => element.scrollTo({ top: 7 }));
+  await page.clock.runFor(61_000);
+  // The new minute drawn, so the page has taken the new answer in.
+  await expect.poll(() => line.evaluate((element) => (element as HTMLElement).style.top)).not.toBe(before);
+  expect(await grid.evaluate((element) => element.scrollTop)).toBe(7);
+});
+
 test("a day of the week can be chosen", async ({ page }) => {
   await page.goto("/");
   const week = page.getByRole("navigation", { name: "Week" });

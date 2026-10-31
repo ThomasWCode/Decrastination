@@ -508,9 +508,9 @@ class AppGraph private constructor(context: Context) {
                 runCatching { TimerAlarms.sync(app) }.onFailure { e -> Log.w(TAG, "Keeping the timer's notification failed", e) }
             }
         }
-        // Anything the server keeps a copy of changed: sent within the minute, by work that keeps its network.
+        // Anything the server keeps a copy of changed, the calendar as read among it: sent within the minute, by work that keeps its network.
         scope.launch {
-            stores.mirrored.map { it.state.drop(1) }.merge().collect { if (replica.paired) ReplicaWorker.soon(app) }
+            merge(stores.mirrored.map { it.state.drop(1) }.merge(), sync.calendarState.drop(1)).collect { if (replica.paired) ReplicaWorker.soon(app) }
         }
         // Redraw the widget whenever what it shows may have changed.
         scope.launch {

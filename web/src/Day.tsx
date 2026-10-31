@@ -53,8 +53,11 @@ function Block({ block }: { block: BlockView }) {
 
 function Grid({ day }: { day: DayView }) {
   const scroller = useRef<HTMLDivElement>(null);
-  // Opened at the day's morning, or where it is now.
+  const placed = useRef<string | null>(null);
+  // Opened at the day's morning, or where it is now; once for a day, as the page is asked for again each minute and you may be reading elsewhere.
   useEffect(() => {
+    if (placed.current === day.date) return;
+    placed.current = day.date;
     scroller.current?.scrollTo({ top: Math.max((day.nowMin ?? day.opensAt) - 90, 0) });
   }, [day.date, day.nowMin, day.opensAt]);
   return (
