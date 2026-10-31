@@ -48,6 +48,29 @@ So that the same command does the same on the phone and the server, each is appl
 
 What isn't a command, and why: a change that's only of this phone (its pairing, the parent code's secret, its calendar's answers), one that starts a job rather than changes the state (a sync, a reading), and what's reached only through Claude until that moves to the server.
 
+## The exchange, once the server applies commands
+
+Built and tested in 5.2.0, and dormant: `SyncState.mode` stays `mirror`, and the phone behaves as it did, till the server goes over to commands (D-141). The server says so by answering a seed with a 409, and `GET /api/version` by its `mode`; the phone then keeps in step this way, from its next upload.
+
+- **A change** is recorded in `outbox.json` before it's applied (`Commands.act`), so a process stopped between the two applies it at its next start (`Commands.resume`), once. The screens show it at once.
+- **An upload** posts what's waiting, in order, to `POST /api/commands`, and each that's answered leaves the outbox. A command the server dropped is said on Setup (`SyncState.dropped`).
+- **Then a pull**: `GET /api/state?since=` for every store changed since the last, each taken whole (`JsonStore.adopt`), and whatever's still waiting applied again on top (`Commands.replacing`), so a pull takes nothing you've just done from the screen. No command is applied while the stores are replaced.
+- A pull follows only an answer. With none, what's waiting may already be on the server, and it mustn't be applied twice over.
+- A store newer than this build can read stops the pull whole, and Setup says to install: the stores change together, and half of them new is worse than all of them old.
+
+An answer lost on the way does no harm: the retry's id is one the server's seen, and it answers as it did the first time, applying nothing.
+
+## Stale commands
+
+The server applies commands in the order they arrive, and the owners are the conflict policy, as they are when a sync and a tap race on the phone (D-140). A command that can't apply to the state as it now is, is dropped, with its reason (`Action.stale`), and nothing of it is applied.
+
+| Command | Stale when | Said |
+|---|---|---|
+| `FinishOwnTask`, `ReopenOwnTask`, `DeleteOwnTask`, `TickBlock`, `StartTimer`, `AddNote` | its task has gone | That task had gone |
+| `AddOwnChange` | the task it's about has gone | That task had gone |
+| any other | never: its owner takes a stale call as it does today, doing nothing, or laying the day again | |
+| one its owner fails on | always | It couldn't be applied |
+
 ## Testing
 
-`ReplicaTest`, on temporary stores and a stand-in server. From a PC, on the phone (`adb reverse`, then these debug commands): `sync-server` with `url`, a test server's address (`http://127.0.0.1:<port>`, the one address `res/xml/network_security.xml` allows in plain HTTP), `sync-pair` with `code`, `sync-send` and `sync-state`.
+`ReplicaTest`, on temporary stores and a stand-in server; `SyncHarnessTest` in `:server`, a real applier over a real database and two phones on stores of their own, a wire between them that can be cut or lose an answer; `CommandApplierTest`. From a PC, on the phone (`adb reverse`, then these debug commands): `sync-server` with `url`, a test server's address (`http://127.0.0.1:<port>`, the one address `res/xml/network_security.xml` allows in plain HTTP), `sync-pair` with `code`, `sync-send` and `sync-state`.

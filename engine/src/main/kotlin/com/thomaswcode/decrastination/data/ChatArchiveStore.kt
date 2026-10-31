@@ -223,6 +223,12 @@ class ChatArchiveStore(private val backend: StoreBackend, private val clock: () 
         _changes.update { it + 1 }
     }
 
+    /** [file], a month, taken whole from the server's copy. */
+    suspend fun adopt(file: String, version: Int, text: String): Unit = writing.withLock {
+        synchronized(reading) { month(file) }.adopt(version, text)
+        _changes.update { it + 1 }
+    }
+
     /** Each month as its store holds it, oldest first: every month read. */
     fun texts(): List<StoreText> = synchronized(reading) { files().map { StoreText(it, version, month(it).text()) } }
 

@@ -19,6 +19,7 @@ import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.felix.FelixPrompts
+import com.thomaswcode.decrastination.sync.protocol.Action
 import java.io.File
 import java.nio.file.Files
 import kotlin.test.Test
@@ -78,6 +79,7 @@ class StoresDecodeTest {
         store("felix.json", FelixStore.serializer(), ::FelixStore, since = "2026-10-20-4.1.0"),
         store("calendar.json", CalendarState.serializer(), ::CalendarState),
         store("sync.json", SyncState.serializer(), ::SyncState, since = "2026-10-31-5.0.0"),
+        store("outbox.json", OutboxState.serializer(), ::OutboxState, since = "2026-10-31-5.2.0"),
         store("gmail-writes.json", GmailWriteStore.serializer(), ::GmailWriteStore, since = "2026-10-21-4.3.0"),
     )
 
@@ -105,7 +107,7 @@ class StoresDecodeTest {
             val stores = Stores(copy, Reverse)
             // The chat's archive, a month a file: all of it read, then what couldn't be.
             if (store.file == stores.chatArchive.name) return stores.chatArchive.value.let { it to stores.chatArchive.problems.firstOrNull() }
-            val read = stores.let { s -> listOf(s.tasks, s.settings, s.runtime, s.session, s.protection, s.device, s.model, s.anki, s.learning, s.log, s.instructions, s.chat, s.school, s.memory, s.felix, s.calendar, s.sync, s.gmailWrites) }.single { it.name == store.file }
+            val read = stores.let { s -> listOf(s.tasks, s.settings, s.runtime, s.session, s.protection, s.device, s.model, s.anki, s.learning, s.log, s.instructions, s.chat, s.school, s.memory, s.felix, s.calendar, s.sync, s.outbox, s.gmailWrites) }.single { it.name == store.file }
             return read.value to read.problem
         } finally {
             copy.deleteRecursively()
@@ -190,9 +192,9 @@ class StoresDecodeTest {
             }
             StructureKind.LIST -> (element as? JsonArray)?.forEach { walk(it, descriptor.getElementDescriptor(0), found, fields) }
             StructureKind.MAP -> (element as? JsonObject)?.values?.forEach { walk(it, descriptor.getElementDescriptor(1), found, fields) }
-            // Raw JSON (a waiting change's value, SettingsChanges) is a value with no fields of its own; any
-            // other polymorphic type is said, not passed over unchecked.
-            is PolymorphicKind -> if (descriptor.serialName != "kotlinx.serialization.json.JsonElement") fail("${descriptor.serialName} is polymorphic, which this check doesn't walk: teach it, or leave it out on purpose")
+            // Raw JSON (a waiting change's value, SettingsChanges) is a value with no fields of its own, and a queued
+            // command's action one of many, each held by `CommandsTest`; any other polymorphic type is said, not passed over unchecked.
+            is PolymorphicKind -> if (descriptor.serialName !in setOf("kotlinx.serialization.json.JsonElement", Action.serializer().descriptor.serialName)) fail("${descriptor.serialName} is polymorphic, which this check doesn't walk: teach it, or leave it out on purpose")
             else -> Unit
         }
     }

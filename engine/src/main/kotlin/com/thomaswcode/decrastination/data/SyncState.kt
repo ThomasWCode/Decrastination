@@ -19,10 +19,21 @@ data class SyncState(
     val serverVersion: String? = null,
     /** The stores it refused last, as newer than it can read: this build is ahead of it till it's deployed. */
     val refused: List<String> = emptyList(),
+    /** How the two keep in step: [MIRROR], its stores sent whole, or [COMMANDS], commands sent and its stores pulled. */
+    val mode: String = MIRROR,
+    /** The revision of the stores last pulled, once the server applies commands. */
+    val revision: Long = 0,
+    /** What the server couldn't apply, and why, newest last, the last few. */
+    val dropped: List<String> = emptyList(),
     /** The shape this is in ([Migration]): raised with each change of it, a migration bringing older files to it. */
-    val version: Int = 1,
+    val version: Int = 2,
 ) {
     companion object {
         const val DEFAULT_SERVER = "https://decrastination.thomaswhite.me"
+        const val MIRROR = "mirror"
+        const val COMMANDS = "commands"
+
+        /** The three fields 5.2.0 adds, each with its default: nothing to bring across. */
+        val V2 = Migration(1) { it }
     }
 }

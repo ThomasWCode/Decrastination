@@ -7,6 +7,7 @@ What runs on the box: the API, how a client signs in, how the state is held, and
 `meta.mode` says who writes the state.
 
 - **Mirror** (5.0.0): the phone is the only writer. It sends its stores whole and the server keeps a copy, computes from it and writes nothing to it. `SqliteBackend.writable` holds to that: a store's own write goes nowhere, so an older shape is read up to date in memory and its row stays as the phone sent it. A route never writes a store.
+- **Commands** (`meta.mode = commands`, D-141): each change is a command, applied through its owner. Built and tested in 5.2.0, and not yet in use: `POST /commands` refuses with a 409 in mirror mode, and a seed does in this one. The switch is one way.
 
 ## The API
 
@@ -23,6 +24,7 @@ Everything is under `/api`, on the same origin as the website. Open: `GET /healt
 | `POST /devices/claim` | anyone with a code | a device's id and token, shown this once |
 | `GET /devices`, `DELETE /devices/{id}` | the website | what's paired, and revoking one |
 | `POST /stores/seed` | a phone | its stores, [sync.md](sync.md) |
+| `POST /commands` | a client | a batch of commands, each one's outcome; a 409 in mirror mode |
 | `GET /state?since=` | a client | every store above a revision, whole |
 | `GET /events` | a client | the state's revision: the one it's at on connecting, then each new one, with a heartbeat every 25 seconds |
 | `GET /views/day?date=`, `GET /views/work` | a client | the pages' view models, [website.md](website.md) |
@@ -47,7 +49,12 @@ SQLite, one file, in WAL mode (`server/Database.kt`), the server its only writer
 
 - `stores`: each store's JSON, its version and the revision that last wrote it. A revision is one transaction.
 - `store_history`: each store's every text, with what caused it, kept 90 days and at least the last 20 of each, let go of at each start and daily after (`ServerGraph.tidy`).
+- `commands`: every command received, whose it was, and what came of it. A repeat of an id answers from here.
 - `devices`, `pairing_codes`, `sessions`, `meta`.
+
+A command is one transaction, all of it or none (`CommandApplier`, `Database.command`), one at a time, in the order they arrive. The owners suspend and change thread on the way, so it's held by a coroutine's lock, and reads that mustn't see it half-way go through a second connection (`Database.read`), which in WAL mode sees only what's committed. One that fails is rolled back, the stores read again from what's committed, and it's on record as dropped.
+
+The owners are `ServerOwners`, wired as `AppGraph` wires the phone's, what touches the device left out. None is started: nothing on the server watches a store or runs by itself.
 
 The server's time zone is the phone's: each batch says it (`ServerClock`), as a day is the owner's wherever they are.
 

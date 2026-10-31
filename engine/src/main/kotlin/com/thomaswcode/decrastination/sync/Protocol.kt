@@ -2,6 +2,7 @@ package com.thomaswcode.decrastination.sync
 
 import java.security.MessageDigest
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
 
 /**
  * What the phone and the server say to each other (docs/plan_web/data-and-sync.md). Every request names [VERSION]
@@ -37,6 +38,14 @@ data class SeedBatch(
  */
 @Serializable
 data class SeedAnswer(val revision: Long, val refused: List<String> = emptyList(), val server: String = "", val holds: Map<String, String> = emptyMap())
+
+/** A store as a pull brings it: its text as JSON. */
+@Serializable
+data class PulledStore(val name: String, val version: Int, val revision: Long, val json: JsonElement)
+
+/** Every store above the revision asked for, and the revision they're as of. */
+@Serializable
+data class PulledState(val revision: Long, val stores: List<PulledStore>)
 
 /** What a client can ask of the server with no sign-in: its version, the protocol and each store's version. */
 @Serializable

@@ -59,7 +59,7 @@ class ReplicaTest {
     private val clock = FixedClock(1_000L)
     private val server = Server()
     private var read = CalendarRead()
-    private val replica = Replica(stores, server, clock, "5.0.0") { read }
+    private val replica = Replica(stores, server, clock, "5.0.0", calendar = { read })
 
     private fun paired() = runBlocking { assertNull(replica.pair("123456", "phone")) }
 

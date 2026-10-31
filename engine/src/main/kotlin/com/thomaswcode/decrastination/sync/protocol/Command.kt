@@ -6,6 +6,8 @@ import com.thomaswcode.decrastination.core.Replay
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.WallClock
 import com.thomaswcode.decrastination.data.JsonStore
+import com.thomaswcode.decrastination.data.OutboxState
+import com.thomaswcode.decrastination.data.Queued
 import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.felix.Conversation
 import com.thomaswcode.decrastination.felix.Looks
@@ -15,6 +17,8 @@ import com.thomaswcode.decrastination.protect.SettingsChanges
 import com.thomaswcode.decrastination.tasks.Instructions
 import com.thomaswcode.decrastination.tasks.OwnTasks
 import kotlinx.coroutines.asContextElement
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 
@@ -72,14 +76,49 @@ interface Owners {
  * Where a screen's change goes (D-140): each is made a [Command] and applied through its owner, inside a [Replay] of it.
  * No screen calls an owner's change itself (`ArchitectureTest`).
  */
-class Commands(private val owners: Owners, private val clock: WallClock) {
+class Commands(
+    private val owners: Owners,
+    private val clock: WallClock,
+    /** Where a command waits for the server's answer, once the two keep in step by commands. */
+    private val outbox: JsonStore<OutboxState>? = null,
+    private val queuing: () -> Boolean = { false },
+) {
+    /** Held while a command's recorded and applied, and while a pull replaces the stores: neither sees the other half-way. */
+    private val gate = Mutex()
+
     suspend fun <R, A> act(action: A): R where A : Action, A : Answers<R> {
         val command = Command(Ids.next(), clock.now(), action)
-        return replaying(command) { action.run(owners) }
+        if (outbox == null || !queuing()) return replaying(command) { action.run(owners) }
+        return gate.withLock {
+            // On the disk first: a process stopped here applies it at its next start, and it's lost by neither side.
+            outbox.update { it.copy(commands = it.commands + Queued(command)) }
+            val answer = replaying(command) { action.run(owners) }
+            outbox.update { state -> state.copy(commands = state.commands.map { if (it.command.id == command.id) it.copy(applied = true) else it }) }
+            answer
+        }
     }
 
     /** [command], made elsewhere, applied here as it was there. */
     suspend fun apply(command: Command): Any? = replaying(command) { command.action.run(owners) }
+
+    /** Commands a stopped process recorded and never applied, applied: once each. */
+    suspend fun resume() {
+        val store = outbox ?: return
+        gate.withLock {
+            for (queued in store.value.commands.filterNot { it.applied }) {
+                apply(queued.command)
+                store.update { state -> state.copy(commands = state.commands.map { if (it.command.id == queued.command.id) it.copy(applied = true) else it }) }
+            }
+        }
+    }
+
+    /** [replace] with no command let in, then every command still waiting applied again on top, so a pull takes nothing you've done from the screen. */
+    suspend fun replacing(replace: suspend () -> Unit) {
+        gate.withLock {
+            replace()
+            outbox?.value?.commands?.forEach { apply(it.command) }
+        }
+    }
 
     /** [block] reading [command]'s moment, and drawing its ids from its own. */
     private suspend fun <T> replaying(command: Command, block: suspend () -> T): T =

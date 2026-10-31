@@ -33,6 +33,7 @@ import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.KeystoreCipher
 import com.thomaswcode.decrastination.data.Secret
 import com.thomaswcode.decrastination.data.Stores
+import com.thomaswcode.decrastination.data.SyncState
 import com.thomaswcode.decrastination.enrich.AndroidModelAlerts
 import com.thomaswcode.decrastination.enrich.EnrichWorker
 import com.thomaswcode.decrastination.enrich.ModelGateway
@@ -357,7 +358,7 @@ class AppGraph private constructor(context: Context) : Owners {
     )
 
     /** Where a screen's changes go (D-140): each a command, applied through its owner. */
-    val commands = Commands(this, clock)
+    val commands = Commands(this, clock, stores.outbox, queuing = { stores.sync.value.mode == SyncState.COMMANDS })
 
     /** [action] applied as a command, its answer the owner's. */
     suspend fun <R, A> act(action: A): R where A : Action, A : Answers<R> = commands.act(action)
@@ -369,7 +370,7 @@ class AppGraph private constructor(context: Context) : Owners {
     override val ownTasks: OwnTasks = OwnTasks(tasks, stores.instructions, chat, clock, scope) { settleCompletions() }
 
     /** The phone and the server ([Replica]): this phone paired, and what's changed sent. */
-    val replica: Replica = Replica(stores, UrlConnectionHttp(), clock, BuildConfig.VERSION_NAME, calendar = { sync.calendarRead() })
+    val replica: Replica = Replica(stores, UrlConnectionHttp(), clock, BuildConfig.VERSION_NAME, calendar = { sync.calendarRead() }, commands)
 
     /** The tasks' readings ([Readings]): by Claude while it can be asked, by the rules otherwise; one read again on asking. */
     val readings: Readings = Readings(
@@ -415,6 +416,8 @@ class AppGraph private constructor(context: Context) : Owners {
         }
         // Any a stop left ungiven: slots being kept, photo checks and completions; and a day with nothing to do's free time (BL-07).
         scope.launch {
+            // A command a stopped process recorded and never applied.
+            commands.resume()
             focus.finishKeeps()
             focus.finishPhotos()
             settleCompletions()

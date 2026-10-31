@@ -127,7 +127,7 @@ class ArchitectureTest {
 
     private companion object {
         /** An update of a store, by the name every file holds it by: `tasks.update {`, `graph.stores.model.update(`. */
-        val UPDATE = Regex("""(?<![\w.])(?:graph\.(?:stores\.)?|stores\.)?(tasks|settings|runtime|session|protection|device|model|anki|learning|log|instructions|chat|school|memory|felix|calendar|sync|writes)\.update\s*[({]""")
+        val UPDATE = Regex("""(?<![\w.])(?:graph\.(?:stores\.)?|stores\.)?(tasks|settings|runtime|session|protection|device|model|anki|learning|log|instructions|chat|school|memory|felix|calendar|sync|outbox|writes)\.update\s*[({]""")
 
         /** What in the app updates a store: the phone's own runtime, the graph's start, and the watchdog's findings. */
         val PHONE_WRITERS = setOf("notify/Notifier.kt", "AppGraph.kt", "block/FocusService.kt", "learn/DailyAlarms.kt", "protect/Watchdog.kt")
@@ -157,6 +157,7 @@ class ArchitectureTest {
             "felix" to setOf("felix/Conversation.kt", "felix/Looks.kt"),
             "calendar" to setOf("calendar/CalendarWriter.kt", "sync/Sync.kt"),
             "sync" to setOf("sync/Replica.kt"),
+            "outbox" to setOf("sync/protocol/Command.kt", "sync/Replica.kt"),
             "writes" to setOf("sync/GmailFinishes.kt"),
         )
     }

@@ -9,6 +9,7 @@ import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.data.SecretCipher
 import com.thomaswcode.decrastination.data.Stores
+import com.thomaswcode.decrastination.data.SyncState
 import com.thomaswcode.decrastination.enrich.KeyProblem
 import com.thomaswcode.decrastination.enrich.ModelGateway
 import com.thomaswcode.decrastination.enrich.Profile
@@ -119,6 +120,8 @@ class TasksHarness(start: String = "2026-10-19T16:00", private val claude: Boole
             override val learning: Learning get() = error("No learning here")
         },
         clock,
+        stores.outbox,
+        queuing = { stores.sync.value.mode == SyncState.COMMANDS },
     )
 
     /** A source's task, made up: Teams homework due on [due], taking [minutes]. */

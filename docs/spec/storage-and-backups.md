@@ -32,6 +32,7 @@ Under the app's `files/` folder:
 | `session.json` | `SessionState`, Focus's, changing every half-minute while work is under way: free time, today's slots, the photos of work done, keeps under way, what's been rewarded, and the timer on a piece (D-112, not backed up); version 3 (`data/CreditMigration.kt`, which steps `log.json` on with it, as its keeps under way hold the same slot records; `data/TimerMigration.kt`, 4.4.0, the timer) |
 | `protection.json` | `ProtectionState`, Protection's: waiting changes, an override's end, the code lock, the uptime mark; version 2 (`data/ProtectionSplit.kt`, 4.13.0) |
 | `device.json` | `DeviceState`, what's only true of this phone: the device admin's arming, the watchdog's findings, blocking forced on; never in a backup, cleared by no reset |
+| `outbox.json` | `OutboxState`: the commands the server hasn't answered yet; empty till the two keep in step by commands; never in a backup, cleared by no reset (5.2.0) |
 | `sync.json` | `SyncState`, the replica's: the server's address, this phone's id there, each store's hash as last accepted, the last send and what went wrong; never in a backup, cleared by no reset (5.0.0) |
 | `model.json` | `ModelState`, the gateway's: Claude's month and last 100 calls, the readings the API refused, the alerts already given, micro-plans |
 | `anki.json` | `AnkiState`, the Anki watch's (`block/AnkiWatch.kt`): AnkiDroid's readings, since when it's been in front, and the day's minutes in it by deck |

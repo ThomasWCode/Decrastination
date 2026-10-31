@@ -243,6 +243,7 @@ private fun Route.signedInRoutes(web: Web) {
     }
     post("/stores/seed") {
         val phone = call.client as? Client.Phone ?: return@post call.respond(HttpStatusCode.Forbidden, Problem("Only a phone seeds"))
+        if (graph.mode == ServerGraph.COMMANDS) return@post call.respond(HttpStatusCode.Conflict, Problem("The server takes commands now"))
         call.respond(graph.seed(call.receive<SeedBatch>(), phone.id))
     }
 
