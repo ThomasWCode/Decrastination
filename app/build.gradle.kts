@@ -90,6 +90,8 @@ tasks.withType<Test>().configureEach {
     inputs.dir(layout.projectDirectory.dir("../fixtures")).withPropertyName("fixtures").withPathSensitivity(PathSensitivity.RELATIVE)
     // core's build, which ArchitectureTest holds free of Android and of the app: a change to it alone runs the tests again.
     inputs.file(layout.projectDirectory.file("../core/build.gradle.kts")).withPropertyName("coreBuild").withPathSensitivity(PathSensitivity.RELATIVE)
+    // The engine's, held the same way.
+    inputs.file(layout.projectDirectory.file("../engine/build.gradle.kts")).withPropertyName("engineBuild").withPathSensitivity(PathSensitivity.RELATIVE)
     // core's and the engine's own tests run with the app's, so one command (CI's) runs every test.
     if (name == "testDebugUnitTest") dependsOn(":core:test", ":engine:test")
 }
