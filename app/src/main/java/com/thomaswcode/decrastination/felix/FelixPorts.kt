@@ -7,7 +7,7 @@ import com.thomaswcode.decrastination.R
 import com.thomaswcode.decrastination.block.SlotAlarms
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.enrich.EnrichWorker
-import com.thomaswcode.decrastination.learn.Daily
+import com.thomaswcode.decrastination.learn.DailyAlarms
 import com.thomaswcode.decrastination.learn.ReviewWorker
 import com.thomaswcode.decrastination.notify.Channels
 import com.thomaswcode.decrastination.notify.NoticeId
@@ -36,7 +36,7 @@ interface FelixPorts {
     /** The tasks read again now, as a job ([EnrichWorker.enqueue]). */
     fun readAgain()
 
-    /** The reminders' alarms at their times, as the Settings screen sets them ([Daily.schedule]). */
+    /** The reminders' alarms at their times, as the Settings screen sets them ([DailyAlarms.schedule]). */
     fun scheduleReminders()
 
     /** The week's review, unless the week has had it ([ReviewWorker.enqueue]). */
@@ -67,7 +67,7 @@ class AndroidFelixPorts(private val context: Context) : FelixPorts {
 
     override fun readAgain() = EnrichWorker.enqueue(context)
 
-    override fun scheduleReminders() = Daily.schedule(context)
+    override fun scheduleReminders() = DailyAlarms.schedule(context)
 
     override fun review() = ReviewWorker.enqueue(context, ifDue = true)
 

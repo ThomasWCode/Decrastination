@@ -28,7 +28,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.calendar.SlotCalendar
 import com.thomaswcode.decrastination.core.Settings
-import com.thomaswcode.decrastination.learn.CalendarTime
+import com.thomaswcode.decrastination.learn.CalendarReader
 import kotlinx.coroutines.launch
 
 /** How to make the calendar the plan is written to: one the app made itself wouldn't leave the phone. */
@@ -47,7 +47,7 @@ fun CalendarSection(graph: AppGraph, activity: Activity, choosing: Boolean = tru
     val settings by graph.settings.state.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     var refresh by remember { mutableIntStateOf(0) }
-    val canRead = remember(refresh) { CalendarTime.allowed(activity) }
+    val canRead = remember(refresh) { CalendarReader.allowed(activity) }
     val canWrite = remember(refresh) { SlotCalendar.allowed(activity) }
     val calendars = remember(refresh, canRead) { runCatching { SlotCalendar.calendars(activity) }.getOrDefault(emptyList()) }
     val ask = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {

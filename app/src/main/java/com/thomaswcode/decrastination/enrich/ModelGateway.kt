@@ -142,9 +142,9 @@ class ModelGateway(
      * shown yet shown, once notifications can show it.
      */
     suspend fun droppedAlerts(all: List<TaskItem>) {
-        val standing = ModelAlerts.standing(all)
+        val standing = DroppedAlerts.standing(all)
         alerts.withdrawExcept(standing.mapTo(HashSet()) { it.first.id })
-        val shown = ModelAlerts.unshown(standing, model.value.droppedAlerted).filter { (task, why) -> alerts.dropped(task, why) }
+        val shown = DroppedAlerts.unshown(standing, model.value.droppedAlerted).filter { (task, why) -> alerts.dropped(task, why) }
         model.update { state ->
             val kept = state.droppedAlerted.filterKeys { id -> standing.any { it.first.id == id } }
             state.copy(droppedAlerted = kept + shown.mapNotNull { (task, _) -> task.enrichment?.let { task.id to it.inputHash } })

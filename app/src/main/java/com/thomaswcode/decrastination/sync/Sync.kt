@@ -1,9 +1,5 @@
 package com.thomaswcode.decrastination.sync
 
-import android.content.Context
-import android.database.ContentObserver
-import android.os.Handler
-import android.os.Looper
 import android.util.Log
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.core.InstructionRules
@@ -18,8 +14,6 @@ import com.thomaswcode.decrastination.felix.FelixWords
 import com.thomaswcode.decrastination.learn.CalendarEvent
 import com.thomaswcode.decrastination.learn.CalendarTime
 import com.thomaswcode.decrastination.learn.EventJudge
-import com.thomaswcode.decrastination.sources.teams.TeamsProvider
-import com.thomaswcode.decrastination.widget.WidgetUpdater
 import java.time.ZoneId
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -51,42 +45,18 @@ interface SyncPorts {
     /** [onChange] at each change the Teams widget announces to its list. */
     fun watchTeams(onChange: () -> Unit)
 
-    /** Whether the calendar may be read ([CalendarTime.allowed]). */
+    /** Whether the calendar may be read. */
     fun calendarAllowed(): Boolean
 
-    /** The calendar's events between [from] and [to], but those you've declined and those of [excluded] calendars ([CalendarTime.read]). */
+    /** The calendar's events between [from] and [to], but those you've declined and those of [excluded] calendars. */
     fun readCalendar(from: Long, to: Long, excluded: Set<Long>): List<CalendarEvent>
 
-    /** The widget drawn again ([WidgetUpdater.update]). */
+    /** The widget drawn again. */
     suspend fun redraw()
 }
 
 /** The Teams widget's answer to being asked to sync: [started], or why not ([reason]: "service_off", "busy", or another). */
 data class TeamsAnswer(val started: Boolean, val reason: String?)
-
-/** [SyncPorts] on the phone. */
-class AndroidSyncPorts(private val context: Context) : SyncPorts {
-    override fun syncNow(sources: Set<Source>?) = SyncWorker.syncNow(context, sources)
-
-    override fun requestTeamsSync(): TeamsAnswer? = TeamsProvider.call(context.contentResolver, TeamsProvider.METHOD_REQUEST_SYNC)
-        ?.let { TeamsAnswer(it.getBoolean(TeamsProvider.RESULT_STARTED), it.getString(TeamsProvider.RESULT_REASON)) }
-
-    override fun watchTeams(onChange: () -> Unit) {
-        context.contentResolver.registerContentObserver(
-            TeamsProvider.root,
-            true,
-            object : ContentObserver(Handler(Looper.getMainLooper())) {
-                override fun onChange(selfChange: Boolean) = onChange()
-            },
-        )
-    }
-
-    override fun calendarAllowed(): Boolean = CalendarTime.allowed(context)
-
-    override fun readCalendar(from: Long, to: Long, excluded: Set<Long>): List<CalendarEvent> = CalendarTime.read(context, from, to, excluded)
-
-    override suspend fun redraw() = WidgetUpdater.update(context)
-}
 
 /**
  * What the app reads (docs/spec/sources.md): the sources, through the syncer ([sync],

@@ -48,7 +48,7 @@ import com.thomaswcode.decrastination.data.SourceStatus
 import com.thomaswcode.decrastination.enrich.AiUsage
 import com.thomaswcode.decrastination.enrich.EnrichWorker
 import com.thomaswcode.decrastination.enrich.ModelAlerts
-import com.thomaswcode.decrastination.learn.CalendarTime
+import com.thomaswcode.decrastination.learn.CalendarReader
 import com.thomaswcode.decrastination.protect.ProtectionActivity
 import com.thomaswcode.decrastination.sources.anki.AnkiProvider
 import com.thomaswcode.decrastination.sync.SyncWorker
@@ -81,7 +81,7 @@ fun SetupScreen(graph: AppGraph, activity: Activity, parts: Set<SetupPart> = Set
     // Given here: what needs it reads now, from the answer itself, which comes back even to this
     // screen made afresh meanwhile (when the change below wouldn't see a change).
     var hadAnki by remember { mutableStateOf(AnkiProvider.hasPermission(activity)) }
-    var hadCalendar by remember { mutableStateOf(CalendarTime.allowed(activity)) }
+    var hadCalendar by remember { mutableStateOf(CalendarReader.allowed(activity)) }
     val requestAnki = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         refresh++
         if (granted) {
@@ -93,12 +93,12 @@ fun SetupScreen(graph: AppGraph, activity: Activity, parts: Set<SetupPart> = Set
     // Read and written: busy time, and the plan's slots written back (NF-07).
     val requestCalendar = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { granted ->
         refresh++
-        if (granted[CalendarTime.PERMISSION] == true) {
+        if (granted[CalendarReader.PERMISSION] == true) {
             hadCalendar = true
             scope.launch { graph.sync.refreshCalendar() }
         }
     }
-    val calendarAllowed = remember(refresh) { CalendarTime.allowed(activity) }
+    val calendarAllowed = remember(refresh) { CalendarReader.allowed(activity) }
     // Looked at again on coming back, so one given in Android's settings shows at once (BUG-P2-023).
     LifecycleResumeEffect(Unit) {
         refresh++
@@ -217,7 +217,7 @@ fun SetupScreen(graph: AppGraph, activity: Activity, parts: Set<SetupPart> = Set
                 title = "Calendar",
                 done = calendarAllowed,
                 detail = if (calendarAllowed) "Its events come off your free time: lessons take their slot, trains don't, and you're asked about all-day and long ones." else "Read only, so lessons and plans come off your free time.",
-                action = if (calendarAllowed) null else "Allow" to { requestCalendar.launch(arrayOf(CalendarTime.PERMISSION, android.Manifest.permission.WRITE_CALENDAR)) },
+                action = if (calendarAllowed) null else "Allow" to { requestCalendar.launch(arrayOf(CalendarReader.PERMISSION, android.Manifest.permission.WRITE_CALENDAR)) },
             )
             // The calendar the plan is written to (NF-07), picked here as Setup's step.
             if (calendarAllowed) CalendarSection(graph, activity, reading = false)

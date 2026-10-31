@@ -1,7 +1,5 @@
 package com.thomaswcode.decrastination.learn
 
-import android.content.Context
-import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.core.AssessLater
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.TaskItem
@@ -19,17 +17,16 @@ object Assessment {
     val ANSWERS = listOf("Harder" to Calibrator.HARDER, "As expected" to Calibrator.AS_EXPECTED, "Easier" to Calibrator.EASIER)
 
     /**
-     * Asked about homework and revision only: an archived email or a passed event isn't work to
-     * judge. Kept for his evening question while Claude is on; asked at once in the chat with it off.
+     * What to ask of [completed], as [log] has it. Asked about homework and revision only: an archived
+     * email or a passed event isn't work to judge. Kept for his evening question while Claude is on;
+     * asked at once in the chat with it off.
      */
-    suspend fun ask(context: Context, completed: List<TaskItem>) {
+    fun asks(completed: List<TaskItem>, log: ActivityLog): List<AssessLater> {
         // Asked again after a stop: one answered meanwhile isn't asked again.
-        val graph = AppGraph.get(context)
-        val answered = graph.log.value.completions.filter { it.assessment != null }
-        val asks = completed.filter { it.kind == Kind.Homework || it.kind == Kind.Revision }
+        val answered = log.completions.filter { it.assessment != null }
+        return completed.filter { it.kind == Kind.Homework || it.kind == Kind.Revision }
             .filterNot { t -> answered.any { it.taskId == t.id && it.doneAt == t.doneAt } }
             .map { AssessLater(it.id, it.title, it.doneAt) }
-        graph.conversation.askHowItWent(asks)
     }
 
     /** [log] with [answer] on the completion it's about: the one done at [doneAt], or (0) the latest of [taskId]'s. */
