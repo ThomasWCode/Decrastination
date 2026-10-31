@@ -1398,6 +1398,18 @@ class Conversation(
     var chatSeen = false
 
     /**
+     * The box's words, not sent (docs/spec/felix.md §The chat): one draft for the app, so every chat screen shows the
+     * same words, and they outlive the screen they were typed on. In memory alone, so they go with the app's process.
+     */
+    val draft = MutableStateFlow(Draft("", 0))
+
+    /**
+     * A message that couldn't be kept (U-05), for the chat screen in front, or the next to come in front, to take
+     * back into the box: the one that sent it may be gone.
+     */
+    val unsent = MutableStateFlow<Unsent?>(null)
+
+    /**
      * What's in the chat read up to [now] (docs/spec/felix.md §The chat): you've left the chat, or
      * opened it from his notification. His notification made again, with nothing older in it.
      */
@@ -1619,3 +1631,9 @@ class Conversation(
         private val ANSWERS_KEPT = setOf(MessageKind.Question, MessageKind.Completions, MessageKind.EventQuestion, MessageKind.CheckIn, MessageKind.Reminder)
     }
 }
+
+/** The chat box's words, not sent, and when they last changed ([at], the clock's time). */
+data class Draft(val text: String, val at: Long)
+
+/** A message that couldn't be kept, on its way back to the box: its words, what it was about and what it replied to. */
+data class Unsent(val text: String, val about: About, val replyTo: ChatMessage?)

@@ -8,8 +8,10 @@ import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.core.ChatState
 import com.thomaswcode.decrastination.core.ChatSummary
 import com.thomaswcode.decrastination.core.Speaker
+import com.thomaswcode.decrastination.felix.Draft
 import com.thomaswcode.decrastination.felix.Outbox
 import com.thomaswcode.decrastination.felix.Replies
+import com.thomaswcode.decrastination.felix.Unsent
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -321,6 +323,30 @@ class ChatScreenState {
 
         private val DAY = DateTimeFormatter.ofPattern("EEEE d MMMM", Locale.UK)
         private val DAY_YEAR = DateTimeFormatter.ofPattern("EEEE d MMMM yyyy", Locale.UK)
+
+        /**
+         * The app's draft, a screen made again after a stop of the process having [saved] one: what's newer. By time,
+         * not by the holder being empty: an empty box can be a send's, newer than a lower chat's saved words, and those
+         * mustn't come back into it. A holder at time 0 has had nothing in it yet, so saved words come back.
+         */
+        fun restoredDraft(held: Draft, saved: Draft): Draft = if (saved.at > held.at) saved else held
+
+        /**
+         * The box's [draft] with [words] handed in to it (*Split with Felix*, *What gives?*) to change or send: the words,
+         * a blank line, then what you'd typed (Q127); as it is where it holds them first already, handed in again.
+         */
+        fun withHanded(draft: String, words: String): String = when {
+            words.isBlank() || draft.startsWith(words) -> draft
+            draft.isBlank() -> words
+            else -> words + "\n\n" + draft
+        }
+
+        /**
+         * The box's [draft] with [unsent] back in it, and whether its subject and reply come back too: into an empty box,
+         * as it was; into words typed meanwhile, its words first, the box's subject and reply as you've set them since.
+         */
+        fun withUnsent(draft: String, unsent: Unsent): Pair<String, Boolean> =
+            if (draft.isEmpty()) unsent.text to true else (unsent.text + "\n\n" + draft) to false
 
         /** [date] as the line between days says it, [today] being today: "Today", "Yesterday", "Tuesday 13 October" (with its year where it isn't this one). */
         fun dayLine(date: LocalDate, today: LocalDate): String = when (date) {
