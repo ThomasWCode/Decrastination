@@ -271,8 +271,8 @@ class StoresTest {
         // ties together are a source's task's, which a backup doesn't hold; TasksMigrationTest); the runtime's
         // split moves a backup's parts by where Backups.PARTS puts them (RuntimeSplitTest); another move
         // must be taught to it as well, and this test changed with it (D-94). The archive's split into months
-        // (4.0.4) moves no field: a backup holds the archive whole, as before. Nor do 4.13.0's move one a backup
-        // holds: it has no part of protection.json or runtime.json, and held no pairs before they moved.
+        // (4.0.4) moves no field: a backup holds the archive whole, as before. Nor do 4.13.0's two: a backup has
+        // no part of protection.json or runtime.json, and held no pairs before they moved.
         assertEquals(listOf(ChatMigration.MOVE, ChatArchiveStore.SPLIT, TasksMigration.MOVE, RuntimeSplit.MOVE, ProtectionSplit.MOVE, NotSameMigration.MOVE), Stores.MOVES, "A new move between stores: apply it to a backup's parts in Backups.upgraded too")
     }
 
