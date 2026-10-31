@@ -651,6 +651,7 @@ They were the chat screen's own (`rememberSaveable`), so they went with it: *Pla
 4. **Each of a missed slot's actions closes its sheet**, its work on Day's scope: Day's bar is under an open sheet, where what it said wouldn't be seen. A new word in the bar takes the last's place, so "Asking Teams…" doesn't hold back what Teams said.
 5. **A message waiting for a screen isn't written over by another that failed after it**: the two are joined, the newer first.
 6. ***All of it done*** moved out of `PieceActions` beside *Check it's done*, so the two sheets share its words.
+7. **A piece's, an event's and a missed slot's sheets scroll**, as a task's does. The phone found it: on a piece with a long first steps, the new button squashed and *Change its due date, minutes…* went off the foot of a sheet that couldn't scroll.
 
 ### Not built
 

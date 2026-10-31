@@ -611,7 +611,7 @@ private fun MissedSheet(
 ) {
     val record = row.record
     ModalBottomSheet(onDismissRequest = onClose) {
-        Column(Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 24.dp, end = 24.dp, bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(record.label, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
             Text("Missed, ${clock(record.start, zone)}–${clock(record.end, zone)}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
             if (can.since) Text("Done since, or planned again", style = MaterialTheme.typography.bodyMedium)
@@ -754,7 +754,7 @@ internal fun EventSheet(graph: AppGraph, activity: Activity, event: CalendarEven
     val key = EventJudge.key(event)
     var writing by rememberSaveable { mutableStateOf(false) }
     ModalBottomSheet(onDismissRequest = onClose) {
-        Column(Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 24.dp, end = 24.dp, bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(event.title.ifBlank { "(no title)" }, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
             Text(
                 if (event.allDay) "All day" else "${Format.at(event.start, now, zone)} to ${clock(event.end, zone)}",
