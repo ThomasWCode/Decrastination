@@ -108,11 +108,11 @@ class AnkiWatch(
         // A stretch across 04:00 (or one cut short) counts for nothing, but the decks are read again all the same.
         val stretch = stretches.lastOrNull()?.takeIf { it.to == reading }
         if (stretch != null) {
-            val tasks = tasks.value
+            val state = tasks.value
             val plan = planning.plan(now = now)
             // Visits that didn't finish a deck's cards: their minutes kept towards the one that does.
             var worked = anki.value.ankiWorked.on(Instant.ofEpochMilli(now).atZone(zone).toLocalDate().toString())
-            val studied = AnkiProgress.done(stretch, tasks.tasks, reviewsOnly = tasks.ankiDay?.reviewsOnly == true)
+            val studied = AnkiProgress.done(stretch, state.tasks, reviewsOnly = state.ankiDay?.reviewsOnly == true)
             // The decks studied: work on their tasks, as Felix sees it (LR-03).
             noteActivity(studied.filter { it.cards > 0 }.map { it.taskId }, now)
             for (done in studied) {

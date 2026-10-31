@@ -97,31 +97,31 @@ class Moves(
             ?.let { " (" + InstructionRules.joinLine(day, it.taskIds - it.joined, chunk.taskId, tasks.value.tasks.associateBy { t -> t.id }) + ")" }.orEmpty()
 
     companion object {
-            val CHIP_DAY: DateTimeFormatter = DateTimeFormatter.ofPattern("EEE d", Locale.UK)
+        val CHIP_DAY: DateTimeFormatter = DateTimeFormatter.ofPattern("EEE d", Locale.UK)
 
-            /**
-             * Whether [task]'s work can go to [day] at [now]: not after its real deadline's day still to come (overdue work can go to any,
-             * D-30), nor before the day it can start, as the plan keeps a day.
-             */
-            fun dayAllowed(task: TaskItem?, day: LocalDate, now: Long, zone: ZoneId): Boolean {
-                val last = task?.realDeadline?.takeIf { it > now }?.let { Planner.date(it, zone) }
-                val first = task?.notBefore?.let { Planner.date(it, zone) }
-                return !(last != null && day > last) && !(first != null && day < first)
-            }
+        /**
+         * Whether [task]'s work can go to [day] at [now]: not after its real deadline's day still to come (overdue work can go to any,
+         * D-30), nor before the day it can start, as the plan keeps a day.
+         */
+        fun dayAllowed(task: TaskItem?, day: LocalDate, now: Long, zone: ZoneId): Boolean {
+            val last = task?.realDeadline?.takeIf { it > now }?.let { Planner.date(it, zone) }
+            val first = task?.notBefore?.let { Planner.date(it, zone) }
+            return !(last != null && day > last) && !(first != null && day < first)
+        }
 
-            /**
-             * Why the break outside named [own] can't go to [minute] (its moment [at]) among its day's [breaks] at [now]: its time
-             * gone, the break begun (D-113), past midnight, or over another of the day's; null where it can.
-             */
-            fun outsideProblem(breaks: DayBreaks, own: Int, minute: Int, at: Long, now: Long): String? = when {
-                at < now -> "That time's gone"
-                own in breaks.begun -> "That break outside has begun"
-                minute + breaks.length > DayLayout.DAY_MINUTES -> "A break outside is over by midnight"
-                breaks.over(minute, own) -> "Another break outside is then"
-                else -> null
-            }
+        /**
+         * Why the break outside named [own] can't go to [minute] (its moment [at]) among its day's [breaks] at [now]: its time
+         * gone, the break begun (D-113), past midnight, or over another of the day's; null where it can.
+         */
+        fun outsideProblem(breaks: DayBreaks, own: Int, minute: Int, at: Long, now: Long): String? = when {
+            at < now -> "That time's gone"
+            own in breaks.begun -> "That break outside has begun"
+            minute + breaks.length > DayLayout.DAY_MINUTES -> "A break outside is over by midnight"
+            breaks.over(minute, own) -> "Another break outside is then"
+            else -> null
+        }
 
-            /** [minute] of [day] by its clock, as the planner lays it: on a day the clocks change too. */
-            fun timeOf(day: LocalDate, minute: Int, zone: ZoneId): Long = day.atStartOfDay().plusMinutes(minute.toLong()).atZone(zone).toInstant().toEpochMilli()
+        /** [minute] of [day] by its clock, as the planner lays it: on a day the clocks change too. */
+        fun timeOf(day: LocalDate, minute: Int, zone: ZoneId): Long = day.atStartOfDay().plusMinutes(minute.toLong()).atZone(zone).toInstant().toEpochMilli()
     }
 }
