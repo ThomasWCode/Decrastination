@@ -6,6 +6,7 @@ import com.thomaswcode.decrastination.core.SchoolDays
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.WallClock
+import com.thomaswcode.decrastination.data.BackupService
 import com.thomaswcode.decrastination.data.CalendarRead
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.Secret
@@ -88,6 +89,8 @@ class ServerGraph(
     /** Where a minute's heartbeat is sent (healthchecks.io), if anywhere. */
     private val heartbeatUrl: String? = null,
     private val http: Http = UrlConnectionHttp(),
+    /** Where the nightly file goes (W-20), if it's set up. */
+    nightly: BackupService.Folder? = null,
 ) {
     /** The clock the phone's zone is told to. */
     val serverClock = ServerClock(db)
@@ -202,6 +205,20 @@ class ServerGraph(
     /** Commands applied as they arrive, one at a time. */
     val applier = CommandApplier(db, backend, commands, owners, clock, reload = { reloadAll() }, committed = { _revisions.tryEmit(it) })
 
+    /** The Backup-format file, as the phone writes it, so the phone's Import can read it. */
+    private val backups: BackupService? = nightly?.let { folder ->
+        BackupService(
+            stores, clock, scope, folder, File(dataDir, "reset-copies"), version,
+            changeSettings = { change -> owners.protection.changeSettings(change) },
+            applying = owners.instructions.applying,
+            layInstructions = { owners.instructions.layInstructions() },
+            layTaskOverrides = { owners.instructions.layTaskOverrides() },
+            schedule = {},
+            reread = {},
+            cancelFelix = {},
+        )
+    }
+
     /** Each minute, what's due, once the server applies commands (docs/spec/server.md §Jobs). */
     val jobs = ServerJobs(
         db, clock, running = { mode == COMMANDS },
@@ -223,9 +240,17 @@ class ServerGraph(
             },
             ServerJob("check-in", due = { last, now -> Daily.nextSunday(last ?: (now - DAY_MS), clock.zone(), stores.settings.value.checkInMin) <= now }) { owners.conversation.remindCheckIn() },
             ServerJob("review", due = { last, now -> Daily.nextSunday(last ?: (now - DAY_MS), clock.zone(), stores.settings.value.checkInMin + Daily.REVIEW_AFTER_MIN) <= now }) { owners.learning.review(ifDue = true) },
+            ServerJob("nightly", due = { last, now -> nightDue(last, now) }) { backups?.backupNow() },
             ServerJob.every("heartbeat", MINUTE_MS) { heartbeatUrl?.let { http.get(it, emptyMap()) } },
         ),
     )
+
+    /** Whether tonight's backup has gone: once a day, after [NIGHTLY_HOUR]. */
+    private fun nightDue(last: Long?, now: Long): Boolean {
+        val zone = clock.zone()
+        val tonight = Instant.ofEpochMilli(now).atZone(zone).toLocalDate().atTime(NIGHTLY_HOUR, 0).atZone(zone).toInstant().toEpochMilli()
+        return now >= tonight && (last == null || last < tonight)
+    }
 
     /** What waits for Claude asked for, after a command's landed: on its own time, as a call can take a minute. */
     fun answerSoon() {
@@ -296,6 +321,7 @@ class ServerGraph(
         private const val MINUTE_MS = 60_000L
         private const val SOURCES_EVERY_MS = 15 * MINUTE_MS
         private const val DAY_MS = 24 * 3_600_000L
+        private const val NIGHTLY_HOUR = 3
 
         /** What the website can set: the sources' sign-ins, entered there (W-19). Claude's key is the box's, and the parent code's the phone's. */
         private val CREDENTIALS = setOf(Secret.PowerPlannerUsername, Secret.PowerPlannerPassword, Secret.GmailAddress, Secret.GmailAppPassword)

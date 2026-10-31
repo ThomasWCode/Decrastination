@@ -48,7 +48,7 @@ GitHub Actions, in `ci.yml`'s workflow or a `deploy.yml` beside it, on a push to
 
 The phone's APK comes from the same CI run as today. Order on a release that changes the stores or the protocol: the APK is checked on the phone (the merge checklist), then the merge deploys the server (`data-and-sync.md` §Versions and compatibility).
 
-Images are public on GHCR as SharpnPro's is; they hold no secret. Everything secret is in `.env` on the box, read by Compose, which gives each service only its own: `DOMAIN`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `ALLOWED_GITHUB_USER_ID`, `MASTER_KEY`, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`; stage 3 adds `ANTHROPIC_API_KEY`, `B2_ENDPOINT`, `B2_KEY_ID`, `B2_APPLICATION_KEY`, `B2_BUCKET`. A session is a random token held hashed, so there's no session secret. `deploy/env.production.example` lists them with no values.
+Images are public on GHCR as SharpnPro's is; they hold no secret. Everything secret is in `.env` on the box, read by Compose, which gives each service only its own: `DOMAIN`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `ALLOWED_GITHUB_USER_ID`, `MASTER_KEY`, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`; stage 3 adds `ANTHROPIC_API_KEY`, `B2_ENDPOINT`, `B2_KEY_ID`, `B2_APPLICATION_KEY`, `B2_BUCKET`. `HEARTBEAT_URL` too. A session is a random token held hashed, so there's no session secret. `deploy/env.production.example` lists them with no values.
 
 ## Litestream
 

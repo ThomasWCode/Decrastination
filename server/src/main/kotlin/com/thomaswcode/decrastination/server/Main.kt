@@ -50,6 +50,12 @@ private object StdoutLog : Log.Sink {
     }
 }
 
+/** The nightly file's place, if all of its settings are there. */
+private fun nightlyFolder(): B2Folder? {
+    val values = listOf("B2_ENDPOINT", "B2_KEY_ID", "B2_APPLICATION_KEY", "B2_BUCKET").map { System.getenv(it)?.takeIf(String::isNotBlank) ?: return null }
+    return B2Folder(values[0], values[1], values[2], values[3])
+}
+
 private fun env(name: String): String = System.getenv(name)?.takeIf { it.isNotBlank() } ?: run {
     System.err.println("Set $name")
     exitProcess(1)
@@ -67,7 +73,7 @@ fun main() {
     val dataDir = File(System.getenv("DATA_DIR") ?: "/data").apply { mkdirs() }
     val db = Database(File(dataDir, "decrastination.db").path)
     val version = System.getenv("APP_VERSION") ?: "dev"
-    val graph = ServerGraph(db, dataDir, MasterKeyCipher(if (testing) Base64.getEncoder().encodeToString(ByteArray(32)) else env("MASTER_KEY")), version, claudeKey = System.getenv("ANTHROPIC_API_KEY")?.takeIf { it.isNotBlank() }, heartbeatUrl = System.getenv("HEARTBEAT_URL")?.takeIf { it.isNotBlank() })
+    val graph = ServerGraph(db, dataDir, MasterKeyCipher(if (testing) Base64.getEncoder().encodeToString(ByteArray(32)) else env("MASTER_KEY")), version, claudeKey = System.getenv("ANTHROPIC_API_KEY")?.takeIf { it.isNotBlank() }, heartbeatUrl = System.getenv("HEARTBEAT_URL")?.takeIf { it.isNotBlank() }, nightly = nightlyFolder())
     val github: GitHub = if (testing) {
         object : GitHub {
             override fun authorizeUrl(state: String, challenge: String) = "/"
