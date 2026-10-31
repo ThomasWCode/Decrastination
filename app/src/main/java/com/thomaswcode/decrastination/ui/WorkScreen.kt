@@ -47,6 +47,7 @@ import com.thomaswcode.decrastination.core.Change
 import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.Duplicates
 import com.thomaswcode.decrastination.core.Enrichments
+import com.thomaswcode.decrastination.core.Ids
 import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
@@ -58,7 +59,6 @@ import com.thomaswcode.decrastination.sync.protocol.AddOwnChange
 import com.thomaswcode.decrastination.sync.protocol.NotSame
 import java.io.File
 import java.time.ZoneId
-import java.util.UUID
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -341,7 +341,7 @@ private fun SameLine(graph: AppGraph, task: TaskItem, other: TaskItem) {
             graph.scope.launch {
                 graph.act(
                     AddOwnChange(
-                        UUID.randomUUID().toString(), "Same as “${other.title}”",
+                        Ids.next(), "Same as “${other.title}”",
                         About(taskId = task.id, taskTitle = task.title),
                         Change(ChangeType.SameAs, taskId = task.id, afterTaskId = other.id),
                     ),
