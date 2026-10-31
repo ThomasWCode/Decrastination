@@ -1,7 +1,5 @@
 package com.thomaswcode.decrastination.sync
 
-import android.util.Log
-import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.InstructionState
 import com.thomaswcode.decrastination.core.Settings
@@ -14,6 +12,7 @@ import com.thomaswcode.decrastination.felix.FelixWords
 import com.thomaswcode.decrastination.learn.CalendarEvent
 import com.thomaswcode.decrastination.learn.CalendarTime
 import com.thomaswcode.decrastination.learn.EventJudge
+import com.thomaswcode.decrastination.ports.Log
 import java.time.ZoneId
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -166,7 +165,7 @@ class Sync(
         val picked = settings.value
         val excluded = (picked.calendarsExcluded + listOfNotNull(picked.calendarWriteId)).toSet()
         val events = runCatching { withContext(Dispatchers.IO) { ports.readCalendar(now - CalendarTime.DAY_MS, CalendarTime.readUntil(now, clock.zone()), excluded) } }
-            .onFailure { Log.w(AppGraph.TAG, "Can't read the calendar", it) }
+            .onFailure { Log.w(Log.TAG, "Can't read the calendar", it) }
             .getOrNull() ?: run {
             // Not read this time: the events last read, judged again with the answers as they are
             // now, so an instruction applied or taken back counts all the same.
@@ -216,7 +215,7 @@ class Sync(
         scope.launch {
             settings.state.map { it.ankiDeadlineMin to it.ankiTextbook }.distinctUntilChanged().drop(1).collect { ports.syncNow(setOf(Source.Anki)) }
         }
-        runCatching { ports.watchTeams { teamsChanged.tryEmit(Unit) } }.onFailure { Log.w(AppGraph.TAG, "Can't watch the Teams widget", it) }
+        runCatching { ports.watchTeams { teamsChanged.tryEmit(Unit) } }.onFailure { Log.w(Log.TAG, "Can't watch the Teams widget", it) }
         scope.launch {
             teamsChanged.debounce(TEAMS_QUIET_MS).collect { syncer.sync(setOf(Source.Teams, Source.Anki)) }
         }

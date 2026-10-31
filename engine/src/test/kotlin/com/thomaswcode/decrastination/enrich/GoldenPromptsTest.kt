@@ -36,8 +36,8 @@ import kotlin.test.fail
  * profile) wants [ReadingPrompts.VERSION] raised as well, so the readings made by the old ones are made again.
  */
 class GoldenPromptsTest {
-    private val dir = listOf(File("src/test"), File("app/src/test")).firstOrNull { it.isDirectory }?.let { File(it, "resources/prompts") }
-        ?: error("No src/test (run the tests from the repository or the app module)")
+    private val dir = listOf(File("src/test"), File("engine/src/test")).firstOrNull { it.isDirectory }?.let { File(it, "resources/prompts") }
+        ?: error("No src/test (run the tests from the repository or the engine module)")
 
     /** Each golden file's name and what it holds now. */
     private fun rendered(): Map<String, String> = buildMap {

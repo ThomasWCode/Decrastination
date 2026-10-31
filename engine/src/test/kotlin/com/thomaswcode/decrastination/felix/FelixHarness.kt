@@ -1,6 +1,5 @@
 package com.thomaswcode.decrastination.felix
 
-import android.app.Notification
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
 import com.thomaswcode.decrastination.block.Focus
@@ -329,7 +328,6 @@ class FelixHarness(
 
     /** His channel shown while [shown] says, and nothing posted through it here: his notification is the ports'. */
     private inner class Shown : Notices {
-        override fun post(id: NoticeId, notification: Notification, tag: String?) = Unit
         override fun cancel(id: NoticeId, tag: String?) = Unit
         override fun shown(channel: String): Boolean = shown
         override suspend fun postHeld() = Unit

@@ -1,7 +1,5 @@
 package com.thomaswcode.decrastination.plan
 
-import android.util.Log
-import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.core.Calibration
 import com.thomaswcode.decrastination.core.Change
 import com.thomaswcode.decrastination.core.ChangeType
@@ -32,13 +30,14 @@ import com.thomaswcode.decrastination.enrich.ModelGateway
 import com.thomaswcode.decrastination.enrich.Profile
 import com.thomaswcode.decrastination.learn.Days
 import com.thomaswcode.decrastination.learn.EventJudge
-import kotlinx.coroutines.flow.combine
+import com.thomaswcode.decrastination.ports.Log
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.temporal.ChronoUnit
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
@@ -218,7 +217,7 @@ class Planning(
         keep = ::keepSlots,
         hooks = hooks + listOf<suspend (Plan) -> Unit>(
             // Felix's next message written ahead (AC-10): by itself, as a model call takes a while.
-            { made -> scope.launch { runCatching { ahead.run(made, clock.now()) }.onFailure { Log.w(AppGraph.TAG, "Writing ahead failed", it) } }; Unit },
+            { made -> scope.launch { runCatching { ahead.run(made, clock.now()) }.onFailure { Log.w(Log.TAG, "Writing ahead failed", it) } }; Unit },
         ),
         onFailure = onFailure,
     )
@@ -231,7 +230,7 @@ class Planning(
     private suspend fun keepSlots(made: Plan) {
         // A slot whose grace went by before its alarm or a sweep could see it is missed first: once its
         // start is replaced by where this plan moved it, nothing would know it was.
-        runCatching { sweep() }.onFailure { Log.w(AppGraph.TAG, "Looking at missed slots failed", it) }
+        runCatching { sweep() }.onFailure { Log.w(Log.TAG, "Looking at missed slots failed", it) }
         session.update { state ->
             val kept = state.slots.on(made.today).laid(made).reconciled(made)
             if (kept == state.slots) state else state.copy(slots = kept)

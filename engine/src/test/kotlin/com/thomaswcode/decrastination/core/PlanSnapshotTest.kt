@@ -49,7 +49,7 @@ import kotlinx.serialization.KSerializer
  */
 class PlanSnapshotTest {
     private val file = listOf(File("../fixtures"), File("fixtures")).firstOrNull { it.isDirectory }?.let { File(it, "snapshots/plan.txt") }
-        ?: error("No fixtures (run the tests from the repository or the app module)")
+        ?: error("No fixtures (run the tests from the repository or the engine module)")
 
     private fun at(local: String) = Fixtures.at(local)
 

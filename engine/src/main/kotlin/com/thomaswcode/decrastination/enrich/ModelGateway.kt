@@ -1,6 +1,5 @@
 package com.thomaswcode.decrastination.enrich
 
-import android.util.Log
 import com.anthropic.client.AnthropicClient
 import com.anthropic.client.okhttp.AnthropicOkHttpClient
 import com.thomaswcode.decrastination.core.Enrichments
@@ -12,6 +11,7 @@ import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.ModelState
 import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.data.plusCall
+import com.thomaswcode.decrastination.ports.Log
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.NonCancellable

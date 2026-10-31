@@ -1,7 +1,5 @@
 package com.thomaswcode.decrastination.felix
 
-import android.util.Log
-import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.block.BlockPolicy
 import com.thomaswcode.decrastination.block.Focus
 import com.thomaswcode.decrastination.core.About
@@ -39,8 +37,8 @@ import com.thomaswcode.decrastination.core.Rule
 import com.thomaswcode.decrastination.core.SchoolCalendar
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.Source
-import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.core.Speaker
+import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.WallClock
 import com.thomaswcode.decrastination.core.WeeklyRules
@@ -67,6 +65,7 @@ import com.thomaswcode.decrastination.learn.Stats
 import com.thomaswcode.decrastination.notify.Channels
 import com.thomaswcode.decrastination.notify.Notices
 import com.thomaswcode.decrastination.plan.Planning
+import com.thomaswcode.decrastination.ports.Log
 import com.thomaswcode.decrastination.sync.GmailFinishes
 import java.time.Instant
 import java.time.format.DateTimeFormatter
@@ -769,7 +768,7 @@ class Conversation(
             val result = when (called) {
                 is Called.Held -> return@call gateway.because(called.hold)
                 is Called.Failed -> {
-                    Log.w(AppGraph.TAG, "Claude's answer in the chat failed", called.error)
+                    Log.w(Log.TAG, "Claude's answer in the chat failed", called.error)
                     return@call "Claude's call failed: ${gateway.retryWords()}, or now with Try again"
                 }
                 is Called.Answered -> called.value
@@ -805,7 +804,7 @@ class Conversation(
                     if (unwanted()) return@withLock
                     val what = (search as? Called.Answered)?.value?.found
                     if (what == null) {
-                        if (search is Called.Failed) Log.w(AppGraph.TAG, "Felix's web search failed", search.error)
+                        if (search is Called.Failed) Log.w(Log.TAG, "Felix's web search failed", search.error)
                         notLooked = when (search) {
                             is Called.Held -> gateway.because(search.hold)
                             is Called.Failed -> "the search failed"
@@ -836,7 +835,7 @@ class Conversation(
                 val second = when (again) {
                     is Called.Held -> return@call gateway.because(again.hold)
                     is Called.Failed -> {
-                        Log.w(AppGraph.TAG, "Claude's answer with what it looked up or read failed", again.error)
+                        Log.w(Log.TAG, "Claude's answer with what it looked up or read failed", again.error)
                         return@call "Claude's call failed: ${gateway.retryWords()}, or now with Try again"
                     }
                     is Called.Answered -> again.value

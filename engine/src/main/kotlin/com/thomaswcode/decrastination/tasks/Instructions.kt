@@ -1,7 +1,5 @@
 package com.thomaswcode.decrastination.tasks
 
-import android.util.Log
-import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.block.Focus
 import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.Change
@@ -40,6 +38,7 @@ import com.thomaswcode.decrastination.enrich.ModelHold
 import com.thomaswcode.decrastination.enrich.Profile
 import com.thomaswcode.decrastination.learn.EventJudge
 import com.thomaswcode.decrastination.plan.Planning
+import com.thomaswcode.decrastination.ports.Log
 import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -214,7 +213,7 @@ class Instructions(
                 val result = when (val called = gateway.call(interactive = interactive, record = ModelCalls.OnRecord(ModelEffort.Job.Instruction, next.text) { r: InstructionReader.Result -> r.usage to ModelCalls.outcome(r.refused, r.reading == null) }, cost = { r: InstructionReader.Result -> r.costUsd to r.refused }) { at -> reader.read(next, tasks.value.tasks, calendarTime().events, at, question = if (next.answer) answering[next.id] ?: question(next) else null, breaksOn = { planning.breaksOn(it) }, rules = WeeklyRules.inForce(instructions.value.applied)) }) {
                     is Called.Held -> return@call gateway.because(called.hold)
                     is Called.Failed -> {
-                        Log.w(AppGraph.TAG, "Reading an instruction failed", called.error)
+                        Log.w(Log.TAG, "Reading an instruction failed", called.error)
                         return@call "Claude's call failed: ${gateway.retryWords()}"
                     }
                     is Called.Answered -> called.value
@@ -491,7 +490,7 @@ class Instructions(
         reread()
         // A day's or time's instruction changes no store the widget watches, and the calendar's read
         // (which redraws it) is skipped without its permission: so it's redrawn here.
-        runCatching { redraw() }.onFailure { Log.w(AppGraph.TAG, "Widget update failed", it) }
+        runCatching { redraw() }.onFailure { Log.w(Log.TAG, "Widget update failed", it) }
     }
 
     /**

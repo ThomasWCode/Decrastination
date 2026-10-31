@@ -1,7 +1,5 @@
 package com.thomaswcode.decrastination.enrich
 
-import android.util.Log
-import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.core.AnkiRules
 import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.TaskItem
@@ -10,6 +8,7 @@ import com.thomaswcode.decrastination.core.withEnrichment
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.ModelState
 import com.thomaswcode.decrastination.data.TaskState
+import com.thomaswcode.decrastination.ports.Log
 import com.thomaswcode.decrastination.sources.gmail.GmailThreads
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.FlowPreview
@@ -103,7 +102,7 @@ class Readings(
                     }
                     is Called.Failed -> {
                         calls++
-                        Log.w(AppGraph.TAG, "The model's enrichment failed; the rules stand in", called.error)
+                        Log.w(Log.TAG, "The model's enrichment failed; the rules stand in", called.error)
                         // Only a request it won't take leaves the others to be asked.
                         if (Failures.classify(called.error) != Failure.BadRequest) enricher = null
                         null
@@ -193,7 +192,7 @@ class Readings(
         // Dropped plans' warnings kept in step with the tasks, from the start.
         scope.launch {
             tasks.state.debounce(DROPPED_DEBOUNCE_MS).collect { state ->
-                runCatching { gateway.droppedAlerts(state.tasks) }.onFailure { Log.w(AppGraph.TAG, "Dropped-plan warnings failed", it) }
+                runCatching { gateway.droppedAlerts(state.tasks) }.onFailure { Log.w(Log.TAG, "Dropped-plan warnings failed", it) }
             }
         }
     }

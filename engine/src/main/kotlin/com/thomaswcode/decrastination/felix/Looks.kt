@@ -1,7 +1,5 @@
 package com.thomaswcode.decrastination.felix
 
-import android.util.Log
-import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.block.BlockPolicy
 import com.thomaswcode.decrastination.block.Focus
 import com.thomaswcode.decrastination.core.About
@@ -45,17 +43,18 @@ import com.thomaswcode.decrastination.enrich.Profile
 import com.thomaswcode.decrastination.learn.Assessment
 import com.thomaswcode.decrastination.learn.EventJudge
 import com.thomaswcode.decrastination.plan.Planning
+import com.thomaswcode.decrastination.ports.Log
 import java.time.Instant
 import java.time.format.DateTimeFormatter
 import java.util.Locale
-import kotlinx.coroutines.async
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.async
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
@@ -207,7 +206,7 @@ class Looks(
         // Marked sent only as it was sent: moved, snoozed or cancelled while it went, it's another moment's, to come then.
         felix.update { s -> s.copy(reminders = s.reminders.map { if (it.id == r.id && it.undrafted() == r.undrafted()) it.copy(sentAt = now).undrafted() else it }) }
         draft?.memories?.takeIf { it.isNotEmpty() }?.let { remember(it) }
-        Log.i(AppGraph.TAG, "A reminder came${if (late) ", late" else ""}, in ${if (draft != null) "his words" else "yours"}")
+        Log.i(Log.TAG, "A reminder came${if (late) ", late" else ""}, in ${if (draft != null) "his words" else "yours"}")
         return true
     }
 
@@ -277,7 +276,7 @@ class Looks(
                 val askedAt = clock.now()
                 val answer = caller?.let { (askReminder(it, r, moment, plan, tasks) as? Called.Answered)?.value?.answer }
                 felix.update { s -> s.copy(reminders = s.reminders.map { if (it.id == r.id && it.undrafted() == r.undrafted()) it.copy(draft = answer, draftedAt = askedAt, draftFor = moment) else it }) }
-                if (answer == null) Log.w(AppGraph.TAG, "Felix's words for a reminder at its moment came back with none: yours go")
+                if (answer == null) Log.w(Log.TAG, "Felix's words for a reminder at its moment came back with none: yours go")
                 // Sent as soon as its words are kept, as it now is, not after the others' calls, which could make it late;
                 // those still to ask for are this run's.
                 sweepReminders(now = clock.now(), askLater = false)
@@ -432,7 +431,7 @@ class Looks(
         // A timer started on its task while he was asked (D-112): held now, so not sent; a slot's miss is said once
         // the hold lifts, asked afresh then.
         if (called != null && FelixRules.held(trigger, focus.timer, clock.now())) {
-            Log.i(AppGraph.TAG, "Felix, ${trigger.reason} about ${trigger.key}: held by a timer started while he was asked")
+            Log.i(Log.TAG, "Felix, ${trigger.reason} about ${trigger.key}: held by a timer started while he was asked")
             return null
         }
         val answer = drafted?.answer ?: (called as? Called.Answered)?.value?.answer
@@ -441,7 +440,7 @@ class Looks(
         // Its work begun while he was asked (a piece kept from Day or the widget, a step ticked, the task opened): a nudge
         // to start it isn't sent after (D-119), its look settled as one sent would be, so it isn't asked again.
         if (called != null && !FelixRules.stillDue(trigger, chat.value.felix, today(clock.now()))) {
-            Log.i(AppGraph.TAG, "Felix, ${trigger.reason} about ${trigger.key}: its work began while he was asked, not sent")
+            Log.i(Log.TAG, "Felix, ${trigger.reason} about ${trigger.key}: its work began while he was asked, not sent")
             chat.update { s -> s.copy(felix = s.felix.copy(nextCheckAt = next, retry = s.felix.retry?.takeUnless { it.reason == trigger.reason.name && it.key == trigger.key })) }
             return null
         }
@@ -483,7 +482,7 @@ class Looks(
             )
         }
         answer?.memories?.takeIf { it.isNotEmpty() }?.let { remember(it) }
-        Log.i(AppGraph.TAG, "Felix, ${trigger.reason} about ${trigger.key}: ${if (text.isBlank()) "nothing" else "a message"}, next look in ${(next - now) / 60_000L} min")
+        Log.i(Log.TAG, "Felix, ${trigger.reason} about ${trigger.key}: ${if (text.isBlank()) "nothing" else "a message"}, next look in ${(next - now) / 60_000L} min")
         return message
     }
 
@@ -621,7 +620,7 @@ class Looks(
         val free = (focus.creditLeftMs(at) / 60_000L).toInt().takeIf { trigger.reason == FelixPrompts.Reason.DayDone || trigger.reason == FelixPrompts.Reason.SlotKept }
         val user = FelixPrompts.describe(trigger.reason, planning.plan(), trigger.slot, task, today(at), chat.value.messages, trigger.question?.question, settings, at, clock.zone(), free, trigger.record, trigger.asks.map { it.title }, firstAction = trigger.slot?.chunk?.key?.let { model.value.microPlans[it] }?.first?.takeIf { it.isNotEmpty() }, reminder = reminder, notes = notes, tasks = planning.asPlanned(), timer = focus.timer, feeling = mood, story = story(at), diary = diary(at), since = dayStart(at))
         val called = gateway.call(interactive = interactive, record = ModelCalls.OnRecord(ModelEffort.Job.Felix, trigger.reason.name) { r: FelixCaller.Result -> r.usage to ModelCalls.outcome(r.refused, r.answer == null) }, cost = { r: FelixCaller.Result -> r.costUsd to r.refused }) { caller.say(FelixPrompts.system(settings), profile.felix, user) }
-        if (called is Called.Failed) Log.w(AppGraph.TAG, "Felix's message failed", called.error)
+        if (called is Called.Failed) Log.w(Log.TAG, "Felix's message failed", called.error)
         return called
     }
 
@@ -711,8 +710,8 @@ class Looks(
                 val answer = called.value.answer
                 // Kept only on the reminder as it was asked for: moved, snoozed, sent or cancelled meanwhile, it's another moment's.
                 felix.update { s -> s.copy(reminders = s.reminders.map { if (it.id == r.id && it.undrafted() == r.undrafted()) it.copy(draft = answer, draftedAt = now, draftFor = moment) else it }) }
-                if (answer == null) Log.w(AppGraph.TAG, "Felix's words for a reminder came back with none: yours go")
-                else Log.i(AppGraph.TAG, "Felix wrote ahead for a reminder, due at ${Instant.ofEpochMilli(moment).atZone(clock.zone()).toLocalTime()}")
+                if (answer == null) Log.w(Log.TAG, "Felix's words for a reminder came back with none: yours go")
+                else Log.i(Log.TAG, "Felix wrote ahead for a reminder, due at ${Instant.ofEpochMilli(moment).atZone(clock.zone()).toLocalTime()}")
             } finally {
                 askingAhead.remove(r.id)
                 call.complete(Unit)
@@ -762,7 +761,7 @@ class Looks(
         val answer = called.value.answer ?: return
         chat.update { it.copy(felix = it.felix.copy(draft = FelixDraft(trigger.reason.name, trigger.key, answer, now, Mood.kept(mood, answer.message)))) }
         draftLaid = now to FelixRules.laid(plan, trigger, today(at))
-        Log.i(AppGraph.TAG, "Felix wrote ahead for ${trigger.key}, due at ${Instant.ofEpochMilli(at).atZone(clock.zone()).toLocalTime()}")
+        Log.i(Log.TAG, "Felix wrote ahead for ${trigger.key}, due at ${Instant.ofEpochMilli(at).atZone(clock.zone()).toLocalTime()}")
     }
 
     /** His next look, by alarm: the phone may be asleep through the service's ticks. */

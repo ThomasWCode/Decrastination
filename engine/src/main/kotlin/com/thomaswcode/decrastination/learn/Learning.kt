@@ -1,7 +1,5 @@
 package com.thomaswcode.decrastination.learn
 
-import android.util.Log
-import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.block.Focus
 import com.thomaswcode.decrastination.core.ChatState
 import com.thomaswcode.decrastination.core.InstructionState
@@ -25,6 +23,7 @@ import com.thomaswcode.decrastination.enrich.ModelGateway
 import com.thomaswcode.decrastination.enrich.ModelHold
 import com.thomaswcode.decrastination.enrich.Profile
 import com.thomaswcode.decrastination.enrich.SummaryWriter
+import com.thomaswcode.decrastination.ports.Log
 import com.thomaswcode.decrastination.protect.Protection
 import java.time.LocalDate
 
@@ -95,10 +94,10 @@ class Learning(
         learned?.let { l -> learning.update { it.copy(calibration = l.calibration) } }
         val findings = learned?.changes.orEmpty() + listOfNotNull(Days.capacityAdvice(log.value.days, focus.today(now)))
         val model = runCatching { modelReview(now, week, generation, changing = !soFar) }
-            .onFailure { Log.w(AppGraph.TAG, "The model's weekly review failed; the rules' stands", it) }
+            .onFailure { Log.w(Log.TAG, "The model's weekly review failed; the rules' stands", it) }
             .getOrElse { Outcome(why = "Claude's call failed") }
         val tidy = runCatching { tidyMemory(now) }
-            .onFailure { Log.w(AppGraph.TAG, "Tidying what's remembered failed; it's left as it was", it) }
+            .onFailure { Log.w(Log.TAG, "Tidying what's remembered failed; it's left as it was", it) }
             .getOrNull()
         // The rules' findings always stand: the model's note comes first, and they follow; then the tidy's line.
         val review = (
@@ -114,13 +113,13 @@ class Learning(
             else l.copy(reviews = l.reviews + review, weeks = Stats.refreshedWeeks(l, now, zone).filterNot { w -> w.week == week } + rollup).trimmed(now).also { kept = true }
         }
         if (!kept) {
-            Log.i(AppGraph.TAG, "The record was reset while the week's review was out: it isn't kept")
+            Log.i(Log.TAG, "The record was reset while the week's review was out: it isn't kept")
             return
         }
         // Its note's first line in the chat, in Felix's name, with the button that opens the review.
         reviewed(review.lines.first())
         // The week's summary for home (NF-02), after its review: its own call, its failure the review's no matter.
-        runCatching { writeSummary(week, review.at) }.onFailure { Log.w(AppGraph.TAG, "The week's summary failed", it) }
+        runCatching { writeSummary(week, review.at) }.onFailure { Log.w(Log.TAG, "The week's summary failed", it) }
     }
 
     /** The model's review, or why there's none (the rules' stands then, saying so). */

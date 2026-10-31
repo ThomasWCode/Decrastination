@@ -1,6 +1,5 @@
 package com.thomaswcode.decrastination.felix
 
-import android.app.Notification
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.ChatArchive
@@ -97,7 +96,6 @@ class OutboxTest {
     }
 
     private inner class Channel : Notices {
-        override fun post(id: NoticeId, notification: Notification, tag: String?) = Unit
         override fun cancel(id: NoticeId, tag: String?) = Unit
         override fun shown(channel: String) = shown
         override suspend fun postHeld() = Unit

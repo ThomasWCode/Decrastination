@@ -1,7 +1,5 @@
 package com.thomaswcode.decrastination.plan
 
-import android.util.Log
-import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.TaskItem
@@ -16,6 +14,7 @@ import com.thomaswcode.decrastination.enrich.ModelEffort
 import com.thomaswcode.decrastination.enrich.ModelGateway
 import com.thomaswcode.decrastination.enrich.Profile
 import com.thomaswcode.decrastination.felix.FelixRules
+import com.thomaswcode.decrastination.ports.Log
 import kotlinx.coroutines.sync.Mutex
 
 /**
@@ -77,7 +76,7 @@ class Ahead(
                 val made = when (called) {
                     is Called.Answered -> called.value.text?.let { MicroPlans.parse(it, chunk, task, now, its) } ?: MicroPlans.none(chunk, task, now, its)
                     is Called.Failed -> {
-                        Log.w(AppGraph.TAG, "A piece's first steps failed", called.error)
+                        Log.w(Log.TAG, "A piece's first steps failed", called.error)
                         return
                     }
                     is Called.Held -> return

@@ -19,7 +19,7 @@ import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.WallClock
 import com.thomaswcode.decrastination.notify.Channels
 import com.thomaswcode.decrastination.notify.NoticeId
-import com.thomaswcode.decrastination.notify.Notices
+import com.thomaswcode.decrastination.notify.Posts
 import com.thomaswcode.decrastination.notify.Notify
 import com.thomaswcode.decrastination.sources.gmail.ImapGmailWriter
 import com.thomaswcode.decrastination.ui.MainActivity
@@ -71,7 +71,7 @@ class GmailWriteWorker(context: Context, params: WorkerParameters) : CoroutineWo
 /** [GmailFinishes]' ports on the phone: the worker, a Gmail-only sync, and a write given up said by the app's own notification. */
 class AndroidGmailPorts(
     private val context: Context,
-    private val notices: Notices,
+    private val notices: Posts,
     private val clock: WallClock,
     private val syncNow: (Set<Source>) -> Unit,
 ) : GmailFinishes.Ports {

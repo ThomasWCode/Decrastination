@@ -268,7 +268,7 @@ class FelixInputsDocTest {
     @Test
     fun `the doc of what Felix is sent is as the app sends it`() {
         val doc = listOf(File("docs/spec/felix-inputs.md"), File("../docs/spec/felix-inputs.md")).firstOrNull { it.isFile } ?: fail("No docs/spec/felix-inputs.md")
-        val golden = listOf(File("src/test"), File("app/src/test")).first { it.isDirectory }.let { File(it, "resources/prompts") }
+        val golden = listOf(File("src/test"), File("engine/src/test")).first { it.isDirectory }.let { File(it, "resources/prompts") }
         val text = doc.readText().replace("\r\n", "\n")
         val examples = examples()
         val written = MARK.replace(text) { m ->

@@ -92,18 +92,18 @@ class AiUsageTest {
     fun `a dropped plan's warning is due till shown for the plan as it is`() {
         val task = TaskItem(id = "gmail:t1", source = Source.Gmail, sourceId = "t1", title = "Calendar", detail = "x", kind = Kind.Admin, firstSeenAt = NOW, lastSeenAt = NOW)
         val dropped = task.copy(enrichment = Enrichment(inputHash = Enrichments.inputHash(task), by = "model", at = NOW, dropped = "31 blocks, past the 30 the app takes"))
-        val standing = ModelAlerts.standing(listOf(dropped))
+        val standing = DroppedAlerts.standing(listOf(dropped))
         assertEquals(listOf("gmail:t1" to "31 blocks, past the 30 the app takes"), standing.map { it.first.id to it.second })
         // Not shown yet (notifications off when it was laid): due.
-        assertEquals(1, ModelAlerts.unshown(standing, emptyMap()).size)
+        assertEquals(1, DroppedAlerts.unshown(standing, emptyMap()).size)
         // Shown for this content: not again.
-        assertEquals(0, ModelAlerts.unshown(standing, mapOf("gmail:t1" to Enrichments.inputHash(task))).size)
+        assertEquals(0, DroppedAlerts.unshown(standing, mapOf("gmail:t1" to Enrichments.inputHash(task))).size)
         // Shown for an older content: this plan is another warning.
-        assertEquals(1, ModelAlerts.unshown(standing, mapOf("gmail:t1" to "older")).size)
+        assertEquals(1, DroppedAlerts.unshown(standing, mapOf("gmail:t1" to "older")).size)
         // Done, or its plan kept since, or said not to be a task, not shown anywhere: nothing standing.
-        assertEquals(0, ModelAlerts.standing(listOf(dropped.copy(status = Status.Done))).size)
-        assertEquals(0, ModelAlerts.standing(listOf(dropped.yours(notATask = true))).size)
-        assertEquals(0, ModelAlerts.standing(listOf(dropped.copy(enrichment = dropped.enrichment!!.copy(dropped = null)))).size)
+        assertEquals(0, DroppedAlerts.standing(listOf(dropped.copy(status = Status.Done))).size)
+        assertEquals(0, DroppedAlerts.standing(listOf(dropped.yours(notATask = true))).size)
+        assertEquals(0, DroppedAlerts.standing(listOf(dropped.copy(enrichment = dropped.enrichment!!.copy(dropped = null)))).size)
     }
 
     @Test
