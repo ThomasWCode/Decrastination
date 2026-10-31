@@ -1,0 +1,688 @@
+/* The phone's colours (app/.../ui/Colours.kt), by day and by night. */
+:root {
+  color-scheme: light dark;
+  --paper: #fcfcfc;
+  --ink: #1a1a1a;
+  --quiet: #43474f;
+  --line: #c3c7cf;
+  --wash: #f5f7fb;
+  --band: #e9edf3;
+  --navy: #1e3a64;
+  --on-navy: #d7e3ff;
+  --accent: #1e3a64;
+  --pale: #d7e3ff;
+  --on-pale: #0b1c36;
+  --error: #ba1a1a;
+  --font: "Atkinson Hyperlegible Next Variable", system-ui, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #121212;
+    --ink: #ededed;
+    --quiet: #c3c8d2;
+    --line: #42474e;
+    --wash: #17191c;
+    --band: #23272d;
+    --navy: #1e3a64;
+    --on-navy: #d7e3ff;
+    --accent: #a8c7ff;
+    --pale: #1e3a64;
+    --on-pale: #d7e3ff;
+    --error: #ffb4ab;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 15px;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+}
+
+h1,
+h2,
+h3,
+p,
+ul {
+  margin: 0;
+  padding: 0;
+}
+
+ul {
+  list-style: none;
+}
+
+a {
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.button {
+  display: inline-block;
+  padding: 10px 18px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--navy);
+  color: var(--on-navy);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.quiet {
+  border: 0;
+  background: none;
+  color: var(--quiet);
+  text-decoration: underline;
+  padding: 4px;
+}
+
+.problem,
+.empty {
+  padding: 32px;
+  color: var(--quiet);
+}
+
+.signin {
+  height: 100%;
+  display: grid;
+  place-content: center;
+  justify-items: start;
+  gap: 24px;
+}
+
+.signin h1 {
+  font-size: 56px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--accent);
+}
+
+.site {
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.bar {
+  display: flex;
+  align-items: baseline;
+  gap: 28px;
+  padding: 10px 24px;
+  border-bottom: 1px solid var(--line);
+}
+
+.bar .name {
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.bar nav {
+  display: flex;
+  gap: 20px;
+  flex: 1;
+}
+
+.bar nav a {
+  text-decoration: none;
+  color: var(--quiet);
+  padding-bottom: 2px;
+  border-bottom: 2px solid transparent;
+}
+
+.bar nav a[aria-current="page"] {
+  color: var(--ink);
+  font-weight: 600;
+  border-bottom-color: var(--accent);
+}
+
+/* The Day: the navy slab beside the grid. */
+.day-page {
+  display: grid;
+  grid-template-columns: minmax(300px, 30%) minmax(0, 1fr);
+  min-height: 0;
+  height: 100%;
+}
+
+.now-panel {
+  background: var(--navy);
+  color: var(--on-navy);
+  padding: 32px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+}
+
+.now-panel h2 {
+  font-size: 48px;
+  line-height: 1.05;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: #fff;
+}
+
+.now-panel .piece {
+  font-size: 22px;
+  line-height: 1.25;
+  font-weight: 600;
+  color: #fff;
+  overflow-wrap: anywhere;
+}
+
+.now-panel .then,
+.now-panel .load {
+  opacity: 0.85;
+}
+
+.now-panel .warning {
+  color: #ffdad6;
+  font-weight: 600;
+}
+
+.now-panel section {
+  margin-top: 12px;
+  border-top: 1px solid rgb(215 227 255 / 30%);
+  padding-top: 12px;
+}
+
+.now-panel h3 {
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.now-panel li {
+  padding: 2px 0;
+}
+
+.now-panel li.urgent {
+  font-weight: 600;
+}
+
+.now-panel .minutes {
+  opacity: 0.75;
+}
+
+.now-panel .fresh {
+  margin-top: auto;
+  padding-top: 16px;
+  color: var(--on-navy);
+  opacity: 0.75;
+}
+
+.agenda {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  min-height: 0;
+  min-width: 0;
+}
+
+.week {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  border-bottom: 1px solid var(--line);
+}
+
+.week a {
+  display: grid;
+  padding: 8px 12px;
+  text-decoration: none;
+  border-left: 1px solid var(--line);
+}
+
+.week a:first-child {
+  border-left: 0;
+}
+
+.week a[aria-current="page"] {
+  background: var(--pale);
+  color: var(--on-pale);
+}
+
+.week .weekday {
+  font-weight: 600;
+}
+
+.week .weekday.today {
+  color: var(--accent);
+}
+
+.week a[aria-current="page"] .weekday.today {
+  color: inherit;
+}
+
+.week .load {
+  font-size: 13px;
+  color: var(--quiet);
+  min-height: 18px;
+}
+
+.week a[aria-current="page"] .load {
+  color: inherit;
+}
+
+.all-day {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 6px 12px 6px 68px;
+  border-bottom: 1px solid var(--line);
+}
+
+.all-day li {
+  padding: 1px 8px;
+  border-radius: 4px;
+  background: var(--band);
+  font-size: 13px;
+}
+
+.scroller {
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
+  position: relative;
+}
+
+.hours {
+  position: relative;
+}
+
+.hours span {
+  position: absolute;
+  right: 8px;
+  transform: translateY(-50%);
+  font-size: 12px;
+  color: var(--quiet);
+}
+
+.hours span:first-child {
+  transform: none;
+}
+
+.day {
+  position: relative;
+  border-left: 1px solid var(--line);
+  margin-right: 16px;
+}
+
+.hour-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 0;
+  border-top: 1px solid var(--line);
+  opacity: 0.55;
+}
+
+.window {
+  position: absolute;
+  left: 0;
+  right: 0;
+  background: var(--wash);
+  padding: 2px 6px;
+  font-size: 12px;
+  color: var(--quiet);
+  text-align: right;
+}
+
+.block {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  padding: 2px 6px;
+  overflow: hidden;
+  border-radius: 4px;
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.block .title {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.block .times,
+.block .note {
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.block.short {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+.block.short .title {
+  flex: 0 1 auto;
+}
+
+.block.short .times {
+  flex: none;
+}
+
+.block.short .note {
+  display: none;
+}
+
+.block.piece {
+  background: var(--pale);
+  color: var(--on-pale);
+}
+
+.block.piece.now {
+  background: var(--navy);
+  color: var(--on-navy);
+}
+
+.block.piece.gone {
+  opacity: 0.55;
+}
+
+.block.piece.urgent {
+  border-left: 3px solid var(--error);
+}
+
+.block.outside {
+  background: none;
+  border: 1px dashed var(--line);
+  color: var(--quiet);
+}
+
+.block.event {
+  background: var(--band);
+}
+
+.block.event.free {
+  background: none;
+  border: 1px solid var(--line);
+}
+
+.block.record {
+  background: var(--band);
+  color: var(--quiet);
+}
+
+.block.record.kept .title,
+.block.record.late .title {
+  text-decoration: line-through;
+}
+
+.block.record.missed {
+  background: none;
+  border: 1px solid var(--error);
+  color: var(--error);
+}
+
+.block.busy {
+  background: var(--band);
+  border: 1px solid var(--line);
+  color: var(--quiet);
+}
+
+.now {
+  position: absolute;
+  left: -5px;
+  right: 0;
+  height: 0;
+  border-top: 2px solid var(--error);
+  z-index: 1;
+}
+
+.now::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: -6px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--error);
+}
+
+/* Work: a column for each stretch of time, left to right. */
+.work-page {
+  padding: 20px 24px;
+  overflow-y: auto;
+  height: 100%;
+}
+
+.work-page > header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.work-page h1,
+.phone-page h1 {
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--accent);
+}
+
+.ways {
+  display: flex;
+  gap: 2px;
+}
+
+.ways button {
+  border: 1px solid var(--line);
+  background: none;
+  padding: 3px 10px;
+  border-radius: 4px;
+}
+
+.ways button[aria-pressed="true"] {
+  background: var(--pale);
+  color: var(--on-pale);
+  border-color: var(--pale);
+  font-weight: 600;
+}
+
+.fresh {
+  color: var(--quiet);
+  font-size: 13px;
+}
+
+.work-page > header .fresh {
+  margin-left: auto;
+}
+
+.columns {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(260px, 340px);
+  gap: 24px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+}
+
+.column h2 {
+  font-size: 15px;
+  font-weight: 700;
+  padding-bottom: 6px;
+  border-bottom: 2px solid var(--accent);
+  margin-bottom: 4px;
+}
+
+.count {
+  color: var(--quiet);
+  font-weight: 400;
+}
+
+.task {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.task .title {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.task .minutes {
+  color: var(--quiet);
+  white-space: nowrap;
+}
+
+.task .due,
+.task .line,
+.task .tags,
+.task .same {
+  grid-column: 1 / -1;
+}
+
+.task .due.overdue {
+  color: var(--error);
+  font-weight: 600;
+}
+
+.task .line,
+.task .same {
+  font-size: 13px;
+  color: var(--quiet);
+}
+
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.tags li {
+  font-size: 12px;
+  padding: 0 6px;
+  border-radius: 3px;
+  background: var(--band);
+}
+
+.folded {
+  margin-top: 28px;
+  display: grid;
+  gap: 8px;
+  max-width: 760px;
+}
+
+.folded summary {
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 0;
+}
+
+/* The Phone page. */
+.phone-page {
+  padding: 24px;
+  max-width: 640px;
+  display: grid;
+  gap: 28px;
+  align-content: start;
+}
+
+.phone-page section {
+  display: grid;
+  gap: 10px;
+  justify-items: start;
+}
+
+.phone-page h2 {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.code {
+  font-size: 48px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--accent);
+}
+
+.devices {
+  width: 100%;
+}
+
+.devices li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.devices .title {
+  font-weight: 600;
+}
+
+.devices .line {
+  grid-column: 1;
+  color: var(--quiet);
+  font-size: 13px;
+}
+
+.devices button {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+}
+
+@media (max-width: 860px) {
+  .day-page {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    overflow-y: auto;
+  }
+
+  .now-panel h2 {
+    font-size: 34px;
+  }
+
+  .week a {
+    padding: 6px 4px;
+  }
+
+  .work-page > header .fresh {
+    margin-left: 0;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .scroller {
+    scroll-behavior: smooth;
+  }
+}

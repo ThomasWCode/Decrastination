@@ -52,7 +52,7 @@ data class TaskTile(
 )
 
 @Serializable
-data class UnplannedTile(val id: String, val title: String, val why: String, val minutes: String)
+data class UnplannedTile(val id: String, val source: String, val title: String, val why: String, val minutes: String)
 
 /** How a source was last read. */
 @Serializable
@@ -125,6 +125,6 @@ object WorkViews {
             Unplanned.Reason.OpensLater -> "Opens ${gap.at?.let { Format.at(it, now, zone) } ?: "later"}, after the plan's last day: planned once it's within reach"
             Unplanned.Reason.NoRoom -> "No room for it by ${lastDay.format(DAY)}, the plan's last day, within each day's limits"
         }
-        return UnplannedTile(gap.taskId, gap.title, "$why · ${gap.source.label}", (if (gap.pieces > 1) "${gap.pieces} pieces, " else "") + Format.minutes(gap.minutes))
+        return UnplannedTile(gap.taskId, gap.source.label, gap.title, "$why · ${gap.source.label}", (if (gap.pieces > 1) "${gap.pieces} pieces, " else "") + Format.minutes(gap.minutes))
     }
 }

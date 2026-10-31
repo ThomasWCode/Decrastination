@@ -10,6 +10,7 @@ import com.thomaswcode.decrastination.data.SlotRecord
 import com.thomaswcode.decrastination.enrich.MicroPlan
 import com.thomaswcode.decrastination.learn.CalendarEvent
 import com.thomaswcode.decrastination.learn.EventJudge
+import com.thomaswcode.decrastination.ui.DayLayout
 import com.thomaswcode.decrastination.ui.DayModel
 import com.thomaswcode.decrastination.ui.Format
 import com.thomaswcode.decrastination.ui.blockKey
@@ -93,11 +94,18 @@ data class BlockView(
     val free: Boolean = false,
     /** A record's outcome: kept, late, missed. */
     val outcome: String? = null,
+    /** Where it's laid among what's at the same time: its column of [columns], and how many it spans ([DayLayout.columns]). */
+    val column: Int = 0,
+    val columns: Int = 1,
+    val span: Int = 1,
 )
 
 object DayViews {
     private val TITLE = DateTimeFormatter.ofPattern("EEEE d MMMM", Locale.UK)
     private val WEEKDAY = DateTimeFormatter.ofPattern("EEE", Locale.UK)
+
+    /** The shortest a block is drawn: the website's grid has a pixel to the minute. */
+    private const val SHORTEST_MIN = 24
 
     /** [date] by [plan], with [events], [records], your [busy] times and its [windows], at [now]. */
     fun of(
@@ -124,7 +132,7 @@ object DayViews {
             opensAt = model.opensAt,
             windows = model.windows.map { WindowView(windowName(it.window.kind), it.window.startMin, it.window.endMin) },
             allDay = model.allDay.map { EventChip(it.title.ifBlank { "(no title)" }, it.colour) },
-            blocks = model.blocks.mapNotNull { block(it, date, zone, judge, micro) },
+            blocks = placed(model.blocks.mapNotNull { block(it, date, zone, judge, micro) }),
             unslotted = model.unslotted.map(::chip),
             done = model.done.map { PieceChip(it.label, Format.minutes(it.workedMin)) },
             load = Format.load(model.plannedMin, model.freeMin),
@@ -136,14 +144,20 @@ object DayViews {
         )
     }
 
-    private fun minuteOf(at: Long, date: LocalDate, zone: ZoneId): Int = com.thomaswcode.decrastination.ui.DayLayout.minuteOf(at, date, zone)
+    private fun minuteOf(at: Long, date: LocalDate, zone: ZoneId): Int = DayLayout.minuteOf(at, date, zone)
+
+    /** [blocks] side by side where they overlap, as the phone lays them, a short one as tall as [SHORTEST_MIN] so its words fit. */
+    private fun placed(blocks: List<BlockView>): List<BlockView> {
+        val spots = DayLayout.columns(blocks.map { it.startMin to it.endMin }, SHORTEST_MIN)
+        return blocks.zip(spots) { block, spot -> block.copy(column = spot.column, columns = spot.columns, span = spot.span) }
+    }
 
     private fun chip(chunk: Chunk) = PieceChip(chunk.label, Format.minutes(chunk.minutes), chunk.urgent)
 
     private fun block(block: DayModel.Block, date: LocalDate, zone: ZoneId, judge: (CalendarEvent) -> EventJudge.Judgement, micro: Map<String, MicroPlan>): BlockView? {
         val key = blockKey(block)
         val start = minuteOf(block.start, date, zone)
-        val end = minuteOf(block.end, date, zone).let { if (it <= start) com.thomaswcode.decrastination.ui.DayLayout.DAY_MINUTES else it }
+        val end = minuteOf(block.end, date, zone).let { if (it <= start) DayLayout.DAY_MINUTES else it }
         val times = Format.span(block.start, block.end, zone)
         return when (val item = block.item) {
             is DayModel.Row.Window -> null
