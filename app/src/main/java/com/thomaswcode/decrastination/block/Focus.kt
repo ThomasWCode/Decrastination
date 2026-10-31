@@ -940,7 +940,8 @@ class Focus(
     private fun timerDone(t: PieceTimer): Boolean {
         val task = tasks.value.tasks.firstOrNull { it.id == t.taskId }
         if (task == null || !task.isOpen || task.hidden) return true
-        if (t.stepIndex != null && task.subSteps.getOrNull(t.stepIndex)?.let { it.title != t.step || it.done } != false) return true
+        val step = t.stepIndex
+        if (step != null && task.subSteps.getOrNull(step)?.let { it.title != t.step || it.done } != false) return true
         return log.value.slots.any { it.taskId == t.taskId && it.outcome.kept && it.at >= t.startedAt }
     }
 

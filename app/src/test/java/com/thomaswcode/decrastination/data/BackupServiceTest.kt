@@ -331,7 +331,7 @@ class BackupServiceTest {
         phone.folder.files["reset-2026-09-01-120000.json"] = "{}"
         assertEquals(BackupService.Nightly.Written, phone.service.backupNow())
         val nightly = phone.folder.files.keys.filter { it.startsWith("decrastination-") }
-        assertEquals(BackupFolder.KEEP, nightly.size)
+        assertEquals(BackupNames.KEEP, nightly.size)
         assertTrue("decrastination-2026-10-18.json" in nightly && "decrastination-2026-09-01.json" !in nightly && "decrastination-2026-09-02.json" !in nightly)
         assertTrue("reset-2026-09-01-120000.json" in phone.folder.files)
         assertEquals(clock.time, phone.stores.runtime.value.lastBackupAt)

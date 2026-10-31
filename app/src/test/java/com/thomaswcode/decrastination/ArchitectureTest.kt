@@ -13,12 +13,14 @@ import kotlin.test.assertTrue
  * for a restore or a reset, called by the backup service alone.
  */
 class ArchitectureTest {
-    private val main: File = listOf(File("src/main/java"), File("app/src/main/java")).firstOrNull { it.isDirectory }
-        ?: error("No src/main/java (run the tests from the repository or the app module)")
+    /** Where the app's own code is: :app's, and :engine's, what's Android-free of it (run from the repository or the app module). */
+    private val roots: List<File> = listOf("src/main/java", "app/src/main/java", "../engine/src/main/kotlin", "engine/src/main/kotlin").map(::File).filter { it.isDirectory }
 
-    /** Each of the app's source files, by its path under the package root, and its text. */
-    private val sources: Map<String, String> = main.walkTopDown().filter { it.isFile && it.extension == "kt" }
-        .associate { it.relativeTo(main).invariantSeparatorsPath.removePrefix("com/thomaswcode/decrastination/") to it.readText() }
+    /** Each of those source files, by its path under the package root, and its text. */
+    private val sources: Map<String, String> = roots.flatMap { root ->
+        root.walkTopDown().filter { it.isFile && it.extension == "kt" }
+            .map { it.relativeTo(root).invariantSeparatorsPath.removePrefix("com/thomaswcode/decrastination/") to it.readText() }.toList()
+    }.toMap()
 
     /** The files of [sources] that match [pattern], outside [allowed]. */
     private fun outside(pattern: Regex, allowed: Set<String>): List<String> =

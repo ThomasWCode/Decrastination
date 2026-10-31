@@ -30,6 +30,6 @@ NIGHTLY=$(ls "$SRC"/decrastination-*.json 2>/dev/null | sort | tail -1)
 # The JVM wants C:/... on Windows.
 if command -v cygpath >/dev/null 2>&1; then DIR=$(cygpath -m "$OUT"); else DIR="$OUT"; fi
 cd "$ROOT"
-./gradlew testDebugUnitTest --tests '*RehearsalTest*' --rerun -PrehearseFrom="$DIR" --console=plain -q || STATUS=$?
+./gradlew :engine:test --tests '*RehearsalTest*' --rerun -PrehearseFrom="$DIR" --console=plain -q || STATUS=$?
 cat "$OUT/rehearsal.txt" 2>/dev/null || echo "no rehearsal.txt: the test didn't get as far as writing it"
 exit ${STATUS:-0}

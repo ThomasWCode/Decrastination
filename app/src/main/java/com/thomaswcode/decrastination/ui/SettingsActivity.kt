@@ -327,9 +327,11 @@ class SettingsActivity : ComponentActivity() {
                         // The weekly summary for home (NF-02): where it goes, and this week's to send now.
                         OptionalTextField("Weekly summary goes to (an email address, or none)", draft.summaryEmail, SUMMARY_EMAIL_MAX, "summaryEmail", form) { draft = draft.copy(summaryEmail = it) }
                         val latest = graph.log.value.reviews.filter { it.summary != null }.maxByOrNull { it.at }
-                        if (latest?.summary != null && latest.week != null) {
+                        val summary = latest?.summary
+                        val week = latest?.week
+                        if (summary != null && week != null) {
                             val context = LocalContext.current
-                            TextButton(onClick = { runCatching { context.startActivity(SummaryEmail.email(draft.summaryEmail, latest.week, latest.summary)) } }) { Text("Send this week's summary") }
+                            TextButton(onClick = { runCatching { context.startActivity(SummaryEmail.email(draft.summaryEmail, week, summary)) } }) { Text("Send this week's summary") }
                         } else {
                             Note("The summary is written after each Sunday's review, while Claude is on.")
                         }
