@@ -12,6 +12,7 @@ A personal, sideloaded app for one phone, version 4.9.6.
 | [`docs/decisions.md`](docs/decisions.md) | The owner's decisions that govern how the app is developed, numbered |
 | [`docs/development.md`](docs/development.md) | How changes are made, reviewed, checked on the phone and shipped; the public repository's rules |
 | [`docs/plan_v4/`](docs/plan_v4/README.md) | The 4.x plan's record (done, Oct 2026): what was built release by release and what's left to check; the structure the code has and its conventions; the stores and their migrations; the owner's answers to the plan's questions and to those asked since, from the timer (4.4.0) to Felix's moods (4.7.0), his speech (4.8.0, the speech review's plan folded in) and the chat as the app's home (4.9.0, its plan folded in) |
+| [`docs/plan_web/`](docs/plan_web/README.md) | The website's plan (31 Oct 2026, not yet built): a second full client on shared state held by a Kotlin server, the phone keeping its device duties and working offline; the decisions, the architecture, the data and sync, the hosting with its evidence, and the stages |
 | [`docs/astra-review-4.3.13/`](docs/astra-review-4.3.13/README.md) | An outside review of 4.3.13 (23 Oct 2026), each finding with what became of it |
 | [`fixtures/README.md`](fixtures/README.md) | The test fixtures and where they came from |
 
