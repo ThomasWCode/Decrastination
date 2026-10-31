@@ -37,12 +37,16 @@ class ReplicaTest {
         var version = "5.0.1"
         var failure: ((String) -> HttpResponse)? = null
 
+        /** What happens on the phone while a send is on its way, once. */
+        var meanwhile: (() -> Unit)? = null
+
         override fun post(url: String, headers: Map<String, String>, body: String): HttpResponse {
             this.headers += headers
             failure?.let { return it(url) }
             if (url.endsWith("/claim")) return HttpResponse(200, """{"id":"device-1","token":"secret-token"}""")
             val batch = Json.decodeFromString(SeedBatch.serializer(), body)
             seeds += batch
+            meanwhile?.also { meanwhile = null }?.invoke()
             val taken = batch.stores.filter { it.name !in refusing }
             taken.forEach { held[it.name] = it.text }
             val answer = SeedAnswer(seeds.size.toLong(), batch.stores.map { it.name }.filter { it in refusing }, version, held.mapValues { Protocol.hash(it.value) })
@@ -218,6 +222,30 @@ class ReplicaTest {
         assertTrue(""""boxMin"""" in server.held.getValue("settings.json"))
         replica.upload()
         assertEquals(emptyList(), server.seeds.last().stores)
+    }
+
+    @Test
+    fun `a store changed while a send's on its way goes in the same upload`() = runBlocking {
+        paired()
+        replica.upload()
+        server.meanwhile = { runBlocking { stores.settings.update { it.copy(boxMin = it.boxMin + 5) } } }
+        val before = server.seeds.size
+        assertTrue(replica.upload())
+        assertEquals(before + 2, server.seeds.size)
+        assertEquals(listOf("settings.json"), server.seeds.last().stores.map { it.name })
+    }
+
+    @Test
+    fun `nothing left to send is one send, and a store refused isn't sent round again`() = runBlocking {
+        paired()
+        replica.upload()
+        val before = server.seeds.size
+        replica.upload()
+        assertEquals(before + 1, server.seeds.size)
+        server.refusing = setOf("settings.json")
+        stores.settings.update { it.copy(boxMin = it.boxMin + 5) }
+        replica.upload()
+        assertEquals(before + 2, server.seeds.size)
     }
 
     @Test

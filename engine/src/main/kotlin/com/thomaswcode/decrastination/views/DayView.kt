@@ -157,7 +157,7 @@ object DayViews {
     private fun block(block: DayModel.Block, date: LocalDate, zone: ZoneId, judge: (CalendarEvent) -> EventJudge.Judgement, micro: Map<String, MicroPlan>): BlockView? {
         val key = blockKey(block)
         val start = minuteOf(block.start, date, zone)
-        val end = minuteOf(block.end, date, zone).let { if (it <= start) DayLayout.DAY_MINUTES else it }
+        val end = minuteOf(block.end, date, zone).coerceAtLeast(start)
         val times = Format.span(block.start, block.end, zone)
         return when (val item = block.item) {
             is DayModel.Row.Window -> null

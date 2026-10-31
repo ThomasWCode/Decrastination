@@ -75,22 +75,35 @@ class Replica(
 
     /** What the server doesn't hold, sent. Whether it took it: a failure's kept for Setup, and tried again next time. */
     suspend fun upload(): Boolean = sending.withLock {
-        // Once more where the answer says the server holds less than it should: it's been restored, say.
-        when (send()) {
-            Sent.Failed -> false
-            Sent.InStep -> true
-            Sent.Behind -> send() != Sent.Failed
+        // Again where a send leaves something behind: the server holds less than it should (it's been restored, say), or a store
+        // changed while it went, which work already running can't be asked for a second time.
+        var sent = send()
+        var rounds = 1
+        while (rounds < ROUNDS && (sent == Sent.Behind || (sent == Sent.InStep && unsent()))) {
+            sent = send()
+            rounds++
         }
+        sent != Sent.Failed
     }
 
     private enum class Sent { InStep, Behind, Failed }
+
+    /** Each store as it stands, the archive's [months] among them. */
+    private fun texts(months: List<StoreText>): List<StoreText> = stores.mirrored.map { StoreText(it.name, it.version, it.text()) } +
+        StoreText(CalendarRead.NAME, CALENDAR_VERSION, JSON.encodeToString(CalendarRead.serializer(), calendar())) + months
+
+    /** Whether anything here isn't on the server, but what it's refused: that goes at the next send, not round again now. */
+    private fun unsent(): Boolean {
+        val state = sync.value
+        val monthsWaiting = stores.chatArchive.changes.value != archiveSent && state.refused.none { ChatArchiveStore.isMonth(it) }
+        return monthsWaiting || texts(emptyList()).any { it.name !in state.refused && state.sent[it.name] != Protocol.hash(it.text) }
+    }
 
     private suspend fun send(): Sent {
         val token = stores.secrets[Secret.DeviceToken] ?: return Sent.Failed
         val archived = stores.chatArchive.changes.value
         val months = if (archived != archiveSent) months() else emptyList()
-        val texts = stores.mirrored.map { StoreText(it.name, it.version, it.text()) } +
-            StoreText(CalendarRead.NAME, CALENDAR_VERSION, JSON.encodeToString(CalendarRead.serializer(), calendar())) + months
+        val texts = texts(months)
         val hashes = texts.associate { it.name to Protocol.hash(it.text) }
         val holds = sync.value.sent
         val batch = SeedBatch(clock.zone().id, build, texts.filter { holds[it.name] != hashes[it.name] })
@@ -135,6 +148,9 @@ class Replica(
         private val CALENDAR_VERSION = CalendarRead().version
 
         private const val NOT_SENT = -1L
+
+        /** The most sends one upload makes: the first, and two to catch what it left. */
+        private const val ROUNDS = 3
 
         private val EMPTY_MONTH = JSON.encodeToString(ChatArchive.serializer(), ChatArchive())
     }
