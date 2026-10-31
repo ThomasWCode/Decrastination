@@ -6,7 +6,7 @@ What runs on the box: the API, how a client signs in, how the state is held, and
 
 `meta.mode` says who writes the state.
 
-- **Mirror** (5.0.0): the phone is the only writer. It sends its stores whole and the server keeps a copy, computes from it and writes nothing to it. A route never writes a store.
+- **Mirror** (5.0.0): the phone is the only writer. It sends its stores whole and the server keeps a copy, computes from it and writes nothing to it. `SqliteBackend.writable` holds to that: a store's own write goes nowhere, so an older shape is read up to date in memory and its row stays as the phone sent it. A route never writes a store.
 
 ## The API
 
@@ -21,7 +21,7 @@ Everything is under `/api`, on the same origin as the website. Open: `GET /healt
 | `POST /auth/logout` | a session | ends it |
 | `POST /devices/pair` | the website | a six-digit code, for five minutes |
 | `POST /devices/claim` | anyone with a code | a device's id and token, shown this once |
-| `GET /devices`, `DELETE /devices/{id}` | a client | what's paired, and revoking one |
+| `GET /devices`, `DELETE /devices/{id}` | the website | what's paired, and revoking one |
 | `POST /stores/seed` | a phone | its stores, [sync.md](sync.md) |
 | `GET /state?since=` | a client | every store above a revision, whole |
 | `GET /events` | a client | the state's revision: the one it's at on connecting, then each new one, with a heartbeat every 25 seconds |

@@ -15,6 +15,7 @@ import com.thomaswcode.decrastination.views.WorkView
 import io.ktor.client.plugins.sse.SSE as ClientSSE
 import io.ktor.client.plugins.sse.sse
 import io.ktor.client.HttpClient
+import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.client.request.bearerAuth
 import io.ktor.client.request.delete
 import io.ktor.client.request.get
@@ -124,6 +125,31 @@ class ApiTest {
                 assertEquals(listOf("0", "1"), heard.toList())
             }
         }
+    }
+
+    @Test
+    fun `a store of an older shape stays as the phone sent it, read up to date, and costs one write`() = server {
+        val phone = paired()
+        val old = Fixtures.file("stores").resolve("2026-10-30-4.10.0/protection.json").readText()
+        val store = StoreText("protection.json", versionOf(old), old)
+        assertTrue(store.version < graph.stores.protection.value.version, "this fixture should be of an older shape")
+        val answer = json.decodeFromString<SeedAnswer>(seed(phone.token, listOf(store)).bodyAsText())
+        assertEquals(Protocol.hash(old), answer.holds["protection.json"], "the hash is of what was sent, or the phone sends it again")
+        assertEquals(1L, answer.revision)
+        val again = json.decodeFromString<SeedAnswer>(seed(phone.token, listOf(store)).bodyAsText())
+        assertEquals(1L, again.revision)
+        assertEquals(1, db.transactionless { c -> c.createStatement().use { s -> s.executeQuery("SELECT COUNT(*) FROM store_history WHERE name = 'protection.json'").use { it.next(); it.getInt(1) } } })
+    }
+
+    @Test
+    fun `a phone can't list or revoke devices`() = server {
+        val phone = paired()
+        fun HttpRequestBuilder.asPhone() {
+            bearerAuth(phone.token)
+            header(Protocol.HEADER, Protocol.VERSION.toString())
+        }
+        assertEquals(HttpStatusCode.Forbidden, plain().get("/api/devices") { asPhone() }.status)
+        assertEquals(HttpStatusCode.Forbidden, plain().delete("/api/devices/${phone.id}") { asPhone() }.status)
     }
 
     @Test

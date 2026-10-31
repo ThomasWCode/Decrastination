@@ -211,8 +211,12 @@ private fun Route.signedInRoutes(web: Web) {
         if (call.client !is Client.Website) return@post call.respond(HttpStatusCode.Forbidden, Problem("A device is paired from the website"))
         call.respond(graph.devices.pair())
     }
-    get("/devices") { call.respond(graph.devices.list()) }
+    get("/devices") {
+        if (call.client !is Client.Website) return@get call.respond(HttpStatusCode.Forbidden, Problem("What's paired is the website's to see"))
+        call.respond(graph.devices.list())
+    }
     delete("/devices/{id}") {
+        if (call.client !is Client.Website) return@delete call.respond(HttpStatusCode.Forbidden, Problem("A device is revoked from the website"))
         graph.devices.revoke(call.parameters["id"].orEmpty())
         call.respond(HttpStatusCode.NoContent)
     }

@@ -3,29 +3,42 @@ import { api } from "./api";
 import { ago, useLive } from "./live";
 import type { PairingCode } from "./types";
 
-/** Pairing a phone: a code to type into its Setup, good for five minutes; and what's paired, each able to be revoked. */
+/** Pairing a phone: a code to type into its Settings, good for five minutes; and what's paired, each able to be revoked. */
 export function PhonePage() {
   const load = useCallback(() => api.devices(), []);
   const { value: devices, failed } = useLive(load);
   const [code, setCode] = useState<PairingCode | null>(null);
   const [revoked, setRevoked] = useState<string[]>([]);
+  const [problem, setProblem] = useState<string | null>(null);
+  const pair = () => {
+    setProblem(null);
+    api
+      .pair()
+      .then(setCode)
+      .catch(() => setProblem("A code couldn't be made. Sign in again if this goes on."));
+  };
   const revoke = (id: string) => {
-    api.revoke(id).then(() => setRevoked((was) => [...was, id]));
+    setProblem(null);
+    api
+      .revoke(id)
+      .then(() => setRevoked((was) => [...was, id]))
+      .catch(() => setProblem("That couldn't be revoked. Try again."));
   };
   return (
     <main className="phone-page">
       <h1>Phone</h1>
       <section>
         <h2>Pair a phone</h2>
-        <p>On the phone, open Setup, then This phone, and type this code. It works once, for five minutes.</p>
+        <p>On the phone, open Settings, then The website, tap Pair and type this code. It works once, for five minutes.</p>
         {code ? (
           <p className="code" data-testid="pairing-code">
             {code.code}
           </p>
         ) : null}
-        <button className="button" onClick={() => api.pair().then(setCode)}>
+        <button className="button" onClick={pair}>
           {code ? "Show another code" : "Show a code"}
         </button>
+        {problem ? <p className="problem">{problem}</p> : null}
       </section>
       <section>
         <h2>Paired</h2>

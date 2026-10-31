@@ -12,6 +12,7 @@ import javax.crypto.Cipher
 import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
 import kotlin.system.exitProcess
+import kotlinx.serialization.json.JsonPrimitive
 
 /** AES-256-GCM under a key from the environment (`MASTER_KEY`, base64, 32 bytes), for what the server holds encrypted. */
 class MasterKeyCipher(masterKey: String) : SecretCipher {
@@ -41,11 +42,7 @@ class MasterKeyCipher(masterKey: String) : SecretCipher {
 /** The log as a line of JSON on stdout: the level, the message, the kind of a failure. No line ever holds a store's content or a header. */
 private object StdoutLog : Log.Sink {
     override fun write(level: Log.Level, tag: String, message: String, error: Throwable?) {
-        fun quoted(text: String) = buildString {
-            append('"')
-            text.forEach { c -> if (c == '"' || c.code == 92) append(c.code.toChar().let { "\$it" }) else if (c.code < 32) append(' ') else append(c) }
-            append('"')
-        }
+        fun quoted(text: String) = JsonPrimitive(text).toString()
         val failure = error?.let { ",\"error\":${quoted(it::class.simpleName.orEmpty())}" }.orEmpty()
         println("{\"at\":\"${Instant.now()}\",\"level\":\"${level.name}\",\"message\":${quoted(message)}$failure}")
     }
