@@ -62,8 +62,8 @@ import com.thomaswcode.decrastination.data.Reset
 import com.thomaswcode.decrastination.enrich.AiUsage
 import com.thomaswcode.decrastination.enrich.ModelEffort
 import com.thomaswcode.decrastination.learn.AnkiProgress
-import com.thomaswcode.decrastination.learn.DailyAlarms
 import com.thomaswcode.decrastination.learn.Daily
+import com.thomaswcode.decrastination.learn.DailyAlarms
 import com.thomaswcode.decrastination.learn.SummaryEmail
 import com.thomaswcode.decrastination.protect.ProtectionPanel
 import com.thomaswcode.decrastination.protect.SettingsChanges

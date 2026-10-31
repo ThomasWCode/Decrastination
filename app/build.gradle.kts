@@ -66,8 +66,6 @@ android {
 }
 
 tasks.withType<Test>().configureEach {
-    // The fixtures this module's tests read: a change to them alone runs the tests again.
-    inputs.dir(layout.projectDirectory.dir("../fixtures")).withPropertyName("fixtures").withPathSensitivity(PathSensitivity.RELATIVE)
     // core's build, which ArchitectureTest holds free of Android and of the app: a change to it alone runs the tests again.
     inputs.file(layout.projectDirectory.file("../core/build.gradle.kts")).withPropertyName("coreBuild").withPathSensitivity(PathSensitivity.RELATIVE)
     // The engine's, held the same way.
