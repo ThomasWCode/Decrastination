@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 
 /** The state's revision as the server says it: the one it's at on connecting, and on reconnecting, then each new one. */
 function onRevision(listener: (revision: string) => void): () => void {
@@ -12,15 +12,39 @@ export interface Loaded<T> {
   failed: boolean;
 }
 
-/** [load]'s answer, fetched again when the revision moves and as the page comes back into view. */
+/** Runs of [load] with only the newest's answer heard, so a slow one can't overwrite what came after it, nor a page that's moved on. */
+export function newestOnly<T>(load: () => Promise<T>, show: (value: T) => void, fail: () => void) {
+  let newest = 0;
+  return {
+    run() {
+      const request = ++newest;
+      load()
+        .then((value) => {
+          if (request === newest) show(value);
+        })
+        .catch(() => {
+          if (request === newest) fail();
+        });
+    },
+    cancel() {
+      newest++;
+    },
+  };
+}
+
+/** How often a page is asked for again with nothing changed: the time moves on, with the now line and what's next. */
+const EVERY_MS = 60_000;
+
+/** [load]'s answer, fetched again when the revision moves, as the page comes back into view, and each minute it's in view. */
 export function useLive<T>(load: () => Promise<T>): Loaded<T> {
   const [state, setState] = useState<Loaded<T>>({ value: null, failed: false });
-  const refresh = useCallback(() => {
-    load()
-      .then((value) => setState({ value, failed: false }))
-      .catch(() => setState((was) => ({ ...was, failed: true })));
-  }, [load]);
   useEffect(() => {
+    const loads = newestOnly(
+      load,
+      (value) => setState({ value, failed: false }),
+      () => setState((was) => ({ ...was, failed: true })),
+    );
+    const refresh = () => loads.run();
     refresh();
     let seen: string | null = null;
     const stop = onRevision((revision) => {
@@ -28,12 +52,17 @@ export function useLive<T>(load: () => Promise<T>): Loaded<T> {
       seen = revision;
       refresh();
     });
+    const clock = setInterval(() => {
+      if (!document.hidden) refresh();
+    }, EVERY_MS);
     document.addEventListener("visibilitychange", refresh);
     return () => {
+      loads.cancel();
       stop();
+      clearInterval(clock);
       document.removeEventListener("visibilitychange", refresh);
     };
-  }, [refresh]);
+  }, [load]);
   return state;
 }
 

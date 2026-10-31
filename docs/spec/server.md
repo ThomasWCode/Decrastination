@@ -46,7 +46,7 @@ The website shows a six-digit code; a phone that gives it back within five minut
 SQLite, one file, in WAL mode (`server/Database.kt`), the server its only writer. `SqliteBackend` is the `StoreBackend` that `Stores` runs on here, as `FileBackend` is on the phone, so a store has the same shape, migrations and versions on both.
 
 - `stores`: each store's JSON, its version and the revision that last wrote it. A revision is one transaction.
-- `store_history`: each store's text before each write, with what caused it, kept 90 days and at least the last 20 of each.
+- `store_history`: each store's every text, with what caused it, kept 90 days and at least the last 20 of each, let go of at each start and daily after (`ServerGraph.tidy`).
 - `devices`, `pairing_codes`, `sessions`, `meta`.
 
 The server's time zone is the phone's: each batch says it (`ServerClock`), as a day is the owner's wherever they are.
@@ -65,6 +65,6 @@ Each service gets only the secrets it uses (`deploy/compose.yaml`), all of them 
 
 **A new box.** `deploy/bootstrap.sh`: Docker, the firewall, `/opt/decrastination`, `MASTER_KEY` made once. With `.env` filled it restores the database from R2 if the box has none and R2 has one, then starts everything. It stops if the restore fails, so an empty server never replicates over the good copy.
 
-**Restoring.** `docker compose run --rm --no-deps litestream restore -config /etc/litestream.yml -if-db-not-exists -if-replica-exists /data/decrastination.db`, with the server stopped and the old database gone; `-timestamp` for a moment in the last month. The drill: the database destroyed, restored, the server started from it, and `GET /state` the same, byte for byte, its sessions and devices still good.
+**Restoring.** `docker compose run --rm --no-deps litestream restore -config /etc/litestream.yml -if-db-not-exists -if-replica-exists /data/decrastination.db`, with the server stopped and the old database gone; `-timestamp` for a moment in the last month. The drill: the database destroyed, restored, the server started from it, and `GET /state` the same, byte for byte, its sessions and devices still good. A database restored to an older moment catches up by itself: the phone's next send sees from the answer what it no longer holds, and sends it.
 
 **Keep `MASTER_KEY` off the box as well.** A restored database's encrypted credentials can't be read without it.

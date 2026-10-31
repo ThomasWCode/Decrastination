@@ -10,12 +10,12 @@ Settings → The website, or the same row on Setup. The website's Phone page sho
 
 `Stores.MIRRORED`, each store's whole text as its file holds it: tasks, settings, session, protection, model, anki, learning, log, instructions, chat, school, memory, felix. With them:
 
-- each month of the chat's archive, once one has changed;
+- each month of the chat's archive, once one has changed, and a month that's gone sent empty, so a chat cleared here is cleared there;
 - `calendar-read.json`: the calendar as last read, and your answers about its events, which the server can't read for itself (`CalendarRead`, from `Sync.calendarRead`).
 
 What's the phone's alone is never sent: the secrets, `runtime.json`, `device.json`, `calendar.json`, `gmail-writes.json` and `sync.json`.
 
-Only what's changed goes: `sync.json` keeps each store's SHA-256 as last accepted, and a store whose hash matches stays home. Nothing changed still sends an empty batch, so the server knows the phone is there and the website can say how fresh it is. Each batch says the phone's time zone, as a day is the owner's wherever they are, and its build.
+Only what the server doesn't hold goes. Each answer says what it holds, every store by its SHA-256, and `sync.json` keeps that: a store whose hash matches stays home, and a server restored to an older copy is sent what it's lost in the same send. Nothing changed still sends an empty batch, so the server knows the phone is there and the website can say how fresh it is. Each batch says the phone's time zone, as a day is the owner's wherever they are, and its build.
 
 ## When
 

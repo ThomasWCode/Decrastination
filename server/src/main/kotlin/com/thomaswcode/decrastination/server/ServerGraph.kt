@@ -15,6 +15,7 @@ import com.thomaswcode.decrastination.enrich.Profile
 import com.thomaswcode.decrastination.learn.EventJudge
 import com.thomaswcode.decrastination.plan.Planning
 import com.thomaswcode.decrastination.core.InstructionRules
+import com.thomaswcode.decrastination.ports.Log
 import com.thomaswcode.decrastination.sync.Protocol
 import com.thomaswcode.decrastination.sync.SeedAnswer
 import com.thomaswcode.decrastination.sync.SeedBatch
@@ -24,6 +25,7 @@ import com.thomaswcode.decrastination.views.DayViews
 import com.thomaswcode.decrastination.views.WorkView
 import com.thomaswcode.decrastination.views.WorkViews
 import java.io.File
+import java.sql.SQLException
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -31,10 +33,12 @@ import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -106,6 +110,20 @@ class ServerGraph(val db: Database, dataDir: File, cipher: SecretCipher, private
     /** The months of the archive read once they're asked for. */
     private val archiveReads = ConcurrentHashMap<String, Long>()
 
+    init {
+        // A store's every write is kept for a while: at each start, and daily while it runs.
+        scope.launch {
+            while (true) {
+                try {
+                    tidy()
+                } catch (failed: SQLException) {
+                    Log.w(Log.TAG, "The history couldn't be tidied: ${failed::class.simpleName}")
+                }
+                delay(TIDY_EVERY_MS)
+            }
+        }
+    }
+
     /** Whether the server is taking the phone's stores whole, or commands (from stage 2). */
     val mode: String get() = db.meta("mode") ?: "mirror"
 
@@ -138,21 +156,22 @@ class ServerGraph(val db: Database, dataDir: File, cipher: SecretCipher, private
         if (written.any(Archives::isMonth)) stores.chatArchive.forget()
         val revision = db.currentRevision()
         if (written.isNotEmpty()) _revisions.tryEmit(revision)
-        SeedAnswer(revision, refused, version)
+        SeedAnswer(revision, refused, version, backend.hashes())
     }
 
-    /** Every store above revision [since], whole. */
-    fun state(since: Long): StateAnswer {
-        val texts = db.transactionless { c ->
-            c.prepareStatement("SELECT name, version, revision, json FROM stores WHERE revision > ? ORDER BY name").use { q ->
-                q.setLong(1, since)
-                q.executeQuery().use { r ->
-                    buildList { while (r.next()) add(StoreRow(r.getString(1), r.getInt(2), r.getLong(3), r.getString(4))) }
-                }
+    /** Every store above revision [since], whole, with the revision they're as of: both read together, so a cursor can't pass a commit it hasn't seen. */
+    fun state(since: Long): StateAnswer = db.transactionless { c ->
+        val texts = c.prepareStatement("SELECT name, version, revision, json FROM stores WHERE revision > ? ORDER BY name").use { q ->
+            q.setLong(1, since)
+            q.executeQuery().use { r ->
+                buildList { while (r.next()) add(StoreRow(r.getString(1), r.getInt(2), r.getLong(3), r.getString(4))) }
             }
         }
-        return StateAnswer(db.currentRevision(), texts)
+        StateAnswer(db.currentRevision(), texts)
     }
+
+    /** The history let go of as its rule says: older than [SqliteBackend.HISTORY_MS], but each store's last few. */
+    fun tidy() = backend.trimHistory(clock.now() - SqliteBackend.HISTORY_MS)
 
     /** [date] as the Day shows it, today's if none's given. */
     fun day(date: LocalDate?): DayView {
@@ -175,6 +194,10 @@ class ServerGraph(val db: Database, dataDir: File, cipher: SecretCipher, private
     }
 
     fun work(): WorkView = WorkViews.of(stores.tasks.value, planning.plan(), stores.settings.value, clock.now(), clock.zone(), devices.lastSeen())
+
+    private companion object {
+        const val TIDY_EVERY_MS = 24 * 3_600_000L
+    }
 
     private object NoAlerts : ModelGateway.Alerts {
         override fun keyProblem(problem: KeyProblem): Boolean = false

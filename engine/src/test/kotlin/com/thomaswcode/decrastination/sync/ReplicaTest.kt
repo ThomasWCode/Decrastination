@@ -28,18 +28,25 @@ class ReplicaTest {
         override fun decrypt(sealed: ByteArray) = sealed
     }
 
-    /** The server as a test has it: what it's sent, and what it answers. */
+    /** The server as a test has it: what it's sent and holds, what it refuses, and whether it's answering at all. */
     private class Server : Http {
         val seeds = mutableListOf<SeedBatch>()
         val headers = mutableListOf<Map<String, String>>()
-        var answer: (String) -> HttpResponse = { url ->
-            if (url.endsWith("/claim")) HttpResponse(200, """{"id":"device-1","token":"secret-token"}""") else HttpResponse(200, """{"revision":1}""")
-        }
+        val held = mutableMapOf<String, String>()
+        var refusing = emptySet<String>()
+        var version = "5.0.1"
+        var failure: ((String) -> HttpResponse)? = null
 
         override fun post(url: String, headers: Map<String, String>, body: String): HttpResponse {
-            if (url.endsWith("/seed")) seeds += Json.decodeFromString(SeedBatch.serializer(), body)
             this.headers += headers
-            return answer(url)
+            failure?.let { return it(url) }
+            if (url.endsWith("/claim")) return HttpResponse(200, """{"id":"device-1","token":"secret-token"}""")
+            val batch = Json.decodeFromString(SeedBatch.serializer(), body)
+            seeds += batch
+            val taken = batch.stores.filter { it.name !in refusing }
+            taken.forEach { held[it.name] = it.text }
+            val answer = SeedAnswer(seeds.size.toLong(), batch.stores.map { it.name }.filter { it in refusing }, version, held.mapValues { Protocol.hash(it.value) })
+            return HttpResponse(200, Json.encodeToString(SeedAnswer.serializer(), answer))
         }
     }
 
@@ -69,14 +76,14 @@ class ReplicaTest {
 
     @Test
     fun `a code the server refuses says so, and pairs nothing`() = runBlocking {
-        server.answer = { HttpResponse(403, "{}") }
+        server.failure = { HttpResponse(403, "{}") }
         assertEquals("That code isn't right, or it's run out", replica.pair("000000", "phone"))
         assertFalse(replica.paired)
     }
 
     @Test
     fun `no network to pair over says so`() = runBlocking {
-        server.answer = { throw IOException("offline") }
+        server.failure = { throw IOException("offline") }
         assertEquals("The server can't be reached", replica.pair("000000", "phone"))
         assertFalse(replica.paired)
     }
@@ -117,10 +124,10 @@ class ReplicaTest {
     @Test
     fun `a failed send keeps what's unsent for next time, and says why`() = runBlocking {
         paired()
-        server.answer = { throw IOException("offline") }
+        server.failure = { throw IOException("offline") }
         assertFalse(replica.upload())
         assertEquals("The server can't be reached", replica.state.value.lastError)
-        server.answer = { HttpResponse(200, """{"revision":2,"server":"5.0.1"}""") }
+        server.failure = null
         assertTrue(replica.upload())
         assertNull(replica.state.value.lastError)
         assertEquals(1_000L, replica.state.value.lastSyncAt)
@@ -131,10 +138,10 @@ class ReplicaTest {
     @Test
     fun `a store the server refuses goes again, and is said`() = runBlocking {
         paired()
-        server.answer = { HttpResponse(200, """{"revision":2,"refused":["tasks.json"]}""") }
+        server.refusing = setOf("tasks.json")
         replica.upload()
         assertEquals(listOf("tasks.json"), replica.state.value.refused)
-        server.answer = { HttpResponse(200, """{"revision":3}""") }
+        server.refusing = emptySet()
         replica.upload()
         assertEquals(listOf("tasks.json"), server.seeds.last().stores.map { it.name })
         assertEquals(emptyList(), replica.state.value.refused)
@@ -143,10 +150,10 @@ class ReplicaTest {
     @Test
     fun `a revoked phone and an old one are told what to do`() = runBlocking {
         paired()
-        server.answer = { HttpResponse(401, "{}") }
+        server.failure = { HttpResponse(401, "{}") }
         replica.upload()
         assertEquals("The server doesn't know this phone: pair it again", replica.state.value.lastError)
-        server.answer = { HttpResponse(409, "{}") }
+        server.failure = { HttpResponse(409, "{}") }
         replica.upload()
         assertEquals("The server needs a newer app: install the latest", replica.state.value.lastError)
     }
@@ -160,6 +167,57 @@ class ReplicaTest {
         assertTrue("words" in month.text)
         replica.upload()
         assertEquals(emptyList(), server.seeds[1].stores)
+    }
+
+    @Test
+    fun `a month cleared here is cleared there, once`() = runBlocking {
+        paired()
+        stores.replace(stores.chatArchive, ChatArchive(listOf(ChatMessage("a", Speaker.You, "words", 1_792_000_000_000L))))
+        replica.upload()
+        val name = server.held.keys.single { it.startsWith("chat-archive-") }
+        stores.chatArchive.clear()
+        replica.upload()
+        assertFalse("words" in server.held.getValue(name))
+        assertEquals(listOf(name), server.seeds.last().stores.map { it.name })
+        stores.chatArchive.clear()
+        replica.upload()
+        assertEquals(emptyList(), server.seeds.last().stores)
+    }
+
+    @Test
+    fun `a month the server refuses goes again with the archive unchanged, and stays said till it's taken`() = runBlocking {
+        paired()
+        stores.replace(stores.chatArchive, ChatArchive(listOf(ChatMessage("a", Speaker.You, "words", 1_792_000_000_000L))))
+        val month = "chat-archive-2026-10.json"
+        server.refusing = setOf(month)
+        replica.upload()
+        assertEquals(listOf(month), replica.state.value.refused)
+        replica.upload()
+        assertEquals(listOf(month), server.seeds.last().stores.map { it.name })
+        assertEquals(listOf(month), replica.state.value.refused)
+        server.refusing = emptySet()
+        replica.upload()
+        assertEquals(emptyList(), replica.state.value.refused)
+        assertTrue(month in server.held)
+    }
+
+    @Test
+    fun `a server restored to an older copy is sent what it's lost, in the same send`() = runBlocking {
+        paired()
+        stores.replace(stores.chatArchive, ChatArchive(listOf(ChatMessage("a", Speaker.You, "words", 1_792_000_000_000L))))
+        replica.upload()
+        val before = server.held.toMap()
+        stores.settings.update { it.copy(boxMin = it.boxMin + 5) }
+        replica.upload()
+        assertTrue(server.held != before)
+        // Back to the older copy, the phone's hashes newer than what's there: nothing's changed on the phone.
+        server.held.clear()
+        server.held += before - "settings.json" - "chat-archive-2026-10.json"
+        assertTrue(replica.upload())
+        assertEquals(setOf("settings.json", "chat-archive-2026-10.json"), server.seeds.last().stores.map { it.name }.toSet())
+        assertTrue(""""boxMin"""" in server.held.getValue("settings.json"))
+        replica.upload()
+        assertEquals(emptyList(), server.seeds.last().stores)
     }
 
     @Test

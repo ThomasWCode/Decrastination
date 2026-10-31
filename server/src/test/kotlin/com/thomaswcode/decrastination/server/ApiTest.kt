@@ -127,6 +127,41 @@ class ApiTest {
     }
 
     @Test
+    fun `a seed's answer says what the server holds, by hash`() = server {
+        val phone = paired()
+        val text = """{"version":1}"""
+        val answer = json.decodeFromString<SeedAnswer>(seed(phone.token, listOf(StoreText("school.json", 1, text))).bodyAsText())
+        assertEquals(Protocol.hash(text), answer.holds["school.json"])
+    }
+
+    @Test
+    fun `the state's revision is never past a store it doesn't return`() = server {
+        val phone = paired()
+        seed(phone.token, listOf(StoreText("school.json", 1, """{"version":1}""")))
+        val first = graph.state(0)
+        assertEquals(1L, first.revision)
+        assertEquals(listOf("school.json"), first.stores.map { it.name })
+        seed(phone.token, listOf(StoreText("school.json", 1, """{"version":1,"noSchool":[]}""")))
+        val next = graph.state(first.revision)
+        assertEquals(2L, next.revision)
+        assertEquals(listOf("school.json"), next.stores.map { it.name })
+        assertEquals(emptyList(), graph.state(next.revision).stores)
+    }
+
+    @Test
+    fun `the history is let go of by its rule`() = server {
+        val phone = paired()
+        repeat(SqliteBackend.HISTORY_KEPT + 5) { seed(phone.token, listOf(StoreText("school.json", 1, """{"version":1,"at":$it}"""))) }
+        fun rows() = db.transactionless { c -> c.createStatement().use { s -> s.executeQuery("SELECT COUNT(*) FROM store_history").use { it.next(); it.getInt(1) } } }
+        assertEquals(SqliteBackend.HISTORY_KEPT + 5, rows())
+        graph.tidy()
+        assertEquals(SqliteBackend.HISTORY_KEPT + 5, rows(), "none is old enough yet")
+        db.transactionless { c -> c.createStatement().use { it.execute("UPDATE store_history SET at = 0") } }
+        graph.tidy()
+        assertEquals(SqliteBackend.HISTORY_KEPT, rows())
+    }
+
+    @Test
     fun `health and the version are open, and everything else isn't`() = server {
         assertEquals(HttpStatusCode.OK, plain().get("/api/health").status)
         val version = json.decodeFromString<ServerVersion>(plain().get("/api/version").bodyAsText())

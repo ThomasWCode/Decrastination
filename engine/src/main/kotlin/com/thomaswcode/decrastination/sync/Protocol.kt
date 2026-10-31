@@ -1,5 +1,6 @@
 package com.thomaswcode.decrastination.sync
 
+import java.security.MessageDigest
 import kotlinx.serialization.Serializable
 
 /**
@@ -10,6 +11,9 @@ import kotlinx.serialization.Serializable
 object Protocol {
     const val VERSION = 1
     const val HEADER = "X-Protocol"
+
+    /** A store's text as a hash, as both ends count it. */
+    fun hash(text: String): String = MessageDigest.getInstance("SHA-256").digest(text.toByteArray()).joinToString("") { "%02x".format(it) }
 }
 
 /** A store's whole text, as its file holds it. */
@@ -26,9 +30,13 @@ data class SeedBatch(
     val stores: List<StoreText>,
 )
 
-/** What came of a [SeedBatch]: the revision it took, the stores refused, as newer than the server can read, and the server's version. */
+/**
+ * What came of a [SeedBatch]: the revision it took, the stores refused, as newer than the server can read, the server's
+ * version, and each store it now holds by its hash ([Protocol.hash]), so the phone goes by what's there rather than what it
+ * last sent: a server restored to an older copy is sent what it's lost.
+ */
 @Serializable
-data class SeedAnswer(val revision: Long, val refused: List<String> = emptyList(), val server: String = "")
+data class SeedAnswer(val revision: Long, val refused: List<String> = emptyList(), val server: String = "", val holds: Map<String, String> = emptyMap())
 
 /** What a client can ask of the server with no sign-in: its version, the protocol and each store's version. */
 @Serializable

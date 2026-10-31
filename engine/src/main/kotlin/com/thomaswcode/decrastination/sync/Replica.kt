@@ -1,7 +1,9 @@
 package com.thomaswcode.decrastination.sync
 
 import com.thomaswcode.decrastination.core.WallClock
+import com.thomaswcode.decrastination.core.ChatArchive
 import com.thomaswcode.decrastination.data.CalendarRead
+import com.thomaswcode.decrastination.data.ChatArchiveStore
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.Secret
 import com.thomaswcode.decrastination.data.Stores
@@ -9,7 +11,6 @@ import com.thomaswcode.decrastination.data.SyncState
 import com.thomaswcode.decrastination.net.Http
 import com.thomaswcode.decrastination.ports.Log
 import java.io.IOException
-import java.security.MessageDigest
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -35,9 +36,9 @@ class Replica(
     /** One at a time: a screen's, a job's. */
     private val sending = Mutex()
 
-    /** The archive's change count as last sent, to save reading its months where none has changed. */
+    /** The archive's change count as last in step, to save reading its months where none has changed. */
     @Volatile
-    private var archiveSent = -1L
+    private var archiveSent = NOT_SENT
 
     val state: StateFlow<SyncState> get() = sync.state
 
@@ -64,7 +65,7 @@ class Replica(
     suspend fun forget() {
         stores.secrets.put(Secret.DeviceToken, null)
         sync.update { SyncState(server = it.server) }
-        archiveSent = -1
+        archiveSent = NOT_SENT
     }
 
     /** The server's address, for a test on a PC. */
@@ -72,33 +73,53 @@ class Replica(
         sync.update { it.copy(server = url.trimEnd('/')) }
     }
 
-    /** What's changed since it was last accepted, sent. Whether the server took it: a failure's kept for Setup, and tried again next time. */
+    /** What the server doesn't hold, sent. Whether it took it: a failure's kept for Setup, and tried again next time. */
     suspend fun upload(): Boolean = sending.withLock {
-        val token = stores.secrets[Secret.DeviceToken] ?: return@withLock false
+        // Once more where the answer says the server holds less than it should: it's been restored, say.
+        when (send()) {
+            Sent.Failed -> false
+            Sent.InStep -> true
+            Sent.Behind -> send() != Sent.Failed
+        }
+    }
+
+    private enum class Sent { InStep, Behind, Failed }
+
+    private suspend fun send(): Sent {
+        val token = stores.secrets[Secret.DeviceToken] ?: return Sent.Failed
         val archived = stores.chatArchive.changes.value
+        val months = if (archived != archiveSent) months() else emptyList()
         val texts = stores.mirrored.map { StoreText(it.name, it.version, it.text()) } +
-            StoreText(CalendarRead.NAME, CALENDAR_VERSION, JSON.encodeToString(CalendarRead.serializer(), calendar())) +
-            (if (archived != archiveSent) stores.chatArchive.texts() else emptyList())
-        val hashes = texts.associate { it.name to hash(it.text) }
-        val changed = texts.filter { sync.value.sent[it.name] != hashes[it.name] }
-        val batch = SeedBatch(clock.zone().id, build, changed)
+            StoreText(CalendarRead.NAME, CALENDAR_VERSION, JSON.encodeToString(CalendarRead.serializer(), calendar())) + months
+        val hashes = texts.associate { it.name to Protocol.hash(it.text) }
+        val holds = sync.value.sent
+        val batch = SeedBatch(clock.zone().id, build, texts.filter { holds[it.name] != hashes[it.name] })
         val headers = mapOf("Content-Type" to "application/json", "Authorization" to "Bearer $token", Protocol.HEADER to Protocol.VERSION.toString())
         val answer = try {
             http.post("${sync.value.server}/api/stores/seed", headers, JSON.encodeToString(SeedBatch.serializer(), batch))
         } catch (failed: IOException) {
             Log.w(Log.TAG, "Sending to the server failed: ${failed::class.simpleName}")
             sync.update { it.copy(lastError = "The server can't be reached") }
-            return@withLock false
+            return Sent.Failed
         }
         if (!answer.ok) {
             sync.update { it.copy(lastError = problem(answer.code)) }
-            return@withLock false
+            return Sent.Failed
         }
         val seed = JSON.decodeFromString(SeedAnswer.serializer(), answer.body)
-        val taken = hashes.filterKeys { it !in seed.refused }
-        sync.update { it.copy(sent = it.sent + taken - seed.refused.toSet(), lastSyncAt = clock.now(), lastError = null, serverVersion = seed.server.ifEmpty { null }, refused = seed.refused) }
-        archiveSent = archived
-        true
+        sync.update { it.copy(sent = seed.holds, lastSyncAt = clock.now(), lastError = null, serverVersion = seed.server.ifEmpty { null }, refused = seed.refused) }
+        val refused = seed.refused.toSet()
+        val inStep = seed.holds - refused == (holds + hashes) - refused
+        // The months aren't read while the archive stands still: they're read again where one's still to be taken, or the server's lost one.
+        archiveSent = if (inStep && refused.none { ChatArchiveStore.isMonth(it) }) archived else NOT_SENT
+        return if (inStep) Sent.InStep else Sent.Behind
+    }
+
+    /** The archive's months as they stand, one the server holds and this phone no longer does sent empty: a chat cleared here is cleared there. */
+    private fun months(): List<StoreText> {
+        val here = stores.chatArchive.texts()
+        val gone = sync.value.sent.keys.filter { ChatArchiveStore.isMonth(it) } - here.map { it.name }.toSet()
+        return here + gone.map { StoreText(it, ChatArchive().version, EMPTY_MONTH) }
     }
 
     private fun problem(code: Int): String = when (code) {
@@ -113,6 +134,8 @@ class Replica(
         /** [CalendarRead]'s version: it isn't a store of this phone's. */
         private val CALENDAR_VERSION = CalendarRead().version
 
-        private fun hash(text: String): String = MessageDigest.getInstance("SHA-256").digest(text.toByteArray()).joinToString("") { "%02x".format(it) }
+        private const val NOT_SENT = -1L
+
+        private val EMPTY_MONTH = JSON.encodeToString(ChatArchive.serializer(), ChatArchive())
     }
 }

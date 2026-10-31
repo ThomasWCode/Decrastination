@@ -1,6 +1,7 @@
 package com.thomaswcode.decrastination.server
 
 import com.thomaswcode.decrastination.data.StoreBackend
+import com.thomaswcode.decrastination.sync.Protocol
 import java.sql.Connection
 
 /**
@@ -42,6 +43,13 @@ class SqliteBackend(private val db: Database, private val clock: () -> Long = Sy
     }
 
     override fun holds(name: String): Boolean = read(name) != null
+
+    /** Every store held, by its hash. */
+    fun hashes(): Map<String, String> = db.transactionless { c ->
+        c.prepareStatement("SELECT name, json FROM stores").use { q ->
+            q.executeQuery().use { r -> buildMap { while (r.next()) put(r.getString(1), Protocol.hash(r.getString(2))) } }
+        }
+    }
 
     override fun delete(name: String, empty: String) {
         db.transaction { c ->
