@@ -15,6 +15,7 @@ import com.thomaswcode.decrastination.enrich.Profile
 import com.thomaswcode.decrastination.learn.EventJudge
 import com.thomaswcode.decrastination.plan.Planning
 import com.thomaswcode.decrastination.core.InstructionRules
+import com.thomaswcode.decrastination.sync.Protocol
 import com.thomaswcode.decrastination.sync.SeedAnswer
 import com.thomaswcode.decrastination.sync.SeedBatch
 import com.thomaswcode.decrastination.sync.ServerVersion
@@ -110,7 +111,7 @@ class ServerGraph(val db: Database, dataDir: File, cipher: SecretCipher, private
 
     fun calendarTime(): EventJudge.Time = calendarRead.value.time(stores.instructions.value.applied, clock.now(), clock.zone())
 
-    fun version() = ServerVersion(version, com.thomaswcode.decrastination.sync.Protocol.VERSION, mode, versions)
+    fun version() = ServerVersion(version, Protocol.VERSION, mode, versions)
 
     /**
      * [batch], a phone's stores as they are, kept whole: all of them, each with its history, as one revision. One of a
@@ -137,7 +138,7 @@ class ServerGraph(val db: Database, dataDir: File, cipher: SecretCipher, private
         if (written.any(Archives::isMonth)) stores.chatArchive.forget()
         val revision = db.currentRevision()
         if (written.isNotEmpty()) _revisions.tryEmit(revision)
-        SeedAnswer(revision, refused)
+        SeedAnswer(revision, refused, version)
     }
 
     /** Every store above revision [since], whole. */

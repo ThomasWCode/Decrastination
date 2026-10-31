@@ -12,8 +12,8 @@ android {
         applicationId = "com.thomaswcode.decrastination"
         minSdk = 26
         targetSdk = 36
-        versionCode = 101
-        versionName = "4.13.0"
+        versionCode = 102
+        versionName = "5.0.0"
     }
 
     signingConfigs {
@@ -70,8 +70,8 @@ tasks.withType<Test>().configureEach {
     inputs.file(layout.projectDirectory.file("../core/build.gradle.kts")).withPropertyName("coreBuild").withPathSensitivity(PathSensitivity.RELATIVE)
     // The engine's, held the same way.
     inputs.file(layout.projectDirectory.file("../engine/build.gradle.kts")).withPropertyName("engineBuild").withPathSensitivity(PathSensitivity.RELATIVE)
-    // core's and the engine's own tests run with the app's, so one command (CI's) runs every test.
-    if (name == "testDebugUnitTest") dependsOn(":core:test", ":engine:test")
+    // core's, the engine's and the server's own tests run with the app's, so one command (CI's) runs every test.
+    if (name == "testDebugUnitTest") dependsOn(":core:test", ":engine:test", ":server:test")
 }
 
 dependencies {

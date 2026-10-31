@@ -2,6 +2,7 @@ package com.thomaswcode.decrastination.data
 
 import com.thomaswcode.decrastination.core.ChatArchive
 import com.thomaswcode.decrastination.core.ChatMessage
+import com.thomaswcode.decrastination.sync.StoreText
 import kotlinx.serialization.json.JsonObject
 import java.io.File
 import java.time.Instant
@@ -221,6 +222,9 @@ class ChatArchiveStore(private val backend: StoreBackend, private val clock: () 
         synchronized(reading) { months.clear() }
         _changes.update { it + 1 }
     }
+
+    /** Each month as its store holds it, oldest first: every month read. */
+    fun texts(): List<StoreText> = synchronized(reading) { files().map { StoreText(it, version, month(it).text()) } }
 
     /** Its months' files that couldn't be read whole, of those read so far. */
     val problems: List<JsonStore.Unreadable> get() = months.values.mapNotNull { it.problem }

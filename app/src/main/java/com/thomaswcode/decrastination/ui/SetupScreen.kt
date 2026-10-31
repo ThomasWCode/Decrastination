@@ -51,6 +51,7 @@ import com.thomaswcode.decrastination.enrich.ModelAlerts
 import com.thomaswcode.decrastination.learn.CalendarReader
 import com.thomaswcode.decrastination.protect.ProtectionActivity
 import com.thomaswcode.decrastination.sources.anki.AnkiProvider
+import com.thomaswcode.decrastination.sync.ReplicaWorker
 import com.thomaswcode.decrastination.sync.SyncWorker
 import com.thomaswcode.decrastination.core.GmailWrites
 import java.util.Locale
@@ -213,6 +214,7 @@ fun SetupScreen(graph: AppGraph, activity: Activity, parts: Set<SetupPart> = Set
             )
         }
         if (SetupPart.Phone in parts) Group("This phone") {
+            WebsiteItem(graph)
             SetupItem(
                 title = "Calendar",
                 done = calendarAllowed,
@@ -307,6 +309,67 @@ private fun CredentialDialog(credential: Credential, onDismiss: () -> Unit, onSa
             TextButton(enabled = user.isNotBlank() && password.isNotBlank(), onClick = {
                 onSave(mapOf(credential.user to user.trim(), credential.password to password))
             }) { Text("Save") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
+/**
+ * The website (docs/spec/sync.md): this phone paired by the code its Phone page shows, then the last it heard. The server's
+ * address and a test server are a debug command's.
+ */
+@Composable
+private fun WebsiteItem(graph: AppGraph) {
+    val sync by graph.replica.state.collectAsStateWithLifecycle()
+    val secrets by graph.secrets.present.collectAsStateWithLifecycle()
+    val paired = Secret.DeviceToken in secrets
+    var pairing by remember { mutableStateOf(false) }
+    val now = graph.clock.now()
+    val problem = sync.lastError ?: sync.refused.takeIf { it.isNotEmpty() }?.let { "The server is behind this app, and can't take ${it.size} of what's here yet" }
+    SetupItem(
+        title = "The website",
+        done = if (paired) problem == null else null,
+        detail = when {
+            !paired -> "Not paired. Open the website's Phone page for a code. Nothing here depends on it."
+            problem != null -> problem
+            else -> sync.lastSyncAt?.let { "Paired. Last sent ${Format.ago(it, now)}, to server ${sync.serverVersion ?: "of unknown version"}." } ?: "Paired. Nothing sent yet."
+        },
+        action = if (paired) "Unpair" to { graph.scope.launch { graph.replica.forget() } } else "Pair" to { pairing = true },
+    )
+    if (pairing) {
+        PairDialog(onDismiss = { pairing = false }) { code, done ->
+            graph.scope.launch {
+                val why = graph.replica.pair(code, android.os.Build.MODEL)
+                if (why == null) ReplicaWorker.now(graph.app)
+                done(why)
+            }
+        }
+    }
+}
+
+/** The website's six-digit code, and what came of it. */
+@Composable
+private fun PairDialog(onDismiss: () -> Unit, onPair: (String, (String?) -> Unit) -> Unit) {
+    var code by remember { mutableStateOf("") }
+    var why by remember { mutableStateOf<String?>(null) }
+    var busy by remember { mutableStateOf(false) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Pair with the website") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(code, { code = it.filter(Char::isDigit).take(6) }, label = { Text("Code") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+                Text(why ?: "The code on the website's Phone page. It works once, for five minutes.", style = MaterialTheme.typography.bodySmall, color = if (why != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = code.length == 6 && !busy, onClick = {
+                busy = true
+                onPair(code) { problem ->
+                    busy = false
+                    if (problem == null) onDismiss() else why = problem
+                }
+            }) { Text("Pair") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )

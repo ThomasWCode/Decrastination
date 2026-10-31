@@ -254,6 +254,7 @@ class JsonStore<T>(
                     "felix.json" -> "Felix's notes and reminders"
                     "calendar.json" -> "The record of what the app wrote to your calendar, and your answers about its events"
                     "gmail-writes.json" -> "The record of what the app has written to Gmail for emails finished here"
+                    "sync.json" -> "What the app keeps of its pairing with the website"
                     else -> if (file.startsWith("chat-archive-")) "The chat's earlier messages from ${file.removePrefix("chat-archive-").removeSuffix(".json")}" else file
                 }
                 val how = if (kept) "couldn't be read whole: what could be was kept, the rest is back to its defaults" else "couldn't be read: it started afresh"

@@ -77,6 +77,7 @@ class StoresDecodeTest {
         store("memory.json", MemoryState.serializer(), ::MemoryState),
         store("felix.json", FelixStore.serializer(), ::FelixStore, since = "2026-10-20-4.1.0"),
         store("calendar.json", CalendarState.serializer(), ::CalendarState),
+        store("sync.json", SyncState.serializer(), ::SyncState, since = "2026-10-31-5.0.0"),
         store("gmail-writes.json", GmailWriteStore.serializer(), ::GmailWriteStore, since = "2026-10-21-4.3.0"),
     )
 
@@ -104,7 +105,7 @@ class StoresDecodeTest {
             val stores = Stores(copy, Reverse)
             // The chat's archive, a month a file: all of it read, then what couldn't be.
             if (store.file == stores.chatArchive.name) return stores.chatArchive.value.let { it to stores.chatArchive.problems.firstOrNull() }
-            val read = stores.let { s -> listOf(s.tasks, s.settings, s.runtime, s.session, s.protection, s.device, s.model, s.anki, s.learning, s.log, s.instructions, s.chat, s.school, s.memory, s.felix, s.calendar, s.gmailWrites) }.single { it.name == store.file }
+            val read = stores.let { s -> listOf(s.tasks, s.settings, s.runtime, s.session, s.protection, s.device, s.model, s.anki, s.learning, s.log, s.instructions, s.chat, s.school, s.memory, s.felix, s.calendar, s.sync, s.gmailWrites) }.single { it.name == store.file }
             return read.value to read.problem
         } finally {
             copy.deleteRecursively()

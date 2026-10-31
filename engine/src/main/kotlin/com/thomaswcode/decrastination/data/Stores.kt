@@ -109,10 +109,13 @@ class Stores(
     /** The versions of its events the app has written to calendars, so a copy of one is known; what it wrote where; your answers about events. */
     val calendar = store("calendar.json", CalendarState.serializer(), ::CalendarState, migrations = listOf(RuntimeSplit.CALENDAR))
 
+    /** This phone's pairing with the server, and what's been sent it. */
+    val sync = store("sync.json", SyncState.serializer(), ::SyncState)
+
     /** The writes to Gmail a finished email makes, journaled before they're made, and their receipts while their Undo stands. */
     val gmailWrites = store("gmail-writes.json", GmailWriteStore.serializer(), ::GmailWriteStore)
 
-    private val json = listOf(tasks, settings, runtime, session, protection, device, model, anki, learning, log, instructions, chat, school, memory, felix, calendar, gmailWrites)
+    private val json = listOf(tasks, settings, runtime, session, protection, device, model, anki, learning, log, instructions, chat, school, memory, felix, calendar, sync, gmailWrites)
 
     /**
      * A store, what a backup keeps of it ([backup]; none, and [why] says why), and the resets that
@@ -147,6 +150,7 @@ class Stores(
         Kept("memory.json", backup = "all of it", resets = setOf(Reset.Memories)),
         Kept("felix.json", backup = "all of it", resets = setOf(Reset.Chat)),
         Kept("calendar.json", backup = "your answers about events (what this phone wrote to its calendars means nothing to another's)"),
+        Kept("sync.json", backup = null, why = "this phone's pairing with the server, and what it's sent"),
         Kept("gmail-writes.json", backup = "the receipts of writes made to Gmail, while their Undo can stand (a write still to make is this phone's)"),
     )
 

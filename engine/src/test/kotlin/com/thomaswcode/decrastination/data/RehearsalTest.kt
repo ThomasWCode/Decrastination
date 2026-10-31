@@ -180,6 +180,7 @@ class RehearsalTest {
             before(files, "memory.json", MemoryState.serializer()),
             before(files, "felix.json", FelixStore.serializer()),
             before(files, "calendar.json", CalendarState.serializer()),
+            before(files, "sync.json", SyncState.serializer()),
             before(files, "gmail-writes.json", GmailWriteStore.serializer()),
         )
         // Every file the app keeps there is one of those read: a store added and not here would go unrehearsed.
@@ -231,6 +232,7 @@ class RehearsalTest {
             after(stores.chatArchive, there("chat-archive.json"), migrated("chat-archive.json")),
             after(stores.school, SchoolCalendar.serializer(), "school.json"), after(stores.memory, MemoryState.serializer(), "memory.json"),
             after(stores.felix, FelixStore.serializer(), "felix.json"), after(stores.calendar, CalendarState.serializer(), "calendar.json"),
+            after(stores.sync, SyncState.serializer(), "sync.json"),
             after(stores.gmailWrites, GmailWriteStore.serializer(), "gmail-writes.json"),
         )
         val ran = stores.shapes.filter { (name, shape) -> (versions[name] ?: shape.version) < shape.version }.map { (name, shape) -> "$name ${versions[name]} to ${shape.version}" }
@@ -427,7 +429,7 @@ class RehearsalTest {
         val REQUIRED = listOf("tasks.json", "settings.json", "runtime.json", "log.json")
 
         /** Every store's file, the secrets aside (they can't be read off the phone), the archive's months found as they're read. */
-        val STORES = REQUIRED + listOf("instructions.json", "chat.json", "chat-archive.json", "school.json", "memory.json", "calendar.json") + listOf("session.json", "protection.json", "device.json", "model.json", "anki.json", "learning.json") + listOf("felix.json", "gmail-writes.json")
+        val STORES = REQUIRED + listOf("instructions.json", "chat.json", "chat-archive.json", "school.json", "memory.json", "calendar.json") + listOf("session.json", "protection.json", "device.json", "model.json", "anki.json", "learning.json") + listOf("felix.json", "sync.json", "gmail-writes.json")
 
         /** The JSON files in the folder that aren't stores: the debug commands' (`ai-prompts`, a list). */
         val NOT_STORES = setOf("ai-prompts.json")

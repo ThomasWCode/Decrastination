@@ -26,9 +26,9 @@ data class SeedBatch(
     val stores: List<StoreText>,
 )
 
-/** What came of a [SeedBatch]: the revision it took, and the stores refused, as newer than the server can read. */
+/** What came of a [SeedBatch]: the revision it took, the stores refused, as newer than the server can read, and the server's version. */
 @Serializable
-data class SeedAnswer(val revision: Long, val refused: List<String> = emptyList())
+data class SeedAnswer(val revision: Long, val refused: List<String> = emptyList(), val server: String = "")
 
 /** What a client can ask of the server with no sign-in: its version, the protocol and each store's version. */
 @Serializable

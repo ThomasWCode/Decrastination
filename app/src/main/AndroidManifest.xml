@@ -51,6 +51,7 @@
         tools:ignore="QueryAllPackagesPermission" />
 
     <application
+        android:networkSecurityConfig="@xml/network_security"
         android:name=".DecrastinationApp"
         android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules"

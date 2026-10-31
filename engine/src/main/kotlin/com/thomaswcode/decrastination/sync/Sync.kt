@@ -5,6 +5,7 @@ import com.thomaswcode.decrastination.core.InstructionState
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.WallClock
+import com.thomaswcode.decrastination.data.CalendarRead
 import com.thomaswcode.decrastination.data.CalendarState
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.TaskState
@@ -147,6 +148,9 @@ class Sync(
      * Anki with it: its homework decks come from Teams' assignments (Anki is read after Teams).
      */
     private val teamsChanged = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+
+    /** The calendar as last read, for the server, which can't read it: your answers about its events with it. */
+    fun calendarRead(): CalendarRead = calendarTime.let { CalendarRead(it.events, calendar.value.eventAnswers, it.read?.first ?: 0, it.read?.second ?: 0) }
 
     /** Held while the calendar's read and its questions asked: refreshes at once (a start, a sync, the calendar changing) can't ask an event twice. */
     private val refreshing = Mutex()
