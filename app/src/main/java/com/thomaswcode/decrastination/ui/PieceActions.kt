@@ -223,6 +223,26 @@ internal fun rememberTimerNow(graph: AppGraph, timer: PieceTimer?): Long {
     return now
 }
 
+/** All of your own [taskId] done: nothing to ask, so it's your say, earning no free time. [say] gives how it went. */
+internal suspend fun allDone(graph: AppGraph, taskId: String, say: (String) -> Unit) {
+    graph.ownTasks.finishOwnTask(taskId)
+    say("All of it done. It earns no free time; its pieces earned theirs.")
+}
+
+/** [task] asked of its source (a sync of that source alone). [say] gives that it's asking, then what it says. */
+internal suspend fun checkDone(graph: AppGraph, task: TaskItem, say: (String) -> Unit) {
+    say("Asking ${task.source.label}…")
+    graph.sync.sync(setOf(task.source))
+    val still = graph.tasks.value.tasks.firstOrNull { it.id == task.id }?.isOpen == true
+    say(
+        when {
+            !still -> "Done: ${task.source.label} agrees."
+            task.source == Source.Teams -> "Teams still lists it as not handed in. If you've handed it in, tap Refresh Teams."
+            else -> "${task.source.label} still lists it as open."
+        },
+    )
+}
+
 /**
  * What can be done with [piece], wherever it's shown (Day, the block screen): **Open** goes to
  * the task; **Start** runs a timer on it, and **Stop** stops the one on it, its time over the buttons
@@ -253,26 +273,10 @@ fun PieceActions(graph: AppGraph, activity: Activity, piece: Chunk, now: Long, p
         FilledTonalButton(onClick = { scope.launch { say(keepPiece(graph, piece, now)) } }) { Text("Done") }
         if (piece.source == Source.Own) {
             // Yours: nothing to ask, so all of it done is your say, earning no free time.
-            OutlinedButton(onClick = {
-                scope.launch {
-                    graph.ownTasks.finishOwnTask(piece.taskId)
-                    say("All of it done. It earns no free time; its pieces earned theirs.")
-                }
-            }) { Text("All of it done") }
+            OutlinedButton(onClick = { scope.launch { allDone(graph, piece.taskId, say) } }) { Text("All of it done") }
         } else OutlinedButton(onClick = {
             val task = tasks.tasks.firstOrNull { it.id == piece.taskId } ?: return@OutlinedButton
-            say("Asking ${task.source.label}…")
-            scope.launch {
-                graph.sync.sync(setOf(task.source))
-                val still = graph.tasks.value.tasks.firstOrNull { it.id == task.id }?.isOpen == true
-                say(
-                    when {
-                        !still -> "Done: ${task.source.label} agrees."
-                        task.source == Source.Teams -> "Teams still lists it as not handed in. If you've handed it in, tap Refresh Teams."
-                        else -> "${task.source.label} still lists it as open."
-                    },
-                )
-            }
+            scope.launch { checkDone(graph, task, say) }
         }) { Text("Check it's done") }
         if (piece.source == Source.Teams) {
             OutlinedButton(onClick = {

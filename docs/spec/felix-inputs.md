@@ -82,7 +82,7 @@ Your words start with what they're about, where the screen you asked from knows:
 
 | From | Your words start |
 |---|---|
-| A task's sheet (*Ask Felix about it*, *Split this into steps*), the block screen (its next piece's task), Day's *What gives?* | `(About the task <id>, “<title>”) ` |
+| A task's sheet (*Ask Felix about it*, *Split this into steps*), a piece's or a missed slot's sheet on Day (*Ask Felix about it*), the block screen (its next piece's task), Day's *What gives?* | `(About the task <id>, “<title>”) ` |
 | An event on Day | `(About the calendar event “<title>”, eventKey <key>) ` |
 | A day on Day | `(About Tuesday 13 October 2026) ` |
 | The chat itself | nothing |

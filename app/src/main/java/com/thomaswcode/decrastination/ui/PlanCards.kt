@@ -14,7 +14,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -45,6 +47,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.thomaswcode.decrastination.AppGraph
+import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.Chunk
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Source
@@ -192,7 +195,7 @@ internal fun PieceSheet(
     onClose: () -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = onClose) {
-        Column(Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 24.dp, end = 24.dp, bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(chunk.label, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
             Text(
                 "${WidgetModel.badge(chunk, now, zone)} · ${Format.minutes(chunk.minutes)} · ${chunk.source.label}",
@@ -204,6 +207,8 @@ internal fun PieceSheet(
             // Its first steps in full (AI-15).
             graph.stores.model.value.microPlans[chunk.key]?.let(MicroPlans::lines)?.forEach { Text(it, style = MaterialTheme.typography.bodyMedium) }
             PieceActions(graph, activity, chunk, now, photo, say)
+            // On this sheet alone, not in PieceActions: the DO NOW card and the block screen use those too.
+            AskFelixButton(activity, About(taskId = chunk.taskId, taskTitle = chunk.title))
             // Its due date, minutes or start: on the task's own sheet.
             TextButton(onClick = onChange) { Text("Change its due date, minutes…") }
             message?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.secondary) }

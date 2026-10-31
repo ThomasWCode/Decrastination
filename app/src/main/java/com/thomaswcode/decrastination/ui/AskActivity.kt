@@ -137,6 +137,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.R
 import com.thomaswcode.decrastination.core.About
@@ -160,8 +161,10 @@ import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.felix.ChatPrompts
 import com.thomaswcode.decrastination.felix.Conversation
+import com.thomaswcode.decrastination.felix.Draft
 import com.thomaswcode.decrastination.felix.FelixAnswers
 import com.thomaswcode.decrastination.felix.Replies
+import com.thomaswcode.decrastination.felix.Unsent
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -169,6 +172,9 @@ import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.getAndUpdate
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -184,6 +190,7 @@ import kotlinx.coroutines.withTimeoutOrNull
  * at the message it was for; left once it's been seen (Q120: 3 seconds on screen, a message of yours
  * sent, or at once from his notification), what's in it is read ([Conversation.read]). The app's home
  * (D-121): the Plan button in its bar opens Day, and Back at its task's root sends the app to the back.
+ * The box's words are the app's ([Conversation.draft]), so every chat screen shows the same ones.
  */
 class AskActivity : ComponentActivity() {
 
@@ -239,6 +246,15 @@ class AskActivity : ComponentActivity() {
                 screen.restoringReply(replying)
                 lifecycleScope.launch { withContext(Dispatchers.IO) { graph.conversation.outbox.find(replying) }?.let(screen::restoredReply) }
             }
+            // After a stop of the process, the box's words back; turned, the holder has them already.
+            val saved = Draft(savedInstanceState.getString(STATE_DRAFT).orEmpty(), savedInstanceState.getLong(STATE_DRAFT_AT))
+            graph.conversation.draft.value = ChatScreenState.restoredDraft(graph.conversation.draft.value, saved)
+        }
+        // A message that couldn't be kept comes back to the screen in front, or the next to come in front (U-05).
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                graph.conversation.unsent.filterNotNull().collect { takeUnsent(graph) }
+            }
         }
         setContent { AppTheme { Screen(graph) } }
     }
@@ -257,6 +273,25 @@ class AskActivity : ComponentActivity() {
         outState.putBoolean(STATE_OFFERED, screen.offered)
         outState.putBoolean(STATE_CHAT_TAB, chatTab)
         outState.putBoolean(EXTRA_BACK, back)
+        val draft = AppGraph.get(this).conversation.draft.value
+        outState.putString(STATE_DRAFT, draft.text)
+        outState.putLong(STATE_DRAFT_AT, draft.at)
+    }
+
+    /** The box's words are now [text], as of now. */
+    private fun setDraft(graph: AppGraph, text: String) {
+        graph.conversation.draft.value = Draft(text, graph.clock.now())
+    }
+
+    /** The message that couldn't be kept taken back into the box, and let go of: its subject and reply with it, where the box was empty. */
+    private fun takeUnsent(graph: AppGraph) {
+        val unsent = graph.conversation.unsent.getAndUpdate { null } ?: return
+        val (text, asItWas) = ChatScreenState.withUnsent(graph.conversation.draft.value.text, unsent)
+        setDraft(graph, text)
+        if (asItWas) {
+            about.value = unsent.about
+            screen.replyingTo = unsent.replyTo
+        }
     }
 
     /** What a message is about, from an intent's extras or a saved state's. */
@@ -412,7 +447,9 @@ class AskActivity : ComponentActivity() {
         val zone = graph.clock.zone()
         val scope = rememberCoroutineScope()
         val tab = if (chatTab) 0 else 1
-        var draft by rememberSaveable { mutableStateOf("") }
+        // At once, not a frame later: a box whose words came late would put back what's just been typed, dropping keys.
+        val held by graph.conversation.draft.collectAsStateWithLifecycle(context = Dispatchers.Main.immediate)
+        val draft = held.text
         var menu by remember { mutableStateOf(false) }
         var clearing by remember { mutableStateOf(false) }
         // What he remembers, from the menu, each to delete, as Settings → Felix has it.
@@ -448,7 +485,7 @@ class AskActivity : ComponentActivity() {
                 // the send halfway, its message saved to the file but neither shown nor answered.
                 val sent = sendHanded && graph.conversation.ask(words, about.value)
                 handed.value = null
-                if (!sent) draft = words else about.value = About()
+                if (!sent) setDraft(graph, ChatScreenState.withHanded(graph.conversation.draft.value.text, words)) else about.value = About()
             }
         }
 
@@ -539,7 +576,7 @@ class AskActivity : ComponentActivity() {
                     InputBar(
                         name = settings.felixName,
                         draft = draft,
-                        onDraft = { draft = it },
+                        onDraft = { setDraft(graph, it) },
                         about = about.value,
                         onForget = { about.value = About() },
                         replyingTo = screen.replyingTo,
@@ -552,7 +589,7 @@ class AskActivity : ComponentActivity() {
                         val text = draft
                         val subject = about.value
                         val replying = screen.replyingTo
-                        draft = ""
+                        setDraft(graph, "")
                         about.value = About()
                         screen.sent()
                         seenBySending()
@@ -572,16 +609,8 @@ class AskActivity : ComponentActivity() {
                                         false
                                     }
                                 }
-                            if (!sent) {
-                                if (draft.isEmpty()) {
-                                    draft = text
-                                    about.value = subject
-                                    screen.replyingTo = replying
-                                } else {
-                                    // Typed again meanwhile: both kept, the one that didn't go first, the box's subject and reply as you've set them now.
-                                    draft = text + "\n\n" + draft
-                                }
-                            }
+                            // Back through the holder, as this screen may be gone. Another still waiting for a screen isn't written over.
+                            if (!sent) graph.conversation.unsent.update { waiting -> waiting?.copy(text = text + "\n\n" + waiting.text) ?: Unsent(text, subject, replying) }
                         }
                     }
                 } else {
@@ -669,6 +698,8 @@ class AskActivity : ComponentActivity() {
         private const val STATE_REPLYING = "replyingTo"
         private const val STATE_OFFERED = "offered"
         private const val STATE_CHAT_TAB = "chatTab"
+        private const val STATE_DRAFT = "draft"
+        private const val STATE_DRAFT_AT = "draftAt"
 
         /**
          * The chat, about [about], with [text] to send; with [send] false, only put in the box, to be

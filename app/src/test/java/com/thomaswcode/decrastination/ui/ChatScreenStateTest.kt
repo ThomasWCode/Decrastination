@@ -9,6 +9,8 @@ import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.core.ChatState
 import com.thomaswcode.decrastination.core.MessageKind
 import com.thomaswcode.decrastination.core.Speaker
+import com.thomaswcode.decrastination.felix.Draft
+import com.thomaswcode.decrastination.felix.Unsent
 import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -353,5 +355,53 @@ class ChatScreenStateTest {
         assertEquals("Yesterday", ChatScreenState.dayLine(today.minusDays(1), today))
         assertEquals("Tuesday 13 October", ChatScreenState.dayLine(LocalDate.of(2026, 10, 13), today))
         assertEquals("Wednesday 31 December 2025", ChatScreenState.dayLine(LocalDate.of(2025, 12, 31), today))
+    }
+
+    @Test
+    fun `words handed in to an empty box are the box's, and to words typed earlier they go first, a blank line between`() {
+        assertEquals("Split this into steps", ChatScreenState.withHanded("", "Split this into steps"))
+        assertEquals("Split this into steps", ChatScreenState.withHanded("  ", "Split this into steps"))
+        assertEquals("Split this into steps\n\ncan I do it on Saturday", ChatScreenState.withHanded("can I do it on Saturday", "Split this into steps"))
+    }
+
+    @Test
+    fun `the same words handed in again leave the box as it is, and so do blank ones`() {
+        val box = ChatScreenState.withHanded("can I do it on Saturday", "Split this into steps")
+        assertEquals(box, ChatScreenState.withHanded(box, "Split this into steps"))
+        assertEquals("Split this into steps", ChatScreenState.withHanded("Split this into steps", "Split this into steps"))
+        assertEquals("can I do it on Saturday", ChatScreenState.withHanded("can I do it on Saturday", " "))
+    }
+
+    @Test
+    fun `a saved draft newer than the holder's comes back, whatever the holder holds`() {
+        assertEquals(Draft("mine", 20), ChatScreenState.restoredDraft(Draft("older", 10), Draft("mine", 20)))
+        assertEquals(Draft("mine", 20), ChatScreenState.restoredDraft(Draft("", 10), Draft("mine", 20)))
+    }
+
+    @Test
+    fun `an older saved draft doesn't, a send's empty box among what it can't overwrite`() {
+        assertEquals(Draft("newer", 30), ChatScreenState.restoredDraft(Draft("newer", 30), Draft("mine", 20)))
+        // Two chats in the task, a stop, a send from the top one and Back to the lower one: the send's empty box stands.
+        assertEquals(Draft("", 30), ChatScreenState.restoredDraft(Draft("", 30), Draft("mine", 20)))
+        // The same draft, a turn of the phone: nothing changes.
+        assertEquals(Draft("mine", 20), ChatScreenState.restoredDraft(Draft("mine", 20), Draft("mine", 20)))
+    }
+
+    @Test
+    fun `saved words come back over a holder at time 0, and nothing saved leaves it as it is`() {
+        assertEquals(Draft("mine", 20), ChatScreenState.restoredDraft(Draft("", 0), Draft("mine", 20)))
+        assertEquals(Draft("", 0), ChatScreenState.restoredDraft(Draft("", 0), Draft("", 0)))
+    }
+
+    @Test
+    fun `a message that couldn't be kept comes back into an empty box with its subject and its reply`() {
+        val unsent = Unsent("the essay's done", About(taskId = "t", taskTitle = "Essay"), his("h", "2026-10-18T17:10"))
+        assertEquals("the essay's done" to true, ChatScreenState.withUnsent("", unsent))
+    }
+
+    @Test
+    fun `into a box holding words it goes first, a blank line between, the box's subject and reply kept`() {
+        val unsent = Unsent("the essay's done", About(taskId = "t", taskTitle = "Essay"), his("h", "2026-10-18T17:10"))
+        assertEquals("the essay's done\n\nand the prep" to false, ChatScreenState.withUnsent("and the prep", unsent))
     }
 }

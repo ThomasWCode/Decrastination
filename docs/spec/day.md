@@ -1,6 +1,6 @@
 # The Day
 
-The Day tab (UI-17, D-118), opened from the chat's Plan button (D-121, [felix.md](felix.md) §The app's home): the week ahead in a strip, today's DO NOW card, the chosen day's header, and the day as a calendar, as Google Calendar's Day view draws one. `ui/DayScreen.kt` puts it together; `ui/DayModel.kt` gives the chosen day as it's shown (pure); `ui/DayLayout.kt` says where things go on the grid (pure); `ui/DayGrid.kt` draws the grid and its blocks; `ui/DayDrag.kt` holds a drag; `ui/Moves.kt` makes a move by hand, as the move sheet (`ui/MoveSheet.kt`) and the drag both make it. What the plan leaves out, and the sources, are on Work.
+The Day tab (UI-17, D-118), opened from the chat's Plan button (D-121, [felix.md](felix.md) §The app's home): the week ahead in a strip, today's DO NOW card, the chosen day's header, and the day as a calendar, as Google Calendar's Day view draws one. `ui/DayScreen.kt` puts it together; `ui/DayModel.kt` gives the chosen day as it's shown (pure); `ui/MissedActions.kt` says what a missed slot's sheet offers (pure); `ui/DayLayout.kt` says where things go on the grid (pure); `ui/DayGrid.kt` draws the grid and its blocks; `ui/DayDrag.kt` holds a drag; `ui/Moves.kt` makes a move by hand, as the move sheet (`ui/MoveSheet.kt`) and the drag both make it. What the plan leaves out, and the sources, are on Work.
 
 ## Top to bottom
 
@@ -29,11 +29,35 @@ The Day tab (UI-17, D-118), opened from the chat's Plan button (D-121, [felix.md
 | A piece gone by, not yet moved | faded, " · gone by" | as above | as above | as above |
 | A break outside | a pale strip, "Outside" | none | none | drag within its day, not under way |
 | A slot kept, or kept late | grey, its label struck through, its outcome | none | none | none |
-| A slot missed | outlined and worded in the error colour, "Missed" | none | none | none |
+| A slot missed | outlined and worded in the error colour, "Missed" | its sheet (`MissedSheet`, below) | none | none |
 | An event | its colour (the event's own, else its calendar's, `CalendarEvent.colour`); its words black or white, whichever reads better on it (`Colours.onEvent`); outlined only where the plan counts it free; a small "?" where the plan needs your answer about it, not asked yet | its event sheet (`EventSheet`) | none | none |
 | A busy time of yours (D-117) | outlined, "Busy: Football", or "Busy" | none | none | none |
 
-For TalkBack, each piece's block says its times and label, and offers *Done*, *Later today* and *Move it* (the move sheet), so nothing needs the drag or a swipe; a break outside is moved without the drag by asking Felix (D-116). The DO NOW card offers *Fold it* on its first line, so the grid can be reached while the card fills the Day and leaves it no room; folded, its line unfolds it at a double tap.
+For TalkBack, each piece's block says its times and label, and offers *Done*, *Later today* and *Move it* (the move sheet), so nothing needs the drag or a swipe; a break outside is moved without the drag by asking Felix (D-116). The DO NOW card offers *Fold it* on its first line, so the grid can be reached while the card fills the Day and leaves it no room; folded, its line unfolds it at a double tap. A missed slot's block offers *Done* too, where its sheet has it.
+
+### A missed slot's sheet
+
+A tap on a missed slot opens its sheet: its label, "Missed, 16:00–16:45", and what can be done about it, which `MissedActions.of` says.
+
+- **Done** keeps it, late (`Focus.keepSlot`, LR-09): the record is *Kept late*, in the missed slot's place and times, and the miss gives way; its free time is earned as a Done on its piece planned again would (BL-08's limits). It's Day's own Done, so the sheet closes and Day's bar says it with an Undo, which makes it *Missed* again. It's there while its piece is in the plan, and only on the last miss of its key today, as that's the miss a keep gives way (`Focus.keep`): a task in boxes of time has one key for every box, so with two of its boxes missed today, the earlier's sheet says "Done goes on its later miss" in its place, and has *Done* once the later's kept. Tapped on a Day drawn before the later was kept, it's refused as changed since, and taken once Day's drawn again, within the minute.
+- **Open**: the task in its source (`TaskOpener.open`), as on a piece's sheet.
+- **Check it's done** asks its source (a sync of that source alone) and says whether it agrees (`checkDone`); for one of your own, **All of it done** in its place, as on a piece's sheet.
+- **Ask Felix about it** (below).
+
+Where its task is done since, or its piece is no longer in the plan (ticked in the chat, changed), the sheet says "Done since, or planned again" and has only *Open*. Each closes the sheet and says how it went in Day's bar, as a record has no line of its own for a message.
+
+### Ask Felix about it
+
+*Ask Felix about it* (`AskFelixButton`, UI-16) is on Day's sheets for one task, event or day, as it is on the Work tab's task sheet: it opens the chat about that, sends nothing, and wears his unread count.
+
+| Sheet | About | Shown |
+|---|---|---|
+| A piece's (`PieceSheet`) | its task | always |
+| A missed slot's (`MissedSheet`) | its task | while its piece is in the plan and its task open |
+| An event's (`EventSheet`), all-day ones too | the event, as *An instruction about it* has | always |
+| The day's *Instructions* | the day, as *An instruction about this day…* has | always |
+
+It isn't on the list sheets (*Won't fit* has *What gives?*, *No time*'s rows open a piece's sheet, *Done* lists records), nor on the DO NOW card or the block screen, which aren't Day's sheets.
 
 ## Moving a piece by hand (UI-04)
 

@@ -35,8 +35,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Card
+import androidx.compose.material3.Button
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -97,6 +99,8 @@ import com.thomaswcode.decrastination.core.SchoolDays
 import com.thomaswcode.decrastination.core.SlotKind
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
+import com.thomaswcode.decrastination.data.SlotOutcome
+import com.thomaswcode.decrastination.data.SlotRecord
 import com.thomaswcode.decrastination.learn.CalendarEvent
 import com.thomaswcode.decrastination.learn.CalendarTime
 import com.thomaswcode.decrastination.learn.EventJudge
@@ -190,6 +194,8 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
     var lastDone by remember { mutableStateOf<Pair<String, Long>?>(null) }
     var changing by rememberSaveable { mutableStateOf<String?>(null) }
     var eventFor by rememberSaveable { mutableStateOf<String?>(null) }
+    // A missed slot's sheet, by the record's key and start.
+    var missedFor by rememberSaveable { mutableStateOf<String?>(null) }
     // A piece being moved by the sheet (UI-04, TalkBack's Move it), by its key; an instruction about the day being written.
     var moving by rememberSaveable { mutableStateOf<String?>(null) }
     var writingDay by rememberSaveable { mutableStateOf(false) }
@@ -202,6 +208,13 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
         )
     }
     val snackbar = remember { SnackbarHostState() }
+    // What a missed slot's actions say, its sheet closed: each new word takes the last's place ("Asking Teams…", then what it said).
+    fun bar(text: String) {
+        scope.launch {
+            snackbar.currentSnackbarData?.dismiss()
+            snackbar.showSnackbar(text)
+        }
+    }
     val grid = rememberScrollState()
     // On its side the Day scrolls as one, [page] its scroll (Q94).
     val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
@@ -298,6 +311,8 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
         },
         onMove = { moving = it.key },
         onDrop = ::drop,
+        onMissed = { missedFor = missedKey(it) },
+        canKeep = { row -> MissedActions.of(row.record, log.slots, row.piece, tasks.tasks.firstOrNull { it.id == row.record.taskId }).done },
     )
 
     // Today's DO NOW card shows in full, up to the whole Day under the strip (Q96). It folds into a line as it's dragged up, or
@@ -508,6 +523,7 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
                             daySheet = null
                             writingDay = true
                         }, modifier = Modifier.padding(horizontal = 12.dp)) { Text("An instruction about this day…") }
+                        Box(Modifier.padding(horizontal = 24.dp)) { AskFelixButton(activity, About(day = day.toString())) }
                     }
                 }
             }
@@ -547,6 +563,67 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
     eventFor?.let { key ->
         val event = calendar.events.firstOrNull { eventKey(it) == key }
         if (event == null) LaunchedEffect(key) { eventFor = null } else EventSheet(graph, activity, event, answers, InstructionRules.eventAnswers(instructions.applied).keys, now, zone) { eventFor = null }
+    }
+    missedFor?.let { key ->
+        val row = model.blocks.firstNotNullOfOrNull { block -> (block.item as? DayModel.Row.Recorded)?.takeIf { it.record.outcome == SlotOutcome.Missed && missedKey(it.record) == key } }
+        if (row == null) {
+            LaunchedEffect(key) { missedFor = null }
+        } else {
+            val task = tasks.tasks.firstOrNull { it.id == row.record.taskId }
+            // Each closes the sheet, so Day's bar can be seen, and its work runs on Day's scope, as the sheet goes.
+            fun act(work: suspend (TaskItem) -> Unit): () -> Unit = {
+                missedFor = null
+                if (task != null) scope.launch { work(task) }
+            }
+            MissedSheet(
+                row, MissedActions.of(row.record, log.slots, row.piece, task), activity, zone,
+                onDone = {
+                    missedFor = null
+                    row.piece?.let(actions.onDone)
+                },
+                onOpen = act { TaskOpener.open(activity, it)?.let(::bar) },
+                onCheck = act { checkDone(graph, it, ::bar) },
+                onAllDone = act { allDone(graph, it.id, ::bar) },
+            ) { missedFor = null }
+        }
+    }
+}
+
+/** A missed slot, as [missedFor][DayScreen] holds it: its key and start tell it from a task's other misses. */
+private fun missedKey(record: SlotRecord) = "${record.key}@${record.start}"
+
+/**
+ * A missed slot's sheet (docs/spec/day.md §A missed slot's sheet): its label and times, and what [can] be done about it. Day
+ * says how each went, in its bar, as a record has no line of its own for a message.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MissedSheet(
+    row: DayModel.Row.Recorded,
+    can: MissedActions,
+    activity: Activity,
+    zone: ZoneId,
+    onDone: () -> Unit,
+    onOpen: () -> Unit,
+    onCheck: () -> Unit,
+    onAllDone: () -> Unit,
+    onClose: () -> Unit,
+) {
+    val record = row.record
+    ModalBottomSheet(onDismissRequest = onClose) {
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 24.dp, end = 24.dp, bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(record.label, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+            Text("Missed, ${clock(record.start, zone)}–${clock(record.end, zone)}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+            if (can.since) Text("Done since, or planned again", style = MaterialTheme.typography.bodyMedium)
+            if (can.doneOnLater) Text("Done goes on its later miss", style = MaterialTheme.typography.bodyMedium)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (can.done) FilledTonalButton(onClick = onDone) { Text("Done") }
+                if (can.open) Button(onClick = onOpen) { Text("Open") }
+                if (can.check) OutlinedButton(onClick = onCheck) { Text("Check it's done") }
+                if (can.allDone) OutlinedButton(onClick = onAllDone) { Text("All of it done") }
+                if (can.ask) AskFelixButton(activity, About(taskId = record.taskId, taskTitle = row.piece?.title))
+            }
+        }
     }
 }
 
@@ -669,7 +746,7 @@ private fun verdict(judgement: EventJudge.Judgement, asked: Boolean): String = w
 
 /**
  * An event's sheet (UI-17, UI-11): when and where, what it says, how
- * the plan counts it, its answers (for every event of that name), and an instruction about it.
+ * the plan counts it, its answers (for every event of that name), an instruction about it, and Felix asked about it.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -677,7 +754,7 @@ internal fun EventSheet(graph: AppGraph, activity: Activity, event: CalendarEven
     val key = EventJudge.key(event)
     var writing by rememberSaveable { mutableStateOf(false) }
     ModalBottomSheet(onDismissRequest = onClose) {
-        Column(Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 24.dp, end = 24.dp, bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(event.title.ifBlank { "(no title)" }, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
             Text(
                 if (event.allDay) "All day" else "${Format.at(event.start, now, zone)} to ${clock(event.end, zone)}",
@@ -700,6 +777,7 @@ internal fun EventSheet(graph: AppGraph, activity: Activity, event: CalendarEven
                 Text("For every event of that name.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             TextButton(onClick = { writing = true }) { Text("An instruction about it") }
+            AskFelixButton(activity, About(eventKey = key, eventTitle = event.title, eventStart = event.start))
         }
     }
     if (writing) {

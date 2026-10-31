@@ -1,11 +1,13 @@
 package com.thomaswcode.decrastination.ui
 
 import android.app.Activity
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -32,6 +34,20 @@ fun FelixFab(activity: Activity, about: About = About(), modifier: Modifier = Mo
         BadgedBox(badge = { if (unread > 0) Badge { Text("$unread") } }) {
             Icon(painterResource(R.drawable.ic_chat), contentDescription = if (unread > 0) "${settings.felixName}, $unread unread" else settings.felixName, modifier = Modifier.size(28.dp))
         }
+    }
+}
+
+/**
+ * *Ask Felix about it* on a sheet (UI-16): his chat, about [about], nothing sent, wearing how many of his
+ * messages are unread, as his button does elsewhere.
+ */
+@Composable
+fun AskFelixButton(activity: Activity, about: About) {
+    val graph = AppGraph.get(activity)
+    val unread by graph.conversation.unread.collectAsStateWithLifecycle(0)
+    OutlinedButton(onClick = { activity.startActivity(AskActivity.intent(activity, about)) }) {
+        Text("Ask ${graph.settings.value.felixName} about it")
+        if (unread > 0) Badge(Modifier.padding(start = 8.dp)) { Text("$unread") }
     }
 }
 

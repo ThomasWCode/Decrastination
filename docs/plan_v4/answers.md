@@ -1,6 +1,6 @@
 # The questions, and your answers
 
-Every question the 4.x plan put to you, and every one raised while it was built, in a line each: what was asked, what you answered, and where it's recorded; after it, the timer's (4.4.0), with the choices its building made without asking, then those of the Day as a calendar (4.5.0 to 4.6.0), the breaks outside (4.4.1 and 4.5.2) and your busy times in your calendar (4.5.3), Felix's moods (4.7.0), his speech (4.8.0) and the chat as the app's home (4.9.0), each with the choices made without asking. A "(Q31: A)" in [decisions.md](../decisions.md) or [spec/](../spec/) points here; "C-Q" is the cleanup plan's, "M" a call the merge of the two plans made on its own (18 Oct 2026), and Q32 on were asked while building, each with a recommendation and your answer. Where a line gives only the letter, you took the recommendation. From Q32 on, a Q id is always one of these, with its letter or without, as "(Q83)"; below that, one written without its answer's letter, as "(Q13)", and the hyphenated ones, as "(Q-31)", are older requirement ids, not these ([spec/requirement-ids.md](../spec/requirement-ids.md) §Q).
+Every question the 4.x plan put to you, and every one raised while it was built, in a line each: what was asked, what you answered, and where it's recorded; after it, the timer's (4.4.0), with the choices its building made without asking, then those of the Day as a calendar (4.5.0 to 4.6.0), the breaks outside (4.4.1 and 4.5.2) and your busy times in your calendar (4.5.3), Felix's moods (4.7.0), his speech (4.8.0), the chat as the app's home (4.9.0) and the chat's kept words with Day's menus (4.11.0), each with the choices made without asking. A "(Q31: A)" in [decisions.md](../decisions.md) or [spec/](../spec/) points here; "C-Q" is the cleanup plan's, "M" a call the merge of the two plans made on its own (18 Oct 2026), and Q32 on were asked while building, each with a recommendation and your answer. Where a line gives only the letter, you took the recommendation. From Q32 on, a Q id is always one of these, with its letter or without, as "(Q83)"; below that, one written without its answer's letter, as "(Q13)", and the hyphenated ones, as "(Q-31)", are older requirement ids, not these ([spec/requirement-ids.md](../spec/requirement-ids.md) §Q).
 
 ## The cleanup's questions (17 and 18 Oct)
 
@@ -628,3 +628,31 @@ You asked for things like "I need to do 3 hours of guitar practice a week" to be
 ### Not built
 
 Fixed clock times, end dates ("until Christmas"), pausing a rule, rules by the month. A week ended short isn't carried over.
+
+## The chat keeps your words, and Day's menus (4.11.0, 31 Oct)
+
+You asked for what's typed in the chat to survive a trip to the plan, a missed slot on Day to do something when tapped, and *Ask Felix about it* on Day's menus.
+
+### Asked and answered
+
+**Q127. The chat's words.** Kept in memory, not written to a file, so they don't outlive the app's process: no store and no migration. Words handed in to a box holding words you typed earlier: offered, kept after the handed words (A), before them (B), or replaced (C). Your pick: **A**, the handed words, a blank line, then yours. The block screen's chat shares them.
+
+**Q128. Day's menus.** A missed slot's sheet holds *Done*, *Open* (as *Open* on a piece's sheet) and *Check it's done* (*All of it done* for one of your own) and *Ask Felix about it*. *Ask Felix about it*, as the Work tab's task sheet has it, goes on the piece's, the missed slot's, the event's and the day's *Instructions* sheets: not on the list sheets (*Won't fit* has *What gives?*, *No time*'s rows open a piece's sheet, *Done* is a record), nor on the DO NOW card or the block screen.
+
+### Why the words were lost, and why the fix isn't in how the screens stack
+
+They were the chat screen's own (`rememberSaveable`), so they went with it: *Plan* over a chat opened from Day closes that chat (`CLEAR_TOP`); Felix's button on Day over the chat opens a second chat, as `singleTop` reuses only one on top; and a send that failed after you'd left put its words into a screen that had gone. Changing *Plan* to `REORDER_TO_FRONT` would keep the first chat for the first two, but changes how the app's screens stack, which Q116 and D-121 settled. One draft for the app (`Conversation.draft`) leaves that alone.
+
+### Decided without asking
+
+1. **The box takes the holder's words at once** (`collectAsStateWithLifecycle` on `Dispatchers.Main.immediate`): a text field's words coming from a flow a frame late put back what's just been typed.
+2. **A missed slot's *Done* is on the last miss of its key as the log has them, not by time** (`MissedActions.of`), as that's the one `Focus.keep` gives way: an Undo puts a miss back at the log's end.
+3. **An open task whose piece has left the plan has only *Open***, as a task done since has: its piece was ticked or changed, so "Done since, or planned again" says what happened. The plan's notes had *Check it's done* and *Ask Felix about it* "while its task is open" too; the sheet's rule for a piece gone is the one built.
+4. **Each of a missed slot's actions closes its sheet**, its work on Day's scope: Day's bar is under an open sheet, where what it said wouldn't be seen. A new word in the bar takes the last's place, so "Asking Teams…" doesn't hold back what Teams said.
+5. **A message waiting for a screen isn't written over by another that failed after it**: the two are joined, the newer first.
+6. ***All of it done*** moved out of `PieceActions` beside *Check it's done*, so the two sheets share its words.
+7. **A piece's, an event's and a missed slot's sheets scroll**, as a task's does. The phone found it: on a piece with a long first steps, the new button squashed and *Change its due date, minutes…* went off the foot of a sheet that couldn't scroll.
+
+### Not built
+
+Nothing of the draft outlives the app's process. Words handed in to a nearly full box can run past what the box holds (2,000 characters), as a failed send's could.
