@@ -44,7 +44,7 @@ import okhttp3.mockwebserver.MockWebServer
  * by a stand-in for Claude's API ([answers]); and what Android does (the calendar read again, the widget,
  * a finish's completions) and what's handed to Felix are counted.
  */
-class TasksHarness(start: String = "2026-10-19T16:00", private val claude: Boolean = false) : AutoCloseable {
+class TasksHarness(start: String = "2026-10-19T16:00", private val claude: Boolean = false) : AutoCloseable, Owners {
     private val dir = Files.createTempDirectory("tasks").toFile()
     val clock = FixedClock(Fixtures.at(start), LONDON)
     val stores = Stores(dir, Reverse, { clock.now() })
@@ -54,7 +54,7 @@ class TasksHarness(start: String = "2026-10-19T16:00", private val claude: Boole
     val server = MockWebServer().apply { if (claude) start() }
     private val gateway = ModelGateway(stores.settings, { "test-key".takeIf { claude } }, stores.model, stores.tasks, clock, NoAlerts, scope) {}
         .also { if (claude) it.endpoint = server.url("").toString().trimEnd('/') }
-    val focus: Focus = Focus(stores.tasks, stores.settings, stores.session, stores.learning, stores.protection, stores.log, clock) { state, s, now -> planning.plan(state, s, now) }
+    override val focus: Focus = Focus(stores.tasks, stores.settings, stores.session, stores.learning, stores.protection, stores.log, clock) { state, s, now -> planning.plan(state, s, now) }
     val planning: Planning = Planning(
         stores.tasks, stores.settings, stores.session, stores.learning, stores.model, stores.log, stores.instructions, stores.school, clock, scope, gateway,
         calendarTime = { NO_CALENDAR },
@@ -74,7 +74,7 @@ class TasksHarness(start: String = "2026-10-19T16:00", private val claude: Boole
     /** Your replies to his questions, read, as they're handed to Felix: each's words, whether it answers his question, and whether a change of it was made. */
     val answersRead: MutableList<Triple<String, Boolean, Boolean>> = Collections.synchronizedList(mutableListOf())
 
-    val instructions = Instructions(
+    override val instructions = Instructions(
         stores.instructions, stores.tasks, stores.settings, stores.session, stores.school, stores.chat, clock, scope, gateway, focus, planning,
         calendarTime = { NO_CALENDAR },
         profile = { Profile.Block.NONE },
@@ -105,24 +105,16 @@ class TasksHarness(start: String = "2026-10-19T16:00", private val claude: Boole
         )
         server.enqueue(MockResponse().setHeader("Content-Type", "application/json").setBody(body.toString()).setHeadersDelay(delayMs, TimeUnit.MILLISECONDS))
     }
-    val ownTasks = OwnTasks(stores.tasks, stores.instructions, stores.chat, clock, scope) { settled.incrementAndGet() }
+    override val ownTasks = OwnTasks(stores.tasks, stores.instructions, stores.chat, clock, scope) { settled.incrementAndGet() }
+
+    override val tasks get() = stores.tasks
+    override val conversation: Conversation get() = error("No conversation here")
+    override val looks: Looks get() = error("No looks here")
+    override val protection: Protection get() = error("No protection here")
+    override val learning: Learning get() = error("No learning here")
 
     /** A screen's changes, as `AppGraph`'s: only the owners here have any. */
-    val commands = Commands(
-        object : Owners {
-            override val tasks get() = stores.tasks
-            override val ownTasks get() = this@TasksHarness.ownTasks
-            override val instructions get() = this@TasksHarness.instructions
-            override val focus get() = this@TasksHarness.focus
-            override val conversation: Conversation get() = error("No conversation here")
-            override val looks: Looks get() = error("No looks here")
-            override val protection: Protection get() = error("No protection here")
-            override val learning: Learning get() = error("No learning here")
-        },
-        clock,
-        stores.outbox,
-        queuing = { stores.sync.value.mode == SyncState.COMMANDS },
-    )
+    val commands = Commands(this, clock, stores.outbox, queuing = { stores.sync.value.mode == SyncState.COMMANDS })
 
     /** A source's task, made up: Teams homework due on [due], taking [minutes]. */
     fun teams(id: String, due: Long? = Fixtures.at("2026-10-23T09:00"), minutes: Int = 60) = TaskItem(
