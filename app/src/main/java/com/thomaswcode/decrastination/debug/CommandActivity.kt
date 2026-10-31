@@ -37,6 +37,7 @@ import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.withoutEnrichment
 import com.thomaswcode.decrastination.data.Secret
+import com.thomaswcode.decrastination.data.SyncState
 import com.thomaswcode.decrastination.enrich.ClaudeEnricher
 import com.thomaswcode.decrastination.enrich.ClaudeReviewer
 import com.thomaswcode.decrastination.enrich.InstructionReader
@@ -176,6 +177,12 @@ class CommandActivity : Activity() {
                 Log.i(TAG, "The server: ${graph.replica.state.value.server}")
             }
             "sync-pair" -> Log.i(TAG, "Pairing: ${graph.replica.pair(intent.getStringExtra("code").orEmpty(), "Test") ?: "paired"}")
+            // A test's pairing undone, the address back to the real server's.
+            "sync-forget" -> {
+                graph.replica.forget()
+                graph.replica.server(SyncState.DEFAULT_SERVER)
+                Log.i(TAG, "Unpaired; the server: ${graph.replica.state.value.server}")
+            }
             "sync-send" -> {
                 ReplicaWorker.now(this)
                 Log.i(TAG, "Sending asked for; last error ${graph.replica.state.value.lastError}")

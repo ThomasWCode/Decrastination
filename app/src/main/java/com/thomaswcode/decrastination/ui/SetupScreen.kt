@@ -60,7 +60,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /** A part of the setup checklist: each but This phone is a page of Settings too (UI-18). */
-enum class SetupPart { Saved, Sources, Claude, Phone, Backup }
+enum class SetupPart { Saved, Sources, Claude, Website, Phone, Backup }
 
 /**
  * The setup checklist: what each part of the app needs, and whether it has it.
@@ -213,8 +213,8 @@ fun SetupScreen(graph: AppGraph, activity: Activity, parts: Set<SetupPart> = Set
                 action = "Enter key" to { enteringKey = true },
             )
         }
+        if (SetupPart.Website in parts) Group("The website") { WebsiteItem(graph) }
         if (SetupPart.Phone in parts) Group("This phone") {
-            WebsiteItem(graph)
             SetupItem(
                 title = "Calendar",
                 done = calendarAllowed,
@@ -327,7 +327,7 @@ private fun WebsiteItem(graph: AppGraph) {
     val now = graph.clock.now()
     val problem = sync.lastError ?: sync.refused.takeIf { it.isNotEmpty() }?.let { "The server is behind this app, and can't take ${it.size} of what's here yet" }
     SetupItem(
-        title = "The website",
+        title = "This phone",
         done = if (paired) problem == null else null,
         detail = when {
             !paired -> "Not paired. Open the website's Phone page for a code. Nothing here depends on it."

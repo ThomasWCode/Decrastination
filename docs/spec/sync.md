@@ -4,7 +4,7 @@ How the phone keeps the server's copy of the state (`sync/Replica.kt`, `data/Syn
 
 ## Pairing
 
-Setup → This phone → The website. The website's Phone page shows a six-digit code, which works once, for five minutes; the phone gives it back and is handed a token, kept in the encrypted secrets (`Secret.DeviceToken`) and never written anywhere else. Unpairing lets the token go and forgets what's been sent, so pairing again sends everything. A store's content stays where it is either way.
+Settings → The website, or the same row on Setup. The website's Phone page shows a six-digit code, which works once, for five minutes; the phone gives it back and is handed a token, kept in the encrypted secrets (`Secret.DeviceToken`) and never written anywhere else. Unpairing lets the token go and forgets what's been sent, so pairing again sends everything; its line stays on the Phone page, to revoke there, though nothing holds its token any more. A store's content stays where it is either way.
 
 ## What's sent
 
