@@ -12,8 +12,8 @@ android {
         applicationId = "com.thomaswcode.decrastination"
         minSdk = 26
         targetSdk = 36
-        versionCode = 97
-        versionName = "4.11.0"
+        versionCode = 98
+        versionName = "4.12.0"
     }
 
     signingConfigs {
@@ -75,7 +75,7 @@ android {
 // The plan snapshot written again (PlanSnapshotTest), only on purpose:
 // ./gradlew testDebugUnitTest --tests '*PlanSnapshotTest*' -PupdateSnapshots=true
 // A phone backup's stores read and migrated (RehearsalTest), as scripts/rehearse.sh runs it:
-// ./gradlew testDebugUnitTest --tests '*RehearsalTest*' --rerun -PrehearseFrom=<the unpacked files/ folder>
+// ./gradlew :engine:test --tests '*RehearsalTest*' --rerun -PrehearseFrom=<the unpacked files/ folder>
 tasks.withType<Test>().configureEach {
     systemProperty("updateGolden", providers.gradleProperty("updateGolden").getOrElse("false"))
     systemProperty("runEval", providers.gradleProperty("runEval").getOrElse("false"))
