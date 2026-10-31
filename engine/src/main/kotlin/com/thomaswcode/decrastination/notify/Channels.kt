@@ -1,6 +1,5 @@
 package com.thomaswcode.decrastination.notify
 
-
 /** The app's notification channels, by their ids ([AndroidChannels] makes them on the phone). */
 object Channels {
     const val SYNC = "sync"

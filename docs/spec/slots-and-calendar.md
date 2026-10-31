@@ -1,7 +1,7 @@
 # Slots and the calendar
 
 How each day's pieces get their times (`core/Slotter.kt`), how a slot is kept, missed or moved (`block/Focus.kt`, `block/SlotAlarms.kt`), and how the plan is written to your calendar (`calendar/CalendarWriter.kt`, through `CalendarProvider`: `calendar/SlotCalendar.kt` on the phone).
-Also how your calendar's events become busy time for the planner (`sync/Sync.kt`'s `refreshCalendar`, `learn/CalendarTime.kt`, `learn/EventJudge.kt`).
+Also how your calendar's events become busy time for the planner (`sync/Sync.kt`'s `refreshCalendar`, `learn/CalendarReader.kt`, `learn/CalendarTime.kt`, `learn/EventJudge.kt`).
 
 ## When the plan is made
 
