@@ -1,7 +1,5 @@
 package com.thomaswcode.decrastination.block
 
-import android.util.Log
-import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.core.ChatAction
 import com.thomaswcode.decrastination.core.ChatActs
 import com.thomaswcode.decrastination.core.ChatState
@@ -20,6 +18,7 @@ import com.thomaswcode.decrastination.enrich.PhotoChecker
 import com.thomaswcode.decrastination.enrich.PhotoTaskReader
 import com.thomaswcode.decrastination.enrich.PhotoTasks
 import com.thomaswcode.decrastination.enrich.Profile
+import com.thomaswcode.decrastination.ports.Log
 import java.io.File
 import java.security.MessageDigest
 import kotlinx.coroutines.CoroutineScope
@@ -47,6 +46,8 @@ class Photos(
     private val focus: Focus,
     /** Where tasks' photos are kept (AI-23): the app's own files, one a task. */
     private val photos: File,
+    /** A photo as the JPEG the model's sent, the right way up and no bigger than it reads; null where it can't be made. */
+    private val shrink: (File) -> ByteArray?,
     /** Who the student is, as each call sends it (AI-05). */
     private val profile: () -> Profile.Block,
     /** [taskId] read again with its photo, where it's one the model reads ([com.thomaswcode.decrastination.enrich.Readings.enrichNow]). */
@@ -64,7 +65,7 @@ class Photos(
         }
         val hash = MessageDigest.getInstance("SHA-256").digest(jpeg).take(8).joinToString("") { "%02x".format(it) }
         tasks.update { s -> s.copy(tasks = s.tasks.map { if (it.id == taskId) it.copy(photo = TaskPhoto(file.path, hash, clock.now())) else it }) }
-        scope.launch { runCatching { read(taskId) }.onFailure { Log.w(AppGraph.TAG, "Reading a task with its photo failed", it) } }
+        scope.launch { runCatching { read(taskId) }.onFailure { Log.w(Log.TAG, "Reading a task with its photo failed", it) } }
     }
 
     /** [jpeg] read into tasks of your own to check (NF-01): the reading, or why there's none. */
@@ -94,7 +95,7 @@ class Photos(
         photoReading.value = PhotoReading(busy = true)
         scope.launch {
             val done = runCatching {
-                val jpeg = withContext(Dispatchers.IO) { PhotoChecks.shrink(file) }
+                val jpeg = withContext(Dispatchers.IO) { shrink(file) }
                 if (jpeg == null) {
                     PhotoReading(busy = false, why = "Couldn't read the photo.")
                 } else {
@@ -131,7 +132,7 @@ class Photos(
         }
         val jpegs = try {
             // Every page, or the check isn't made: one left out could be the one that shows it isn't done.
-            val read = withContext(Dispatchers.IO) { pages.map { PhotoChecks.shrink(it) } }
+            val read = withContext(Dispatchers.IO) { pages.map { shrink(it) } }
             if (read.isEmpty() || read.any { it == null }) return if (pages.size > 1) "A page couldn't be read: take the photos again." else "Couldn't read the photo."
             read.filterNotNull()
         } finally {
@@ -147,7 +148,7 @@ class Photos(
                 ModelHold.Capped -> "Claude's monthly cap is reached: tick it Done, or the source will have to do."
             }
             is Called.Failed -> {
-                Log.w(AppGraph.TAG, "The photo check failed", called.error)
+                Log.w(Log.TAG, "The photo check failed", called.error)
                 return "The check didn't go through (${called.error.message ?: "no connection"})."
             }
             is Called.Answered -> called.value

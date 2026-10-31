@@ -14,6 +14,7 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
+import kotlin.math.roundToInt
 import java.util.Locale
 
 /** What a task's sheet says beyond its fields (UI-09): its pieces in the plan and why, and the instructions on it. Pure. */
@@ -94,3 +95,10 @@ object TaskSheetModel {
             .sortedByDescending { it.appliedAt ?: it.at }
             .map { it.text }
 }
+
+/**
+ * Whether all of [task]'s work is done as the planner sees it: every step ticked, or its minutes worked,
+ * what's left rounding to none as the planner rounds it ([Planner.remaining]).
+ */
+fun worked(task: TaskItem, multiplier: Double): Boolean =
+    if (task.subSteps.isNotEmpty()) task.subSteps.all { it.done } else Planner.remaining(task, multiplier).roundToInt() <= 0

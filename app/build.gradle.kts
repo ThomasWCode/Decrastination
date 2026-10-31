@@ -99,6 +99,7 @@ dependencies {
     implementation(platform(libs.jackson.bom))
 
     testImplementation(testFixtures(project(":core")))
+    testImplementation(testFixtures(project(":engine")))
     testImplementation(libs.junit)
     testImplementation(libs.kotlin.test.junit)
     testImplementation(libs.kotlinx.coroutines.test)

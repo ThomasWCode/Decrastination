@@ -1,14 +1,20 @@
 package com.thomaswcode.decrastination.block
 
-import android.util.Log
-import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.core.Deck
 import com.thomaswcode.decrastination.core.Source
+import com.thomaswcode.decrastination.core.WallClock
+import com.thomaswcode.decrastination.data.AnkiState
+import com.thomaswcode.decrastination.data.JsonStore
+import com.thomaswcode.decrastination.data.LearningState
+import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.learn.AnkiProgress
 import com.thomaswcode.decrastination.learn.AnkiReading
 import com.thomaswcode.decrastination.learn.DeckCount
-import com.thomaswcode.decrastination.sources.anki.AnkiProvider
+import com.thomaswcode.decrastination.plan.Planning
+import com.thomaswcode.decrastination.ports.Log
+import com.thomaswcode.decrastination.sync.Sync
 import java.time.Instant
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
@@ -23,7 +29,22 @@ import kotlinx.coroutines.withContext
  * and going is decided as it's seen and handled after the one before, so leaving before the read
  * coming in is done isn't lost behind it.
  */
-class AnkiWatch(private val graph: AppGraph) {
+class AnkiWatch(
+    private val anki: JsonStore<AnkiState>,
+    private val learning: JsonStore<LearningState>,
+    private val tasks: JsonStore<TaskState>,
+    private val clock: WallClock,
+    scope: CoroutineScope,
+    private val focus: Focus,
+    private val planning: Planning,
+    private val sync: Sync,
+    /** AnkiDroid's package, by which it's known in front. */
+    private val ankiPackage: String,
+    /** Its decks as they are now; null where they can't be read. */
+    private val decks: () -> List<Deck>?,
+    /** Work on [taskIds] as Felix sees it (LR-03). */
+    private val noteActivity: suspend (taskIds: List<String>, now: Long) -> Unit,
+) {
     private sealed interface Event {
         data class Came(val at: Long) : Event
         data class Went(val at: Long) : Event
@@ -38,15 +59,15 @@ class AnkiWatch(private val graph: AppGraph) {
     private var inFront: Boolean? = null
 
     init {
-        graph.scope.launch {
+        scope.launch {
             for (event in events) {
                 runCatching {
                     when (event) {
                         is Event.Came -> came(event.at)
                         is Event.Went -> went(event.at)
-                        Event.Reset -> if (graph.stores.anki.value.ankiFrontSince != null) graph.stores.anki.update { it.copy(ankiFrontSince = null) }
+                        Event.Reset -> if (anki.value.ankiFrontSince != null) anki.update { it.copy(ankiFrontSince = null) }
                     }
-                }.onFailure { Log.w(AppGraph.TAG, "Reading AnkiDroid's decks failed", it) }
+                }.onFailure { Log.w(Log.TAG, "Reading AnkiDroid's decks failed", it) }
             }
         }
     }
@@ -62,40 +83,40 @@ class AnkiWatch(private val graph: AppGraph) {
 
     /** [pkg] is in front: AnkiDroid come, or gone. Cheap when it's neither. */
     fun seen(pkg: String) {
-        val anki = pkg == AnkiProvider.PACKAGE
-        val was = inFront ?: (graph.stores.anki.value.ankiFrontSince != null)
-        inFront = anki
-        if (anki != was) events.trySend(if (anki) Event.Came(graph.clock.now()) else Event.Went(graph.clock.now()))
+        val isAnki = pkg == ankiPackage
+        val was = inFront ?: (anki.value.ankiFrontSince != null)
+        inFront = isAnki
+        if (isAnki != was) events.trySend(if (isAnki) Event.Came(clock.now()) else Event.Went(clock.now()))
     }
 
     private suspend fun came(now: Long) {
-        if (graph.stores.anki.value.ankiFrontSince != null) return
+        if (anki.value.ankiFrontSince != null) return
         val reading = read(now, entering = true) ?: return
-        graph.stores.anki.update { it.copy(ankiFrontSince = now, ankiReadings = (it.ankiReadings + reading).takeLast(AnkiProgress.KEEP)) }
+        anki.update { it.copy(ankiFrontSince = now, ankiReadings = (it.ankiReadings + reading).takeLast(AnkiProgress.KEEP)) }
         // In AnkiDroid in a deck task's slot: work on it, as Felix sees it (LR-03). Not on every deck
         // task: it may be the deck list, or another deck; going out, the decks that moved say which.
-        graph.focus.plan(now).slotAt(now)?.chunk?.takeIf { it.source == Source.Anki }?.let { graph.looks.noteActivity(listOf(it.taskId), now) }
+        focus.plan(now).slotAt(now)?.chunk?.takeIf { it.source == Source.Anki }?.let { noteActivity(listOf(it.taskId), now) }
     }
 
     private suspend fun went(now: Long) {
-        if (graph.stores.anki.value.ankiFrontSince == null) return
+        if (anki.value.ankiFrontSince == null) return
         val reading = read(now, entering = false)
-        graph.stores.anki.update { state -> state.copy(ankiFrontSince = null, ankiReadings = reading?.let { (state.ankiReadings + it).takeLast(AnkiProgress.KEEP) } ?: state.ankiReadings) }
+        anki.update { state -> state.copy(ankiFrontSince = null, ankiReadings = reading?.let { (state.ankiReadings + it).takeLast(AnkiProgress.KEEP) } ?: state.ankiReadings) }
         reading ?: return
-        val zone = graph.clock.zone()
-        val stretches = AnkiProgress.stretches(graph.stores.anki.value.ankiReadings, zone)
+        val zone = clock.zone()
+        val stretches = AnkiProgress.stretches(anki.value.ankiReadings, zone)
         // A stretch across 04:00 (or one cut short) counts for nothing, but the decks are read again all the same.
         val stretch = stretches.lastOrNull()?.takeIf { it.to == reading }
         if (stretch != null) {
-            val tasks = graph.tasks.value
-            val plan = graph.planning.plan(now = now)
+            val tasks = tasks.value
+            val plan = planning.plan(now = now)
             // Visits that didn't finish a deck's cards: their minutes kept towards the one that does.
-            var worked = graph.stores.anki.value.ankiWorked.on(Instant.ofEpochMilli(now).atZone(zone).toLocalDate().toString())
+            var worked = anki.value.ankiWorked.on(Instant.ofEpochMilli(now).atZone(zone).toLocalDate().toString())
             val studied = AnkiProgress.done(stretch, tasks.tasks, reviewsOnly = tasks.ankiDay?.reviewsOnly == true)
             // The decks studied: work on their tasks, as Felix sees it (LR-03).
-            graph.looks.noteActivity(studied.filter { it.cards > 0 }.map { it.taskId }, now)
+            noteActivity(studied.filter { it.cards > 0 }.map { it.taskId }, now)
             for (done in studied) {
-                Log.i(AppGraph.TAG, "AnkiDroid: ${done.cards} cards for ${done.taskId} in ${done.minutes} min${if (done.finished) ", today's done" else ""}")
+                Log.i(Log.TAG, "AnkiDroid: ${done.cards} cards for ${done.taskId} in ${done.minutes} min${if (done.finished) ", today's done" else ""}")
                 if (!done.finished) {
                     worked = worked.plus(done.taskId, done.minutes)
                     continue
@@ -104,12 +125,12 @@ class AnkiWatch(private val graph: AppGraph) {
                 // of today's time on it. The cards counted are its evidence, as a photo is written work's (BL-08).
                 val piece = plan.ordered.firstOrNull { it.taskId == done.taskId } ?: continue
                 val minutes = (worked.minutes[done.taskId] ?: 0) + done.minutes
-                if (graph.focus.keepSlot(piece.key, extraMin = (minutes - piece.minutes).coerceAtLeast(0), verified = true, now = now)) worked = worked.without(done.taskId)
+                if (focus.keepSlot(piece.key, extraMin = (minutes - piece.minutes).coerceAtLeast(0), verified = true, now = now)) worked = worked.without(done.taskId)
             }
-            graph.stores.anki.update { it.copy(ankiWorked = worked) }
+            anki.update { it.copy(ankiWorked = worked) }
             // What a card takes, per deck (DX-11): a deck with new evidence takes it; the rest keep theirs (a backup's, say).
             val rates = AnkiProgress.secondsPerCard(stretches)
-            graph.stores.learning.update {
+            learning.update {
                 it.copy(
                     calibration = it.calibration.copy(
                         ankiSecondsPerCard = it.calibration.ankiSecondsPerCard + rates.mapValues { r -> r.value.first },
@@ -118,12 +139,11 @@ class AnkiWatch(private val graph: AppGraph) {
                 )
             }
         }
-        graph.sync.sync(setOf(Source.Anki))
+        sync.sync(setOf(Source.Anki))
     }
 
     private suspend fun read(now: Long, entering: Boolean): AnkiReading? = withContext(Dispatchers.IO) {
-        if (!AnkiProvider.hasPermission(graph.app)) return@withContext null
-        val decks: List<Deck> = AnkiProvider.decks(graph.app.contentResolver)
-        AnkiReading(now, decks.associate { it.id to DeckCount(it.learn, it.review, it.new, it.isTopLevel) }, entering)
+        val read = decks() ?: return@withContext null
+        AnkiReading(now, read.associate { it.id to DeckCount(it.learn, it.review, it.new, it.isTopLevel) }, entering)
     }
 }

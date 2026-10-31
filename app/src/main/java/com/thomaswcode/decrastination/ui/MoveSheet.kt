@@ -24,7 +24,7 @@ import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.core.Chunk
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Planner
-import com.thomaswcode.decrastination.ui.Moves.CHIP_DAY
+import com.thomaswcode.decrastination.ui.Moves.Companion.CHIP_DAY
 import java.time.LocalDate
 import java.time.ZoneId
 
@@ -76,7 +76,7 @@ fun MoveSheet(graph: AppGraph, chunk: Chunk, plan: Plan, zone: ZoneId, onDone: (
                 } else {
                     Text("Only its next piece takes a time: all of it can go to a day.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                OutlinedButton(onClick = { moved(Moves.toDay(graph, chunk, day, zone)) }) { Text("All of it, any time that day") }
+                OutlinedButton(onClick = { moved(graph.moves.toDay(chunk, day, zone)) }) { Text("All of it, any time that day") }
             }
             problem?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error) }
         }
@@ -86,7 +86,7 @@ fun MoveSheet(graph: AppGraph, chunk: Chunk, plan: Plan, zone: ZoneId, onDone: (
         TimeDialog("${chunk.label}, on ${day.format(CHIP_DAY)}", 17 * 60, onClose = { timing = false }) { minute ->
             timing = false
             problem = null
-            moved(Moves.toTime(graph, chunk, day, minute, zone))
+            moved(graph.moves.toTime(chunk, day, minute, zone))
         }
     }
 }

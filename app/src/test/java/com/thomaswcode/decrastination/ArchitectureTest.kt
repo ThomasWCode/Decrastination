@@ -112,7 +112,7 @@ class ArchitectureTest {
             "tasks" to setOf("sync/Sync.kt", "sync/Syncer.kt", "enrich/Readings.kt", "tasks/Instructions.kt", "tasks/OwnTasks.kt", "block/Focus.kt", "block/Photos.kt", "felix/Conversation.kt", "felix/Looks.kt"),
             "settings" to setOf("protect/Protection.kt"),
             "runtime" to setOf("notify/Notifier.kt", "AppGraph.kt", "block/FocusService.kt", "learn/Briefing.kt", "learn/DailyAlarms.kt"),
-            "session" to setOf("block/Focus.kt", "block/SlotAlarms.kt", "plan/Planning.kt", "tasks/Instructions.kt"),
+            "session" to setOf("block/Focus.kt", "block/Slots.kt", "plan/Planning.kt", "tasks/Instructions.kt"),
             "protection" to setOf("protect/Protection.kt", "protect/Watchdog.kt"),
             "model" to setOf("enrich/ModelGateway.kt", "plan/Ahead.kt"),
             "anki" to setOf("block/AnkiWatch.kt"),

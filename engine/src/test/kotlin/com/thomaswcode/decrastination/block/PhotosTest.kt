@@ -77,7 +77,7 @@ class PhotosTest {
 
     /** The tasks read again with their photos. */
     private val read: MutableList<String> = Collections.synchronizedList(mutableListOf())
-    private val photos = Photos(tasks, settings, chat, clock, scope, gateway, focus, folder, profile = { Profile.Block.NONE }) { read += it }
+    private val photos = Photos(tasks, settings, chat, clock, scope, gateway, focus, folder, shrink = { null }, profile = { Profile.Block.NONE }) { read += it }
 
     private val essay = TaskItem(
         id = "teams:essay", source = Source.Teams, sourceId = "essay", title = "Essay", dueAt = Fixtures.at("2026-10-23T09:00"), kind = Kind.Homework,

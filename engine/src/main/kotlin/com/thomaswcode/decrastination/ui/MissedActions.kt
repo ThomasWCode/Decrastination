@@ -7,7 +7,7 @@ import com.thomaswcode.decrastination.data.SlotOutcome
 import com.thomaswcode.decrastination.data.SlotRecord
 
 /** What a missed slot's sheet offers (docs/spec/day.md §A missed slot's sheet), each by [of]. Pure. */
-internal data class MissedActions(
+data class MissedActions(
     /** *Done*: kept, late, in the slot's place. */
     val done: Boolean,
     /** *Done* goes on a later miss of its key today: said in its place, till that one's kept. */
