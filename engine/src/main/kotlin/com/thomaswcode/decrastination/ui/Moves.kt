@@ -5,6 +5,7 @@ import com.thomaswcode.decrastination.core.Change
 import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.Chunk
 import com.thomaswcode.decrastination.core.DayBreaks
+import com.thomaswcode.decrastination.core.Ids
 import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.Planner
 import com.thomaswcode.decrastination.core.Slot
@@ -13,12 +14,14 @@ import com.thomaswcode.decrastination.core.WallClock
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.plan.Planning
+import com.thomaswcode.decrastination.sync.protocol.AddOwnChange
+import com.thomaswcode.decrastination.sync.protocol.Commands
+import com.thomaswcode.decrastination.sync.protocol.TakeBackQuick
 import com.thomaswcode.decrastination.tasks.Instructions
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
-import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
@@ -31,6 +34,7 @@ import kotlinx.coroutines.launch
 class Moves(
     private val tasks: JsonStore<TaskState>,
     private val instructions: Instructions,
+    private val commands: Commands,
     private val planning: Planning,
     private val clock: WallClock,
     private val scope: CoroutineScope,
@@ -57,7 +61,7 @@ class Moves(
         if (problem != null) return Moved.Refused(problem)
         val said = "At ${day.format(CHIP_DAY)} ${"%02d:%02d".format(Locale.UK, minute / 60, minute % 60)}"
         val joining = joins(chunk, day)
-        scope.launch { instructions.addOwnChange(UUID.randomUUID().toString(), said, About(taskId = chunk.taskId, taskTitle = chunk.title), Change(ChangeType.AtTime, taskId = chunk.taskId, date = day.toString(), startMin = minute, time = time)) }
+        scope.launch { commands.act(AddOwnChange(Ids.next(), said, About(taskId = chunk.taskId, taskTitle = chunk.title), Change(ChangeType.AtTime, taskId = chunk.taskId, date = day.toString(), startMin = minute, time = time))) }
         return Moved.Done(said + joining)
     }
 
@@ -74,8 +78,8 @@ class Moves(
         if (pinned != null && !quick) return Moved.Refused("A time you gave in the chat holds it at ${Format.at(pinned, clock.now(), zone)}: take that back in the chat's Your changes first.")
         // Any time: a time you gave it here before goes, as the plan would keep it on its day.
         scope.launch {
-            if (quick) instructions.takeBackQuick(chunk.taskId, ChangeType.AtTime)
-            instructions.addOwnChange(UUID.randomUUID().toString(), "All of it on ${day.format(CHIP_DAY)}", About(taskId = chunk.taskId, taskTitle = chunk.title), Change(ChangeType.OnDay, taskId = chunk.taskId, date = day.toString()))
+            if (quick) commands.act(TakeBackQuick(chunk.taskId, ChangeType.AtTime))
+            commands.act(AddOwnChange(Ids.next(), "All of it on ${day.format(CHIP_DAY)}", About(taskId = chunk.taskId, taskTitle = chunk.title), Change(ChangeType.OnDay, taskId = chunk.taskId, date = day.toString())))
         }
         return Moved.Done("All of it on ${day.format(CHIP_DAY)}" + joins(chunk, day))
     }
@@ -87,7 +91,7 @@ class Moves(
     fun outsideTo(slot: Slot, day: LocalDate, minute: Int, zone: ZoneId): Moved {
         outsideProblem(planning.breaksOn(day), slot.outsideAt, minute, timeOf(day, minute, zone), clock.now())?.let { return Moved.Refused(it) }
         val said = "Outside at ${day.format(CHIP_DAY)} ${"%02d:%02d".format(Locale.UK, minute / 60, minute % 60)}"
-        scope.launch { instructions.addOwnChange(UUID.randomUUID().toString(), said, About(day = day.toString()), Change(ChangeType.OutsideAt, date = day.toString(), outsideMin = slot.outsideAt, startMin = minute)) }
+        scope.launch { commands.act(AddOwnChange(Ids.next(), said, About(day = day.toString()), Change(ChangeType.OutsideAt, date = day.toString(), outsideMin = slot.outsideAt, startMin = minute))) }
         return Moved.Done(said)
     }
 

@@ -12,8 +12,14 @@ import com.thomaswcode.decrastination.data.Stores
 import com.thomaswcode.decrastination.enrich.KeyProblem
 import com.thomaswcode.decrastination.enrich.ModelGateway
 import com.thomaswcode.decrastination.enrich.Profile
+import com.thomaswcode.decrastination.felix.Conversation
+import com.thomaswcode.decrastination.felix.Looks
 import com.thomaswcode.decrastination.learn.EventJudge
+import com.thomaswcode.decrastination.learn.Learning
 import com.thomaswcode.decrastination.plan.Planning
+import com.thomaswcode.decrastination.protect.Protection
+import com.thomaswcode.decrastination.sync.protocol.Commands
+import com.thomaswcode.decrastination.sync.protocol.Owners
 import java.nio.file.Files
 import java.util.Collections
 import java.util.concurrent.TimeUnit
@@ -99,6 +105,20 @@ class TasksHarness(start: String = "2026-10-19T16:00", private val claude: Boole
         server.enqueue(MockResponse().setHeader("Content-Type", "application/json").setBody(body.toString()).setHeadersDelay(delayMs, TimeUnit.MILLISECONDS))
     }
     val ownTasks = OwnTasks(stores.tasks, stores.instructions, stores.chat, clock, scope) { settled.incrementAndGet() }
+
+    /** A screen's changes, as `AppGraph`'s: only the owners here have any. */
+    val commands = Commands(
+        object : Owners {
+            override val ownTasks get() = this@TasksHarness.ownTasks
+            override val instructions get() = this@TasksHarness.instructions
+            override val focus get() = this@TasksHarness.focus
+            override val conversation: Conversation get() = error("No conversation here")
+            override val looks: Looks get() = error("No looks here")
+            override val protection: Protection get() = error("No protection here")
+            override val learning: Learning get() = error("No learning here")
+        },
+        clock,
+    )
 
     /** A source's task, made up: Teams homework due on [due], taking [minutes]. */
     fun teams(id: String, due: Long? = Fixtures.at("2026-10-23T09:00"), minutes: Int = 60) = TaskItem(

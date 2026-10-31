@@ -16,6 +16,7 @@ import com.thomaswcode.decrastination.core.Duplicates
 import com.thomaswcode.decrastination.core.Fact
 import com.thomaswcode.decrastination.core.FelixSettings
 import com.thomaswcode.decrastination.core.Given
+import com.thomaswcode.decrastination.core.Ids
 import com.thomaswcode.decrastination.core.Instruction
 import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.InstructionState
@@ -69,7 +70,6 @@ import com.thomaswcode.decrastination.sync.GmailFinishes
 import java.time.Instant
 import java.time.format.DateTimeFormatter
 import java.util.Locale
-import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.NonCancellable
@@ -82,6 +82,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.Serializable
 
 /**
  * Felix's conversation: who the student is, as every
@@ -231,7 +232,7 @@ class Conversation(
     /** [draft]'s question as his message, in the app's words, with its replies, the draft kept with it: so its reply comes back here. */
     private suspend fun askNext(draft: CheckInDraft, now: Long, again: Boolean = false) {
         val text = (if (again) FelixWords.CHECK_IN_AGAIN else "") + CheckInFlow.question(draft)
-        val question = ChatMessage(UUID.randomUUID().toString(), Speaker.Felix, text, now, kind = MessageKind.CheckIn, byApp = true, suggestedReplies = CheckInFlow.replies(draft, log.value, clock.zone()))
+        val question = ChatMessage(Ids.next(), Speaker.Felix, text, now, kind = MessageKind.CheckIn, byApp = true, suggestedReplies = CheckInFlow.replies(draft, log.value, clock.zone()))
         outbox.send(question) { it.copy(checkInDraft = draft) }
     }
 
@@ -260,7 +261,7 @@ class Conversation(
             return true
         }
         val added = owners.recordCheckIn(flow.checkIn(next, now), now)
-        outbox.send(ChatMessage(UUID.randomUUID().toString(), Speaker.Felix, FelixWords.CHECK_IN_THANKS, now, kind = MessageKind.CheckIn, byApp = true)) { it.copy(checkInDraft = null) }
+        outbox.send(ChatMessage(Ids.next(), Speaker.Felix, FelixWords.CHECK_IN_THANKS, now, kind = MessageKind.CheckIn, byApp = true)) { it.copy(checkInDraft = null) }
         // Its review, unless the week has had it (the evening's ran first).
         if (added) ports.review()
         return true
@@ -288,13 +289,14 @@ class Conversation(
      * question, answered, out of his notification. Shown there by the outbox after.
      */
     private suspend fun keepReply(message: ChatMessage, words: String, now: Long) {
-        val reply = ChatMessage(UUID.randomUUID().toString(), Speaker.You, words, now, message.about, kind = message.kind, replyTo = message.id, answeredAt = now)
+        val reply = ChatMessage(Ids.next(), Speaker.You, words, now, message.about, kind = message.kind, replyTo = message.id, answeredAt = now)
         chat.update { s -> s.copy(messages = s.messages.map { if (it.id == message.id && it.answeredAt == null) it.copy(answeredAt = now) else it } + reply) }
         // One scrolled back to in the archive is answered there, so it takes no second answer.
         outbox.answeredInArchive(message.id, now)
     }
 
     /** Messages of his marked answered at [at] ([markAnswered]): what its Undo puts back. */
+    @Serializable
     data class Marked(val ids: Set<String>, val at: Long)
 
     /**
@@ -350,7 +352,7 @@ class Conversation(
 
     /** The morning's list (LR-04) as his message, in the app's words, where he has none of his own ([Looks.morning]): the day's [title], then its [lines]. */
     suspend fun morningList(title: String, lines: List<String>) =
-        outbox.send(ChatMessage(UUID.randomUUID().toString(), Speaker.Felix, FelixWords.morningList(title, lines), clock.now(), kind = MessageKind.Morning, byApp = true))
+        outbox.send(ChatMessage(Ids.next(), Speaker.Felix, FelixWords.morningList(title, lines), clock.now(), kind = MessageKind.Morning, byApp = true))
 
     /**
      * An event the plan can't judge (Q7), [title] on [day], asked about as his message in the app's
@@ -359,7 +361,7 @@ class Conversation(
      */
     suspend fun askAboutEvent(key: String, title: String, day: String, start: Long, answers: List<String>) = outbox.send(
         ChatMessage(
-            UUID.randomUUID().toString(), Speaker.Felix, FelixWords.eventQuestion(title, day), clock.now(),
+            Ids.next(), Speaker.Felix, FelixWords.eventQuestion(title, day), clock.now(),
             About(eventKey = key, eventTitle = title, eventStart = start), kind = MessageKind.EventQuestion, byApp = true, suggestedReplies = answers,
         ),
     )
@@ -409,7 +411,7 @@ class Conversation(
 
     /** How [ask]'s work went, as his message in the app's words: the three answers its replies, each kept on it ([Looks.answered]). */
     private fun howItWent(ask: AssessLater) = ChatMessage(
-        UUID.randomUUID().toString(), Speaker.Felix, FelixWords.howItWent(ask.title), clock.now(), About(taskId = ask.taskId, taskTitle = ask.title),
+        Ids.next(), Speaker.Felix, FelixWords.howItWent(ask.title), clock.now(), About(taskId = ask.taskId, taskTitle = ask.title),
         kind = MessageKind.Completions, byApp = true, asks = listOf(ask), suggestedReplies = FelixWords.HOW_IT_WENT_REPLIES,
     )
 
@@ -427,11 +429,11 @@ class Conversation(
 
     /** The week's review written (LR-01): its note's [firstLine] as his message in the app's words, with the button that opens the review. */
     suspend fun reviewed(firstLine: String) =
-        outbox.send(ChatMessage(UUID.randomUUID().toString(), Speaker.Felix, firstLine, clock.now(), kind = MessageKind.Review, byApp = true, opens = OPENS_REVIEW))
+        outbox.send(ChatMessage(Ids.next(), Speaker.Felix, firstLine, clock.now(), kind = MessageKind.Review, byApp = true, opens = OPENS_REVIEW))
 
     /** The [week]'s summary written (NF-02): his offer to send it, with the button that opens it in an email. */
     suspend fun summaryReady(week: String) =
-        outbox.send(ChatMessage(UUID.randomUUID().toString(), Speaker.Felix, FelixWords.SUMMARY_READY, clock.now(), kind = MessageKind.Summary, byApp = true, opens = OPENS_SUMMARY + week))
+        outbox.send(ChatMessage(Ids.next(), Speaker.Felix, FelixWords.SUMMARY_READY, clock.now(), kind = MessageKind.Summary, byApp = true, opens = OPENS_SUMMARY + week))
 
     /** Held while the chat is answered, so each message is answered once. */
     private val answering = Mutex()
@@ -480,7 +482,7 @@ class Conversation(
      * for and unused, and he answers both together (D-98). False only with no words. Kept, it's shown in
      * his notification under what it answers.
      */
-    suspend fun ask(text: String, about: About = About(), id: String = UUID.randomUUID().toString(), replyTo: String? = null, takeItsSubject: Boolean = true): Boolean =
+    suspend fun ask(text: String, about: About = About(), id: String = Ids.next(), replyTo: String? = null, takeItsSubject: Boolean = true): Boolean =
         send(text, about, id, replyTo, takeItsSubject) != Asked.Nothing
 
     /** What became of words sent ([send]): nothing (there were none), an answer taken as one (with no call, but a reading's question's, read by Claude), or a turn of the chat waiting for his answer. */
@@ -491,7 +493,7 @@ class Conversation(
      * where it's a turn of the chat ([replyFromNotification]), and the `chat-ask` command waits for an
      * answer only then. The message replied to may be in the archive, scrolled back to.
      */
-    suspend fun send(text: String, about: About = About(), id: String = UUID.randomUUID().toString(), replyTo: String? = null, takeItsSubject: Boolean = true): Asked {
+    suspend fun send(text: String, about: About = About(), id: String = Ids.next(), replyTo: String? = null, takeItsSubject: Boolean = true): Asked {
         val words = text.trim().take(ChatPrompts.MAX_TEXT)
         if (words.isEmpty()) return Asked.Nothing
         val repliedTo = replyTo?.let { outbox.find(it) }
@@ -659,7 +661,7 @@ class Conversation(
             }
             val what = changed(watch.was, task, watch.source) ?: continue
             watching.remove(id, watch)
-            outbox.send(ChatMessage(UUID.randomUUID().toString(), Speaker.Felix, FelixWords.read(watch.source.label, task.title, what), now, About(taskId = task.id, taskTitle = task.title), kind = MessageKind.Note, byApp = true))
+            outbox.send(ChatMessage(Ids.next(), Speaker.Felix, FelixWords.read(watch.source.label, task.title, what), now, About(taskId = task.id, taskTitle = task.title), kind = MessageKind.Note, byApp = true))
         }
     }
 
@@ -849,7 +851,7 @@ class Conversation(
             reading = reading.copy(research = null, details = emptyList(), stats = false, calendar = null)
             gathered = null
             val reply = ChatMessage(
-                id = UUID.randomUUID().toString(),
+                id = Ids.next(),
                 from = Speaker.Felix,
                 text = reading.reply,
                 at = clock.now(),
@@ -956,7 +958,7 @@ class Conversation(
     private suspend fun act(actions: List<ChatAction>, shownAt: Long, replyId: String): List<Act> {
         fun said(line: String, a: ChatAction) = Act(line, a)
         // A task's card on his message (G3), where it isn't, or mayn't have been, opened where it lives.
-        suspend fun card(t: TaskItem) = chat.update { s -> s.copy(messages = s.messages.map { m -> if (m.id == replyId) m.copy(proposals = m.proposals + Proposal(UUID.randomUUID().toString(), open = t.id)) else m }) }
+        suspend fun card(t: TaskItem) = chat.update { s -> s.copy(messages = s.messages.map { m -> if (m.id == replyId) m.copy(proposals = m.proposals + Proposal(Ids.next(), open = t.id)) else m }) }
         return actions.mapNotNull { a ->
             val task = tasks.value.tasks.firstOrNull { it.id == a.taskId }
             when (a.type) {
@@ -1299,7 +1301,7 @@ class Conversation(
         var full = false
         felix.update { s ->
             full = Notes.on(taskId, s.notes).size >= Notes.PER_TASK
-            if (full) s else s.copy(notes = s.notes + Note(UUID.randomUUID().toString(), words, clock.now(), By.You, taskId = taskId))
+            if (full) s else s.copy(notes = s.notes + Note(Ids.next(), words, clock.now(), By.You, taskId = taskId))
         }
         return if (full) "It has ${Notes.PER_TASK} notes already: delete one first" else null
     }
@@ -1483,10 +1485,10 @@ class Conversation(
         var schoolAfter: SchoolCalendar? = null
         val task = edited ?: proposal.task
         if (task != null) {
-            val id = UUID.randomUUID().toString()
+            val id = Ids.next()
             if (owners.saveOwnTask(id, task)) made = TaskItem.id(Source.Own, id) else note = OwnTaskRules.problem(task) ?: "It couldn't be added"
         } else if (proposal.changes.isNotEmpty()) {
-            val id = UUID.randomUUID().toString()
+            val id = Ids.next()
             // Your own tasks it changes, as they are: made on them, the changes are undone by putting them back.
             val own = tasks.value.tasks.filter { it.source == Source.Own }.associateBy { it.id }
             before = proposal.changes.filter { it.type in OwnTaskRules.MADE_ON_IT }.mapNotNull { it.taskId }.distinct()

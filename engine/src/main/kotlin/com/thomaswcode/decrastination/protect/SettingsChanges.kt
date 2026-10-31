@@ -185,11 +185,16 @@ object SettingsChanges {
      * edit began) laid over it, field by field: a change made elsewhere meanwhile to a field the
      * edit didn't touch stands, rather than an old copy putting it back (BUG-P2-014).
      */
-    fun edited(base: Settings, draft: Settings, latest: Settings): Settings {
+    fun edited(base: Settings, draft: Settings, latest: Settings): Settings = laidOver(latest, changed(base, draft))
+
+    /** What [draft] changed from [base], field by field: what a command carries. */
+    fun changed(base: Settings, draft: Settings): Map<String, JsonElement> {
         val before = encode(base)
-        val after = encode(draft)
-        return decode(JsonObject(encode(latest) + after.filter { (field, value) -> before[field] != value }))
+        return encode(draft).filter { (field, value) -> before[field] != value }
     }
+
+    /** [latest] with [fields] laid over it. */
+    fun laidOver(latest: Settings, fields: Map<String, JsonElement>): Settings = decode(JsonObject(encode(latest) + fields))
 
     /**
      * [change] to [fields] made at once, armed or not, with no wait: read from what's been asked for,
