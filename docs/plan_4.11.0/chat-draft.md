@@ -14,11 +14,11 @@ Changing *Plan*'s `CLEAR_TOP` to `REORDER_TO_FRONT` would keep the first chat fo
 
 ## What's built
 
-- **One draft for the app**: `Conversation` (the chat's owner) holds `val draft = MutableStateFlow("")`, in memory alone (you answered: not kept past the app's process). It isn't a store: no file, no version, no migration, no writer in `ArchitectureTest`, nothing in the backups or the resets.
+- **One draft for the app**: `Conversation` (the chat's owner) holds `val draft = MutableStateFlow(Draft("", 0))`, the words and when they last changed (`at`, the clock's time), in memory alone (you answered: not kept past the app's process). It isn't a store: no file, no version, no migration, no writer in `ArchitectureTest`, nothing in the backups or the resets.
 - **The box reads and writes it**: `AskActivity.Screen` collects `graph.conversation.draft`; `InputBar`'s `onDraft` sets it. Every chat screen, the first or a second, shows the same words.
-- **Through a stop of the process, as now**: `onSaveInstanceState` keeps the draft as `STATE_DRAFT`; `onCreate`, made again, puts it back only where the holder is empty, so a stop behind your back keeps the words as `rememberSaveable` does now, and a newer draft isn't replaced by an older screen's.
-- **Sending**: the box is cleared at once, as now (`draft.value = ""`). A message that couldn't be kept goes back into the holder, not the screen, so it's there wherever you are: into an empty box as it was, or before what you've typed since, as now (`text + "\n\n" + draft`).
-- **What it's about and what it replies to** aren't kept with it: they stay as each opening of the chat sets them (`about`, `ChatScreenState.replyingTo`), as now.
+- **Through a stop of the process, as now**: `onSaveInstanceState` keeps the draft and its time (`STATE_DRAFT`, `STATE_DRAFT_AT`); `onCreate`, made again, puts it back only where it's newer than the holder's (`ChatScreenState.restoredDraft(held, saved)`), so a stop behind your back keeps the words as `rememberSaveable` does now. An empty holder isn't the test: it can't tell nothing restored yet from a box you emptied. With two chats in the task (the second case above), a stop, a send from the top one and Back to the lower one, the lower one's older saved words would come back into the box the send had just emptied; by time, the send's empty box is newer, and they don't. A chat opened fresh first (from his notification, say) leaves the holder at time 0, so a lower one made again later still brings its words back.
+- **Sending**: the box is cleared at once, as now. A message that couldn't be kept is handed back through `Conversation.unsent` (`Unsent(text, about, replyTo)`), and the chat screen in front, or the next to come in front, takes it and lets it go (`ChatScreenState.withUnsent(draft, unsent)`): into an empty box, its words with what it was about and what it replied to, as they were, as now; into a box holding words, its words first, a blank line, then the box's (`text + "\n\n" + draft`), the subject and reply left as you've set them since, as now. It's one path whether the screen that sent it is still there or gone (closed by *Plan*, or made again by a turn of the phone), so it's never put into a screen that's gone, and a message about a task doesn't come back about nothing.
+- **What it's about and what it replies to** aren't kept with the draft: they stay as each opening of the chat sets them (`about`, `ChatScreenState.replyingTo`), as now. Only a failed send's come back with its words (above).
 - **Clear chat** leaves the draft alone: it clears the messages, not the box.
 - **The block screen's chat** (`EXTRA_BACK`) shares the holder, as you answered.
 
@@ -34,12 +34,17 @@ For example, you type "can I do the essay on Saturday instead", tap *Plan*, open
 
 Words handed in to be sent at once (an instruction about an event or a day) don't touch the box, as now.
 
-A is built as a pure function beside the chat screen's state (`ChatScreenState.withHanded(draft, words)`), so it's tested on its own.
+A is built as a pure function beside the chat screen's state (`ChatScreenState.withHanded(draft, words)`), so it's tested on its own. Words handed in again, the box already holding them first (*Split with Felix* tapped, left unsent, then tapped again), leave the box as it is, so they aren't put in twice.
 
 ## Tests
 
-- `ChatScreenStateTest`: words handed in to an empty box are the box's; to a box holding words, the handed words, a blank line, then the box's (A); blank words handed in leave the box as it is.
-- The holder itself is a `MutableStateFlow` with no rule of its own: there's nothing more to test without a screen, so the phone's steps 1 to 4 ([README](README.md#at-the-phone)) hold it.
+The holder's rules are pure functions beside the chat screen's state, tested in `ChatScreenStateTest`:
+
+- `withHanded`: words handed in to an empty box are the box's; to a box holding words, the handed words, a blank line, then the box's (A); the same words handed in again leave the box as it is; blank words leave it as it is.
+- `restoredDraft`: a saved draft newer than the holder's is put back; an older one isn't, whatever the holder holds, the two chats' case above among them (a send's empty box newer than the lower chat's saved words); one saved over a holder at time 0 is put back.
+- `withUnsent`: into an empty box, its words, its subject and its reply; into a box holding words, its words first, a blank line, then the box's, the box's subject and reply kept.
+
+What's left without a rule (the screens collecting the holder, `Conversation.unsent` taken by the one in front) is held by the phone's steps 1 to 4 ([README](README.md#at-the-phone)).
 
 ## Spec
 

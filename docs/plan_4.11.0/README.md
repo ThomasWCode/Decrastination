@@ -27,7 +27,7 @@ These go into `docs/plan_v4/answers.md` as Q127 and Q128 when the release is bui
   6. The version, and the answers in `answers.md`.
 - No new library, store, migration, prompt or golden, and no new call to Claude: *Ask Felix about it* opens the chat and sends nothing.
 - Checks while building: `./gradlew :app:testDebugUnitTest --tests '*ChatScreenStateTest' --tests '*DayModelTest' --tests '*MissedActionsTest'`; before the push, CI's command once: `./gradlew testDebugUnitTest lintDebug assembleDebug`.
-- `CLAUDE.md`'s *Where things are said* names this folder while it's in use; it's deleted once what it describes is built and in the specs, as `plan_v4`'s design documents were.
+- `CLAUDE.md`'s *Where things are said* names this folder (added with the plan); the folder and that line are deleted together once what it describes is built and in the specs, as `plan_v4`'s design documents were.
 
 ## At the phone
 
