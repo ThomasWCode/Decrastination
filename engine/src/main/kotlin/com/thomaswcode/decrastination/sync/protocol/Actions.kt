@@ -185,6 +185,12 @@ data object WithdrawQuestion : Action, Answers<Unit> {
 }
 
 @Serializable
+@SerialName("CancelAnswer")
+data object CancelAnswer : Action, Answers<Unit> {
+    override suspend fun run(owners: Owners) = owners.conversation.cancelAnswer()
+}
+
+@Serializable
 @SerialName("MarkAnswered")
 data class MarkAnswered(val ids: List<String>) : Action, Answers<Conversation.Marked> {
     override suspend fun run(owners: Owners): Conversation.Marked = owners.conversation.markAnswered(ids)

@@ -64,7 +64,7 @@ class CommandsTest {
         LaterToday("k"), TakeBackQuick("t", ChangeType.AtTime), ApplyInstruction("i"), DeleteInstruction("i"), RereadInstruction("i", "words"), NotSame("a", "b"),
         AddNoSchool(NoSchool("2026-11-02", "2026-11-03", "a break")), AddHalfDay(HalfDay("2026-11-02", 780)), DeleteNoSchool(NoSchool("2026-11-02", "2026-11-03")), DeleteHalfDay(HalfDay("2026-11-02", 780)),
         KeepSlot("k", 5L), UndoKeep("k", 5L), TickBlock("t", 1, "a step"), StartTimer("t", 1, "k"), StopTimer, NoteActivity(listOf("t")),
-        SendMessage("hello", About(taskId = "t"), "m", "r", false), ReplyFromNotification("hello", "m"), WithdrawQuestion, MarkAnswered(listOf("m")), UnmarkAnswered(Conversation.Marked(setOf("m"), 5L)),
+        SendMessage("hello", About(taskId = "t"), "m", "r", false), ReplyFromNotification("hello", "m"), WithdrawQuestion, CancelAnswer, MarkAnswered(listOf("m")), UnmarkAnswered(Conversation.Marked(setOf("m"), 5L)),
         RateMessage("m", true, "good", "this one"), ReadChat(5L), ClearChat, ApplyProposal("m", "p", OwnTask(title = "t")), UndoProposal("m", "p"), DiscardProposal("m", "p", false), UndoAct("m", 1), UndoMemory("m", 1), EndCheckInFlow,
         Remember(listOf(Given(text = "a rule", kind = Given.RULE))), DeleteRule(Rule("a rule", 5L)), DeleteFact(Fact("topic", "a fact", 5L)), AddNote("t", "a note"), DeleteNote("n"),
         ChangeSettings(mapOf("boxMin" to JsonPrimitive(30))), UseParentCode("123456", 9L), ApplyChangeNow("c"), CancelChange("c"),
@@ -162,8 +162,11 @@ class CommandsTest {
         try {
             val task = OwnTask(title = "Essay", steps = listOf(OwnStep("Plan", 20), OwnStep("Write", 40)))
             val command = Command("the-id", phone.clock.now() + 60_000, SaveOwnTask.of("e", task))
+            // An hour apart: only the command's own moment can make the two the same.
+            server.clock.time += 3_600_000
             for (side in listOf(phone, server)) side.commands.apply(command)
             assertEquals(phone.stores.tasks.text(), server.stores.tasks.text())
+            assertEquals(command.at, phone.stores.tasks.value.tasks.single().firstSeenAt)
             assertTrue(phone.stores.tasks.value.tasks.single().subSteps.all { it.id.isNotEmpty() })
         } finally {
             phone.close()

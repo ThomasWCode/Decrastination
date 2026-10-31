@@ -167,6 +167,7 @@ import com.thomaswcode.decrastination.felix.FelixAnswers
 import com.thomaswcode.decrastination.felix.Replies
 import com.thomaswcode.decrastination.felix.Unsent
 import com.thomaswcode.decrastination.sync.protocol.ApplyProposal
+import com.thomaswcode.decrastination.sync.protocol.CancelAnswer
 import com.thomaswcode.decrastination.sync.protocol.ClearChat
 import com.thomaswcode.decrastination.sync.protocol.DiscardProposal
 import com.thomaswcode.decrastination.sync.protocol.MarkAnswered
@@ -1162,7 +1163,7 @@ private fun Typing(graph: AppGraph) {
         Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, shape = RoundedCornerShape(18.dp, 18.dp, 18.dp, 4.dp)) {
             Dots(Modifier.padding(horizontal = 16.dp, vertical = 15.dp).semantics { contentDescription = "$name is typing" })
         }
-        if (long) TextButton(onClick = { graph.conversation.cancelAnswer() }) { Text("Cancel") }
+        if (long) TextButton(onClick = { graph.scope.launch { graph.act(CancelAnswer) } }) { Text("Cancel") }
     }
 }
 
