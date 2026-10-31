@@ -63,7 +63,7 @@ import com.thomaswcode.decrastination.enrich.AiUsage
 import com.thomaswcode.decrastination.enrich.ModelEffort
 import com.thomaswcode.decrastination.learn.AnkiProgress
 import com.thomaswcode.decrastination.learn.Daily
-import com.thomaswcode.decrastination.learn.Summary
+import com.thomaswcode.decrastination.learn.SummaryEmail
 import com.thomaswcode.decrastination.protect.ProtectionPanel
 import com.thomaswcode.decrastination.protect.SettingsChanges
 import java.time.Instant
@@ -329,7 +329,7 @@ class SettingsActivity : ComponentActivity() {
                         val latest = graph.log.value.reviews.filter { it.summary != null }.maxByOrNull { it.at }
                         if (latest?.summary != null && latest.week != null) {
                             val context = LocalContext.current
-                            TextButton(onClick = { runCatching { context.startActivity(Summary.email(draft.summaryEmail, latest.week, latest.summary)) } }) { Text("Send this week's summary") }
+                            TextButton(onClick = { runCatching { context.startActivity(SummaryEmail.email(draft.summaryEmail, latest.week, latest.summary)) } }) { Text("Send this week's summary") }
                         } else {
                             Note("The summary is written after each Sunday's review, while Claude is on.")
                         }
