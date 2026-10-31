@@ -10,6 +10,7 @@ import com.thomaswcode.decrastination.data.OutsideMigration
 import com.thomaswcode.decrastination.data.TimerMigration
 import com.thomaswcode.decrastination.data.MemoryMigration
 import com.thomaswcode.decrastination.data.JsonStore
+import com.thomaswcode.decrastination.data.NotSameMigration
 import com.thomaswcode.decrastination.data.LearningState
 import com.thomaswcode.decrastination.data.ModelState
 import com.thomaswcode.decrastination.data.SessionState
@@ -138,8 +139,8 @@ class PlanSnapshotTest {
 
     /** The stores' migrations, as [com.thomaswcode.decrastination.data.Stores] gives them: those of a shape past the first. */
     private val MIGRATIONS = mapOf(
-        "runtime.json" to listOf(ChatMigration.RUNTIME), "log.json" to listOf(ChatMigration.LOG, MemoryMigration.LOG, CreditMigration.LOG), "session.json" to listOf(CreditMigration.SESSION, TimerMigration.SESSION),
-        "tasks.json" to listOf(TasksMigration.TASKS, StepOrderMigration.TASKS, WeeklyMigration.TASKS), "instructions.json" to listOf(TasksMigration.INSTRUCTIONS, StepOrderMigration.INSTRUCTIONS, OnlyMigration.INSTRUCTIONS, OutsideMigration.INSTRUCTIONS, WeeklyMigration.INSTRUCTIONS),
+        "log.json" to listOf(ChatMigration.LOG, MemoryMigration.LOG, CreditMigration.LOG), "session.json" to listOf(CreditMigration.SESSION, TimerMigration.SESSION),
+        "tasks.json" to listOf(TasksMigration.TASKS, StepOrderMigration.TASKS, WeeklyMigration.TASKS, NotSameMigration.TASKS), "instructions.json" to listOf(TasksMigration.INSTRUCTIONS, StepOrderMigration.INSTRUCTIONS, OnlyMigration.INSTRUCTIONS, OutsideMigration.INSTRUCTIONS, WeeklyMigration.INSTRUCTIONS),
         "settings.json" to listOf(SettingsMigration.SETTINGS, ZoomMigration.SETTINGS, SpeechMigration.SETTINGS),
     )
 

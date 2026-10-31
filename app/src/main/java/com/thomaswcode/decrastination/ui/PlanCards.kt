@@ -53,7 +53,7 @@ import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Unplanned
 import com.thomaswcode.decrastination.core.WontFit
-import com.thomaswcode.decrastination.data.ProtectionState
+import com.thomaswcode.decrastination.data.DeviceState
 import com.thomaswcode.decrastination.data.RuntimeState
 import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.enrich.KeyProblem
@@ -81,8 +81,8 @@ internal data class Trouble(val text: String, val fix: Fix) {
 }
 
 /** As the widget's warning has them, all of them, protection first. */
-internal fun trouble(tasks: TaskState, runtime: RuntimeState, protection: ProtectionState, now: Long): List<Trouble> = buildList {
-    protection.protection.problems.forEach { add(Trouble(it, Trouble.Fix.Protection)) }
+internal fun trouble(tasks: TaskState, runtime: RuntimeState, device: DeviceState, now: Long): List<Trouble> = buildList {
+    device.watchdog.problems.forEach { add(Trouble(it, Trouble.Fix.Protection)) }
     if (runtime.unreadable.isNotEmpty()) add(Trouble("A saved file couldn't be read: Setup says what was kept", Trouble.Fix.Setup))
     Source.SYNCED.forEach { source -> tasks.status(source).error?.let { add(Trouble("Can't read ${source.label}: $it", Trouble.Fix.Setup)) } }
     WidgetModel.teamsWarning(tasks, now)?.let { add(Trouble(it, Trouble.Fix.Teams)) }

@@ -72,7 +72,7 @@ fun SetupScreen(graph: AppGraph, activity: Activity, parts: Set<SetupPart> = Set
     val secrets by graph.secrets.present.collectAsStateWithLifecycle()
     val runtime by graph.runtime.state.collectAsStateWithLifecycle()
     val model by graph.stores.model.state.collectAsStateWithLifecycle()
-    val protection by graph.stores.protection.state.collectAsStateWithLifecycle()
+    val device by graph.stores.device.state.collectAsStateWithLifecycle()
     val settings by graph.settings.state.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     var refresh by remember { mutableIntStateOf(0) }
@@ -223,8 +223,8 @@ fun SetupScreen(graph: AppGraph, activity: Activity, parts: Set<SetupPart> = Set
             if (calendarAllowed) CalendarSection(graph, activity, reading = false)
             SetupItem(
                 title = "Blocking and protection",
-                done = protection.protection.problems.isEmpty() && protection.protection.checkedAt != null,
-                detail = protection.protection.problems.firstOrNull() ?: if (settings.armed) "Armed." else "Blocking works; protection isn't armed.",
+                done = device.watchdog.problems.isEmpty() && device.watchdog.checkedAt != null,
+                detail = device.watchdog.problems.firstOrNull() ?: if (settings.armed) "Armed." else "Blocking works; protection isn't armed.",
                 action = "Open" to { activity.startActivity(Intent(activity, ProtectionActivity::class.java)) },
             )
         }

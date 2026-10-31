@@ -126,7 +126,7 @@ class BackupServiceTest {
         val full = Phone(full = true)
         val backup = Backups.decode(full.service.exportBackup(), full.stores.shapes)!!
         assertEquals(full.stores.shapes.mapValues { it.value.version }, backup.versions)
-        assertEquals(setOf("calendar.json", "chat.json", "chat-archive.json", "felix.json", "instructions.json", "log.json", "memory.json", "runtime.json", "session.json", "settings.json", "tasks.json"), backup.versions.filterValues { it > 1 }.keys)
+        assertEquals(setOf("calendar.json", "chat.json", "chat-archive.json", "felix.json", "instructions.json", "log.json", "memory.json", "protection.json", "runtime.json", "session.json", "settings.json", "tasks.json"), backup.versions.filterValues { it > 1 }.keys)
     }
 
     @Test
@@ -194,7 +194,7 @@ class BackupServiceTest {
     @Test
     fun `a reset of the chat whose copy has no room for its earliest messages keeps them whole beside it`() = runTest {
         // Room for all but the archive's earliest messages: the rest of the copy fits, as it must to be read back.
-        val small = Phone(full = true, cap = 122_000)
+        val small = Phone(full = true, cap = 122_100)
         val archive = ChatArchive((1..80).map { ChatMessage("a$it", Speaker.You, "x".repeat(1_000), it.toLong(), answeredAt = it.toLong()) })
         small.stores.replace(small.stores.chatArchive, archive)
         val said = small.service.reset(Reset.Chat)

@@ -6,8 +6,11 @@ import com.thomaswcode.decrastination.core.FixedClock
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.Uptime
 import com.thomaswcode.decrastination.data.ChatMigration
+import com.thomaswcode.decrastination.data.DeviceState
 import com.thomaswcode.decrastination.data.JsonStore
+import com.thomaswcode.decrastination.data.NotSameMigration
 import com.thomaswcode.decrastination.data.SettingsMigration
+import com.thomaswcode.decrastination.data.ProtectionSplit
 import com.thomaswcode.decrastination.data.ProtectionState
 import com.thomaswcode.decrastination.data.RuntimeSplit
 import com.thomaswcode.decrastination.data.RuntimeState
@@ -41,8 +44,9 @@ class ProtectionTest {
     private val dir: File = Files.createTempDirectory("protection").toFile()
     private val clock = FixedClock(Fixtures.at("2026-10-19T16:00"), LONDON, up = Uptime(boot = 1, elapsedMs = 1_000_000))
     private val settings = JsonStore(File(dir, "settings.json"), Settings.serializer(), ::Settings, migrations = listOf(SettingsMigration.SETTINGS, ZoomMigration.SETTINGS, SpeechMigration.SETTINGS))
-    private val runtime = JsonStore(File(dir, "runtime.json"), RuntimeState.serializer(), ::RuntimeState, migrations = listOf(ChatMigration.RUNTIME, RuntimeSplit.RUNTIME))
-    private val protectionState = JsonStore(File(dir, "protection.json"), ProtectionState.serializer(), ::ProtectionState)
+    private val runtime = JsonStore(File(dir, "runtime.json"), RuntimeState.serializer(), ::RuntimeState, migrations = listOf(ChatMigration.RUNTIME, RuntimeSplit.RUNTIME, NotSameMigration.RUNTIME))
+    private val protectionState = JsonStore(File(dir, "protection.json"), ProtectionState.serializer(), ::ProtectionState, migrations = listOf(ProtectionSplit.PROTECTION))
+    private val device = JsonStore(File(dir, "device.json"), DeviceState.serializer(), ::DeviceState)
     private val secrets = SecretStore(File(dir, "secrets.bin"), Reverse, clock = { clock.now() })
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -50,7 +54,7 @@ class ProtectionTest {
     @Volatile private var admin = false
     private val removed = AtomicInteger()
 
-    private val protection = Protection(settings, protectionState, secrets, clock, scope, adminActive = { admin }) {
+    private val protection = Protection(settings, protectionState, device, secrets, clock, scope, adminActive = { admin }) {
         removed.incrementAndGet()
         admin = false
     }
@@ -175,13 +179,13 @@ class ProtectionTest {
         admin = true
         protection.start()
         until("the part-way arming is undone") { removed.get() == 1 }
-        assertTrue(!protectionState.value.adminArmed)
+        assertTrue(!device.value.adminArmed)
         // Armed: on record; disarmed (its wait over), given up.
         admin = true
         settings.update { it.copy(armed = true) }
-        until("armed is on record") { protectionState.value.adminArmed }
+        until("armed is on record") { device.value.adminArmed }
         settings.update { it.copy(armed = false) }
-        until("the admin is given up") { removed.get() == 2 && !protectionState.value.adminArmed }
+        until("the admin is given up") { removed.get() == 2 && !device.value.adminArmed }
     }
 
     private fun until(what: String, done: () -> Boolean) {

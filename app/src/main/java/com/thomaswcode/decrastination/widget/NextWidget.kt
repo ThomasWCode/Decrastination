@@ -73,12 +73,12 @@ class NextWidget : GlanceAppWidget() {
             val tasks by graph.tasks.state.collectAsState()
             val settings by graph.settings.state.collectAsState()
             val session by graph.stores.session.state.collectAsState()
-            val protection by graph.stores.protection.state.collectAsState()
+            val device by graph.stores.device.state.collectAsState()
             val written by graph.stores.model.state.collectAsState()
             val log by graph.log.state.collectAsState()
             val plan = graph.planning.plan(tasks, settings)
             val today = plan.today.toString()
-            val model = WidgetModel.from(plan, tasks, graph.clock.zone(), session, protection, settings.armed, reward = graph.focus.rewardLine(plan), slots = log.slots.filter { it.date == today }, micro = written.microPlans)
+            val model = WidgetModel.from(plan, tasks, graph.clock.zone(), session, device, settings.armed, reward = graph.focus.rewardLine(plan), slots = log.slots.filter { it.date == today }, micro = written.microPlans)
             // The app's dark blue ([com.thomaswcode.decrastination.ui.Colours]), as the app has it.
             GlanceTheme(colors = ColorProviders(light = Colours.Light, dark = Colours.Dark)) { Content(model) }
         }

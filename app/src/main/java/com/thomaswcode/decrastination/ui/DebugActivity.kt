@@ -67,7 +67,7 @@ class DebugActivity : ComponentActivity() {
 private fun DebugPage(graph: AppGraph, activity: Activity) {
     val runtime by graph.runtime.state.collectAsStateWithLifecycle()
     val model by graph.stores.model.state.collectAsStateWithLifecycle()
-    val protection by graph.stores.protection.state.collectAsStateWithLifecycle()
+    val device by graph.stores.device.state.collectAsStateWithLifecycle()
     val state by graph.tasks.state.collectAsStateWithLifecycle()
     val log by graph.log.state.collectAsStateWithLifecycle()
     val chat by graph.chat.state.collectAsStateWithLifecycle()
@@ -77,7 +77,7 @@ private fun DebugPage(graph: AppGraph, activity: Activity) {
     var round by remember { mutableIntStateOf(0) }
     var taskId by rememberSaveable { mutableStateOf<String?>(null) }
     fun at(time: Long?) = time?.let { Format.ago(it, now) } ?: "never"
-    val context = remember(round, state, runtime.notSame) { graph.conversation.chatContext().let { it.known + "\n\n" + it.plan } }
+    val context = remember(round, state) { graph.conversation.chatContext().let { it.known + "\n\n" + it.plan } }
     Scaffold(topBar = { TopAppBar(title = { Text("Debug") }) }) { padding ->
         LazyColumn(Modifier.padding(padding).fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             item(key = "commands") {
@@ -137,7 +137,7 @@ private fun DebugPage(graph: AppGraph, activity: Activity) {
             }
             item(key = "watchdog") {
                 val report = remember(round) { runCatching { Watchdog.report(activity).toString() }.getOrElse { "couldn't be made: ${it.message}" } }
-                Block(activity, "The watchdog", "Problems: ${protection.protection.problems.ifEmpty { listOf("none") }.joinToString("; ")}\nChecked ${at(protection.protection.checkedAt)}\n\n$report")
+                Block(activity, "The watchdog", "Problems: ${device.watchdog.problems.ifEmpty { listOf("none") }.joinToString("; ")}\nChecked ${at(device.watchdog.checkedAt)}\n\n$report")
             }
         }
     }

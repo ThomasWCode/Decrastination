@@ -41,6 +41,7 @@ class RuntimeSplitTest {
     private fun written(stores: Stores): Map<String, JsonElement> = mapOf(
         "session.json" to JsonStore.json.encodeToJsonElement(SessionState.serializer(), stores.session.value),
         "protection.json" to JsonStore.json.encodeToJsonElement(ProtectionState.serializer(), stores.protection.value),
+        "device.json" to JsonStore.json.encodeToJsonElement(DeviceState.serializer(), stores.device.value),
         "model.json" to JsonStore.json.encodeToJsonElement(ModelState.serializer(), stores.model.value),
         "anki.json" to JsonStore.json.encodeToJsonElement(AnkiState.serializer(), stores.anki.value),
         "calendar.json" to JsonStore.json.encodeToJsonElement(CalendarState.serializer(), stores.calendar.value),
@@ -54,6 +55,7 @@ class RuntimeSplitTest {
         return when (file) {
             "session.json" -> through(SessionState.serializer())
             "protection.json" -> through(ProtectionState.serializer())
+            "device.json" -> JsonStore.json.encodeToJsonElement(DeviceState.serializer(), JsonStore.json.decodeFromJsonElement(DeviceState.serializer(), JsonObject(mapOf(ProtectionSplit.FIELDS.getValue(field) to value)))).jsonObject.getValue(ProtectionSplit.FIELDS.getValue(field))
             "model.json" -> through(ModelState.serializer())
             "anki.json" -> through(AnkiState.serializer())
             "calendar.json" -> through(CalendarState.serializer())
@@ -70,16 +72,18 @@ class RuntimeSplitTest {
             val stores = Stores(dir, Reverse)
             val after = written(stores)
             for ((file, fields) in RuntimeSplit.FIELDS) {
-                val now = after.getValue(file).jsonObject
-                // Each field as the runtime held it, as its new store writes it (defaults written out alike).
+                // Each field as the runtime held it, as its new store writes it (defaults written out alike), the phone's
+                // own of protection's in device.json, where 4.13.0 took them on to.
                 for (field in fields) runtime[field]?.let { was ->
-                    assertEquals(normal(file, field, was), now.getValue(field), "$shape: $file $field")
+                    val on = ProtectionSplit.FIELDS[field]?.takeIf { file == "protection.json" }
+                    val store = if (on != null) "device.json" else file
+                    assertEquals(normal(store, field, was), after.getValue(store).jsonObject.getValue(on ?: field), "$shape: $store $field")
                 }
             }
             assertEquals(calendarBefore.getValue("written"), after.getValue("calendar.json").jsonObject.getValue("written"), shape)
             // The runtime keeps only its own, in its new shape.
             val left = json(File(dir, "runtime.json"))
-            assertEquals(3, Migration.versionOf(left), shape)
+            assertEquals(4, Migration.versionOf(left), shape)
             assertTrue(RuntimeSplit.FIELDS.values.flatten().none { it in left }, shape)
             assertEquals(runtime.getValue("heldNotifications"), left.getValue("heldNotifications"), shape)
             assertTrue(File(dir, "runtime.json.v2").isFile || File(dir, "runtime.json.v1").isFile, shape)

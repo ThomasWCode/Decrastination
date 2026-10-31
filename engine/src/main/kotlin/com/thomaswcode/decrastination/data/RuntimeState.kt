@@ -1,7 +1,6 @@
 package com.thomaswcode.decrastination.data
 
 import com.thomaswcode.decrastination.block.TeamsAutoSync
-import com.thomaswcode.decrastination.core.Duplicates
 import com.thomaswcode.decrastination.core.Fact
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Source
@@ -31,8 +30,6 @@ data class RuntimeState(
     val teamsAuto: TeamsAutoSync.State = TeamsAutoSync.State(),
     /** When the nightly backup was last written (AR-07): null before the first. */
     val lastBackupAt: Long? = null,
-    /** Pairs of tasks you've said aren't the same work (DX-15), by [com.thomaswcode.decrastination.core.Duplicates.key]: not asked about again. */
-    val notSame: List<String> = emptyList(),
     /** Saved files found unreadable at a start (IMP-P1-003), till you've seen them in Setup. */
     val unreadable: List<JsonStore.Unreadable> = emptyList(),
     /**
@@ -41,7 +38,7 @@ data class RuntimeState(
      */
     val unreadableSeen: List<String> = emptyList(),
     /** The shape this is in ([Migration]): raised with each change of it, a migration bringing older files to it. */
-    val version: Int = 3,
+    val version: Int = 4,
 ) {
     /** With [found] (this start's) on Setup's list: each once, and none you've seen. */
     fun withUnreadable(found: List<JsonStore.Unreadable>): RuntimeState {
@@ -53,15 +50,10 @@ data class RuntimeState(
     fun seenUnreadable(seen: JsonStore.Unreadable): RuntimeState =
         copy(unreadable = unreadable - seen, unreadableSeen = (unreadableSeen + listOfNotNull(seen.copy)).distinct().takeLast(MAX_UNREADABLE_SEEN))
 
-    /** Tasks [a] and [b] said not to be the same work (DX-15): not asked about again, the newest [MAX_NOT_SAME] pairs kept. */
-    fun withNotSame(a: String, b: String): RuntimeState = copy(notSame = (notSame + Duplicates.key(a, b)).distinct().takeLast(MAX_NOT_SAME))
-
     companion object {
         /** Unreadable files Setup lists at most: the latest. */
         const val MAX_UNREADABLE = 10
 
-        /** The most pairs said to be different kept: far more than there are. */
-        const val MAX_NOT_SAME = 200
 
         /** Three copies kept of each of six files, with room. */
         const val MAX_UNREADABLE_SEEN = 24

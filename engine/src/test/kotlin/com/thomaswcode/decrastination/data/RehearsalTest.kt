@@ -168,6 +168,7 @@ class RehearsalTest {
             before(files, "runtime.json", RuntimeState.serializer()),
             before(files, "session.json", SessionState.serializer()),
             before(files, "protection.json", ProtectionState.serializer()),
+            before(files, "device.json", DeviceState.serializer()),
             before(files, "model.json", ModelState.serializer()),
             before(files, "anki.json", AnkiState.serializer()),
             before(files, "learning.json", LearningState.serializer()),
@@ -206,6 +207,7 @@ class RehearsalTest {
         Stores.MOVES.forEach { it.run(moved) }
         val stores = Stores(copy, NoKeystore)
         fun there(name: String) = File(files, name).isFile || (name in SPLIT && File(files, "runtime.json").isFile) ||
+            (name == "device.json" && File(files, "protection.json").isFile) ||
             (name == ChatArchiveStore.NAME && archiveFiles(files).isNotEmpty())
         // Each file as the moves and its migrations leave it: what the store decodes, and should write back whole.
         fun upgraded(file: String, shape: String): JsonObject? = runCatching {
@@ -222,7 +224,7 @@ class RehearsalTest {
         val migrated = listOf(
             after(stores.tasks, TaskState.serializer(), "tasks.json"), after(stores.settings, Settings.serializer(), "settings.json"),
             after(stores.runtime, RuntimeState.serializer(), "runtime.json"),
-            after(stores.session, SessionState.serializer(), "session.json"), after(stores.protection, ProtectionState.serializer(), "protection.json"),
+            after(stores.session, SessionState.serializer(), "session.json"), after(stores.protection, ProtectionState.serializer(), "protection.json"), after(stores.device, DeviceState.serializer(), "device.json"),
             after(stores.model, ModelState.serializer(), "model.json"), after(stores.anki, AnkiState.serializer(), "anki.json"),
             after(stores.learning, LearningState.serializer(), "learning.json"), after(stores.log, ActivityLog.serializer(), "log.json"),
             after(stores.instructions, InstructionState.serializer(), "instructions.json"), after(stores.chat, ChatState.serializer(), "chat.json"),
@@ -272,10 +274,10 @@ class RehearsalTest {
 
     private fun List<Read>.json(file: String): JsonObject? = firstOrNull { it.file == file }?.json
 
-    /** Each read's lists by "<file> <path>", the runtime's moved fields' under the file each went to (4.0.13), so a move compares. */
+    /** Each read's lists by "<file> <path>", the runtime's moved fields' under the file each went to (4.0.13, 4.13.0), so a move compares. */
     private fun keyed(reads: List<Read>): Map<String, Int> = reads.flatMap { r ->
         r.lists.map { (path, n) ->
-            val file = if (r.file == "runtime.json") RuntimeSplit.FIELDS.entries.firstOrNull { path.substringBefore("[") in it.value }?.key ?: r.file else r.file
+            val file = if (r.file != "runtime.json") r.file else if (path == "notSame") "tasks.json" else RuntimeSplit.FIELDS.entries.firstOrNull { path.substringBefore("[") in it.value }?.key ?: r.file
             "$file $path" to n
         }
     }.groupBy({ it.first }, { it.second }).mapValues { it.value.sum() }
@@ -345,8 +347,8 @@ class RehearsalTest {
             @Suppress("UNCHECKED_CAST")
             it as T
         }
-        // The split's files (4.0.13) aside: each is counted through it, by what it holds, below; read whole, it's checked after.
-        val counted = reads.filter { it.file !in SPLIT }
+        // The splits' files (4.0.13, 4.13.0's device.json) aside: each is counted through its split, by what it holds, below; read whole, it's checked after.
+        val counted = reads.filter { it.file !in SPLIT && it.file != "device.json" }
         appendLine("Stores: ${counted.count { it.value != null }} of ${counted.size} there; read whole: ${counted.count { it.value != null && it.problem == null }}; the same written again: ${counted.count { it.value != null && it.roundTrip }}")
         counted.filter { it.problem != null }.forEach { appendLine("  ${it.file} didn't read whole${if (it.problem!!.kept) ", some of it kept" else ""}") }
         counted.filter { !it.roundTrip }.forEach { appendLine("  ${it.file} changed read and written again") }
@@ -392,6 +394,11 @@ class RehearsalTest {
             appendLine("  today's slots ${slots.previous.size}, missed ${slots.missed.size}; changes waiting ${size("pending")}; held notifications ${size("heldNotifications")}; kept slots under way ${size("keeping")}; rewarded ${size("rewarded")}")
             appendLine("  your event answers ${size("eventAnswers")}, asked ${size("eventsAsked")}; calendar events written ${size("calendarWritten")}; calibration ${calibration.multipliers.size} multipliers, ${calibration.timed.size} timed")
         }
+        // 4.13.0's moves, each read wherever it is: the pairs in the runtime or the tasks, the phone's own fields in protection.json or device.json.
+        val pairs = (reads.json("tasks.json")?.get("notSame") ?: reads.json("runtime.json")?.get("notSame")) as? JsonArray
+        fun own(name: String, there: String = name): JsonElement? = reads.json("device.json")?.get(there) ?: reads.json("protection.json")?.get(name)
+        val found = ((own("protection", "watchdog") as? JsonObject)?.get("problems") as? JsonArray)?.size ?: 0
+        appendLine("Pairs that aren't the same work: ${pairs?.size ?: 0}; the device admin armed: ${(own("adminArmed") as? JsonPrimitive)?.contentOrNull ?: false}; the watchdog's problems: $found")
         of<MemoryState>("memory.json")?.let { appendLine("Memory: facts ${it.facts.size}, rules ${it.rules.size}") }
         of<FelixStore>("felix.json")?.let { appendLine("Felix's notes ${it.notes.size}, not deleted ${Notes.live(it.notes).size}; reminders ${it.reminders.size}, still to come ${it.reminders.count(Reminders::pending)}") }
         of<SchoolCalendar>("school.json")?.let { appendLine("School: days off ${it.noSchool.size}, half-days ${it.halfDays.size}") }
@@ -420,7 +427,7 @@ class RehearsalTest {
         val REQUIRED = listOf("tasks.json", "settings.json", "runtime.json", "log.json")
 
         /** Every store's file, the secrets aside (they can't be read off the phone), the archive's months found as they're read. */
-        val STORES = REQUIRED + listOf("instructions.json", "chat.json", "chat-archive.json", "school.json", "memory.json", "calendar.json") + listOf("session.json", "protection.json", "model.json", "anki.json", "learning.json") + listOf("felix.json", "gmail-writes.json")
+        val STORES = REQUIRED + listOf("instructions.json", "chat.json", "chat-archive.json", "school.json", "memory.json", "calendar.json") + listOf("session.json", "protection.json", "device.json", "model.json", "anki.json", "learning.json") + listOf("felix.json", "gmail-writes.json")
 
         /** The JSON files in the folder that aren't stores: the debug commands' (`ai-prompts`, a list). */
         val NOT_STORES = setOf("ai-prompts.json")

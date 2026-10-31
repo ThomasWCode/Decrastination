@@ -115,9 +115,9 @@ class ArchitectureTest {
 
     private companion object {
         /** An update of a store, by the name every file holds it by: `tasks.update {`, `graph.stores.model.update(`. */
-        val UPDATE = Regex("""(?<![\w.])(?:graph\.(?:stores\.)?|stores\.)?(tasks|settings|runtime|session|protection|model|anki|learning|log|instructions|chat|school|memory|felix|calendar|writes)\.update\s*[({]""")
+        val UPDATE = Regex("""(?<![\w.])(?:graph\.(?:stores\.)?|stores\.)?(tasks|settings|runtime|session|protection|device|model|anki|learning|log|instructions|chat|school|memory|felix|calendar|writes)\.update\s*[({]""")
 
-        /** What in the app updates a store: the phone's own runtime, the graph's start, and the watchdog's protection findings. */
+        /** What in the app updates a store: the phone's own runtime, the graph's start, and the watchdog's findings. */
         val PHONE_WRITERS = setOf("notify/Notifier.kt", "AppGraph.kt", "block/FocusService.kt", "learn/DailyAlarms.kt", "protect/Watchdog.kt")
 
         /**
@@ -132,7 +132,8 @@ class ArchitectureTest {
             "settings" to setOf("protect/Protection.kt"),
             "runtime" to setOf("notify/Notifier.kt", "AppGraph.kt", "block/FocusService.kt", "learn/Briefing.kt", "learn/DailyAlarms.kt"),
             "session" to setOf("block/Focus.kt", "block/Slots.kt", "plan/Planning.kt", "tasks/Instructions.kt"),
-            "protection" to setOf("protect/Protection.kt", "protect/Watchdog.kt"),
+            "protection" to setOf("protect/Protection.kt"),
+            "device" to setOf("protect/Protection.kt", "protect/Watchdog.kt"),
             "model" to setOf("enrich/ModelGateway.kt", "plan/Ahead.kt"),
             "anki" to setOf("block/AnkiWatch.kt"),
             "learning" to setOf("learn/Learning.kt", "block/AnkiWatch.kt", "AppGraph.kt"),

@@ -182,7 +182,7 @@ object Watchdog {
             }
         }
         val now = graph.clock.now()
-        val before = graph.stores.protection.value.protection
+        val before = graph.stores.device.value.watchdog
         var stoppedSince = if (ProtectionCheck.stopped(report)) before.stoppedSince ?: now else null
         var restartedAt = before.restartedAt
         var tries = if (stoppedSince == null) 0 else before.restartTries
@@ -201,9 +201,9 @@ object Watchdog {
             // Look again when the restart is due, rather than at the next periodic run.
             WatchdogReceiver.checkIn(context, restartAt - now)
         }
-        graph.stores.protection.update {
+        graph.stores.device.update {
             it.copy(
-                protection = WatchdogState(
+                watchdog = WatchdogState(
                     problems = problems,
                     offSince = if (problems.isEmpty()) null else before.offSince ?: now,
                     checkedAt = now,

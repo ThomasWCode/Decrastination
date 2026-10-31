@@ -189,7 +189,7 @@ Every merge lays the rest over the source's values (`TaskItem.enriched`, `core/E
 `core/Duplicates.kt` finds open tasks from two sources that look like the same work (`Duplicates.candidates`). Never Anki's, nor hidden tasks.
 
 - Alike means the same subject (by Settings' class map, or the same class), due within a day of each other or both undated, and titles sharing at least 60 % of the shorter one's words of three letters or more.
-- Work shows each such pair with *Same?*. Yes makes one the other's same work (a `SameAs` change, `TaskItem.mine.sameAs`): it's off the plan and the lists, and its minutes worked count for the one kept (`Duplicates.credited`). No keeps the pair from being asked about again (`RuntimeState.notSame`).
+- Work shows each such pair with *Same?*. Yes makes one the other's same work (a `SameAs` change, `TaskItem.mine.sameAs`): it's off the plan and the lists, and its minutes worked count for the one kept (`Duplicates.credited`). No keeps the pair from being asked about again (`TaskState.notSame`, `Instructions.notSame`).
 - Felix is told which tasks look alike, for a `SameAs` you ask him for.
 - A link to a task that's gone is let go at every merge, and the hidden task comes back (`Duplicates.linksPresent`).
 

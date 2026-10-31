@@ -48,7 +48,7 @@ Makes the stores (through `Stores`), the gateway, the notifier and the services;
 | **Planning** (`plan/`) | the plan watcher, today's slot starts, writing ahead | the focus, the widget, screens, the Conversation |
 | **Focus** (`block/`) | the blocker's session state (`session.json`), Anki's watch (`anki.json`) | the focus service, screens, the Conversation's ticks and kept pieces |
 | **CalendarWriter** (`calendar/`) | `calendar.json`: what was written where, the calendars to clear, your answers about events | Planning's hooks, the Conversation's event answers |
-| **Protection** (`protect/`) | `protection.json`: changes waiting, the override, armed, the code's lock, protection's state | screens, the review, the watchdog |
+| **Protection** (`protect/`) | `protection.json`: changes waiting, the override, the code's lock, the uptime mark; and `device.json`, what's only this phone's: the device admin's arming, the watchdog's finding (written by the watchdog), forced blocking | screens, the review, the watchdog |
 | **Instructions** (`tasks/`) | `instructions.json`; your values laid on tasks (`TaskItem.mine`); `Instruction.by` | screens, the Conversation |
 | **OwnTasks** (`tasks/`) | your own tasks | screens, the Conversation, the focus |
 | **Readings** (`enrich/`) | the readings on tasks | Sync, screens |
