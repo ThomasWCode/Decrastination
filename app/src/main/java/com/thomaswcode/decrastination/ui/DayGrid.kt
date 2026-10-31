@@ -75,6 +75,7 @@ import com.thomaswcode.decrastination.core.SlotKind
 import com.thomaswcode.decrastination.core.SettingsLimits
 import com.thomaswcode.decrastination.core.WindowKind
 import com.thomaswcode.decrastination.data.SlotOutcome
+import com.thomaswcode.decrastination.data.SlotRecord
 import com.thomaswcode.decrastination.enrich.MicroPlan
 import com.thomaswcode.decrastination.learn.CalendarEvent
 import com.thomaswcode.decrastination.learn.EventJudge
@@ -103,6 +104,10 @@ internal class DayActions(
     val onLater: (Chunk) -> Unit,
     val onMove: (Chunk) -> Unit,
     val onDrop: () -> Unit,
+    /** A missed slot tapped: its sheet. */
+    val onMissed: (SlotRecord) -> Unit,
+    /** Whether a missed slot's sheet has a Done just now ([MissedActions]), which TalkBack offers on its block too. */
+    val canKeep: (DayModel.Row.Recorded) -> Boolean,
 )
 
 /**
@@ -288,7 +293,7 @@ private fun GridBlock(block: DayModel.Block, plan: Plan, zone: ZoneId, judge: (C
             }
         }
         is DayModel.Row.Event -> EventBlock(item.event, judge(item.event), EventJudge.key(item.event) in asked, zone, actions, ::fit)
-        is DayModel.Row.Recorded -> RecordBlock(item, zone, ::fit)
+        is DayModel.Row.Recorded -> RecordBlock(item, zone, actions, ::fit)
         is DayModel.Row.Busy -> BusyBlockView(item, ::fit)
         is DayModel.Row.Window -> Unit
     }
@@ -458,14 +463,24 @@ private fun EventBlock(event: CalendarEvent, judgement: EventJudge.Judgement, as
     }
 }
 
-/** A slot on record: kept, grey and struck through; missed, outlined and worded in the error colour. */
+/** A slot on record: kept, grey and struck through; missed, outlined and worded in the error colour, its sheet a tap away. */
 @Composable
-private fun RecordBlock(item: DayModel.Row.Recorded, zone: ZoneId, fit: (String) -> String) {
+private fun RecordBlock(item: DayModel.Row.Recorded, zone: ZoneId, actions: DayActions, fit: (String) -> String) {
     val record = item.record
     val missed = record.outcome == SlotOutcome.Missed
+    // For TalkBack, its Done offered on the block, as a piece's is.
+    val keeps = item.piece?.takeIf { actions.canKeep(item) }
     Box(
         Modifier.fillMaxSize().clip(RoundedCornerShape(8.dp))
             .then(if (missed) Modifier.border(1.dp, MaterialTheme.colorScheme.error, RoundedCornerShape(8.dp)) else Modifier.background(MaterialTheme.colorScheme.surfaceVariant))
+            .then(
+                if (missed) {
+                    Modifier.semantics { if (keeps != null) customActions = listOf(CustomAccessibilityAction("Done") { actions.onDone(keeps); true }) }
+                        .clickable { actions.onMissed(record) }
+                } else {
+                    Modifier
+                },
+            )
             .padding(horizontal = 6.dp, vertical = 2.dp),
     ) {
         Column {

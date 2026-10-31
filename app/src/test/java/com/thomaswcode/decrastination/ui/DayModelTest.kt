@@ -84,6 +84,21 @@ class DayModelTest {
     }
 
     @Test
+    fun `a missed slot whose piece is still in the plan carries it, and a kept one or one whose piece has left the plan carries none`() {
+        val p = plan()
+        val piece = p.ordered.first()
+        val missed = SlotRecord(
+            date = "2026-10-12", key = piece.key, taskId = piece.taskId, kind = Kind.Homework, label = "a", plannedMin = 30,
+            start = Fixtures.at("2026-10-12T14:00"), end = Fixtures.at("2026-10-12T14:30"), window = WindowKind.Evening, outcome = SlotOutcome.Missed, workedMin = 0, at = Fixtures.at("2026-10-12T14:40"),
+        )
+        fun pieceOf(record: SlotRecord) = DayModel.from(p, monday, emptyList(), listOf(record), evening, Fixtures.at("2026-10-12T16:30"), LONDON)
+            .blocks.firstNotNullOf { it.item as? DayModel.Row.Recorded }.piece
+        assertEquals(piece, pieceOf(missed))
+        assertNull(pieceOf(missed.copy(outcome = SlotOutcome.KeptLate)))
+        assertNull(pieceOf(missed.copy(key = "teams:gone#-1#1")))
+    }
+
+    @Test
     fun `a slot kept twice at one start is two blocks, each with its own key, and the pieces with no time are listed`() {
         val p = plan()
         val slot = p.todaySlots.first { it.kind == SlotKind.Work }

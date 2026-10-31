@@ -48,8 +48,8 @@ data class DayModel(
         /** A slot of the plan's: under way, to come, or gone by and not moved yet. */
         data class Planned(val slot: Slot, val state: State) : Row
 
-        /** A slot on record: kept, kept late, or missed. */
-        data class Recorded(val record: SlotRecord) : Row
+        /** A slot on record: kept, kept late, or missed; a missed one with the plan's [piece] of its key, where it's still planned. */
+        data class Recorded(val record: SlotRecord, val piece: Chunk? = null) : Row
 
         /** A busy time of yours (D-117), as your calendar has it. */
         data class Busy(val block: BusyBlock) : Row
@@ -93,7 +93,7 @@ data class DayModel(
                     }
                     add(Block(s.start, s.end, Row.Planned(s, state)))
                 }
-                recorded.forEach { r -> add(cut(r.start, r.end, Row.Recorded(r))) }
+                recorded.forEach { r -> add(cut(r.start, r.end, Row.Recorded(r, plan.ordered.firstOrNull { it.key == r.key }?.takeIf { r.outcome == SlotOutcome.Missed }))) }
             }.sortedWith(compareBy({ it.start }, { it.end }))
             val first = listOfNotNull(windows.minOfOrNull { it.startMin }, blocks.minOfOrNull { DayLayout.minuteOf(it.start, date, zone) }).minOrNull() ?: FIRST_MIN
             val done = recorded.filter { it.outcome.kept }
