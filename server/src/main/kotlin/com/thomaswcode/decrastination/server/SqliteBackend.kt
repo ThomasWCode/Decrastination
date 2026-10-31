@@ -17,7 +17,20 @@ class SqliteBackend(private val db: Database, private val clock: () -> Long = Sy
 
     override fun read(name: String): String? = db.transactionless { c -> c.single("SELECT json FROM stores WHERE name = ?", name) }
 
+    /**
+     * Whether a store can write itself. Not in mirror mode, where what's kept is what the phone sent ([keep]): an older shape is
+     * read up to date in memory, its row left as it came, so the hash the phone's told is the one it sent, and no route can
+     * change the state.
+     */
+    @Volatile
+    var writable: Boolean = true
+
     override fun write(name: String, version: Int, text: String) {
+        if (writable) keep(name, version, text)
+    }
+
+    /** [text] kept as [name], with its history, whatever [writable] says: a seed's. */
+    fun keep(name: String, version: Int, text: String) {
         db.transaction { c ->
             val revision = db.revision()
             val now = clock()

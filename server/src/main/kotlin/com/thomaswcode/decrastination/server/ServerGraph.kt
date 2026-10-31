@@ -72,7 +72,7 @@ class ServerClock(private val db: Database) : WallClock {
  */
 class ServerGraph(val db: Database, dataDir: File, cipher: SecretCipher, private val version: String) {
     val clock = ServerClock(db)
-    val backend = SqliteBackend(db)
+    val backend = SqliteBackend(db).apply { writable = (db.meta("mode") ?: MIRROR) != MIRROR }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     val stores = Stores(backend, SecretStore(File(dataDir, "secrets.bin"), cipher))
@@ -125,7 +125,7 @@ class ServerGraph(val db: Database, dataDir: File, cipher: SecretCipher, private
     }
 
     /** Whether the server is taking the phone's stores whole, or commands (from stage 2). */
-    val mode: String get() = db.meta("mode") ?: "mirror"
+    val mode: String get() = db.meta("mode") ?: MIRROR
 
     fun calendarTime(): EventJudge.Time = calendarRead.value.time(stores.instructions.value.applied, clock.now(), clock.zone())
 
@@ -148,7 +148,7 @@ class ServerGraph(val db: Database, dataDir: File, cipher: SecretCipher, private
                     continue
                 }
                 if (backend.read(store.name) == store.text) continue
-                backend.write(store.name, store.version, store.text)
+                backend.keep(store.name, store.version, store.text)
                 written += store.name
             }
         }
@@ -196,6 +196,7 @@ class ServerGraph(val db: Database, dataDir: File, cipher: SecretCipher, private
     fun work(): WorkView = WorkViews.of(stores.tasks.value, planning.plan(), stores.settings.value, clock.now(), clock.zone(), devices.lastSeen())
 
     private companion object {
+        const val MIRROR = "mirror"
         const val TIDY_EVERY_MS = 24 * 3_600_000L
     }
 
