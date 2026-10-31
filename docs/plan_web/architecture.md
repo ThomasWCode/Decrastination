@@ -65,7 +65,7 @@ A Ktor application (3.6.x, the CIO or Netty engine; both run on arm64 Linux) on 
 
 A route never writes a store. It turns the request into a command and hands it to the applier, which calls the owner; the same rule as "no screen is among a store's writers" (D-107), moved to the server.
 
-**Jobs.** A scheduler loop (a coroutine, every minute) runs what is due, with each job's `lastRanAt` in the server's own runtime store: the Power Planner and Gmail syncs every 15 minutes (stage 3), the readings of new tasks, planning ahead, the memory tidy, the daily briefing's text and the weekly review's at their times, the nightly backup to R2. The phone's WorkManager jobs that did these go (`inventory.md` §Integrations); the phone's `SyncWorker` becomes the sync alone.
+**Jobs.** A scheduler loop (a coroutine, every minute) runs what is due, with each job's `lastRanAt` in the server's own runtime store: the Power Planner and Gmail syncs every 15 minutes (stage 3), the readings of new tasks, planning ahead, the memory tidy, the daily briefing's text and the weekly review's at their times, the nightly backup to B2 (W-20). The phone's WorkManager jobs that did these go (`inventory.md` §Integrations); the phone's `SyncWorker` becomes the sync alone.
 
 ## The sync, in brief
 

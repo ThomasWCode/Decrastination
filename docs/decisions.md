@@ -8,7 +8,7 @@ How the app works in detail is in [spec/](spec/); how the work is done is in [de
 
 - **D-1. An organiser first, a blocker second** (2.0.0, 12 Oct). The work (deadlines, minutes, days, steps) can always be changed at once; only switching blocking off is guarded (D-46).
 - **D-2. The core stays deterministic.** Ranking, deadlines, allocation, quotas and "done" never depend on Claude, whose readings are advice the rules check and can stand in for. Applies: `core/`.
-- **D-3. One phone, everything on it.** No PC or server at runtime; a sideloaded app for its one owner.
+- **D-3. One phone, everything on it.** No PC or server at runtime; a sideloaded app for its one owner. Giving way to D-126 stage by stage: in 5.0.0 the server only mirrors the phone, which needs it for nothing.
 - **D-4. The app's rules apply to the app's own output; what you or Felix set explicitly is kept as set** (17 Oct). A limit or adjustment the app makes (sittings, the learned pace) never rewrites your or Felix's values; where the app's knowledge would help with them, Felix is told it instead. Applies: every enforcement or normalisation, with `TaskItem.mine` (your and Felix's values, each with who set it), `yourSteps` and `yourMinutes` exempt.
 - **D-5. Quality over cost.** Claude is tuned for good readings and speed, not cheapness; but no call is wasted (D-90, D-91).
 
@@ -167,6 +167,20 @@ How the app works in detail is in [spec/](spec/); how the work is done is in [de
 - **D-89. The docs change with the code**, in the same PR: the spec for behaviour, this file for decisions. Comments say what and why, and cite requirement ids and decisions.
 - **D-90. Not built:** focus sessions, streaks, an exams page, rules by sender, two weekend windows, task search, a free-time ledger, reviews that only propose. A rewrite of the app isn't wanted; it was restructured in place instead ([plan_v4/](plan_v4/README.md)).
 - **D-125. The website's versions** (31 Oct; W-21 in [plan_web/decisions.md](plan_web/decisions.md)): the moves that cut `:engine` out of the app are 4.12.x, cleanups; its two store changes a minor of their own, 4.13.0, as a stored-data change isn't a cleanup; the first release of the phone that syncs is 5.0.0, each later stage's phone release a minor, and the server's image is tagged with the same version. Applies: `app/build.gradle.kts`, `deploy/`.
+- **D-126. The website is a second full client on shared state, not a replacement** (5.0.0, 31 Oct; W-1, Q129 in [plan_web/decisions.md](plan_web/decisions.md), as those below). The server holds the state; the phone and the website are both clients, and the phone keeps every device duty.
+- **D-127. The phone works offline to an extent** (5.0.0; W-2): reads, the blocker, the timer and the alarms from a replica; only Felix and the syncs need a connection.
+- **D-128. One account, the owner's** (5.0.0; W-3, Q130): GitHub sign-in restricted to one user id.
+- **D-129. A Kotlin/JVM server reusing `:core` and `:engine`** (5.0.0; W-4, Q132): one copy of the rules, the goldens and the migrations.
+- **D-130. An Oracle Always Free Arm instance** (5.0.0; W-5, Q133), its idle-reclamation risk carried with its mitigations ([plan_web/hosting.md](plan_web/hosting.md)).
+- **D-131. SQLite with Litestream to R2** (5.0.0; W-6, Q134): the stores as JSON documents, a write a transaction, the WAL streamed off the box.
+- **D-132. A React and TypeScript single-page app, served by Caddy from the same box** (5.0.0; W-7, Q135), its code in this repository under `web/`.
+- **D-133. The server runs the Power Planner and Gmail syncs** (W-8, Q136; stage 3), their credentials held there encrypted, entered on the website. Teams and AnkiDroid stay the phone's.
+- **D-134. Notices in the page first; Web Push an optional last stage** (W-9, Q137). The phone keeps every notification.
+- **D-135. No blocking on a laptop** (W-10, Q131).
+- **D-136. The stages go in the most technically feasible order, and the website isn't used until they're done** (W-11, Q138). The phone keeps working at every release.
+- **D-137. The website renders view models the server computes** (5.0.0; W-14). The TypeScript holds layout and interaction, never a rule about tasks, slots or days.
+- **D-138. A protocol version in every request** (5.0.0; W-16): the server takes its own and the one before, and a client behind gets a 409 and works from what it holds. The phone is never behind the server on a store's version: a release that raises one is installed on the phone before the merge that deploys the server.
+- **D-139. One repository** (5.0.0; W-17): `:engine` and `:server` are Gradle modules beside `:app` and `:core`; `web/` and `deploy/` are folders.
 - **D-107. The structure as Stage 12 left it** (4.3.2, 21 Oct; Q48: A, Q49: A, Q50): each store is updated only by the files the architecture test names for it, its owner first, each writing its own part of it (one writer where there's one, as `gmail-writes.json`'s), and no screen updates a store; a single writer for every store isn't planned. `AppGraph` holds the wiring (the stores and the services made, and the flows that join them), whatever its length: 537 lines at 4.3.2, not the plan's 400. The plan's folder was cut to its record once the plan was done (24 Oct). Applies: `ArchitectureTest`, `AppGraph`, [plan_v4/architecture.md](plan_v4/architecture.md).
 
 ## Costs

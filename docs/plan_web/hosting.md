@@ -22,37 +22,13 @@ A free-only account has no Oracle support, and an account left idle 30 days can 
 
 | Service | Image | Does | Memory |
 |---|---|---|---|
-| `server` | `ghcr.io/thomaswcode/decrastination-server:<version>` (`eclipse-temurin:21-jre` + the fat JAR) | the API and the jobs, port 8080 inside | `mem_limit` 1.5 GB, `-Xmx1g`; the real figure measured in stage 1 and written here |
-| `web` | `ghcr.io/thomaswcode/decrastination-web:<version>` (`caddy:2-alpine` + the SPA's `dist/`) | TLS, the static files, `/api` to `server:8080` | ~50 MB |
-| `litestream` | `litestream/litestream:0.5` | replicates `data/decrastination.db` to R2, sharing the `data` volume | ~30 MB |
+| `server` | `ghcr.io/thomaswcode/decrastination-server:<version>` (`eclipse-temurin:21-jre` + the fat JAR) | the API and the jobs, port 8080 inside | `mem_limit` 1.5 GB, `-Xmx1g`, SerialGC; 132 MB in use idle with the stores loaded, measured on a PC in rehearsal (31 Oct), the box's own figure to follow |
+| `web` | `ghcr.io/thomaswcode/decrastination-web:<version>` (`caddy:2-alpine` + the SPA's `dist/`) | TLS, the static files, `/api` to `server:8080` | 15 MB measured |
+| `litestream` | `litestream/litestream:0.5` | replicates `data/decrastination.db` to R2, sharing the `data` volume | 10 MB measured |
 
 The server and Litestream share one volume; Litestream runs as a sidecar (the documented pattern), so the server's image stays a plain JRE image. Ports 80 and 443 (TCP, and 443 UDP for HTTP/3) open in the VCN's security list and in the instance's iptables, both — Oracle's Ubuntu images reject everything but SSH until the second is done, as SharpnPro's `bootstrap.sh` already handles.
 
-The Caddyfile, from Caddy's own single-page-app pattern:
-
-```
-{$DOMAIN} {
-	encode zstd gzip
-	handle /api/* {
-		reverse_proxy server:8080
-	}
-	handle {
-		root * /srv
-		try_files {path} /index.html
-		file_server
-	}
-	header {
-		-Server
-		Strict-Transport-Security "max-age=31536000"
-		X-Content-Type-Options nosniff
-		Content-Security-Policy "default-src 'self'; img-src 'self' data: blob:; connect-src 'self'"
-	}
-	log {
-		output stdout
-		format json
-	}
-}
-```
+The Caddyfile (`deploy/Caddyfile`) is Caddy's own single-page-app pattern with the headers above and the event stream left uncompressed, so each event reaches the browser as it's sent.
 
 Caddy gets and renews the certificate from Let's Encrypt (ZeroSSL as the fallback) on its own; HTTP redirects to HTTPS.
 
@@ -72,7 +48,7 @@ GitHub Actions, in `ci.yml`'s workflow or a `deploy.yml` beside it, on a push to
 
 The phone's APK comes from the same CI run as today. Order on a release that changes the stores or the protocol: the APK is checked on the phone (the merge checklist), then the merge deploys the server (`data-and-sync.md` §Versions and compatibility).
 
-Images are public on GHCR as SharpnPro's is; they hold no secret. Everything secret is in `.env` on the box, read by Compose: `DOMAIN`, `ANTHROPIC_API_KEY`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `ALLOWED_GITHUB_USER_ID`, `SESSION_SECRET`, `MASTER_KEY`, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `B2_ENDPOINT`, `B2_KEY_ID`, `B2_APPLICATION_KEY`, `B2_BUCKET`. `deploy/env.production.example` lists them with no values.
+Images are public on GHCR as SharpnPro's is; they hold no secret. Everything secret is in `.env` on the box, read by Compose, which gives each service only its own: `DOMAIN`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `ALLOWED_GITHUB_USER_ID`, `MASTER_KEY`, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`; stage 3 adds `ANTHROPIC_API_KEY`, `B2_ENDPOINT`, `B2_KEY_ID`, `B2_APPLICATION_KEY`, `B2_BUCKET`. A session is a random token held hashed, so there's no session secret. `deploy/env.production.example` lists them with no values.
 
 ## Litestream
 
@@ -91,7 +67,9 @@ dbs:
       secret-access-key: ${R2_SECRET_ACCESS_KEY}
 ```
 
-Restore on a fresh box: `litestream restore -if-db-not-exists -if-replica-exists -o /data/decrastination.db s3://…`, run by `bootstrap.sh` before the server starts, so a rebuilt box comes up with the state. `-timestamp` restores to a moment, for a rollback.
+Litestream's default is 24 hours' snapshots kept 24 hours; `deploy/litestream.yml` has `snapshot: retention: 720h`, so the plan's 30 days hold.
+
+Restore on a fresh box: `litestream restore -config /etc/litestream.yml -if-db-not-exists -if-replica-exists /data/decrastination.db`, run by `bootstrap.sh` before the server starts, so a rebuilt box comes up with the state. `-timestamp` restores to a moment, for a rollback. A failed restore stops `bootstrap.sh`, as an empty server started beside Litestream would replicate over the good copy.
 
 **R2's free tier**: 10 GB stored, a million Class A operations and ten million Class B a month, no egress charge. Litestream's steady writes are well inside it. The nightly Backup-format file goes to **Backblaze B2** (10 GB free) under an application key of its own, allowed to write and not to delete, so the two off-box copies share no provider and no credential (W-20); Litestream could replicate to B2 the same way if R2 ever stopped suiting.
 
