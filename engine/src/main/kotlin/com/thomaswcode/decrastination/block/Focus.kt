@@ -2,6 +2,7 @@ package com.thomaswcode.decrastination.block
 
 import com.thomaswcode.decrastination.core.Blocklist
 import com.thomaswcode.decrastination.core.ChatActs
+import com.thomaswcode.decrastination.core.Ids
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Chunk
 import com.thomaswcode.decrastination.core.EarnsBy
@@ -32,7 +33,6 @@ import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.core.AnkiRules
 import java.time.Instant
 import java.time.LocalDate
-import java.util.UUID
 import java.util.concurrent.atomic.AtomicLong
 import com.thomaswcode.decrastination.ui.Format
 import kotlin.math.roundToInt
@@ -587,7 +587,7 @@ class Focus(
      * finished at start-up.
      */
     suspend fun photoChecked(taskId: String, step: String?, minutes: Int, stepIndex: Int? = null, key: String, takenAt: Long? = null): Boolean {
-        val done = PhotoDone(UUID.randomUUID().toString(), taskId, step, minutes, clock.now(), stepIndex, key, takenAt)
+        val done = PhotoDone(Ids.next(), taskId, step, minutes, clock.now(), stepIndex, key, takenAt)
         session.update { it.copy(photosDone = it.photosDone + done) }
         return finishPhoto(done).also { settleTimer() }
     }

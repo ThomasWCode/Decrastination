@@ -1,5 +1,6 @@
 package com.thomaswcode.decrastination.protect
 
+import com.thomaswcode.decrastination.core.Ids
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.WallClock
 import com.thomaswcode.decrastination.data.DeviceState
@@ -9,7 +10,6 @@ import com.thomaswcode.decrastination.data.Secret
 import com.thomaswcode.decrastination.data.SecretStore
 import com.thomaswcode.decrastination.learn.ReviewInput
 import com.thomaswcode.decrastination.ui.Format
-import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
@@ -64,7 +64,7 @@ class Protection(
         applyDue(force = true)
         val state = protection.value
         val proposed = change(SettingsChanges.requested(settings.value, state.pending))
-        val outcome = SettingsChanges.propose(settings.value, proposed, state.pending, clock.now()) { UUID.randomUUID().toString() }
+        val outcome = SettingsChanges.propose(settings.value, proposed, state.pending, clock.now()) { Ids.next() }
         // Nothing was waiting: the count starts now, whatever an old mark says.
         val mark = if (state.pending.isEmpty()) clock.uptime() else state.uptimeMark ?: clock.uptime()
         // The pending list first: stopped between the two, what applies now is lost (and seen to
