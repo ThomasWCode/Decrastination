@@ -1,12 +1,18 @@
 import { useCallback, useState } from "react";
 import { api } from "./api";
 import { ago, useLive } from "./live";
+import { NewTask } from "./NewTask";
+import { TaskSheet } from "./TaskSheet";
 import type { TaskGroup, TaskTile, WorkView } from "./types";
 
-function Task({ task }: { task: TaskTile }) {
+type Open = (id: string) => void;
+
+function Task({ task, open }: { task: TaskTile; open: Open }) {
   return (
     <li className="task" data-testid="task">
-      <span className="title">{task.title}</span>
+      <button className="title" onClick={() => open(task.id)}>
+        {task.title}
+      </button>
       <span className="minutes">{task.minutes}</span>
       <span className={task.overdue ? "due overdue" : "due"}>{task.due}</span>
       <span className="line" data-testid="task-line">
@@ -24,7 +30,7 @@ function Task({ task }: { task: TaskTile }) {
   );
 }
 
-function Column({ group, only }: { group: TaskGroup; only: string | null }) {
+function Column({ group, only, open }: { group: TaskGroup; only: string | null; open: Open }) {
   const tasks = group.tasks.filter((task) => only === null || task.source === only);
   if (tasks.length === 0) return null;
   return (
@@ -34,14 +40,14 @@ function Column({ group, only }: { group: TaskGroup; only: string | null }) {
       </h2>
       <ul>
         {tasks.map((task) => (
-          <Task key={task.id} task={task} />
+          <Task key={task.id} task={task} open={open} />
         ))}
       </ul>
     </section>
   );
 }
 
-function Folded({ view, only }: { view: WorkView; only: string | null }) {
+function Folded({ view, only, open }: { view: WorkView; only: string | null; open: Open }) {
   // Each fold is of one source's too, where one is chosen.
   const mine = <T extends { source: string }>(items: T[]) => items.filter((item) => only === null || item.source === only);
   const notPlanned = mine(view.notPlanned);
@@ -72,7 +78,7 @@ function Folded({ view, only }: { view: WorkView; only: string | null }) {
           </summary>
           <ul>
             {hidden.map((task) => (
-              <Task key={task.id} task={task} />
+              <Task key={task.id} task={task} open={open} />
             ))}
           </ul>
         </details>
@@ -84,7 +90,7 @@ function Folded({ view, only }: { view: WorkView; only: string | null }) {
           </summary>
           <ul>
             {finished.map((task) => (
-              <Task key={task.id} task={task} />
+              <Task key={task.id} task={task} open={open} />
             ))}
           </ul>
         </details>
@@ -112,6 +118,9 @@ export function WorkPage() {
   const { value: view, failed } = useLive(load);
   const [bySubject, setBySubject] = useState(false);
   const [only, setOnly] = useState<string | null>(null);
+  const [opened, setOpened] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
+  const shut = useCallback(() => setOpened(null), []);
   if (!view) return failed ? <p className="problem">Work couldn't be read. It tries again with the next change.</p> : null;
   const groups = bySubject ? view.bySubject : view.byDue;
   const shown = groups.some((group) => group.tasks.some((task) => only === null || task.source === only));
@@ -137,18 +146,23 @@ export function WorkPage() {
             </button>
           ))}
         </div>
+        <button className="button" onClick={() => setAdding(true)}>
+          New task
+        </button>
         <p className="fresh">{view.asOf ? `From the phone ${ago(view.asOf)}` : "The phone hasn't sent anything yet: pair it on the Phone page."}</p>
       </header>
+      {adding ? <NewTask close={() => setAdding(false)} /> : null}
       {shown ? (
         <div className="columns">
           {groups.map((group) => (
-            <Column key={group.title} group={group} only={only} />
+            <Column key={group.title} group={group} only={only} open={setOpened} />
           ))}
         </div>
       ) : (
         <p className="empty">Nothing to do. New tasks appear as the sources are read, or add your own.</p>
       )}
-      <Folded view={view} only={only} />
+      <Folded view={view} only={only} open={setOpened} />
+      {opened ? <TaskSheet key={opened} id={opened} close={shut} /> : null}
     </main>
   );
 }

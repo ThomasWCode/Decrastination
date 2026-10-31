@@ -124,3 +124,52 @@ export interface PairingCode {
   code: string;
   expiresAt: number;
 }
+
+/** A command's action, as the server makes it or as a form fills it in: `type` says which. */
+export type Action = { type: string } & Record<string, unknown>;
+
+/** What came of a command. */
+export interface Outcome {
+  id: string;
+  state: "applied" | "dropped";
+  why?: string | null;
+  revision: number;
+}
+
+export interface TaskAction {
+  label: string;
+  action: Action;
+  confirm?: string | null;
+  detail?: string | null;
+}
+
+export interface StepLine {
+  line: string;
+  done: boolean;
+  tick?: Action | null;
+}
+
+export interface NoteLine {
+  line: string;
+  delete: Action;
+  every?: string | null;
+}
+
+export interface TaskView {
+  id: string;
+  title: string;
+  detail: string;
+  line: string;
+  minutes: string;
+  due: string;
+  overdue: boolean;
+  own: boolean;
+  tags: string[];
+  next?: string | null;
+  steps: StepLine[];
+  planned: string[];
+  instructions: string[];
+  notes: NoteLine[];
+  actions: TaskAction[];
+  notable: boolean;
+}
