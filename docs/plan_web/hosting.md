@@ -72,7 +72,7 @@ GitHub Actions, in `ci.yml`'s workflow or a `deploy.yml` beside it, on a push to
 
 The phone's APK comes from the same CI run as today. Order on a release that changes the stores or the protocol: the APK is checked on the phone (the merge checklist), then the merge deploys the server (`data-and-sync.md` §Versions and compatibility).
 
-Images are public on GHCR as SharpnPro's is; they hold no secret. Everything secret is in `.env` on the box, read by Compose: `DOMAIN`, `ANTHROPIC_API_KEY`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `ALLOWED_GITHUB_USER_ID`, `SESSION_SECRET`, `MASTER_KEY`, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`. `deploy/env.production.example` lists them with no values.
+Images are public on GHCR as SharpnPro's is; they hold no secret. Everything secret is in `.env` on the box, read by Compose: `DOMAIN`, `ANTHROPIC_API_KEY`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `ALLOWED_GITHUB_USER_ID`, `SESSION_SECRET`, `MASTER_KEY`, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `B2_ENDPOINT`, `B2_KEY_ID`, `B2_APPLICATION_KEY`, `B2_BUCKET`. `deploy/env.production.example` lists them with no values.
 
 ## Litestream
 
@@ -93,7 +93,7 @@ dbs:
 
 Restore on a fresh box: `litestream restore -if-db-not-exists -if-replica-exists -o /data/decrastination.db s3://…`, run by `bootstrap.sh` before the server starts, so a rebuilt box comes up with the state. `-timestamp` restores to a moment, for a rollback.
 
-**R2's free tier**: 10 GB stored, a million Class A operations and ten million Class B a month, no egress charge. Litestream's steady writes are well inside it; the nightly backups are a few megabytes each. Backblaze B2 (10 GB free) is the alternative if R2 ever isn't; Litestream supports it the same way.
+**R2's free tier**: 10 GB stored, a million Class A operations and ten million Class B a month, no egress charge. Litestream's steady writes are well inside it. The nightly Backup-format file goes to **Backblaze B2** (10 GB free) under an application key of its own, allowed to write and not to delete, so the two off-box copies share no provider and no credential (W-20); Litestream could replicate to B2 the same way if R2 ever stopped suiting.
 
 ## Monitoring
 
@@ -114,6 +114,7 @@ As SharpnPro: a heartbeat to healthchecks.io every minute from the server's sche
 |---|---|
 | Oracle A1.Flex 2 OCPU / 12 GB, 100 GB boot volume | £0 (Always Free; a PAYG upgrade changes nothing within the allowance) |
 | Cloudflare R2, under 1 GB | £0 |
+| Backblaze B2, under 1 GB | £0 |
 | GHCR images, public | £0 |
 | Let's Encrypt | £0 |
 | healthchecks.io, one check | £0 |

@@ -69,7 +69,7 @@ A route never writes a store. It turns the request into a command and hands it t
 
 ## The sync, in brief
 
-`data-and-sync.md` has it in full. A client changes the state by sending a **command** (an owner's operation with its arguments, given an id by the client). The server applies it through the owner, in one SQLite transaction, which bumps the global **revision** and writes a history row. Clients pull the stores changed since the revision they last saw. The phone also sends **observations**: facts only it can know (Teams rows, AnkiDroid counts, the calendar's busy time, slots and blocks recorded). The phone applies its own commands locally first, through the same owner code, so what it shows offline is what the server will show once the command lands; when the outbox has drained, the server's copies replace the replica.
+`data-and-sync.md` has it in full. A client changes the state by sending a **command** (an owner's operation with its arguments, given an id by the client). The server applies it through the owner, in one SQLite transaction, which bumps the global **revision** and writes a history row. Clients pull the stores changed since the revision they last saw. The phone also sends **observations**: facts only it can know (Teams rows, AnkiDroid counts, the calendar's busy time, slots and blocks recorded). The phone applies its own commands locally first, through the same owner code, so what it shows offline is what the server will show once the command lands; a pull replaces the replica with the server's copies and applies the commands still in the outbox again on top.
 
 ## Offline on the phone
 
@@ -119,7 +119,7 @@ The phone keeps everything that touches the device, and each becomes an observat
 
 ## Protection on the website
 
-`Protection.changeSettings` runs on the server for every settings command, from either client, so a loosening asked on the website waits its 24 hours as one asked on the phone does, and the pending list (now in the synced `protection.json`) shows on both. The parent's TOTP code is verified on the server as well as the phone, so a code typed on the website works; the secret is held on both (`§Secrets`). When armed, the website's Settings pages that could loosen show the delay rather than hide the page: the server enforces, the page explains. The settings guard that presses Back on the phone's own pages stays the phone's.
+`Protection.changeSettings` runs on the server for every settings command, from either client, so a loosening asked on the website waits its 24 hours as one asked on the phone does, and the pending list (now in the synced `protection.json`) shows on both. The wait is counted by the server's clock (W-23): today the phone counts by its uptime, because the phone's date is the owner's to set; the server's isn't, so each pending change carries the `dueAt` the server set, the server applies it when due, and the phone shows the list and applies nothing itself, online or offline. The time the phone is off now counts towards the wait; the wait still can't be hurried from either client. The parent's TOTP code is verified on the server as well as the phone, so a code typed on the website works; the secret is held on both (`§Secrets`). When armed, the website's Settings pages that could loosen show the delay rather than hide the page: the server enforces, the page explains. The settings guard that presses Back on the phone's own pages stays the phone's.
 
 ## Secrets
 
@@ -131,7 +131,7 @@ The phone keeps everything that touches the device, and each becomes an observat
 | TOTP secret | `secrets.bin` | both: the phone's copy verifies offline, the server's verifies the website's (stage 4) |
 | Device token | — | the phone's `secrets.bin`; hashed in the server's `devices` |
 | GitHub App client id and secret, the allowed user id, `SESSION_SECRET` | — | `.env` |
-| R2 access keys | — | `.env`, read by Litestream and the nightly backup |
+| R2 access keys (Litestream); a B2 application key for the nightly file, able to write and not to delete | — | `.env` |
 
 Credentials are **re-entered on the website**, never uploaded from the phone (W-19): the phone's release that stops holding one deletes it once the server reports it has its own. Nothing in `.env` is ever in the repository; `deploy/env.production.example` lists the names with no values, as SharpnPro's does.
 

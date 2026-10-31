@@ -8,7 +8,7 @@ The estimates are hours of sessions, from the durations measured over the 4.x re
 
 ## Stage 0: `:engine`
 
-**Goal.** The app's Android-free code in a JVM module that `:app` and, later, `:server` both build. No behaviour changes; every test passes as before. Releases 4.11.1 to about 4.11.5, cleanups, one move each.
+**Goal.** The app's Android-free code in a JVM module that `:app` and, later, `:server` both build. No behaviour changes in the moves; every test passes as before. Releases 4.12.0 to about 4.12.3, cleanups, one move each (4.11.0 is `docs/plan_4.11.0/`'s release), then 4.13.0 for step 6's store changes.
 
 **Work.**
 1. The module: `engine/build.gradle.kts` (`kotlin.jvm`, JVM target 17 as `:core`'s, `kotlinx-serialization`, `anthropic-java`), `settings.gradle.kts`, `:app` depending on it.
@@ -16,7 +16,7 @@ The estimates are hours of sessions, from the durations measured over the 4.x re
 3. The owners and their ports: `sync/Sync`, `tasks/OwnTasks`, `tasks/Instructions`, `plan/Planning`, `plan/Ahead`, `block/Focus`'s rules (the service stays), `protect/Protection` (the delay, the TOTP), `learn/Learning`, `learn/Calibrator`. Where one touches Android (a notification posted, an alarm set, a string resource, `Log`), an interface in `engine/.../ports/` and an implementation in `:app`.
 4. Felix and the readings: `felix/Conversation`, `Looks`, `Outbox`, `FelixRules`, `Replies`, `Story`, `Mood`, every `*Prompts` and `*Answers`, `enrich/ModelGateway`, `ModelEffort`, `Readings`, `ReadingPrompts`, `WebResearcher`; the goldens and `GoldenPromptsTest`, `SchemaCompileTest`, `FelixInputsDocTest` move to `engine/src/test/`.
 5. The screens' models: `DayModel`, `WidgetModel`, `Groups`, `TaskSheetModel`, `learn/Stats`'s tables, `ReviewInput`, `BlockPolicy`, `TeamsAutoSync`'s decisions: anything a screen computes before it draws.
-6. Two store shapes change, with migrations tested from every fixture: `protection.json` splits into the synced store (pending changes, `overrideUntil`, `codeLock`) and a phone-only `device.json` (`adminArmed`, the watchdog's state, `forceActiveUntil`, `uptimeMark`); `runtime.json`'s `notSame` moves to `tasks.json`. The backup format rises to 11 (`device.json` excluded, as runtime is).
+6. Release 4.13.0, a minor of its own as it changes stored data: two store shapes change, with migrations tested from every fixture. `protection.json` splits into the synced store (the pending changes with `uptimeMark` beside them as today, so the count stays one atomic write; `overrideUntil`; `codeLock`) and a phone-only `device.json` (`adminArmed`, the watchdog's state, `forceActiveUntil`); the phone goes on counting the wait exactly as now until stage 2 (W-23). `runtime.json`'s `notSame` moves to `tasks.json`. The backup format rises to 11 (`device.json` excluded, as runtime is).
 7. `ArchitectureTest`: every owner in `:engine`; `:app` holds none; `WRITERS` paths updated.
 
 **Tests.** The existing 1,500-odd tests, now split across `:core`, `:engine` and `:app`; `./gradlew test` runs them all. The migration tests for step 6.
@@ -64,11 +64,12 @@ The estimates are hours of sessions, from the durations measured over the 4.x re
 **Work.**
 1. `engine/.../sync/protocol/`: the command classes, one an owner operation, with the test that lists both sides; the observation kinds.
 2. `CommandApplier` on the server: the transaction, the `Mutex`, idempotence by id, outcomes; `POST /api/commands` and `/api/observations`; the switch to `commands` mode in the release's migration after the phone's last full upload.
-3. The phone: the recording of owner calls into `outbox.json` (the mechanism settled here: interfaces with a recording implementation, or the owners writing to an outbox port); `SyncWorker` posting the outbox in order, then pulling and replacing the replica (`Stores.replace` from `sync/Replica`, named in `ArchitectureTest`); the provisional flag on slots the phone planned offline and `CalendarWriter` skipping them (W-15); the dropped-command card; the seven-day line.
+3. The phone: the recording of owner calls into `outbox.json` (the mechanism settled here: interfaces with a recording implementation, or the owners writing to an outbox port), the 30 s free-time spends among them, merged until the upload (W-24); `SyncWorker` posting the outbox in order, then pulling: the server's stores replace the replica (`Stores.replace` from `sync/Replica`, named in `ArchitectureTest`) and the commands still in the outbox are applied again on top; the provisional flag on slots the phone planned offline and `CalendarWriter` skipping them (W-15); the dropped-command card; the seven-day line.
 4. The table of stale cases, command by command, with its tests.
 5. The sync harness (`data-and-sync.md` §Testing the sync) and its scenarios.
+6. Protection's wait counted by the server's clock (W-23): `PendingChange` gains the `dueAt` the server sets, the server's scheduler applies what falls due, the phone shows the list and applies nothing itself; `uptimeMark` dropped, the store's version raised and migrated.
 
-**Tests.** The harness; the applier's; the phone's outbox under a killed process (a command recorded, not applied, applied once on restart).
+**Tests.** The harness; the applier's; the phone's outbox under a killed process (a command recorded, not applied, applied once on restart); a command recorded mid-sync still shown after the pull; a batch whose first response was lost, retried, with identical outcomes.
 
 **Docs.** `docs/spec/sync.md` in full; `data-and-sync.md` here updated with what the stale table found.
 

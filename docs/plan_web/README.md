@@ -35,7 +35,7 @@ In the most technically feasible order (the owner's word on 31 Oct: the website 
 
 | Stage | What | Phone release |
 |---|---|---|
-| 0 | `:engine`: the app's Android-free code moved into a JVM module both the app and the server build | 4.11.x, cleanups |
+| 0 | `:engine`: the app's Android-free code moved into a JVM module both the app and the server build | 4.12.x, cleanups; 4.13.0 the store split |
 | 1 | `:server` skeleton on the box: Ktor, SQLite, sign-in, device tokens, the image, Caddy, Litestream; the phone uploads its stores; the website shows the Day and the Work list read-only | 5.0.0 |
 | 2 | The command log: the phone sends commands, the server applies them through the owners, revisions flow back; the outbox and the offline rules | 5.1.0 |
 | 3 | The server's jobs: Power Planner and Gmail syncs, the readings, planning ahead, memory tidy, nightly backups; Claude's key and gateway move to the server; the phone calls Claude through it | 5.2.0 |
