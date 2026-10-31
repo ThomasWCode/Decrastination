@@ -114,7 +114,7 @@ class AppGraph private constructor(context: Context) : Owners {
      * while the device admin is on, as only arming turns it on (IMP-P1-003).
      */
     val stores = Stores(app.filesDir, KeystoreCipher(), armedIfUnreadable = { Watchdog.isAdminActive(app) })
-    val tasks = stores.tasks
+    override val tasks = stores.tasks
     val settings = stores.settings
     val secrets = stores.secrets
     val runtime = stores.runtime

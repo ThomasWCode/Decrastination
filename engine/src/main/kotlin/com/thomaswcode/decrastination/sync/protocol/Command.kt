@@ -5,6 +5,8 @@ import com.thomaswcode.decrastination.core.Ids
 import com.thomaswcode.decrastination.core.Replay
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.WallClock
+import com.thomaswcode.decrastination.data.JsonStore
+import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.felix.Conversation
 import com.thomaswcode.decrastination.felix.Looks
 import com.thomaswcode.decrastination.learn.Learning
@@ -24,6 +26,19 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class Command(val id: String, val at: Long, val action: Action)
 
+/** A client's commands, in the order it made them. */
+@Serializable
+data class CommandBatch(val commands: List<Command>)
+
+/** What came of a command: [state] one of [APPLIED], [DROPPED]; why, if it was dropped; and the revision it left the state at. */
+@Serializable
+data class Outcome(val id: String, val state: String, val why: String? = null, val revision: Long = 0) {
+    companion object {
+        const val APPLIED = "applied"
+        const val DROPPED = "dropped"
+    }
+}
+
 /**
  * What a screen asks of an owner, as data. Each is one owner's operation, its class beside its call ([run]), so the phone
  * and the server apply it through the same code. An action's arguments hold nothing of the device's.
@@ -31,6 +46,9 @@ data class Command(val id: String, val at: Long, val action: Action)
 @Serializable
 sealed interface Action {
     suspend fun run(owners: Owners): Any?
+
+    /** Why this can't be applied to the state as it now is, or null: what it's about has gone since it was made (docs/spec/sync.md §Stale commands). */
+    fun stale(owners: Owners): String? = null
 }
 
 /** An action's answer, typed, for the screen that asked it. */
@@ -40,6 +58,7 @@ interface Answers<out R> {
 
 /** The owners an action can reach: a graph's own. */
 interface Owners {
+    val tasks: JsonStore<TaskState>
     val ownTasks: OwnTasks
     val instructions: Instructions
     val focus: Focus

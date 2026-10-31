@@ -20,6 +20,9 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
 
+/** Why an action about [taskId] can't go ahead: the task's gone. */
+private fun Owners.gone(taskId: String?): String? = if (taskId != null && tasks.value.tasks.none { it.id == taskId }) "That task had gone" else null
+
 // Your own tasks.
 
 /** [fromForm] and [wasIndexes] are what `OwnTask` holds only in memory: which of its steps each was, so a renamed one keeps its tick. */
@@ -41,18 +44,24 @@ data class SaveOwnTask(val sourceId: String, val task: OwnTask, val fromForm: Bo
 @SerialName("FinishOwnTask")
 data class FinishOwnTask(val taskId: String) : Action, Answers<Unit> {
     override suspend fun run(owners: Owners) = owners.ownTasks.finishOwnTask(taskId)
+
+    override fun stale(owners: Owners) = owners.gone(taskId)
 }
 
 @Serializable
 @SerialName("ReopenOwnTask")
 data class ReopenOwnTask(val taskId: String) : Action, Answers<Unit> {
     override suspend fun run(owners: Owners) = owners.ownTasks.reopenOwnTask(taskId)
+
+    override fun stale(owners: Owners) = owners.gone(taskId)
 }
 
 @Serializable
 @SerialName("DeleteOwnTask")
 data class DeleteOwnTask(val taskId: String) : Action, Answers<Unit> {
     override suspend fun run(owners: Owners) = owners.ownTasks.deleteOwnTask(taskId)
+
+    override fun stale(owners: Owners) = owners.gone(taskId)
 }
 
 // Instructions, and the changes of yours they hold.
@@ -61,6 +70,8 @@ data class DeleteOwnTask(val taskId: String) : Action, Answers<Unit> {
 @SerialName("AddOwnChange")
 data class AddOwnChange(val id: String, val text: String, val about: About, val change: Change) : Action, Answers<Unit> {
     override suspend fun run(owners: Owners) = owners.instructions.addOwnChange(id, text, about, change)
+
+    override fun stale(owners: Owners) = owners.gone(about.taskId)
 }
 
 @Serializable
@@ -143,12 +154,16 @@ data class UndoKeep(val key: String, val since: Long) : Action, Answers<Boolean>
 @SerialName("TickBlock")
 data class TickBlock(val taskId: String, val index: Int, val title: String) : Action, Answers<Boolean> {
     override suspend fun run(owners: Owners): Boolean = owners.focus.tickBlock(taskId, index, title)
+
+    override fun stale(owners: Owners) = owners.gone(taskId)
 }
 
 @Serializable
 @SerialName("StartTimer")
 data class StartTimer(val taskId: String, val stepIndex: Int? = null, val key: String? = null) : Action, Answers<PieceTimer?> {
     override suspend fun run(owners: Owners): PieceTimer? = owners.focus.startTimer(taskId, stepIndex, key)
+
+    override fun stale(owners: Owners) = owners.gone(taskId)
 }
 
 @Serializable
@@ -274,6 +289,8 @@ data class DeleteFact(val fact: Fact) : Action, Answers<Unit> {
 @SerialName("AddNote")
 data class AddNote(val taskId: String, val text: String) : Action, Answers<String?> {
     override suspend fun run(owners: Owners): String? = owners.conversation.addNote(taskId, text)
+
+    override fun stale(owners: Owners) = owners.gone(taskId)
 }
 
 @Serializable

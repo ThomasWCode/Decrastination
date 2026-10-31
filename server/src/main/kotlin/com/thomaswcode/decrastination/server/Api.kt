@@ -4,6 +4,7 @@ import com.thomaswcode.decrastination.ports.Log
 import com.thomaswcode.decrastination.sync.DeviceClaim
 import com.thomaswcode.decrastination.sync.Protocol
 import com.thomaswcode.decrastination.sync.SeedBatch
+import com.thomaswcode.decrastination.sync.protocol.CommandBatch
 import io.ktor.http.ContentType
 import io.ktor.http.Cookie
 import io.ktor.http.CookieEncoding
@@ -58,6 +59,11 @@ sealed interface Client {
     data object Website : Client
 
     data class Phone(val id: String) : Client
+
+    companion object {
+        /** What the commands' record calls the website. */
+        const val WEBSITE = "web"
+    }
 }
 
 private val CLIENT = AttributeKey<Client>("client")
@@ -238,6 +244,13 @@ private fun Route.signedInRoutes(web: Web) {
     post("/stores/seed") {
         val phone = call.client as? Client.Phone ?: return@post call.respond(HttpStatusCode.Forbidden, Problem("Only a phone seeds"))
         call.respond(graph.seed(call.receive<SeedBatch>(), phone.id))
+    }
+
+    post("/commands") {
+        // Mirror mode's writer is the phone, by its seeds: a command now would be undone by the next one.
+        if (graph.mode != ServerGraph.COMMANDS) return@post call.respond(HttpStatusCode.Conflict, Problem("The server is mirroring the phone"))
+        val device = (call.client as? Client.Phone)?.id ?: Client.WEBSITE
+        call.respond(graph.applier.apply(call.receive<CommandBatch>(), device))
     }
 
     get("/views/day") {
