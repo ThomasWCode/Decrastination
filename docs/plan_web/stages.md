@@ -8,7 +8,7 @@ The estimates are hours of sessions, from the durations measured over the 4.x re
 
 ## Stage 0: `:engine`
 
-**Goal.** The app's Android-free code in a JVM module that `:app` and, later, `:server` both build. No behaviour changes in the moves; every test passes as before. Releases 4.12.0 to about 4.12.3, cleanups, one move each (4.11.0 is `docs/plan_4.11.0/`'s release), then 4.13.0 for step 6's store changes.
+**Goal.** The app's Android-free code in a JVM module that `:app` and, later, `:server` both build. No behaviour changes in the moves; every test passes as before. Releases 4.12.0 to about 4.12.3, cleanups, one move each (4.11.0 is the chat's kept words and Day's menus), then 4.13.0 for step 6's store changes.
 
 **Work.**
 1. The module: `engine/build.gradle.kts` (`kotlin.jvm`, JVM target 17 as `:core`'s, `kotlinx-serialization`, `anthropic-java`), `settings.gradle.kts`, `:app` depending on it.
