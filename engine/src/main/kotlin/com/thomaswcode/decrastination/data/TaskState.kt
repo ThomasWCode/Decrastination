@@ -1,6 +1,7 @@
 package com.thomaswcode.decrastination.data
 
 import com.thomaswcode.decrastination.core.AnkiDay
+import com.thomaswcode.decrastination.core.Duplicates
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.Timetable
@@ -30,8 +31,10 @@ data class TaskState(
     val timetable: Timetable? = null,
     /** The weeks of weekly work you've deleted, still to come or under way (D-124): each stays gone, whatever becomes of its rule. */
     val weeksDeleted: List<WeeklyMark> = emptyList(),
+    /** Pairs of tasks you've said aren't the same work (DX-15), by [Duplicates.key]: not asked about again. */
+    val notSame: List<String> = emptyList(),
     /** The shape this is in ([Migration]): raised with each change of it, a migration bringing older files to it. */
-    val version: Int = 4,
+    val version: Int = 5,
 ) {
     val open: List<TaskItem> get() = tasks.filter { it.isOpen }
 
@@ -44,6 +47,14 @@ data class TaskState(
     }
 
     fun status(source: Source): SourceStatus = sources[source] ?: SourceStatus()
+
+    /** Tasks [a] and [b] said not to be the same work (DX-15): not asked about again, the newest [MAX_NOT_SAME] pairs kept. */
+    fun withNotSame(a: String, b: String): TaskState = copy(notSame = (notSame + Duplicates.key(a, b)).distinct().takeLast(MAX_NOT_SAME))
+
+    companion object {
+        /** Pairs said not to be the same work, the newest kept. */
+        const val MAX_NOT_SAME = 200
+    }
 }
 
 /** How reading one source last went. */

@@ -93,7 +93,7 @@ class FelixHarness(
     private val notices = Shown()
     val outbox = Outbox(stores.chat, stores.chatArchive, stores.settings, notices, ports, { chatOnScreen }, { chatSeen }, clock)
     val conversation: Conversation = Conversation(
-        stores.tasks, stores.settings, stores.runtime, stores.learning, stores.log, stores.instructions, stores.chat, stores.school, stores.memory, stores.felix,
+        stores.tasks, stores.settings, stores.learning, stores.log, stores.instructions, stores.chat, stores.school, stores.memory, stores.felix,
         clock, scope, gateway, notices, focus, planning, ports, outbox, owners,
         calendarTime = { calendar(stores) },
         answered = { message, words -> looks.answered(message, words) },

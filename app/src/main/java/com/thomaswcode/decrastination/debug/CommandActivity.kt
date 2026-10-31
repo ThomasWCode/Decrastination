@@ -270,7 +270,7 @@ class CommandActivity : Activity() {
                 // Testing at night: blocking hours apply for this many minutes (tightening only).
                 val minutes = intent.getIntExtra("minutes", 10).coerceIn(0, 120)
                 val until = graph.clock.now() + minutes * 60_000L
-                graph.stores.protection.update { it.copy(forceActiveUntil = if (minutes == 0) null else until) }
+                graph.stores.device.update { it.copy(forceActiveUntil = if (minutes == 0) null else until) }
                 Log.i(TAG, "Blocking hours apply for $minutes min; verdict now ${graph.focus.verdict()}")
             }
             // Test hooks, from a PC only: arming and disarming at once, as no screen can.
@@ -293,10 +293,10 @@ class CommandActivity : Activity() {
                     log.copy(reviews = log.reviews.filter { r -> Instant.ofEpochMilli(r.at).atZone(zone).let { it.dayOfWeek == DayOfWeek.SUNDAY && it.hour * 60 + it.minute >= graph.settings.value.checkInMin } })
                 }
                 graph.runtime.update { it.copy(teamsAuto = TeamsAutoSync.State()) }
-                graph.stores.protection.update {
+                graph.stores.device.update {
                     it.copy(
                         forceActiveUntil = null,
-                        protection = it.protection.copy(stoppedSince = null, restartedAt = null, restartTries = 0),
+                        watchdog = it.watchdog.copy(stoppedSince = null, restartedAt = null, restartTries = 0),
                     )
                 }
                 Log.i(TAG, "Cleaned up after testing")
@@ -313,7 +313,7 @@ class CommandActivity : Activity() {
             "offer-teams-sync" -> sendBroadcast(Intent(FocusService.ACTION_OFFER_TEAMS_SYNC).setPackage(packageName)).also { Log.i(TAG, "Asked the focus service to offer a Teams sync") }
             "protection" -> {
                 Watchdog.check(this, repair = intent.getBooleanExtra("repair", false))
-                Log.i(TAG, "Protection: ${Watchdog.report(this)}; problems ${graph.stores.protection.value.protection.problems}")
+                Log.i(TAG, "Protection: ${Watchdog.report(this)}; problems ${graph.stores.device.value.watchdog.problems}")
             }
             "enrich" -> {
                 graph.readings.enrichNow()

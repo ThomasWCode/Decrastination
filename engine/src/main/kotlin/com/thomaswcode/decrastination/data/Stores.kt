@@ -32,19 +32,22 @@ class Stores(
     private fun <T> store(name: String, serializer: KSerializer<T>, default: () -> T, unreadable: () -> T = default, migrations: List<Migration> = emptyList(), onWrite: (T) -> T = { it }) =
         JsonStore(File(dir, name), serializer, default, unreadable = unreadable, clock = clock, migrations = migrations, onWrite = onWrite)
 
-    val tasks = store("tasks.json", TaskState.serializer(), ::TaskState, migrations = listOf(TasksMigration.TASKS, StepOrderMigration.TASKS, WeeklyMigration.TASKS), onWrite = TaskState::withStepIds)
+    val tasks = store("tasks.json", TaskState.serializer(), ::TaskState, migrations = listOf(TasksMigration.TASKS, StepOrderMigration.TASKS, WeeklyMigration.TASKS, NotSameMigration.TASKS), onWrite = TaskState::withStepIds)
 
     // A file that can't be read at all starts armed while the device admin is on, as only arming
     // turns it on: a bad file never disarms protection (IMP-P1-003).
     val settings = store("settings.json", Settings.serializer(), ::Settings, unreadable = { Settings(armed = armedIfUnreadable()) }, migrations = listOf(SettingsMigration.SETTINGS, ZoomMigration.SETTINGS, SpeechMigration.SETTINGS))
     val secrets = SecretStore(File(dir, "secrets.bin"), cipher, clock)
-    val runtime = store("runtime.json", RuntimeState.serializer(), ::RuntimeState, migrations = listOf(ChatMigration.RUNTIME, RuntimeSplit.RUNTIME))
+    val runtime = store("runtime.json", RuntimeState.serializer(), ::RuntimeState, migrations = listOf(ChatMigration.RUNTIME, RuntimeSplit.RUNTIME, NotSameMigration.RUNTIME))
 
     /** What the blocker keeps from moment to moment, changing every half minute (Focus's). */
     val session = store("session.json", SessionState.serializer(), ::SessionState, migrations = listOf(CreditMigration.SESSION, TimerMigration.SESSION))
 
-    /** Protection's own state: changes waiting, the override, what's armed, the watchdog's finding. */
-    val protection = store("protection.json", ProtectionState.serializer(), ::ProtectionState)
+    /** Protection's state wherever it's asked for: changes waiting, the override, the code's lock. */
+    val protection = store("protection.json", ProtectionState.serializer(), ::ProtectionState, migrations = listOf(ProtectionSplit.PROTECTION))
+
+    /** What's only true of this phone: its device admin, the watchdog's finding, blocking forced from a PC. */
+    val device = store("device.json", DeviceState.serializer(), ::DeviceState)
 
     /** What calling Claude keeps: the month's cost, the last calls, what was refused, the micro-plans. */
     val model = store("model.json", ModelState.serializer(), ::ModelState)
@@ -99,7 +102,7 @@ class Stores(
     /** The writes to Gmail a finished email makes, journaled before they're made, and their receipts while their Undo stands. */
     val gmailWrites = store("gmail-writes.json", GmailWriteStore.serializer(), ::GmailWriteStore)
 
-    private val json = listOf(tasks, settings, runtime, session, protection, model, anki, learning, log, instructions, chat, school, memory, felix, calendar, gmailWrites)
+    private val json = listOf(tasks, settings, runtime, session, protection, device, model, anki, learning, log, instructions, chat, school, memory, felix, calendar, gmailWrites)
 
     /**
      * A store, what a backup keeps of it ([backup]; none, and [why] says why), and the resets that
@@ -115,13 +118,14 @@ class Stores(
 
     /** Every store, the secrets among them, as [Kept] says. */
     val all: List<Kept> = listOf(
-        Kept("tasks.json", backup = "your own tasks, which no source gives back"),
+        Kept("tasks.json", backup = "your own tasks, which no source gives back, and the pairs you've said aren't the same work"),
         // A memory reset clears only what they say about you: their copies hold the rest, an unreadable one perhaps its only record.
         Kept("settings.json", backup = "the settings as asked for, a change still waiting among them", resets = setOf(Reset.Memories), clears = emptySet()),
         Kept("secrets.bin", backup = null, why = "passwords and keys stay on this phone (D-78)"),
         Kept("runtime.json", backup = null, why = "the notifications held, the daily runs and the files found unreadable are this phone's"),
         Kept("session.json", backup = "today's slots"),
         Kept("protection.json", backup = null, why = "protection is this phone's; a change still waiting goes with the settings"),
+        Kept("device.json", backup = null, why = "the device admin, the watchdog's finding and forced blocking are this phone's"),
         Kept("model.json", backup = "Claude's month"),
         Kept("anki.json", backup = null, why = "what AnkiDroid showed this phone"),
         Kept("learning.json", backup = "the calibration", resets = setOf(Reset.Stats, Reset.Calibration)),
@@ -193,9 +197,10 @@ class Stores(
         /**
          * The moves between stores this build makes at start: Felix's records and state into the chat (4.0.0); the
          * chat's archive into its months (4.0.4); your instructions' step ids onto the tasks they're laid on, and
-         * Felix's instructions marked from the chat, and runtime.json split by owner (4.0.13).
+         * Felix's instructions marked from the chat, and runtime.json split by owner (4.0.13); protection.json split, and
+         * the pairs that aren't the same work to the tasks (4.13.0).
          */
-        val MOVES: List<Move> = listOf(ChatMigration.MOVE, ChatArchiveStore.SPLIT, TasksMigration.MOVE, RuntimeSplit.MOVE)
+        val MOVES: List<Move> = listOf(ChatMigration.MOVE, ChatArchiveStore.SPLIT, TasksMigration.MOVE, RuntimeSplit.MOVE, ProtectionSplit.MOVE, NotSameMigration.MOVE)
 
         /** How long the file an older shape came from is kept after its migration. */
         const val OLD_SHAPE_KEPT_MS = 7 * 24 * 3_600_000L

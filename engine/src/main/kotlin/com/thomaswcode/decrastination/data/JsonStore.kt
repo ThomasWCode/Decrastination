@@ -228,6 +228,7 @@ class JsonStore<T>(
                     "runtime.json" -> "The app's running state (held notifications, the daily jobs' runs, the Teams sync)"
                     "session.json" -> "Today's free time and slots, and work under way"
                     "protection.json" -> "Protection's state (waiting changes, the code lock)"
+                    "device.json" -> "What the app keeps of this phone's protection (the device admin, the watchdog's finding)"
                     "model.json" -> "Claude's month and its recent calls"
                     "anki.json" -> "What the app read of AnkiDroid"
                     "learning.json" -> "What the app has learned of your pace"

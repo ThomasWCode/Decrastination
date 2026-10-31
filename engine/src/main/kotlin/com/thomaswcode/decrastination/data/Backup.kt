@@ -89,6 +89,8 @@ data class Backup(
     val gmailWrites: List<GmailWrite> = emptyList(),
     /** The weeks of weekly work you've deleted (D-124), so each stays gone: none in a backup from before. */
     val weeksDeleted: List<WeeklyMark> = emptyList(),
+    /** The pairs you've said aren't the same work (DX-15): a judgement no source can give back. */
+    val notSame: List<String> = emptyList(),
     /**
      * The version of each store its parts come from, by file (docs/plan_v4/data-and-migrations.md §Versions and migrations): an
      * older one's parts are brought to this build's shapes as it's read ([Backups.decode]). None in a
@@ -108,7 +110,7 @@ data class Backup(
          * messages (4.0.0), 8 with Felix's notes and reminders (4.1.0), 9 with the receipts of writes to
          * Gmail (4.3.0), 10 with the weeks of weekly work deleted (4.10.0): an older app refuses it rather than losing them.
          */
-        const val FORMAT = 10
+        const val FORMAT = 11
     }
 }
 
@@ -263,6 +265,7 @@ object Backups {
                         w.onTime > w.finished || w.dated > w.finished || w.fullDays > 7 || w.minutes > 7 * DAY_MIN
                 } || log.weeks.map { it.week }.toSet().size != log.weeks.size
             ) add("a week's totals")
+            if (backup.notSame.size > TaskState.MAX_NOT_SAME || backup.notSame.any { it.split("|").size < 2 || it.split("|").any(String::isBlank) }) add("the pairs that aren't the same work")
             if (backup.weeksDeleted.any { it.rule.isBlank() || runCatching { LocalDate.parse(it.week) }.getOrNull()?.dayOfWeek != DayOfWeek.MONDAY }) add("a week of weekly work")
             val calibration = backup.calibration
             if (calibration.multipliers.values.any { !it.isFinite() || it !in Calibrator.MIN_MULTIPLIER..Calibrator.MAX_MULTIPLIER }) add("what the app learned about estimates")
@@ -344,6 +347,9 @@ object Backups {
     fun restoredOwnTasks(backed: List<TaskItem>, here: List<TaskItem>): List<TaskItem> =
         backed.filter { b -> here.none { it.id == b.id && !(b.weekly != null && it.isOpen && WeeklyRules.doneMin(it) == 0) } }
             .map { it.copy(mine = Mine(sameAs = it.mine.sameAs)).enriched() }
+
+    /** [here] with [backed]'s pairs that aren't the same work: one said on either side stands, this phone's newest kept. */
+    fun mergedNotSame(here: List<String>, backed: List<String>): List<String> = (backed + here).distinct().takeLast(TaskState.MAX_NOT_SAME)
 
     /** [here] with [backed]'s weeks of weekly work deleted: one deleted on either side stays gone. */
     fun mergedWeeks(here: List<WeeklyMark>, backed: List<WeeklyMark>): List<WeeklyMark> =

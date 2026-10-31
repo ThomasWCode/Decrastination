@@ -109,6 +109,7 @@ private enum class Step { None, Explain, ParentCode, Confirm }
 fun ProtectionPanel(graph: AppGraph, activity: ComponentActivity) {
     val settings by graph.settings.state.collectAsStateWithLifecycle()
     val protection by graph.stores.protection.state.collectAsStateWithLifecycle()
+    val device by graph.stores.device.state.collectAsStateWithLifecycle()
     val secrets by graph.secrets.present.collectAsStateWithLifecycle()
     val connected by FocusService.connected.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
@@ -121,7 +122,7 @@ fun ProtectionPanel(graph: AppGraph, activity: ComponentActivity) {
     // Kept through the screen being recreated (turned): the wizard isn't left half-done unseen.
     var step by rememberSaveable { mutableStateOf(Step.None) }
     var codeFor by remember { mutableStateOf<CodeTarget?>(null) }
-    val report = remember(refresh, protection.protection) { Watchdog.report(activity) }
+    val report = remember(refresh, device.watchdog) { Watchdog.report(activity) }
     val adminLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
         refresh++
         if (step == Step.Explain && Watchdog.isAdminActive(activity)) step = Step.ParentCode
@@ -148,7 +149,7 @@ fun ProtectionPanel(graph: AppGraph, activity: ComponentActivity) {
         Card(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
             colors = CardDefaults.cardColors(
-                containerColor = if (protection.protection.problems.isEmpty()) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.errorContainer,
+                containerColor = if (device.watchdog.problems.isEmpty()) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.errorContainer,
             ),
         ) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -163,7 +164,7 @@ fun ProtectionPanel(graph: AppGraph, activity: ComponentActivity) {
                     },
                     style = MaterialTheme.typography.bodyMedium,
                 )
-                protection.protection.problems.forEach { Text("• $it", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error) }
+                device.watchdog.problems.forEach { Text("• $it", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error) }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (settings.armed) {
                         OutlinedButton(onClick = { scope.launch { graph.protection.changeSettings { it.copy(armed = false) } } }) { Text("Disarm") }

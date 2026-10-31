@@ -7,6 +7,7 @@ import com.thomaswcode.decrastination.data.StepOrderMigration
 import java.time.LocalDate
 import com.thomaswcode.decrastination.core.yours
 import com.thomaswcode.decrastination.data.LearningState
+import com.thomaswcode.decrastination.data.ProtectionSplit
 import com.thomaswcode.decrastination.data.ProtectionState
 import com.thomaswcode.decrastination.data.SessionState
 import com.thomaswcode.decrastination.data.SlotOutcome
@@ -34,6 +35,7 @@ import com.thomaswcode.decrastination.data.CreditMigration
 import com.thomaswcode.decrastination.data.TimerMigration
 import com.thomaswcode.decrastination.data.MemoryMigration
 import com.thomaswcode.decrastination.data.JsonStore
+import com.thomaswcode.decrastination.data.NotSameMigration
 import com.thomaswcode.decrastination.data.SettingsMigration
 import com.thomaswcode.decrastination.data.Keeping
 import com.thomaswcode.decrastination.data.PhotoDone
@@ -65,9 +67,9 @@ import kotlinx.coroutines.test.runTest
 class FocusTest {
     private val dir: File = Files.createTempDirectory("focus").toFile()
     private val clock = FixedClock(Fixtures.at("2026-10-10T12:00"), LONDON)
-    private val tasks = JsonStore(File(dir, "tasks.json"), TaskState.serializer(), ::TaskState, migrations = listOf(TasksMigration.TASKS, StepOrderMigration.TASKS, WeeklyMigration.TASKS))
+    private val tasks = JsonStore(File(dir, "tasks.json"), TaskState.serializer(), ::TaskState, migrations = listOf(TasksMigration.TASKS, StepOrderMigration.TASKS, WeeklyMigration.TASKS, NotSameMigration.TASKS))
     private val settings = JsonStore(File(dir, "settings.json"), Settings.serializer(), ::Settings, migrations = listOf(SettingsMigration.SETTINGS, ZoomMigration.SETTINGS, SpeechMigration.SETTINGS))
-    private val protection = JsonStore(File(dir, "protection.json"), ProtectionState.serializer(), ::ProtectionState)
+    private val protection = JsonStore(File(dir, "protection.json"), ProtectionState.serializer(), ::ProtectionState, migrations = listOf(ProtectionSplit.PROTECTION))
     private val session = JsonStore(File(dir, "session.json"), SessionState.serializer(), ::SessionState, migrations = listOf(CreditMigration.SESSION, TimerMigration.SESSION))
     private val learning = JsonStore(File(dir, "learning.json"), LearningState.serializer(), ::LearningState)
     private val log = JsonStore(File(dir, "log.json"), ActivityLog.serializer(), ::ActivityLog, migrations = listOf(ChatMigration.LOG, MemoryMigration.LOG, CreditMigration.LOG))

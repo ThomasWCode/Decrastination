@@ -89,27 +89,27 @@ class StoresTest {
     fun `the tasks keep the timetable they were last read with`() = runTest {
         val file = File(dir, "tasks.json")
         val timetable = Timetable("2026-08-24T00:00:00", listOf(PpClass("c", "Study Period", listOf(PpSchedule("2026-09-05T08:50:00", "2026-09-05T09:45:00", dayOfWeek = 2)))))
-        JsonStore(file, TaskState.serializer(), ::TaskState, migrations = listOf(TasksMigration.TASKS, StepOrderMigration.TASKS, WeeklyMigration.TASKS)).update { it.copy(timetable = timetable) }
-        assertEquals(timetable, JsonStore(file, TaskState.serializer(), ::TaskState, migrations = listOf(TasksMigration.TASKS, StepOrderMigration.TASKS, WeeklyMigration.TASKS)).value.timetable)
+        JsonStore(file, TaskState.serializer(), ::TaskState, migrations = listOf(TasksMigration.TASKS, StepOrderMigration.TASKS, WeeklyMigration.TASKS, NotSameMigration.TASKS)).update { it.copy(timetable = timetable) }
+        assertEquals(timetable, JsonStore(file, TaskState.serializer(), ::TaskState, migrations = listOf(TasksMigration.TASKS, StepOrderMigration.TASKS, WeeklyMigration.TASKS, NotSameMigration.TASKS)).value.timetable)
     }
 
     @Test
     fun `an unreadable file is set aside and the state starts afresh`() = runTest {
         val file = File(dir, "tasks.json").apply { writeText("{not json") }
-        val store = JsonStore(file, TaskState.serializer(), ::TaskState, clock = { AT }, migrations = listOf(TasksMigration.TASKS, StepOrderMigration.TASKS, WeeklyMigration.TASKS))
+        val store = JsonStore(file, TaskState.serializer(), ::TaskState, clock = { AT }, migrations = listOf(TasksMigration.TASKS, StepOrderMigration.TASKS, WeeklyMigration.TASKS, NotSameMigration.TASKS))
         assertEquals(TaskState(), store.value)
         val problem = store.problem!!
         assertEquals("tasks.json.unreadable-20261011-083000", problem.copy)
         assertEquals("{not json", File(dir, problem.copy!!).readText())
         assertFalse(problem.kept)
         // Not replaced till it's on record: a start cut short before then finds it again, with the same copy.
-        assertEquals(problem.copy, JsonStore(file, TaskState.serializer(), ::TaskState, clock = { AT + 1000 }, migrations = listOf(TasksMigration.TASKS, StepOrderMigration.TASKS, WeeklyMigration.TASKS)).problem?.copy)
+        assertEquals(problem.copy, JsonStore(file, TaskState.serializer(), ::TaskState, clock = { AT + 1000 }, migrations = listOf(TasksMigration.TASKS, StepOrderMigration.TASKS, WeeklyMigration.TASKS, NotSameMigration.TASKS)).problem?.copy)
         // On record: what it started from is the file now, and the next start reads it, with nothing to say.
         store.keepRecovered()
-        assertNull(JsonStore(file, TaskState.serializer(), ::TaskState, clock = { AT + 2000 }, migrations = listOf(TasksMigration.TASKS, StepOrderMigration.TASKS, WeeklyMigration.TASKS)).problem)
+        assertNull(JsonStore(file, TaskState.serializer(), ::TaskState, clock = { AT + 2000 }, migrations = listOf(TasksMigration.TASKS, StepOrderMigration.TASKS, WeeklyMigration.TASKS, NotSameMigration.TASKS)).problem)
         assertEquals(1, dir.listFiles { f -> f.name.startsWith("tasks.json.unreadable-") }!!.size)
         // A file that reads is no problem.
-        assertNull(JsonStore(File(dir, "other.json").apply { writeText("{}") }, TaskState.serializer(), ::TaskState, migrations = listOf(TasksMigration.TASKS, StepOrderMigration.TASKS, WeeklyMigration.TASKS)).problem)
+        assertNull(JsonStore(File(dir, "other.json").apply { writeText("{}") }, TaskState.serializer(), ::TaskState, migrations = listOf(TasksMigration.TASKS, StepOrderMigration.TASKS, WeeklyMigration.TASKS, NotSameMigration.TASKS)).problem)
     }
 
     @Test
@@ -209,7 +209,7 @@ class StoresTest {
         assertEquals(stores.all.size, stores.all.map { it.file }.toSet().size)
         // Every JSON store's shape is known to a backup, at the version its state says, each with a migration from every one before.
         assertEquals(made - "secrets.bin", stores.shapes.keys)
-        assertEquals(mapOf("calendar.json" to 2, "chat.json" to 13, "chat-archive.json" to 12, "felix.json" to 3, "instructions.json" to 6, "log.json" to 4, "memory.json" to 2, "runtime.json" to 3, "session.json" to 3, "settings.json" to 4, "tasks.json" to 4), stores.shapes.filterValues { it.version > 1 }.mapValues { it.value.version })
+        assertEquals(mapOf("calendar.json" to 2, "chat.json" to 13, "chat-archive.json" to 12, "felix.json" to 3, "instructions.json" to 6, "log.json" to 4, "memory.json" to 2, "protection.json" to 2, "runtime.json" to 4, "session.json" to 3, "settings.json" to 4, "tasks.json" to 5), stores.shapes.filterValues { it.version > 1 }.mapValues { it.value.version })
         assertTrue(stores.shapes.values.all { Migration.complete(it.version, it.migrations) })
         // And each is said in words when it can't be read, not by its file's name.
         for (file in made) assertTrue(!JsonStore.Unreadable(file, null, kept = false, at = 0).says.startsWith(file), file)
@@ -217,10 +217,10 @@ class StoresTest {
 
     @Test
     fun `two tasks said not to be the same work are kept once a pair, the newest so many`() {
-        val said = RuntimeState().withNotSame("teams:a", "gmail:b").withNotSame("gmail:b", "teams:a")
+        val said = TaskState().withNotSame("teams:a", "gmail:b").withNotSame("gmail:b", "teams:a")
         assertEquals(1, said.notSame.size)
-        val many = (1..RuntimeState.MAX_NOT_SAME + 5).fold(said) { s, n -> s.withNotSame("own:$n", "teams:a") }
-        assertEquals(RuntimeState.MAX_NOT_SAME, many.notSame.size)
+        val many = (1..TaskState.MAX_NOT_SAME + 5).fold(said) { s, n -> s.withNotSame("own:$n", "teams:a") }
+        assertEquals(TaskState.MAX_NOT_SAME, many.notSame.size)
         assertFalse(said.notSame.single() in many.notSame)
     }
 
@@ -271,8 +271,9 @@ class StoresTest {
         // ties together are a source's task's, which a backup doesn't hold; TasksMigrationTest); the runtime's
         // split moves a backup's parts by where Backups.PARTS puts them (RuntimeSplitTest); another move
         // must be taught to it as well, and this test changed with it (D-94). The archive's split into months
-        // (4.0.4) moves no field: a backup holds the archive whole, as before.
-        assertEquals(listOf(ChatMigration.MOVE, ChatArchiveStore.SPLIT, TasksMigration.MOVE, RuntimeSplit.MOVE), Stores.MOVES, "A new move between stores: apply it to a backup's parts in Backups.upgraded too")
+        // (4.0.4) moves no field: a backup holds the archive whole, as before. Nor do 4.13.0's move one a backup
+        // holds: it has no part of protection.json or runtime.json, and held no pairs before they moved.
+        assertEquals(listOf(ChatMigration.MOVE, ChatArchiveStore.SPLIT, TasksMigration.MOVE, RuntimeSplit.MOVE, ProtectionSplit.MOVE, NotSameMigration.MOVE), Stores.MOVES, "A new move between stores: apply it to a backup's parts in Backups.upgraded too")
     }
 
     @Test

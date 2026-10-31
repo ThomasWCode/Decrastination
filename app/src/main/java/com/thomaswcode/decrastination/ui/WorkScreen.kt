@@ -74,7 +74,7 @@ fun WorkScreen(graph: AppGraph, activity: Activity, opening: String? = null, onO
     val settings by graph.settings.state.collectAsStateWithLifecycle()
     val runtime by graph.runtime.state.collectAsStateWithLifecycle()
     val model by graph.stores.model.state.collectAsStateWithLifecycle()
-    val protection by graph.stores.protection.state.collectAsStateWithLifecycle()
+    val device by graph.stores.device.state.collectAsStateWithLifecycle()
     val instructions by graph.instructions.state.collectAsStateWithLifecycle()
     val calendar by graph.sync.calendarState.collectAsStateWithLifecycle()
     // The sections move with the clock as well as the data: deadlines pass, and midnight.
@@ -98,7 +98,7 @@ fun WorkScreen(graph: AppGraph, activity: Activity, opening: String? = null, onO
     val byId = state.tasks.associateBy { it.id }
     // What the plan leaves out, as the plan has it now.
     val plan = remember(state, settings, now, instructions, calendar) { graph.planning.plan(state, settings, now) }
-    val trouble = trouble(state, runtime, protection, now)
+    val trouble = trouble(state, runtime, device, now)
     val scope = rememberCoroutineScope()
     var said by rememberSaveable { mutableStateOf<String?>(null) }
     // A photo of homework read into tasks (NF-01): the app's, so a turn of the phone or leaving Work loses nothing.
@@ -168,7 +168,7 @@ fun WorkScreen(graph: AppGraph, activity: Activity, opening: String? = null, onO
             }
             val groups = if (bySubject) Groups.bySubject(open, settings.classMap, now) else Groups.byDue(open, now, zone).map { (g, t) -> g.title to t }
             // Work that looks the same from two sources (DX-15): said on each.
-            val pairs = Duplicates.candidates(state.tasks, settings.classMap, runtime.notSame)
+            val pairs = Duplicates.candidates(state.tasks, settings.classMap, state.notSame)
             val alike = pairs.flatMap { (a, b) -> listOf(a.id to b, b.id to a) }.groupBy({ it.first }, { it.second })
             for ((title, tasks) in groups) {
                 val key = if (bySubject) Groups.subjectKey(title, tasks, settings.classMap) else "group-$title"
@@ -345,7 +345,7 @@ private fun SameLine(graph: AppGraph, task: TaskItem, other: TaskItem) {
             }
         }) { Text("Same") }
         TextButton(onClick = {
-            graph.scope.launch { graph.notSame(task.id, other.id) }
+            graph.scope.launch { graph.instructions.notSame(task.id, other.id) }
         }) { Text("Different") }
     }
 }

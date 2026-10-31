@@ -200,6 +200,11 @@ class Instructions(
         scope.launch { readInstructions(interactive = true) }
     }
 
+    /** Tasks [a] and [b] said, on Work, not to be the same work (DX-15): not asked about again. */
+    suspend fun notSame(a: String, b: String) {
+        tasks.update { it.withNotSame(a, b) }
+    }
+
     /**
      * Reads the instructions waiting for Claude, one call each, as the enrichment's calls are made:
      * under the cap, and resting after a failure. While Claude can't be asked, each says why.

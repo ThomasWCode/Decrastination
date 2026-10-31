@@ -65,7 +65,7 @@ class LearningTest {
     @Volatile private var key: String? = null
     private val gateway = ModelGateway(stores.settings, { key }, stores.model, stores.tasks, clock, NoAlerts, scope) {}.also { it.endpoint = server.url("").toString().trimEnd('/') }
     private val focus = Focus(stores.tasks, stores.settings, stores.session, stores.learning, stores.protection, stores.log, clock) { state, s, now -> Planner.plan(Planner.Input(state.tasks, now, LONDON, s)) }
-    private val protection = Protection(stores.settings, stores.protection, stores.secrets, clock, scope, adminActive = { false }) {}
+    private val protection = Protection(stores.settings, stores.protection, stores.device, stores.secrets, clock, scope, adminActive = { false }) {}
 
     /** The review's lines put in the chat, and the weeks whose summary was offered. */
     private val told: MutableList<String> = Collections.synchronizedList(mutableListOf())

@@ -46,7 +46,6 @@ import com.thomaswcode.decrastination.data.ActivityLog
 import com.thomaswcode.decrastination.data.FelixStore
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.LearningState
-import com.thomaswcode.decrastination.data.RuntimeState
 import com.thomaswcode.decrastination.data.SlotRecord
 import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.enrich.Called
@@ -101,7 +100,6 @@ import kotlinx.coroutines.withContext
 class Conversation(
     private val tasks: JsonStore<TaskState>,
     private val settings: JsonStore<Settings>,
-    private val runtime: JsonStore<RuntimeState>,
     private val learning: JsonStore<LearningState>,
     private val log: JsonStore<ActivityLog>,
     private val instructions: JsonStore<InstructionState>,
@@ -597,7 +595,7 @@ class Conversation(
         val lessons = lessons(state, now)
         val waiting = waiting(now, messages)
         return ChatPrompts.Context(
-            known = ChatPrompts.context(state.tasks, time.events, applied, now, clock.zone(), settings.value.classMap, runtime.value.notSame, settings.value, learning.value.calibration, kept.notes, kept.reminders, moments, lessons, waiting),
+            known = ChatPrompts.context(state.tasks, time.events, applied, now, clock.zone(), settings.value.classMap, state.notSame, settings.value, learning.value.calibration, kept.notes, kept.reminders, moments, lessons, waiting),
             plan = ChatPrompts.plan(
                 plan, clock.zone(), keptToday.map { it.key to it.label }, focus.blockingLine(plan, now), focus.timer,
                 InstructionRules.onlyDays(applied, plan.today, plan.today.plusDays(ChatPrompts.PLAN_DAYS.toLong())).mapValues { ChatPrompts.onlyLine(it.value, byId) },

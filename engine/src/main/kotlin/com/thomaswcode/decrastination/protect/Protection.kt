@@ -2,6 +2,7 @@ package com.thomaswcode.decrastination.protect
 
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.WallClock
+import com.thomaswcode.decrastination.data.DeviceState
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.ProtectionState
 import com.thomaswcode.decrastination.data.Secret
@@ -28,6 +29,8 @@ import kotlinx.coroutines.sync.withLock
 class Protection(
     private val settings: JsonStore<Settings>,
     private val protection: JsonStore<ProtectionState>,
+    /** The phone's own side of it: whether the device admin was last left armed. */
+    private val device: JsonStore<DeviceState>,
     /** Where your dad's authenticator's secret is kept ([Secret.TotpSecret]). */
     private val secrets: SecretStore,
     private val clock: WallClock,
@@ -174,11 +177,11 @@ class Protection(
         scope.launch {
             var starting = true
             settings.state.map { it.armed }.distinctUntilChanged().collect { armed ->
-                val wasArmed = protection.value.adminArmed
-                if (armed && !wasArmed) protection.update { it.copy(adminArmed = true) }
+                val wasArmed = device.value.adminArmed
+                if (armed && !wasArmed) device.update { it.copy(adminArmed = true) }
                 if (!armed && (wasArmed || (starting && adminActive()))) {
                     runCatching { removeAdmin() }
-                    protection.update { it.copy(adminArmed = false) }
+                    device.update { it.copy(adminArmed = false) }
                 }
                 starting = false
             }

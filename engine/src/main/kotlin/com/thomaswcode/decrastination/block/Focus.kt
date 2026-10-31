@@ -54,7 +54,7 @@ class Focus(
     private val session: JsonStore<SessionState>,
     /** What's learned of your pace (read): the calibration's. */
     private val learning: JsonStore<LearningState>,
-    /** Protection's state (read): the parent code's override, a PC's forced blocking. */
+    /** Protection's state (read): the parent code's override. */
     private val protection: JsonStore<ProtectionState>,
     private val log: JsonStore<ActivityLog>,
     private val clock: WallClock,
@@ -66,6 +66,8 @@ class Focus(
     private val onUnworked: suspend (String) -> Unit = {},
     /** Whether [LocalDate] is a school day (BL-02): by the school calendar; without one, Monday to Friday. */
     private val schoolDay: (LocalDate) -> Boolean = { it.dayOfWeek.value <= 5 },
+    /** Till when a PC has forced blocking on (`DeviceState.forceActiveUntil`). */
+    private val forceActiveUntil: () -> Long? = { null },
     private val planOf: (TaskState, Settings, Long) -> Plan,
 ) {
     /** What the blocker covers. */
@@ -105,7 +107,6 @@ class Focus(
 
     /** Whether a blocked app may be in front now, by [plan]: the plan now, or one Felix is shown, so they agree. */
     fun verdict(now: Long = clock.now(), plan: Plan = this.plan(now)): BlockPolicy.Verdict {
-        val state = protection.value
         return BlockPolicy.decide(
             BlockPolicy.Input(
                 now = now,
@@ -113,8 +114,8 @@ class Focus(
                 settings = settings.value,
                 pressure = plan.pressure || missedKeepsPressure(now),
                 creditLeftMs = creditLeftMs(now),
-                overrideUntil = state.overrideUntil,
-                forceActiveUntil = state.forceActiveUntil,
+                overrideUntil = protection.value.overrideUntil,
+                forceActiveUntil = forceActiveUntil(),
                 schoolDay = schoolDay(today(now)),
                 gapUntil = gapUntil(now, plan),
             ),

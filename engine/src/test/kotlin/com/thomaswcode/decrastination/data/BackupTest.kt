@@ -381,12 +381,24 @@ class BackupTest {
     }
 
     @Test
+    fun `format 11 keeps the pairs that aren't the same work, one said on either side standing`() {
+        val backup = Backup(exportedAt = 1, settings = Settings(), log = ActivityLog(), notSame = listOf("a|b", "c|d"))
+        assertEquals(listOf("a|b", "c|d"), Backups.decode(Backups.encode(backup), emptyMap())!!.notSame)
+        assertEquals(listOf("c|d", "a|b", "e|f"), Backups.mergedNotSame(listOf("a|b", "e|f"), listOf("c|d", "a|b")))
+        // None in one from before.
+        assertEquals(emptyList(), Backups.decode("""{"app":"Decrastination","format":10,"exportedAt":0,"settings":{},"log":{}}""", emptyMap())!!.notSame)
+        assertNull(Backups.problem(backup))
+        assertNotNull(Backups.problem(backup.copy(notSame = listOf("just one"))))
+        assertNotNull(Backups.problem(backup.copy(notSame = List(TaskState.MAX_NOT_SAME + 1) { "a$it|b" })))
+    }
+
+    @Test
     fun `format 9 keeps the receipts of writes to Gmail, restored by id beside this phone's, never a write still to make`() {
         val made = GmailWrite("w1", "gmail:t1", "Trip form", "t1", 3, notBefore = 4, flagged = listOf("101"), inbox = listOf("101"), unstarred = true, archived = true, doneAt = 5)
         val pending = GmailWrite("w2", "gmail:t2", "Club email", "t2", 6, notBefore = 7)
         val backup = Backup(exportedAt = 1, settings = Settings(), log = ActivityLog(), gmailWrites = listOf(made))
         val back = Backups.decode(Backups.encode(backup), emptyMap())!!
-        assertEquals(10, Backup.FORMAT)
+        assertEquals(11, Backup.FORMAT)
         assertEquals(listOf(made), back.gmailWrites)
         // None in one from before.
         assertEquals(emptyList(), Backups.decode("""{"app":"Decrastination","format":8,"exportedAt":0,"settings":{},"log":{}}""", emptyMap())!!.gmailWrites)

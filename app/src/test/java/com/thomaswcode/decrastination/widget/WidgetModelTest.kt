@@ -13,7 +13,7 @@ import com.thomaswcode.decrastination.core.SubStep
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.WindowKind
 import com.thomaswcode.decrastination.data.PieceTimer
-import com.thomaswcode.decrastination.data.ProtectionState
+import com.thomaswcode.decrastination.data.DeviceState
 import com.thomaswcode.decrastination.data.SessionState
 import com.thomaswcode.decrastination.data.SlotOutcome
 import com.thomaswcode.decrastination.data.SlotRecord
@@ -121,10 +121,10 @@ class WidgetModelTest {
 
     @Test
     fun `protection trouble comes first, loudest when armed`() {
-        val off = ProtectionState(protection = WatchdogState(problems = listOf("The focus service is off: nothing is blocked")))
+        val off = DeviceState(watchdog = WatchdogState(problems = listOf("The focus service is off: nothing is blocked")))
         val plan = Planner.plan(Planner.Input(emptyList(), now, LONDON, Settings()))
-        assertEquals("The focus service is off: nothing is blocked", WidgetModel.from(plan, TaskState(), LONDON, protection = off, armed = false).warning)
-        assertEquals("PROTECTION OFF: The focus service is off: nothing is blocked", WidgetModel.from(plan, TaskState(), LONDON, protection = off, armed = true).warning)
+        assertEquals("The focus service is off: nothing is blocked", WidgetModel.from(plan, TaskState(), LONDON, device = off, armed = false).warning)
+        assertEquals("PROTECTION OFF: The focus service is off: nothing is blocked", WidgetModel.from(plan, TaskState(), LONDON, device = off, armed = true).warning)
     }
 
     @Test

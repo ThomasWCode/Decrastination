@@ -164,9 +164,6 @@ class AppGraph private constructor(context: Context) {
     /** Takes [seen] off Setup's list of files found unreadable. */
     suspend fun forgetUnreadable(seen: JsonStore.Unreadable) = runtime.update { it.seenUnreadable(seen) }
 
-    /** Tasks [a] and [b] said, on Work, not to be the same work (DX-15). */
-    suspend fun notSame(a: String, b: String) = runtime.update { it.withNotSame(a, b) }
-
     private val syncer = Syncer(
         tasks = tasks,
         settings = settings,
@@ -252,6 +249,7 @@ class AppGraph private constructor(context: Context) {
         onUnworked = { runCatching { gmailFinishes.unworked(it) }.onFailure { e -> Log.w(TAG, "Taking back an email's finish failed", e) } },
         // A school day by the school calendar (BL-02): a day off blocks from the weekend's time.
         schoolDay = { SchoolDays.kindOf(it, school.value) == DayKind.Weekday },
+        forceActiveUntil = { stores.device.value.forceActiveUntil },
     ) { state, s, now -> planning.plan(state, s, now) }
 
     /**
@@ -305,7 +303,7 @@ class AppGraph private constructor(context: Context) {
      * remembers, the replies from his notification, the week's check-in, and what the app says in his name.
      */
     val conversation: Conversation = Conversation(
-        tasks, settings, runtime, stores.learning, log, stores.instructions, chat, school, memory, stores.felix, clock, scope, gateway, notifier, focus, planning, felixPorts, outbox,
+        tasks, settings, stores.learning, log, stores.instructions, chat, school, memory, stores.felix, clock, scope, gateway, notifier, focus, planning, felixPorts, outbox,
         owners = object : Conversation.Owners {
             override suspend fun saveOwnTask(sourceId: String, task: OwnTask): Boolean = ownTasks.saveOwnTask(sourceId, task)
             override suspend fun finishOwnTask(taskId: String) { ownTasks.finishOwnTask(taskId) }
@@ -372,7 +370,7 @@ class AppGraph private constructor(context: Context) {
     )
 
     /** Protection ([Protection]): settings changes, waiting once armed if they loosen blocking; the parent code; the device admin. */
-    val protection = Protection(settings, stores.protection, secrets, clock, scope, adminActive = { Watchdog.isAdminActive(app) }) {
+    val protection = Protection(settings, stores.protection, stores.device, secrets, clock, scope, adminActive = { Watchdog.isAdminActive(app) }) {
         app.getSystemService(DevicePolicyManager::class.java)?.removeActiveAdmin(Watchdog.admin(app))
     }
 
@@ -506,7 +504,7 @@ class AppGraph private constructor(context: Context) {
         }
         // Redraw the widget whenever what it shows may have changed.
         scope.launch {
-            combine(tasks.state, settings.state, stores.session.state, stores.protection.state, stores.model.state) { _, _, _, _, _ -> }.drop(1).debounce(WIDGET_DEBOUNCE_MS).collect {
+            combine(tasks.state, settings.state, stores.session.state, stores.device.state, stores.model.state) { _, _, _, _, _ -> }.drop(1).debounce(WIDGET_DEBOUNCE_MS).collect {
                 runCatching { WidgetUpdater.update(app) }.onFailure { Log.w(TAG, "Widget update failed", it) }
             }
         }

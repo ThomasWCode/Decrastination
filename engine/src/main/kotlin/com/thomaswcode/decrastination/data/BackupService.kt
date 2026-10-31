@@ -129,6 +129,7 @@ class BackupService(
             felixStore = stores.felix.value,
             gmailWrites = GmailWrites.receipts(stores.gmailWrites.value.writes),
             weeksDeleted = stores.tasks.value.weeksDeleted,
+            notSame = stores.tasks.value.notSame,
             versions = stores.shapes.mapValues { it.value.version },
         )
 
@@ -181,7 +182,7 @@ class BackupService(
         Backups.problem(backup)?.let { return "Nothing was restored: $it." }
         changeSettings { Backups.importedSettings(it, backup) }
         // Before the rules, so a week deleted isn't made again from them as they come back (D-124).
-        stores.replace(stores.tasks) { it.copy(weeksDeleted = Backups.mergedWeeks(it.weeksDeleted, backup.weeksDeleted)) }
+        stores.replace(stores.tasks) { it.copy(weeksDeleted = Backups.mergedWeeks(it.weeksDeleted, backup.weeksDeleted), notSame = Backups.mergedNotSame(it.notSame, backup.notSame)) }
         val (restored, unclear, asTheyWere) = restoreInstructions(backup.instructions)
         // Your own tasks not here already: no source can give them back. The instructions' say is laid
         // over them afresh, from those in use here.
