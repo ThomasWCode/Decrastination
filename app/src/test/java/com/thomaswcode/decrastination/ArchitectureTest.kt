@@ -61,6 +61,16 @@ class ArchitectureTest {
     }
 
     @Test
+    fun `the engine's build names no Android and no module but core`() {
+        // As core's is held: what the server runs has nothing of Android, but the lint that checks it as the app's code.
+        val build = listOf(File("../engine/build.gradle.kts"), File("engine/build.gradle.kts")).first { it.isFile }
+        val code = build.readLines().filterNot { it.trimStart().startsWith("//") }.joinToString("\n")
+            .replace("libs.plugins.android.lint", "").replace("""project(":core")""", "")
+        val named = Regex("""android|project\(""").findAll(code).map { it.value }.toList()
+        assertTrue(named.isEmpty(), "the engine's build names Android or another module: $named")
+    }
+
+    @Test
     fun `screens call services, never a store's update`() {
         // A screen reads a store's flow and calls its owner's functions (§The rules, 4): what it changes goes through them.
         val stray = sources.filter { (path, text) -> path.startsWith("ui/") && UPDATE.containsMatchIn(text) }.keys.sorted()
