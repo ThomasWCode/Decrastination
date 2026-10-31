@@ -12,8 +12,8 @@ android {
         applicationId = "com.thomaswcode.decrastination"
         minSdk = 26
         targetSdk = 36
-        versionCode = 99
-        versionName = "4.12.1"
+        versionCode = 100
+        versionName = "4.12.2"
     }
 
     signingConfigs {
@@ -97,6 +97,7 @@ dependencies {
     implementation(platform(libs.jackson.bom))
 
     testImplementation(testFixtures(project(":core")))
+    testImplementation(testFixtures(project(":engine")))
     testImplementation(libs.junit)
     testImplementation(libs.kotlin.test.junit)
     testImplementation(libs.kotlinx.coroutines.test)

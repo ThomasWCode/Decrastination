@@ -74,7 +74,7 @@ class DailyReceiver : BroadcastReceiver() {
                         runCatching { graph.conversation.forgetExpired() }.onFailure { Log.w(AppGraph.TAG, "Forgetting what's run out failed", it) }
                         // A new week's work in place before the day's plan is said (D-124).
                         runCatching { graph.ownTasks.rollWeeks() }.onFailure { Log.w(AppGraph.TAG, "Rolling weekly work failed", it) }
-                        Briefing.run(context)
+                        graph.briefing.run()
                         // Felix's notes and reminders kept as long as they're wanted, each morning: not the briefing's
                         // failure, so not one that runs it again.
                         runCatching { graph.conversation.pruneFelix() }.onFailure { Log.w(AppGraph.TAG, "Pruning Felix's notes and reminders failed", it) }

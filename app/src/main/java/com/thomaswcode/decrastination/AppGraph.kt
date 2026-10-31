@@ -6,6 +6,7 @@ import android.content.Context
 import android.util.Log
 import com.thomaswcode.decrastination.block.AnkiWatch
 import com.thomaswcode.decrastination.block.Focus
+import com.thomaswcode.decrastination.block.PhotoChecks
 import com.thomaswcode.decrastination.block.Photos
 import com.thomaswcode.decrastination.block.SlotAlarms
 import com.thomaswcode.decrastination.block.Slots
@@ -56,6 +57,7 @@ import com.thomaswcode.decrastination.notify.Notifier
 import com.thomaswcode.decrastination.plan.Planning
 import com.thomaswcode.decrastination.protect.Protection
 import com.thomaswcode.decrastination.protect.Watchdog
+import com.thomaswcode.decrastination.sources.anki.AnkiProvider
 import com.thomaswcode.decrastination.sources.anki.AnkiSource
 import com.thomaswcode.decrastination.sources.gmail.GmailSource
 import com.thomaswcode.decrastination.sources.gmail.GmailThreads
@@ -70,6 +72,7 @@ import com.thomaswcode.decrastination.sync.SyncWorker
 import com.thomaswcode.decrastination.sync.Syncer
 import com.thomaswcode.decrastination.tasks.Instructions
 import com.thomaswcode.decrastination.tasks.OwnTasks
+import com.thomaswcode.decrastination.ui.Moves
 import com.thomaswcode.decrastination.widget.WidgetUpdater
 import java.io.File
 import kotlinx.coroutines.CoroutineExceptionHandler
@@ -264,17 +267,21 @@ class AppGraph private constructor(context: Context) {
         settleEvent = { conversation.settleEvent(it) },
         reread = {
             sync.refreshCalendar()
-            Briefing.replanToday(app)
+            briefing.replanToday()
         },
         busyTimes = { from, to -> InstructionRules.busyBlocks(instructions.value.applied, from, to) },
         sayPutBack = { want, deleted, why -> SlotCalendar.sayPutBack(app, want, deleted, why) },
     )
 
     /** Today's slots as they pass: begun, or missed (PL-13). */
-    val slots = Slots(this)
+    val slots = Slots(stores.session, settings, tasks, school, clock, planning, focus)
 
     /** Time in AnkiDroid as work (NF-03, DX-11). */
-    val anki = AnkiWatch(this)
+    val anki = AnkiWatch(
+        stores.anki, stores.learning, tasks, clock, scope, focus, planning, sync, AnkiProvider.PACKAGE,
+        decks = { if (AnkiProvider.hasPermission(app)) AnkiProvider.decks(app.contentResolver) else null },
+        noteActivity = { taskIds, now -> looks.noteActivity(taskIds, now) },
+    )
 
     /** What Felix's service asks of Android: his notification, and the work and alarms that outlive what asked. */
     private val felixPorts = AndroidFelixPorts(app)
@@ -323,6 +330,9 @@ class AppGraph private constructor(context: Context) {
         requestTeamsSync = { sync.requestTeamsSync() },
     )
 
+    /** The morning: the day's record, what the night held back, and his message on the day ([Briefing]). */
+    val briefing: Briefing = Briefing(planning, log, runtime, school, clock, notifier, sync, looks, conversation)
+
     /**
      * Your instructions ([Instructions]): written and read by Claude, or quick changes of yours; applied,
      * refused, taken back, and laid over everything they change. Made after the plan and the focus, which it uses.
@@ -333,12 +343,15 @@ class AppGraph private constructor(context: Context) {
         profile = { conversation.profile() },
         reread = {
             sync.refreshCalendar()
-            Briefing.replanToday(app)
+            briefing.replanToday()
         },
         redraw = { WidgetUpdater.update(app) },
         answerRead = { instruction, answers, changed -> looks.answerRead(instruction, answers, changed) },
         question = { looks.questionFor(it) },
     )
+
+    /** A piece moved by hand ([Moves]). */
+    val moves: Moves = Moves(tasks, instructions, planning, clock, scope)
 
     /** Your own tasks ([OwnTasks]): kept, finished, opened again, deleted, and trimmed to their record once long done. */
     val ownTasks: OwnTasks = OwnTasks(tasks, stores.instructions, chat, clock, scope) { settleCompletions() }
@@ -353,7 +366,7 @@ class AppGraph private constructor(context: Context) {
 
     /** Photos ([Photos]): of a task's work, of homework to make tasks from, and of written work checked. */
     val photos: Photos = Photos(
-        tasks, settings, chat, clock, scope, gateway, focus, File(app.filesDir, "photos"),
+        tasks, settings, chat, clock, scope, gateway, focus, File(app.filesDir, "photos"), PhotoChecks::shrink,
         profile = { conversation.profile() },
         read = { taskId -> readings.enrichNow(only = taskId) },
     )
@@ -529,7 +542,7 @@ class AppGraph private constructor(context: Context) {
             schedule = { DailyAlarms.schedule(app) },
             reread = {
                 sync.refreshCalendar()
-                Briefing.replanToday(app)
+                briefing.replanToday()
             },
             cancelFelix = { FelixNotifications.cancel(app) },
         )

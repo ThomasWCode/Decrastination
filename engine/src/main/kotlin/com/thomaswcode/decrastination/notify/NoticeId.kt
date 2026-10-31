@@ -64,7 +64,7 @@ enum class NoticeId(val id: Int, val codes: IntRange = IntRange.EMPTY) {
     }
 
     companion object {
-        /** No longer made, as each is Felix's message in the chat now: taken away at start where one's left ([Notifier.retire]). */
+        /** No longer made, as each is Felix's message in the chat now: taken away at start where one's left (`Notifier.retire`). */
         val RETIRED: Set<NoticeId> = setOf(Briefing, Review, Summary, Assessment, FelixMessage, CalendarQuestion)
     }
 }

@@ -56,6 +56,11 @@ dependencies {
     // Every Jackson module the SDK brings at one patched version (gradle/libs.versions.toml).
     api(platform(libs.jackson.bom))
 
+    // TasksHarness, as the services' tests here and the task sheet's in the app share it.
+    testFixturesApi(testFixtures(project(":core")))
+    testFixturesApi(libs.okhttp.mockwebserver)
+    testFixturesImplementation(libs.kotlin.test.junit)
+
     testImplementation(testFixtures(project(":core")))
     testImplementation(libs.junit)
     testImplementation(libs.kotlin.test.junit)
