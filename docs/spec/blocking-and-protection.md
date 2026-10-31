@@ -40,7 +40,7 @@ It stays reported until an address is read again, the browser is blocked outrigh
 **Today's work isn't done** (BL-01) while today's bucket holds pieces (`Plan.pressure`), or while a slot missed today has no slot left today, until today's working hours end (BL-11, `Focus.missedKeepsPressure`). Tomorrow's work alone never blocks. A missed slot whose task has since finished, or gone, went to no day: once the plan's made without it, it keeps nothing on (`SlotState.reconciled`).
 A piece you move yourself (a time, a day or a start you give its task) is recorded moved and its miss forgotten, so moving work doesn't keep the evening blocked the way letting it lapse does.
 
-From a PC, `force-block` makes blocking hours apply for up to two hours whatever the time, for testing (`ProtectionState.forceActiveUntil`); it can only tighten.
+From a PC, `force-block` makes blocking hours apply for up to two hours whatever the time, for testing (`DeviceState.forceActiveUntil`); it can only tighten.
 
 ## The block screen
 
@@ -114,7 +114,7 @@ Nothing on an unrooted phone is unbypassable: the layers make every impulsive ro
 
 **Unarmed** (`Settings.armed` false), blocking works, but the guard is off, every change applies at once, and the watchdog warns without repairing (a crashed service it still restarts, given self-repair). **Armed**, all six layers act.
 
-`protect/Protection.kt` makes every settings change (`changeSettings`: at once, or waiting), counts the waits and applies what's due, uses a parent code, and keeps the device admin in step with arming. It's built like `Focus`: the settings, protection's own state (`protection.json`), the secrets, the clock, and callbacks for the device admin; `ProtectionTest` drives it on temporary stores, armed and unarmed. Settings saves through it from its state holder (`ui/SettingsScreenState.kt`: your edits over what the screen showed, only what you changed saved, BUG-P2-014), tested without Compose (`SettingsScreenStateTest`).
+`protect/Protection.kt` makes every settings change (`changeSettings`: at once, or waiting), counts the waits and applies what's due, uses a parent code, and keeps the device admin in step with arming. It's built like `Focus`: the settings, protection's own state (`protection.json`), the phone's side of it (`device.json`), the secrets, the clock, and callbacks for the device admin; `ProtectionTest` drives it on temporary stores, armed and unarmed. Settings saves through it from its state holder (`ui/SettingsScreenState.kt`: your edits over what the screen showed, only what you changed saved, BUG-P2-014), tested without Compose (`SettingsScreenStateTest`).
 
 **Arming** (`protect/ProtectionActivity.kt`: its own page, and Settings → Blocking and protection) asks for the device admin, then sets up the parent code:
 - a QR code for the parent's authenticator, checked with a code from it; or, with one set already, kept once a code from it is typed (IMP-P2-012); or skipped;
