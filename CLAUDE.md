@@ -12,6 +12,7 @@ Every Claude session in this repository reads this file: the reviewer GitHub Act
 - `docs/plan_v4/`: the 4.x plan's record, done in Oct 2026. `README.md` says what was built, release by release, and what's left; `architecture.md` the structure the code has and the conventions it keeps to; `data-and-migrations.md` how stored data changes; `answers.md` the questions the plan asked and the owner's answers, and those asked since, from the timer (4.4.0) to Felix's moods (4.7.0), his speech (4.8.0, the speech review's plan folded into it) and the chat as the app's home (4.9.0, its plan folded in likewise), with the choices made in building them.
 - `docs/astra-review-4.3.13/`: the review of 4.3.13 and what became of each finding.
 - `docs/astra-review-29-10-26/`: the review of 4.9.1 (two runs, 29 Oct 2026), its 53 findings that stood and what became of each (fixed in 4.9.2 to 4.9.6), and what it taught.
+- `docs/plan_4.11.0/`: the plan for 4.11.0, before it's built: the chat's box keeping your words, a missed slot's sheet, and *Ask Felix about it* on Day's sheets. Deleted, with this line, once it's built and in the specs.
 
 ## What matters most here
 
