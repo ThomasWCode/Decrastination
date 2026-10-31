@@ -13,6 +13,7 @@ What's kept where, and how each change to stored data is made safely on a phone 
 | `session.json` | credit, today's slots, slots being kept, photo checks under way, completions rewarded | Focus | every half minute |
 | `protection.json` | changes waiting, the override, the code's lock, the uptime mark | Protection | on a change |
 | `device.json` | what's only this phone's: the device admin's arming, the watchdog's finding, forced blocking | Protection and the watchdog | on a change |
+| `sync.json` | this phone's pairing with the server, what's been sent it | the replica | at each send |
 | `model.json` | the month's usage, the last calls, failed readings, dropped-plan alerts, micro-plans | ModelGateway | at each call |
 | `anki.json` | Anki's readings, when AnkiDroid came to the front, the minutes worked in it | Focus (Anki's watch) | as AnkiDroid is used |
 | `calendar.json` | the versions of its events the app wrote, what was written where, the calendars to clear, your answers about events | CalendarWriter | at each write |

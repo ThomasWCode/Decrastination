@@ -25,7 +25,7 @@ The estimates are hours of sessions, from the durations measured over the 4.x re
 
 **Phone.** One install and check per release (the usual `scripts/phone-check.sh`): the services bound, the blocker blocking, a backup written. Step 6's release gets the rehearsal (`scripts/rehearse.sh`) on a real backup first.
 
-**Done when.** `:app` has no owner, no prompt, no migration; `:engine` builds with no Android dependency; every test passes; the phone runs 4.11.x with nothing changed for the owner.
+**Done when.** `:app` has no owner, no prompt, no migration; `:engine` builds with no Android dependency; every test passes; the phone runs 4.13.0 with nothing changed for the owner.
 
 **Risks.** Hidden Android dependencies inside owners that need a port each (the first move finds them; each is small). The moves in commits, code first, nothing improved on the way (`CLAUDE.md`'s rule for moves: move first, improve after, a commit each).
 
@@ -39,7 +39,7 @@ The estimates are hours of sessions, from the durations measured over the 4.x re
 1. `:server`: Ktor 3.6 with the `io.ktor.plugin` (`buildFatJar`), `sqlite-jdbc`, the tables (`data-and-sync.md` §The database) and `SqliteBackend`, `meta.mode = mirror`.
 2. Sign-in: the GitHub App, `/api/auth/*`, sessions, the allowed user id; device pairing, `/api/devices/*`, the token hashed.
 3. `POST /api/stores/seed`, `GET /api/state`, `GET /api/events`, `GET /api/views/day`, `GET /api/views/work`, `GET /api/health`, `GET /api/version`.
-4. The phone: Setup → This phone → the pairing step; `sync/Replica` and the upload: every synced store's write (coalesced to one upload a minute, and at once on the app's foreground and the 15-minute `SyncWorker`) posted to `seed`; Setup → This phone shows the last sync and the server's version; a 409 on versions shows there too.
+4. The phone: Setup → This phone → the pairing step, each batch saying the phone's time zone (which the server keeps to, as a day is the owner's wherever they are); `sync/Replica` and the upload: every synced store's write (coalesced to one upload a minute, and at once on the app's foreground and the 15-minute `SyncWorker`) posted to `seed`; Setup → This phone shows the last sync and the server's version; a 409 on versions shows there too.
 5. `web/`: the scaffold (Vite, React, TypeScript, ESLint, vitest, Playwright), sign-in, the Day page and the Work page rendering `/views/*`, the events stream reloading them.
 6. `deploy/`: `compose.yaml`, `Caddyfile`, `litestream.yml`, `bootstrap.sh`, `decrastination-update.{service,timer,sh}`, `env.production.example`, adapted from SharpnPro's; the Actions job that builds the two images and pushes them to GHCR.
 7. The box: created (the owner, at the Oracle console: A1.Flex 2/12, Ubuntu 24.04, the home region; retried if out of capacity), bootstrapped, `.env` filled, the DNS A record at Spaceship, the GitHub App made with the callback, the R2 bucket and keys.
@@ -86,7 +86,7 @@ The estimates are hours of sessions, from the durations measured over the 4.x re
 **Goal.** The state is fresh while the phone sleeps; Claude is called from one place on the server; the credentials that can leave the phone have. Release 5.2.0.
 
 **Work.**
-1. The scheduler and the jobs: the Power Planner and Gmail syncs (their sources run on the JVM as they are; the IMAP client checked on JRE 21), the readings (`EnrichWorker`'s work), `Ahead`, the memory tidy, the daily briefing's and weekly review's texts at their times, the nightly Backup-format file to R2, the heartbeat.
+1. The scheduler and the jobs: the Power Planner and Gmail syncs (their sources run on the JVM as they are; the IMAP client checked on JRE 21), the readings (`EnrichWorker`'s work), `Ahead`, the memory tidy, the daily briefing's and weekly review's texts at their times, the nightly Backup-format file to B2 (W-20), the heartbeat.
 2. `ModelGateway` on the server with `ANTHROPIC_API_KEY`; the phone's Felix calls as commands (a look with its context, a reply, a photo); the Gmail finish on the server.
 3. The `credentials` table under `MASTER_KEY`; the website's Setup → Sources and Claude pages; the phone's Setup drops the Power Planner, Gmail and Anthropic entries once the server reports it holds them (a `DeviceStatus` round-trip), and deletes its copies.
 4. The phone's workers that did these go: `EnrichWorker`, `GmailWriteWorker`, `FelixWorker`, `FelixReplyWorker`'s call, `ReviewWorker`'s call, `ReminderWorker`'s text; the scheduling of their notifications stays.
@@ -94,7 +94,7 @@ The estimates are hours of sessions, from the durations measured over the 4.x re
 
 **Tests.** The scheduler's due-time rules on a test clock; the sources' tests as today; the backup file's round trip through the phone's `Backups.decode`.
 
-**Docs.** `docs/spec/sources.md` (where each sync runs), `docs/spec/readings.md`, `docs/spec/felix.md` (the calls' place), `docs/spec/storage-and-backups.md` (the nightly file, R2), `docs/spec/privacy.md` (what the server holds).
+**Docs.** `docs/spec/sources.md` (where each sync runs), `docs/spec/readings.md`, `docs/spec/felix.md` (the calls' place), `docs/spec/storage-and-backups.md` (the nightly file, B2), `docs/spec/privacy.md` (what the server holds).
 
 **Phone.** 5.2.0 installed; the credentials re-entered on the website; the phone's Setup checked to hold none; a message to Felix answered through the server; Settings → Claude → Recent calls showing it on both.
 

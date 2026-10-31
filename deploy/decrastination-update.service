@@ -1,0 +1,9 @@
+[Unit]
+Description=Bring Decrastination's server to the newest images
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/decrastination/decrastination-update.sh
+TimeoutStartSec=10min

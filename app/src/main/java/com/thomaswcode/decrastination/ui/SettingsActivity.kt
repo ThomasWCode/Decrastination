@@ -338,6 +338,9 @@ class SettingsActivity : ComponentActivity() {
                         }
                     }
 
+                    // This phone's pairing, as Setup has it.
+                    WEBSITE -> item { SetupScreen(graph, this@SettingsActivity, setOf(SetupPart.Website), scroll = false) }
+
                     // A backup, and what couldn't be read at a start, as Setup has them.
                     BACKUP -> {
                         item { SetupScreen(graph, this@SettingsActivity, setOf(SetupPart.Saved, SetupPart.Backup), scroll = false) }
@@ -375,6 +378,7 @@ private const val CLAUDE = "claude"
 private const val SOURCES = "sources"
 private const val CALENDAR = "calendar"
 private const val NOTIFICATIONS = "notifications"
+private const val WEBSITE = "website"
 private const val BACKUP = "backup"
 private const val RESET = "reset"
 
@@ -393,6 +397,7 @@ private val PAGES = listOf(
     Page(SOURCES, "Sources", "Teams, Power Planner, AnkiDroid and Gmail"),
     Page(CALENDAR, "Calendar", "The calendars read, and the one your plan's written to"),
     Page(NOTIFICATIONS, "Notifications", "The morning briefing and Sunday's check-in"),
+    Page(WEBSITE, "The website", "This phone paired with it, and when it last sent"),
     Page(BACKUP, "Backup", "The settings, the log and what's learned, saved or restored"),
     Page(RESET, "Reset", "Stats, what's learned, what Felix remembers, the chat, your changes"),
 )

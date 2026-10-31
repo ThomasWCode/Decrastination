@@ -37,6 +37,31 @@ jobs:
       - name: Build debug APK
         run: ./gradlew assembleDebug --console=plain
 
+      - name: Build the server
+        run: ./gradlew :server:buildFatJar --console=plain
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: The website's dependencies
+        working-directory: web
+        run: npm ci
+
+      - name: The website's lint and unit tests
+        working-directory: web
+        run: npm run lint && npm run test:unit
+
+      - name: Build the website
+        working-directory: web
+        run: npm run build
+
+      - name: The website against the server, in a browser
+        working-directory: web
+        run: npx playwright install --with-deps chromium && npm run test:e2e
+
       - name: Upload test and lint reports
         if: always()
         uses: actions/upload-artifact@v7
@@ -49,6 +74,10 @@ jobs:
             core/build/test-results/
             engine/build/reports/
             engine/build/test-results/
+            server/build/reports/
+            server/build/test-results/
+            web/test-results/
+            web/playwright-report/
           if-no-files-found: ignore
 
       - name: Upload debug APK
@@ -57,3 +86,77 @@ jobs:
           name: decrastination-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+
+      - name: Upload what the images hold
+        uses: actions/upload-artifact@v7
+        with:
+          name: images-input
+          path: |
+            server/build/libs/server-all.jar
+            web/dist/
+          if-no-files-found: error
+
+  # The two images, built on every PR so a broken one shows before a merge, pushed from main (the box's timer
+  # pulls them) or from a branch by hand, tagged with its name, to try on the box first. Neither has a RUN step,
+  # so both architectures build here with no emulation.
+  images:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write
+    env:
+      PUSH: ${{ github.event_name != 'pull_request' }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: images-input
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        if: env.PUSH == 'true'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: The version and the tags
+        id: tags
+        run: |
+          version="$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts)"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [ "$GITHUB_REF" = refs/heads/main ]; then
+            echo "tags=$version latest" >> "$GITHUB_OUTPUT"
+          else
+            echo "tags=${GITHUB_REF_NAME//[^a-zA-Z0-9._-]/-}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: The names, lower case as GHCR wants them
+        id: names
+        run: |
+          for image in server web; do
+            list=""
+            for tag in ${{ steps.tags.outputs.tags }}; do list="$list,ghcr.io/thomaswcode/decrastination-$image:$tag"; done
+            echo "$image=${list#,}" >> "$GITHUB_OUTPUT"
+          done
+
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: deploy/server.Dockerfile
+          platforms: linux/amd64,linux/arm64
+          build-args: APP_VERSION=${{ steps.tags.outputs.version }}
+          push: ${{ env.PUSH == 'true' }}
+          tags: ${{ steps.names.outputs.server }}
+
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: deploy/web.Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: ${{ env.PUSH == 'true' }}
+          tags: ${{ steps.names.outputs.web }}

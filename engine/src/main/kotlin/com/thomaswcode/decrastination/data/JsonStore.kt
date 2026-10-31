@@ -115,6 +115,9 @@ class JsonStore<T>(
 
     val value: T get() = _state.value
 
+    /** Its state as its file holds it. */
+    fun text(): String = json.encodeToString(serializer, value)
+
     /** Whether its file has been read: as it was made, unless [lazily]. */
     val isLoaded: Boolean get() = loaded.isInitialized()
 
@@ -137,12 +140,22 @@ class JsonStore<T>(
     }
 
     /**
+     * The state read again from its backend, where something else has written it: a client's whole store
+     * mirrored into the server's. As at a start: its migrations run on what's there, what can't be read set aside.
+     */
+    suspend fun reload(): T = mutex.withLock {
+        val read = load()
+        _state.value = read
+        read
+    }
+
+    /**
      * The copies kept beside its file let go: an older shape's (`<name>.v<n>`) and those of a file that couldn't be
      * read (`<name>.unreadable-<when>`), so what *Clear the chat* or a reset takes isn't kept in one (D-94). Each is
      * deleted, or, where that fails, emptied, as the archive's months are, so what's cleared can't come back from it.
      */
     suspend fun letGoOfCopies(): Unit = withContext(Dispatchers.IO) {
-        backend.letGoOfCopies(name)
+        backend.letGoOfCopies { it == name }
     }
 
     /**
@@ -241,6 +254,7 @@ class JsonStore<T>(
                     "felix.json" -> "Felix's notes and reminders"
                     "calendar.json" -> "The record of what the app wrote to your calendar, and your answers about its events"
                     "gmail-writes.json" -> "The record of what the app has written to Gmail for emails finished here"
+                    "sync.json" -> "What the app keeps of its pairing with the website"
                     else -> if (file.startsWith("chat-archive-")) "The chat's earlier messages from ${file.removePrefix("chat-archive-").removeSuffix(".json")}" else file
                 }
                 val how = if (kept) "couldn't be read whole: what could be was kept, the rest is back to its defaults" else "couldn't be read: it started afresh"

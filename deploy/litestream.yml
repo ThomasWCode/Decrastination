@@ -1,0 +1,17 @@
+# Streams the server's database to a private R2 bucket, continuously (docs/plan_web/hosting.md §Litestream).
+# ${...} is read from the container's environment. A snapshot a day, kept 30 days, so `restore -timestamp`
+# reaches a month back.
+snapshot:
+  interval: 24h
+  retention: 720h
+
+dbs:
+  - path: /data/decrastination.db
+    replica:
+      type: s3
+      bucket: ${R2_BUCKET}
+      path: db
+      endpoint: ${R2_ACCOUNT_ID}.r2.cloudflarestorage.com
+      region: auto
+      access-key-id: ${R2_ACCESS_KEY_ID}
+      secret-access-key: ${R2_SECRET_ACCESS_KEY}

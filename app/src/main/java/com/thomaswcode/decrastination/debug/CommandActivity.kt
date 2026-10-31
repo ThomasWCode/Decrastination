@@ -37,6 +37,7 @@ import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.withoutEnrichment
 import com.thomaswcode.decrastination.data.Secret
+import com.thomaswcode.decrastination.data.SyncState
 import com.thomaswcode.decrastination.enrich.ClaudeEnricher
 import com.thomaswcode.decrastination.enrich.ClaudeReviewer
 import com.thomaswcode.decrastination.enrich.InstructionReader
@@ -62,6 +63,7 @@ import com.thomaswcode.decrastination.learn.EventJudge
 import com.thomaswcode.decrastination.protect.Watchdog
 import com.thomaswcode.decrastination.sources.anki.AnkiProvider
 import com.thomaswcode.decrastination.sources.gmail.GmailThreads
+import com.thomaswcode.decrastination.sync.ReplicaWorker
 import com.thomaswcode.decrastination.sync.SyncWorker
 import com.thomaswcode.decrastination.ui.OpenTaskActivity
 import com.thomaswcode.decrastination.core.GmailWrites
@@ -169,6 +171,23 @@ class CommandActivity : Activity() {
     private suspend fun run(graph: AppGraph, command: String) {
         when (command) {
             "import-credentials" -> importCredentials(graph)
+            // The server, from a PC: a test server's address (`adb reverse`, then http://127.0.0.1:<port>), and pairing and sending by hand.
+            "sync-server" -> {
+                intent.getStringExtra("url")?.let { graph.replica.server(it) }
+                Log.i(TAG, "The server: ${graph.replica.state.value.server}")
+            }
+            "sync-pair" -> Log.i(TAG, "Pairing: ${graph.replica.pair(intent.getStringExtra("code").orEmpty(), "Test") ?: "paired"}")
+            // A test's pairing undone, the address back to the real server's.
+            "sync-forget" -> {
+                graph.replica.forget()
+                graph.replica.server(SyncState.DEFAULT_SERVER)
+                Log.i(TAG, "Unpaired; the server: ${graph.replica.state.value.server}")
+            }
+            "sync-send" -> {
+                ReplicaWorker.now(this)
+                Log.i(TAG, "Sending asked for; last error ${graph.replica.state.value.lastError}")
+            }
+            "sync-state" -> graph.replica.state.value.let { Log.i(TAG, "The server: ${it.server}; paired ${graph.replica.paired}, last sent ${it.lastSyncAt}, ${it.sent.size} stores, error ${it.lastError}, refused ${it.refused}") }
             "sync" -> {
                 val only = intent.getStringExtra("sources")?.split(",")?.mapNotNull { name ->
                     Source.entries.firstOrNull { it.name.equals(name.trim(), ignoreCase = true) }

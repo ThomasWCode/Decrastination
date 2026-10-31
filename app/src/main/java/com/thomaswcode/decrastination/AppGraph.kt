@@ -67,6 +67,8 @@ import com.thomaswcode.decrastination.sources.teams.TeamsSource
 import com.thomaswcode.decrastination.sync.AndroidSyncPorts
 import com.thomaswcode.decrastination.sync.AndroidGmailPorts
 import com.thomaswcode.decrastination.sync.GmailFinishes
+import com.thomaswcode.decrastination.sync.Replica
+import com.thomaswcode.decrastination.sync.ReplicaWorker
 import com.thomaswcode.decrastination.sync.Sync
 import com.thomaswcode.decrastination.sync.SyncWorker
 import com.thomaswcode.decrastination.sync.Syncer
@@ -85,6 +87,7 @@ import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 
@@ -354,6 +357,9 @@ class AppGraph private constructor(context: Context) {
     /** Your own tasks ([OwnTasks]): kept, finished, opened again, deleted, and trimmed to their record once long done. */
     val ownTasks: OwnTasks = OwnTasks(tasks, stores.instructions, chat, clock, scope) { settleCompletions() }
 
+    /** The phone and the server ([Replica]): this phone paired, and what's changed sent. */
+    val replica: Replica = Replica(stores, UrlConnectionHttp(), clock, BuildConfig.VERSION_NAME, calendar = { sync.calendarRead() })
+
     /** The tasks' readings ([Readings]): by Claude while it can be asked, by the rules otherwise; one read again on asking. */
     val readings: Readings = Readings(
         tasks, stores.model, clock, scope, gateway,
@@ -501,6 +507,10 @@ class AppGraph private constructor(context: Context) {
             stores.session.state.map { it.timer }.distinctUntilChanged().collect {
                 runCatching { TimerAlarms.sync(app) }.onFailure { e -> Log.w(TAG, "Keeping the timer's notification failed", e) }
             }
+        }
+        // Anything the server keeps a copy of changed, the calendar as read and the chat's archive among it: sent within the minute, by work that keeps its network.
+        scope.launch {
+            merge(stores.mirrored.map { it.state.drop(1) }.merge(), sync.calendarState.drop(1), stores.chatArchive.changes.drop(1)).collect { if (replica.paired) ReplicaWorker.soon(app) }
         }
         // Redraw the widget whenever what it shows may have changed.
         scope.launch {

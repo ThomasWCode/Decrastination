@@ -68,8 +68,48 @@ class FileBackendTest {
         backend.write("a.json", 1, "{}")
         backend.keepShape("a.json", 1, 1_000L)
         backend.setAside("a.json", 1_000L)
-        backend.letGoOfCopies("a.json")
+        backend.letGoOfCopies { it == "a.json" }
         assertEquals(listOf("a.json"), dir.list()!!.toList())
+    }
+
+    @Test
+    fun `only the copies of the stores picked are let go`() {
+        backend.write("a.json", 1, "{}")
+        backend.write("b.json", 1, "{}")
+        backend.keepShape("a.json", 1, 1_000L)
+        backend.keepShape("b.json", 1, 1_000L)
+        backend.letGoOfCopies { it == "a.json" }
+        assertEquals(setOf("a.json", "b.json", "b.json.v1"), dir.list()!!.toSet())
+    }
+
+    @Test
+    fun `an older shape goes once it's old enough, and a copy that couldn't be read doesn't go with it`() {
+        backend.write("a.json", 1, "{}")
+        backend.keepShape("a.json", 1, 1_000L)
+        val aside = assertNotNull(backend.setAside("a.json", 1_000L))
+        backend.letGoOfOldShapes(999L) { true }
+        assertTrue(File(dir, "a.json.v1").exists())
+        backend.letGoOfOldShapes(1_000L) { it == "a.json" }
+        assertFalse(File(dir, "a.json.v1").exists())
+        assertTrue(File(dir, aside).exists())
+    }
+
+    @Test
+    fun `a store is held till it's deleted, and one that can't be deleted is emptied`() {
+        backend.write("a.json", 1, "{}")
+        assertTrue(backend.holds("a.json"))
+        backend.delete("a.json", "empty")
+        assertFalse(backend.holds("a.json"))
+        assertFalse(backend.holds("never.json"))
+    }
+
+    @Test
+    fun `a store read again takes what its backend holds now`() = runBlocking {
+        val store = JsonStore(backend, "note.json", Note.serializer(), ::Note)
+        backend.write("note.json", 1, """{"text":"written elsewhere"}""")
+        assertEquals("", store.value.text)
+        assertEquals("written elsewhere", store.reload().text)
+        assertEquals("written elsewhere", store.value.text)
     }
 
     @Test

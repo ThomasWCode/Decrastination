@@ -1,0 +1,11 @@
+[Unit]
+Description=Check for new Decrastination images every few minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=3min
+RandomizedDelaySec=30s
+Persistent=true
+
+[Install]
+WantedBy=timers.target

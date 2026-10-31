@@ -42,6 +42,8 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
             "Sync${only?.let { " of ${it.joinToString()}" }.orEmpty()}: ${report.added.size} added, ${report.completed.size} completed, " +
                 "${report.reopened.size} reopened, ${report.missed.size} missed; failures ${report.failures}",
         )
+        // With the network this job holds, what's changed to the server.
+        graph.replica.upload()
         return Result.success()
     }
 

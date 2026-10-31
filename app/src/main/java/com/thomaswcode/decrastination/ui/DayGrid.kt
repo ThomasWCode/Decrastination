@@ -270,14 +270,6 @@ internal fun DayGrid(
     }
 }
 
-/** A window's name, as its band says it. */
-internal fun windowName(kind: WindowKind): String = when (kind) {
-    WindowKind.Evening -> "Your time"
-    WindowKind.Study -> "Study period"
-    WindowKind.Break -> "Break"
-    WindowKind.Lunch -> "Lunch"
-}
-
 /** A block of the grid, as its kind draws it (`docs/spec/day.md` §The blocks). */
 @Composable
 private fun GridBlock(block: DayModel.Block, plan: Plan, zone: ZoneId, judge: (CalendarEvent) -> EventJudge.Judgement, asked: Collection<String>, micro: Map<String, MicroPlan>, messageOf: (String) -> String?, drag: DayDrag, actions: DayActions, width: Dp) {
@@ -511,12 +503,4 @@ private fun BusyBlockView(item: DayModel.Row.Busy, fit: (String) -> String) {
     ) {
         Text(fit(item.block.title?.let { "Busy: $it" } ?: "Busy"), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
     }
-}
-
-/** A slot's outcome, in a word or two. */
-internal fun outcomeWords(outcome: SlotOutcome): String = when (outcome) {
-    SlotOutcome.Kept -> "Kept"
-    SlotOutcome.KeptLate -> "Kept late"
-    SlotOutcome.Missed -> "Missed"
-    SlotOutcome.Moved -> "Moved"
 }

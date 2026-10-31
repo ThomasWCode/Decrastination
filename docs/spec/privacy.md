@@ -1,9 +1,11 @@
 # Privacy
 
 What leaves the phone, what's kept on it and for how long, how secrets are kept, what the activity log holds, and the rules for the public repository.
-The app has no server of its own: it runs on the phone, talks only to Claude and to the sources' own services, and the PC is used only to build and test it.
+The app runs on the phone and talks to Claude and to the sources' own services. Once it's paired with the website, it also keeps a copy of its stores on the owner's own server ([server.md](server.md), [sync.md](sync.md)); unpaired, it talks to nothing else. The PC is used only to build and test it.
 
 ## What leaves the phone
+
+**The owner's server.** Paired, the phone sends the stores `Stores.MIRRORED` names, whole, and the calendar as last read, over TLS with a token of its own ([sync.md](sync.md)): tasks and their readings, settings, today's slots, the chat and what Felix remembers, the log, Claude's month. The secrets never go, nor `runtime.json`, `device.json`, `calendar.json` or `gmail-writes.json`. On the box they're plain JSON in SQLite, readable only there, behind the owner's GitHub sign-in or a device's token; a copy streams to a private R2 bucket (D-131), which holds them as the database does. Each store's earlier texts are kept 90 days (R2's snapshots, a month), so what's cleared on the phone is gone from the website at once and from the server's history after that. Sessions and device tokens are kept hashed. Nothing there is shared with anyone, and no log line holds a store's content, a credential or a header.
 
 **Claude.** The Anthropic API, through its Java SDK, is called only while Claude is on and its key in use (`ModelGateway.claudeKey`), every call through `ModelGateway.call` ([readings.md](readings.md)).
 Every call sends its job's instructions and, but for the web search, your profile (AI-05, AI-06, `enrich/Profile.kt`):

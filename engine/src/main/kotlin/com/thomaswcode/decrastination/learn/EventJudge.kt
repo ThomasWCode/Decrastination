@@ -4,8 +4,10 @@ import com.thomaswcode.decrastination.core.Busy
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import kotlinx.serialization.Serializable
 
 /** One event from the phone's calendar, as read. */
+@Serializable
 data class CalendarEvent(
     val id: Long,
     val title: String,
