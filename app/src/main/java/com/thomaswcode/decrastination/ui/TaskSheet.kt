@@ -67,6 +67,9 @@ import com.thomaswcode.decrastination.sources.gmail.GmailThreads
 import com.thomaswcode.decrastination.core.GmailWrites
 import com.thomaswcode.decrastination.enrich.MicroPlans
 import com.thomaswcode.decrastination.sources.teams.TeamsRows
+import com.thomaswcode.decrastination.sync.protocol.AddNote
+import com.thomaswcode.decrastination.sync.protocol.DeleteNote
+import com.thomaswcode.decrastination.sync.protocol.TickBlock
 import java.io.File
 import java.time.Instant
 import java.time.ZoneId
@@ -149,9 +152,9 @@ fun TaskSheet(
     val today = Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
     val scope = rememberCoroutineScope()
     // The sheet's state and its changes ([TaskSheetState]), kept through a turn of the phone.
-    val sheet = rememberSaveable(saver = TaskSheetState.saver(graph.instructions, graph.ownTasks, graph.conversation::addNote, graph.conversation::deleteNote)) {
-        TaskSheetState(graph.instructions, graph.ownTasks, graph.conversation::addNote, graph.conversation::deleteNote)
-    }
+    val addNote: suspend (String, String) -> String? = { id, text -> graph.act(AddNote(id, text)) }
+    val deleteNote: suspend (String) -> Unit = { graph.act(DeleteNote(it)) }
+    val sheet = rememberSaveable(saver = TaskSheetState.saver(graph.commands, addNote, deleteNote)) { TaskSheetState(graph.commands, addNote, deleteNote) }
     var picking by sheet::picking
     var confirming by sheet::confirming
     var message by sheet::message
@@ -629,7 +632,7 @@ private fun Steps(graph: AppGraph, activity: Activity, task: TaskItem, now: Long
                     TextButton(onClick = { scope.launch { say(TimerAlarms.start(activity, task.id, index)) } }) { Text("Start") }
                 }
             }
-            if (Focus.tickable(task) && task.isOpen && !step.done) TextButton(onClick = { scope.launch { graph.focus.tickBlock(task.id, index, step.title) } }) { Text("Done") }
+            if (Focus.tickable(task) && task.isOpen && !step.done) TextButton(onClick = { scope.launch { graph.act(TickBlock(task.id, index, step.title)) } }) { Text("Done") }
         }
     }
 }

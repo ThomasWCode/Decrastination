@@ -30,7 +30,7 @@ fun Hint(graph: AppGraph, name: String, text: String) {
     ) {
         Column(Modifier.padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 4.dp)) {
             Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSecondaryContainer)
-            TextButton(onClick = { graph.scope.launch { graph.protection.changeSettings { it.copy(hintsSeen = (it.hintsSeen + name).distinct().takeLast(SettingsLimits.MAX_HINTS)) } } }) { Text("Got it") }
+            TextButton(onClick = { graph.scope.launch { graph.commands.changeSettings { it.copy(hintsSeen = (it.hintsSeen + name).distinct().takeLast(SettingsLimits.MAX_HINTS)) } } }) { Text("Got it") }
         }
     }
 }

@@ -67,6 +67,9 @@ import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.block.FocusService
 import com.thomaswcode.decrastination.data.Secret
 import com.thomaswcode.decrastination.notify.Channels
+import com.thomaswcode.decrastination.sync.protocol.ApplyChangeNow
+import com.thomaswcode.decrastination.sync.protocol.CancelChange
+import com.thomaswcode.decrastination.sync.protocol.UseParentCode
 import com.thomaswcode.decrastination.ui.AppTheme
 import com.thomaswcode.decrastination.ui.Format
 import com.thomaswcode.decrastination.ui.Group
@@ -167,7 +170,7 @@ fun ProtectionPanel(graph: AppGraph, activity: ComponentActivity) {
                 device.watchdog.problems.forEach { Text("• $it", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error) }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (settings.armed) {
-                        OutlinedButton(onClick = { scope.launch { graph.protection.changeSettings { it.copy(armed = false) } } }) { Text("Disarm") }
+                        OutlinedButton(onClick = { scope.launch { graph.commands.changeSettings { it.copy(armed = false) } } }) { Text("Disarm") }
                         if (hasParentCode) {
                             OutlinedButton(onClick = { codeFor = CodeTarget.Unblock }) { Text("Unblock for an hour") }
                         }
@@ -191,7 +194,7 @@ fun ProtectionPanel(graph: AppGraph, activity: ComponentActivity) {
                         Text("Applies ${Format.at(change.applyAt, now, graph.clock.zone())}", style = MaterialTheme.typography.bodySmall)
                     }
                     // Changed your mind: cancelling a loosening tightens, so it's at once.
-                    TextButton(onClick = { scope.launch { graph.protection.cancelChange(change.id) } }) { Text("Cancel") }
+                    TextButton(onClick = { scope.launch { graph.act(CancelChange(change.id)) } }) { Text("Cancel") }
                     if (hasParentCode) TextButton(onClick = { codeFor = CodeTarget.Change(change.id, change.description) }) { Text("Parent code") }
                 }
             }
@@ -324,7 +327,7 @@ fun ProtectionPanel(graph: AppGraph, activity: ComponentActivity) {
                 TextButton(onClick = {
                     step = Step.None
                     scope.launch {
-                        graph.protection.changeSettings { it.copy(armed = true) }
+                        graph.commands.changeSettings { it.copy(armed = true) }
                         Watchdog.check(activity, repair = true)
                     }
                 }) { Text("Arm") }
@@ -392,7 +395,7 @@ private fun KeepParentCodeDialog(graph: AppGraph, onKept: () -> Unit, onNew: () 
         confirmButton = {
             TextButton(enabled = code.length == Totp.DIGITS, onClick = {
                 // Checked, and used up, as any parent code is.
-                scope.launch { graph.protection.useParentCode(code)?.let { error = it } ?: onKept() }
+                scope.launch { graph.act(UseParentCode(code))?.let { error = it } ?: onKept() }
             }) { Text("Keep it") }
         },
         dismissButton = { TextButton(onClick = onCancel) { Text("Cancel") } },
@@ -496,8 +499,8 @@ private suspend fun applyWithCode(graph: AppGraph, target: CodeTarget, code: Str
     // The code is used up first (with the unblock, if that's what it was for), then the change
     // it allows is applied.
     val unblock = if (target == CodeTarget.Unblock) graph.clock.now() + UNBLOCK_MS else null
-    graph.protection.useParentCode(code, unblock)?.let { return it }
-    if (target is CodeTarget.Change) graph.protection.applyNow(target.id)
+    graph.act(UseParentCode(code, unblock))?.let { return it }
+    if (target is CodeTarget.Change) graph.act(ApplyChangeNow(target.id))
     return null
 }
 

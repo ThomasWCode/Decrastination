@@ -38,6 +38,8 @@ import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.data.PieceTimer
 import com.thomaswcode.decrastination.enrich.PhotoChecker
+import com.thomaswcode.decrastination.sync.protocol.FinishOwnTask
+import com.thomaswcode.decrastination.sync.protocol.KeepSlot
 import java.io.File
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
@@ -162,7 +164,7 @@ fun rememberPhotoCheck(graph: AppGraph, activity: Activity, plan: Plan, say: (ta
 internal suspend fun keepPiece(graph: AppGraph, piece: Chunk, now: Long): String {
     val by = graph.focus.earnsBy(piece)
     val since = graph.clock.now()
-    val kept = graph.focus.keepSlot(piece.key, seenAt = now)
+    val kept = graph.act(KeepSlot(piece.key, now))
     // What the keep put in the day's ledger, from its record (U-07): a piece of another day's earns nothing today, and
     // today's earns no more than the day's share (BL-08), so what's said is what it earned, not what a piece this long could.
     val record = graph.log.value.slots.lastOrNull { it.key == piece.key && it.outcome.kept && it.at >= since }
@@ -218,7 +220,7 @@ internal fun rememberTimerNow(graph: AppGraph, timer: PieceTimer?): Long {
 
 /** All of your own [taskId] done: nothing to ask, so it's your say, earning no free time. [say] gives how it went. */
 internal suspend fun allDone(graph: AppGraph, taskId: String, say: (String) -> Unit) {
-    graph.ownTasks.finishOwnTask(taskId)
+    graph.act(FinishOwnTask(taskId))
     say("All of it done. It earns no free time; its pieces earned theirs.")
 }
 

@@ -67,6 +67,7 @@ import com.thomaswcode.decrastination.learn.DailyAlarms
 import com.thomaswcode.decrastination.learn.SummaryEmail
 import com.thomaswcode.decrastination.protect.ProtectionPanel
 import com.thomaswcode.decrastination.protect.SettingsChanges
+import com.thomaswcode.decrastination.sync.protocol.ChangeSettings
 import java.time.Instant
 import java.time.ZoneId
 import java.util.Locale
@@ -131,7 +132,7 @@ class SettingsActivity : ComponentActivity() {
                         enabled = screen.canSave,
                         onClick = {
                             // The reminders' alarms, at their new times.
-                            scope.launch { screen.save(graph.protection) { DailyAlarms.schedule(this@SettingsActivity) } }
+                            scope.launch { screen.save(graph.protection, { graph.act(ChangeSettings(it)) }) { DailyAlarms.schedule(this@SettingsActivity) } }
                         },
                         modifier = Modifier.fillMaxWidth(),
                     ) { Text("Save") }

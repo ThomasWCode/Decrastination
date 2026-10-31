@@ -11,6 +11,7 @@ import com.thomaswcode.decrastination.sources.anki.AnkiProvider
 import com.thomaswcode.decrastination.sources.gmail.GmailThreads
 import com.thomaswcode.decrastination.sources.teams.TeamsProvider
 import com.thomaswcode.decrastination.sources.teams.TeamsRows
+import com.thomaswcode.decrastination.sync.protocol.NoteActivity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -37,7 +38,7 @@ object TaskOpener {
     /** [task] opened where it lives, as [open], and whether it was: Felix's open (G3) says which. */
     suspend fun opened(context: Context, task: TaskItem): Pair<Boolean, String?> {
         val (opened, say) = openIn(context, task)
-        if (opened) AppGraph.get(context).looks.noteActivity(listOf(task.id))
+        if (opened) AppGraph.get(context).act(NoteActivity(listOf(task.id)))
         return opened to say
     }
 

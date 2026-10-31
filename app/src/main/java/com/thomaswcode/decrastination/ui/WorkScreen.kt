@@ -54,6 +54,8 @@ import com.thomaswcode.decrastination.core.longFinished
 import com.thomaswcode.decrastination.data.SourceStatus
 import com.thomaswcode.decrastination.protect.ProtectionActivity
 import com.thomaswcode.decrastination.sources.gmail.GmailThreads
+import com.thomaswcode.decrastination.sync.protocol.AddOwnChange
+import com.thomaswcode.decrastination.sync.protocol.NotSame
 import java.io.File
 import java.time.ZoneId
 import java.util.UUID
@@ -337,15 +339,17 @@ private fun SameLine(graph: AppGraph, task: TaskItem, other: TaskItem) {
         Text("Looks like the same work as “${other.title}” from ${other.source.label}. Same?", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
         TextButton(onClick = {
             graph.scope.launch {
-                graph.instructions.addOwnChange(
-                    UUID.randomUUID().toString(), "Same as “${other.title}”",
-                    About(taskId = task.id, taskTitle = task.title),
-                    Change(ChangeType.SameAs, taskId = task.id, afterTaskId = other.id),
+                graph.act(
+                    AddOwnChange(
+                        UUID.randomUUID().toString(), "Same as “${other.title}”",
+                        About(taskId = task.id, taskTitle = task.title),
+                        Change(ChangeType.SameAs, taskId = task.id, afterTaskId = other.id),
+                    ),
                 )
             }
         }) { Text("Same") }
         TextButton(onClick = {
-            graph.scope.launch { graph.instructions.notSame(task.id, other.id) }
+            graph.scope.launch { graph.act(NotSame(task.id, other.id)) }
         }) { Text("Different") }
     }
 }

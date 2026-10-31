@@ -44,6 +44,7 @@ import com.thomaswcode.decrastination.core.OwnStep
 import com.thomaswcode.decrastination.core.OwnTask
 import com.thomaswcode.decrastination.core.OwnTaskRules
 import com.thomaswcode.decrastination.core.TaskItem
+import com.thomaswcode.decrastination.sync.protocol.SaveOwnTask
 import java.time.Instant
 import java.time.LocalTime
 import java.util.UUID
@@ -124,7 +125,7 @@ fun OwnTaskForm(graph: AppGraph, editing: TaskItem?, initial: OwnTask? = null, o
                             saving = true
                             // In the app's scope, past this form's: a turn of the phone mid-save doesn't stop it (a photo's
                             // attaching with it), and the form made again waits for how it went (U-02).
-                            FormSaves.start(graph.scope, id) { onSave?.invoke(made) ?: graph.ownTasks.saveOwnTask(id, made) }
+                            FormSaves.start(graph.scope, id) { onSave?.invoke(made) ?: graph.act(SaveOwnTask.of(id, made)) }
                         }
                     }) { Text("Save", fontWeight = FontWeight.Bold) }
                 }

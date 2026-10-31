@@ -46,6 +46,7 @@ import com.thomaswcode.decrastination.core.Blocklist
 import com.thomaswcode.decrastination.enrich.AiUsage
 import com.thomaswcode.decrastination.learn.Export
 import com.thomaswcode.decrastination.learn.Stats
+import com.thomaswcode.decrastination.sync.protocol.ForgetCalibration
 import java.io.File
 import java.time.DayOfWeek
 import java.time.Instant
@@ -111,7 +112,7 @@ fun StatsScreen(graph: AppGraph) {
             confirmButton = {
                 TextButton(onClick = {
                     forgetting = null
-                    row.forget?.let { key -> scope.launch { graph.learning.forgetCalibration(key) } }
+                    row.forget?.let { key -> scope.launch { graph.act(ForgetCalibration(key)) } }
                 }) { Text("Forget") }
             },
             dismissButton = { TextButton(onClick = { forgetting = null }) { Text("Keep") } },
@@ -125,7 +126,7 @@ fun StatsScreen(graph: AppGraph) {
             confirmButton = {
                 TextButton(onClick = {
                     proposing = false
-                    scope.launch { graph.protection.changeSettings { it.copy(weekdayHours = suggested) } }
+                    scope.launch { graph.commands.changeSettings { it.copy(weekdayHours = suggested) } }
                 }) { Text("Set them") }
             },
             dismissButton = { TextButton(onClick = { proposing = false }) { Text("Keep mine") } },

@@ -60,7 +60,7 @@ fun CalendarSection(graph: AppGraph, activity: Activity, choosing: Boolean = tru
         onPauseOrDispose { }
     }
     fun change(change: (Settings) -> Settings) {
-        scope.launch { graph.protection.changeSettings(change) }
+        scope.launch { graph.commands.changeSettings(change) }
     }
 
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {

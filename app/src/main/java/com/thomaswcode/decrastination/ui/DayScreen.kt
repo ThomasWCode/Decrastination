@@ -104,6 +104,9 @@ import com.thomaswcode.decrastination.data.SlotRecord
 import com.thomaswcode.decrastination.learn.CalendarEvent
 import com.thomaswcode.decrastination.learn.CalendarTime
 import com.thomaswcode.decrastination.learn.EventJudge
+import com.thomaswcode.decrastination.sync.protocol.KeepSlot
+import com.thomaswcode.decrastination.sync.protocol.LaterToday
+import com.thomaswcode.decrastination.sync.protocol.UndoKeep
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -288,10 +291,10 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
                 lastDone = chunk.key to at
                 scope.launch {
                     val since = graph.clock.now()
-                    if (!graph.focus.keepSlot(chunk.key, seenAt = now)) {
+                    if (!graph.act(KeepSlot(chunk.key, now))) {
                         snackbar.showSnackbar("That piece has changed since (done, or planned again).")
                     } else if (snackbar.showSnackbar(listOfNotNull("Done: ${chunk.label}", stillPlanned(graph, chunk.taskId)).joinToString(". "), actionLabel = "Undo", duration = SnackbarDuration.Short) == SnackbarResult.ActionPerformed) {
-                        if (!graph.focus.undoKeep(chunk.key, since)) snackbar.showSnackbar("It can't be taken back now: its task is finished.")
+                        if (!graph.act(UndoKeep(chunk.key, since))) snackbar.showSnackbar("It can't be taken back now: its task is finished.")
                     }
                 }
             }
@@ -303,7 +306,7 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
                         // A time pins its task's next piece: this one goes by its day.
                         snackbar.showSnackbar("Only its next piece takes a time: hold it to move all of it to a day")
                     } else {
-                        val at = graph.instructions.laterToday(chunk.key)
+                        val at = graph.act(LaterToday(chunk.key))
                         snackbar.showSnackbar(at?.let { "Later today, at ${clock(it, zone)}: undone in the chat's Your changes" } ?: "No time left today it can be done in")
                     }
                 }
@@ -447,7 +450,7 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
             DayGrid(
                 model, plan, zone, settings.dayHourDp, grid, { EventJudge.judge(it, answers) }, asked.eventsAsked, written.microPlans,
                 { messageOf(it) }, drag, actions,
-                onZoom = { hourDp -> scope.launch { graph.protection.changeSettings { it.copy(dayHourDp = hourDp) } } },
+                onZoom = { hourDp -> scope.launch { graph.commands.changeSettings { it.copy(dayHourDp = hourDp) } } },
                 // Upright, the grid's scrolls move only its hours, never the card. On its side the grid is the Day's height, under
                 // what's above it, and its scrolls take that away first.
                 modifier = if (landscape) Modifier.height(tall).nestedScroll(collapsing) else Modifier.weight(1f),

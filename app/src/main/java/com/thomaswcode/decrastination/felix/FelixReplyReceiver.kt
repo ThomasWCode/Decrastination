@@ -6,6 +6,7 @@ import android.content.Intent
 import android.util.Log
 import androidx.core.app.RemoteInput
 import com.thomaswcode.decrastination.AppGraph
+import com.thomaswcode.decrastination.sync.protocol.ReplyFromNotification
 import kotlinx.coroutines.launch
 
 /**
@@ -23,7 +24,7 @@ class FelixReplyReceiver : BroadcastReceiver() {
                     val text = RemoteInput.getResultsFromIntent(intent)?.getCharSequence(FelixNotifications.KEY_REPLY)?.toString()?.trim()
                     val id = intent.getStringExtra(FelixNotifications.EXTRA_ID)
                     // Only the reply's own handling waits here; the answer comes after, by itself.
-                    if (!text.isNullOrEmpty() && id != null) graph.conversation.replyFromNotification(text, id)
+                    if (!text.isNullOrEmpty() && id != null) graph.act(ReplyFromNotification(text, id))
                 }
             } catch (e: Exception) {
                 Log.w(AppGraph.TAG, "Felix's notification action failed", e)

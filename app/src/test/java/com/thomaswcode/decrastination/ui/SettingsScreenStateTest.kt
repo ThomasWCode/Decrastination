@@ -26,6 +26,7 @@ import com.thomaswcode.decrastination.data.SecretStore
 import com.thomaswcode.decrastination.data.SpeechMigration
 import com.thomaswcode.decrastination.data.ZoomMigration
 import com.thomaswcode.decrastination.protect.Protection
+import com.thomaswcode.decrastination.protect.SettingsChanges
 import java.io.File
 import java.nio.file.Files
 import kotlin.test.AfterTest
@@ -47,6 +48,9 @@ import kotlinx.coroutines.runBlocking
  * of the phone.
  */
 class SettingsScreenStateTest {
+    /** Saved as a settings command does: the fields changed, laid over what's asked for then. */
+    private suspend fun SettingsScreenState.saved(done: () -> Unit) = save(protection, { fields -> protection.changeSettings { SettingsChanges.laidOver(it, fields) } }, done)
+
     private val dir: File = Files.createTempDirectory("settings-screen").toFile()
     private val clock = FixedClock(Fixtures.at("2026-10-19T16:00"), LONDON, up = Uptime(boot = 1, elapsedMs = 1_000_000))
     private val settings = JsonStore(File(dir, "settings.json"), Settings.serializer(), ::Settings, migrations = listOf(SettingsMigration.SETTINGS, ZoomMigration.SETTINGS, SpeechMigration.SETTINGS))
@@ -86,7 +90,7 @@ class SettingsScreenStateTest {
         val screen = SettingsScreenState(protection.asked)
         screen.typed("boxMin", "40")
         screen.draft = screen.draft.copy(boxMin = 40)
-        screen.save(protection) { scheduled++ }
+        screen.saved { scheduled++ }
         assertEquals(40, settings.value.boxMin)
         assertEquals("Saved.", screen.message)
         assertEquals(1, scheduled)
@@ -103,7 +107,7 @@ class SettingsScreenStateTest {
         screen.draft = screen.draft.copy(freeAllowanceMin = 90)
         // A change made elsewhere after the screen began, and not yet shown on it: kept, not saved over.
         settings.update { it.copy(slotBreakMin = 10) }
-        screen.save(protection) { scheduled++ }
+        screen.saved { scheduled++ }
         assertEquals(10, settings.value.slotBreakMin)
         assertEquals(60, settings.value.freeAllowanceMin)
         assertEquals("Saved. 1 change loosening blocking waits 24 hours, shown below.", screen.message)
@@ -189,7 +193,7 @@ class SettingsScreenStateTest {
     fun `kept through a turn of the phone, but for what the last save said`() = runBlocking {
         val screen = SettingsScreenState(protection.asked)
         screen.draft = screen.draft.copy(boxMin = 40)
-        screen.save(protection) { scheduled++ }
+        screen.saved { scheduled++ }
         assertEquals("Saved.", screen.message)
         screen.draft = screen.draft.copy(boxMin = 50)
         screen.typed("marginDays", "x")

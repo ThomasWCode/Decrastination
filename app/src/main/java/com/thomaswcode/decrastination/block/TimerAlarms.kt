@@ -14,6 +14,9 @@ import com.thomaswcode.decrastination.felix.FelixWorker
 import com.thomaswcode.decrastination.notify.Channels
 import com.thomaswcode.decrastination.notify.NoticeId
 import com.thomaswcode.decrastination.notify.Notify
+import com.thomaswcode.decrastination.sync.protocol.NoteActivity
+import com.thomaswcode.decrastination.sync.protocol.StartTimer
+import com.thomaswcode.decrastination.sync.protocol.StopTimer
 import com.thomaswcode.decrastination.ui.Format
 import com.thomaswcode.decrastination.ui.MainActivity
 import kotlinx.coroutines.CoroutineScope
@@ -41,8 +44,8 @@ object TimerAlarms {
     suspend fun start(context: Context, taskId: String, stepIndex: Int?, key: String? = null): String {
         val graph = AppGraph.get(context)
         val before = graph.focus.timer?.takeIf { it.running }
-        val timer = graph.focus.startTimer(taskId, stepIndex, key) ?: return "That piece has changed since (done, or planned again)."
-        graph.looks.noteActivity(listOf(taskId))
+        val timer = graph.act(StartTimer(taskId, stepIndex, key)) ?: return "That piece has changed since (done, or planned again)."
+        graph.act(NoteActivity(listOf(taskId)))
         sync(context)
         return when {
             before == timer -> "The timer's already on it."
@@ -53,7 +56,7 @@ object TimerAlarms {
 
     /** The running timer stopped by hand: its notifications gone, and Felix's hold lifted 30 minutes on ([sync]). What to tell you. */
     suspend fun stop(context: Context): String {
-        val stopped = AppGraph.get(context).focus.stopTimer()
+        val stopped = AppGraph.get(context).act(StopTimer)
         sync(context)
         return if (stopped) "Timer stopped." else "No timer was running."
     }
