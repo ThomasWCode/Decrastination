@@ -1,6 +1,6 @@
 # The Day
 
-The Day tab (UI-17, D-118), opened from the chat's Plan button (D-121, [felix.md](felix.md) §The app's home): the week ahead in a strip, today's DO NOW card, the chosen day's header, and the day as a calendar, as Google Calendar's Day view draws one. `ui/DayScreen.kt` puts it together; `ui/DayModel.kt` gives the chosen day as it's shown (pure); `ui/DayLayout.kt` says where things go on the grid (pure); `ui/DayGrid.kt` draws the grid and its blocks; `ui/DayDrag.kt` holds a drag; `ui/Moves.kt` makes a move by hand, as the move sheet (`ui/MoveSheet.kt`) and the drag both make it. What the plan leaves out, and the sources, are on Work.
+The Day tab (UI-17, D-118), opened from the chat's Plan button (D-121, [felix.md](felix.md) §The app's home): the week ahead in a strip, today's DO NOW card, the chosen day's header, and the day as a calendar, as Google Calendar's Day view draws one. `ui/DayScreen.kt` puts it together; `ui/DayModel.kt` gives the chosen day as it's shown (pure); `ui/MissedActions.kt` says what a missed slot's sheet offers (pure); `ui/DayLayout.kt` says where things go on the grid (pure); `ui/DayGrid.kt` draws the grid and its blocks; `ui/DayDrag.kt` holds a drag; `ui/Moves.kt` makes a move by hand, as the move sheet (`ui/MoveSheet.kt`) and the drag both make it. What the plan leaves out, and the sources, are on Work.
 
 ## Top to bottom
 
