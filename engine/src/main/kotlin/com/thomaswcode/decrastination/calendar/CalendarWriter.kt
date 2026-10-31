@@ -1,7 +1,5 @@
 package com.thomaswcode.decrastination.calendar
 
-import android.util.Log
-import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.BusyBlock
 import com.thomaswcode.decrastination.core.Change
@@ -15,6 +13,7 @@ import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.ModelState
 import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.enrich.MicroPlan
+import com.thomaswcode.decrastination.ports.Log
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -41,7 +40,7 @@ import kotlinx.coroutines.withContext
  * ([clearOldCalendars]); the calendar watched for changes ([watchCalendar], [calendarChanged]); and your
  * answers about its events ([answer]). Built like [com.thomaswcode.decrastination.block.Focus]: its
  * stores, the clock and small callbacks in its constructor, the calendar provider behind a port
- * ([CalendarProvider]: [SlotCalendar] on the phone).
+ * ([CalendarProvider]: `SlotCalendar` on the phone).
  */
 @OptIn(FlowPreview::class)
 class CalendarWriter(
@@ -54,7 +53,7 @@ class CalendarWriter(
     private val scope: CoroutineScope,
     /** The calendar's events, read and written. */
     private val provider: CalendarProvider,
-    /** A move of yours written back, and why, said ([SlotCalendar.sayRefused]). */
+    /** A move of yours written back, and why, said (`SlotCalendar.sayRefused`). */
     private val sayRefused: (move: SlotCalendarDiff.HandMove, zone: ZoneId, why: String) -> Unit,
     /** A move of yours taken as your time: a change of yours, kept and applied at once ([com.thomaswcode.decrastination.tasks.Instructions.addOwnChange]). */
     private val addOwnChange: suspend (id: String, text: String, about: About, change: Change) -> Unit,
@@ -66,7 +65,7 @@ class CalendarWriter(
     private val reread: suspend () -> Unit,
     /** Your busy times from one day to another, as the instructions in use give them ([InstructionRules.busyBlocks]): each written as its own event (D-117). */
     private val busyTimes: (from: LocalDate, to: LocalDate) -> List<BusyBlock>,
-    /** A busy time's event you [deleted] or changed, put back, and why, said ([SlotCalendar.sayPutBack]). */
+    /** A busy time's event you [deleted] or changed, put back, and why, said (`SlotCalendar.sayPutBack`). */
     private val sayPutBack: (want: SlotCalendarDiff.Desired, deleted: Boolean, why: String) -> Unit,
     /** How long plans are quiet before the calendar's written: [CALENDAR_WRITE_QUIET_MS], but in a test. */
     private val quietMs: Long = CALENDAR_WRITE_QUIET_MS,
@@ -140,7 +139,7 @@ class CalendarWriter(
         runCatching {
             val versions = desired.filter { d -> d.uri !in moved }.map { d -> SlotCalendarDiff.version(calendarId, d.title, d.start, d.end) }.filterNot { it in written.yours }
             calendar.update { it.copy(written = SlotCalendarDiff.remembered(it.written, versions)) }
-        }.onFailure { Log.w(AppGraph.TAG, "Remembering what was written to the calendar failed", it) }
+        }.onFailure { Log.w(Log.TAG, "Remembering what was written to the calendar failed", it) }
         // And each event inserted or changed, by its URI and version, with when, so the sync bringing it back to that within
         // [SlotCalendarDiff.ECHO_MS] is known for the app's own; not one left as it was, nor another event's.
         written.wrote.forEach { d -> wroteAt[d.uri to SlotCalendarDiff.version(calendarId, d.title, d.start, d.end)] = now }
@@ -266,7 +265,7 @@ class CalendarWriter(
                 calendarTouched = true
                 changes.tryEmit(Unit)
             }
-        }.onSuccess { calendarWatched = it }.onFailure { Log.w(AppGraph.TAG, "Can't watch the calendar", it) }
+        }.onSuccess { calendarWatched = it }.onFailure { Log.w(Log.TAG, "Can't watch the calendar", it) }
     }
 
     /**
@@ -294,7 +293,7 @@ class CalendarWriter(
         }
         // The calendar written once plans have been quiet a while.
         scope.launch {
-            toWrite.debounce(quietMs).collect { made -> runCatching { writeSlots(made) }.onFailure { Log.w(AppGraph.TAG, "Writing the calendar failed", it) } }
+            toWrite.debounce(quietMs).collect { made -> runCatching { writeSlots(made) }.onFailure { Log.w(Log.TAG, "Writing the calendar failed", it) } }
         }
     }
 

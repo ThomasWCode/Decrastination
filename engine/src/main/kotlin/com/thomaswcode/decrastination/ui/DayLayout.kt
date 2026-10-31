@@ -8,7 +8,7 @@ import java.time.ZoneId
  * Where things go on the Day's grid (4.6.0, UI-17): the day's wall clock down it, 00:00 to 24:00, blocks at the same time side by
  * side, a drop's minute and the strip's day under a finger. Pure: every number in minutes, or in pixels handed in.
  */
-internal object DayLayout {
+object DayLayout {
     const val DAY_MINUTES = 24 * 60
 
     /** A block as laid: its [column] of the [columns] its cluster has, and how many it [span]s, widened right where they're free. */

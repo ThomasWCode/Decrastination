@@ -45,7 +45,7 @@ class ModelGateway(
     /** A failure's rest over after this long: what only the rules have read is asked again then. */
     private val retryAfter: (Long) -> Unit,
 ) {
-    /** Claude's warnings, as notifications ([ModelAlerts] on the phone, a list in a test). */
+    /** Claude's warnings, as notifications (`ModelAlerts` on the phone, a list in a test). */
     interface Alerts {
         /** [problem] with the key or the account said; false if it couldn't be shown. */
         fun keyProblem(problem: KeyProblem): Boolean

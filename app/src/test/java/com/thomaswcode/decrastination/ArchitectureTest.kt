@@ -89,6 +89,22 @@ class ArchitectureTest {
     }
 
     @Test
+    fun `the app holds no owner, no prompt and no migration`() {
+        // What decides lives in :engine, where the server runs it too (D-125): what's left here touches the device.
+        val app = roots.filter { it.path.endsWith("src/main/java") || it.invariantSeparatorsPath.endsWith("src/main/java") }
+        val here = app.flatMap { root ->
+            root.walkTopDown().filter { it.isFile && it.extension == "kt" }
+                .map { it.relativeTo(root).invariantSeparatorsPath.removePrefix("com/thomaswcode/decrastination/") }.toList()
+        }.toSet()
+        assertTrue("AppGraph.kt" in here, "found ${here.size} files of the app's")
+        val decides = here.filter { Regex("""(Prompts|Answers|Migration|Stores|JsonStore)\.kt$""").containsMatchIn(it) }
+        assertTrue(decides.isEmpty(), "A prompt, an answer's parser, a migration or the stores are in the app, not in :engine: $decides")
+        val writers = sources.filterKeys { it in here && !it.startsWith("debug/") }.filterValues { UPDATE.containsMatchIn(it) }.keys
+        val stray = writers - PHONE_WRITERS
+        assertTrue(stray.isEmpty(), "A store is updated in the app outside PHONE_WRITERS (its owner belongs in :engine): $stray")
+    }
+
+    @Test
     fun `only the backup service replaces a store whole`() {
         // Stores.replace goes round a store's owner: for a backup restored or a reset, and nothing else.
         val replaces = Regex("""\bstores\.replace\(""")
@@ -101,6 +117,9 @@ class ArchitectureTest {
         /** An update of a store, by the name every file holds it by: `tasks.update {`, `graph.stores.model.update(`. */
         val UPDATE = Regex("""(?<![\w.])(?:graph\.(?:stores\.)?|stores\.)?(tasks|settings|runtime|session|protection|model|anki|learning|log|instructions|chat|school|memory|felix|calendar|writes)\.update\s*[({]""")
 
+        /** What in the app updates a store: the phone's own runtime, the graph's start, and the watchdog's protection findings. */
+        val PHONE_WRITERS = setOf("notify/Notifier.kt", "AppGraph.kt", "block/FocusService.kt", "learn/DailyAlarms.kt", "protect/Watchdog.kt")
+
         /**
          * The files that update each store (§The rules, 2: its owner, first). Where there's more than one,
          * each writes its own part of it: the tasks' sources (Sync), readings, your values and own tasks
@@ -112,7 +131,7 @@ class ArchitectureTest {
             "tasks" to setOf("sync/Sync.kt", "sync/Syncer.kt", "enrich/Readings.kt", "tasks/Instructions.kt", "tasks/OwnTasks.kt", "block/Focus.kt", "block/Photos.kt", "felix/Conversation.kt", "felix/Looks.kt"),
             "settings" to setOf("protect/Protection.kt"),
             "runtime" to setOf("notify/Notifier.kt", "AppGraph.kt", "block/FocusService.kt", "learn/Briefing.kt", "learn/DailyAlarms.kt"),
-            "session" to setOf("block/Focus.kt", "block/SlotAlarms.kt", "plan/Planning.kt", "tasks/Instructions.kt"),
+            "session" to setOf("block/Focus.kt", "block/Slots.kt", "plan/Planning.kt", "tasks/Instructions.kt"),
             "protection" to setOf("protect/Protection.kt", "protect/Watchdog.kt"),
             "model" to setOf("enrich/ModelGateway.kt", "plan/Ahead.kt"),
             "anki" to setOf("block/AnkiWatch.kt"),

@@ -337,7 +337,7 @@ class CommandActivity : Activity() {
                 graph.protection.changeSettings { it.copy(gmailFinishes = on) }
                 Log.i(TAG, "gmail-finishes: ${if (graph.settings.value.gmailFinishes) "on" else "off"}")
             }
-            "briefing" -> Briefing.run(this).also { Log.i(TAG, "Briefing posted") }
+            "briefing" -> graph.briefing.run().also { Log.i(TAG, "Briefing posted") }
             "check-in" -> graph.conversation.remindCheckIn().also { Log.i(TAG, "Check-in reminder posted") }
             // The nightly backup's work, once (AR-07).
             "backup-now" -> Log.i(TAG, "Backup: ${graph.backups.backupNow().name}; last ${graph.runtime.value.lastBackupAt}")

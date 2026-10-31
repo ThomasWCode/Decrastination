@@ -117,7 +117,7 @@ data class DayModel(
 }
 
 /** Each block's key, its own however alike two blocks are: a slot kept twice is two records, told apart by when. */
-internal fun blockKey(block: DayModel.Block): String = when (val item = block.item) {
+fun blockKey(block: DayModel.Block): String = when (val item = block.item) {
     is DayModel.Row.Window -> "window-${item.start}"
     is DayModel.Row.Event -> "event-${item.event.id}@${item.event.start}"
     is DayModel.Row.Planned -> "slot-${item.slot.key}-${item.slot.start}"

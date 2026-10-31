@@ -32,10 +32,10 @@ import kotlinx.coroutines.withContext
 /**
  * What the reading of the sources and the calendar asks of Android (docs/plan_v4/architecture.md
  * §Ports), so it's tested without it: a sync as a job, the Teams widget asked and watched, the calendar
- * read, the widget drawn. [AndroidSyncPorts] on the phone.
+ * read, the widget drawn. `AndroidSyncPorts` on the phone.
  */
 interface SyncPorts {
-    /** Every source read now, or only [sources], as a job that keeps its network after the screen that asked has gone ([SyncWorker.syncNow]). */
+    /** Every source read now, or only [sources], as a job that keeps its network after the screen that asked has gone (`SyncWorker.syncNow`). */
     fun syncNow(sources: Set<Source>? = null)
 
     /** The Teams widget asked to sync Teams itself: whether it started and why not, or null if it didn't answer. */

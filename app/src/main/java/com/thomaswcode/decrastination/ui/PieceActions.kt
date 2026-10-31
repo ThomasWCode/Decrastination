@@ -193,13 +193,6 @@ internal fun stillPlanned(graph: AppGraph, taskId: String): String? {
     return "It stays planned, ${Format.minutes(next.minutes)}, until ${task.source.label} says it's done."
 }
 
-/**
- * Whether all of [task]'s work is done as the planner sees it: every step ticked, or its minutes worked,
- * what's left rounding to none as the planner rounds it ([Planner.remaining]).
- */
-internal fun worked(task: TaskItem, multiplier: Double): Boolean =
-    if (task.subSteps.isNotEmpty()) task.subSteps.all { it.done } else Planner.remaining(task, multiplier).roundToInt() <= 0
-
 /** A running [timer]'s time at [now], as its piece shows it: "Timer: 12 min left", "Timer: time's up", "Timer: 5 min over". */
 internal fun timerText(timer: PieceTimer, now: Long): String = when {
     timer.leftMin(now) > 0 -> "Timer: ${Format.minutes(timer.leftMin(now))} left"

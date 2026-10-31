@@ -2,7 +2,7 @@ package com.thomaswcode.decrastination.ui
 
 /** Where the app opens (D-121): the launcher's start goes to the chat, the app's home. */
 object Home {
-    /** What a start of [MainActivity] does before it draws anything. */
+    /** What a start of `MainActivity` does before it draws anything. */
     enum class Start { Chat, Leave, Stay }
 
     /**
