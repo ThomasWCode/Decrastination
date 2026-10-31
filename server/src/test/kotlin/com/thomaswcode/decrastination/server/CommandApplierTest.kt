@@ -16,9 +16,11 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
@@ -121,6 +123,30 @@ class CommandApplierTest {
         assertEquals(1L, db.currentRevision())
         assertEquals(Outcome.APPLIED, send(Command("three", at, own("Maths"))).state)
         assertEquals(setOf("Essay", "Maths"), graph.stores.tasks.value.tasks.map { it.title }.toSet())
+    }
+
+    @Test
+    fun `a command waiting behind one that fails part-way builds on nothing it left in memory`() = runBlocking {
+        send(Command("one", at, own("Essay")))
+        // Only the tasks can be written: finishing one writes them, and fails at the next store it reaches.
+        db.transaction { c ->
+            c.createStatement().use { it.execute("CREATE TRIGGER only_tasks BEFORE INSERT ON store_history WHEN NEW.name <> 'tasks.json' BEGIN SELECT RAISE(ABORT, 'no room'); END") }
+        }
+        val free = CompletableDeferred<Unit>()
+        val holding = launch(Dispatchers.IO) { db.command { free.await() } }
+        delay(100)
+        val failing = async(Dispatchers.IO) { send(Command("two", at, FinishOwnTask("own:s-Essay"))) }
+        delay(100)
+        val next = async(Dispatchers.IO) { send(Command("three", at, own("Maths"))) }
+        delay(100)
+        free.complete(Unit)
+        holding.join()
+        assertEquals(Outcome.DROPPED, failing.await().state)
+        assertEquals(Outcome.APPLIED, next.await().state)
+        val open = { graph.stores.tasks.value.tasks.filter { it.isOpen }.map { it.title }.toSet() }
+        assertEquals(setOf("Essay", "Maths"), open())
+        graph.stores.tasks.reload()
+        assertEquals(setOf("Essay", "Maths"), open(), "and nothing of it reached the database")
     }
 
     @Test

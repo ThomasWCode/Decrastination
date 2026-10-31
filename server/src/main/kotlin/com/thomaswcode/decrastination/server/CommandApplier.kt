@@ -36,29 +36,27 @@ class CommandApplier(
 
     private suspend fun one(command: Command, device: String): Outcome {
         var before = 0L
-        val outcome = try {
-            db.command {
-                before = db.currentRevision()
-                // Inside, not ahead of it: a retry racing its first send waits here, and finds what came of it.
-                recorded(command.id)?.let { return@command it }
-                backend.cause = command.id
-                val stale = command.action.stale(owners)
-                if (stale == null) commands.apply(command)
-                val revision = db.currentRevision()
-                val made = if (stale == null) Outcome(command.id, Outcome.APPLIED, revision = revision) else Outcome(command.id, Outcome.DROPPED, stale, revision)
-                record(command, device, made)
-                made
-            }
-        } catch (failed: Exception) {
-            // What it left in memory goes with the rollback, and it's on record as dropped, so a retry isn't tried again for ever.
-            Log.w(Log.TAG, "A command failed: ${failed::class.simpleName} at ${failed.stackTrace.firstOrNull { it.className.startsWith("com.thomaswcode") }}")
-            db.command {
-                reload()
-                recorded(command.id) ?: Outcome(command.id, Outcome.DROPPED, "It couldn't be applied", db.currentRevision()).also { record(command, device, it) }
-            }
+        val outcome = db.commandOr({ failed -> dropped(command, device, failed) }) {
+            before = db.currentRevision()
+            // Inside, not ahead of it: a retry racing its first send waits here, and finds what came of it.
+            recorded(command.id)?.let { return@commandOr it }
+            backend.cause = command.id
+            val stale = command.action.stale(owners)
+            if (stale == null) commands.apply(command)
+            val revision = db.currentRevision()
+            val made = if (stale == null) Outcome(command.id, Outcome.APPLIED, revision = revision) else Outcome(command.id, Outcome.DROPPED, stale, revision)
+            record(command, device, made)
+            made
         }
         if (outcome.revision > before) committed(outcome.revision)
         return outcome
+    }
+
+    /** What it left in memory goes with the rollback, and it's on record as dropped, so a retry isn't tried again for ever. */
+    private suspend fun dropped(command: Command, device: String, failed: Exception): Outcome {
+        Log.w(Log.TAG, "A command failed: ${failed::class.simpleName} at ${failed.stackTrace.firstOrNull { it.className.startsWith("com.thomaswcode") }}")
+        reload()
+        return Outcome(command.id, Outcome.DROPPED, "It couldn't be applied", db.currentRevision()).also { record(command, device, it) }
     }
 
     private fun recorded(id: String): Outcome? = db.read { c ->

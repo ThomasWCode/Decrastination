@@ -93,6 +93,9 @@ class Replica(
         sent != Sent.Failed
     }
 
+    /** Whether this process has been through an exchange: what it found waiting at its start has been looked at. */
+    private var started = false
+
     private enum class Sent { InStep, Behind, Failed }
 
     /** Whether the server says it now applies commands: this phone then keeps in step that way, at its next upload. */
@@ -111,8 +114,9 @@ class Replica(
 
     /**
      * The commands waiting sent, in order, and the stores changed since the last pull taken in their place (docs/spec/sync.md).
-     * What's been answered leaves the outbox; a command the server dropped is said. A pull that follows no answer isn't made, and
-     * one that finds a command made meanwhile isn't taken: stores are replaced only with nothing waiting ([Commands.replacing]).
+     * What's been answered leaves the outbox; a command the server dropped is said, and what it did here goes with the pull of
+     * everything that follows. A pull that follows no answer isn't made, and one that finds a command made meanwhile isn't taken:
+     * stores are replaced only with nothing waiting ([Commands.replacing]).
      * A store newer than this build can read stops the pull whole: the stores change together, and half of them new is worse than
      * all of them old.
      */
@@ -120,16 +124,24 @@ class Replica(
         val token = stores.secrets[Secret.DeviceToken] ?: return false
         val headers = mapOf("Content-Type" to "application/json", "Authorization" to "Bearer $token", Protocol.HEADER to Protocol.VERSION.toString())
         val server = sync.value.server
-        val waiting = stores.outbox.value.commands.map { it.command }
+        val waiting = stores.outbox.value.commands
+        // A stopped process may have left a command half made, or not made at all. What the server makes of it comes in the pull,
+        // but not what's left of it in a store the server doesn't change: so the first pull after such a start is of everything.
+        if (!started) {
+            started = true
+            if (waiting.isNotEmpty()) sync.update { it.copy(revision = 0) }
+        }
         try {
             if (waiting.isNotEmpty()) {
                 val answer = http.post("$server/api/commands", headers, JSON.encodeToString(CommandBatch.serializer(), CommandBatch(waiting)))
                 if (!answer.ok) return failed(problem(answer.code))
                 val outcomes = JSON.decodeFromString(ListSerializer(Outcome.serializer()), answer.body)
-                val heard = outcomes.map { it.id }.toSet()
-                stores.outbox.update { state -> state.copy(commands = state.commands.filterNot { it.command.id in heard }) }
+                // What a dropped command did here is in stores the server hasn't changed, so a pull of what's changed wouldn't take it
+                // out: the next is of everything. Before it leaves the outbox, so a process stopped between the two hears it again.
                 val dropped = outcomes.filter { it.state == Outcome.DROPPED }.map { it.why ?: "It couldn't be applied" }
-                if (dropped.isNotEmpty()) sync.update { it.copy(dropped = (it.dropped + dropped).takeLast(DROPPED_KEPT)) }
+                if (dropped.isNotEmpty()) sync.update { it.copy(dropped = (it.dropped + dropped).takeLast(DROPPED_KEPT), revision = 0) }
+                val heard = outcomes.map { it.id }.toSet()
+                stores.outbox.update { state -> state.copy(commands = state.commands.filterNot { it.id in heard }) }
             }
             val answer = http.get("$server/api/state?since=${sync.value.revision}", headers)
             if (!answer.ok) return failed(problem(answer.code))

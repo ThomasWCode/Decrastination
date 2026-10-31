@@ -46,7 +46,21 @@ class Database(path: String) : AutoCloseable {
      * [block], which can suspend and change thread on the way, all of it committed or, if it throws, none of it. Everything
      * written while it runs is part of it, whichever thread writes it.
      */
-    suspend fun <T> command(block: suspend () -> T): T = commanding.withLock {
+    suspend fun <T> command(block: suspend () -> T): T = commanding.withLock { attempt(block) }
+
+    /**
+     * A [command] that [recover] answers for if it fails, a transaction of its own, with no other let in between the two: what
+     * the failed one left in memory has to be put right before another can build on it.
+     */
+    suspend fun <T> commandOr(recover: suspend (Exception) -> T, block: suspend () -> T): T = commanding.withLock {
+        try {
+            attempt(block)
+        } catch (failed: Exception) {
+            attempt { recover(failed) }
+        }
+    }
+
+    private suspend fun <T> attempt(block: suspend () -> T): T {
         lock.withLock {
             connection.autoCommit = false
             depth = 1
@@ -54,7 +68,7 @@ class Database(path: String) : AutoCloseable {
         try {
             val result = block()
             lock.withLock { connection.commit() }
-            result
+            return result
         } catch (failed: Throwable) {
             lock.withLock { connection.rollback() }
             throw failed

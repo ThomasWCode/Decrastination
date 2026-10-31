@@ -11,7 +11,6 @@ import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.SecretCipher
 import com.thomaswcode.decrastination.data.Secret
 import com.thomaswcode.decrastination.data.CalendarRead
-import com.thomaswcode.decrastination.data.Queued
 import com.thomaswcode.decrastination.data.SyncState
 import com.thomaswcode.decrastination.net.Http
 import com.thomaswcode.decrastination.net.HttpResponse
@@ -234,18 +233,43 @@ class SyncHarnessTest {
         assertEquals(emptyList(), phone.h.stores.chatArchive.texts().map { it.name })
     }
 
+    private fun change(id: String, taskId: String) = AddOwnChange(id, "words", About(taskId = taskId), Change(ChangeType.OnDay, taskId = taskId, date = "2026-11-02"))
+
     @Test
-    fun `a command recorded and not applied, its process stopped, is applied once at the next start`() = runBlocking {
+    fun `what a dropped command did here goes, though the server changed nothing a pull since the last would bring`() = runBlocking {
+        val one = phone("one")
+        val two = phone("two")
+        one.h.commands.act(own("Essay"))
+        one.h.commands.act(own("Maths"))
+        one.h.commands.act(change("kept", "own:s-Maths"))
+        assertTrue(one.replica.upload())
+        assertTrue(two.replica.upload())
+        one.h.commands.act(DeleteOwnTask("own:s-Essay"))
+        assertTrue(one.replica.upload())
+        two.h.commands.act(change("dropped", "own:s-Essay"))
+        assertEquals(2, two.h.stores.instructions.value.instructions.size)
+        assertTrue(two.replica.upload())
+        assertEquals(listOf("kept"), two.h.stores.instructions.value.instructions.map { it.id }, "as the server has it")
+        assertEquals(setOf("Maths"), two.titles)
+        assertEquals(1, two.h.stores.sync.value.dropped.size)
+        assertEquals(graph.state(0).revision, two.h.stores.sync.value.revision)
+    }
+
+    @Test
+    fun `a command a stopped process half made reaches the server once, and the pull after is of everything`() = runBlocking {
         val phone = phone()
-        val command = Command("stopped", phone.h.clock.now(), own("Essay"))
-        phone.h.stores.outbox.update { it.copy(commands = listOf(Queued(command))) }
-        phone.h.commands.resume()
-        assertEquals(setOf("Essay"), phone.titles)
-        assertTrue(phone.h.stores.outbox.value.commands.single().applied)
-        phone.h.commands.resume()
-        assertEquals(1, phone.h.stores.tasks.value.tasks.size)
+        phone.h.commands.act(own("Essay"))
+        phone.h.commands.act(change("kept", "own:s-Essay"))
         assertTrue(phone.replica.upload())
-        assertEquals(setOf("Essay"), serverTitles)
+        // Stopped with a command recorded, and a store written that the server won't change.
+        phone.h.stores.instructions.update { it.copy(instructions = emptyList()) }
+        phone.h.stores.outbox.update { it.copy(commands = listOf(Command("stopped", phone.h.clock.now(), own("Maths")))) }
+        val started = Replica(phone.h.stores, phone.wire, phone.h.clock, "test", { CalendarRead() }, phone.h.commands)
+        assertTrue(started.upload())
+        assertEquals(setOf("Essay", "Maths"), serverTitles)
+        assertEquals(setOf("Essay", "Maths"), phone.titles, "made here by the pull")
+        assertEquals(0, phone.waiting)
+        assertEquals(listOf("kept"), phone.h.stores.instructions.value.instructions.map { it.id }, "put back by it")
     }
 
     @Test

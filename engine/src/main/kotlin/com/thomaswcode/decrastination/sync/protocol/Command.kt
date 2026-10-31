@@ -7,7 +7,6 @@ import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.WallClock
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.OutboxState
-import com.thomaswcode.decrastination.data.Queued
 import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.felix.Conversation
 import com.thomaswcode.decrastination.felix.Looks
@@ -93,27 +92,14 @@ class Commands(
         val command = Command(Ids.next(), clock.now(), action)
         if (outbox == null || !queuing()) return replaying(command) { action.run(owners) }
         return gate.withLock {
-            // On the disk first: a process stopped here applies it at its next start, and it's lost by neither side.
-            outbox.update { it.copy(commands = it.commands + Queued(command)) }
-            val answer = replaying(command) { action.run(owners) }
-            outbox.update { state -> state.copy(commands = state.commands.map { if (it.command.id == command.id) it.copy(applied = true) else it }) }
-            answer
+            // On the disk first, so it's sent whatever stops this process: the server's copy then brings what it made (`Replica`).
+            outbox.update { it.copy(commands = it.commands + command) }
+            replaying(command) { action.run(owners) }
         }
     }
 
     /** [command], made elsewhere, applied here as it was there. */
     suspend fun apply(command: Command): Any? = replaying(command) { command.action.run(owners) }
-
-    /** Commands a stopped process recorded and never applied, applied: once each. */
-    suspend fun resume() {
-        val store = outbox ?: return
-        gate.withLock {
-            for (queued in store.value.commands.filterNot { it.applied }) {
-                apply(queued.command)
-                store.update { state -> state.copy(commands = state.commands.map { if (it.command.id == queued.command.id) it.copy(applied = true) else it }) }
-            }
-        }
-    }
 
     /**
      * [replace] with no command let in, and only with none waiting; whether it ran. What's waiting is already in the stores, and
