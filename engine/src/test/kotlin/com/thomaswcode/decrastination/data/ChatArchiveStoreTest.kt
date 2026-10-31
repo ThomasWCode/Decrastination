@@ -34,6 +34,28 @@ class ChatArchiveStoreTest {
 
     private fun files() = dir.list()!!.filter { it.startsWith("chat-archive") && it.endsWith(".json") }.sorted()
 
+    private fun text(messages: List<ChatMessage>) = JsonStore.json.encodeToString(ChatArchive.serializer(), ChatArchive(messages))
+
+    @Test
+    fun `a month taken with nothing in it is a chat cleared elsewhere, and goes with its copies`() = runBlocking {
+        val store = ChatArchiveStore(dir)
+        val file = "chat-archive-2026-08.json"
+        store.adopt(file, store.version, text(august))
+        assertEquals(listOf(file), files())
+        val older = File(dir, "$file.v11").apply { writeText("old words") }
+        store.adopt(file, store.version, text(emptyList()))
+        assertEquals(emptyList(), files())
+        assertFalse(older.exists())
+        assertEquals(emptyList(), store.texts())
+    }
+
+    @Test
+    fun `a month taken for one never held, with nothing in it, leaves nothing`() = runBlocking {
+        val store = ChatArchiveStore(dir)
+        store.adopt("chat-archive-2026-08.json", store.version, text(emptyList()))
+        assertEquals(emptyList(), files())
+    }
+
     @Test
     fun `messages moved go to their months' files, each once, and read back as one`() = runBlocking {
         val store = ChatArchiveStore(dir)

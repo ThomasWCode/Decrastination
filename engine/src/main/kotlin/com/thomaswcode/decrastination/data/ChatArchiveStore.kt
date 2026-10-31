@@ -223,9 +223,22 @@ class ChatArchiveStore(private val backend: StoreBackend, private val clock: () 
         _changes.update { it + 1 }
     }
 
-    /** [file], a month, taken whole from the server's copy. */
+    /**
+     * [file], a month, taken whole from the server's copy. One with nothing in it is a chat cleared elsewhere, the server keeping
+     * the month only to say so: it's let go here with its copies, as a month cleared here is, so none offers *Earlier messages*.
+     */
     suspend fun adopt(file: String, version: Int, text: String): Unit = writing.withLock {
-        synchronized(reading) { month(file) }.adopt(version, text)
+        val store = synchronized(reading) { month(file) }
+        store.adopt(version, text)
+        if (store.value.messages.isEmpty() && store.problem == null) {
+            withContext(Dispatchers.IO) {
+                synchronized(reading) {
+                    months.remove(file)
+                    letGo(file)
+                    backend.letGoOfCopies { it == file }
+                }
+            }
+        }
         _changes.update { it + 1 }
     }
 

@@ -17,6 +17,9 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonPrimitive
@@ -65,6 +68,27 @@ class CommandApplierTest {
         assertEquals(1, graph.stores.tasks.value.tasks.size)
         assertEquals(1L, db.currentRevision())
         assertEquals(1, rows())
+    }
+
+    @Test
+    fun `a retry racing its first send applies nothing twice, and gets the same answer`() = runBlocking {
+        val command = Command("one", at, own("Essay"))
+        val answers = (1..8).map { async(Dispatchers.IO) { send(command) } }.awaitAll()
+        assertEquals(1, answers.toSet().size, "every send heard the one outcome")
+        assertEquals(Outcome.APPLIED, answers.first().state)
+        assertEquals(1, rows())
+        assertEquals(1L, db.currentRevision())
+    }
+
+    @Test
+    fun `a repeat says no revision, as the stream only goes forward`() = runBlocking {
+        val said = mutableListOf<Long>()
+        val watching = launch(Dispatchers.Unconfined) { graph.revisions.collect { said += it } }
+        send(Command("one", at, own("Essay")))
+        send(Command("two", at, own("Maths")))
+        send(Command("one", at, own("Essay")))
+        watching.cancel()
+        assertEquals(listOf(1L, 2L), said)
     }
 
     @Test
