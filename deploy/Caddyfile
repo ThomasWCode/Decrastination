@@ -1,7 +1,9 @@
 # Caddy terminates TLS with a certificate from Let's Encrypt, renewed on its own, serves the website
 # and forwards /api to the server. DOMAIN comes from the service's environment.
 {$DOMAIN} {
-	encode zstd gzip
+	# Not the event stream: each event has to reach the browser as it's sent, not when a compressor has enough to emit.
+	@compressed not path /api/events
+	encode @compressed zstd gzip
 
 	handle /api/* {
 		reverse_proxy server:8080

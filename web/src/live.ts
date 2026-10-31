@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 
-/** Each new revision of the state, as the server says it: one connection, shared by the pages. */
-function onRevision(listener: () => void): () => void {
+/** The state's revision as the server says it: the one it's at on connecting, and on reconnecting, then each new one. */
+function onRevision(listener: (revision: string) => void): () => void {
   const events = new EventSource("/api/events");
-  events.addEventListener("revision", listener);
+  events.addEventListener("revision", (event: MessageEvent<string>) => listener(event.data));
   return () => events.close();
 }
 
@@ -12,7 +12,7 @@ export interface Loaded<T> {
   failed: boolean;
 }
 
-/** [load]'s answer, fetched again at each revision and as the page comes back into view. */
+/** [load]'s answer, fetched again when the revision moves and as the page comes back into view. */
 export function useLive<T>(load: () => Promise<T>): Loaded<T> {
   const [state, setState] = useState<Loaded<T>>({ value: null, failed: false });
   const refresh = useCallback(() => {
@@ -22,7 +22,12 @@ export function useLive<T>(load: () => Promise<T>): Loaded<T> {
   }, [load]);
   useEffect(() => {
     refresh();
-    const stop = onRevision(refresh);
+    let seen: string | null = null;
+    const stop = onRevision((revision) => {
+      if (revision === seen) return;
+      seen = revision;
+      refresh();
+    });
     document.addEventListener("visibilitychange", refresh);
     return () => {
       stop();

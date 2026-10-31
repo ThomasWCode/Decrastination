@@ -12,6 +12,8 @@ import com.thomaswcode.decrastination.sync.ServerVersion
 import com.thomaswcode.decrastination.sync.StoreText
 import com.thomaswcode.decrastination.views.DayView
 import com.thomaswcode.decrastination.views.WorkView
+import io.ktor.client.plugins.sse.SSE as ClientSSE
+import io.ktor.client.plugins.sse.sse
 import io.ktor.client.HttpClient
 import io.ktor.client.request.bearerAuth
 import io.ktor.client.request.delete
@@ -35,6 +37,9 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.take
+import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
@@ -102,6 +107,23 @@ class ApiTest {
         val dir = Fixtures.file("stores").listFiles { f -> f.isDirectory }!!.maxByOrNull { it.name }!!
         return dir.listFiles()!!.filter { it.name in setOf("tasks.json", "settings.json", "session.json", "log.json", "instructions.json", "school.json", "model.json", "learning.json") }
             .map { file -> StoreText(file.name, JsonStore.json.parseToJsonElement(file.readText()).let { 1 }, file.readText()) }
+    }
+
+    @Test
+    fun `the event stream says the revision it's at at once, then each new one`() = server {
+        val session = signIn()
+        val phone = paired()
+        val events = createClient { install(ClientSSE) }
+        withTimeout(10_000) {
+            events.sse("/api/events", request = { header(HttpHeaders.Cookie, session) }) {
+                val heard = mutableListOf<String>()
+                incoming.filter { it.event == "revision" }.take(2).collect { event ->
+                    heard += event.data.orEmpty()
+                    if (heard.size == 1) seed(phone.token, listOf(StoreText("school.json", 1, """{"version":1}""")))
+                }
+                assertEquals(listOf("0", "1"), heard.toList())
+            }
+        }
     }
 
     @Test

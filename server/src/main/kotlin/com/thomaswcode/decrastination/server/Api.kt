@@ -38,11 +38,14 @@ import io.ktor.server.routing.post
 import io.ktor.server.routing.route
 import io.ktor.server.routing.routing
 import io.ktor.server.sse.SSE
+import io.ktor.server.sse.heartbeat
 import io.ktor.server.sse.sse
 import io.ktor.sse.ServerSentEvent
 import io.ktor.util.AttributeKey
 import java.time.LocalDate
 import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
+import kotlinx.coroutines.flow.onSubscription
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
@@ -80,6 +83,9 @@ private const val OAUTH = "__Host-oauth"
 private fun cookie(web: Web, name: String) = if (web.secure) name else name.removePrefix("__Host-")
 
 private val AUTH_LIMIT = RateLimitName("auth")
+
+/** Under the minute most proxies give up on a quiet connection at. */
+private val HEARTBEAT = 25.seconds
 private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
 /** A branch of the routes that adds nothing to their path: `route("")` would be its parent, and what's installed there would hold for the open routes too. */
@@ -128,8 +134,8 @@ fun Application.api(web: Web) {
     install(SSE)
     install(StatusPages) {
         exception<Throwable> { call, cause ->
-            // Never what a store held, nor a header: the kind of failure alone.
-            Log.w(Log.TAG, "A request failed: ${cause::class.simpleName}")
+            // Never what a store held, nor a header: the kind of failure and where, not its message.
+            Log.w(Log.TAG, "A request failed: ${cause::class.simpleName} at ${cause.stackTrace.firstOrNull { it.className.startsWith("com.thomaswcode") } ?: cause.stackTrace.firstOrNull()}")
             call.respond(HttpStatusCode.InternalServerError, Problem("Something went wrong"))
         }
     }
@@ -217,7 +223,13 @@ private fun Route.signedInRoutes(web: Web) {
         call.respond(StateOut(state.revision, state.stores.map { StoreOut(it.name, it.version, it.revision, json.parseToJsonElement(it.text)) }))
     }
     sse("/events") {
-        graph.revisions.collect { send(ServerSentEvent(data = it.toString(), event = "revision")) }
+        // The heartbeat lets a dropped connection be seen, from either end; a comment, so a client hears nothing new in it.
+        heartbeat {
+            period = HEARTBEAT
+            event = ServerSentEvent(comments = "still here")
+        }
+        // The revision it's at first: a client knows it's connected, and one that's reconnected catches what it missed.
+        graph.revisions.onSubscription { emit(graph.db.currentRevision()) }.collect { send(ServerSentEvent(data = it.toString(), event = "revision")) }
     }
     post("/stores/seed") {
         val phone = call.client as? Client.Phone ?: return@post call.respond(HttpStatusCode.Forbidden, Problem("Only a phone seeds"))
