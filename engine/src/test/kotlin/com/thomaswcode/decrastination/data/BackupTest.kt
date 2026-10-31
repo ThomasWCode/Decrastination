@@ -385,6 +385,11 @@ class BackupTest {
         val backup = Backup(exportedAt = 1, settings = Settings(), log = ActivityLog(), notSame = listOf("a|b", "c|d"))
         assertEquals(listOf("a|b", "c|d"), Backups.decode(Backups.encode(backup), emptyMap())!!.notSame)
         assertEquals(listOf("c|d", "a|b", "e|f"), Backups.mergedNotSame(listOf("a|b", "e|f"), listOf("c|d", "a|b")))
+        // Past what's kept, this phone's stay: its own pair, early in the backup too, isn't the one that goes.
+        val backed = listOf("mine|1") + List(TaskState.MAX_NOT_SAME) { "b$it|x" }
+        val merged = Backups.mergedNotSame(listOf("mine|1"), backed)
+        assertEquals(TaskState.MAX_NOT_SAME, merged.size)
+        assertEquals("mine|1", merged.last())
         // None in one from before.
         assertEquals(emptyList(), Backups.decode("""{"app":"Decrastination","format":10,"exportedAt":0,"settings":{},"log":{}}""", emptyMap())!!.notSame)
         assertNull(Backups.problem(backup))

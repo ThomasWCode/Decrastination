@@ -349,7 +349,10 @@ object Backups {
             .map { it.copy(mine = Mine(sameAs = it.mine.sameAs)).enriched() }
 
     /** [here] with [backed]'s pairs that aren't the same work: one said on either side stands, this phone's newest kept. */
-    fun mergedNotSame(here: List<String>, backed: List<String>): List<String> = (backed + here).distinct().takeLast(TaskState.MAX_NOT_SAME)
+    fun mergedNotSame(here: List<String>, backed: List<String>): List<String> {
+        val own = here.toSet()
+        return (backed.filterNot { it in own } + here).distinct().takeLast(TaskState.MAX_NOT_SAME)
+    }
 
     /** [here] with [backed]'s weeks of weekly work deleted: one deleted on either side stays gone. */
     fun mergedWeeks(here: List<WeeklyMark>, backed: List<WeeklyMark>): List<WeeklyMark> =
