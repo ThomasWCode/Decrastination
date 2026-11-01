@@ -249,6 +249,17 @@ class ApiTest {
     }
 
     @Test
+    fun `a session's cookie lasts a month from its last use, as the session does, and a refused request changes nothing`() = server {
+        val cookie = signIn()
+        val again = plain().get("/api/views/work") { header(HttpHeaders.Cookie, cookie) }.setCookie().single { it.name == "session" }
+        assertEquals(cookie, "session=" + again.value)
+        assertEquals((Sessions.LIFE_MS / 1000).toInt(), again.maxAge)
+        assertTrue(plain().get("/api/views/work").setCookie().none { it.name == "session" })
+        assertTrue(plain().post("/api/devices/pair") { header(HttpHeaders.Cookie, cookie) }.setCookie().none { it.name == "session" }, "what's refused isn't its use")
+        assertTrue(plain().get("/api/views/work") { header(HttpHeaders.Cookie, "session=not-a-session") }.setCookie().none { it.name == "session" })
+    }
+
+    @Test
     fun `a pairing code works once, and a wrong one not at all`() = server {
         val cookie = signIn()
         val code = json.decodeFromString<PairingCode>(plain().post("/api/devices/pair") { header(HttpHeaders.Cookie, cookie); header("X-Requested-With", "test") }.bodyAsText())
@@ -572,6 +583,8 @@ class ApiTest {
         assertEquals(HttpStatusCode.BadRequest, asks("https://push.example.com/a").status)
         assertEquals(HttpStatusCode.NoContent, asks("https://fcm.googleapis.com/a").status)
         assertEquals(setOf("felix"), keyed.pushes.channels("https://fcm.googleapis.com/a"))
+        plain().post("/api/auth/logout") { header(HttpHeaders.Cookie, cookie); header("X-Requested-With", "test") }
+        assertEquals(emptySet(), keyed.pushes.channels("https://fcm.googleapis.com/a"), "it goes with the session that asked")
     }
 
     @Test
