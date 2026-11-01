@@ -20,16 +20,29 @@ async function stop(held: PushSubscription): Promise<void> {
   }
 }
 
+/** Whether [held] was made under the box's [key]: one made under old keys fails at every send, with nothing to say so. */
+function madeUnder(held: PushSubscription, key: string): boolean {
+  const had = held.options.applicationServerKey;
+  if (!had) return false;
+  const bytes = new Uint8Array(had);
+  const wanted = keyBytes(key);
+  return bytes.length === wanted.length && bytes.every((byte, index) => byte === wanted[index]);
+}
+
 /** This browser asked to be told of [channels], or, with none, to be told of nothing: why not, if it couldn't be. */
 async function save(key: string, channels: string[]): Promise<string | null> {
   await navigator.serviceWorker.register("/sw.js");
   const registered = await navigator.serviceWorker.ready;
-  const held = await registered.pushManager.getSubscription();
+  let held = await registered.pushManager.getSubscription();
   if (channels.length === 0) {
     if (held) await stop(held);
     return null;
   }
   if ((await Notification.requestPermission()) !== "granted") return "This browser won't show notifications: that's changed in its own settings.";
+  if (held && !madeUnder(held, key)) {
+    await stop(held);
+    held = null;
+  }
   const subscription = held ?? (await registered.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(key) }));
   const sealed = subscription.toJSON().keys;
   await api.pushKeep({ endpoint: subscription.endpoint, p256dh: sealed?.p256dh ?? "", auth: sealed?.auth ?? "", channels });

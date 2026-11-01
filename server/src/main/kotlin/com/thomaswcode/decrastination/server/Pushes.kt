@@ -49,9 +49,9 @@ class Pushes(private val db: Database, private val scope: CoroutineScope, privat
 
     val on: Boolean get() = sender != null
 
-    /** [given] kept, for what's known of what it asks: false, and nothing kept, if it isn't a push service's address. */
+    /** [given] kept, for what's known of what it asks: false, and nothing kept, if it isn't a push service's address, or can't be sealed for. */
     fun keep(given: PushSubscription): Boolean {
-        if (!fit(given.endpoint)) return false
+        if (!fit(given.endpoint) || !sealable(given)) return false
         db.transaction { c ->
             c.prepareStatement(
                 """INSERT INTO push_subscriptions(endpoint, p256dh, auth, channels, created_at) VALUES(?, ?, ?, ?, ?)
@@ -113,6 +113,16 @@ class Pushes(private val db: Database, private val scope: CoroutineScope, privat
 
         /** What a push service's address runs to at most. */
         private const val MAX_ENDPOINT = 1024
+
+        /** A browser's public key and its secret, as RFC 8291 has them. */
+        private const val P256DH_BYTES = 65
+        private const val AUTH_BYTES = 16
+
+        /** Whether [given]'s keys are what a browser gives: one that isn't would fail at every send, and never be let go of. */
+        private fun sealable(given: PushSubscription): Boolean {
+            fun bytes(text: String) = runCatching { Base64.getUrlDecoder().decode(text) }.getOrNull()?.size
+            return bytes(given.p256dh) == P256DH_BYTES && bytes(given.auth) == AUTH_BYTES
+        }
 
         /** The browsers' push services: Chrome's and what's built on it, Firefox's, Safari's and Edge's. */
         private val SERVICES = listOf("fcm.googleapis.com", "push.services.mozilla.com", "web.push.apple.com", "notify.windows.com")

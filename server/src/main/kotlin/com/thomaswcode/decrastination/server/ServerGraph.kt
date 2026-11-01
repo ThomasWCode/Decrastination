@@ -323,10 +323,11 @@ class ServerGraph(
         ),
     )
 
-    /** His newest words, as a browser shows them. */
+    /** His newest message, as a browser shows it: all its texts (D-120), which his notification gives a line each. */
     private fun pushFelix(notice: Outbox.Notice) {
-        val newest = notice.lines.lastOrNull { !it.yours } ?: return
-        pushes.push(Pushes.FELIX, PushMessage(notice.name, Pushes.words(newest.text), "/", Pushes.FELIX))
+        val newest = notice.lines.filter { !it.yours && (it.id == notice.replyTo || it.id.startsWith("${notice.replyTo}#")) }
+        if (newest.isEmpty()) return
+        pushes.push(Pushes.FELIX, PushMessage(notice.name, Pushes.words(newest.joinToString("\n") { it.text }), "/", Pushes.FELIX))
     }
 
     /**
