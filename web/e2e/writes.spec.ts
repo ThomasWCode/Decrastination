@@ -323,6 +323,7 @@ test("a timer's words are read again when they turn, not at the page's next minu
   const before = await timer.textContent();
   await page.clock.runFor(6_000);
   await expect(timer).not.toHaveText(before ?? "");
+  await page.unrouteAll({ behavior: "ignoreErrors" });
 });
 
 test("a step takes a timer of its own", async ({ page }) => {
@@ -382,6 +383,29 @@ test("Done on the last piece keeps what it came to, and its Undo, though the pie
   const said = page.getByRole("status").filter({ hasText: "Done" });
   await expect(said).toBeVisible();
   await said.getByRole("button", { name: "Undo" }).click();
+  await expect(said).toBeHidden();
+  await page.unrouteAll({ behavior: "ignoreErrors" });
+});
+
+test("what a button came to stays with its day, and what a drop did doesn't follow you", async ({ page }) => {
+  await dueTask(page, "Said of its own day");
+  const block = await pieceOf(page, "Said of its own day");
+  await page.route("**/api/day/drop", (route) => route.fulfill({ json: { done: false, said: "Refused here" } }));
+  await drag(page, block, { dy: 60 });
+  await page.mouse.up();
+  const said = page.getByRole("status").filter({ hasText: "Refused here" });
+  await expect(said).toBeVisible();
+  const week = page.getByRole("navigation", { name: "Week" });
+  await week.locator("a:not([aria-current=page])").first().click();
+  await expect(said).toBeHidden();
+});
+
+test("Done's words go when you move to another day", async ({ page }) => {
+  await page.goto("/day");
+  await page.getByRole("group", { name: "Do" }).getByRole("button", { name: "Done", exact: true }).click();
+  const said = page.getByRole("status").filter({ hasText: "Done" });
+  await expect(said).toBeVisible();
+  await page.getByRole("navigation", { name: "Week" }).locator("a:not([aria-current=page])").first().click();
   await expect(said).toBeHidden();
 });
 
