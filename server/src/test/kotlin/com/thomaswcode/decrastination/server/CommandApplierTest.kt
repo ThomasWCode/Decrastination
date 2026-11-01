@@ -31,10 +31,14 @@ import com.thomaswcode.decrastination.sync.protocol.UndoTidy
 import com.thomaswcode.decrastination.sync.protocol.UseParentCode
 import java.io.File
 import java.nio.file.Files
+import java.sql.Connection
+import java.sql.DriverManager
+import java.sql.SQLException
 import java.util.concurrent.Executors
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -400,6 +404,65 @@ class CommandApplierTest {
         assertEquals(1L, db.currentRevision())
         assertEquals(Outcome.APPLIED, send(Command("three", at, own("Maths"))).state)
         assertEquals(setOf("Essay", "Maths"), graph.stores.tasks.value.tasks.map { it.title }.toSet())
+    }
+
+    /** Another connection holding the write lock, as a checkpoint can: writes here are told the database is busy, at once. */
+    private fun locked(): Connection {
+        db.transactionless { c -> c.createStatement().use { it.execute("PRAGMA busy_timeout=20") } }
+        return DriverManager.getConnection("jdbc:sqlite:${File(dir, "test.db").path}").apply { createStatement().use { it.execute("BEGIN IMMEDIATE") } }
+    }
+
+    private fun rowsOf(state: String) = db.read { c ->
+        c.prepareStatement("SELECT COUNT(*) FROM commands WHERE outcome = ?").use { q ->
+            q.setString(1, state)
+            q.executeQuery().use { it.next(); it.getInt(1) }
+        }
+    }
+
+    @Test
+    fun `a fault of the box leaves a command to go again, nothing of it on record, and its retry is applied`() = runBlocking {
+        val command = Command("one", at, own("Essay"))
+        locked().use { lock ->
+            assertFailsWith<SQLException> { send(command) }
+            lock.createStatement().use { it.execute("ROLLBACK") }
+        }
+        assertEquals(0, rows(), "so it can't be answered as gone")
+        assertTrue(graph.stores.tasks.value.tasks.isEmpty(), "and nothing of it's left in memory")
+        assertEquals(Outcome.APPLIED, send(command).state)
+        assertEquals(listOf("Essay"), graph.stores.tasks.value.tasks.map { it.title })
+        assertEquals(1, rowsOf(Outcome.APPLIED))
+    }
+
+    @Test
+    fun `a batch stops at a fault, and sent again goes in order, what went through answering as it did`() = runBlocking {
+        val batch = CommandBatch(listOf(Command("one", at, own("Essay")), Command("two", at, FinishOwnTask("own:s-Essay")), Command("three", at, own("Maths"))))
+        var lock: Connection? = null
+        // The lock taken as the first has gone through.
+        val applier = CommandApplier(db, graph.backend, Commands(graph.owners, graph.clock), graph.owners, graph.clock, reload = { graph.stores.tasks.reload() }) {
+            if (lock == null) lock = locked()
+        }
+        assertFailsWith<SQLException> { applier.apply(batch, "phone") }
+        assertEquals(setOf("Essay"), graph.stores.tasks.value.tasks.map { it.title }.toSet(), "nothing goes ahead of the one that failed")
+        assertTrue(graph.stores.tasks.value.tasks.single().isOpen)
+        assertEquals(1, rows())
+        lock?.use { held -> held.createStatement().use { it.execute("ROLLBACK") } }
+        val first = 1L
+        val answers = applier.apply(batch, "phone")
+        assertEquals(listOf(Outcome.APPLIED, Outcome.APPLIED, Outcome.APPLIED), answers.map { it.state })
+        assertEquals(first, answers.first().revision, "the first answers as it did, and isn't applied twice")
+        assertEquals(setOf("Essay", "Maths"), graph.stores.tasks.value.tasks.map { it.title }.toSet())
+        assertFalse(graph.stores.tasks.value.tasks.single { it.title == "Essay" }.isOpen)
+    }
+
+    @Test
+    fun `what the box does with a database that's lost a table isn't taken out on the command`() = runBlocking {
+        send(Command("one", at, own("Essay")))
+        // A release gone wrong: every command would fail, and none of them is at fault.
+        db.transaction { c -> c.createStatement().use { it.execute("ALTER TABLE store_history RENAME TO store_history_gone") } }
+        assertFailsWith<SQLException> { send(Command("two", at, own("Maths"))) }
+        assertEquals(0, rowsOf(Outcome.DROPPED))
+        db.transaction { c -> c.createStatement().use { it.execute("ALTER TABLE store_history_gone RENAME TO store_history") } }
+        assertEquals(Outcome.APPLIED, send(Command("two", at, own("Maths"))).state)
     }
 
     @Test
