@@ -29,6 +29,7 @@ import java.security.spec.ECGenParameterSpec
 import java.security.spec.ECParameterSpec
 import java.security.spec.ECPoint
 import java.security.spec.ECPublicKeySpec
+import java.sql.DriverManager
 import java.time.Duration
 import java.util.Base64
 import java.util.Collections
@@ -46,6 +47,8 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -76,6 +79,8 @@ class PushesTest {
     private val db = Database(File(dir, "test.db").path).apply { setMeta("mode", ServerGraph.COMMANDS) }
     private val service = Service()
     private val graph = ServerGraph(db, dir, Plain, "test", pushSender = service, pushKey = "made-up-key")
+    private val sessions = Sessions(db, 1L)
+    private val session = Tokens.hash(sessions.start())
 
     @AfterTest
     fun cleanUp() {
@@ -89,7 +94,9 @@ class PushesTest {
     private val laptop = "https://fcm.googleapis.com/fcm/send/laptop"
     private val other = "https://updates.push.services.mozilla.com/wpush/v2/other"
 
-    private fun asks(endpoint: String, vararg channels: String) = assertTrue(graph.pushes.keep(PushSubscription(endpoint, P256DH, AUTH, channels.toSet())))
+    private fun asks(endpoint: String, vararg channels: String, by: String = session) = assertTrue(graph.pushes.keep(PushSubscription(endpoint, P256DH, AUTH, channels.toSet()), by))
+
+    private fun lines() = db.read { c -> c.createStatement().use { s -> s.executeQuery("SELECT COUNT(*) FROM push_subscriptions").use { it.next(); it.getInt(1) } } }
 
     private fun message(payload: String) = Json.decodeFromString<PushMessage>(payload)
 
@@ -109,17 +116,17 @@ class PushesTest {
         )) {
             assertFalse(Pushes.fit(address), address)
         }
-        assertFalse(graph.pushes.keep(PushSubscription("https://push.example.com/a", P256DH, AUTH, setOf(Pushes.FELIX))))
+        assertFalse(graph.pushes.keep(PushSubscription("https://push.example.com/a", P256DH, AUTH, setOf(Pushes.FELIX)), session))
         assertEquals(emptySet(), graph.pushes.channels("https://push.example.com/a"))
     }
 
     @Test
     fun `keys that couldn't be sealed for aren't kept, as every send would fail and it'd never be let go of`() {
         for ((p256dh, auth) in listOf("" to AUTH, P256DH to "", "A".repeat(80) to AUTH, P256DH to "A".repeat(20), "not base64!" to AUTH, P256DH to "not base64!")) {
-            assertFalse(graph.pushes.keep(PushSubscription(laptop, p256dh, auth, setOf(Pushes.FELIX))), "$p256dh $auth")
+            assertFalse(graph.pushes.keep(PushSubscription(laptop, p256dh, auth, setOf(Pushes.FELIX)), session), "$p256dh $auth")
         }
         assertEquals(emptySet(), graph.pushes.channels(laptop))
-        assertTrue(graph.pushes.keep(PushSubscription(laptop, P256DH, AUTH, setOf(Pushes.FELIX))))
+        assertTrue(graph.pushes.keep(PushSubscription(laptop, P256DH, AUTH, setOf(Pushes.FELIX)), session))
     }
 
     @Test
@@ -141,6 +148,63 @@ class PushesTest {
         assertEquals(setOf(Pushes.TIMER, Pushes.SLOTS), graph.pushes.channels(laptop))
         graph.pushes.forget(laptop)
         assertEquals(emptySet(), graph.pushes.channels(laptop))
+    }
+
+    @Test
+    fun `a browser signed out isn't told, whatever its page managed, and its line goes with the session`() = runBlocking<Unit> {
+        val leaving = sessions.start()
+        asks(laptop, Pushes.FELIX, by = Tokens.hash(leaving))
+        asks(other, Pushes.FELIX)
+        assertEquals(setOf(Pushes.FELIX), graph.pushes.channels(laptop))
+        sessions.end(leaving)
+        assertEquals(emptySet(), graph.pushes.channels(laptop))
+        assertEquals(1, lines(), "nothing of it's kept, as its address is as good as a password")
+        graph.pushes.push(Pushes.FELIX, PushMessage("A title", "Words", "/", "felix"))
+        waitFor(1)
+        delay(100)
+        assertEquals(listOf(other), service.taken.map { it.first })
+    }
+
+    @Test
+    fun `a session that's run out tells nothing from that moment, and its line goes at the next sign-in`() = runBlocking<Unit> {
+        val lapsed = Tokens.hash(Sessions(db, 1L) { System.currentTimeMillis() - Sessions.LIFE_MS - 1_000 }.start())
+        asks(laptop, Pushes.FELIX, by = lapsed)
+        asks(other, Pushes.FELIX)
+        assertEquals(emptySet(), graph.pushes.channels(laptop))
+        graph.pushes.push(Pushes.FELIX, PushMessage("A title", "Words", "/", "felix"))
+        waitFor(1)
+        delay(100)
+        assertEquals(listOf(other), service.taken.map { it.first })
+        assertEquals(2, lines())
+        sessions.start()
+        assertEquals(1, lines())
+    }
+
+    @Test
+    fun `a browser that asks again goes with the session that asked last`() = runBlocking<Unit> {
+        val first = sessions.start()
+        asks(laptop, Pushes.FELIX, by = Tokens.hash(first))
+        asks(laptop, Pushes.TIMER, by = Tokens.hash(sessions.start()))
+        sessions.end(first)
+        assertEquals(setOf(Pushes.TIMER), graph.pushes.channels(laptop))
+    }
+
+    @Test
+    fun `a table from before takes the column once, and what's in it isn't told till it asks`() {
+        val old = File(dir, "old.db").path
+        DriverManager.getConnection("jdbc:sqlite:$old").use { c ->
+            c.createStatement().use { s ->
+                s.execute("CREATE TABLE push_subscriptions(endpoint TEXT PRIMARY KEY, p256dh TEXT NOT NULL, auth TEXT NOT NULL, channels TEXT NOT NULL, created_at INTEGER NOT NULL)")
+                s.execute("INSERT INTO push_subscriptions VALUES('$laptop', '$P256DH', '$AUTH', 'felix', 1)")
+            }
+        }
+        Database(old).close()
+        Database(old).use { again ->
+            val pushes = Pushes(again, CoroutineScope(Dispatchers.IO), service)
+            assertEquals(emptySet(), pushes.channels(laptop))
+            assertTrue(pushes.keep(PushSubscription(laptop, P256DH, AUTH, setOf(Pushes.FELIX)), Tokens.hash(Sessions(again, 1L).start())))
+            assertEquals(setOf(Pushes.FELIX), pushes.channels(laptop))
+        }
     }
 
     @Test

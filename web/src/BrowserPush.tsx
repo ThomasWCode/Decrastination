@@ -147,7 +147,7 @@ export function BrowserPush({ push }: { push: PushView }) {
   return (
     <section className="browser-push" aria-label="This browser">
       <h3>This browser</h3>
-      <p className="note long">Told here with its tab closed, as well as on the phone, so only what you'd want twice.</p>
+      <p className="note long">Told here with its tab closed, as well as on the phone, so only what you'd want twice. It stops if you sign out here, or don't open the site here for a month.</p>
       {push.channels.map((channel) => (
         <label key={channel.key}>
           <input type="checkbox" disabled={busy} checked={chosen.includes(channel.key)} onChange={(event) => change(event.target.checked ? [...chosen, channel.key] : chosen.filter((one) => one !== channel.key))} />
