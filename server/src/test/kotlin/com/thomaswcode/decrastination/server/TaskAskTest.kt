@@ -305,6 +305,17 @@ class TaskAskTest {
     }
 
     @Test
+    fun `Done keeps whichever of its task's pieces the page showed, the first or not`() = runBlocking<Unit> {
+        graph.applier.apply(CommandBatch(listOf(Command("long", System.currentTimeMillis(), SaveOwnTask("long", OwnTask(title = "A long one", minutes = 400))))), Client.WEBSITE)
+        val pieces = graph.planning.plan().chunksOf("own:long")
+        assertTrue(pieces.size > 1, "it's in pieces")
+        val later = pieces.last()
+        val answer = graph.ask("own:long", TaskAsk(TaskAsk.DONE, at = System.currentTimeMillis(), key = later.key))
+        assertTrue(answer.done, answer.said)
+        assertEquals(listOf(later.key), graph.stores.log.value.slots.map { it.key })
+    }
+
+    @Test
     fun `a task with nothing planned has nothing to move or do`() = runBlocking<Unit> {
         withTasks()
         graph.stores.tasks.update { state -> state.copy(tasks = state.tasks.map { it.copy(status = com.thomaswcode.decrastination.core.Status.Done) }) }
