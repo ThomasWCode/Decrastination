@@ -57,9 +57,9 @@ object Sigv4 {
 }
 
 /**
- * The nightly Backup-format file's place (W-20): a Backblaze B2 bucket, under a key that can write and not delete, so nothing
- * that gets this key can take the copies. The bucket's own lifecycle rule lets the old ones go, so this lists none and
- * deletes none. Its [endpoint] is the bucket's S3 one, `s3.<region>.backblazeb2.com`.
+ * The nightly Backup-format file's place (W-20): a Backblaze B2 bucket, under a key of its own, with the bucket's Object Lock to
+ * hold each file whatever that key can do. Its lifecycle rule lets the old ones go, so this lists none and deletes none. Its
+ * [endpoint] is the bucket's S3 one, `s3.<region>.backblazeb2.com`.
  */
 class B2Folder(
     private val endpoint: String,

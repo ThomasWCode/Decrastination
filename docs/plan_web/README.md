@@ -45,7 +45,7 @@ In the most technically feasible order (the owner's word on 31 Oct: the website 
 | 7 | This week, Reviews, Stats, Backup and Reset, Setup on the website | 5.7.0, 5.8.0 |
 | 8 | Optional: the phone told at once of the server's changes (Firebase Cloud Messaging) | not built: it needs a Firebase project |
 | 9 | Optional: Web Push for Felix's messages, slot starts and the timer (W-9) | 5.9.0 |
-| Last | The switch: the phone goes over to commands, and what's dormant wakes (D-141). It needs the box | to come |
+| Last | The switch: the phone goes over to commands, and what's dormant wakes (D-141). The box it needs has been up, mirroring, since 1 Nov 2026 | to come |
 
 Estimated at 61 to 83 hours of sessions in all (66 to 90 with the two optional stages), from the durations measured in the 4.x releases (`stages.md` §Estimates), plus the owner's own time at the Oracle console, the DNS, the GitHub App and the phone.
 
