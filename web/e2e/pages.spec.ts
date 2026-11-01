@@ -20,6 +20,47 @@ test("while the phone writes, the Day has nothing to press, and a block can't be
   await expect(page.locator(".block.movable")).toHaveCount(0);
 });
 
+test("Stats shows the record, by period, with nothing to press while the phone writes", async ({ page }) => {
+  await page.goto("/stats");
+  await expect(page.getByRole("heading", { name: "The last 14 days" })).toBeVisible();
+  await expect(page.getByTestId("stat-tile")).toHaveCount(6);
+  const days = page.getByRole("region", { name: /^Day by day/ }).getByRole("listitem");
+  await expect(days).toHaveCount(7);
+  await page.getByRole("button", { name: "Show all 14 days" }).click();
+  await expect(days).toHaveCount(14);
+  await page.getByRole("button", { name: "Show the last week only" }).click();
+  await expect(days).toHaveCount(7);
+  const period = page.getByRole("group", { name: "Period" });
+  await expect(period.getByRole("button", { name: "2 weeks" })).toHaveAttribute("aria-pressed", "true");
+  await period.getByRole("button", { name: "6 weeks" }).click();
+  await expect(page.getByRole("heading", { name: "The last 42 days" })).toBeVisible();
+  await expect(period.getByRole("button", { name: "6 weeks" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("table")).toBeVisible();
+  await expect(page.getByRole("cell", { name: "Mon 07:00: 0 kept, 0 missed" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Forget" })).toHaveCount(0);
+});
+
+test("This week says the check-in's the phone's while it writes, and shows the latest review", async ({ page }) => {
+  await page.goto("/week");
+  await expect(page.getByRole("heading", { name: "This week" })).toBeVisible();
+  await expect(page.getByRole("form", { name: "This week's check-in" })).toHaveCount(0);
+  await expect(page.getByRole("region", { name: /^Review, / })).toBeVisible();
+});
+
+test("the reviews are there to read, with no Undo while the phone writes", async ({ page }) => {
+  await page.goto("/reviews");
+  const review = page.getByTestId("review").first();
+  await expect(review.getByRole("heading", { name: /^Week of / })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Undo" })).toHaveCount(0);
+});
+
+test("a review's summary goes by the mail app, nothing being sent from here", async ({ page }) => {
+  const card = { id: 1, week: "Week of 5 Oct", by: "By the rules.", lines: ["A made-up note."], changes: [], summary: "A made-up week", mailto: "mailto:?subject=Made%20up&body=A%20made-up%20week" };
+  await page.route("**/api/views/reviews", (route) => route.fulfill({ json: { cards: [card] } }));
+  await page.goto("/reviews");
+  await expect(page.getByRole("link", { name: "Send it" })).toHaveAttribute("href", card.mailto);
+});
+
 test("signed in, the Day shows the plan's grid and what to do now", async ({ page }) => {
   await page.goto("/day");
   await expect(page.getByRole("heading", { name: "Do now" })).toBeVisible();

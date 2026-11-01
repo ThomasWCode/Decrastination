@@ -1,4 +1,4 @@
-import type { Action, Asked, ChatView, DayView, DeviceLine, NoticesView, Outcome, PairingCode, PhotoRead, SettingsView, TaskAsk, TaskView, WorkView } from "./types";
+import type { Action, Asked, ChatView, DayView, DeviceLine, NoticesView, Outcome, PairingCode, PhotoRead, ReviewsView, SettingsView, StatsView, TaskAsk, TaskView, WeekView, WorkView } from "./types";
 
 /** A request the server answered with a refusal. */
 export class ApiError extends Error {
@@ -28,6 +28,9 @@ export const api = {
   work: () => read<WorkView>("/api/views/work"),
   chat: (earlier: number, reach: string | null) => read<ChatView>(`/api/views/chat?earlier=${earlier}${reach ? `&reach=${encodeURIComponent(reach)}` : ""}`),
   notices: () => read<NoticesView>("/api/views/notices"),
+  stats: (period: string | null) => read<StatsView>(`/api/views/stats${period ? `?period=${encodeURIComponent(period)}` : ""}`),
+  week: () => read<WeekView>("/api/views/week"),
+  reviews: () => read<ReviewsView>("/api/views/reviews"),
   task: (id: string) => read<TaskView>(`/api/views/task/${encodeURIComponent(id)}`),
   settings: () => read<SettingsView>("/api/views/settings"),
   setCredentials: (given: Record<string, string>) => read<{ held: string[] }>("/api/credentials", posting(given)),
@@ -58,6 +61,25 @@ export async function saying(action: Action): Promise<string | null> {
     return outcome.state === "applied" ? null : (outcome.why ?? "That couldn't be done.");
   } catch {
     return UNREACHED;
+  }
+}
+
+/** What came of [action], where its owner has something to say of it either way, for the line over the page. */
+export async function telling(action: Action): Promise<string | null> {
+  try {
+    const outcome = await send(action);
+    return outcome.why ?? outcome.said ?? null;
+  } catch {
+    return UNREACHED;
+  }
+}
+
+/** The week's check-in as the form has it: the server makes it the one the phone's does, and sets off the review. */
+export async function checkIn(ask: { week: string; feel: number } & Record<string, string | number>): Promise<Asked> {
+  try {
+    return await read<Asked>("/api/week/check-in", posting(ask));
+  } catch {
+    return { done: false, said: UNREACHED };
   }
 }
 

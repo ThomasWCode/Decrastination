@@ -278,6 +278,11 @@ function Message({ row, view, doing, go }: { row: ChatRow; view: ChatView; doing
       ) : null}
       <Said said={said} />
       {rating !== null ? <Rate key={String(rating)} row={row} up={rating} max={view.maxFeedback} close={() => setRating(null)} /> : null}
+      {row.opens ? (
+        <Link to="/reviews" go={go}>
+          {row.opens}
+        </Link>
+      ) : null}
       {row.shown.map((card) => (
         <Card key={card.id} card={card} form={view.form ?? null} go={go} />
       ))}

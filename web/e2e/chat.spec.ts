@@ -210,6 +210,13 @@ test("your changes are beside the chat, and one can be taken back", async ({ pag
   await expect(takeBack).toHaveCount(before - 1);
 });
 
+test("his word on a review goes to the reviews", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("link", { name: "Open the review" }).click();
+  await expect(page).toHaveURL(/\/reviews$/);
+  await expect(page.getByRole("heading", { name: "Reviews" })).toBeVisible();
+});
+
 test("a task he shows you opens its sheet", async ({ page }) => {
   await page.goto("/");
   const his = message(page, "Here's the one to look at.");

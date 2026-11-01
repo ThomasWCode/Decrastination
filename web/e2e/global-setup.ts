@@ -36,6 +36,7 @@ function chatFrom(fixture: string, now: number) {
         ],
       }),
       his("seed-shows", 37, "Here's the one to look at.", { proposals: [{ id: "seed-card", open: "own:seed" }] }),
+      his("seed-review", 36, "The week's been gone through.", { kind: "Review", byApp: true, opens: "review" }),
       question("seed-first", 30, "first"),
       question("seed-second", 29, "second"),
       his("seed-new", 2, "A new word for you"),

@@ -243,6 +243,8 @@ export interface Outcome {
   revision: number;
   /** What takes it back, where only its owner could say. */
   undo?: Action | null;
+  /** What's said of it, where its owner's words are the answer. */
+  said?: string | null;
 }
 
 /** What's asked of a task where it takes the server's rules to make the commands (engine's views/TaskAsks.kt). */
@@ -383,6 +385,8 @@ export interface ChatButton {
   primary: boolean;
   confirm?: string | null;
   detail?: string | null;
+  yes?: string | null;
+  no?: string | null;
 }
 
 export interface ChatCard {
@@ -432,6 +436,7 @@ export interface ChatRow {
   cards: ChatCard[];
   lines: ChatDid[];
   said?: string | null;
+  opens?: string | null;
 }
 
 export interface ChangeRow {
@@ -481,4 +486,81 @@ export interface ChatView {
 
 export interface NoticesView {
   unread: number;
+}
+
+export interface PeriodChoice {
+  key: string;
+  label: string;
+  chosen: boolean;
+}
+
+export interface DayBar {
+  label: string;
+  today: boolean;
+  share: number;
+  line: string;
+  quiet: boolean;
+}
+
+export interface HeatCell {
+  kept: number;
+  missed: number;
+  share: number;
+  missedMore: boolean;
+}
+
+export interface HeatRow {
+  day: string;
+  cells: HeatCell[];
+}
+
+export interface StatsView {
+  periods: PeriodChoice[];
+  heading: string;
+  tiles: { label: string; value: string; note: string; warn: boolean }[];
+  days: DayBar[];
+  foldAfter: number;
+  subjects: string[];
+  heat: HeatRow[];
+  heatHours: number[];
+  heatNote: string;
+  hours?: ChatButton | null;
+  learned: { line: string; forget?: ChatButton | null }[];
+  nothingLearned?: string | null;
+  inFull: string[];
+  canChange: boolean;
+}
+
+export interface WeekView {
+  week: string;
+  done: boolean;
+  doneWords: string;
+  feel: string;
+  feelNote: string;
+  questions: { name: string; label: string }[];
+  save: string;
+  latest?: { heading: string; lines: string[]; by: string } | null;
+  canChange: boolean;
+}
+
+export interface ReviewLine {
+  text: string;
+  undo?: Action | null;
+}
+
+export interface ReviewCard {
+  id: number;
+  week: string;
+  by: string;
+  lines: string[];
+  changes: ReviewLine[];
+  tidy?: ReviewLine | null;
+  summary?: string | null;
+  mailto?: string | null;
+  checkIn?: string | null;
+}
+
+export interface ReviewsView {
+  cards: ReviewCard[];
+  none?: string | null;
 }
