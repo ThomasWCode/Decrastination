@@ -99,26 +99,33 @@ class Sessions(private val db: Database, private val allowed: Long, private val 
         return id
     }
 
-    /** Whether [id] is a session still good, which its use keeps good a while longer. */
+    /**
+     * Whether [id] is a session still good, which its use keeps good a while longer. Every request asks, so none waits for an open
+     * command to be told: what's committed answers, and that use is let go of, as the next will count.
+     */
     fun check(id: String?): Boolean {
         if (id.isNullOrEmpty()) return false
         val now = clock()
         val hash = Tokens.hash(id)
-        return db.transaction { c ->
-            val live = c.prepareStatement("SELECT expires_at FROM sessions WHERE id = ?").use { q ->
+        val live = db.read { c ->
+            c.prepareStatement("SELECT expires_at FROM sessions WHERE id = ?").use { q ->
                 q.setString(1, hash)
                 q.executeQuery().use { it.next() && it.getLong(1) > now }
             }
-            if (live) {
-                c.prepareStatement("UPDATE sessions SET last_seen_at = ?, expires_at = ? WHERE id = ?").use {
-                    it.setLong(1, now)
-                    it.setLong(2, now + LIFE_MS)
-                    it.setString(3, hash)
-                    it.executeUpdate()
+        }
+        if (live) {
+            db.ifFree {
+                db.transaction { c ->
+                    c.prepareStatement("UPDATE sessions SET last_seen_at = ?, expires_at = ? WHERE id = ?").use {
+                        it.setLong(1, now)
+                        it.setLong(2, now + LIFE_MS)
+                        it.setString(3, hash)
+                        it.executeUpdate()
+                    }
                 }
             }
-            live
         }
+        return live
     }
 
     fun end(id: String?) {
@@ -177,24 +184,28 @@ class Devices(private val db: Database, private val clock: () -> Long = System::
         }
     }
 
-    /** The device [token] is, if it's one not revoked. */
+    /** The device [token] is, if it's one not revoked: told as a session's is, no request waiting for an open command to hear it. */
     fun check(token: String?): String? {
         if (token.isNullOrEmpty()) return null
         val hash = Tokens.hash(token)
-        return db.transaction { c ->
-            val id = c.prepareStatement("SELECT id FROM devices WHERE token_hash = ? AND revoked_at IS NULL").use { q ->
+        val id = db.read { c ->
+            c.prepareStatement("SELECT id FROM devices WHERE token_hash = ? AND revoked_at IS NULL").use { q ->
                 q.setString(1, hash)
                 q.executeQuery().use { if (it.next()) it.getString(1) else null }
             }
-            if (id != null) {
-                c.prepareStatement("UPDATE devices SET last_seen_at = ? WHERE id = ?").use {
-                    it.setLong(1, clock())
-                    it.setString(2, id)
-                    it.executeUpdate()
+        }
+        if (id != null) {
+            db.ifFree {
+                db.transaction { c ->
+                    c.prepareStatement("UPDATE devices SET last_seen_at = ? WHERE id = ?").use {
+                        it.setLong(1, clock())
+                        it.setString(2, id)
+                        it.executeUpdate()
+                    }
                 }
             }
-            id
         }
+        return id
     }
 
     fun list(): List<DeviceLine> = db.transactionless { c ->
