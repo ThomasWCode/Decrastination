@@ -52,6 +52,9 @@ sealed interface Action {
 
     /** Why this can't be applied to the state as it now is, or null: what it's about has gone since it was made (docs/spec/sync.md §Stale commands). */
     fun stale(owners: Owners): String? = null
+
+    /** Why it came to nothing, by the [answer] its owner gave, or null: reported as a stale one is, what it did standing, a wrong code's count among it. */
+    fun refused(answer: Any?): String? = null
 }
 
 /** An action's answer, typed, for the screen that asked it. */

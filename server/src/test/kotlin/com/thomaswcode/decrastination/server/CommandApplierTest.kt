@@ -1,13 +1,17 @@
 package com.thomaswcode.decrastination.server
 
 import com.thomaswcode.decrastination.core.OwnTask
+import com.thomaswcode.decrastination.data.Secret
 import com.thomaswcode.decrastination.data.SecretCipher
+import com.thomaswcode.decrastination.protect.Totp
+import com.thomaswcode.decrastination.sync.protocol.ApplyChangeNow
 import com.thomaswcode.decrastination.sync.protocol.ChangeSettings
 import com.thomaswcode.decrastination.sync.protocol.Command
 import com.thomaswcode.decrastination.sync.protocol.CommandBatch
 import com.thomaswcode.decrastination.sync.protocol.FinishOwnTask
 import com.thomaswcode.decrastination.sync.protocol.Outcome
 import com.thomaswcode.decrastination.sync.protocol.SaveOwnTask
+import com.thomaswcode.decrastination.sync.protocol.UseParentCode
 import java.io.File
 import java.nio.file.Files
 import kotlin.test.AfterTest
@@ -37,7 +41,7 @@ class CommandApplierTest {
     private val dir: File = Files.createTempDirectory("commands").toFile()
     private val db = Database(File(dir, "test.db").path).apply { setMeta("mode", ServerGraph.COMMANDS) }
     private val graph = ServerGraph(db, dir, Plain, "test")
-    private val at = 1_792_000_000_000L
+    private val at = System.currentTimeMillis() - 86_400_000L
 
     @AfterTest
     fun cleanUp() {
@@ -50,6 +54,18 @@ class CommandApplierTest {
     private suspend fun send(command: Command): Outcome = graph.applier.apply(CommandBatch(listOf(command)), "phone").single()
 
     private fun rows() = db.read { c -> c.createStatement().use { s -> s.executeQuery("SELECT COUNT(*) FROM commands").use { it.next(); it.getInt(1) } } }
+
+    private fun code(secret: ByteArray) = Totp.code(secret, Totp.step(System.currentTimeMillis()))
+
+    private fun wrong(secret: ByteArray) = (0..999_999).asSequence().map { it.toString().padStart(Totp.DIGITS, '0') }.first { Totp.matchingStep(secret, it, System.currentTimeMillis()) == null }
+
+    private suspend fun parentCode(): ByteArray = Totp.newSecret().also { graph.stores.secrets.put(Secret.TotpSecret, Totp.base32(it)) }
+
+    private suspend fun armedWithAChange(): String {
+        graph.stores.settings.update { it.copy(armed = true) }
+        send(Command("loosen", at, ChangeSettings(mapOf("workMinPerFreeMin" to JsonPrimitive(1)))))
+        return graph.stores.protection.value.pending.single().id
+    }
 
     @Test
     fun `a command goes through its owner, at its own moment, as one revision`() = runBlocking {
@@ -109,6 +125,77 @@ class CommandApplierTest {
         assertEquals(0L, db.currentRevision())
         assertEquals(1, rows())
         assertEquals(outcome, send(Command("one", at, FinishOwnTask("own:gone"))))
+    }
+
+    @Test
+    fun `an answer that says no is reported with its reason, and what it did stands`() = runBlocking {
+        val secret = parentCode()
+        val first = send(Command("one", at, UseParentCode(wrong(secret))))
+        assertEquals(Outcome.DROPPED, first.state)
+        assertEquals("Wrong code: 2 tries left", first.why)
+        assertEquals("Wrong code: 1 try left", send(Command("two", at, UseParentCode(wrong(secret)))).why, "the first wrong one is counted")
+        assertEquals(first.why, send(Command("one", at, UseParentCode(wrong(secret)))).why, "and a repeat answers as it did")
+    }
+
+    @Test
+    fun `a task the form wouldn't take is dropped, saying why, and nothing's made`() = runBlocking {
+        val outcome = send(Command("one", at, SaveOwnTask("s", OwnTask(title = " "))))
+        assertEquals(Outcome.DROPPED, outcome.state)
+        assertEquals("It needs a name", outcome.why)
+        assertTrue(graph.stores.tasks.value.tasks.isEmpty())
+    }
+
+    @Test
+    fun `a website's moment is the server's, whatever the browser says`() = runBlocking {
+        val before = System.currentTimeMillis()
+        for ((id, moment) in listOf("early" to at, "late" to System.currentTimeMillis() + 86_400_000L)) {
+            val command = Command(id, moment, SaveOwnTask(id, OwnTask(title = id)))
+            graph.applier.apply(CommandBatch(listOf(command)), Client.WEBSITE)
+            assertTrue(graph.stores.tasks.value.tasks.single { it.title == id }.firstSeenAt in before..System.currentTimeMillis(), id)
+        }
+    }
+
+    @Test
+    fun `a phone's moment may be earlier, as one made offline is, but never later`() = runBlocking {
+        send(Command("early", at, own("Earlier")))
+        assertEquals(at, graph.stores.tasks.value.tasks.single { it.title == "Earlier" }.firstSeenAt)
+        send(Command("late", System.currentTimeMillis() + 86_400_000L, own("Later")))
+        assertTrue(graph.stores.tasks.value.tasks.single { it.title == "Later" }.firstSeenAt <= System.currentTimeMillis())
+    }
+
+    @Test
+    fun `a client's clock can't outrun the lock on a code`() = runBlocking {
+        val secret = parentCode()
+        val hour = 3_600_000L
+        val now = System.currentTimeMillis()
+        repeat(3) { send(Command("wrong-$it", now, UseParentCode(wrong(secret)))) }
+        val after = send(Command("later", now + 2 * hour, UseParentCode(code(secret))))
+        assertEquals(Outcome.DROPPED, after.state)
+        assertTrue(assertNotNull(after.why).startsWith("Too many wrong codes"), after.why)
+    }
+
+    @Test
+    fun `a waiting change goes through only with its code, which isn't spent on one that's gone`() = runBlocking {
+        val secret = parentCode()
+        val id = armedWithAChange()
+        val refused = send(Command("bad", at, ApplyChangeNow(id, wrong(secret))))
+        assertEquals("Wrong code: 2 tries left", refused.why)
+        assertEquals(listOf(id), graph.stores.protection.value.pending.map { it.id })
+        assertEquals("That change isn't waiting now", send(Command("none", at, ApplyChangeNow("no such change", code(secret)))).why)
+        assertEquals(Outcome.APPLIED, send(Command("good", System.currentTimeMillis(), ApplyChangeNow(id, code(secret)))).state, "the code wasn't used up on the last")
+        assertTrue(graph.stores.protection.value.pending.isEmpty())
+        assertEquals(1, graph.stores.settings.value.workMinPerFreeMin)
+    }
+
+    @Test
+    fun `settings are held to what the screen would take`() = runBlocking {
+        val box = graph.stores.settings.value.boxMin
+        assertEquals("That's out of range: the box length", send(Command("low", at, ChangeSettings(mapOf("boxMin" to JsonPrimitive(1))))).why)
+        assertEquals("That isn't a value it can have", send(Command("words", at, ChangeSettings(mapOf("boxMin" to JsonPrimitive("long"))))).why)
+        assertEquals("That can't be changed", send(Command("shape", at, ChangeSettings(mapOf("version" to JsonPrimitive(1))))).why)
+        assertEquals(box, graph.stores.settings.value.boxMin)
+        assertEquals(Outcome.APPLIED, send(Command("fine", at, ChangeSettings(mapOf("boxMin" to JsonPrimitive(45))))).state)
+        assertEquals(45, graph.stores.settings.value.boxMin)
     }
 
     @Test

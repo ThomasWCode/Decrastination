@@ -141,13 +141,13 @@ Undone on the Reviews page, one that loosens the blocker waits as yours do.
 
 A waiting change is a `PendingChange` in `protection.json`, listed under *Waiting* with when it applies.
 - Its wait is counted on the uptime clock (`DeviceClock.uptime`, `SettingsChanges.applyDue`), which setting the date can't move; hours the phone is off don't count.
-- *Cancel*, or setting it back, drops it at once; a parent code applies it at once (`Protection.applyNow`).
+- *Cancel*, or setting it back, drops it at once; a parent code applies it at once (`Protection.applyWithCode`), the code carried by the one command (`ApplyChangeNow`), so a client can't ask for the change without it.
 - One that no longer loosens (a setting that no longer waits, a removal added back) applies at the next count.
 
 ## The parent code
 
 An authenticator app's time-based codes (RFC 6238, Q17). The secret is made at arming, shown once as a QR code, and kept only in the encrypted secrets file ([storage-and-backups.md](storage-and-backups.md)).
-- A code applies one waiting change, or, armed, **Unblock for an hour** (`Protection.useParentCode`).
+- A code applies one waiting change, or, armed, **Unblock for an hour** (`Protection.useParentCode`), an hour at most whatever's asked.
 - Each code works once; three wrong ones lock entry for an hour, across restarts (`CodeLock`).
 - A code can't say what it's for, so the dialog says in full what it will do, and that the code's holder types it in, seeing that.
 - Nothing is ever emailed: protection's alerts stay on the phone.

@@ -16,7 +16,7 @@ import kotlinx.serialization.json.Json
  * Commands applied to the state, each through its owner, one at a time, in the order they arrive: all of one or none of it,
  * in one transaction that takes one revision (docs/spec/server.md). A repeat of an id answers with what came of it the first
  * time, applying nothing, as a client retries until it hears back and a lost answer mustn't turn an applied command into a
- * dropped one.
+ * dropped one. A command's moment is the server's where a client's clock would decide something ([stamped]).
  */
 class CommandApplier(
     private val db: Database,
@@ -34,22 +34,30 @@ class CommandApplier(
     /** [batch] in order, each one's outcome. Not cut short by the client's going away: each is finished, and said at its retry. */
     suspend fun apply(batch: CommandBatch, device: String): List<Outcome> = withContext(NonCancellable) { batch.commands.map { one(it, device) } }
 
-    private suspend fun one(command: Command, device: String): Outcome {
+    private suspend fun one(sent: Command, device: String): Outcome {
+        val command = stamped(sent, device)
         var before = 0L
         val outcome = db.commandOr({ failed -> dropped(command, device, failed) }) {
             before = db.currentRevision()
             // Inside, not ahead of it: a retry racing its first send waits here, and finds what came of it.
             recorded(command.id)?.let { return@commandOr it }
             backend.cause = command.id
-            val stale = command.action.stale(owners)
-            if (stale == null) commands.apply(command)
-            val revision = db.currentRevision()
-            val made = if (stale == null) Outcome(command.id, Outcome.APPLIED, revision = revision) else Outcome(command.id, Outcome.DROPPED, stale, revision)
+            val why = command.action.stale(owners) ?: command.action.refused(commands.apply(command))
+            val made = Outcome(command.id, if (why == null) Outcome.APPLIED else Outcome.DROPPED, why, db.currentRevision())
             record(command, device, made)
             made
         }
         if (outcome.revision > before) committed(outcome.revision)
         return outcome
+    }
+
+    /**
+     * [command] at the moment it's read as. The website's is this one: it has no queue to send late, and a browser can say
+     * anything. A phone's may be earlier, as one made offline is, but never later: the moment decides a code's lock and a wait.
+     */
+    private fun stamped(command: Command, device: String): Command {
+        val now = clock.now()
+        return command.copy(at = if (device == Client.WEBSITE) now else minOf(command.at, now))
     }
 
     /** What it left in memory goes with the rollback, and it's on record as dropped, so a retry isn't tried again for ever. */
