@@ -19,11 +19,15 @@ import com.thomaswcode.decrastination.data.Backups
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.Secret
 import com.thomaswcode.decrastination.data.SecretCipher
+import com.thomaswcode.decrastination.net.Http
+import com.thomaswcode.decrastination.net.HttpResponse
 import com.thomaswcode.decrastination.sync.protocol.Command
 import com.thomaswcode.decrastination.sync.protocol.CommandBatch
 import com.thomaswcode.decrastination.sync.protocol.SaveOwnTask
 import java.io.File
 import java.nio.file.Files
+import java.sql.DriverManager
+import java.sql.SQLException
 import java.time.Instant
 import java.time.LocalDate
 import kotlin.test.AfterTest
@@ -65,6 +69,23 @@ class ServerJobsTest {
     }
 
     private fun jobs(vararg jobs: ServerJob, running: Boolean = true) = ServerJobs(db, clock, { running }, jobs.toList())
+
+    @Test
+    fun `the heartbeat goes only from a box that can still write, as one that can't still answers its health check`() {
+        val beats = mutableListOf<String>()
+        val graph = ServerGraph(db, dir, Plain, "test", heartbeatUrl = "https://beat.example/made-up", http = Http { url, _, _ -> beats += url; HttpResponse(200, "") })
+        graph.heartbeat()
+        assertEquals(listOf("https://beat.example/made-up"), beats)
+        db.transactionless { c -> c.createStatement().use { it.execute("PRAGMA busy_timeout=20") } }
+        DriverManager.getConnection("jdbc:sqlite:${File(dir, "test.db").path}").use { lock ->
+            lock.createStatement().use { it.execute("BEGIN IMMEDIATE") }
+            assertFailsWith<SQLException> { graph.heartbeat() }
+            assertEquals(1, beats.size, "so the check notices")
+            lock.createStatement().use { it.execute("ROLLBACK") }
+        }
+        graph.heartbeat()
+        assertEquals(2, beats.size, "and it's back as that passes")
+    }
 
     @Test
     fun `in mirror mode nothing runs`() = runBlocking {

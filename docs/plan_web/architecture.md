@@ -82,6 +82,7 @@ The owner's word (31 Oct): the phone works offline to an extent. The extent:
 - **The plan**: the phone's planner runs over the replica when it changes while offline, so DO NOW and the blocker follow a task finished; those slots are **provisional** and the calendar is never written from them (W-15): not built, it comes with the switch. Once the outbox has drained and the server's slots have arrived, they replace the provisional ones.
 - **Felix and the syncs** need a connection, as they do today.
 - After seven days without a sync, the Day shows a line saying so: not built, it comes with the switch.
+- What's waited hours in the outbox gets the same line sooner, whatever's holding it, a fault on the server, one command that keeps causing one, or the server gone: nothing's pulled while anything waits, so Felix's answers stop too, and a line on Setup isn't enough for that. The age of the oldest command is all it takes to know. Not built either, for the same reason.
 
 ## The website
 

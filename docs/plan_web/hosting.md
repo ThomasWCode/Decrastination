@@ -75,7 +75,7 @@ Restore on a fresh box: `litestream restore -config /etc/litestream.yml -if-db-n
 
 ## Monitoring
 
-As SharpnPro: a heartbeat to healthchecks.io every minute from the server's scheduler (a missed one means the box or the process is down, reclaimed included), which starts with the jobs at the switch, and an uptime check, which is all that notices a stopped box till then, on `GET /api/health` from outside. Alerts by email to the owner, through whatever SharpnPro uses today. Logs are JSON lines on stdout, `docker compose logs`. No log line ever holds a store's content, a credential or a request header (the owner's rule).
+As SharpnPro: a heartbeat to healthchecks.io every minute from the server's scheduler (a missed one means the box or the process is down, reclaimed included, or that it can't write to its database), which starts with the jobs at the switch, and an uptime check, which is all that notices a stopped box till then, on `GET /api/health` from outside. Alerts by email to the owner, through whatever SharpnPro uses today. Logs are JSON lines on stdout, `docker compose logs`. No log line ever holds a store's content, a credential or a request header (the owner's rule).
 
 ## Security
 
