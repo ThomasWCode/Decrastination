@@ -8,6 +8,7 @@ import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.ReplayClock
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
+import com.thomaswcode.decrastination.data.BackupService
 import com.thomaswcode.decrastination.data.SecretCipher
 import com.thomaswcode.decrastination.data.Stores
 import com.thomaswcode.decrastination.data.SyncState
@@ -116,6 +117,7 @@ class TasksHarness(start: String = "2026-10-19T16:00", private val claude: Boole
     override val looks: Looks get() = error("No looks here")
     override val protection: Protection get() = error("No protection here")
     override val learning: Learning get() = error("No learning here")
+    override val backups: BackupService get() = error("No backups here")
 
     /** A screen's changes, as `AppGraph`'s: only the owners here have any. */
     val commands = Commands(this, owners, stores.outbox, queuing = { stores.sync.value.mode == SyncState.COMMANDS }, unfinished = { stores.sync.update { it.copy(revision = 0) } })

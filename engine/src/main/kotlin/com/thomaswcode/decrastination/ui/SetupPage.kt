@@ -8,6 +8,7 @@ import com.thomaswcode.decrastination.data.CallRecord
 import com.thomaswcode.decrastination.data.SourceStatus
 import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.enrich.AiUsage
+import com.thomaswcode.decrastination.enrich.KeyProblem
 import java.time.Instant
 import java.time.ZoneId
 import java.util.Locale
@@ -53,8 +54,8 @@ object SetupPage {
             givenUp.joinToString("") { " " + GmailWrites.failure(it) + " Its sheet's It's sorted clears this." },
     )
 
-    /** Claude, from whether a key's held, as the month's [usage] stands. */
-    fun claude(keyHeld: Boolean, settings: Settings, usage: AiUsage): Line {
+    /** Claude, from whether a key's held, as the month's [usage] stands: [newKey], how a new one's given, where it isn't as on the phone. */
+    fun claude(keyHeld: Boolean, settings: Settings, usage: AiUsage, newKey: String? = null): Line {
         val keyProblem = usage.keyProblem
         val lastError = usage.lastError
         return Line(
@@ -65,7 +66,7 @@ object SetupPage {
                 !settings.aiKeyActive -> "Key saved, not in use yet: enter it again to use it."
                 !settings.aiEnabled -> "Key saved; switched off in Settings, so nothing is sent."
                 // The key or its account can't be used: said with what puts it right.
-                keyProblem != null -> "${keyProblem.says}. ${keyProblem.fix}: the rules stand in, and it's tried again an hour after each failed try."
+                keyProblem != null -> "${keyProblem.says}. ${newKey?.takeIf { keyProblem == KeyProblem.Rejected } ?: keyProblem.fix}: the rules stand in, and it's tried again an hour after each failed try."
                 // Its calls failing (a bad key, no connection): said, so it can be put right.
                 lastError != null -> "On, but its last call failed (${lastError.take(80)}): the rules stand in, and it's tried again after an hour."
                 else -> "On: $%.2f this month".format(Locale.UK, usage.spentUsd) + (settings.aiMonthlyCapUsd?.let { " of $$it" } ?: ", no cap: it stops when the account's credit runs out") + "."

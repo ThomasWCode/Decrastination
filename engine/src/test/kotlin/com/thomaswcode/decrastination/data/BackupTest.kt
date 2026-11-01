@@ -42,6 +42,7 @@ import com.thomaswcode.decrastination.core.WeeklyRules
 import com.thomaswcode.decrastination.core.Window
 import com.thomaswcode.decrastination.core.WindowKind
 import com.thomaswcode.decrastination.core.yours
+import com.thomaswcode.decrastination.data.WeeklyReview
 import com.thomaswcode.decrastination.enrich.AiUsage
 import java.io.ByteArrayInputStream
 import java.time.Instant
@@ -226,6 +227,14 @@ class BackupTest {
         assertNull(Backups.problem(backup(calibration = Calibration(multipliers = mapOf("Homework|12.1 Physics" to 1.2)))))
         assertNotNull(Backups.problem(backup(answers = mapOf("Trip" to "load:-5"))))
         assertNull(Backups.problem(backup(answers = mapOf("Trip" to "load:180", "Open Day" to "busy"))))
+    }
+
+    @Test
+    fun `a backup with a day or a week that can't be read is refused whole, as Stats and the reviews read each`() {
+        fun review(week: String?) = WeeklyReview(now, listOf("A made-up note."), by = "rules", week = week)
+        assertTrue("a slot's day" in assertNotNull(Backups.problem(backup(ActivityLog(slots = listOf(slot("teams:a#-1#1", now - 3_600_000L).copy(date = "someday")))))))
+        assertTrue("a review's week" in assertNotNull(Backups.problem(backup(ActivityLog(reviews = listOf(review("someday")))))))
+        assertNull(Backups.problem(backup(ActivityLog(reviews = listOf(review("2026-10-12"), review(null))))))
     }
 
     @Test

@@ -7,8 +7,10 @@ import com.thomaswcode.decrastination.core.NoSchool
 import com.thomaswcode.decrastination.core.SchoolCalendar
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.SettingsLimits
+import com.thomaswcode.decrastination.data.CallRecord
 import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.enrich.AiUsage
+import com.thomaswcode.decrastination.enrich.ModelEffort
 import com.thomaswcode.decrastination.protect.PendingChange
 import com.thomaswcode.decrastination.protect.SettingsChanges
 import com.thomaswcode.decrastination.sync.protocol.Action
@@ -19,6 +21,7 @@ import com.thomaswcode.decrastination.sync.protocol.DeleteNoSchool
 import com.thomaswcode.decrastination.sync.protocol.DeleteRule
 import com.thomaswcode.decrastination.ui.Format
 import com.thomaswcode.decrastination.ui.SettingsEffects
+import com.thomaswcode.decrastination.ui.SetupPage
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -48,7 +51,20 @@ data class SettingsView(
     val credentials: List<CredentialGroup>,
     /** Whether anything can be changed here: the server applies commands. */
     val canChange: Boolean,
+    /** How hard Claude thinks, by job, and its calls, newest first. */
+    val efforts: List<String> = emptyList(),
+    val effortNote: String = SetupPage.EFFORT_NOTE,
+    val calls: List<CallLine> = emptyList(),
+    /** What's in the phone's Settings and not here. */
+    val phoneOnly: List<String> = PHONE_ONLY,
 )
+
+/** A call to Claude, a line of it, and all of it to open. */
+@Serializable
+data class CallLine(val at: Long, val line: String, val details: String)
+
+/** The phone's Settings that are its own: they're about the phone, so they stay there. */
+private val PHONE_ONLY = listOf("Blocking and protection", "Calendar", "This phone's pairing", "The last crash")
 
 @Serializable
 data class SettingsPage(val key: String, val title: String, val says: String, val fields: List<SettingField>, val note: String? = null)
@@ -115,6 +131,7 @@ object SettingsViews {
         now: Long,
         zone: ZoneId,
         writable: Boolean,
+        calls: List<CallRecord> = emptyList(),
     ): SettingsView {
         val values = SettingsChanges.values(asked)
         val today = Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
@@ -213,6 +230,8 @@ object SettingsViews {
                 ListLine("${fact.topic}: ${fact.text}" + (Memories.held(fact.until, fact.taskId, titles::get, zone)?.let { " ($it)" } ?: ""), DeleteFact(fact).takeIf { writable })
             },
             factsRoom = memory.facts.takeIf { it.isNotEmpty() }?.let { "${Memories.chars(it) * 100 / Memories.FACT_BUDGET_CHARS}% of the room for facts used." },
+            efforts = ModelEffort.table().map { (effort, jobs) -> "$effort: $jobs" },
+            calls = calls.asReversed().map { CallLine(it.at, SetupPage.callLine(it, zone), it.details(zone)) },
             credentials = CREDENTIALS.map { (title, fields) -> CredentialGroup(title, fields.map { (name, label, secret) -> CredentialField(name, label, secret, name in held) }) },
             canChange = writable,
         )

@@ -5,6 +5,7 @@ import com.thomaswcode.decrastination.core.Ids
 import com.thomaswcode.decrastination.core.Replay
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.WallClock
+import com.thomaswcode.decrastination.data.BackupService
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.OutboxState
 import com.thomaswcode.decrastination.data.TaskState
@@ -91,6 +92,7 @@ interface Owners {
     val looks: Looks
     val protection: Protection
     val learning: Learning
+    val backups: BackupService
 }
 
 /**

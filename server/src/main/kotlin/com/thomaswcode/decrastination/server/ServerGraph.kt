@@ -8,6 +8,7 @@ import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.Uptime
 import com.thomaswcode.decrastination.core.WallClock
+import com.thomaswcode.decrastination.data.BackupNames
 import com.thomaswcode.decrastination.data.BackupService
 import com.thomaswcode.decrastination.data.CalendarRead
 import com.thomaswcode.decrastination.data.JsonStore
@@ -43,9 +44,12 @@ import com.thomaswcode.decrastination.sync.protocol.RecordCheckIn
 import com.thomaswcode.decrastination.ui.ChatRows
 import com.thomaswcode.decrastination.ui.Moves
 import com.thomaswcode.decrastination.ui.PieceSays
+import com.thomaswcode.decrastination.ui.SetupPage
 import com.thomaswcode.decrastination.ui.StatsPage
 import com.thomaswcode.decrastination.ui.TaskSheetModel
 import com.thomaswcode.decrastination.views.Asked
+import com.thomaswcode.decrastination.views.BackupView
+import com.thomaswcode.decrastination.views.BackupViews
 import com.thomaswcode.decrastination.views.ChatView
 import com.thomaswcode.decrastination.views.ChatViews
 import com.thomaswcode.decrastination.views.CheckInAsk
@@ -58,6 +62,8 @@ import com.thomaswcode.decrastination.views.PhotoRead
 import com.thomaswcode.decrastination.views.ReviewsView
 import com.thomaswcode.decrastination.views.SettingsView
 import com.thomaswcode.decrastination.views.SettingsViews
+import com.thomaswcode.decrastination.views.SetupView
+import com.thomaswcode.decrastination.views.SetupViews
 import com.thomaswcode.decrastination.views.StatsView
 import com.thomaswcode.decrastination.views.StatsViews
 import com.thomaswcode.decrastination.views.TaskAsk
@@ -87,6 +93,7 @@ import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 /** The server's clock: its own time, in the zone the phone last said, as a day is the owner's wherever they are. */
 class ServerClock(private val db: Database) : WallClock {
@@ -189,7 +196,20 @@ class ServerGraph(
     }
 
     /** The owners: what they do is what a command asks, a job, and what [start] has watch the stores. */
-    val owners: ServerOwners = ServerOwners(stores, clock, scope, gateway, planning, calendarTime = { calendarTime() }, photosFolder = File(dataDir, "photos"))
+    val owners: ServerOwners = ServerOwners(
+        stores, clock, scope, gateway, planning,
+        calendarTime = { calendarTime() },
+        photosFolder = File(dataDir, "photos"),
+        nightly = nightly,
+        resetCopies = File(dataDir, "reset-copies"),
+        version = version,
+        eventAnswers = { calendarRead.value.answers },
+        answersBack = { backed -> calendarRead.update { it.copy(answers = backed + it.answers) } },
+        settled = { read -> db.betweenCommands(read) },
+    )
+
+    /** Whether a nightly file has somewhere to go. */
+    private val hasNightly = nightly != null
 
     private val commands = Commands(owners, clock)
 
@@ -265,22 +285,6 @@ class ServerGraph(
     /** Commands applied as they arrive, one at a time. */
     val applier = CommandApplier(db, backend, commands, owners, clock, reload = { reloadAll() }, committed = { _revisions.tryEmit(it) })
 
-    /** The Backup-format file, as the phone writes it, so the phone's Import can read it. */
-    private val backups: BackupService? = nightly?.let { folder ->
-        BackupService(
-            stores, clock, scope, folder, File(dataDir, "reset-copies"), version,
-            changeSettings = { change -> owners.protection.changeSettings(change) },
-            applying = owners.instructions.applying,
-            layInstructions = { owners.instructions.layInstructions() },
-            layTaskOverrides = { owners.instructions.layTaskOverrides() },
-            schedule = {},
-            reread = {},
-            cancelFelix = {},
-            eventAnswers = { calendarRead.value.answers },
-            settled = { read -> db.betweenCommands(read) },
-        )
-    }
-
     /** Each minute, what's due, once the server applies commands (docs/spec/server.md §Jobs). */
     val jobs = ServerJobs(
         db, clock, running = { mode == COMMANDS },
@@ -306,7 +310,8 @@ class ServerGraph(
 
     /** Tonight's file, or a failure, so it's tried again rather than the night going without. */
     internal suspend fun nightly() {
-        val written = backups?.backupNow() ?: return
+        if (!hasNightly) return
+        val written = owners.backups.backupNow()
         check(written == BackupService.Nightly.Written) { "The nightly file wasn't written: $written" }
     }
 
@@ -470,7 +475,7 @@ class ServerGraph(
         val usage = stores.model.value.aiUsage.forMonth(AiUsage.monthOf(now, zone))
         return SettingsViews.of(
             owners.protection.asked, owners.protection.pending, stores.tasks.value, stores.school.value, stores.memory.value, usage,
-            credentials(), stores.secrets.has(Secret.TotpSecret), now, zone, writable = mode == COMMANDS,
+            credentials(), stores.secrets.has(Secret.TotpSecret), now, zone, writable = mode == COMMANDS, calls = stores.model.value.calls,
         )
     }
 
@@ -543,8 +548,41 @@ class ServerGraph(
     /** The record as CSV files in a zip, as the phone's Export gives it. */
     fun record(): ByteArray = Export.zipped(Export.csv(stores.log.value, stores.learning.value.calibration, clock.zone(), stores.chatArchive.value.messages + stores.chat.value.messages))
 
+    /** The Backup page, by what a backup of things as they stand comes to: on a thread of its own, as the chat's archive is read whole for it. */
+    suspend fun backupView(): BackupView = withContext(Dispatchers.IO) {
+        val backups = owners.backups
+        val (leftOut, tooBig, refused) = runCatching {
+            backups.encoded().let { (text, leftOut) -> Triple(leftOut, backups.tooBig(text), backups.unrestorable(text)) }
+        }.getOrDefault(Triple(0, false, null))
+        BackupViews.of(leftOut, tooBig, refused, stores.runtime.value.lastBackupAt, backups.resetCopies(), stores.instructions.value.applied, clock.now(), mode == COMMANDS)
+    }
+
+    /** A backup to download, no command half done in it. None if it's more than Import reads, as it couldn't be restored. */
+    suspend fun backup(): String? = db.betweenCommands { withContext(Dispatchers.IO) { owners.backups.exportBackup() } }.takeUnless(owners.backups::tooBig)
+
+    /** What a backup's called today. */
+    fun backupName(): String = BackupNames.nightlyName(Instant.ofEpochMilli(clock.now()).atZone(clock.zone()).toLocalDate().toString())
+
+    /** The backup [text] taken in as the phone's Import takes it, but whole: all of it or none, one revision, no command between. What came of it, in words. */
+    suspend fun importBackup(text: String): String = applier.alone("import", NOT_RESTORED) { owners.backups.importBackup(text) }
+
+    /** The reset's copy [name] taken in the same way. */
+    suspend fun restoreCopy(name: String): String = applier.alone("import", NOT_RESTORED) { owners.backups.restoreResetCopy(name) }
+
+    /** Setup for the website. */
+    fun setup(): SetupView {
+        val now = clock.now()
+        val zone = clock.zone()
+        val usage = stores.model.value.aiUsage.forMonth(AiUsage.monthOf(now, zone))
+        return SetupViews.of(stores.tasks.value, stores.problems, stores::holds, stores.settings.value, usage, credentials(), claudeKey != null, now, zone, mode == COMMANDS)
+    }
+
     /** What's said wherever you are on the website. */
-    fun notices(): NoticesView = NoticesView(Outbox.unreadOf(stores.chat.value).size)
+    fun notices(): NoticesView {
+        val settings = stores.settings.value
+        val keyProblem = stores.model.value.aiUsage.keyProblem != null && settings.aiEnabled && settings.aiKeyActive
+        return NoticesView(Outbox.unreadOf(stores.chat.value).size, SetupPage.attention(stores.tasks.value, gmailGivenUp = false, keyProblem = keyProblem, watchdog = false, unreadable = stores.problems.isNotEmpty()))
+    }
 
     /** Task [id]'s sheet, if there's such a task. */
     fun task(id: String): TaskView? {
@@ -598,6 +636,7 @@ class ServerGraph(
         const val COMMANDS = "commands"
         private const val SECRETS = "secrets.bin"
         private const val GONE = "That task had gone"
+        private const val NOT_RESTORED = "Nothing was restored: it couldn't be applied."
         private const val MINUTE_MS = 60_000L
         private const val HOUR_MS = 60 * MINUTE_MS
         private const val SOURCES_EVERY_MS = 15 * MINUTE_MS
