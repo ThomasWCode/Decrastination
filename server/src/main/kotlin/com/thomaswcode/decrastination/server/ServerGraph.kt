@@ -247,7 +247,7 @@ class ServerGraph(
     }
 
     /** What moves a piece, its rules the phone's: it decides, and [ask] applies. */
-    private val moves = Moves(stores.tasks, owners.instructions, commands, planning, clock, scope)
+    internal val moves = Moves(stores.tasks, owners.instructions, commands, planning, clock, scope)
 
     /** What's said of a piece as it's done. */
     private val pieceSays = PieceSays(owners.focus, stores.log, stores.settings, stores.learning, planning, clock)

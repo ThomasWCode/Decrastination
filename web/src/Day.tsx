@@ -277,7 +277,7 @@ function Now({ day }: { day: DayView }) {
               <p className="piece">{day.next.label}</p>
               {day.next.first ? <p>First: {day.next.first}</p> : null}
               {day.next.then ? <p className="then">Then: {day.next.then}</p> : null}
-              {day.next.taskId ? <NextButtons key={day.next.label} taskId={day.next.taskId} actions={day.next.actions} /> : null}
+              {day.next.taskId ? <NextButtons taskId={day.next.taskId} actions={day.next.actions} /> : null}
             </>
           ) : (
             <p className="piece">Nothing to do</p>

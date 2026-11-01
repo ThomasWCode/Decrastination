@@ -31,6 +31,18 @@ const tomorrow = () => {
 /** [day] as a date field writes it. */
 const dated = (day: Date) => `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, "0")}-${String(day.getDate()).padStart(2, "0")}`;
 
+/** A task of your own due tomorrow night, so the plan finds it room, however full its days are. */
+async function dueTask(page: Page, title: string) {
+  await page.goto("/work");
+  await page.getByRole("button", { name: "New task" }).click();
+  const form = page.getByRole("form", { name: "New task" });
+  await form.getByLabel("What").fill(title);
+  await form.getByLabel("Due").fill(`${dated(tomorrow())}T23:30`);
+  await form.getByLabel("Minutes").fill("30");
+  await form.getByRole("button", { name: "Add", exact: true }).click();
+  await expect(form).toBeHidden();
+}
+
 /** The week's days from today on, each with its grid opened, till [title]'s piece is on one: its block. */
 async function pieceOf(page: Page, title: string): Promise<Locator> {
   const piece = page.getByTestId("piece").filter({ hasText: title });
@@ -214,31 +226,42 @@ test("Delete asks first, and it's gone", async ({ page }) => {
   await expect(sheet.getByText("That task has gone")).toBeVisible();
 });
 
-test("a piece dragged on the grid shows where it'll land, and stays there as a change of yours", async ({ page }) => {
-  await newTask(page, "Dragged to a time");
+test("a piece dragged on the grid shows where it'll land, and goes there, the server saying what came of it", async ({ page }) => {
+  await dueTask(page, "Dragged to a time");
   const block = await pieceOf(page, "Dragged to a time");
   await drag(page, block, { dy: 120 });
-  await expect(page.getByTestId("landing")).toBeVisible();
+  const landing = page.getByTestId("landing");
+  await expect(landing).toHaveText(/^\d\d:\d[05]$/);
+  const shown = (await landing.textContent()) ?? "";
+  const asked = page.waitForRequest("**/api/day/drop");
   await page.mouse.up();
-  await expect(page.getByRole("status")).toContainText("undone in the chat's Your changes");
-  await expect(page.getByTestId("landing")).toBeHidden();
+  const drop = (await asked).postDataJSON() as { key: string; date: string; onto: string | null; minute: number };
+  expect(drop.onto).toBeNull();
+  // Where the page showed it would land, as the server's own rule makes of what's sent: to the nearest five.
+  const [hours, minutes] = shown.split(":").map(Number);
+  expect(Math.abs(drop.minute - ((hours ?? 0) * 60 + (minutes ?? 0)))).toBeLessThanOrEqual(3);
+  await expect(page.getByRole("status")).not.toBeEmpty();
+  await expect(landing).toBeHidden();
 });
 
-test("a piece dragged onto a day of the strip goes there, all of it", async ({ page }) => {
-  await newTask(page, "Dragged to a day");
+test("a piece dragged onto a day of the strip is asked to go there, with no time", async ({ page }) => {
+  await dueTask(page, "Dragged to a day");
   const block = await pieceOf(page, "Dragged to a day");
-  const strip = page.getByRole("navigation", { name: "Week" });
-  const chosen = strip.locator("a[aria-current=page]");
-  const date = await chosen.getAttribute("data-date");
-  const other = strip.locator(`a:not([aria-current=page])`).last();
-  expect(await other.getAttribute("data-date")).not.toBe(date);
+  await page.route("**/api/day/drop", (route) => route.fulfill({ json: { done: true, said: "All of it on that day: undone in the chat's Your changes" } }));
+  const other = page.getByRole("navigation", { name: "Week" }).locator("a:not([aria-current=page])").last();
+  const date = await other.getAttribute("data-date");
+  const asked = page.waitForRequest("**/api/day/drop");
   await drag(page, block, other);
+  await expect(page.getByTestId("landing")).toBeHidden();
   await page.mouse.up();
-  await expect(page.getByRole("status")).toContainText(/All of it on|Not that day/);
+  const drop = (await asked).postDataJSON() as { onto: string | null; minute: number | null };
+  expect(drop.onto).toBe(date);
+  expect(drop.minute).toBeNull();
+  await expect(page.getByRole("status")).toContainText("All of it on that day");
 });
 
 test("Escape puts a block back, and a tap opens its sheet", async ({ page }) => {
-  await newTask(page, "Lifted and let go");
+  await dueTask(page, "Lifted and let go");
   const block = await pieceOf(page, "Lifted and let go");
   await drag(page, block, { dy: 90 });
   await expect(page.getByTestId("landing")).toBeVisible();
@@ -257,6 +280,9 @@ test("the wheel with Ctrl held zooms the grid, and it stays so", async ({ page }
   const box = await page.getByTestId("grid").boundingBox();
   if (!box) throw new Error("No grid");
   await page.mouse.move(box.x + 100, box.y + 100);
+  await page.mouse.wheel(0, -100);
+  await page.waitForTimeout(200);
+  expect(await height(), "alone, the wheel scrolls").toBe(before);
   await page.keyboard.down("Control");
   await page.mouse.wheel(0, -100);
   await page.keyboard.up("Control");
@@ -281,6 +307,22 @@ test("a timer's started on a piece and stopped, with its time said", async ({ pa
   await expect(timer).toContainText("Timer:");
   await timer.getByRole("button", { name: "Stop" }).click();
   await expect(timer).toBeHidden();
+});
+
+test("a timer's words are read again when they turn, not at the page's next minute", async ({ page }) => {
+  await page.clock.install();
+  let asked = 0;
+  await page.route("**/api/views/day**", async (route) => {
+    asked++;
+    const response = await route.fetch();
+    await route.fulfill({ response, json: { ...(await response.json()), timer: { label: "A piece", says: `Timer: ${30 - asked} min left`, nextAt: (await page.evaluate(() => Date.now())) + 5_000 } } });
+  });
+  await page.goto("/day");
+  const timer = page.getByRole("region", { name: "Timer" });
+  await expect(timer).toBeVisible();
+  const before = await timer.textContent();
+  await page.clock.runFor(6_000);
+  await expect(timer).not.toHaveText(before ?? "");
 });
 
 test("a step takes a timer of its own", async ({ page }) => {
@@ -308,6 +350,26 @@ test("what's next can be done from the Day, with its Undo", async ({ page }) => 
   await expect(said).toBeVisible();
   await said.getByRole("button", { name: "Undo" }).click();
   await expect(said).toBeHidden();
+});
+
+test("how the Day looks with something to press, to be seen", async ({ page }) => {
+  // Run alone, with LOOK=<a folder>, as look.spec.ts is.
+  const folder = process.env.LOOK;
+  test.skip(!folder, "Only when asked: LOOK=<a folder>");
+  await dueTask(page, "A piece to look at");
+  const block = await pieceOf(page, "A piece to look at");
+  for (const scheme of ["light", "dark"] as const) {
+    await page.emulateMedia({ colorScheme: scheme });
+    await drag(page, block, { dy: 75 });
+    await page.screenshot({ path: `${folder}/day-drag-${scheme}.png` });
+    await page.keyboard.press("Escape");
+    await page.mouse.up();
+  }
+  await page.goto("/day");
+  await page.getByRole("group", { name: "Do" }).getByRole("button", { name: "Start" }).click();
+  await page.getByRole("region", { name: "Timer" }).waitFor();
+  await page.screenshot({ path: `${folder}/day-timer.png` });
+  await page.getByRole("region", { name: "Timer" }).getByRole("button", { name: "Stop" }).click();
 });
 
 test("a note is kept on a task, and deleted", async ({ page }) => {

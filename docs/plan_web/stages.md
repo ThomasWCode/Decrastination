@@ -142,6 +142,8 @@ The estimates are hours of sessions, from the durations measured over the 4.x re
 
 ## Stage 6: the Day grid and the timer
 
+**As built.** Dormant, as the rest is till the switch (W-25): in mirror mode the Day's there to read and a piece's sheet opens, with nothing to press or drag. 5.6.0. A drop isn't a `MoveSlot` command: it's `POST /day/drop`, which the server judges with the phone's own rule (`Moves.dropped`, moved out of `DayScreen`) and makes the commands that rule makes, as a task's moves are. Zoom is the wheel with Ctrl held, as a plain wheel scrolls the grid. A timer's Start is asked of the server, as the phone's also notes something done on its task. That the phone's alarms follow a timer started here needs a server taking commands, so it's the switch's.
+
 **Goal.** The Day as on the phone, with drag, on a wide screen; the timer from the laptop. Release 5.5.0.
 
 **Work.** The grid from `/views/day` (the layout maths in TypeScript; the model's from Kotlin), drag by pointer to move a piece (the `MoveSlot` command), zoom by wheel, the DO NOW card with its actions, Start and Stop on the card and the sheet (the `Timer` commands), the week strip. The phone's alarms follow the synced timer.

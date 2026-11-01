@@ -235,6 +235,22 @@ class TaskAskTest {
     }
 
     @Test
+    fun `a drop naming a day its piece isn't on is one drawn before a new plan`() = runBlocking<Unit> {
+        withTasks()
+        val (day, slot) = slotOf(own)
+        assertEquals(Moves.CHANGED, graph.drop(DayDrop(slot.key, day.plusDays(1).toString(), minute = 600)).said)
+    }
+
+    @Test
+    fun `a piece gone from the plan since it was lifted can't be moved`() = runBlocking<Unit> {
+        withTasks()
+        val (day, slot) = slotOf(own)
+        val gone = slot.copy(chunk = slot.chunk?.copy(taskId = "own:gone", stepIndex = 99))
+        val refused = assertNotNull(graph.moves.dropped(graph.planning.plan(), gone, day, null, 600, 30, graph.clock.zone()))
+        assertEquals(Moves.CHANGED, refused.why)
+    }
+
+    @Test
     fun `only its next piece takes a time`() = runBlocking<Unit> {
         withTasks()
         graph.applier.apply(CommandBatch(listOf(Command("long", System.currentTimeMillis(), SaveOwnTask("long", OwnTask(title = "A long one", minutes = 400))))), Client.WEBSITE)
@@ -249,9 +265,11 @@ class TaskAskTest {
         withTasks()
         val (day, slot) = graph.planning.plan().buckets.flatMap { bucket -> bucket.slots.map { bucket.date to it } }.first { (_, slot) -> slot.kind == SlotKind.Outside }
         assertEquals("A break outside stays on its day", graph.drop(DayDrop(slot.key, day.toString(), onto = day.plusDays(1).toString())).said)
-        val moved = graph.drop(DayDrop(slot.key, day.toString(), minute = 20 * 60))
+        val moved = graph.drop(DayDrop(slot.key, day.toString(), minute = 20 * 60 + 3))
         assertTrue(moved.done, moved.said)
-        assertEquals(ChangeType.OutsideAt, graph.stores.instructions.value.applied.single().changes.single().type)
+        val change = graph.stores.instructions.value.applied.single().changes.single()
+        assertEquals(ChangeType.OutsideAt, change.type)
+        assertEquals(20 * 60 + 5, change.startMin, "to the nearest five, as a piece is")
     }
 
     @Test

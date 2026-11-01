@@ -51,9 +51,10 @@ class TaskViewTest {
     fun `a source's open task can be done, put off, and called not a task, which asks first`() {
         val sheet = view(task())
         assertEquals(listOf("Start", "Done", "Later today", "Tomorrow", "Not a task"), sheet.labels())
-        assertEquals(TaskAsk.DONE, sheet.actions[0].ask?.kind)
-        assertNotNull(sheet.actions[0].undo, "a Done can be taken back")
-        assertNull(sheet.actions[1].confirm)
+        assertEquals(TaskAsk.TIMER, sheet.actions[0].ask?.kind)
+        assertEquals(TaskAsk.DONE, sheet.actions[1].ask?.kind)
+        assertNotNull(sheet.actions[1].undo, "a Done can be taken back")
+        assertNull(sheet.actions[2].confirm)
         assertEquals("Not a task?", sheet.actions.last().confirm)
         assertNull(sheet.edit, "only yours goes to the form")
     }
@@ -144,6 +145,8 @@ class TaskViewTest {
         assertEquals(TaskAsk(TaskAsk.TIMER, step = 1), sheet.steps[1].timer?.ask)
         val running = PieceTimer("a piece", task.id, 1, "Second", "A piece", 30, now - 600_000L)
         assertEquals("Stop (20 min left)", view(task, timer = running).steps[1].timer?.label)
+        val both = task.copy(subSteps = listOf(SubStep("First", 10), SubStep("Second", 20)))
+        assertEquals(listOf("Start", "Stop (20 min left)"), view(both, timer = running).steps.map { it.timer?.label }, "the other's still to start")
         assertNull(view(task, writable = false).steps[1].timer, "and none while mirroring")
     }
 

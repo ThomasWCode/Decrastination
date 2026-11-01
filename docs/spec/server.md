@@ -29,6 +29,7 @@ Everything is under `/api`, on the same origin as the website. Open: `GET /healt
 | `GET /events` | a client | the state's revision: the one it's at on connecting, then each new one, with a heartbeat every 25 seconds |
 | `GET /views/day?date=`, `GET /views/work`, `GET /views/task/{id}`, `GET /views/settings`, `GET /views/chat?earlier=&reach=`, `GET /views/notices` | a client | the pages' view models, [website.md](website.md) |
 | `POST /tasks/{id}/ask` | the website | what's asked of a task, made the commands the phone's sheet would make; a 409 in mirror mode |
+| `POST /day/drop` | the website | a block let go on the Day, judged as the phone judges one; a 409 in mirror mode |
 | `POST /chat/try-again` | a client | your message that waits asked for again, outside any command; a 409 in mirror mode |
 | `POST /photos/tasks` | the website | a JPEG of homework read into tasks to check, one at a time; a 409 in mirror mode, or with another being read |
 | `GET /credentials`, `POST /credentials` | the website | which sign-ins are held, and setting them: never their values back |

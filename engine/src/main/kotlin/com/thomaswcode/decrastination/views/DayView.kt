@@ -196,8 +196,8 @@ object DayViews {
 
     /** What can be done with [piece] from here, as the phone's *Do now* card has it; what's the phone's own (its source opened, a photo taken) stays there. */
     private fun actions(piece: Chunk, timer: PieceTimer?, now: Long) = buildList {
-        val on = timer?.takeIf { it.running && it.key == piece.key }
-        add(if (on != null) TaskAction("Stop", StopTimer) else TaskAction("Start", ask = TaskAsk(TaskAsk.TIMER, key = piece.key, step = piece.stepIndex)))
+        // One running on it is stopped where its time's said: there, on the page, wherever it was started.
+        if (timer?.takeIf { it.running && it.key == piece.key } == null) add(TaskAction("Start", ask = TaskAsk(TaskAsk.TIMER, key = piece.key, step = piece.stepIndex)))
         add(TaskAction("Done", ask = TaskAsk(TaskAsk.DONE, at = now, key = piece.key), undo = UndoKeep(piece.key, now)))
         add(TaskAction("Later today", LaterToday(piece.key)))
         // Yours: nothing to ask, so all of it done is your say.

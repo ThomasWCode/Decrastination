@@ -92,6 +92,7 @@ class DayViewTest {
         val ahead = DayViews.block(out, monday, LONDON, { EventJudge.Judgement.Busy }, emptyMap(), writable = true)
         assertEquals(20, ahead?.drag?.minutes)
         assertNull(ahead?.taskId)
+        assertNull(DayViews.block(out, monday, LONDON, { EventJudge.Judgement.Busy }, emptyMap(), writable = false)?.drag, "nor while mirroring")
         val begun = out.copy(item = (out.item as DayModel.Row.Planned).copy(state = DayModel.State.Now))
         assertNull(DayViews.block(begun, monday, LONDON, { EventJudge.Judgement.Busy }, emptyMap(), writable = true)?.drag)
     }
@@ -112,8 +113,7 @@ class DayViewTest {
         val key = assertNotNull(view(writable = true).next?.actions?.first()?.ask?.key)
         val running = PieceTimer(key, "teams:a", null, null, "A piece", 30, now - 90_000L)
         val day = view(now = now, timer = running, writable = true)
-        assertEquals("Stop", day.next?.actions?.first()?.label)
-        assertEquals(StopTimer, day.next?.actions?.first()?.action)
+        assertEquals(listOf("Done", "Later today"), day.next?.actions?.map { it.label }, "its Stop's with its time, not twice")
         val timer = assertNotNull(day.timer)
         assertEquals("A piece", timer.label)
         assertEquals("Timer: 29 min left", timer.says)
