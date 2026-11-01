@@ -182,10 +182,18 @@ class ChatViewTest {
     }
 
     @Test
-    fun `a chip's id is fixed, so a second press is the one message`() {
+    fun `a chip's id is the same till your reply is heard, so a second press is the one message`() {
         val question = his("q", kind = MessageKind.Question).copy(about = About(taskId = "t"), suggestedReplies = listOf("Yes"))
-        assertEquals(SendMessage("Yes", id = "q-chip-0", replyTo = "q"), view(question).chips.single().send)
+        assertEquals(SendMessage("Yes", id = "q-chip-0-0", replyTo = "q"), view(question).chips.single().send)
         assertEquals(view(question).chips, view(question).chips)
+    }
+
+    @Test
+    fun `a chip pressed again after your reply is heard is a message of its own`() {
+        val nudge = his("n", kind = MessageKind.SlotStart).copy(suggestedReplies = listOf("On it"))
+        val reply = ChatMessage("n-chip-0-0", Speaker.You, "On it", now, replyTo = "n", answeredAt = now)
+        val chip = view(nudge, reply).rows.first().chips.single()
+        assertEquals(SendMessage("On it", id = "n-chip-0-1", replyTo = "n"), chip.send)
     }
 
     @Test

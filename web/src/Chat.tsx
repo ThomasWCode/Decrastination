@@ -609,6 +609,7 @@ export function ChatPage({ go }: { go: Go }) {
   const mark = (action: Action) => {
     void send(action)
       .then((outcome) => {
+        if (outcome.state !== "applied") setSaid(outcome.why ?? "That couldn't be done.");
         const undo = outcome.undo;
         if (!undo) return;
         const marked = undo.marked as { ids: string[] };
