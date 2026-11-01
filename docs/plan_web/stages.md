@@ -110,6 +110,8 @@ The estimates are hours of sessions, from the durations measured over the 4.x re
 
 ## Stage 4: the website writes
 
+**As built.** Dormant, as the rest is till the switch (W-25): the website shows all of it, with nothing to press while the server mirrors. 5.4.0, as 5.2.0 and 5.3.0 took the numbers before it. The server takes the TOTP secret from the phone (`POST /api/parent-code`), but the phone sends it only with the switch, so nothing leaves the phone before then. The photo path reads tasks from a photo; a photo kept with a task stays the phone's.
+
 **Goal.** Work and Settings on the website as on the phone. Release 5.3.0 (the phone changes little: the TOTP secret's copy to the server).
 
 **Work.** The Work list's actions (Done and Undo, Same? and Not same, New task, the own-task form, the move sheet), the task sheet with its instructions, the photo-to-tasks path by upload, the Settings pages that are shared state (About you, Hours and windows, School, Planning, Felix, Claude, Sources), the pending changes and the delay shown when armed, the TOTP code accepted (the secret on the server from this release).

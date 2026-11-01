@@ -40,6 +40,9 @@ data class Outcome(val id: String, val state: String, val why: String? = null, v
     companion object {
         const val APPLIED = "applied"
         const val DROPPED = "dropped"
+
+        /** It ran and came to nothing, by what its owner answered ([Action.refused]): what it did stands, so it isn't a change lost. */
+        const val REFUSED = "refused"
     }
 }
 
@@ -53,6 +56,9 @@ sealed interface Action {
 
     /** Why this can't be applied to the state as it now is, or null: what it's about has gone since it was made (docs/spec/sync.md §Stale commands). */
     fun stale(owners: Owners): String? = null
+
+    /** Why it came to nothing, by the [answer] its owner gave, or null: reported as a stale one is, what it did standing, a wrong code's count among it. */
+    fun refused(answer: Any?): String? = null
 }
 
 /** An action's answer, typed, for the screen that asked it. */
@@ -91,14 +97,21 @@ class Commands(
     /** Held across a change to the settings: [changeSettings]. */
     private val changingSettings = Mutex()
 
-    suspend fun <R, A> act(action: A): R where A : Action, A : Answers<R> {
+    suspend fun <R, A> act(action: A): R where A : Action, A : Answers<R> = made(action) { action.run(owners) }
+
+    /** [action], what it answers left aside: one decided on elsewhere, whichever it is. */
+    suspend fun send(action: Action) {
+        made(action) { action.run(owners) }
+    }
+
+    private suspend fun <R> made(action: Action, run: suspend () -> R): R {
         val command = Command(Ids.next(), clock.now(), action)
-        if (outbox == null || !queuing()) return replaying(command) { action.run(owners) }
+        if (outbox == null || !queuing()) return replaying(command) { run() }
         return gate.withLock {
             // On the disk first, so it's sent whatever stops this process: the server's copy then brings what it made (`Replica`).
             outbox.update { it.copy(commands = it.commands + command) }
             try {
-                replaying(command) { action.run(owners) }
+                replaying(command) { run() }
             } catch (failed: Throwable) {
                 withContext(NonCancellable) { unfinished() }
                 throw failed

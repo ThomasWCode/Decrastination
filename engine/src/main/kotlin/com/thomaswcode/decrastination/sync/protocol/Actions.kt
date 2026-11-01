@@ -9,7 +9,9 @@ import com.thomaswcode.decrastination.core.Fact
 import com.thomaswcode.decrastination.core.MemoryEdit
 import com.thomaswcode.decrastination.core.NoSchool
 import com.thomaswcode.decrastination.core.OwnTask
+import com.thomaswcode.decrastination.core.OwnTaskRules
 import com.thomaswcode.decrastination.core.Rule
+import com.thomaswcode.decrastination.core.SettingsLimits
 import com.thomaswcode.decrastination.data.PieceTimer
 import com.thomaswcode.decrastination.data.WeeklyReview
 import com.thomaswcode.decrastination.felix.Conversation
@@ -33,6 +35,8 @@ data class SaveOwnTask(val sourceId: String, val task: OwnTask, val fromForm: Bo
         val steps = task.steps.mapIndexed { i, step -> step.copy(wasIndex = wasIndexes.getOrNull(i)) }
         return owners.ownTasks.saveOwnTask(sourceId, task.copy(steps = steps, fromForm = fromForm))
     }
+
+    override fun stale(owners: Owners) = OwnTaskRules.problem(task)
 
     companion object {
         /** [task] as the form left it, what's only in memory carried with it. */
@@ -78,6 +82,8 @@ data class AddOwnChange(val id: String, val text: String, val about: About, val 
 @SerialName("LaterToday")
 data class LaterToday(val key: String) : Action, Answers<Long?> {
     override suspend fun run(owners: Owners): Long? = owners.instructions.laterToday(key)
+
+    override fun refused(answer: Any?) = "No time left today for it".takeIf { answer == null }
 }
 
 @Serializable
@@ -90,6 +96,8 @@ data class TakeBackQuick(val taskId: String, val kind: ChangeType) : Action, Ans
 @SerialName("ApplyInstruction")
 data class ApplyInstruction(val id: String) : Action, Answers<Boolean> {
     override suspend fun run(owners: Owners): Boolean = owners.instructions.applyInstruction(id)
+
+    override fun refused(answer: Any?) = "It couldn't be applied".takeIf { answer == false }
 }
 
 @Serializable
@@ -142,12 +150,16 @@ data class DeleteHalfDay(val entry: HalfDay) : Action, Answers<Unit> {
 @SerialName("KeepSlot")
 data class KeepSlot(val key: String, val seenAt: Long? = null) : Action, Answers<Boolean> {
     override suspend fun run(owners: Owners): Boolean = owners.focus.keepSlot(key, seenAt = seenAt)
+
+    override fun refused(answer: Any?) = "That piece isn't there now".takeIf { answer == false }
 }
 
 @Serializable
 @SerialName("UndoKeep")
 data class UndoKeep(val key: String, val since: Long) : Action, Answers<Boolean> {
     override suspend fun run(owners: Owners): Boolean = owners.focus.undoKeep(key, since)
+
+    override fun refused(answer: Any?) = "That can't be taken back now".takeIf { answer == false }
 }
 
 @Serializable
@@ -156,6 +168,8 @@ data class TickBlock(val taskId: String, val index: Int, val title: String) : Ac
     override suspend fun run(owners: Owners): Boolean = owners.focus.tickBlock(taskId, index, title)
 
     override fun stale(owners: Owners) = owners.gone(taskId)
+
+    override fun refused(answer: Any?) = "That step has changed".takeIf { answer == false }
 }
 
 @Serializable
@@ -257,12 +271,16 @@ data class DiscardProposal(val messageId: String, val proposalId: String, val di
 @SerialName("UndoAct")
 data class UndoAct(val messageId: String, val index: Int) : Action, Answers<String?> {
     override suspend fun run(owners: Owners): String? = owners.conversation.undoAct(messageId, index)
+
+    override fun refused(answer: Any?) = answer as? String
 }
 
 @Serializable
 @SerialName("UndoMemory")
 data class UndoMemory(val messageId: String, val index: Int) : Action, Answers<String?> {
     override suspend fun run(owners: Owners): String? = owners.conversation.undoMemory(messageId, index)
+
+    override fun refused(answer: Any?) = answer as? String
 }
 
 @Serializable
@@ -297,6 +315,8 @@ data class AddNote(val taskId: String, val text: String) : Action, Answers<Strin
     override suspend fun run(owners: Owners): String? = owners.conversation.addNote(taskId, text)
 
     override fun stale(owners: Owners) = owners.gone(taskId)
+
+    override fun refused(answer: Any?) = answer as? String
 }
 
 @Serializable
@@ -307,12 +327,32 @@ data class DeleteNote(val id: String) : Action, Answers<Unit> {
 
 // Settings and protection.
 
-/** The fields a change touched and their new values ([SettingsChanges.changed]): a change made elsewhere to any other stands. */
+/**
+ * The fields a change touched and their new values ([SettingsChanges.changed]): a change made elsewhere to any other stands.
+ * What's been asked is held to what the Settings screen takes, as a client can send anything; a value out of range that's already
+ * there doesn't stop another being changed.
+ */
 @Serializable
 @SerialName("ChangeSettings")
 data class ChangeSettings(val fields: Map<String, JsonElement>) : Action, Answers<Unit> {
     override suspend fun run(owners: Owners) {
         owners.protection.changeSettings { latest -> SettingsChanges.laidOver(latest, fields) }
+    }
+
+    override fun stale(owners: Owners): String? {
+        if (VERSION in fields) return "That can't be changed"
+        val asked = owners.protection.asked
+        val laid = try {
+            SettingsChanges.laidOver(asked, fields)
+        } catch (_: IllegalArgumentException) {
+            return "That isn't a value it can have"
+        }
+        return (SettingsLimits.problems(laid) - SettingsLimits.problems(asked).toSet()).firstOrNull()?.let { "That's out of range: $it" }
+    }
+
+    private companion object {
+        /** The settings' shape, raised by a migration, never by a change. */
+        const val VERSION = "version"
     }
 }
 
@@ -320,14 +360,20 @@ data class ChangeSettings(val fields: Map<String, JsonElement>) : Action, Answer
 @SerialName("UseParentCode")
 data class UseParentCode(val code: String, val unblockUntil: Long? = null) : Action, Answers<String?> {
     override suspend fun run(owners: Owners): String? = owners.protection.useParentCode(code, unblockUntil)
+
+    override fun refused(answer: Any?) = answer as? String
 }
 
+/** The waiting change [id] applied at once, by a parent's [code]: one action, so a client can't ask for the change without it. */
 @Serializable
 @SerialName("ApplyChangeNow")
-data class ApplyChangeNow(val id: String) : Action, Answers<Unit> {
-    override suspend fun run(owners: Owners) {
-        owners.protection.applyNow(id)
-    }
+data class ApplyChangeNow(val id: String, val code: String) : Action, Answers<String?> {
+    override suspend fun run(owners: Owners): String? = owners.protection.applyWithCode(id, code)
+
+    /** Before the code's used up: there's nothing here to spend it on. */
+    override fun stale(owners: Owners) = "That change isn't waiting now".takeIf { owners.protection.pending.none { it.id == id } }
+
+    override fun refused(answer: Any?) = answer as? String
 }
 
 @Serializable

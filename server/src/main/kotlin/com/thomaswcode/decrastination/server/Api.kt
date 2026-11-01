@@ -5,6 +5,7 @@ import com.thomaswcode.decrastination.sync.DeviceClaim
 import com.thomaswcode.decrastination.sync.Protocol
 import com.thomaswcode.decrastination.sync.SeedBatch
 import com.thomaswcode.decrastination.sync.protocol.CommandBatch
+import com.thomaswcode.decrastination.views.TaskAsk
 import io.ktor.http.ContentType
 import io.ktor.http.Cookie
 import io.ktor.http.CookieEncoding
@@ -23,6 +24,7 @@ import io.ktor.server.plugins.ratelimit.RateLimit
 import io.ktor.server.plugins.ratelimit.RateLimitName
 import io.ktor.server.plugins.ratelimit.rateLimit
 import io.ktor.server.plugins.statuspages.StatusPages
+import io.ktor.server.request.contentLength
 import io.ktor.server.request.header
 import io.ktor.server.request.httpMethod
 import io.ktor.server.request.receive
@@ -79,12 +81,22 @@ private data class Me(val signedIn: Boolean)
 @Serializable
 private data class StoreOut(val name: String, val version: Int, val revision: Long, val json: JsonElement)
 
+/** The parent code's secret from the phone, or none: it's been taken away. */
+@Serializable
+private data class ParentCode(val secret: String? = null)
+
 /** Which credentials the server holds, by name: never a value. */
 @Serializable
 private data class Credentials(val held: Set<String>)
 
 @Serializable
 private data class StateOut(val revision: Long, val stores: List<StoreOut>, val mode: String)
+
+/** More than a page shrunk to what's sent ever comes to. */
+private const val MAX_PHOTO_BYTES = 4 * 1024 * 1024L
+
+/** Whether [bytes] starts as a JPEG does. */
+private fun isJpeg(bytes: ByteArray) = bytes.size > 3 && bytes[0] == 0xFF.toByte() && bytes[1] == 0xD8.toByte() && bytes[2] == 0xFF.toByte()
 
 private const val SESSION = "__Host-session"
 private const val OAUTH = "__Host-oauth"
@@ -198,6 +210,10 @@ fun Application.api(web: Web) {
                         call.setCookie(web, SESSION, web.sessions.start(), 3600)
                         call.respond(Me(true))
                     }
+                    post("/test/commands") {
+                        web.graph.commandsForATest()
+                        call.respond(HttpStatusCode.NoContent)
+                    }
                 }
             }
 
@@ -283,4 +299,30 @@ private fun Route.signedInRoutes(web: Web) {
         call.respond(graph.day(date))
     }
     get("/views/work") { call.respond(graph.work()) }
+    post("/photos/tasks") {
+        if (call.client !is Client.Website) return@post call.respond(HttpStatusCode.Forbidden, Problem("A photo's read from the website"))
+        if (graph.mode != ServerGraph.COMMANDS) return@post call.respond(HttpStatusCode.Conflict, Problem("The server is mirroring the phone"))
+        // By what it says it is first, so nothing that size is read: nothing in front of this limits a body.
+        val length = call.request.contentLength()
+        if (length == null || length > MAX_PHOTO_BYTES) return@post call.respond(HttpStatusCode.PayloadTooLarge, Problem("That photo's too big"))
+        val jpeg = call.receive<ByteArray>()
+        if (!isJpeg(jpeg)) return@post call.respond(HttpStatusCode.UnsupportedMediaType, Problem("That isn't a JPEG"))
+        graph.readPhoto(jpeg)?.let { call.respond(it) } ?: call.respond(HttpStatusCode.Conflict, Problem("A photo is being read already"))
+    }
+    get("/views/settings") { call.respond(graph.settings()) }
+    post("/parent-code") {
+        // The phone's, as it's the phone that makes it: never set from the website, or the code would prove nothing.
+        if (call.client !is Client.Phone) return@post call.respond(HttpStatusCode.Forbidden, Problem("The parent code is set on the phone"))
+        graph.setParentCode(call.receive<ParentCode>().secret)
+        call.respond(HttpStatusCode.NoContent)
+    }
+    get("/views/task/{id}") {
+        val view = graph.task(call.parameters["id"].orEmpty()) ?: return@get call.respond(HttpStatusCode.NotFound, Problem("That task isn't here"))
+        call.respond(view)
+    }
+    post("/tasks/{id}/ask") {
+        if (call.client !is Client.Website) return@post call.respond(HttpStatusCode.Forbidden, Problem("A task is asked of from the website"))
+        if (graph.mode != ServerGraph.COMMANDS) return@post call.respond(HttpStatusCode.Conflict, Problem("The server is mirroring the phone"))
+        call.respond(graph.ask(call.parameters["id"].orEmpty(), call.receive<TaskAsk>()))
+    }
 }

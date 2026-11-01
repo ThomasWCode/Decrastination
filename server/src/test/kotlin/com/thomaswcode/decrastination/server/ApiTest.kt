@@ -2,6 +2,7 @@ package com.thomaswcode.decrastination.server
 
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.data.JsonStore
+import com.thomaswcode.decrastination.data.Secret
 import com.thomaswcode.decrastination.data.SecretCipher
 import com.thomaswcode.decrastination.sync.DeviceToken
 import com.thomaswcode.decrastination.sync.PairingCode
@@ -11,6 +12,8 @@ import com.thomaswcode.decrastination.sync.SeedBatch
 import com.thomaswcode.decrastination.sync.ServerVersion
 import com.thomaswcode.decrastination.sync.StoreText
 import com.thomaswcode.decrastination.views.DayView
+import com.thomaswcode.decrastination.views.SettingsView
+import com.thomaswcode.decrastination.views.TaskView
 import com.thomaswcode.decrastination.views.WorkView
 import io.ktor.client.plugins.sse.SSE as ClientSSE
 import io.ktor.client.plugins.sse.sse
@@ -28,6 +31,7 @@ import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
+import io.ktor.http.encodeURLPathPart
 import io.ktor.http.setCookie
 import io.ktor.server.testing.ApplicationTestBuilder
 import io.ktor.server.testing.testApplication
@@ -357,6 +361,86 @@ class ApiTest {
             header(Protocol.ZONE_HEADER, "Asia/Tokyo")
         }
         assertEquals("America/New_York", graph.clock.zone().id)
+    }
+
+    @Test
+    fun `a photo's for the website, of a size, a JPEG, and not while mirroring`() = server {
+        val cookie = signIn()
+        val phone = paired()
+        suspend fun upload(bytes: ByteArray, signed: HttpRequestBuilder.() -> Unit) = plain().post("/api/photos/tasks") {
+            signed()
+            contentType(ContentType.Image.JPEG)
+            setBody(bytes)
+        }
+        val website: HttpRequestBuilder.() -> Unit = {
+            header(HttpHeaders.Cookie, cookie)
+            header("X-Requested-With", "test")
+        }
+        val jpeg = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 0)
+        assertEquals(HttpStatusCode.Conflict, upload(jpeg, website).status)
+        graph.commandsForATest()
+        assertEquals(
+            HttpStatusCode.Forbidden,
+            upload(jpeg) {
+                bearerAuth(phone.token)
+                header(Protocol.HEADER, Protocol.VERSION.toString())
+            }.status,
+        )
+        assertEquals(HttpStatusCode.UnsupportedMediaType, upload("not a photo".toByteArray(), website).status)
+        assertEquals(HttpStatusCode.PayloadTooLarge, upload(ByteArray(4 * 1024 * 1024 + 1), website).status)
+        assertEquals(HttpStatusCode.OK, upload(jpeg, website).status, "it's read, with no key saying so")
+    }
+
+    @Test
+    fun `the parent code's secret comes from the phone alone, and it's taken away the same way`() = server {
+        val phone = paired()
+        suspend fun fromPhone(body: String) = plain().post("/api/parent-code") {
+            bearerAuth(phone.token)
+            header(Protocol.HEADER, Protocol.VERSION.toString())
+            contentType(ContentType.Application.Json)
+            setBody(body)
+        }
+        val website = plain().post("/api/parent-code") {
+            header(HttpHeaders.Cookie, signIn())
+            header("X-Requested-With", "test")
+            contentType(ContentType.Application.Json)
+            setBody("""{"secret":"MADEUP"}""")
+        }
+        assertEquals(HttpStatusCode.Forbidden, website.status)
+        assertFalse(graph.stores.secrets.has(Secret.TotpSecret), "a code set from the website would prove nothing")
+        assertEquals(HttpStatusCode.NoContent, fromPhone("""{"secret":"MADEUP"}""").status)
+        assertTrue(graph.stores.secrets.has(Secret.TotpSecret))
+        assertEquals(HttpStatusCode.NoContent, fromPhone("""{"secret":null}""").status)
+        assertFalse(graph.stores.secrets.has(Secret.TotpSecret))
+    }
+
+    @Test
+    fun `a task's sheet and Settings are there to read in mirror mode, and what's asked of a task is turned away`() = server {
+        val phone = paired()
+        seed(phone.token, shape().map { it.copy(version = versionOf(it.text)) })
+        val cookie = signIn()
+        val id = graph.stores.tasks.value.tasks.first().id
+        val sheet = plain().get("/api/views/task/" + id.encodeURLPathPart()) { header(HttpHeaders.Cookie, cookie) }
+        assertEquals(HttpStatusCode.OK, sheet.status)
+        assertTrue(json.decodeFromString<TaskView>(sheet.bodyAsText()).actions.isEmpty())
+        assertEquals(HttpStatusCode.NotFound, plain().get("/api/views/task/nothing") { header(HttpHeaders.Cookie, cookie) }.status)
+        val settings = plain().get("/api/views/settings") { header(HttpHeaders.Cookie, cookie) }
+        assertEquals(HttpStatusCode.OK, settings.status)
+        assertFalse(json.decodeFromString<SettingsView>(settings.bodyAsText()).canChange)
+        val asked = plain().post("/api/tasks/" + id.encodeURLPathPart() + "/ask") {
+            header(HttpHeaders.Cookie, cookie)
+            header("X-Requested-With", "test")
+            contentType(ContentType.Application.Json)
+            setBody("""{"kind":"done"}""")
+        }
+        assertEquals(HttpStatusCode.Conflict, asked.status)
+        val fromPhone = plain().post("/api/tasks/" + id.encodeURLPathPart() + "/ask") {
+            bearerAuth(phone.token)
+            header(Protocol.HEADER, Protocol.VERSION.toString())
+            contentType(ContentType.Application.Json)
+            setBody("""{"kind":"done"}""")
+        }
+        assertEquals(HttpStatusCode.Forbidden, fromPhone.status, "a phone sends commands of its own")
     }
 
     @Test

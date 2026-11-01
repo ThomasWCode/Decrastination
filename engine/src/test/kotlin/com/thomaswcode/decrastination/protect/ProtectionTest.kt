@@ -129,8 +129,7 @@ class ProtectionTest {
         protection.changeSettings { it.copy(workMinPerFreeMin = 2) }
         val waiting = protection.pending.single()
         // Right: used up, and the change it was for applied now.
-        assertNull(protection.useParentCode(code()))
-        protection.applyNow(waiting.id)
+        assertNull(protection.applyWithCode(waiting.id, code()))
         assertEquals(2, settings.value.workMinPerFreeMin)
         assertEquals(emptyList(), protection.pending)
         // The same code again, and a wrong one.
@@ -142,6 +141,24 @@ class ProtectionTest {
         val until = clock.now() + 3_600_000L
         assertNull(protection.useParentCode(code(), unblockUntil = until))
         assertEquals(until, protectionState.value.overrideUntil)
+    }
+
+    @Test
+    fun `a code's unblock is an hour at most, whatever's asked`() = runBlocking {
+        protection.newParentCode(secret, Totp.step(clock.now()) - 10)
+        assertNull(protection.useParentCode(code(), unblockUntil = clock.now() + 30 * 24 * 3_600_000L))
+        assertEquals(clock.now() + Protection.UNBLOCK_MS, protectionState.value.overrideUntil)
+    }
+
+    @Test
+    fun `a change isn't applied by a wrong code`() = runBlocking {
+        settings.update { it.copy(armed = true) }
+        protection.newParentCode(secret, Totp.step(clock.now()) - 10)
+        protection.changeSettings { it.copy(workMinPerFreeMin = 1) }
+        val waiting = protection.pending.single()
+        val wrong = (0..999_999).asSequence().map { it.toString().padStart(Totp.DIGITS, '0') }.first { Totp.matchingStep(secret, it, clock.now()) == null }
+        assertEquals("Wrong code: 2 tries left", protection.applyWithCode(waiting.id, wrong))
+        assertEquals(listOf(waiting.id), protection.pending.map { it.id })
     }
 
     @Test

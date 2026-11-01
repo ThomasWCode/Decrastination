@@ -52,6 +52,20 @@ test("Work filters by source", async ({ page }) => {
   for (const line of await page.getByTestId("task-line").allTextContents()) expect(line).toContain("Teams");
 });
 
+test("mirroring the phone, a task's sheet is there to read, with nothing to press", async ({ page }) => {
+  await page.goto("/work");
+  await expect(page.getByTestId("work-column").first()).toBeVisible();
+  await expect(page.getByRole("button", { name: "New task" })).toBeHidden();
+  await page.getByTestId("task").first().getByRole("button").first().click();
+  const sheet = page.getByTestId("task-sheet");
+  await expect(sheet.getByRole("heading").first()).toBeVisible();
+  await expect(sheet.locator(".field").first()).toBeVisible();
+  await expect(sheet.getByRole("button", { name: "Done", exact: true })).toBeHidden();
+  await expect(sheet.getByRole("button", { name: /^Change/ })).toHaveCount(0);
+  await expect(sheet.getByRole("button", { name: "Move" })).toBeHidden();
+  await expect(sheet.getByLabel("A note on it")).toBeHidden();
+});
+
 test("the Phone page gives a code and lists what's paired", async ({ page }) => {
   await page.goto("/phone");
   await expect(page.getByText("Test phone")).toBeVisible();

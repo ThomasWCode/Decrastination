@@ -1,6 +1,7 @@
 package com.thomaswcode.decrastination.server
 
 import com.thomaswcode.decrastination.block.Focus
+import com.thomaswcode.decrastination.block.Photos
 import com.thomaswcode.decrastination.block.Slots
 import com.thomaswcode.decrastination.core.DayKind
 import com.thomaswcode.decrastination.core.Enrichments
@@ -41,6 +42,7 @@ import com.thomaswcode.decrastination.sync.Syncer
 import com.thomaswcode.decrastination.sync.protocol.Owners
 import com.thomaswcode.decrastination.tasks.Instructions
 import com.thomaswcode.decrastination.tasks.OwnTasks
+import java.io.File
 import java.io.IOException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -91,6 +93,8 @@ class ServerOwners(
     private val gateway: ModelGateway,
     private val planning: Planning,
     private val calendarTime: () -> EventJudge.Time,
+    /** Where a task's photo would be kept: read here, a photo of homework is kept nowhere. */
+    photosFolder: File,
 ) : Owners {
     override val tasks: JsonStore<TaskState> = stores.tasks
 
@@ -178,6 +182,9 @@ class ServerOwners(
         queueQuestion = { taskId, question, now -> looks.queueQuestion(taskId, question, now) },
         readDecks = {},
     )
+
+    /** A photo of homework read into tasks of your own: the browser's shrunk it already. */
+    val photos: Photos = Photos(stores.tasks, stores.settings, stores.chat, clock, scope, gateway, focus, photosFolder, shrink = { null }, profile = { conversation.profile() }, read = {})
 
     /** Today's slots as they pass. */
     val slots: Slots = Slots(stores.session, stores.settings, stores.tasks, stores.school, clock, planning, focus)

@@ -116,7 +116,7 @@ class Protection(
 
     /**
      * Checks a parent [code] from your dad's authenticator, using it up if it's right (with an
-     * hour's unblock until [unblockUntil], if that's what it's for). Returns what went wrong, or null.
+     * hour's unblock until [unblockUntil], if that's what it's for, [UNBLOCK_MS] at most whatever's asked). Returns what went wrong, or null.
      */
     suspend fun useParentCode(code: String, unblockUntil: Long? = null): String? {
         val secret = secrets[Secret.TotpSecret]?.let(Totp::fromBase32) ?: return "No parent code is set"
@@ -125,7 +125,7 @@ class Protection(
         protection.update { state ->
             val (result, lock) = state.codeLock.attempt(secret, code, now)
             outcome = result
-            if (result is CodeLock.Result.Accepted && unblockUntil != null) state.copy(codeLock = lock, overrideUntil = unblockUntil) else state.copy(codeLock = lock)
+            if (result is CodeLock.Result.Accepted && unblockUntil != null) state.copy(codeLock = lock, overrideUntil = minOf(unblockUntil, now + UNBLOCK_MS)) else state.copy(codeLock = lock)
         }
         return when (val result = outcome) {
             is CodeLock.Result.Accepted -> null
@@ -143,8 +143,15 @@ class Protection(
         }
     }
 
+    /** Applies the pending change [id] now, if [code] is right, used up first. Returns what went wrong, or null. */
+    suspend fun applyWithCode(id: String, code: String): String? {
+        useParentCode(code)?.let { return it }
+        applyNow(id)
+        return null
+    }
+
     /** Applies the pending change [id] now (a parent's code allowed it), if it's still waiting. */
-    suspend fun applyNow(id: String) = changing.withLock {
+    private suspend fun applyNow(id: String) = changing.withLock {
         val change = protection.value.pending.firstOrNull { it.id == id } ?: return@withLock
         // Saved before its pending entry goes, as in [applyDue].
         settings.update { SettingsChanges.apply(it, change) }
@@ -186,5 +193,10 @@ class Protection(
                 starting = false
             }
         }
+    }
+
+    companion object {
+        /** What a parent's code unblocks for, at most. */
+        const val UNBLOCK_MS = 60 * 60_000L
     }
 }

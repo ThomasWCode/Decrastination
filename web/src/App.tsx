@@ -2,6 +2,7 @@ import { useEffect, useState, type MouseEvent, type ReactNode } from "react";
 import { api } from "./api";
 import { DayPage } from "./Day";
 import { PhonePage } from "./Phone";
+import { SettingsPageView } from "./Settings";
 import { WorkPage } from "./Work";
 
 /** Where you are, kept in the address so a reload and the back button work. */
@@ -38,6 +39,7 @@ export function Link({ to, go, current, children }: { to: string; go: Go; curren
 const PAGES = [
   { path: "/", name: "Day" },
   { path: "/work", name: "Work" },
+  { path: "/settings", name: "Settings" },
   { path: "/phone", name: "Phone" },
 ];
 
@@ -79,7 +81,15 @@ export function App() {
           Sign out
         </button>
       </header>
-      {url.pathname === "/work" ? <WorkPage /> : url.pathname === "/phone" ? <PhonePage /> : <DayPage date={url.searchParams.get("date")} go={go} />}
+      {url.pathname === "/work" ? (
+        <WorkPage />
+      ) : url.pathname === "/settings" ? (
+        <SettingsPageView />
+      ) : url.pathname === "/phone" ? (
+        <PhonePage />
+      ) : (
+        <DayPage date={url.searchParams.get("date")} go={go} />
+      )}
     </div>
   );
 }

@@ -1,5 +1,6 @@
 package com.thomaswcode.decrastination.server
 
+import com.thomaswcode.decrastination.core.Ids
 import com.thomaswcode.decrastination.core.Notes
 import com.thomaswcode.decrastination.core.ReplayClock
 import com.thomaswcode.decrastination.core.SchoolDays
@@ -14,8 +15,10 @@ import com.thomaswcode.decrastination.data.Secret
 import com.thomaswcode.decrastination.data.SecretCipher
 import com.thomaswcode.decrastination.data.SecretStore
 import com.thomaswcode.decrastination.data.Stores
+import com.thomaswcode.decrastination.enrich.AiUsage
 import com.thomaswcode.decrastination.enrich.KeyProblem
 import com.thomaswcode.decrastination.enrich.ModelGateway
+import com.thomaswcode.decrastination.enrich.PhotoTasks
 import com.thomaswcode.decrastination.learn.Daily
 import com.thomaswcode.decrastination.learn.EventJudge
 import com.thomaswcode.decrastination.net.Http
@@ -27,9 +30,25 @@ import com.thomaswcode.decrastination.sync.Protocol
 import com.thomaswcode.decrastination.sync.SeedAnswer
 import com.thomaswcode.decrastination.sync.SeedBatch
 import com.thomaswcode.decrastination.sync.ServerVersion
+import com.thomaswcode.decrastination.sync.protocol.Action
+import com.thomaswcode.decrastination.sync.protocol.Command
+import com.thomaswcode.decrastination.sync.protocol.CommandBatch
 import com.thomaswcode.decrastination.sync.protocol.Commands
+import com.thomaswcode.decrastination.sync.protocol.Outcome
+import com.thomaswcode.decrastination.ui.Moves
+import com.thomaswcode.decrastination.ui.PieceSays
+import com.thomaswcode.decrastination.ui.TaskSheetModel
+import com.thomaswcode.decrastination.views.Asked
 import com.thomaswcode.decrastination.views.DayView
 import com.thomaswcode.decrastination.views.DayViews
+import com.thomaswcode.decrastination.views.OwnTaskEdit
+import com.thomaswcode.decrastination.views.PhotoRead
+import com.thomaswcode.decrastination.views.SettingsView
+import com.thomaswcode.decrastination.views.SettingsViews
+import com.thomaswcode.decrastination.views.TaskAsk
+import com.thomaswcode.decrastination.views.TaskAsks
+import com.thomaswcode.decrastination.views.TaskView
+import com.thomaswcode.decrastination.views.TaskViews
 import com.thomaswcode.decrastination.views.WorkView
 import com.thomaswcode.decrastination.views.WorkViews
 import java.io.File
@@ -39,6 +58,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -151,7 +171,7 @@ class ServerGraph(
     }
 
     /** The owners: what they do is what a command asks, a job, and what [start] has watch the stores. */
-    val owners: ServerOwners = ServerOwners(stores, clock, scope, gateway, planning, calendarTime = { calendarTime() })
+    val owners: ServerOwners = ServerOwners(stores, clock, scope, gateway, planning, calendarTime = { calendarTime() }, photosFolder = File(dataDir, "photos"))
 
     private val commands = Commands(owners, clock)
 
@@ -218,6 +238,12 @@ class ServerGraph(
         SeedAnswer(revision, refused, version, backend.hashes())
     }
 
+    /** What moves a piece, its rules the phone's: it decides, and [ask] applies. */
+    private val moves = Moves(stores.tasks, owners.instructions, commands, planning, clock, scope)
+
+    /** What's said of a piece as it's done. */
+    private val pieceSays = PieceSays(owners.focus, stores.log, stores.settings, stores.learning, planning, clock)
+
     /** Commands applied as they arrive, one at a time. */
     val applier = CommandApplier(db, backend, commands, owners, clock, reload = { reloadAll() }, committed = { _revisions.tryEmit(it) })
 
@@ -268,9 +294,13 @@ class ServerGraph(
 
     /** The mode set at once, for a test: what a restart does. */
     internal fun modeForATest(set: String) {
+        db.setMeta("mode", set)
         mode = set
         backend.writable = set != MIRROR
     }
+
+    /** Commands from now on, for the browser tests' server, which starts in mirror mode to be seeded. */
+    fun commandsForATest() = modeForATest(COMMANDS)
 
     /** What runs by itself: the jobs, and, once the server applies commands, what watches the stores and the plan made again. */
     fun start(scope: CoroutineScope) {
@@ -385,12 +415,80 @@ class ServerGraph(
         )
     }
 
-    fun work(): WorkView = WorkViews.of(stores.tasks.value, planning.plan(), stores.settings.value, clock.now(), clock.zone(), devices.lastSeen())
+    fun work(): WorkView = WorkViews.of(stores.tasks.value, planning.plan(), stores.settings.value, clock.now(), clock.zone(), devices.lastSeen(), writable = mode == COMMANDS, readsPhotos = readsPhotos)
+
+    /** Whether a photo can be read into tasks here: tasks can be saved, Claude's on, and its key's on the box. */
+    private val readsPhotos: Boolean get() = mode == COMMANDS && stores.settings.value.aiEnabled && claudeKey != null
+
+    /** Whether a photo is being read: one at a time, as on the phone, as each is a paid call. */
+    private val readingPhoto = AtomicBoolean()
+
+    /**
+     * [jpeg], a photo of homework, read into tasks to check (NF-01), each under an id of its own: never in a command, as a call can
+     * take a minute. Null while another's being read.
+     */
+    suspend fun readPhoto(jpeg: ByteArray): PhotoRead? = readPhoto(jpeg) { owners.photos.readPhotoTasks(it) }
+
+    internal suspend fun readPhoto(jpeg: ByteArray, read: suspend (ByteArray) -> Pair<PhotoTasks.Reading?, String?>): PhotoRead? {
+        if (!readingPhoto.compareAndSet(false, true)) return null
+        try {
+            val (reading, why) = read(jpeg)
+            return PhotoRead(reading?.tasks.orEmpty().map { OwnTaskEdit(Ids.next(), it) }, reading?.leftOut.orEmpty(), reading?.question, why)
+        } finally {
+            readingPhoto.set(false)
+        }
+    }
+
+    /** Settings as the website draws them. */
+    fun settings(): SettingsView {
+        val now = clock.now()
+        val zone = clock.zone()
+        val usage = stores.model.value.aiUsage.forMonth(AiUsage.monthOf(now, zone))
+        return SettingsViews.of(
+            owners.protection.asked, owners.protection.pending, stores.tasks.value, stores.school.value, stores.memory.value, usage,
+            credentials(), stores.secrets.has(Secret.TotpSecret), now, zone, writable = mode == COMMANDS,
+        )
+    }
+
+    /** The parent code's secret, as the phone sends it or takes it away (W-19): held here so a code typed on the website can be checked. */
+    suspend fun setParentCode(secret: String?) = stores.secrets.put(Secret.TotpSecret, secret?.takeIf { it.isNotBlank() })
+
+    /** Task [id]'s sheet, if there's such a task. */
+    fun task(id: String): TaskView? {
+        val state = stores.tasks.value
+        val task = state.tasks.firstOrNull { it.id == id } ?: return null
+        return TaskViews.of(task, state.tasks.associateBy { it.id }, planning.plan(), stores.settings.value, stores.instructions.value.applied, stores.felix.value.notes, clock.now(), clock.zone(), writable = mode == COMMANDS)
+    }
+
+    /** [ask] of task [id], made the commands the phone's sheet would make, and applied as the website's. */
+    suspend fun ask(id: String, ask: TaskAsk): Asked {
+        val task = stores.tasks.value.tasks.firstOrNull { it.id == id } ?: return Asked(false, GONE)
+        val plan = planning.plan()
+        val piece = TaskSheetModel.next(plan, id).takeIf { task.isOpen }
+        if (ask.kind == TaskAsk.DONE) {
+            // The one the page showed, or none: done elsewhere since, the next one's not what was meant.
+            val shown = piece?.takeIf { it.key == ask.key } ?: return Asked(false, "That piece has changed since (done, or planned again).")
+            var kept = false
+            val said = pieceSays.kept(shown, ask.at ?: plan.now) { action -> (website(action).state == Outcome.APPLIED).also { kept = it } }
+            return Asked(kept, said)
+        }
+        val decided = TaskAsks.decide(task, piece, ask, moves, clock.zone())
+        decided.why?.let { return Asked(false, it) }
+        for (action in decided.actions) {
+            val outcome = website(action)
+            if (outcome.state != Outcome.APPLIED) return Asked(false, outcome.why)
+        }
+        return Asked(true, decided.said.ifEmpty { null })
+    }
+
+    /** [action] as one of the website's commands, made here. */
+    private suspend fun website(action: Action): Outcome = applier.apply(CommandBatch(listOf(Command(Ids.next(), clock.now(), action))), Client.WEBSITE).single()
 
     companion object {
         /** The mode where commands apply: `meta.mode`, one way, from mirror mode. */
         const val COMMANDS = "commands"
         private const val SECRETS = "secrets.bin"
+        private const val GONE = "That task had gone"
         private const val MINUTE_MS = 60_000L
         private const val HOUR_MS = 60 * MINUTE_MS
         private const val SOURCES_EVERY_MS = 15 * MINUTE_MS

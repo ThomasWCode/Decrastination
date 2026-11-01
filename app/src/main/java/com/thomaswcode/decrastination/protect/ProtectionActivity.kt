@@ -496,12 +496,10 @@ private fun CodeDialog(graph: AppGraph, target: CodeTarget, onClose: () -> Unit)
 
 /** Checks [code] and, if it's right, does what it was for. Returns what went wrong, or null. */
 private suspend fun applyWithCode(graph: AppGraph, target: CodeTarget, code: String): String? {
-    // The code is used up first (with the unblock, if that's what it was for), then the change
-    // it allows is applied.
-    val unblock = if (target == CodeTarget.Unblock) graph.clock.now() + UNBLOCK_MS else null
-    graph.act(UseParentCode(code, unblock))?.let { return it }
-    if (target is CodeTarget.Change) graph.act(ApplyChangeNow(target.id))
-    return null
+    return when (target) {
+        is CodeTarget.Change -> graph.act(ApplyChangeNow(target.id, code))
+        CodeTarget.Unblock -> graph.act(UseParentCode(code, graph.clock.now() + Protection.UNBLOCK_MS))
+    }
 }
 
 /** A sideloaded app, never on Play, whose blocker One UI mustn't put to sleep. */
@@ -517,4 +515,3 @@ private fun qrBitmap(text: String, size: Int): Bitmap {
     return bitmap
 }
 
-private const val UNBLOCK_MS = 60 * 60_000L

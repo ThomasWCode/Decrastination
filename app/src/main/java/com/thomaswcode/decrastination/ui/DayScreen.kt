@@ -256,11 +256,9 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
             }
         } else {
             val chunk = plan.ordered.firstOrNull { it.key == slot.chunk?.key }
-            val task = tasks.tasks.firstOrNull { it.id == chunk?.taskId }
             when {
                 chunk == null -> Moves.Moved.Refused("That piece has changed since (done, or planned again).")
                 onto != null && onto == day -> null
-                onto != null && !Moves.dayAllowed(task, onto, graph.clock.now(), zone) -> Moves.Moved.Refused("Not that day: it's due before then, or can't be started till later")
                 onto != null -> graph.moves.toDay(chunk, onto, zone)
                 minute == null -> null
                 plan.chunksOf(chunk.taskId).firstOrNull()?.key != chunk.key -> Moves.Moved.Refused("Only its next piece takes a time: drag it onto a day above")

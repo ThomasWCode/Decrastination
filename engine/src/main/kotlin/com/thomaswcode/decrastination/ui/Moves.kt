@@ -14,6 +14,7 @@ import com.thomaswcode.decrastination.core.WallClock
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.plan.Planning
+import com.thomaswcode.decrastination.sync.protocol.Action
 import com.thomaswcode.decrastination.sync.protocol.AddOwnChange
 import com.thomaswcode.decrastination.sync.protocol.Commands
 import com.thomaswcode.decrastination.sync.protocol.TakeBackQuick
@@ -46,8 +47,23 @@ class Moves(
         data class Refused(val why: String) : Moved
     }
 
+    /** A move decided on: what's said of it, and what makes it, in order; or [why] it can't be. */
+    data class Decided(val said: String = "", val actions: List<Action> = emptyList(), val why: String? = null)
+
+    /** [chunk], its task's next piece, at [minute] of [day], made here. */
+    fun toTime(chunk: Chunk, day: LocalDate, minute: Int, zone: ZoneId): Moved = sent(timeMove(chunk, day, minute, zone))
+
+    /** All of [chunk]'s task on [day], made here. */
+    fun toDay(chunk: Chunk, day: LocalDate, zone: ZoneId): Moved = sent(dayMove(chunk, day, zone))
+
+    private fun sent(decided: Decided): Moved {
+        decided.why?.let { return Moved.Refused(it) }
+        scope.launch { decided.actions.forEach { commands.send(it) } }
+        return Moved.Done(decided.said)
+    }
+
     /** [chunk], its task's next piece, at [minute] of [day]: an `AtTime` change of yours, unless the plan wouldn't keep it. */
-    fun toTime(chunk: Chunk, day: LocalDate, minute: Int, zone: ZoneId): Moved {
+    fun timeMove(chunk: Chunk, day: LocalDate, minute: Int, zone: ZoneId): Decided {
         val task = tasks.value.tasks.firstOrNull { it.id == chunk.taskId }
         val time = timeOf(day, minute, zone)
         val now = clock.now()
@@ -58,30 +74,26 @@ class Moves(
             Planner.PinProblem.NotYet -> "It can't be started till ${Format.at(task.notBefore!!, now, zone)}: pick a later time."
             Planner.PinProblem.PastDeadline -> "It's due ${Format.at(task.realDeadline!!, now, zone)}: pick a time before then."
         }
-        if (problem != null) return Moved.Refused(problem)
+        if (problem != null) return Decided(why = problem)
         val said = "At ${day.format(CHIP_DAY)} ${"%02d:%02d".format(Locale.UK, minute / 60, minute % 60)}"
-        val joining = joins(chunk, day)
-        scope.launch { commands.act(AddOwnChange(Ids.next(), said, About(taskId = chunk.taskId, taskTitle = chunk.title), Change(ChangeType.AtTime, taskId = chunk.taskId, date = day.toString(), startMin = minute, time = time))) }
-        return Moved.Done(said + joining)
+        return Decided(said + joins(chunk, day), listOf(AddOwnChange(Ids.next(), said, About(taskId = chunk.taskId, taskTitle = chunk.title), Change(ChangeType.AtTime, taskId = chunk.taskId, date = day.toString(), startMin = minute, time = time))))
     }
 
     /**
      * All of [chunk]'s task on [day], any time that day: an `OnDay` change of yours, a time you gave it here before taken back,
-     * as the plan would keep it on its day; refused where a time from the chat holds it that day.
+     * as the plan would keep it on its day; refused on a day it can't go to ([dayAllowed]), or where a time from the chat holds it that day.
      */
-    fun toDay(chunk: Chunk, day: LocalDate, zone: ZoneId): Moved {
+    fun dayMove(chunk: Chunk, day: LocalDate, zone: ZoneId): Decided {
         val task = tasks.value.tasks.firstOrNull { it.id == chunk.taskId }
+        if (!dayAllowed(task, day, clock.now(), zone)) return Decided(why = "Not that day: it's due before then, or can't be started till later")
         val applied = instructions.value.applied
         val quick = InstructionRules.quickInForce(applied, chunk.taskId, ChangeType.AtTime)
         val pinned = task?.mine?.atTime?.value?.takeIf { Planner.date(it, zone) == day }
         // A time from the chat holds it that day, over a day given after it: it's taken back where it was made.
-        if (pinned != null && !quick) return Moved.Refused("A time you gave in the chat holds it at ${Format.at(pinned, clock.now(), zone)}: take that back in the chat's Your changes first.")
+        if (pinned != null && !quick) return Decided(why = "A time you gave in the chat holds it at ${Format.at(pinned, clock.now(), zone)}: take that back in the chat's Your changes first.")
         // Any time: a time you gave it here before goes, as the plan would keep it on its day.
-        scope.launch {
-            if (quick) commands.act(TakeBackQuick(chunk.taskId, ChangeType.AtTime))
-            commands.act(AddOwnChange(Ids.next(), "All of it on ${day.format(CHIP_DAY)}", About(taskId = chunk.taskId, taskTitle = chunk.title), Change(ChangeType.OnDay, taskId = chunk.taskId, date = day.toString())))
-        }
-        return Moved.Done("All of it on ${day.format(CHIP_DAY)}" + joins(chunk, day))
+        val onDay = AddOwnChange(Ids.next(), "All of it on ${day.format(CHIP_DAY)}", About(taskId = chunk.taskId, taskTitle = chunk.title), Change(ChangeType.OnDay, taskId = chunk.taskId, date = day.toString()))
+        return Decided("All of it on ${day.format(CHIP_DAY)}" + joins(chunk, day), listOfNotNull(TakeBackQuick(chunk.taskId, ChangeType.AtTime).takeIf { quick }, onDay))
     }
 
     /**

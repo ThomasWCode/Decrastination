@@ -187,6 +187,9 @@ object SettingsChanges {
      */
     fun edited(base: Settings, draft: Settings, latest: Settings): Settings = laidOver(latest, changed(base, draft))
 
+    /** Each setting as its value, as a client's sent them and sends them back. */
+    fun values(settings: Settings): Map<String, JsonElement> = encode(settings)
+
     /** What [draft] changed from [base], field by field: what a command carries. */
     fun changed(base: Settings, draft: Settings): Map<String, JsonElement> {
         val before = encode(base)

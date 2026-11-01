@@ -1,8 +1,14 @@
 package com.thomaswcode.decrastination.views
 
+import com.thomaswcode.decrastination.core.About
+import com.thomaswcode.decrastination.core.Change
+import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.Duplicates
 import com.thomaswcode.decrastination.core.Enrichments
+import com.thomaswcode.decrastination.core.Ids
 import com.thomaswcode.decrastination.core.InstructionRules
+import com.thomaswcode.decrastination.core.Kind
+import com.thomaswcode.decrastination.core.OwnTaskRules
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.Source
@@ -10,7 +16,11 @@ import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.Unplanned
 import com.thomaswcode.decrastination.core.longFinished
 import com.thomaswcode.decrastination.data.TaskState
+import com.thomaswcode.decrastination.enrich.PhotoChecker
 import com.thomaswcode.decrastination.sources.gmail.GmailThreads
+import com.thomaswcode.decrastination.sync.protocol.Action
+import com.thomaswcode.decrastination.sync.protocol.AddOwnChange
+import com.thomaswcode.decrastination.sync.protocol.NotSame
 import com.thomaswcode.decrastination.ui.Format
 import com.thomaswcode.decrastination.ui.Groups
 import java.time.ZoneId
@@ -31,7 +41,24 @@ data class WorkView(
     val read: List<SourceLine>,
     /** When the phone last told the server anything. */
     val asOf: Long? = null,
+    /** Whether anything can be changed here: the server applies commands. */
+    val canChange: Boolean = false,
+    /** What the form for a task of your own takes, while one can be made here. */
+    val form: OwnTaskFormView? = null,
+    /** The longest side a photo of homework is sent at, while one can be read here. */
+    val photoSide: Int? = null,
 )
+
+/** A photo read into tasks to check, each as the form opens it; what couldn't be kept; Claude's question; or why there's nothing. */
+@Serializable
+data class PhotoRead(val tasks: List<OwnTaskEdit>, val leftOut: List<String> = emptyList(), val question: String? = null, val why: String? = null)
+
+/** The form for a task of your own: its kinds and limits, so the page holds none of them (D-137). */
+@Serializable
+data class OwnTaskFormView(val kinds: List<KindChoice>, val maxTitle: Int, val maxClass: Int, val maxNotes: Int, val maxSteps: Int, val defaultMinutes: Int)
+
+@Serializable
+data class KindChoice(val name: String, val label: String, val event: Boolean)
 
 @Serializable
 data class TaskGroup(val title: String, val tasks: List<TaskTile>)
@@ -49,6 +76,9 @@ data class TaskTile(
     val tags: List<String> = emptyList(),
     /** Another task it looks like the same work as, "“x” from Teams". */
     val sameAs: String? = null,
+    /** What saying it's the same, and that it isn't, send. */
+    val same: Action? = null,
+    val different: Action? = null,
 )
 
 @Serializable
@@ -61,12 +91,17 @@ data class SourceLine(val source: String, val read: String, val open: Int, val e
 object WorkViews {
     private val DAY = DateTimeFormatter.ofPattern("EEE d MMM", Locale.UK)
 
-    /** The page at [now], of [state] by [plan], your classes in [settings]. */
-    fun of(state: TaskState, plan: Plan, settings: Settings, now: Long, zone: ZoneId, asOf: Long?): WorkView {
+    private val FORM = OwnTaskFormView(
+        OwnTaskRules.KINDS.map { KindChoice(it.name, it.label, it == Kind.Event) },
+        OwnTaskRules.MAX_TITLE, OwnTaskRules.MAX_CLASS, OwnTaskRules.MAX_NOTES, OwnTaskRules.MAX_STEPS, Kind.Homework.defaultEffortMin,
+    )
+
+    /** The page at [now], of [state] by [plan], your classes in [settings]. [writable]: the server applies commands, so it can be changed here. */
+    fun of(state: TaskState, plan: Plan, settings: Settings, now: Long, zone: ZoneId, asOf: Long?, writable: Boolean = false, readsPhotos: Boolean = false): WorkView {
         val byId = state.tasks.associateBy { it.id }
         val pairs = Duplicates.candidates(state.tasks, settings.classMap, state.notSame)
         val alike = pairs.flatMap { (a, b) -> listOf(a.id to b, b.id to a) }.groupBy({ it.first }, { it.second })
-        fun tile(task: TaskItem) = tile(task, now, zone, byId, alike[task.id]?.firstOrNull())
+        fun tile(task: TaskItem) = tile(task, now, zone, byId, alike[task.id]?.firstOrNull(), writable)
         val open = state.tasks.filter { it.isOpen && !it.hidden }
         val hidden = state.tasks.filter { it.isOpen && (it.mine.notATask != null || it.mine.sameAs?.value != null) }.sortedBy { it.title.lowercase(Locale.UK) }
         val finished = state.tasks.filter { !it.isOpen && !it.hidden && !it.longFinished(now) }.sortedByDescending { it.doneAt ?: it.lastSeenAt }
@@ -83,10 +118,13 @@ object WorkViews {
                 SourceLine(source.label, read + status.dataAsOf?.let { " · its data from ${Format.ago(it, now)}" }.orEmpty(), state.tasks.count { it.source == source && it.isOpen && !it.hidden }, status.error, status.note)
             },
             asOf = asOf,
+            canChange = writable,
+            form = if (writable) FORM else null,
+            photoSide = PhotoChecker.MAX_SIDE.takeIf { readsPhotos },
         )
     }
 
-    private fun tile(task: TaskItem, now: Long, zone: ZoneId, byId: Map<String, TaskItem>, alike: TaskItem?): TaskTile {
+    internal fun tile(task: TaskItem, now: Long, zone: ZoneId, byId: Map<String, TaskItem>, alike: TaskItem?, writable: Boolean = false): TaskTile {
         val due = task.deadlineAt(now) ?: task.dueAt
         val hard = task.hardAt(now)
         val hiddenUntil = task.availableFrom?.takeIf { it > now }
@@ -114,6 +152,8 @@ object WorkViews {
             line = listOfNotNull(task.source.label, task.kind.label, task.className, task.extra[GmailThreads.EXTRA_FROM]).joinToString(" · "),
             tags = tags,
             sameAs = alike?.let { "“${it.title}” from ${it.source.label}" },
+            same = alike?.takeIf { writable }?.let { AddOwnChange(Ids.next(), "Same as “${it.title}”", About(taskId = task.id, taskTitle = task.title), Change(ChangeType.SameAs, taskId = task.id, afterTaskId = it.id)) },
+            different = alike?.takeIf { writable }?.let { NotSame(task.id, it.id) },
         )
     }
 

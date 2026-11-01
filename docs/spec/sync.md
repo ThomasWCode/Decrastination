@@ -71,8 +71,24 @@ The server applies commands in the order they arrive, and the owners are the con
 |---|---|---|
 | `FinishOwnTask`, `ReopenOwnTask`, `DeleteOwnTask`, `TickBlock`, `StartTimer`, `AddNote` | its task has gone | That task had gone |
 | `AddOwnChange` | the task it's about has gone | That task had gone |
+| `SaveOwnTask` | the form wouldn't take it (`OwnTaskRules.problem`) | what's wrong with it |
+| `ChangeSettings` | a value the screen wouldn't take (`SettingsLimits`), or the settings' `version` | what's wrong with it |
+| `ApplyChangeNow` | the change isn't waiting now, before the code's used up | That change isn't waiting now |
 | any other | never: its owner takes a stale call as it does today, doing nothing, or laying the day again | |
 | one its owner fails on | always | It couldn't be applied |
+
+A command that ran and came to nothing is `refused`, by what its owner answered (`Action.refused`), not dropped: what it did stands, so a wrong parent code still counts towards the lock, and it isn't a change lost, so Setup doesn't list it, your screen having said what came of it. The pull after one is of everything all the same, as it may have gone otherwise on the phone:
+
+| Command | Said |
+|---|---|
+| `UseParentCode`, `ApplyChangeNow`, `AddNote`, `UndoAct`, `UndoMemory` | what its owner said |
+| `KeepSlot` | That piece isn't there now |
+| `UndoKeep` | That can't be taken back now |
+| `TickBlock` | That step has changed |
+| `LaterToday` | No time left today for it |
+| `ApplyInstruction` | It couldn't be applied |
+
+A command's moment is the server's where a client's clock would decide something (`CommandApplier.stamped`): the website's is always the moment it lands, as it has no queue to send late and a browser can say anything, and a phone's may be earlier but never later, so neither can run the clock past a code's lock or a wait.
 
 ## Testing
 

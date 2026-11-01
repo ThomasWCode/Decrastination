@@ -81,6 +81,7 @@ import com.thomaswcode.decrastination.sync.protocol.Owners
 import com.thomaswcode.decrastination.tasks.Instructions
 import com.thomaswcode.decrastination.tasks.OwnTasks
 import com.thomaswcode.decrastination.ui.Moves
+import com.thomaswcode.decrastination.ui.PieceSays
 import com.thomaswcode.decrastination.widget.WidgetUpdater
 import java.io.File
 import kotlinx.coroutines.CoroutineExceptionHandler
@@ -365,6 +366,9 @@ class AppGraph private constructor(context: Context) : Owners {
 
     /** A piece moved by hand ([Moves]). */
     val moves: Moves = Moves(tasks, instructions, commands, planning, clock, scope)
+
+    /** What's said of a piece as it's done. */
+    val pieceSays: PieceSays = PieceSays(focus, log, settings, stores.learning, planning, clock)
 
     /** Your own tasks ([OwnTasks]): kept, finished, opened again, deleted, and trimmed to their record once long done. */
     override val ownTasks: OwnTasks = OwnTasks(tasks, stores.instructions, chat, clock, scope) { settleCompletions() }

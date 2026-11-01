@@ -157,43 +157,11 @@ fun rememberPhotoCheck(graph: AppGraph, activity: Activity, plan: Plan, say: (ta
     }
 }
 
-/**
- * [piece] done (LR-09), seen at [now]: its slot kept, earning its free time if it's short (a longer
- * one's photo earns it, or its source saying it's done, BL-08). What to say of it.
- */
-internal suspend fun keepPiece(graph: AppGraph, piece: Chunk, now: Long): String {
-    val by = graph.focus.earnsBy(piece)
-    val since = graph.clock.now()
-    val kept = graph.act(KeepSlot(piece.key, now))
-    // What the keep put in the day's ledger, from its record (U-07): a piece of another day's earns nothing today, and
-    // today's earns no more than the day's share (BL-08), so what's said is what it earned, not what a piece this long could.
-    val record = graph.log.value.slots.lastOrNull { it.key == piece.key && it.outcome.kept && it.at >= since }
-    val todays = record?.date == graph.focus.today(graph.clock.now()).toString()
-    val earned = record?.earnedMin ?: 0.0
-    val free = Format.minutes(Credit.forSlot(piece.minutes, graph.settings.value.workMinPerFreeMin).roundToInt().coerceAtLeast(1))
-    val none = "Done. It earns no free time: it isn't on today's plan, or today's free time is all earned."
-    val said = when {
-        !kept -> return "That piece has changed since (done, or planned again)."
-        by == EarnsBy.Tick -> if (earned > 0) "Done: ${Format.minutes(earned.roundToInt().coerceAtLeast(1))} free." else none
-        by == EarnsBy.Photo -> if (todays) "Done. A photo check of it earns up to $free free." else none
-        by == EarnsBy.Source -> if (todays) "Done. Up to $free free comes once ${piece.source.label} says it's done." else none
-        else -> "Done. It earns no free time: a piece this long earns with a photo check, and this isn't written work."
-    }
-    return listOfNotNull(said, stillPlanned(graph, piece.taskId)).joinToString(" ")
-}
+/** [piece] done (LR-09), seen at [now]. What to say of it. */
+internal suspend fun keepPiece(graph: AppGraph, piece: Chunk, now: Long): String = graph.pieceSays.kept(piece, now) { graph.act(it) }
 
-/**
- * What's said once a Done leaves all of [taskId]'s work done but its source's word: its last few
- * minutes stay planned till the source says it's done (planner.md), so the piece shown again isn't
- * taken for a Done that didn't take. Null for any other.
- */
-internal fun stillPlanned(graph: AppGraph, taskId: String): String? {
-    // As the plan takes it: your instructions' values over it, and linked work credited to it.
-    val task = graph.planning.asPlanned().firstOrNull { it.id == taskId && it.isOpen } ?: return null
-    if (!worked(task, graph.stores.learning.value.calibration.multiplierFor(task))) return null
-    val next = graph.planning.plan().ordered.firstOrNull { it.taskId == taskId } ?: return null
-    return "It stays planned, ${Format.minutes(next.minutes)}, until ${task.source.label} says it's done."
-}
+/** What's said once a Done leaves all of [taskId]'s work done but its source's word ([PieceSays.stillPlanned]). */
+internal fun stillPlanned(graph: AppGraph, taskId: String): String? = graph.pieceSays.stillPlanned(taskId)
 
 /** A running [timer]'s time at [now], as its piece shows it: "Timer: 12 min left", "Timer: time's up", "Timer: 5 min over". */
 internal fun timerText(timer: PieceTimer, now: Long): String = when {
