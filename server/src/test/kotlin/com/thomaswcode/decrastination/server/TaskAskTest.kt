@@ -115,6 +115,17 @@ class TaskAskTest {
     }
 
     @Test
+    fun `Done is of the piece the page showed, and if that's changed, of none`() = runBlocking<Unit> {
+        withTasks()
+        val shown = assertNotNull(assertNotNull(graph.task(own)).actions.first { it.label == "Done" }.ask)
+        val stale = graph.ask(own, shown.copy(key = "a piece done elsewhere since"))
+        assertFalse(stale.done)
+        assertEquals("That piece has changed since (done, or planned again).", stale.said)
+        assertTrue(graph.stores.log.value.slots.isEmpty(), "and the next isn't kept in its place")
+        assertFalse(graph.ask(own, TaskAsk(TaskAsk.DONE)).done, "nor one that doesn't say which")
+    }
+
+    @Test
     fun `a task with nothing planned has nothing to move or do`() = runBlocking<Unit> {
         withTasks()
         graph.stores.tasks.update { state -> state.copy(tasks = state.tasks.map { it.copy(status = com.thomaswcode.decrastination.core.Status.Done) }) }
@@ -127,7 +138,8 @@ class TaskAskTest {
         withTasks()
         val before = graph.task(own)
         val undo = assertNotNull(assertNotNull(before).actions.first { it.label == "Done" }.undo)
-        val answer = graph.ask(own, TaskAsk(TaskAsk.DONE))
+        val done = assertNotNull(before.actions.first { it.label == "Done" }.ask)
+        val answer = graph.ask(own, done)
         assertTrue(answer.done, answer.said)
         assertTrue(assertNotNull(answer.said).startsWith("Done"))
         assertEquals(1, graph.stores.log.value.slots.size)

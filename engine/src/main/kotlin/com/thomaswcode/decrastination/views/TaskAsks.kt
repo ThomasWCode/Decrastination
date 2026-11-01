@@ -21,11 +21,12 @@ import kotlinx.serialization.Serializable
 
 /**
  * What a page asks of a task that takes the phone's rules to turn into commands: a value for one of its fields ([at] a moment,
- * [minutes], [date] a day), a move ([date], with [minute] for a time), or its next piece done. The page says what you gave, and
- * what's made of it, in what words, is made once, here (D-137).
+ * [minutes], [date] a day), a move ([date], with [minute] for a time), or its next piece done ([key] the piece the page showed, and
+ * [at] when: it's that one that's done, or none). The page says what you gave, and what's made of it, in what words, is made
+ * once, here (D-137).
  */
 @Serializable
-data class TaskAsk(val kind: String, val at: Long? = null, val minutes: Int? = null, val date: String? = null, val minute: Int? = null) {
+data class TaskAsk(val kind: String, val at: Long? = null, val minutes: Int? = null, val date: String? = null, val minute: Int? = null, val key: String? = null) {
     companion object {
         const val DONE = "done"
         const val DUE = "due"

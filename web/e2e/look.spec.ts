@@ -15,6 +15,13 @@ for (const scheme of ["light", "dark"] as const) {
     await page.goto("/work");
     await page.getByTestId("work-column").first().waitFor();
     await page.screenshot({ path: `${folder}/work-${scheme}.png` });
+    await page.getByTestId("task").first().getByRole("button").first().click();
+    await page.getByTestId("task-sheet").getByRole("heading").first().waitFor();
+    await page.screenshot({ path: `${folder}/sheet-${scheme}.png` });
+    await page.goto("/settings");
+    await page.getByRole("navigation", { name: "Settings" }).getByRole("button", { name: /^Hours/ }).click();
+    await page.getByRole("heading", { name: "Hours and windows" }).waitFor();
+    await page.screenshot({ path: `${folder}/settings-${scheme}.png` });
     await page.goto("/phone");
     await page.getByRole("button", { name: "Show a code" }).click();
     await page.getByTestId("pairing-code").waitFor();

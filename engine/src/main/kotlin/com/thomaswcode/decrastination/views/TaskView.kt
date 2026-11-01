@@ -130,7 +130,7 @@ object TaskViews {
         val actions = buildList {
             if (!writable) return@buildList
             next?.let { piece ->
-                add(TaskAction("Done", ask = TaskAsk(TaskAsk.DONE), undo = UndoKeep(piece.key, now)))
+                add(TaskAction("Done", ask = TaskAsk(TaskAsk.DONE, at = now, key = piece.key), undo = UndoKeep(piece.key, now)))
                 add(TaskAction("Later today", LaterToday(piece.key)))
                 val tomorrow = plan.today.plusDays(1)
                 if (TaskSheetModel.canGo(task, tomorrow, now, zone)) {

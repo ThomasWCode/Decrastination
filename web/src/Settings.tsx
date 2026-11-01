@@ -421,7 +421,7 @@ export function SettingsPageView() {
     <main className="settings-page">
       <header>
         <h1>Settings</h1>
-        {view.canChange ? null : <p className="fresh">Read only for now: the phone holds these till the switch.</p>}
+        {view.canChange ? null : <p className="fresh">Read only for now: change these on the phone.</p>}
         {view.armed ? <p className="fresh">Protection is armed: a change to one marked † that loosens blocking waits {view.delayHours} hours.</p> : null}
       </header>
       {view.pending.length > 0 ? (

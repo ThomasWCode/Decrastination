@@ -21,7 +21,8 @@ export function local(at: number | null | undefined): string {
 interface Row {
   title: string;
   minutes: string;
-  home: boolean;
+  /** Its own place, as the phone keeps it: home, anywhere, or none of its own, so it goes with its task's. */
+  where: string | null;
   anyOrder: boolean;
   /** Which step it was, kept with it so a renamed one keeps its tick. */
   wasIndex: number | null;
@@ -32,7 +33,7 @@ function rowsOf(start: OwnTaskEdit | undefined, editing: boolean): Row[] {
   return (start?.task.steps ?? []).map((step, index) => ({
     title: step.title,
     minutes: String(step.minutes),
-    home: step.where === "home",
+    where: step.where ?? null,
     anyOrder: step.anyOrder ?? false,
     wasIndex: editing ? index : null,
     was: step,
@@ -76,7 +77,7 @@ export function NewTask({ form, edit, from: read, close }: { form: OwnTaskFormVi
         ...row.was,
         title: row.title.trim(),
         minutes: Number(row.minutes),
-        where: row.home ? "home" : null,
+        where: row.where,
         anyOrder: row.anyOrder && index > 0,
       })),
       where: start?.where ?? "anywhere",
@@ -142,7 +143,7 @@ export function NewTask({ form, edit, from: read, close }: { form: OwnTaskFormVi
                   <input value={row.minutes} onChange={(event) => change(index, { minutes: event.target.value })} type="number" min="1" />
                 </label>
                 <label className="mark">
-                  <input type="checkbox" checked={row.home} onChange={(event) => change(index, { home: event.target.checked })} />
+                  <input type="checkbox" checked={row.where === "home"} onChange={(event) => change(index, { where: event.target.checked ? "home" : "anywhere" })} />
                   Home only
                 </label>
                 {index > 0 ? (
@@ -158,7 +159,7 @@ export function NewTask({ form, edit, from: read, close }: { form: OwnTaskFormVi
             ))}
             {rows.length < form.maxSteps ? (
               <div>
-                <button type="button" className="quiet" onClick={() => setRows([...rows, { title: "", minutes: "30", home: false, anyOrder: false, wasIndex: null, was: null }])}>
+                <button type="button" className="quiet" onClick={() => setRows([...rows, { title: "", minutes: "30", where: null, anyOrder: false, wasIndex: null, was: null }])}>
                   Add a step
                 </button>
               </div>

@@ -81,6 +81,30 @@ test("steps made in the form are ticked off", async ({ page }) => {
   await expect(sheet.getByRole("listitem").filter({ hasText: "Plot the graph" }).first()).toHaveClass("done");
 });
 
+test("a step's place stays as it was given, through an edit of something else", async ({ page, request }) => {
+  await page.goto("/work");
+  await page.getByRole("button", { name: "New task" }).click();
+  const form = page.getByRole("form", { name: "New task" });
+  await form.getByLabel("What").fill("Placed steps");
+  await form.getByRole("button", { name: "Add a step" }).click();
+  const step = form.getByRole("group", { name: "Step 1" });
+  await step.getByLabel("Step").fill("Anywhere at all");
+  await step.getByLabel("Home only").check();
+  await step.getByLabel("Home only").uncheck();
+  await form.getByRole("button", { name: "Add", exact: true }).click();
+  await expect(form).toBeHidden();
+  const sheet = await sheetOf(page, "Placed steps");
+  await sheet.getByRole("button", { name: "Edit" }).click();
+  const editing = sheet.getByRole("form", { name: "Edit task" });
+  await editing.getByLabel("What").fill("Placed steps again");
+  await editing.getByRole("button", { name: "Save" }).click();
+  await expect(sheet.getByRole("heading", { name: "Placed steps again" })).toBeVisible();
+  const work = await (await request.get("/api/views/work")).json();
+  const tile = work.byDue.flatMap((group: { tasks: { id: string; title: string }[] }) => group.tasks).find((task: { title: string }) => task.title === "Placed steps again");
+  const task = await (await request.get(`/api/views/task/${encodeURIComponent(tile.id)}`)).json();
+  expect(task.edit.task.steps[0].where).toBe("anywhere");
+});
+
 test("a task of your own is edited, keeping what wasn't changed", async ({ page }) => {
   await newTask(page, "Essay plan");
   const sheet = await sheetOf(page, "Essay plan");
