@@ -53,6 +53,7 @@ import io.ktor.server.sse.heartbeat
 import io.ktor.server.sse.sse
 import io.ktor.sse.ServerSentEvent
 import io.ktor.util.AttributeKey
+import io.ktor.util.cio.ChannelWriteException
 import java.time.LocalDate
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
@@ -173,6 +174,8 @@ fun Application.api(web: Web) {
     install(XForwardedHeaders)
     install(SSE)
     install(StatusPages) {
+        // A client gone mid-answer failed nothing: it's how an event stream ends, each page left closing one, heard at the next write.
+        exception<ChannelWriteException> { _, _ -> }
         exception<Throwable> { call, cause ->
             // Never what a store held, nor a header: the kind of failure and where, not its message.
             Log.w(Log.TAG, "A request failed: ${cause::class.simpleName} at ${cause.stackTrace.firstOrNull { it.className.startsWith("com.thomaswcode") } ?: cause.stackTrace.firstOrNull()}")
