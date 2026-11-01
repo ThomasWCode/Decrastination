@@ -397,9 +397,10 @@ class ServerGraph(
         stores.secrets.put(changed + if (login) Secret.POWER_PLANNER_SESSION.associateWith { null } else emptyMap())
     }
 
-    /** Every store read again from what's committed. */
+    /** Every store read again from what's committed: those that aren't mirrored too, as a failed change may have touched them. */
     private suspend fun reloadAll() {
-        byName.values.forEach { it.reload() }
+        stores.stored.forEach { it.reload() }
+        calendarRead.reload()
         stores.chatArchive.forget()
     }
 
@@ -557,8 +558,11 @@ class ServerGraph(
         BackupViews.of(leftOut, tooBig, refused, stores.runtime.value.lastBackupAt, backups.resetCopies(), stores.instructions.value.applied, clock.now(), mode == COMMANDS)
     }
 
-    /** A backup to download, no command half done in it. None if it's more than Import reads, as it couldn't be restored. */
-    suspend fun backup(): String? = db.betweenCommands { withContext(Dispatchers.IO) { owners.backups.exportBackup() } }.takeUnless(owners.backups::tooBig)
+    /**
+     * A backup to download, no command half done in it, nor a seed: the stores are read one by one, as a seed reads them again one
+     * by one. None if it's more than Import reads, as it couldn't be restored.
+     */
+    suspend fun backup(): String? = writing.withLock { db.betweenCommands { withContext(Dispatchers.IO) { owners.backups.exportBackup() } } }.takeUnless(owners.backups::tooBig)
 
     /** What a backup's called today. */
     fun backupName(): String = BackupNames.nightlyName(Instant.ofEpochMilli(clock.now()).atZone(clock.zone()).toLocalDate().toString())
@@ -574,14 +578,17 @@ class ServerGraph(
         val now = clock.now()
         val zone = clock.zone()
         val usage = stores.model.value.aiUsage.forMonth(AiUsage.monthOf(now, zone))
-        return SetupViews.of(stores.tasks.value, stores.problems, stores::holds, stores.settings.value, usage, credentials(), claudeKey != null, now, zone, mode == COMMANDS)
+        return SetupViews.of(stores.tasks.value, unreadable(), stores::holds, stores.settings.value, usage, credentials(), claudeKey != null, now, zone, mode == COMMANDS)
     }
+
+    /** What couldn't be read at this start: the calendar's copy is a store of the server's own, beside the rest. */
+    private fun unreadable(): List<JsonStore.Unreadable> = stores.problems + listOfNotNull(calendarRead.problem)
 
     /** What's said wherever you are on the website. */
     fun notices(): NoticesView {
         val settings = stores.settings.value
         val keyProblem = stores.model.value.aiUsage.keyProblem != null && settings.aiEnabled && settings.aiKeyActive
-        return NoticesView(Outbox.unreadOf(stores.chat.value).size, SetupPage.attention(stores.tasks.value, gmailGivenUp = false, keyProblem = keyProblem, watchdog = false, unreadable = stores.problems.isNotEmpty()))
+        return NoticesView(Outbox.unreadOf(stores.chat.value).size, SetupPage.attention(stores.tasks.value, gmailGivenUp = false, keyProblem = keyProblem, watchdog = false, unreadable = unreadable().isNotEmpty()))
     }
 
     /** Task [id]'s sheet, if there's such a task. */

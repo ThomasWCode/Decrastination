@@ -170,6 +170,9 @@ class Stores(
     /** The stores the server keeps a copy of ([MIRRORED]), as they are. */
     val mirrored: List<JsonStore<*>> get() = json.filter { it.name in MIRRORED }
 
+    /** Every JSON store, mirrored or not: what a failed change on the server may have left in memory. */
+    val stored: List<JsonStore<*>> get() = json
+
     /** Each JSON store's shape now, by file: what a backup's parts from it are brought to ([Backups.decode]). */
     val shapes: Map<String, Shape> get() = json.associate { it.name to Shape(it.version, it.migrations) } + (chatArchive.name to Shape(chatArchive.version, ChatArchiveStore.MIGRATIONS))
 
