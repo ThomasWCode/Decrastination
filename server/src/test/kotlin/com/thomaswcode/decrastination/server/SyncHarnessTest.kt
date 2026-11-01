@@ -5,6 +5,7 @@ import com.thomaswcode.decrastination.core.Change
 import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.ChatArchive
 import com.thomaswcode.decrastination.core.ChatMessage
+import com.thomaswcode.decrastination.core.FixedClock
 import com.thomaswcode.decrastination.core.OwnTask
 import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.data.JsonStore
@@ -14,6 +15,7 @@ import com.thomaswcode.decrastination.data.CalendarRead
 import com.thomaswcode.decrastination.data.SyncState
 import com.thomaswcode.decrastination.net.Http
 import com.thomaswcode.decrastination.net.HttpResponse
+import com.thomaswcode.decrastination.sync.Protocol
 import com.thomaswcode.decrastination.sync.Replica
 import com.thomaswcode.decrastination.sync.protocol.AddOwnChange
 import com.thomaswcode.decrastination.sync.protocol.ClearChat
@@ -27,6 +29,7 @@ import com.thomaswcode.decrastination.tasks.TasksHarness
 import java.io.File
 import java.io.IOException
 import java.nio.file.Files
+import java.time.ZoneId
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -66,6 +69,7 @@ class SyncHarnessTest {
         override fun post(url: String, headers: Map<String, String>, body: String): HttpResponse {
             if (cut) throw IOException("cut")
             check(url.endsWith("/api/commands")) { url }
+            headers[Protocol.ZONE_HEADER]?.let(graph.serverClock::setZone)
             val batch = json.decodeFromString(CommandBatch.serializer(), body)
             val outcomes = runBlocking { graph.applier.apply(batch, device) }
             if (losesAnswers > 0) {
@@ -78,6 +82,7 @@ class SyncHarnessTest {
         override fun get(url: String, headers: Map<String, String>): HttpResponse {
             if (cut) throw IOException("cut")
             duringPull?.also { duringPull = null }?.invoke()
+            headers[Protocol.ZONE_HEADER]?.let(graph.serverClock::setZone)
             val since = url.substringAfter("since=").toLong()
             val state = graph.state(since)
             val body = buildJsonObject {
@@ -124,6 +129,47 @@ class SyncHarnessTest {
         phones.forEach { it.h.close() }
         db.close()
         dir.deleteRecursively()
+    }
+
+    @Test
+    fun `a server restored to an earlier revision is read whole, not taken at its word`() = runBlocking {
+        val phone = phone()
+        phone.h.commands.act(own("Essay"))
+        assertTrue(phone.replica.upload())
+        // This phone has been further than the server now has: it took what a restore has since taken back.
+        phone.h.stores.sync.update { it.copy(revision = 1_000) }
+        phone.h.stores.tasks.update { state -> state.copy(tasks = state.tasks.map { it.copy(title = "Gone with the restore") }) }
+        assertTrue(phone.replica.upload())
+        assertEquals(setOf("Essay"), phone.titles)
+        assertEquals(db.currentRevision(), phone.h.stores.sync.value.revision)
+    }
+
+    @Test
+    fun `the phone's zone reaches the server with each exchange, with commands waiting or none`() = runBlocking {
+        val phone = phone()
+        fun replica(zone: String) = Replica(phone.h.stores, phone.wire, FixedClock(phone.h.clock.time, ZoneId.of(zone)), "test", { CalendarRead() }, phone.h.commands)
+        assertTrue(replica("Asia/Tokyo").upload())
+        assertEquals("Asia/Tokyo", graph.clock.zone().id, "with nothing waiting")
+        phone.h.commands.act(own("Essay"))
+        assertTrue(replica("America/New_York").upload())
+        assertEquals("America/New_York", graph.clock.zone().id, "with a command")
+    }
+
+    @Test
+    fun `what the server dropped stays said till it's put away`() = runBlocking {
+        val one = phone("one")
+        val two = phone("two")
+        one.h.commands.act(own("Essay"))
+        assertTrue(one.replica.upload())
+        assertTrue(two.replica.upload())
+        one.h.commands.act(FinishOwnTask("own:s-Essay"))
+        one.h.commands.act(DeleteOwnTask("own:s-Essay"))
+        assertTrue(one.replica.upload())
+        two.h.commands.act(FinishOwnTask("own:s-Essay"))
+        assertTrue(two.replica.upload())
+        assertEquals(listOf("That task had gone"), two.h.stores.sync.value.dropped)
+        two.replica.clearDropped()
+        assertEquals(emptyList(), two.h.stores.sync.value.dropped)
     }
 
     @Test

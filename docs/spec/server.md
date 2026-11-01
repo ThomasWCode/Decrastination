@@ -60,7 +60,7 @@ The server's time zone is the phone's: each batch says it (`ServerClock`), as a 
 
 ## Jobs
 
-What runs with nobody asking (`ServerJobs`), once the server applies commands (D-141): each minute, whatever's due, one at a time, each's last run in `meta`, so a restart neither repeats one nor misses one. A job that fails is logged and tried again: one that runs on a cadence at its next turn, one at a set time 15 minutes on, the nightly file an hour on, so nothing that reaches Claude or a source goes round each minute. One at a set time that's never run counts from the start of today, so the first run is today's, and nothing gone by before it is caught up on.
+What runs with nobody asking (`ServerJobs`), once the server applies commands (D-141): each minute, whatever's due, one at a time, each's last run in `meta`, so a restart neither repeats one nor misses one. A job that fails is logged and tried again: one that runs on a cadence at its next turn, one at a set time 15 minutes on, the nightly file an hour on, so nothing that reaches Claude or a source goes round each minute. One at a set time that's never run counts from the start of today, so the first run is today's, and nothing gone by before it is caught up on. The morning never catches up, even with a run on record: it says today's whenever it runs, so a morning missed is left, and today's comes at its time. The nightly file's send is bounded (five minutes), as the jobs run one at a time.
 
 | Job | When | Does |
 |---|---|---|
@@ -90,6 +90,6 @@ Each service gets only the secrets it uses (`deploy/compose.yaml`), all of them 
 
 **A new box.** `deploy/bootstrap.sh`: Docker, the firewall, `/opt/decrastination`, `MASTER_KEY` made once. With `.env` filled it restores the database from R2 if the box has none and R2 has one, then starts everything. It stops if the restore fails, so an empty server never replicates over the good copy.
 
-**Restoring.** `docker compose run --rm --no-deps litestream restore -config /etc/litestream.yml -if-db-not-exists -if-replica-exists /data/decrastination.db`, with the server stopped and the old database gone; `-timestamp` for a moment in the last month. The drill: the database destroyed, restored, the server started from it, and `GET /state` the same, byte for byte, its sessions and devices still good. A database restored to an older moment catches up by itself: the phone's next send sees from the answer what it no longer holds, and sends it.
+**Restoring.** `docker compose run --rm --no-deps litestream restore -config /etc/litestream.yml -if-db-not-exists -if-replica-exists /data/decrastination.db`, with the server stopped and the old database gone; `-timestamp` for a moment in the last month. The drill: the database destroyed, restored, the server started from it, and `GET /state` the same, byte for byte, its sessions and devices still good. A database restored to an older moment catches up by itself: the phone's next send sees from the answer what it no longer holds, and sends it. Once commands apply it doesn't: a phone can only see a server that's behind it now, so after a restore, unpair the phone and pair it again, which starts it from nothing.
 
 **Keep `MASTER_KEY` off the box as well.** A restored database's encrypted credentials can't be read without it.

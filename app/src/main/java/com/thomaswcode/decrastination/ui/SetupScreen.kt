@@ -336,6 +336,14 @@ private fun WebsiteItem(graph: AppGraph) {
         },
         action = if (paired) "Unpair" to { graph.scope.launch { graph.replica.forget() } } else "Pair" to { pairing = true },
     )
+    if (sync.dropped.isNotEmpty()) {
+        SetupItem(
+            title = "Changes the server didn't apply",
+            done = false,
+            detail = sync.dropped.asReversed().joinToString("\n"),
+            action = "Clear" to { graph.scope.launch { graph.replica.clearDropped() } },
+        )
+    }
     if (pairing) {
         PairDialog(onDismiss = { pairing = false }) { code, done ->
             graph.scope.launch {

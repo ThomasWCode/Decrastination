@@ -335,6 +335,31 @@ class ApiTest {
     }
 
     @Test
+    fun `a phone's zone is heard with its pull and with its commands, and a website's isn't`() = server {
+        val phone = paired()
+        suspend fun pull(zone: String) = plain().get("/api/state") {
+            bearerAuth(phone.token)
+            header(Protocol.HEADER, Protocol.VERSION.toString())
+            header(Protocol.ZONE_HEADER, zone)
+        }
+        assertEquals(HttpStatusCode.OK, pull("Asia/Tokyo").status)
+        assertEquals("Asia/Tokyo", graph.clock.zone().id)
+        plain().post("/api/commands") {
+            bearerAuth(phone.token)
+            header(Protocol.HEADER, Protocol.VERSION.toString())
+            header(Protocol.ZONE_HEADER, "America/New_York")
+            contentType(ContentType.Application.Json)
+            setBody("""{"commands":[]}""")
+        }
+        assertEquals("America/New_York", graph.clock.zone().id, "before it's turned away in mirror mode, as it's the same either way")
+        plain().get("/api/state") {
+            header(HttpHeaders.Cookie, signIn())
+            header(Protocol.ZONE_HEADER, "Asia/Tokyo")
+        }
+        assertEquals("America/New_York", graph.clock.zone().id)
+    }
+
+    @Test
     fun `the Day and Work show what the phone sent, in the phone's words`() = server {
         val phone = paired()
         val answer = json.decodeFromString<SeedAnswer>(seed(phone.token, shape().map { it.copy(version = versionOf(it.text)) }).bodyAsText())
