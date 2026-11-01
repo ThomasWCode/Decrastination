@@ -2,6 +2,7 @@ package com.thomaswcode.decrastination.server
 
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.OwnTask
+import com.thomaswcode.decrastination.core.OwnTaskRules
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.data.SecretCipher
@@ -10,15 +11,20 @@ import com.thomaswcode.decrastination.sync.protocol.CommandBatch
 import com.thomaswcode.decrastination.sync.protocol.SaveOwnTask
 import com.thomaswcode.decrastination.views.TaskAsk
 import java.io.File
+import java.io.IOException
 import java.nio.file.Files
 import java.time.Instant
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
 
 /** What the website asks of a task (docs/spec/website.md): made the commands the phone's sheet would make, by the phone's rules. */
@@ -94,6 +100,76 @@ class TaskAskTest {
     }
 
     @Test
+    fun `each Clear takes off its own, not what another put back from when the page was drawn`() = runBlocking<Unit> {
+        withTasks()
+        assertTrue(graph.ask(own, TaskAsk(TaskAsk.DUE, at = System.currentTimeMillis() + 7 * 86_400_000L)).done)
+        assertTrue(graph.ask(own, TaskAsk(TaskAsk.START, date = day(2))).done)
+        val drawn = assertNotNull(graph.task(own)).fields.mapNotNull { it.undo?.ask }
+        assertEquals(listOf(TaskAsk.CLEAR_DUE, TaskAsk.CLEAR_START), drawn.map { it.kind })
+        drawn.forEach { assertTrue(graph.ask(own, it).done) }
+        assertNull(task(own).dueAt)
+        assertNull(task(own).notBefore)
+    }
+
+    @Test
+    fun `Home only leaves what's changed since the page was drawn, and Anywhere takes it back`() = runBlocking<Unit> {
+        withTasks()
+        val home = assertNotNull(assertNotNull(graph.task(own)).actions.single { it.label == "Home only" }.ask)
+        assertTrue(graph.ask(own, TaskAsk(TaskAsk.MINUTES, minutes = 45)).done)
+        assertTrue(graph.ask(own, home).done)
+        assertEquals("home", OwnTaskRules.draftOf(task(own)).where)
+        assertEquals(45, task(own).sourceEffortMin)
+        val anywhere = assertNotNull(assertNotNull(graph.task(own)).actions.single { it.label == "Anywhere" }.ask)
+        assertTrue(graph.ask(own, anywhere).done)
+        assertEquals("anywhere", OwnTaskRules.draftOf(task(own)).where)
+    }
+
+    @Test
+    fun `what's only for your own isn't made of a source's task`() = runBlocking<Unit> {
+        withTasks()
+        for (kind in listOf(TaskAsk.CLEAR_DUE, TaskAsk.CLEAR_START, TaskAsk.HOME, TaskAsk.ANYWHERE)) {
+            assertEquals("That can't be changed on it", graph.ask(teams, TaskAsk(kind)).said, kind)
+        }
+        assertTrue(graph.stores.instructions.value.applied.isEmpty())
+    }
+
+    @Test
+    fun `a day past what the task can take is refused here, whatever the page offered`() = runBlocking<Unit> {
+        withTasks()
+        assertTrue(graph.ask(own, TaskAsk(TaskAsk.DUE, at = System.currentTimeMillis() + 2 * 86_400_000L)).done)
+        val refused = graph.ask(own, TaskAsk(TaskAsk.TO_DAY, date = day(5)))
+        assertFalse(refused.done)
+        assertEquals("Not that day: it's due before then, or can't be started till later", refused.said)
+        assertTrue(graph.stores.instructions.value.applied.isEmpty())
+    }
+
+    @Test
+    fun `one photo is read at a time, and the next can go once it's done`() = runBlocking<Unit> {
+        val reading = CompletableDeferred<Unit>()
+        val started = CompletableDeferred<Unit>()
+        val jpeg = byteArrayOf(0xFF.toByte(), 0xD8.toByte())
+        val first = async(Dispatchers.Default) {
+            graph.readPhoto(jpeg) {
+                started.complete(Unit)
+                reading.await()
+                null to "Read"
+            }
+        }
+        started.await()
+        assertNull(graph.readPhoto(jpeg) { null to "A second call" }, "turned away, with no call made")
+        reading.complete(Unit)
+        assertEquals("Read", first.await()?.why)
+        assertEquals("Next", graph.readPhoto(jpeg) { null to "Next" }?.why)
+    }
+
+    @Test
+    fun `a reading that fails doesn't hold the next up`() = runBlocking<Unit> {
+        val jpeg = byteArrayOf(0xFF.toByte(), 0xD8.toByte())
+        assertFailsWith<IOException> { graph.readPhoto(jpeg) { throw IOException("The call failed") } }
+        assertEquals("Next", graph.readPhoto(jpeg) { null to "Next" }?.why)
+    }
+
+    @Test
     fun `all of it moves to a day, said in the phone's words`() = runBlocking<Unit> {
         withTasks()
         val answer = graph.ask(own, TaskAsk(TaskAsk.TO_DAY, date = day(3)))
@@ -160,7 +236,7 @@ class TaskAskTest {
 
     @Test
     fun `with no key, a photo says so and calls nothing`() = runBlocking<Unit> {
-        val read = graph.readPhoto(byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 0))
+        val read = assertNotNull(graph.readPhoto(byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 0)))
         assertTrue(read.tasks.isEmpty())
         assertNotNull(read.why)
     }

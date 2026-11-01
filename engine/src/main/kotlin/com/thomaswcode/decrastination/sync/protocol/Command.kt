@@ -47,6 +47,9 @@ data class Outcome(
     companion object {
         const val APPLIED = "applied"
         const val DROPPED = "dropped"
+
+        /** It ran and came to nothing, by what its owner answered ([Action.refused]): what it did stands, so it isn't a change lost. */
+        const val REFUSED = "refused"
     }
 }
 

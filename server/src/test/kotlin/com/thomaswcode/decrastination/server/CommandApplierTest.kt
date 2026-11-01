@@ -133,7 +133,7 @@ class CommandApplierTest {
     fun `an answer that says no is reported with its reason, and what it did stands`() = runBlocking {
         val secret = parentCode()
         val first = send(Command("one", at, UseParentCode(wrong(secret))))
-        assertEquals(Outcome.DROPPED, first.state)
+        assertEquals(Outcome.REFUSED, first.state)
         assertEquals("Wrong code: 2 tries left", first.why)
         assertEquals("Wrong code: 1 try left", send(Command("two", at, UseParentCode(wrong(secret)))).why, "the first wrong one is counted")
         assertEquals(first.why, send(Command("one", at, UseParentCode(wrong(secret)))).why, "and a repeat answers as it did")
@@ -172,7 +172,7 @@ class CommandApplierTest {
         val now = System.currentTimeMillis()
         repeat(3) { send(Command("wrong-$it", now, UseParentCode(wrong(secret)))) }
         val after = send(Command("later", now + 2 * hour, UseParentCode(code(secret))))
-        assertEquals(Outcome.DROPPED, after.state)
+        assertEquals(Outcome.REFUSED, after.state)
         assertTrue(assertNotNull(after.why).startsWith("Too many wrong codes"), after.why)
     }
 

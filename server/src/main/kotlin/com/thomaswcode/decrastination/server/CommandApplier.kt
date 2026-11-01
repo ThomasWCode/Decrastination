@@ -44,11 +44,13 @@ class CommandApplier(
             recorded(command.id)?.let { return@commandOr it }
             backend.cause = command.id
             var undo: Action? = null
-            val why = command.action.stale(owners) ?: commands.apply(command).let { answer ->
+            val stale = command.action.stale(owners)
+            val why = stale ?: commands.apply(command).let { answer ->
                 undo = command.action.undoing(answer)
                 command.action.refused(answer)
             }
-            val made = Outcome(command.id, if (why == null) Outcome.APPLIED else Outcome.DROPPED, why, db.currentRevision(), undo.takeIf { why == null })
+            val state = if (why == null) Outcome.APPLIED else if (stale != null) Outcome.DROPPED else Outcome.REFUSED
+            val made = Outcome(command.id, state, why, db.currentRevision(), undo.takeIf { why == null })
             record(command, device, made)
             made
         }

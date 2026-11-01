@@ -2,6 +2,7 @@ package com.thomaswcode.decrastination.views
 
 import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.Change
+import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.Chunk
 import com.thomaswcode.decrastination.core.Ids
 import com.thomaswcode.decrastination.core.OwnTaskRules
@@ -21,9 +22,10 @@ import kotlinx.serialization.Serializable
 
 /**
  * What a page asks of a task that takes the phone's rules to turn into commands: a value for one of its fields ([at] a moment,
- * [minutes], [date] a day), a move ([date], with [minute] for a time), or its next piece done ([key] the piece the page showed, and
- * [at] when: it's that one that's done, or none). The page says what you gave, and what's made of it, in what words, is made
- * once, here (D-137).
+ * [minutes], [date] a day), one taken off it, where it's planned, a move ([date], with [minute] for a time), or its next piece done
+ * ([key] the piece the page showed, and [at] when: it's that one that's done, or none). The page says what you gave, and what's
+ * made of it, in what words, is made once, here (D-137), of the task as it is then: a copy of it sent from a page drawn before
+ * would put back what's changed since (D-4).
  */
 @Serializable
 data class TaskAsk(val kind: String, val at: Long? = null, val minutes: Int? = null, val date: String? = null, val minute: Int? = null, val key: String? = null) {
@@ -32,6 +34,10 @@ data class TaskAsk(val kind: String, val at: Long? = null, val minutes: Int? = n
         const val DUE = "due"
         const val MINUTES = "minutes"
         const val START = "start"
+        const val CLEAR_DUE = "clearDue"
+        const val CLEAR_START = "clearStart"
+        const val HOME = "home"
+        const val ANYWHERE = "anywhere"
         const val TO_DAY = "toDay"
         const val TO_TIME = "toTime"
     }
@@ -58,6 +64,11 @@ object TaskAsks {
                 val (change, text) = ownChange(task, OwnChange.StartFrom, it, zone)
                 made(task, change, text)
             } ?: Moves.Decided(why = "That needs a date")
+            TaskAsk.CLEAR_DUE -> cleared(task, ChangeType.DueBy)
+            TaskAsk.CLEAR_START -> cleared(task, ChangeType.StartFrom)
+            TaskAsk.HOME, TaskAsk.ANYWHERE -> if (task.source != Source.Own) NOT_ON_IT else Moves.Decided(
+                actions = listOf(SaveOwnTask.of(task.sourceId, OwnTaskRules.draftOf(task).copy(where = if (ask.kind == TaskAsk.HOME) "home" else "anywhere"))),
+            )
             TaskAsk.TO_DAY, TaskAsk.TO_TIME -> when {
                 piece == null -> Moves.Decided(why = "It has no piece in the plan to move")
                 day == null -> Moves.Decided(why = "That needs a date")
@@ -69,10 +80,16 @@ object TaskAsks {
         }
     }
 
+    /** [type]'s value taken off [task], yours. */
+    private fun cleared(task: TaskItem, type: ChangeType): Moves.Decided =
+        if (task.source != Source.Own) NOT_ON_IT else made(task, Change(type, taskId = task.id, time = null), "")
+
     /** [change] to [task], as its sheet makes one: yours changed itself, where the form would take the result; a source's given it as a quick change of yours, in [text]. */
     fun made(task: TaskItem, change: Change, text: String): Moves.Decided {
         if (task.source != Source.Own) return Moves.Decided(actions = listOf(AddOwnChange(Ids.next(), text, About(taskId = task.id, taskTitle = task.title), change)))
-        val draft = OwnTaskRules.draftWith(task, change) ?: return Moves.Decided(why = "That can't be changed on it")
+        val draft = OwnTaskRules.draftWith(task, change) ?: return NOT_ON_IT
         return OwnTaskRules.problem(draft)?.let { Moves.Decided(why = it) } ?: Moves.Decided(actions = listOf(SaveOwnTask.of(task.sourceId, draft)))
     }
+
+    private val NOT_ON_IT = Moves.Decided(why = "That can't be changed on it")
 }

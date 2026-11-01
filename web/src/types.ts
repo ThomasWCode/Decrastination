@@ -218,7 +218,7 @@ export type Action = { type: string } & Record<string, unknown>;
 /** What came of a command. */
 export interface Outcome {
   id: string;
-  state: "applied" | "dropped";
+  state: "applied" | "dropped" | "refused";
   why?: string | null;
   revision: number;
 }

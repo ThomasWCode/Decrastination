@@ -77,7 +77,7 @@ The server applies commands in the order they arrive, and the owners are the con
 | any other | never: its owner takes a stale call as it does today, doing nothing, or laying the day again | |
 | one its owner fails on | always | It couldn't be applied |
 
-A command that ran and came to nothing is reported the same way, by what its owner answered (`Action.refused`), and what it did stands, so a wrong parent code still counts towards the lock:
+A command that ran and came to nothing is `refused`, by what its owner answered (`Action.refused`), not dropped: what it did stands, so a wrong parent code still counts towards the lock, and it isn't a change lost, so Setup doesn't list it, your screen having said what came of it. The pull after one is of everything all the same, as it may have gone otherwise on the phone:
 
 | Command | Said |
 |---|---|

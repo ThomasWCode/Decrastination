@@ -108,7 +108,8 @@ class TaskViewTest {
     fun `a value of yours can be cleared, and a quick change on a source's undone`() {
         val own = view(task(source = Source.Own)).fields.first { it.kind == TaskAsk.DUE }
         assertEquals("Clear", own.undo?.label)
-        assertNotNull(own.undo?.action)
+        assertEquals(TaskAsk(TaskAsk.CLEAR_DUE), own.undo?.ask)
+        assertNull(own.undo?.action, "asked of the task as it is, not sent as a copy of it")
         val source = task()
         val quick = Instruction("i", "Due Friday (set in Tasks)", About(taskId = source.id), now, InstructionStatus.Applied, changes = listOf(Change(ChangeType.DueBy, taskId = source.id, time = now)), quick = true)
         val undo = view(source, applied = listOf(quick)).fields.first { it.kind == TaskAsk.DUE }.undo

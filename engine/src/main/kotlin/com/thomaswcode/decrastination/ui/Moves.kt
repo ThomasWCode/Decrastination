@@ -81,10 +81,11 @@ class Moves(
 
     /**
      * All of [chunk]'s task on [day], any time that day: an `OnDay` change of yours, a time you gave it here before taken back,
-     * as the plan would keep it on its day; refused where a time from the chat holds it that day.
+     * as the plan would keep it on its day; refused on a day it can't go to ([dayAllowed]), or where a time from the chat holds it that day.
      */
     fun dayMove(chunk: Chunk, day: LocalDate, zone: ZoneId): Decided {
         val task = tasks.value.tasks.firstOrNull { it.id == chunk.taskId }
+        if (!dayAllowed(task, day, clock.now(), zone)) return Decided(why = "Not that day: it's due before then, or can't be started till later")
         val applied = instructions.value.applied
         val quick = InstructionRules.quickInForce(applied, chunk.taskId, ChangeType.AtTime)
         val pinned = task?.mine?.atTime?.value?.takeIf { Planner.date(it, zone) == day }
