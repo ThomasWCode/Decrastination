@@ -13,6 +13,7 @@ import com.thomaswcode.decrastination.sync.protocol.SaveOwnTask
 import java.io.File
 import java.math.BigInteger
 import java.net.InetSocketAddress
+import java.net.http.HttpTimeoutException
 import java.nio.ByteBuffer
 import java.nio.file.Files
 import java.security.AlgorithmParameters
@@ -23,6 +24,7 @@ import java.security.spec.ECGenParameterSpec
 import java.security.spec.ECParameterSpec
 import java.security.spec.ECPoint
 import java.security.spec.ECPublicKeySpec
+import java.time.Duration
 import java.util.Base64
 import java.util.Collections
 import javax.crypto.Cipher
@@ -34,6 +36,7 @@ import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -75,8 +78,8 @@ class PushesTest {
         dir.deleteRecursively()
     }
 
-    private val laptop = "https://push.example.com/laptop"
-    private val other = "https://push.example.com/other"
+    private val laptop = "https://fcm.googleapis.com/fcm/send/laptop"
+    private val other = "https://updates.push.services.mozilla.com/wpush/v2/other"
 
     private fun asks(endpoint: String, vararg channels: String) = assertTrue(graph.pushes.keep(PushSubscription(endpoint, "made-up", "made-up", channels.toSet())))
 
@@ -87,14 +90,19 @@ class PushesTest {
     }
 
     @Test
-    fun `an address has to be a push service's, as the server posts to it`() {
-        assertTrue(Pushes.fit("https://fcm.googleapis.com/fcm/send/made-up"))
-        assertTrue(Pushes.fit("https://updates.push.services.mozilla.com/wpush/v2/made-up"))
-        for (address in listOf("http://push.example.com/a", "https://localhost/a", "https://127.0.0.1/a", "https://10.0.0.1/a", "https://[::1]/a", "https://server:8080/a", "https://metadata.internal/a", "https://box.local/a", "not an address", "https://push.example.com/" + "a".repeat(1100))) {
+    fun `an address has to be a known push service's, as the server posts to it, and any other name can point anywhere`() {
+        for (address in listOf("https://fcm.googleapis.com/fcm/send/a", "https://updates.push.services.mozilla.com/wpush/v2/a", "https://web.push.apple.com/a", "https://wns2-par02p.notify.windows.com/w/?token=a")) {
+            assertTrue(Pushes.fit(address), address)
+        }
+        for (address in listOf(
+            "http://fcm.googleapis.com/a", "https://fcm.googleapis.com:8443/a", "https://user" + "@fcm.googleapis.com/a", "https://fcm.googleapis.com.example.com/a",
+            "https://notfcm.googleapis.com/a", "https://push.example.com/a", "https://localhost/a", "https://127.0.0.1/a", "https://[::1]/a", "not an address",
+            "https://fcm.googleapis.com/" + "a".repeat(1100),
+        )) {
             assertFalse(Pushes.fit(address), address)
         }
-        assertFalse(graph.pushes.keep(PushSubscription("http://push.example.com/a", "made-up", "made-up", setOf(Pushes.FELIX))))
-        assertEquals(emptySet(), graph.pushes.channels("http://push.example.com/a"))
+        assertFalse(graph.pushes.keep(PushSubscription("https://push.example.com/a", "made-up", "made-up", setOf(Pushes.FELIX))))
+        assertEquals(emptySet(), graph.pushes.channels("https://push.example.com/a"))
     }
 
     @Test
@@ -120,16 +128,16 @@ class PushesTest {
 
     @Test
     fun `a browser that's gone is let go of, and one that fails is kept, and neither stops the rest`() = runBlocking<Unit> {
-        asks("https://push.example.com/failing", Pushes.FELIX)
+        asks("https://web.push.apple.com/failing", Pushes.FELIX)
         asks(laptop, Pushes.FELIX)
         asks(other, Pushes.FELIX)
-        service.failing += "https://push.example.com/failing"
+        service.failing += "https://web.push.apple.com/failing"
         service.gone += laptop
         graph.pushes.push(Pushes.FELIX, PushMessage("A title", "Words", "/", "felix"))
         waitFor(2)
         withTimeout(5_000) { while (graph.pushes.channels(laptop).isNotEmpty()) delay(10) }
         assertEquals(setOf(Pushes.FELIX), graph.pushes.channels(other))
-        assertEquals(setOf(Pushes.FELIX), graph.pushes.channels("https://push.example.com/failing"))
+        assertEquals(setOf(Pushes.FELIX), graph.pushes.channels("https://web.push.apple.com/failing"))
     }
 
     @Test
@@ -311,6 +319,26 @@ class PushesTest {
             doFinal(sealed)
         }
         return plain.copyOf(plain.indexOfLast { it.toInt() != 0 }).decodeToString()
+    }
+
+    // A limit of its own: without the sender's, this would wait for ever.
+    @Test(timeout = 10_000)
+    fun `a service that never answers is given up on`() {
+        val browser = KeyPairGenerator.getInstance("EC").run {
+            initialize(ECGenParameterSpec("secp256r1"))
+            generateKeyPair()
+        }
+        val encoder = Base64.getUrlEncoder().withoutPadding()
+        val stand = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+        stand.createContext("/never") { exchange -> exchange.requestBody.readBytes() }
+        stand.start()
+        try {
+            val sender = WebPushSender("https://example.com", VapidKeys.generate(), Duration.ofMillis(300))
+            val subscription = PushSubscription("http://127.0.0.1:${stand.address.port}/never", encoder.encodeToString(point(browser.public as ECPublicKey)), encoder.encodeToString(ByteArray(16)), emptySet())
+            assertFailsWith<HttpTimeoutException> { sender.send(subscription, "A made-up word") }
+        } finally {
+            stand.stop(0)
+        }
     }
 
     @Test

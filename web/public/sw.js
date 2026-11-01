@@ -5,15 +5,10 @@ self.addEventListener("install", () => self.skipWaiting());
 
 self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim()));
 
+// Every one is shown, a page in front or not: a browser can stop sending to a site whose pushes show nothing.
 self.addEventListener("push", (event) => {
   const message = event.data.json();
-  event.waitUntil(
-    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((windows) => {
-      // A page you're looking at says it itself.
-      if (windows.some((page) => page.focused)) return undefined;
-      return self.registration.showNotification(message.title, { body: message.body, tag: message.tag, data: { url: message.url } });
-    }),
-  );
+  event.waitUntil(self.registration.showNotification(message.title, { body: message.body, tag: message.tag, data: { url: message.url } }));
 });
 
 self.addEventListener("notificationclick", (event) => {

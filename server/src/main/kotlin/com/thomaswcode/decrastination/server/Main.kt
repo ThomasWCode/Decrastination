@@ -90,9 +90,10 @@ fun main(args: Array<String>) {
     val version = System.getenv("APP_VERSION") ?: "dev"
     // Only a test's server has a stand-in for Claude: one on a box would send the owner's tasks to it.
     val standIn = System.getenv("CLAUDE_STAND_IN")?.takeIf { testing }
-    // A test's made here, so none is in the repository, and none's a box's.
+    // A test's are made here, so none is in the repository, and what it sends goes nowhere.
     val pusher = (if (testing) VapidKeys.generate() else pushKeys())?.let { WebPushSender("https://${domain.ifEmpty { "localhost" }}", it) }
-    val graph = ServerGraph(db, dataDir, MasterKeyCipher(if (testing) Base64.getEncoder().encodeToString(ByteArray(32)) else env("MASTER_KEY")), version, claudeKey = System.getenv("ANTHROPIC_API_KEY")?.takeIf { it.isNotBlank() }, claudeEndpoint = standIn, heartbeatUrl = System.getenv("HEARTBEAT_URL")?.takeIf { it.isNotBlank() }, nightly = nightlyFolder(), pushSender = pusher, pushKey = pusher?.applicationKey)
+    val sender = if (testing) Pushes.Sender { _, _ -> true } else pusher
+    val graph = ServerGraph(db, dataDir, MasterKeyCipher(if (testing) Base64.getEncoder().encodeToString(ByteArray(32)) else env("MASTER_KEY")), version, claudeKey = System.getenv("ANTHROPIC_API_KEY")?.takeIf { it.isNotBlank() }, claudeEndpoint = standIn, heartbeatUrl = System.getenv("HEARTBEAT_URL")?.takeIf { it.isNotBlank() }, nightly = nightlyFolder(), pushSender = sender, pushKey = pusher?.applicationKey)
     val github: GitHub = if (testing) {
         object : GitHub {
             override fun authorizeUrl(state: String, challenge: String) = "/"

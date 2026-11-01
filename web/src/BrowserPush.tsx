@@ -51,6 +51,9 @@ export function BrowserPush({ push }: { push: PushView }) {
   const [said, setSaid] = useState<string | null>(null);
   // One change at a time: each sends the whole list, so two at once would each leave out the other's.
   const [busy, setBusy] = useState(false);
+  // What it asked for, when that couldn't be read: not nothing, or the next tick would take the rest away.
+  const [unread, setUnread] = useState(false);
+  const [reads, setReads] = useState(0);
   useEffect(() => {
     if (!supported) return;
     let gone = false;
@@ -58,15 +61,29 @@ export function BrowserPush({ push }: { push: PushView }) {
       .getRegistration()
       .then((registered) => registered?.pushManager.getSubscription())
       .then((held) => (held ? api.pushChannels(held.endpoint).then((asked) => asked.channels) : []))
-      .catch(() => [])
       .then((channels) => {
-        if (!gone) setChosen(channels);
+        if (gone) return;
+        setUnread(false);
+        setChosen(channels);
+      })
+      .catch(() => {
+        if (!gone) setUnread(true);
       });
     return () => {
       gone = true;
     };
-  }, [supported]);
+  }, [supported, reads]);
   if (!supported) return <p className="note long">This browser can't be told anything with its tab closed.</p>;
+  if (unread) {
+    return (
+      <section className="browser-push" aria-label="This browser">
+        <p className="problem">What this browser's told of couldn't be read.</p>
+        <button className="quiet" onClick={() => setReads(reads + 1)}>
+          Try again
+        </button>
+      </section>
+    );
+  }
   if (!chosen) return null;
   const change = (next: string[]) => {
     setSaid(null);
