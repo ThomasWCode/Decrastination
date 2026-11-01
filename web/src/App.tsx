@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState, type MouseEvent, type ReactNode } from "react";
 import { api } from "./api";
+import { BackupPage } from "./Backup";
 import { ChatPage } from "./Chat";
 import { DayPage } from "./Day";
 import { useLive } from "./live";
 import { PhonePage } from "./Phone";
 import { SettingsPageView } from "./Settings";
+import { SetupPage } from "./Setup";
 import { StatsPage } from "./Stats";
 import { ReviewsPage, WeekPage } from "./Week";
 import { WorkPage } from "./Work";
@@ -48,20 +50,20 @@ const PAGES = [
   { path: "/week", name: "This week" },
   { path: "/reviews", name: "Reviews" },
   { path: "/settings", name: "Settings" },
+  { path: "/backup", name: "Backup" },
+  { path: "/setup", name: "Setup" },
   { path: "/phone", name: "Phone" },
 ];
 
 /** What waits for you, wherever you are (W-9): his unread, by the bell and in the tab's title, but while you're [reading] them. */
-function Bell({ go, reading }: { go: Go; reading: boolean }) {
-  const load = useCallback(() => api.notices(), []);
-  const { value } = useLive(load);
+function Bell({ go, reading, waiting }: { go: Go; reading: boolean; waiting: number }) {
   const [hidden, setHidden] = useState(document.hidden);
   useEffect(() => {
     const moved = () => setHidden(document.hidden);
     document.addEventListener("visibilitychange", moved);
     return () => document.removeEventListener("visibilitychange", moved);
   }, []);
-  const unread = reading && !hidden ? 0 : (value?.unread ?? 0);
+  const unread = reading && !hidden ? 0 : waiting;
   useEffect(() => {
     document.title = unread > 0 ? `(${unread}) Decrastination` : "Decrastination";
   }, [unread]);
@@ -74,6 +76,29 @@ function Bell({ go, reading }: { go: Go; reading: boolean }) {
         {unread > 0 ? <span className="count">{unread}</span> : null}
       </span>
     </Link>
+  );
+}
+
+/** The site's bar: its pages, Setup marked while it needs you (UI-18), the bell and signing out. */
+function Bar({ url, go, signOut }: { url: URL; go: Go; signOut: () => void }) {
+  const load = useCallback(() => api.notices(), []);
+  const { value } = useLive(load);
+  return (
+    <header className="bar">
+      <span className="name">Decrastination</span>
+      <nav aria-label="Pages">
+        {PAGES.map((page) => (
+          <Link key={page.path} to={page.path} go={go} current={url.pathname === page.path}>
+            {page.name}
+            {page.path === "/setup" && value?.setup ? <span className="needs-you" role="img" aria-label="needs you" /> : null}
+          </Link>
+        ))}
+      </nav>
+      <Bell go={go} reading={url.pathname === "/"} waiting={value?.unread ?? 0} />
+      <button className="quiet" onClick={signOut}>
+        Sign out
+      </button>
+    </header>
   );
 }
 
@@ -104,20 +129,7 @@ export function App() {
   };
   return (
     <div className="site">
-      <header className="bar">
-        <span className="name">Decrastination</span>
-        <nav aria-label="Pages">
-          {PAGES.map((page) => (
-            <Link key={page.path} to={page.path} go={go} current={url.pathname === page.path}>
-              {page.name}
-            </Link>
-          ))}
-        </nav>
-        <Bell go={go} reading={url.pathname === "/"} />
-        <button className="quiet" onClick={signOut}>
-          Sign out
-        </button>
-      </header>
+      <Bar url={url} go={go} signOut={signOut} />
       {url.pathname === "/work" ? (
         <WorkPage />
       ) : url.pathname === "/stats" ? (
@@ -128,6 +140,10 @@ export function App() {
         <ReviewsPage />
       ) : url.pathname === "/settings" ? (
         <SettingsPageView />
+      ) : url.pathname === "/backup" ? (
+        <BackupPage />
+      ) : url.pathname === "/setup" ? (
+        <SetupPage />
       ) : url.pathname === "/phone" ? (
         <PhonePage />
       ) : url.pathname === "/day" ? (

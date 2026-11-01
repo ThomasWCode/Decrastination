@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react";
 import { api } from "./api";
+import { Asking } from "./AskFirst";
 import { ago, useLive } from "./live";
 import type { PairingCode } from "./types";
 
@@ -50,9 +51,7 @@ export function PhonePage() {
               <li key={device.id}>
                 <span className="title">{device.name}</span>
                 <span className="line">{device.lastSeenAt ? `Last heard from ${ago(device.lastSeenAt)}` : "Not heard from yet"}</span>
-                <button className="quiet" onClick={() => revoke(device.id)}>
-                  Revoke
-                </button>
+                <Asking label="Revoke" title={`Revoke ${device.name}?`} detail="It stops reaching the server at once, and has to be paired again." yes="Revoke" no="Keep it" go={() => revoke(device.id)} />
               </li>
             ))}
         </ul>

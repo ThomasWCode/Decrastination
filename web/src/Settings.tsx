@@ -311,10 +311,12 @@ function Credentials({ groups }: { groups: CredentialGroup[] }) {
   // What it says it holds, from its answer: a sign-in is in no store, so no revision says it's changed.
   const [held, setHeld] = useState<string[] | null>(null);
   const [said, setSaid] = useState<string | null>(null);
+  // Only what's been filled in: to the server a blank takes one away, and a field typed in and cleared isn't asking for that.
+  const given = Object.fromEntries(Object.entries(typed).filter(([, value]) => value.trim() !== ""));
   const save = () => {
     setSaid(null);
     api
-      .setCredentials(typed)
+      .setCredentials(given)
       .then((answer) => {
         setTyped({});
         setHeld(answer.held);
@@ -347,7 +349,7 @@ function Credentials({ groups }: { groups: CredentialGroup[] }) {
           ))}
         </fieldset>
       ))}
-      <button className="button" disabled={Object.keys(typed).length === 0}>
+      <button className="button" disabled={Object.keys(given).length === 0}>
         Save sign-ins
       </button>
       {said ? (
@@ -409,6 +411,29 @@ function Waiting({ line, parentCode }: { line: PendingLine; parentCode: boolean 
   );
 }
 
+/** How hard Claude thinks, and its recent calls, each to open. */
+function Calls({ view }: { view: SettingsView }) {
+  return (
+    <section className="calls" aria-label="Claude's calls">
+      <h3>How hard it thinks</h3>
+      <ul className="stat-lines">
+        {view.efforts.map((line) => (
+          <li key={line}>{line}</li>
+        ))}
+      </ul>
+      <p className="note">{view.effortNote}</p>
+      <h3>Recent calls</h3>
+      {view.calls.length === 0 ? <p className="note">None yet.</p> : null}
+      {view.calls.map((call) => (
+        <details key={call.at}>
+          <summary>{call.line}</summary>
+          <pre>{call.details}</pre>
+        </details>
+      ))}
+    </section>
+  );
+}
+
 /** The settings that are shared state, a page at a time: what each takes is the server's to say, and a loosening waits there whichever client asks. */
 export function SettingsPageView() {
   const load = useCallback(() => api.settings(), []);
@@ -442,6 +467,7 @@ export function SettingsPageView() {
               <span className="line">{one.says}</span>
             </button>
           ))}
+          <p className="note">On the phone only: {view.phoneOnly.join(", ")}.</p>
         </nav>
         <div className="settings-body">
           <h2>{page.title}</h2>
@@ -449,6 +475,7 @@ export function SettingsPageView() {
           {page.fields.length > 0 ? <Fields key={page.key} page={page} canChange={view.canChange} /> : null}
           {page.key === "felix" ? <Remembered view={view} /> : null}
           {page.key === "sources" && view.canChange ? <Credentials groups={view.credentials} /> : null}
+          {page.key === "claude" ? <Calls view={view} /> : null}
         </div>
       </div>
     </main>

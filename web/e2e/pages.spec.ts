@@ -65,6 +65,61 @@ test("a review's summary goes by the mail app, nothing being sent from here", as
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(card.summary);
 });
 
+test("a backup can be had while the phone writes, with nothing else to press", async ({ page }) => {
+  await page.goto("/backup");
+  await expect(page.getByRole("heading", { name: "Back up" })).toBeVisible();
+  await expect(page.getByText("Restoring and resetting are on the phone for now.")).toBeVisible();
+  await expect(page.getByLabel("Import a backup")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Reset" })).toHaveCount(0);
+  const download = page.waitForEvent("download");
+  await page.getByRole("link", { name: "Download a backup" }).click();
+  expect((await download).suggestedFilename()).toMatch(/^decrastination-\d{4}-\d{2}-\d{2}\.json$/);
+});
+
+test("Setup says how each source reads, and Claude", async ({ page }) => {
+  await page.goto("/setup");
+  const sources = page.getByRole("region", { name: "Sources" }).getByRole("listitem");
+  await expect(sources).toHaveCount(4);
+  await expect(sources.first()).toContainText("Teams Assignments widget");
+  await expect(page.getByRole("region", { name: "Claude" }).getByRole("listitem")).toHaveCount(1);
+});
+
+test("Setup's marked in the bar while it needs you", async ({ page }) => {
+  await page.route("**/api/views/notices", (route) => route.fulfill({ json: { unread: 0, setup: true } }));
+  await page.goto("/day");
+  await expect(page.getByRole("link", { name: "Setup" }).getByRole("img", { name: "needs you" })).toBeVisible();
+});
+
+test("Setup's not marked when it doesn't", async ({ page }) => {
+  await page.route("**/api/views/notices", (route) => route.fulfill({ json: { unread: 0, setup: false } }));
+  await page.goto("/day");
+  await expect(page.getByRole("link", { name: "Setup" })).toBeVisible();
+  await expect(page.getByRole("img", { name: "needs you" })).toHaveCount(0);
+});
+
+test("Settings says what's the phone's alone, and Claude's page how it's worked", async ({ page }) => {
+  await page.goto("/settings");
+  await expect(page.getByText("On the phone only: Blocking and protection, Calendar, This phone's pairing, The last crash.")).toBeVisible();
+  await page.getByRole("button", { name: /^Claude/ }).click();
+  await expect(page.getByRole("heading", { name: "How hard it thinks" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Recent calls" })).toBeVisible();
+});
+
+test("a phone's revoked only once it's been asked", async ({ page, request }) => {
+  const { code } = await (await request.post("/api/devices/pair", { headers: { "X-Requested-With": "test" } })).json();
+  await request.post("/api/devices/claim", { data: { code, name: "A made-up phone" } });
+  await page.goto("/phone");
+  const row = page.getByRole("listitem").filter({ hasText: "A made-up phone" });
+  await row.getByRole("button", { name: "Revoke" }).click();
+  const asking = page.getByRole("alertdialog", { name: "Revoke A made-up phone?" });
+  await asking.getByRole("button", { name: "Keep it" }).click();
+  await expect(asking).toBeHidden();
+  await expect(row).toBeVisible();
+  await row.getByRole("button", { name: "Revoke" }).click();
+  await asking.getByRole("button", { name: "Revoke" }).click();
+  await expect(row).toHaveCount(0);
+});
+
 test("signed in, the Day shows the plan's grid and what to do now", async ({ page }) => {
   await page.goto("/day");
   await expect(page.getByRole("heading", { name: "Do now" })).toBeVisible();

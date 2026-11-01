@@ -2113,6 +2113,69 @@ label.button {
   white-space: pre-wrap;
 }
 
+.setup-lines {
+  display: grid;
+  gap: 10px;
+  max-width: 720px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.setup-line {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.setup-line .mark {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--line);
+  font-weight: 700;
+}
+
+.setup-line.needed .mark {
+  background: var(--error);
+  color: var(--paper);
+}
+
+.setup-line .title,
+.setup-line .line {
+  display: block;
+}
+
+.setup-line .title {
+  font-weight: 600;
+}
+
+.setup-line .line {
+  color: var(--quiet);
+}
+
+.needs-you {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: var(--error);
+  vertical-align: middle;
+}
+
+.calls details {
+  padding: 4px 0;
+}
+
+.calls pre {
+  overflow-x: auto;
+  white-space: pre-wrap;
+}
+
 @media (max-width: 860px) {
   .stat-day {
     grid-template-columns: 72px minmax(0, 1fr);

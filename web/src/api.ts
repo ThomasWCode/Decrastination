@@ -1,4 +1,4 @@
-import type { Action, Asked, ChatView, DayView, DeviceLine, NoticesView, Outcome, PairingCode, PhotoRead, ReviewsView, SettingsView, StatsView, TaskAsk, TaskView, WeekView, WorkView } from "./types";
+import type { Action, Asked, BackupView, ChatView, DayView, DeviceLine, NoticesView, Outcome, PairingCode, PhotoRead, ReviewsView, SettingsView, SetupView, StatsView, TaskAsk, TaskView, WeekView, WorkView } from "./types";
 
 /** A request the server answered with a refusal. */
 export class ApiError extends Error {
@@ -31,6 +31,8 @@ export const api = {
   stats: (period: string | null) => read<StatsView>(`/api/views/stats${period ? `?period=${encodeURIComponent(period)}` : ""}`),
   week: () => read<WeekView>("/api/views/week"),
   reviews: () => read<ReviewsView>("/api/views/reviews"),
+  backup: () => read<BackupView>("/api/views/backup"),
+  setup: () => read<SetupView>("/api/views/setup"),
   task: (id: string) => read<TaskView>(`/api/views/task/${encodeURIComponent(id)}`),
   settings: () => read<SettingsView>("/api/views/settings"),
   setCredentials: (given: Record<string, string>) => read<{ held: string[] }>("/api/credentials", posting(given)),
@@ -69,6 +71,25 @@ export async function telling(action: Action): Promise<string | null> {
   try {
     const outcome = await send(action);
     return outcome.why ?? outcome.said ?? null;
+  } catch {
+    return UNREACHED;
+  }
+}
+
+/** The backup [file] taken in, in what the server says of it: [tooBig] for one past what it reads, as nothing that size is sent back to say so. */
+export async function importing(file: Blob, tooBig: string): Promise<string> {
+  try {
+    const answer = await read<Asked>("/api/backup/import", { method: "POST", headers: { ...CHANGING, "Content-Type": "application/octet-stream" }, body: file });
+    return answer.said ?? UNREACHED;
+  } catch (failure) {
+    return failure instanceof ApiError && failure.status === 413 ? tooBig : UNREACHED;
+  }
+}
+
+/** The reset's copy [name] taken in, in what the server says of it. */
+export async function restoring(name: string): Promise<string> {
+  try {
+    return (await read<Asked>("/api/backup/copy", posting({ name }))).said ?? UNREACHED;
   } catch {
     return UNREACHED;
   }
