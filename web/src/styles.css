@@ -140,6 +140,16 @@ button {
   color: var(--accent);
 }
 
+.bar:has(.still-in) {
+  flex-wrap: wrap;
+}
+
+.bar .still-in {
+  order: 1;
+  flex-basis: 100%;
+  color: var(--error);
+}
+
 .bar nav {
   display: flex;
   gap: 20px;
@@ -2171,6 +2181,13 @@ label.button:has(input:focus-visible) {
   border-radius: 50%;
   background: var(--error);
   vertical-align: middle;
+}
+
+.browser-push label {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 4px 0;
 }
 
 .calls details {

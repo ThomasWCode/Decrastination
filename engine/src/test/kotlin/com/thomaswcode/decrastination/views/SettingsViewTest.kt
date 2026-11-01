@@ -41,6 +41,15 @@ class SettingsViewTest {
     private fun SettingsView.field(name: String) = pages.flatMap { it.fields }.single { it.name == name }
 
     @Test
+    fun `a browser's offered telling only with the box's key, and not while mirroring`() {
+        fun push(key: String?, writable: Boolean) = SettingsViews.of(Settings(), emptyList(), TaskState(), SchoolCalendar(), MemoryState(), AiUsage(), emptySet(), false, now, LONDON, writable, pushKey = key).push
+        assertEquals(PushView("made-up"), push("made-up", writable = true))
+        assertEquals(listOf("felix", "slots", "timer"), PushView.CHANNELS.map { it.key })
+        assertNull(push("made-up", writable = false))
+        assertNull(push(null, writable = true))
+    }
+
+    @Test
     fun `what's the phone's alone is said, and Claude's calls are shown newest first`() {
         assertEquals(listOf("Blocking and protection", "Calendar", "This phone's pairing", "The last crash"), view().phoneOnly)
         assertEquals(ModelEffort.table().size, view().efforts.size)

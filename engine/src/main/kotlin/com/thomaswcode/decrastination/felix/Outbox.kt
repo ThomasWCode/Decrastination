@@ -217,7 +217,7 @@ class Outbox(
          * [message] as his notification's lines: his a line a text (D-120), as the chat shows them, the first ([id]#0) above
          * the last, which carries the message's id and the gist of what it made; yours, one.
          */
-        private fun lines(message: ChatMessage): List<Notice.Line> {
+        fun lines(message: ChatMessage): List<Notice.Line> {
             val texts = FelixAnswers.texts(message)
             return texts.dropLast(1).mapIndexed { i, text -> Notice.Line("${message.id}#$i", text, message.at, false) } +
                 Notice.Line(message.id, line(message, texts.last()), message.at, message.from == Speaker.You)

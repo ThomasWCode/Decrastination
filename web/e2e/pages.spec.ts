@@ -105,6 +105,13 @@ test("Settings says what's the phone's alone, and Claude's page how it's worked"
   await expect(page.getByRole("heading", { name: "Recent calls" })).toBeVisible();
 });
 
+test("a browser's offered nothing while the phone writes", async ({ page }) => {
+  await page.goto("/settings");
+  await page.getByRole("button", { name: /^Notifications/ }).click();
+  await expect(page.getByRole("heading", { name: "Notifications" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "This browser" })).toHaveCount(0);
+});
+
 test("a phone's revoked only once it's been asked", async ({ page, request }) => {
   const { code } = await (await request.post("/api/devices/pair", { headers: { "X-Requested-With": "test" } })).json();
   await request.post("/api/devices/claim", { data: { code, name: "A made-up phone" } });

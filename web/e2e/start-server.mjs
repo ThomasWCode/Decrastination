@@ -5,7 +5,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const dataDir = mkdtempSync(join(tmpdir(), "decrastination-e2e-"));
-const server = spawn("java", ["-jar", "../server/build/libs/server-all.jar"], {
+// On two cores, as a small box has: its thread pools are that size, and a machine with more hides what waits for what.
+const server = spawn("java", ["-XX:ActiveProcessorCount=2", "-jar", "../server/build/libs/server-all.jar"], {
   stdio: "inherit",
   // A made-up key, for the stand-in: a test can't reach Claude, whatever's in this machine's environment.
   env: { ...process.env, DECRASTINATION_TEST: "1", DOMAIN: "", DATA_DIR: dataDir, PORT: process.argv[2] ?? "8090", ANTHROPIC_API_KEY: "a made-up key", CLAUDE_STAND_IN: "http://127.0.0.1:8092" },

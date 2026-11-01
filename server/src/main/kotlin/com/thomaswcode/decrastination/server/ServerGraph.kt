@@ -2,8 +2,10 @@ package com.thomaswcode.decrastination.server
 
 import com.thomaswcode.decrastination.core.Ids
 import com.thomaswcode.decrastination.core.Notes
+import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.ReplayClock
 import com.thomaswcode.decrastination.core.SchoolDays
+import com.thomaswcode.decrastination.core.SlotKind
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.Uptime
@@ -12,6 +14,7 @@ import com.thomaswcode.decrastination.data.BackupNames
 import com.thomaswcode.decrastination.data.BackupService
 import com.thomaswcode.decrastination.data.CalendarRead
 import com.thomaswcode.decrastination.data.JsonStore
+import com.thomaswcode.decrastination.data.PieceTimer
 import com.thomaswcode.decrastination.data.Secret
 import com.thomaswcode.decrastination.data.SecretCipher
 import com.thomaswcode.decrastination.data.SecretStore
@@ -42,11 +45,14 @@ import com.thomaswcode.decrastination.sync.protocol.EndCheckInFlow
 import com.thomaswcode.decrastination.sync.protocol.Outcome
 import com.thomaswcode.decrastination.sync.protocol.RecordCheckIn
 import com.thomaswcode.decrastination.ui.ChatRows
+import com.thomaswcode.decrastination.ui.Format
 import com.thomaswcode.decrastination.ui.Moves
 import com.thomaswcode.decrastination.ui.PieceSays
 import com.thomaswcode.decrastination.ui.SetupPage
 import com.thomaswcode.decrastination.ui.StatsPage
 import com.thomaswcode.decrastination.ui.TaskSheetModel
+import com.thomaswcode.decrastination.ui.timerOverText
+import com.thomaswcode.decrastination.ui.timerOverTitle
 import com.thomaswcode.decrastination.views.Asked
 import com.thomaswcode.decrastination.views.BackupView
 import com.thomaswcode.decrastination.views.BackupViews
@@ -146,6 +152,10 @@ class ServerGraph(
     private val http: Http = UrlConnectionHttp(),
     /** Where the nightly file goes (W-20), if it's set up. */
     nightly: BackupService.Folder? = null,
+    /** How a browser's told (W-9), with the box's keys, if they're set. */
+    pushSender: Pushes.Sender? = null,
+    /** The public one of those keys, as a browser asks for it. */
+    private val pushKey: String? = null,
 ) {
     /** The clock the phone's zone is told to. */
     val serverClock = ServerClock(db)
@@ -172,6 +182,9 @@ class ServerGraph(
     val stores = Stores(backend, secrets)
     val calendarRead = JsonStore(backend, CalendarRead.NAME, CalendarRead.serializer(), ::CalendarRead)
     val devices = Devices(db)
+
+    /** The browsers told with their tabs closed. */
+    val pushes = Pushes(db, scope, pushSender)
 
     private val gateway = ModelGateway(stores.settings, { claudeKey }, stores.model, stores.tasks, clock, NoAlerts, scope, keyInUse = { true }) {}.apply { endpoint = claudeEndpoint }
 
@@ -206,6 +219,7 @@ class ServerGraph(
         eventAnswers = { calendarRead.value.answers },
         answersBack = { backed -> calendarRead.update { it.copy(answers = backed + it.answers) } },
         settled = { read -> db.betweenCommands(read) },
+        told = { notice -> pushFelix(notice) },
     )
 
     /** Whether a nightly file has somewhere to go. */
@@ -232,7 +246,7 @@ class ServerGraph(
 
     init {
         // A store's every write is kept for a while: at each start, and daily while it runs.
-        scope.launch {
+        scope.launch(Dispatchers.IO) {
             while (true) {
                 try {
                     tidy()
@@ -297,6 +311,7 @@ class ServerGraph(
                 owners.looks.check()
                 owners.looks.sweepReminders()
             },
+            ServerJob.every("pushes", MINUTE_MS) { pushDue() },
             ServerJob.every("sources", SOURCES_EVERY_MS) { owners.syncer.sync(setOf(Source.PowerPlanner, Source.Gmail)) },
             ServerJob("morning", due = { last, now -> morningDue(last, now) }) {
                 morning({ owners.conversation.forgetExpired() }, { owners.ownTasks.rollWeeks() }, { owners.briefing.run() }, { owners.conversation.pruneFelix() })
@@ -307,6 +322,39 @@ class ServerGraph(
             ServerJob.every("heartbeat", MINUTE_MS) { heartbeatUrl?.let { http.get(it, emptyMap()) } },
         ),
     )
+
+    /**
+     * His newest message, as a browser shows it: all its texts (D-120), from the chat, as his notification's lines are cut to its
+     * room, the opening first. Once it stands: a command's may yet be rolled back.
+     */
+    private fun pushFelix(notice: Outbox.Notice) {
+        val newest = stores.chat.value.messages.lastOrNull { it.id == notice.replyTo } ?: return
+        val told = PushMessage(notice.name, Pushes.words(Outbox.lines(newest).joinToString("\n") { it.text }), "/", Pushes.FELIX)
+        db.afterCommit { pushes.push(Pushes.FELIX, told) }
+    }
+
+    /**
+     * What's come due since the last look, for the browsers that asked: a slot's start, and a timer's zero. Only read: a timer's
+     * being told is the phone's to mark, or its own "time's up" wouldn't sound. A look missed isn't made up past a few minutes,
+     * as what's long past is no use.
+     */
+    internal fun pushDue() {
+        if (!pushes.on) return
+        val now = clock.now()
+        val since = maxOf(db.meta(PUSHED)?.toLongOrNull() ?: now, now - PUSH_REACH_MS)
+        due(planning.plan(), stores.session.value.timer, since, now).forEach { (channel, message) -> pushes.push(channel, message) }
+        db.setMeta(PUSHED, now.toString())
+    }
+
+    /** What's come due after [since], up to [now], by the channel it's told on. */
+    internal fun due(plan: Plan, timer: PieceTimer?, since: Long, now: Long): List<Pair<String, PushMessage>> {
+        fun passed(at: Long) = at > since && at <= now
+        val slots = plan.buckets.flatMap { it.slots }.filter { it.kind == SlotKind.Work && passed(it.start) }.mapNotNull { slot ->
+            slot.chunk?.let { chunk -> Pushes.SLOTS to PushMessage("Now: ${chunk.title}", Format.minutes(chunk.minutes), "/day", Pushes.SLOTS) }
+        }
+        val zero = timer?.takeIf { it.running && passed(it.endsAt) }?.let { Pushes.TIMER to PushMessage(timerOverTitle(it), timerOverText(it), "/day", Pushes.TIMER) }
+        return slots + listOfNotNull(zero)
+    }
 
     /** Tonight's file, or a failure, so it's tried again rather than the night going without. */
     internal suspend fun nightly() {
@@ -476,7 +524,7 @@ class ServerGraph(
         val usage = stores.model.value.aiUsage.forMonth(AiUsage.monthOf(now, zone))
         return SettingsViews.of(
             owners.protection.asked, owners.protection.pending, stores.tasks.value, stores.school.value, stores.memory.value, usage,
-            credentials(), stores.secrets.has(Secret.TotpSecret), now, zone, writable = mode == COMMANDS, calls = stores.model.value.calls,
+            credentials(), stores.secrets.has(Secret.TotpSecret), now, zone, writable = mode == COMMANDS, calls = stores.model.value.calls, pushKey = pushKey.takeIf { pushes.on },
         )
     }
 
@@ -655,6 +703,10 @@ class ServerGraph(
         private const val SECRETS = "secrets.bin"
         private const val GONE = "That task had gone"
         private const val NOT_RESTORED = "Nothing was restored: it couldn't be applied."
+        private const val PUSHED = "pushed"
+
+        /** The most that's made up after a look missed. */
+        private const val PUSH_REACH_MS = 5 * 60_000L
         private const val MINUTE_MS = 60_000L
         private const val HOUR_MS = 60 * MINUTE_MS
         private const val SOURCES_EVERY_MS = 15 * MINUTE_MS

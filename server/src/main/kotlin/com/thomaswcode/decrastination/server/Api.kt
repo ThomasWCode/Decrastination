@@ -335,6 +335,22 @@ private fun Route.signedInRoutes(web: Web) {
         call.response.header(HttpHeaders.ContentDisposition, "attachment; filename=\"decrastination-record.zip\"")
         call.respondBytes(graph.record(), ContentType.Application.Zip)
     }
+    post("/push/subscription") {
+        if (call.client !is Client.Website) return@post call.respond(HttpStatusCode.Forbidden, Problem("A browser asks for itself"))
+        if (graph.mode != ServerGraph.COMMANDS) return@post call.respond(HttpStatusCode.Conflict, Problem("The server is mirroring the phone"))
+        if (!graph.pushes.on) return@post call.respond(HttpStatusCode.Conflict, Problem("The box has no keys for that"))
+        if (!graph.pushes.keep(call.receive<PushSubscription>())) return@post call.respond(HttpStatusCode.BadRequest, Problem("That isn't a push service's address"))
+        call.respond(HttpStatusCode.NoContent)
+    }
+    post("/push/channels") {
+        if (call.client !is Client.Website) return@post call.respond(HttpStatusCode.Forbidden, Problem("A browser asks for itself"))
+        call.respond(PushChannels(graph.pushes.channels(call.receive<PushEndpoint>().endpoint)))
+    }
+    post("/push/forget") {
+        if (call.client !is Client.Website) return@post call.respond(HttpStatusCode.Forbidden, Problem("A browser asks for itself"))
+        graph.pushes.forget(call.receive<PushEndpoint>().endpoint)
+        call.respond(HttpStatusCode.NoContent)
+    }
     get("/views/backup") { call.respond(graph.backupView()) }
     get("/views/setup") { call.respond(graph.setup()) }
     get("/backup") {

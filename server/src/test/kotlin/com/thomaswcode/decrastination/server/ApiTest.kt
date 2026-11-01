@@ -524,6 +524,57 @@ class ApiTest {
     }
 
     @Test
+    fun `a browser's asking is the website's, and not while mirroring or with no keys`() = server {
+        val cookie = signIn()
+        val phone = paired()
+        val website: HttpRequestBuilder.() -> Unit = {
+            header(HttpHeaders.Cookie, cookie)
+            header("X-Requested-With", "test")
+        }
+        val asPhone: HttpRequestBuilder.() -> Unit = {
+            bearerAuth(phone.token)
+            header(Protocol.HEADER, Protocol.VERSION.toString())
+        }
+        suspend fun asks(endpoint: String, signed: HttpRequestBuilder.() -> Unit) = plain().post("/api/push/subscription") {
+            signed()
+            contentType(ContentType.Application.Json)
+            setBody("""{"endpoint":"$endpoint","p256dh":"${"A".repeat(87)}","auth":"${"A".repeat(22)}","channels":["felix"]}""")
+        }
+        suspend fun one(path: String, signed: HttpRequestBuilder.() -> Unit) = plain().post(path) {
+            signed()
+            contentType(ContentType.Application.Json)
+            setBody("""{"endpoint":"https://fcm.googleapis.com/a"}""")
+        }
+        assertEquals(HttpStatusCode.Conflict, asks("https://fcm.googleapis.com/a", website).status)
+        graph.commandsForATest()
+        assertEquals(HttpStatusCode.Conflict, asks("https://fcm.googleapis.com/a", website).status, "no keys on this box")
+        assertEquals(HttpStatusCode.Forbidden, asks("https://fcm.googleapis.com/a", asPhone).status)
+        assertEquals(HttpStatusCode.Forbidden, one("/api/push/channels", asPhone).status)
+        assertEquals(HttpStatusCode.Forbidden, one("/api/push/forget", asPhone).status)
+        assertEquals(HttpStatusCode.OK, one("/api/push/channels", website).status)
+        assertEquals(HttpStatusCode.NoContent, one("/api/push/forget", website).status)
+    }
+
+    @Test
+    fun `with the box's keys a browser's taken, but not while mirroring, nor at an address that isn't a push service's`() = testApplication {
+        val keyedDb = Database(":memory:")
+        val keyed = ServerGraph(keyedDb, Files.createTempDirectory("keyed").toFile(), Plain, "test", pushSender = Pushes.Sender { _, _ -> true }, pushKey = "made-up")
+        application { api(Web(keyed, github, Sessions(keyedDb, ALLOWED), secure = false)) }
+        val cookie = signIn()
+        suspend fun asks(endpoint: String) = plain().post("/api/push/subscription") {
+            header(HttpHeaders.Cookie, cookie)
+            header("X-Requested-With", "test")
+            contentType(ContentType.Application.Json)
+            setBody("""{"endpoint":"$endpoint","p256dh":"${"A".repeat(87)}","auth":"${"A".repeat(22)}","channels":["felix"]}""")
+        }
+        assertEquals(HttpStatusCode.Conflict, asks("https://fcm.googleapis.com/a").status)
+        keyed.commandsForATest()
+        assertEquals(HttpStatusCode.BadRequest, asks("https://push.example.com/a").status)
+        assertEquals(HttpStatusCode.NoContent, asks("https://fcm.googleapis.com/a").status)
+        assertEquals(setOf("felix"), keyed.pushes.channels("https://fcm.googleapis.com/a"))
+    }
+
+    @Test
     fun `Backup and Setup are a client's`() = server {
         val cookie = signIn()
         for (path in listOf("/api/views/backup", "/api/views/setup")) {
