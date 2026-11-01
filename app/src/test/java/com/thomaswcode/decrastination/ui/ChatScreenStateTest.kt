@@ -61,7 +61,7 @@ class ChatScreenStateTest {
         screen.opened(ChatState(window, readAt = Fixtures.at("2026-10-18T08:00")), opening)
         val rows = screen.items(window, emptyList(), LONDON)
         assertEquals(listOf("day-y1", "y1", "day-h1", "h1", "unread", "h2"), rows.map { it.key })
-        assertEquals(listOf(LocalDate.of(2026, 10, 17), LocalDate.of(2026, 10, 18)), rows.filterIsInstance<ChatScreenState.Item.Day>().map { it.date })
+        assertEquals(listOf(LocalDate.of(2026, 10, 17), LocalDate.of(2026, 10, 18)), rows.filterIsInstance<ChatRows.Item.Day>().map { it.date })
         // A message out of time order brings a date back: its row keyed by the message, so no key repeats.
         val back = window + yours("late", "2026-10-17T23:59")
         val keys = screen.items(back, emptyList(), LONDON).map { it.key }
@@ -76,7 +76,7 @@ class ChatScreenStateTest {
         screen.opened(state, opening)
         assertEquals("h2", screen.firstUnread)
         val rows = ChatScreenState().apply { loadEarlier(1) }.items(state.messages, listOf(his("old", "2026-08-01T10:00")), LONDON)
-        assertEquals(mapOf("old" to true, "q" to false, "h2" to false), rows.filterIsInstance<ChatScreenState.Item.Message>().associate { it.message.id to it.archived })
+        assertEquals(mapOf("old" to true, "q" to false, "h2" to false), rows.filterIsInstance<ChatRows.Item.Message>().associate { it.message.id to it.archived })
     }
 
     @Test
@@ -168,12 +168,12 @@ class ChatScreenStateTest {
         val old = his("old", "2026-08-01T10:00")
         val window = listOf(yours("w1", Fixtures.at("2026-10-18T17:00")).copy(replyTo = "old"))
         val screen = ChatScreenState()
-        assertEquals(ChatScreenState.Item.Earlier, screen.items(window, emptyList(), LONDON, unread = true).first())
+        assertEquals(ChatRows.Item.Earlier, screen.items(window, emptyList(), LONDON, unread = true).first())
         assertTrue(screen.loadEarlier(null))
         assertEquals(ChatScreenState.PAGE, screen.earlier)
         assertFalse(screen.loadEarlier(null))
         // The quote, read on its own from the archive.
-        val reply = screen.items(window, emptyList(), LONDON, quotes = listOf(old)).filterIsInstance<ChatScreenState.Item.Message>().single()
+        val reply = screen.items(window, emptyList(), LONDON, quotes = listOf(old)).filterIsInstance<ChatRows.Item.Message>().single()
         assertEquals(old, reply.quote)
         // Tapped, further back than the pages read: as far back as it is, and scrolled to.
         screen.revealBack("old", 340)
@@ -186,15 +186,15 @@ class ChatScreenStateTest {
         val archive = (1..250).map { yours("a$it", start + it * 60_000L) }
         val window = listOf(his("w1", "2026-10-18T17:00"))
         val screen = ChatScreenState()
-        assertEquals(ChatScreenState.Item.Earlier, screen.items(window, archive, LONDON).first())
+        assertEquals(ChatRows.Item.Earlier, screen.items(window, archive, LONDON).first())
         assertTrue(screen.loadEarlier(archive.size))
-        assertEquals((151..250).map { "a$it" } + "w1", screen.items(window, archive, LONDON).filterIsInstance<ChatScreenState.Item.Message>().map { it.message.id })
+        assertEquals((151..250).map { "a$it" } + "w1", screen.items(window, archive, LONDON).filterIsInstance<ChatRows.Item.Message>().map { it.message.id })
         assertTrue(screen.loadEarlier(archive.size))
         assertTrue(screen.loadEarlier(archive.size))
         assertEquals(250, screen.earlier)
         assertFalse(screen.loadEarlier(archive.size))
         // None left: no row to load more.
-        assertTrue(screen.items(window, archive, LONDON).none { it == ChatScreenState.Item.Earlier })
+        assertTrue(screen.items(window, archive, LONDON).none { it == ChatRows.Item.Earlier })
         // A quote's message far back: shown, and scrolled to; one in neither, not.
         val fresh = ChatScreenState()
         assertTrue(fresh.reveal("a10", window, archive))
@@ -214,7 +214,7 @@ class ChatScreenStateTest {
             yours("y2", "2026-10-18T17:06", replyTo = "h1"),
             yours("y3", "2026-10-18T17:07", replyTo = "old"),
         )
-        val rows = ChatScreenState().items(window, archived, LONDON).filterIsInstance<ChatScreenState.Item.Message>()
+        val rows = ChatScreenState().items(window, archived, LONDON).filterIsInstance<ChatRows.Item.Message>()
         assertEquals(listOf(null, null, null, "h1", "old"), rows.map { it.quote?.id })
     }
 
@@ -351,10 +351,10 @@ class ChatScreenStateTest {
     @Test
     fun `a day's line says today, yesterday, or its date, with its year where it isn't this one`() {
         val today = LocalDate.of(2026, 10, 18)
-        assertEquals("Today", ChatScreenState.dayLine(today, today))
-        assertEquals("Yesterday", ChatScreenState.dayLine(today.minusDays(1), today))
-        assertEquals("Tuesday 13 October", ChatScreenState.dayLine(LocalDate.of(2026, 10, 13), today))
-        assertEquals("Wednesday 31 December 2025", ChatScreenState.dayLine(LocalDate.of(2025, 12, 31), today))
+        assertEquals("Today", ChatRows.dayLine(today, today))
+        assertEquals("Yesterday", ChatRows.dayLine(today.minusDays(1), today))
+        assertEquals("Tuesday 13 October", ChatRows.dayLine(LocalDate.of(2026, 10, 13), today))
+        assertEquals("Wednesday 31 December 2025", ChatRows.dayLine(LocalDate.of(2025, 12, 31), today))
     }
 
     @Test

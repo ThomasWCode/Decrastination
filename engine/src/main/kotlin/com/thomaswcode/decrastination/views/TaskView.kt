@@ -33,6 +33,7 @@ import com.thomaswcode.decrastination.ui.Moves
 import com.thomaswcode.decrastination.ui.OwnChange
 import com.thomaswcode.decrastination.ui.TaskSheetModel
 import com.thomaswcode.decrastination.ui.ownChange
+import com.thomaswcode.decrastination.ui.stepLine
 import java.time.ZoneId
 import kotlinx.serialization.Serializable
 
@@ -158,9 +159,7 @@ object TaskViews {
             next = next?.let { piece -> "Next: ${piece.shown ?: if (piece.parts > 1) "part ${piece.part} of ${piece.parts}" else piece.title}, ${Format.minutes(piece.minutes)}" },
             fields = fields(task, applied, changeable, now, zone),
             steps = task.subSteps.mapIndexed { index, step ->
-                val dates = listOfNotNull(step.from?.let { "from " + Format.at(it, now, zone) }, step.dueAt?.let { Format.due(it, hard = false, now, zone) }).joinToString(", ")
-                val details = listOfNotNull(Format.minutes(step.minutes), dates.ifEmpty { null }, "in any order".takeIf { step.anyOrder }).joinToString("; ")
-                StepLine("${step.title} ($details)", step.done, if (writable && Focus.tickable(task) && task.isOpen && !step.done) TickBlock(task.id, index, step.title) else null)
+                StepLine(stepLine(step.title, step.minutes, step.from, step.dueAt, step.anyOrder, now, zone), step.done, if (writable && Focus.tickable(task) && task.isOpen && !step.done) TickBlock(task.id, index, step.title) else null)
             },
             planned = TaskSheetModel.planned(plan, task.id, zone).map { TaskSheetModel.line(it, plan.today, zone) },
             instructions = TaskSheetModel.instructions(applied, task.id),

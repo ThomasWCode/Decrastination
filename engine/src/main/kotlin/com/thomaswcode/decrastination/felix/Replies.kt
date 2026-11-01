@@ -96,6 +96,25 @@ object Replies {
     }
 
     /**
+     * What the foot of the chat answers (D-98): [pending], the message of his the box and his chips answer; a [nudge] if it isn't a question;
+     * [quiet], that nudge where it's just above the box, which takes your words with no strip; and [last], whose replies are offered: that
+     * one, else his newest, where it's his and not answered.
+     */
+    data class Turn(val pending: ChatMessage?, val nudge: Boolean, val quiet: ChatMessage?, val last: ChatMessage?)
+
+    /** The chat's [Turn] at [now]. */
+    fun turn(messages: List<ChatMessage>, checkInUnderWay: Boolean, now: Long, zone: ZoneId): Turn {
+        val pending = pending(messages, checkInUnderWay, now, zone)
+        val nudge = pending != null && !waiting(pending, checkInUnderWay)
+        val quiet = pending?.takeIf { nudge && it.id == newest(messages)?.id }
+        return Turn(pending, nudge, quiet, pending ?: newest(messages)?.takeIf { it.from == Speaker.Felix && it.answeredAt == null })
+    }
+
+    /** Those of the [awaiting] among [messages] you can mark answered (D-99): all but a check-in's under way, which the check-in waits on. */
+    fun markable(messages: List<ChatMessage>, checkInUnderWay: Boolean, awaiting: Set<String>): Set<String> =
+        messages.filter { it.id in awaiting && !(checkInUnderWay && it.kind == MessageKind.CheckIn) }.mapTo(HashSet()) { it.id }
+
+    /**
      * Where [words], your reply to [message], go: a question of his still waiting ([waiting]) takes its
      * answer (a check-in's, any words; a reading's, any words, read by Claude as an instruction; how work went
      * or a calendar event's, one of its three, whatever their case), with no call but a reading's; a reminder of yours not yet answered, *Done* or a

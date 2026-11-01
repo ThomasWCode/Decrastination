@@ -1427,7 +1427,7 @@ class Conversation(
      * those he's written since you last left the chat, but a question you've answered, or a message you've replied to,
      * from his notification.
      */
-    val unread: Flow<Int> = chat.state.map { s -> Outbox.repliedTo(s).let { replied -> s.messages.count { Outbox.unread(it, s.readAt) && it.answeredAt == null && it.id !in replied } } }.distinctUntilChanged()
+    val unread: Flow<Int> = chat.state.map { s -> Outbox.unreadOf(s).size }.distinctUntilChanged()
 
     /**
      * Your [text] in reply to his message [id] from his notification (AI-24): asked as any reply is

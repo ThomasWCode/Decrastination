@@ -12,11 +12,7 @@ import com.thomaswcode.decrastination.felix.Draft
 import com.thomaswcode.decrastination.felix.Outbox
 import com.thomaswcode.decrastination.felix.Replies
 import com.thomaswcode.decrastination.felix.Unsent
-import java.time.Instant
-import java.time.LocalDate
 import java.time.ZoneId
-import java.time.format.DateTimeFormatter
-import java.util.Locale
 
 /**
  * What the chat's screen holds beside the chat (docs/spec/felix.md §The chat): the first of his
@@ -26,32 +22,6 @@ import java.util.Locale
  * Compose: the screen keeps one while it's there and draws from [items].
  */
 class ChatScreenState {
-    /** One row of the list: a day's date, the divider over the first unread, a message, or the row that loads the archive's next page. */
-    sealed interface Item {
-        val key: String
-
-        /** A day's date over its [first] message: keyed by that, as a message out of time order can bring a date back. */
-        data class Day(val date: LocalDate, val first: String) : Item {
-            override val key: String get() = "day-$first"
-        }
-
-        data object Divider : Item {
-            override val key: String get() = "unread"
-        }
-
-        /**
-         * A [message], with the message it replies to where that isn't the one above it ([quote]), shown over
-         * its words; one from the archive ([archived]) shown with nothing to do, as only the window is acted on.
-         */
-        data class Message(val message: ChatMessage, val quote: ChatMessage? = null, val archived: Boolean = false) : Item {
-            override val key: String get() = message.id
-        }
-
-        data object Earlier : Item {
-            override val key: String get() = "earlier"
-        }
-    }
-
     /** The first of his messages unread when the chat was opened ([opened]): the divider is over it, for this visit. */
     var firstUnread: String? by mutableStateOf(null)
         private set
@@ -182,10 +152,8 @@ class ChatScreenState {
     fun opened(state: ChatState, now: Long, at: String? = null) {
         // A question you've answered from his notification has been seen, as his button's count says; and
         // what it showed when it was left just now, whether or not that's reached the chat's read position.
-        val readAt = maxOf(state.readAt, leftAt)
         // One you've replied to from it too: seen, as you answered it.
-        val replied = Outbox.repliedTo(state)
-        val unread = state.messages.filter { Outbox.unread(it, readAt) && it.answeredAt == null && it.id !in replied }
+        val unread = Outbox.unreadOf(state, maxOf(state.readAt, leftAt))
         firstUnread = unread.firstOrNull()?.id
         unreadOnOpen = unread.mapTo(HashSet()) { it.id }
         since = now
@@ -288,41 +256,14 @@ class ChatScreenState {
         scrollTo = id
     }
 
-    /**
-     * The list as it's drawn: the [archive]'s [earlier] newest messages, then the [window]'s, each day's
-     * date over its first, the divider over the first unread, and over a reply what it replies to where
-     * that isn't the message above it (from the [quotes] read of the archive, past its pages); the row that
-     * loads the next page at the top while the archive has more, or holds some not read yet ([unread]). His
-     * silences (nothing to say) aren't drawn.
-     */
-    fun items(window: List<ChatMessage>, archive: List<ChatMessage>, zone: ZoneId, unread: Boolean = false, quotes: List<ChatMessage> = emptyList()): List<Item> = buildList {
-        if (earlier < archive.size || unread) add(Item.Earlier)
-        val byId = (quotes + archive + window).associateBy { it.id }
-        val live = window.mapTo(HashSet()) { it.id }
-        var day: LocalDate? = null
-        var above: ChatMessage? = null
-        for (m in (archive.takeLast(earlier) + window).distinctBy { it.id }) {
-            if (m.from == Speaker.Felix && m.text.isBlank()) continue
-            val on = Instant.ofEpochMilli(m.at).atZone(zone).toLocalDate()
-            if (on != day) {
-                add(Item.Day(on, m.id))
-                day = on
-            }
-            if (m.id == firstUnread) add(Item.Divider)
-            add(Item.Message(m, m.replyTo?.takeIf { it != above?.id }?.let(byId::get)?.takeIf { it.text.isNotBlank() }, archived = m.id !in live))
-            above = m
-        }
-    }
+    /** The list as it's drawn, by what this visit holds: [ChatRows.items]. */
+    fun items(window: List<ChatMessage>, archive: List<ChatMessage>, zone: ZoneId, unread: Boolean = false, quotes: List<ChatMessage> = emptyList()): List<ChatRows.Item> =
+        ChatRows.items(window, archive, earlier, firstUnread, zone, unread, quotes)
 
     companion object {
-        /** The archive read back a page at a time. */
-        const val PAGE = 100
+        const val PAGE = ChatRows.PAGE
 
-        /** How long the chat is on screen before a visit's seen (Q120): long enough to pass through to Day, short enough that a real look counts. */
-        const val READ_AFTER_MS = 3_000L
-
-        private val DAY = DateTimeFormatter.ofPattern("EEEE d MMMM", Locale.UK)
-        private val DAY_YEAR = DateTimeFormatter.ofPattern("EEEE d MMMM yyyy", Locale.UK)
+        const val READ_AFTER_MS = ChatRows.READ_AFTER_MS
 
         /**
          * The app's draft, a screen made again after a stop of the process having [saved] one: what's newer. By time,
@@ -347,12 +288,5 @@ class ChatScreenState {
          */
         fun withUnsent(draft: String, unsent: Unsent): Pair<String, Boolean> =
             if (draft.isEmpty()) unsent.text to true else (unsent.text + "\n\n" + draft) to false
-
-        /** [date] as the line between days says it, [today] being today: "Today", "Yesterday", "Tuesday 13 October" (with its year where it isn't this one). */
-        fun dayLine(date: LocalDate, today: LocalDate): String = when (date) {
-            today -> "Today"
-            today.minusDays(1) -> "Yesterday"
-            else -> date.format(if (date.year == today.year) DAY else DAY_YEAR)
-        }
     }
 }
