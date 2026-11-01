@@ -207,10 +207,11 @@ data class ReplyFromNotification(val text: String, val id: String) : Action, Ans
     override suspend fun run(owners: Owners): Boolean = owners.conversation.replyFromNotification(text, id)
 }
 
+/** [id] the message the page showed: one sent since isn't the one taken back. */
 @Serializable
 @SerialName("WithdrawQuestion")
-data object WithdrawQuestion : Action, Answers<Unit> {
-    override suspend fun run(owners: Owners) = owners.conversation.withdrawQuestion()
+data class WithdrawQuestion(val id: String) : Action, Answers<Unit> {
+    override suspend fun run(owners: Owners) = owners.conversation.withdrawQuestion(id)
 }
 
 @Serializable
@@ -223,6 +224,8 @@ data object CancelAnswer : Action, Answers<Unit> {
 @SerialName("MarkAnswered")
 data class MarkAnswered(val ids: List<String>) : Action, Answers<Conversation.Marked> {
     override suspend fun run(owners: Owners): Conversation.Marked = owners.conversation.markAnswered(ids)
+
+    override fun undoing(answer: Any?): Action? = (answer as? Conversation.Marked)?.takeIf { it.ids.isNotEmpty() }?.let { UnmarkAnswered(it) }
 }
 
 @Serializable

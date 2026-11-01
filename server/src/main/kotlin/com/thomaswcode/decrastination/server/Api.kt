@@ -278,10 +278,14 @@ private fun Route.signedInRoutes(web: Web) {
         // Mirror mode's writer is the phone, by its seeds: a command now would be undone by the next one.
         if (graph.mode != ServerGraph.COMMANDS) return@post call.respond(HttpStatusCode.Conflict, Problem("The server is mirroring the phone"))
         val device = (call.client as? Client.Phone)?.id ?: Client.WEBSITE
-        val outcomes = graph.applier.apply(call.receive<CommandBatch>(), device)
-        // Felix's answer, on its own time: the phone's message is in, whenever he gets to it.
-        graph.answerSoon()
-        call.respond(outcomes)
+        call.respond(graph.applier.apply(call.receive<CommandBatch>(), device))
+    }
+
+    // Asked again at your word, outside any command: a call mustn't hold the state's write lock.
+    post("/chat/try-again") {
+        if (graph.mode != ServerGraph.COMMANDS) return@post call.respond(HttpStatusCode.Conflict, Problem("The server is mirroring the phone"))
+        graph.tryAgain()
+        call.respond(HttpStatusCode.NoContent)
     }
 
     get("/credentials") {
@@ -299,6 +303,10 @@ private fun Route.signedInRoutes(web: Web) {
         call.respond(graph.day(date))
     }
     get("/views/work") { call.respond(graph.work()) }
+    get("/views/chat") {
+        call.respond(graph.chat(call.request.queryParameters["earlier"]?.toIntOrNull() ?: 0, call.request.queryParameters["reach"]))
+    }
+    get("/views/notices") { call.respond(graph.notices()) }
     post("/photos/tasks") {
         if (call.client !is Client.Website) return@post call.respond(HttpStatusCode.Forbidden, Problem("A photo's read from the website"))
         if (graph.mode != ServerGraph.COMMANDS) return@post call.respond(HttpStatusCode.Conflict, Problem("The server is mirroring the phone"))

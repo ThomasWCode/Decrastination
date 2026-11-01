@@ -1,7 +1,20 @@
 import { expect, test } from "@playwright/test";
 
-test("signed in, the Day shows the plan's grid and what to do now", async ({ page }) => {
+test("the chat's the home, and while the phone writes it's there to read, with nothing to press", async ({ page }) => {
   await page.goto("/");
+  await expect(page.getByTestId("message").filter({ hasText: "A new word for you" })).toBeVisible();
+  await expect(page.getByText("To write to Fe, use the phone for now.")).toBeVisible();
+  await expect(page.getByRole("form", { name: /^Write to/ })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Clear the chat" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Mark all answered" })).toHaveCount(0);
+  await expect(page.getByRole("group", { name: "His replies" })).toHaveCount(0);
+  const his = page.getByTestId("message").filter({ hasText: "Busy, but it fits." });
+  await expect(his.getByRole("button", { name: "Thumbs up" })).toHaveCount(0);
+  await expect(page.getByRole("complementary", { name: "Your changes" }).getByRole("button", { name: "Take back" })).toHaveCount(0);
+});
+
+test("signed in, the Day shows the plan's grid and what to do now", async ({ page }) => {
+  await page.goto("/day");
   await expect(page.getByRole("heading", { name: "Do now" })).toBeVisible();
   await expect(page.getByRole("navigation", { name: "Week" })).toBeVisible();
   await expect(page.getByTestId("grid")).toBeVisible();
@@ -15,7 +28,7 @@ test("the grid keeps your place when the page is asked for again", async ({ page
     const response = await route.fetch();
     await route.fulfill({ response, json: { ...(await response.json()), nowMin: minute++ } });
   });
-  await page.goto("/");
+  await page.goto("/day");
   const grid = page.getByTestId("grid");
   await expect(grid).toBeVisible();
   const line = grid.locator("i.now");
@@ -29,7 +42,7 @@ test("the grid keeps your place when the page is asked for again", async ({ page
 });
 
 test("a day of the week can be chosen", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/day");
   const week = page.getByRole("navigation", { name: "Week" });
   await week.getByRole("link").first().click();
   await expect(page).toHaveURL(/date=/);
@@ -76,7 +89,7 @@ test("the Phone page gives a code and lists what's paired", async ({ page }) => 
 test("signed out, the site asks you to sign in", async ({ browser }) => {
   const context = await browser.newContext({ storageState: { cookies: [], origins: [] } });
   const page = await context.newPage();
-  await page.goto("/");
+  await page.goto("/day");
   await expect(page.getByRole("link", { name: "Sign in with GitHub" })).toBeVisible();
   await context.close();
 });

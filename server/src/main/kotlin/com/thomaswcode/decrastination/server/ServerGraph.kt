@@ -19,6 +19,7 @@ import com.thomaswcode.decrastination.enrich.AiUsage
 import com.thomaswcode.decrastination.enrich.KeyProblem
 import com.thomaswcode.decrastination.enrich.ModelGateway
 import com.thomaswcode.decrastination.enrich.PhotoTasks
+import com.thomaswcode.decrastination.felix.Outbox
 import com.thomaswcode.decrastination.learn.Daily
 import com.thomaswcode.decrastination.learn.EventJudge
 import com.thomaswcode.decrastination.net.Http
@@ -35,12 +36,16 @@ import com.thomaswcode.decrastination.sync.protocol.Command
 import com.thomaswcode.decrastination.sync.protocol.CommandBatch
 import com.thomaswcode.decrastination.sync.protocol.Commands
 import com.thomaswcode.decrastination.sync.protocol.Outcome
+import com.thomaswcode.decrastination.ui.ChatRows
 import com.thomaswcode.decrastination.ui.Moves
 import com.thomaswcode.decrastination.ui.PieceSays
 import com.thomaswcode.decrastination.ui.TaskSheetModel
 import com.thomaswcode.decrastination.views.Asked
+import com.thomaswcode.decrastination.views.ChatView
+import com.thomaswcode.decrastination.views.ChatViews
 import com.thomaswcode.decrastination.views.DayView
 import com.thomaswcode.decrastination.views.DayViews
+import com.thomaswcode.decrastination.views.NoticesView
 import com.thomaswcode.decrastination.views.OwnTaskEdit
 import com.thomaswcode.decrastination.views.PhotoRead
 import com.thomaswcode.decrastination.views.SettingsView
@@ -116,6 +121,8 @@ class ServerGraph(
     private val version: String,
     /** Claude's key, from the box's `.env` (W-12): none, and the rules do what they can. */
     private val claudeKey: String? = null,
+    /** Where Claude's calls go instead of Anthropic: a test's stand-in, and only a test's. */
+    claudeEndpoint: String? = null,
     /** Where a minute's heartbeat is sent (healthchecks.io), if anywhere. */
     private val heartbeatUrl: String? = null,
     private val http: Http = UrlConnectionHttp(),
@@ -148,7 +155,7 @@ class ServerGraph(
     val calendarRead = JsonStore(backend, CalendarRead.NAME, CalendarRead.serializer(), ::CalendarRead)
     val devices = Devices(db)
 
-    private val gateway = ModelGateway(stores.settings, { claudeKey }, stores.model, stores.tasks, clock, NoAlerts, scope) {}
+    private val gateway = ModelGateway(stores.settings, { claudeKey }, stores.model, stores.tasks, clock, NoAlerts, scope) {}.apply { endpoint = claudeEndpoint }
 
     val planning: Planning = Planning(
         stores.tasks, stores.settings, stores.session, stores.learning, stores.model, stores.log, stores.instructions, stores.school, clock, scope, gateway,
@@ -353,11 +360,11 @@ class ServerGraph(
         return now >= tonight && (last == null || last < tonight)
     }
 
-    /** What waits for Claude asked for, after a command's landed: on its own time, as a call can take a minute. */
-    fun answerSoon() {
+    /** Your message that waits asked for again, at your Try again: on its own time, as a call can take a minute. */
+    fun tryAgain() {
         scope.launch {
             try {
-                owners.answerWhatWaits()
+                owners.conversation.answerChat(retry = true)
             } catch (failed: IOException) {
                 Log.w(Log.TAG, "Asking Claude failed: ${failed::class.simpleName}")
             }
@@ -452,6 +459,32 @@ class ServerGraph(
 
     /** The parent code's secret, as the phone sends it or takes it away (W-19): held here so a code typed on the website can be checked. */
     suspend fun setParentCode(secret: String?) = stores.secrets.put(Secret.TotpSecret, secret?.takeIf { it.isNotBlank() })
+
+    /**
+     * The chat as the website draws it: [earlier] of the archive's newest over the window, or as far back as message [reach], a reply's
+     * quote followed. Claude's on by this box's key where it's asked here, and by the phone's while it's asked there.
+     */
+    fun chat(earlier: Int, reach: String?): ChatView {
+        val now = clock.now()
+        val chat = stores.chat.value
+        val archive = stores.chatArchive
+        val writable = mode == COMMANDS
+        val settings = stores.settings.value
+        val back = reach?.let(archive::back) ?: 0
+        // However far a page asks: it's added to a page's length below.
+        val shown = minOf(maxOf(earlier, back), Int.MAX_VALUE - ChatRows.PAGE)
+        val read = if (shown > 0) archive.recent(shown + ChatRows.PAGE) else emptyList()
+        val known = (chat.messages + read).mapTo(HashSet()) { it.id }
+        val quotes = (read.takeLast(shown) + chat.messages).mapNotNull { message -> message.replyTo?.takeIf { it !in known } }.distinct().mapNotNull(archive::find)
+        return ChatViews.of(
+            chat, read, shown, older = shown == 0 && archive.recent(1).isNotEmpty(), quotes, stores.tasks.value, settings, stores.memory.value, stores.felix.value, stores.instructions.value,
+            owners.conversation.keptAt(now), owners.conversation.answeringSince.value, settings.aiEnabled && (if (writable) claudeKey != null else settings.aiKeyActive),
+            owners.focus.today(now), now, clock.zone(), writable,
+        )
+    }
+
+    /** What's said wherever you are on the website. */
+    fun notices(): NoticesView = NoticesView(Outbox.unreadOf(stores.chat.value).size)
 
     /** Task [id]'s sheet, if there's such a task. */
     fun task(id: String): TaskView? {

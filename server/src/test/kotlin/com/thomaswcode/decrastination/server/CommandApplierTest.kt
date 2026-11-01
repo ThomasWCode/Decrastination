@@ -1,23 +1,31 @@
 package com.thomaswcode.decrastination.server
 
+import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.core.OwnTask
+import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.data.Secret
 import com.thomaswcode.decrastination.data.SecretCipher
 import com.thomaswcode.decrastination.protect.Totp
 import com.thomaswcode.decrastination.sync.protocol.ApplyChangeNow
 import com.thomaswcode.decrastination.sync.protocol.ChangeSettings
+import com.thomaswcode.decrastination.sync.protocol.ClearChat
 import com.thomaswcode.decrastination.sync.protocol.Command
 import com.thomaswcode.decrastination.sync.protocol.CommandBatch
 import com.thomaswcode.decrastination.sync.protocol.Commands
 import com.thomaswcode.decrastination.sync.protocol.FinishOwnTask
+import com.thomaswcode.decrastination.sync.protocol.MarkAnswered
 import com.thomaswcode.decrastination.sync.protocol.Outcome
+import com.thomaswcode.decrastination.sync.protocol.RateMessage
+import com.thomaswcode.decrastination.sync.protocol.ReplyFromNotification
 import com.thomaswcode.decrastination.sync.protocol.SaveOwnTask
+import com.thomaswcode.decrastination.sync.protocol.SendMessage
 import com.thomaswcode.decrastination.sync.protocol.UseParentCode
 import java.io.File
 import java.nio.file.Files
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -137,6 +145,41 @@ class CommandApplierTest {
         assertEquals("Wrong code: 2 tries left", first.why)
         assertEquals("Wrong code: 1 try left", send(Command("two", at, UseParentCode(wrong(secret)))).why, "the first wrong one is counted")
         assertEquals(first.why, send(Command("one", at, UseParentCode(wrong(secret)))).why, "and a repeat answers as it did")
+    }
+
+    @Test
+    fun `an answer that takes back what it did says what does`() = runBlocking {
+        graph.stores.chat.update { it.copy(messages = listOf(ChatMessage("q", Speaker.Felix, "A question", at))) }
+        val marked = send(Command("one", at, MarkAnswered(listOf("q"))))
+        assertNotNull(graph.stores.chat.value.messages.single().answeredAt)
+        val undo = assertNotNull(marked.undo)
+        assertEquals(Outcome.APPLIED, send(Command("two", at, undo)).state)
+        assertNull(graph.stores.chat.value.messages.single().answeredAt)
+        assertNull(send(Command("three", at, MarkAnswered(listOf("nothing")))).undo, "with nothing marked, there's nothing to take back")
+    }
+
+    @Test
+    fun `clearing the chat leaves none of its words on record, and what isn't its stays`() = runBlocking {
+        graph.stores.chat.update { it.copy(messages = listOf(ChatMessage("q", Speaker.Felix, "A question", at))) }
+        send(Command("said", at, SendMessage("the words of the chat", id = "m")))
+        send(Command("told", at, ReplyFromNotification("the words of a reply", "q")))
+        send(Command("rated", at, RateMessage("q", true, "what I thought of it")))
+        send(Command("task", at, own("Essay")))
+        assertEquals(Outcome.APPLIED, send(Command("gone", at, ClearChat)).state)
+        val left = db.read { c -> c.createStatement().use { s -> s.executeQuery("SELECT group_concat(payload) FROM commands").use { it.next(); it.getString(1) } } }
+        for (words in listOf("the words of the chat", "the words of a reply", "what I thought of it")) assertFalse(words in left, words)
+        assertTrue("Essay" in left)
+        assertEquals(5, rows(), "each stays on record, so a repeat still answers as it did")
+        assertEquals(Outcome.APPLIED, send(Command("said", at, SendMessage("the words of the chat", id = "m"))).state)
+        assertTrue(graph.stores.chat.value.messages.isEmpty(), "and makes nothing")
+    }
+
+    @Test
+    fun `only the chat's copies going takes its words off the record`() = runBlocking {
+        send(Command("said", at, SendMessage("the words of the chat", id = "m")))
+        graph.backend.letGoOfCopies { it == "tasks.json" }
+        val left = db.read { c -> c.createStatement().use { s -> s.executeQuery("SELECT group_concat(payload) FROM commands").use { it.next(); it.getString(1) } } }
+        assertTrue("the words of the chat" in left)
     }
 
     @Test

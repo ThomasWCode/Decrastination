@@ -36,7 +36,14 @@ data class CommandBatch(val commands: List<Command>)
 
 /** What came of a command: [state] one of [APPLIED], [DROPPED]; why, if it was dropped; and the revision it left the state at. */
 @Serializable
-data class Outcome(val id: String, val state: String, val why: String? = null, val revision: Long = 0) {
+data class Outcome(
+    val id: String,
+    val state: String,
+    val why: String? = null,
+    val revision: Long = 0,
+    /** What takes it back, where that needs what only its owner knows ([Action.undoing]): a client can't make it itself. */
+    val undo: Action? = null,
+) {
     companion object {
         const val APPLIED = "applied"
         const val DROPPED = "dropped"
@@ -59,6 +66,9 @@ sealed interface Action {
 
     /** Why it came to nothing, by the [answer] its owner gave, or null: reported as a stale one is, what it did standing, a wrong code's count among it. */
     fun refused(answer: Any?): String? = null
+
+    /** What takes this back, by the [answer] its owner gave, or null: for a client that hears only the [Outcome]. */
+    fun undoing(answer: Any?): Action? = null
 }
 
 /** An action's answer, typed, for the screen that asked it. */

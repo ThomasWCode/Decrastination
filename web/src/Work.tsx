@@ -153,7 +153,7 @@ export function WorkPage() {
   const { value: view, failed } = useLive(load);
   const [bySubject, setBySubject] = useState(false);
   const [only, setOnly] = useState<string | null>(null);
-  const [opened, setOpened] = useState<string | null>(null);
+  const [opened, setOpened] = useState<string | null>(() => new URLSearchParams(location.search).get("task"));
   const [adding, setAdding] = useState(false);
   const shut = useCallback(() => setOpened(null), []);
   if (!view) return failed ? <p className="problem">Work couldn't be read. It tries again with the next change.</p> : null;

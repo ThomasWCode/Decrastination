@@ -4,7 +4,8 @@ const browser = { ...devices["Desktop Chrome"], viewport: { width: 1440, height:
 
 // The website against the real server, run from its fat JAR in test mode with the made-up stores in
 // fixtures/ (e2e/global-setup.ts). Two of each: reading against a server that mirrors, as the site does
-// till the switch, and writing against one that applies commands, each with a database of its own.
+// till the switch, and writing against one that applies commands, each with a database of its own, and a
+// stand-in for Claude that costs nothing (e2e/claude-stand-in.mjs).
 // Build the JAR first: ./gradlew :server:buildFatJar
 export default defineConfig({
   testDir: "e2e",
@@ -21,6 +22,11 @@ export default defineConfig({
     screenshot: "only-on-failure",
   },
   webServer: [
+    {
+      command: "node e2e/claude-stand-in.mjs 8092",
+      url: "http://127.0.0.1:8092/",
+      reuseExistingServer: !process.env.CI,
+    },
     {
       command: "node e2e/start-server.mjs 8090",
       url: "http://127.0.0.1:8090/api/health",
@@ -46,7 +52,7 @@ export default defineConfig({
     },
   ],
   projects: [
-    { name: "reading", testIgnore: "writes.spec.ts", use: { ...browser, baseURL: "http://127.0.0.1:4175", storageState: "e2e/.state.json" } },
-    { name: "writing", testMatch: "writes.spec.ts", use: { ...browser, baseURL: "http://127.0.0.1:4176", storageState: "e2e/.state-writes.json" } },
+    { name: "reading", testIgnore: /(chat|writes)\.spec\.ts/, use: { ...browser, baseURL: "http://127.0.0.1:4175", storageState: "e2e/.state.json" } },
+    { name: "writing", testMatch: /(chat|writes)\.spec\.ts/, use: { ...browser, baseURL: "http://127.0.0.1:4176", storageState: "e2e/.state-writes.json" } },
   ],
 });

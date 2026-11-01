@@ -25,6 +25,8 @@ The chat is the app's home (D-121, 4.9.0; Q113 to Q120): the launcher opens it, 
 - **Back.** On the chat at its task's root, the app goes to the back (`moveTaskToBack`), the chat kept as it was. On Day, Work or Stats at the task's root (opened straight from the widget or a notification), the chat opens in its place (Q116, `Home.backOpensChat`); over the chat, Back closes Day.
 - **Felix's button** opens a chat over the screen it's on, about what it shows, and Back returns there (Q118); the home chat underneath is left as it was. On the block screen, which has a task of its own that mustn't hold Day, its chat keeps a Back arrow in place of the Plan button, and has neither Setup's mark nor Day's menu items, so nothing from it opens the app's pages in that task (`AskActivity.intent(back = true)`); Back there closes it, never sending that task to the back.
 
+The website's home is the chat too ([website.md](website.md)): the same rows, words and rules (`ChatRows`, `Replies`, `Outbox.unreadOf`, `ChatViews`), Your changes beside it. What's the phone's alone stays there: voice, a draft kept across a stopped process, and his notification.
+
 Every way in ("over" meaning Back returns to the screen underneath):
 
 | Way in | Opens |

@@ -39,8 +39,6 @@ import com.thomaswcode.decrastination.sync.protocol.RereadInstruction
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
-import java.time.format.DateTimeFormatter
-import java.util.Locale
 import kotlinx.coroutines.launch
 
 /** Examples of what an instruction can say, for the box you write one in. */
@@ -72,16 +70,6 @@ fun InstructionDialog(what: String, initial: String = "", onDismiss: () -> Unit,
         confirmButton = { TextButton(enabled = text.isNotBlank(), onClick = { onSend(text) }) { Text("Send to Claude") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
-}
-
-private val DAY = DateTimeFormatter.ofPattern("EEEE d MMMM", Locale.UK)
-
-/** What an instruction is about, in words. */
-fun aboutLine(about: About, now: Long, zone: ZoneId): String = when {
-    about.taskId != null -> "About the task “${about.taskTitle ?: about.taskId}”"
-    about.eventKey != null -> "About “${about.eventTitle ?: about.eventKey}”" + (about.eventStart?.let { ", " + Format.at(it, now, zone) } ?: "")
-    about.day != null -> "About " + (runCatching { LocalDate.parse(about.day).format(DAY) }.getOrNull() ?: about.day)
-    else -> "General"
 }
 
 /**

@@ -152,8 +152,6 @@ import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.InstructionStatus
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Memories
-import com.thomaswcode.decrastination.core.MessageKind
-import com.thomaswcode.decrastination.core.OwnTask
 import com.thomaswcode.decrastination.core.OwnTaskRules
 import com.thomaswcode.decrastination.core.Proposal
 import com.thomaswcode.decrastination.core.ProposalState
@@ -477,14 +475,14 @@ class AskActivity : ComponentActivity() {
         // marked answered, each or all at once, with an Undo for a moment.
         val checkIn = chat.felix.checkInDraft != null
         val awaiting = Replies.awaitingIds(chat.messages, checkIn, now, zone)
-        val markable = chat.messages.filter { it.id in awaiting && !(checkIn && it.kind == MessageKind.CheckIn) }.mapTo(HashSet()) { it.id }
+        val markable = Replies.markable(chat.messages, checkIn, awaiting)
         val snackbar = remember { SnackbarHostState() }
         fun mark(ids: Collection<String>) {
             scope.launch {
                 val marked = graph.act(MarkAnswered(ids.toList()))
                 if (marked.ids.isEmpty()) return@launch
                 val said = if (marked.ids.size == 1) "Marked answered" else "${marked.ids.size} marked answered"
-                val undo = withTimeoutOrNull(UNDO_BAR_MS) { snackbar.showSnackbar(said, actionLabel = "Undo", duration = SnackbarDuration.Indefinite) }
+                val undo = withTimeoutOrNull(ChatRows.UNDO_BAR_MS) { snackbar.showSnackbar(said, actionLabel = "Undo", duration = SnackbarDuration.Indefinite) }
                 if (undo == SnackbarResult.ActionPerformed) graph.act(UnmarkAnswered(marked))
             }
         }
@@ -569,11 +567,12 @@ class AskActivity : ComponentActivity() {
                     // (D-98); else his last message's replies, where it's his. One of his you chose to reply to (a swipe,
                     // its waiting line tapped) shows its own. A nudge just above the box takes it with no strip, your
                     // words its reply ([quiet]); one further up has its strip, as a question has.
-                    val pending = Replies.pending(chat.messages, checkIn, now, zone)
-                    val nudge = pending != null && !Replies.waiting(pending, checkIn)
-                    val quiet = pending?.takeIf { nudge && it.id == Replies.newest(chat.messages)?.id }
+                    val turn = Replies.turn(chat.messages, checkIn, now, zone)
+                    val pending = turn.pending
+                    val nudge = turn.nudge
+                    val quiet = turn.quiet
                     val chosen = screen.replyingTo?.takeIf { it.from == Speaker.Felix && it.answeredAt == null && it.suggestedReplies.isNotEmpty() }
-                    val last = chosen ?: pending ?: Replies.newest(chat.messages)?.takeIf { it.from == Speaker.Felix && it.answeredAt == null }
+                    val last = chosen ?: turn.last
                     LaunchedEffect(pending?.id, checkIn, quiet?.id) { screen.offer(pending?.takeIf { quiet == null }, checkIn, nudge) }
                     if (last != null && last.suggestedReplies.isNotEmpty()) {
                         FlowRow(Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -735,17 +734,6 @@ class AskActivity : ComponentActivity() {
     }
 }
 
-/** The examples the empty chat shows. */
-private val EXAMPLES = listOf(
-    "I need to write my UCAS personal statement by 1 December, about 8 hours",
-    "The physics prep will take 90 minutes",
-    "Move the German vocab to Thursday",
-    "I'm out on Saturday evening from 7",
-    "Remind me at 7 to call gran",
-    "Note on the essay: use the second source",
-    "I'm done with the trip email",
-)
-
 /**
  * The conversation, newest at the foot, kept in view as it grows; each day's date over its first
  * message, and the divider over the first unread, for this visit (docs/spec/felix.md §The chat).
@@ -805,7 +793,7 @@ private fun ColumnScope.Chat(
         val target = screen.scrollTo ?: return@LaunchedEffect
         val at = rows.indexOfFirst { it.key == target }
         if (at < 0 && reading) return@LaunchedEffect
-        if (at < 0) list.scrollToItem(rows.size + 1) else list.scrollToItem(1 + if (at > 0 && rows[at - 1] == ChatScreenState.Item.Divider) at - 1 else at)
+        if (at < 0) list.scrollToItem(rows.size + 1) else list.scrollToItem(1 + if (at > 0 && rows[at - 1] == ChatRows.Item.Divider) at - 1 else at)
         settled = true
         screen.scrolled()
     }
@@ -822,7 +810,7 @@ private fun ColumnScope.Chat(
     val known = remember(all, archive, quotes) { (all + archive + quotes).mapTo(HashSet()) { it.id } }
     LaunchedEffect(list, rows, known) {
         snapshotFlow { list.layoutInfo.visibleItemsInfo.mapTo(HashSet()) { it.key } }.collect { keys ->
-            val past = rows.mapNotNullTo(HashSet()) { r -> (r as? ChatScreenState.Item.Message)?.takeIf { it.key in keys }?.message?.replyTo?.takeIf { it !in known } }
+            val past = rows.mapNotNullTo(HashSet()) { r -> (r as? ChatRows.Item.Message)?.takeIf { it.key in keys }?.message?.replyTo?.takeIf { it !in known } }
             if (past.isNotEmpty()) onQuoted(past)
         }
     }
@@ -846,22 +834,22 @@ private fun ColumnScope.Chat(
                 }
                 if (shown.isEmpty()) {
                     Text(
-                        "Tell ${graph.settings.value.felixName} about your work: a task to add, a deadline or how long something takes, a day you can't work, a step done. Whatever he does is made at once, and its Undo takes it back.",
+                        ChatRows.intro(graph.settings.value.felixName),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    EXAMPLES.forEach { Text("“$it”", style = MaterialTheme.typography.bodyMedium, fontStyle = FontStyle.Italic, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                    ChatRows.EXAMPLES.forEach { Text("“$it”", style = MaterialTheme.typography.bodyMedium, fontStyle = FontStyle.Italic, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 }
             }
         }
         items(rows, key = { it.key }) { row ->
             when (row) {
-                ChatScreenState.Item.Earlier -> Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                ChatRows.Item.Earlier -> Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                     TextButton(onClick = { screen.loadEarlier(archive.size.takeUnless { unread }) }) { Text("Earlier messages") }
                 }
-                is ChatScreenState.Item.Day -> DayLine(row.date, today)
-                ChatScreenState.Item.Divider -> NewMessages()
-                is ChatScreenState.Item.Message -> {
+                is ChatRows.Item.Day -> DayLine(row.date, today)
+                ChatRows.Item.Divider -> NewMessages()
+                is ChatRows.Item.Message -> {
                     val message = row.message
                     val flash = screen.flash == message.id
                     LaunchedEffect(flash) {
@@ -894,9 +882,6 @@ private fun ColumnScope.Chat(
 /** How long the message his notification opened the chat at stays tinted. */
 private const val FLASH_MS = 1_000L
 
-/** How long Mark answered's Undo stays at the foot (D-99): six seconds. */
-private const val UNDO_BAR_MS = 6_000L
-
 /** How near the top of the list (in rows) scrolling back loads the archive's next page. */
 private const val EARLIER_WITHIN = 5
 
@@ -905,7 +890,7 @@ private const val EARLIER_WITHIN = 5
 private fun DayLine(date: LocalDate, today: LocalDate) {
     Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
         Text(
-            ChatScreenState.dayLine(date, today),
+            ChatRows.dayLine(date, today),
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceContainer).padding(horizontal = 12.dp, vertical = 4.dp),
@@ -1136,7 +1121,7 @@ private fun Yours(graph: AppGraph, message: ChatMessage, quote: ChatMessage?, na
             Text(note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 6.dp))
             Row {
                 TextButton(onClick = { graph.scope.launch { graph.conversation.answerChat(retry = true) } }) { Text("Try again") }
-                TextButton(onClick = { scope.launch { graph.act(WithdrawQuestion) } }) { Text("Take back") }
+                TextButton(onClick = { scope.launch { graph.act(WithdrawQuestion(message.id)) } }) { Text("Take back") }
             }
         }
     }
@@ -1145,7 +1130,7 @@ private fun Yours(graph: AppGraph, message: ChatMessage, quote: ChatMessage?, na
 /**
  * Felix answering, on his side (in place of "Felix is thinking… 12 s"): three
  * dots rising in turn in a bubble of his, as a messaging app shows someone typing; and once the
- * call has run [CANCEL_AFTER_S], a way to stop waiting (AC-08).
+ * call has run [ChatRows.CANCEL_AFTER_S], a way to stop waiting (AC-08).
  */
 @Composable
 private fun Typing(graph: AppGraph) {
@@ -1157,7 +1142,7 @@ private fun Typing(graph: AppGraph) {
             delay(1_000)
         }
     }
-    val long = since?.let { (clock - it) / 1_000 >= CANCEL_AFTER_S } == true
+    val long = since?.let { (clock - it) / 1_000 >= ChatRows.CANCEL_AFTER_S } == true
     val name = graph.settings.value.felixName
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, shape = RoundedCornerShape(18.dp, 18.dp, 18.dp, 4.dp)) {
@@ -1506,12 +1491,7 @@ private fun ProposalCard(graph: AppGraph, messageId: String, proposal: Proposal,
                 Text(task.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 Text(taskLine(task, now, zone), style = MaterialTheme.typography.bodyMedium)
                 if (task.steps.isNotEmpty()) {
-                    task.steps.forEach { s ->
-                        val dates = listOfNotNull(s.from?.let { "from " + Format.at(it, now, zone) }, s.dueAt?.let { Format.due(it, hard = false, now, zone) }).joinToString(", ")
-                        // One that doesn't need the steps before it says so (D-109), as the task's sheet does.
-                        val details = listOfNotNull(Format.minutes(s.minutes), dates.ifEmpty { null }, "in any order".takeIf { s.anyOrder }).joinToString("; ")
-                        Text("• ${s.title} ($details)", style = MaterialTheme.typography.bodySmall)
-                    }
+                    task.steps.forEach { s -> Text("• " + stepLine(s.title, s.minutes, s.from, s.dueAt, s.anyOrder, now, zone), style = MaterialTheme.typography.bodySmall) }
                 }
                 if (task.notes.isNotBlank()) Text(task.notes, style = MaterialTheme.typography.bodySmall)
             } else {
@@ -1571,16 +1551,6 @@ private fun ProposalCard(graph: AppGraph, messageId: String, proposal: Proposal,
         }
     }
 }
-
-/** A card's task in a line: its kind and subject, when it's due (or starts), how long it takes. */
-private fun taskLine(task: OwnTask, now: Long, zone: ZoneId): String = listOfNotNull(
-    task.kind.label,
-    task.className,
-    // Your own task's date is yours, so a real deadline.
-    task.dueAt?.let { if (task.kind == Kind.Event) Format.at(it, now, zone) else Format.due(it, hard = true, now, zone) } ?: "No due date",
-    task.startFrom?.let { "not before " + Format.at(it, now, zone) },
-    if (task.kind == Kind.Event) null else Format.minutes(if (task.steps.isEmpty()) task.minutes else task.steps.sumOf { it.minutes }),
-).joinToString(" · ")
 
 /** The box you write in, with the message it replies to and what it's about over it, and Send. */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -1652,7 +1622,4 @@ private fun InputBar(
         }
     }
 }
-
-/** How long the chat's call runs before Cancel is offered (AC-08). */
-private const val CANCEL_AFTER_S = 10L
 

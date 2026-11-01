@@ -18,6 +18,7 @@ import com.thomaswcode.decrastination.core.Instruction
 import com.thomaswcode.decrastination.core.Memories
 import com.thomaswcode.decrastination.core.MemoryState
 import com.thomaswcode.decrastination.core.MessageKind
+import com.thomaswcode.decrastination.core.OwnTask
 import com.thomaswcode.decrastination.core.OnlyDay
 import com.thomaswcode.decrastination.core.OutsideDay
 import com.thomaswcode.decrastination.core.Proposal
@@ -858,7 +859,7 @@ class ConversationTest {
         felix.settle()
         val why = stores.chat.value.unanswered?.note
         assertNotNull(why)
-        conversation.withdrawQuestion()
+        conversation.withdrawQuestion(stores.chat.value.unanswered!!.id)
         assertEquals("What's due tomorrow?" to why, stores.chat.value.unanswered?.let { it.text to it.note })
     }
 
@@ -871,12 +872,81 @@ class ConversationTest {
         stores.chat.update { s -> s.copy(messages = s.messages.map { if (it.text == "What's due tomorrow?") it.copy(note = "Claude's answer couldn't be read: Try again", stuck = true) else it }) }
         assertTrue(conversation.ask("And on Friday?"))
         felix.settle()
-        conversation.withdrawQuestion()
+        conversation.withdrawQuestion(stores.chat.value.unanswered!!.id)
         assertEquals(true, stores.chat.value.unanswered?.stuck)
         // Claude back: nothing's asked by itself.
         stores.settings.update { it.copy(aiEnabled = true) }
         conversation.answerChat()
         assertEquals(0, felix.server.requestCount)
+    }
+
+    @Test
+    fun `only the message the page showed is taken back`() = runBlocking {
+        stores.settings.update { it.copy(aiEnabled = false) }
+        assertTrue(conversation.ask("What's due tomorrow?", id = "shown"))
+        felix.settle()
+        assertTrue(conversation.ask("And on Friday?", id = "since"))
+        felix.settle()
+        conversation.withdrawQuestion("shown")
+        assertEquals(listOf("shown", "since"), stores.chat.value.messages.map { it.id })
+    }
+
+    @Test
+    fun `a message sent twice is one`() = runBlocking {
+        stores.settings.update { it.copy(aiEnabled = false) }
+        assertTrue(conversation.ask("What's due tomorrow?", id = "once"))
+        felix.settle()
+        assertEquals(Conversation.Asked.Turn, conversation.send("What's due tomorrow?", id = "once"))
+        assertEquals(listOf("once"), stores.chat.value.messages.map { it.id })
+    }
+
+    @Test
+    fun `a chip pressed twice on a question of his answers it once, and starts no turn of the chat`() = runBlocking {
+        stores.settings.update { it.copy(aiEnabled = false) }
+        val chip = CalendarTime.ANSWERS.first().first
+        stores.chat.update { it.copy(messages = listOf(ChatMessage("q", Speaker.Felix, "Can you work through this?", 1L, About(eventKey = "k", eventTitle = "An event"), kind = MessageKind.EventQuestion, suggestedReplies = listOf(chip)))) }
+        assertEquals(Conversation.Asked.Answer, conversation.send(chip, id = "press", replyTo = "q"))
+        assertEquals(Conversation.Asked.Turn, conversation.send(chip, id = "press", replyTo = "q"))
+        felix.settle()
+        assertEquals(listOf("q", "press"), stores.chat.value.messages.map { it.id })
+        assertNull(stores.chat.value.unanswered)
+    }
+
+    @Test
+    fun `a card of changes stays one, whatever task is sent with it`() = runBlocking {
+        val now = System.currentTimeMillis()
+        val change = Change(ChangeType.Minutes, taskId = sheet.id, minutes = 90)
+        stores.tasks.update { it.copy(tasks = listOf(sheet)) }
+        stores.chat.update { ChatState(listOf(ChatMessage("m", Speaker.Felix, "I'd make it 90 minutes.", now, proposals = listOf(Proposal("p", changes = listOf(change)))))) }
+        conversation.applyProposal("m", "p", OwnTask(title = "Not on this card"))
+        assertEquals(listOf(change), stores.instructions.value.instructions.single().changes)
+        assertTrue(stores.tasks.value.tasks.none { it.title == "Not on this card" })
+        assertNull(stores.chat.value.messages.single().proposals.single().task)
+    }
+
+    @Test
+    fun `a read mark ahead of this moment goes no further than now`() = runBlocking {
+        val now = System.currentTimeMillis()
+        conversation.read(now + 3_600_000L)
+        assertTrue(stores.chat.value.readAt <= System.currentTimeMillis(), "read at ${stores.chat.value.readAt}, now $now")
+        // An older mark doesn't take it back.
+        val read = stores.chat.value.readAt
+        conversation.read(1L)
+        assertEquals(read, stores.chat.value.readAt)
+    }
+
+    @Test
+    fun `an Undo of a mark can't set one of yours waiting again`() = runBlocking {
+        stores.chat.update {
+            it.copy(
+                messages = listOf(
+                    ChatMessage("his", Speaker.Felix, "A question", 1L, answeredAt = 5L),
+                    ChatMessage("yours", Speaker.You, "An answer", 2L, answeredAt = 5L),
+                ),
+            )
+        }
+        conversation.unmarkAnswered(Conversation.Marked(setOf("his", "yours"), 5L))
+        assertEquals(mapOf("his" to null, "yours" to 5L), stores.chat.value.messages.associate { it.id to it.answeredAt })
     }
 
     @Test

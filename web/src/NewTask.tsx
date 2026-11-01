@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { saying } from "./api";
-import type { OwnStep, OwnTaskEdit, OwnTaskFormView } from "./types";
+import type { Action, OwnStep, OwnTaskEdit, OwnTaskFormView } from "./types";
 
 /** A datetime-local field's words as a moment, or null where it's empty. */
 export function moment(field: string): number | null {
@@ -42,9 +42,9 @@ function rowsOf(start: OwnTaskEdit | undefined, editing: boolean): Row[] {
 
 /**
  * A task of your own, new, [from] what's been read for it, or [edit]ed: what the form won't take is the server's to say
- * (`OwnTaskRules`), and its kinds and limits are too.
+ * (`OwnTaskRules`), and its kinds and limits are too. What it's saved by is [making]'s, where that's something else (a card's task, changed first).
  */
-export function NewTask({ form, edit, from: read, close }: { form: OwnTaskFormView; edit?: OwnTaskEdit; from?: OwnTaskEdit; close: () => void }) {
+export function NewTask({ form, edit, from: read, making, close }: { form: OwnTaskFormView; edit?: OwnTaskEdit; from?: OwnTaskEdit; making?: (task: object) => Action; close: () => void }) {
   const given = edit ?? read;
   const start = given?.task;
   const [sourceId] = useState(() => given?.sourceId ?? crypto.randomUUID());
@@ -82,7 +82,7 @@ export function NewTask({ form, edit, from: read, close }: { form: OwnTaskFormVi
       })),
       where: start?.where ?? "anywhere",
     };
-    void saying({ type: "SaveOwnTask", sourceId, task, fromForm: true, wasIndexes: steps.map((row) => row.wasIndex) }).then((why) => {
+    void saying(making ? making(task) : { type: "SaveOwnTask", sourceId, task, fromForm: true, wasIndexes: steps.map((row) => row.wasIndex) }).then((why) => {
       if (why === null) close();
       else setSaid(why);
     });

@@ -144,6 +144,12 @@ class Outbox(
          */
         fun repliedTo(state: ChatState): Set<String> = state.messages.mapNotNullTo(HashSet()) { m -> m.replyTo.takeIf { m.from == Speaker.You } }
 
+        /** His messages in [state] that count as unread at [readAt]: those he's written since, but a question you've answered or a message you've replied to, which say they've been seen. */
+        fun unreadOf(state: ChatState, readAt: Long = state.readAt): List<ChatMessage> {
+            val replied = repliedTo(state)
+            return state.messages.filter { unread(it, readAt) && it.answeredAt == null && it.id !in replied }
+        }
+
         /** Whether [message] is his, with words, and unread at [readAt]: shown nowhere yet, so never moved. */
         fun unread(message: ChatMessage, readAt: Long): Boolean = message.from == Speaker.Felix && message.at > readAt && message.text.isNotBlank()
 

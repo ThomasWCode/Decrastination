@@ -145,7 +145,7 @@ export function DayPage({ date, go }: { date: string | null; go: Go }) {
       <section className="agenda" aria-label={day.title}>
         <nav className="week" aria-label="Week">
           {day.week.map((d) => (
-            <Link key={d.date} to={`/?date=${d.date}`} go={go} current={d.chosen}>
+            <Link key={d.date} to={`/day?date=${d.date}`} go={go} current={d.chosen}>
               <span className={d.today ? "weekday today" : "weekday"}>
                 {d.weekday} {d.day}
               </span>

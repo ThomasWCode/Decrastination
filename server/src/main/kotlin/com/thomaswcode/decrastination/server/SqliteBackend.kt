@@ -123,6 +123,8 @@ class SqliteBackend(private val db: Database, private val clock: () -> Long = Sy
                         q.executeUpdate()
                     }
                 }
+                // The commands on record are a copy of what the chat was told and what you said of it: their words go with it.
+                if (of(CHAT)) c.prepareStatement("UPDATE commands SET payload = '{}' WHERE json_extract(payload, '$.action.type') IN ($CHAT_WORDS)").use { it.executeUpdate() }
             }
         }
     }
@@ -171,6 +173,11 @@ class SqliteBackend(private val db: Database, private val clock: () -> Long = Sy
 
         /** What [Database.writing] calls a change to no one store. */
         private const val COPIES = ""
+
+        private const val CHAT = "chat.json"
+
+        /** The commands that hold the chat's words. */
+        private const val CHAT_WORDS = "'SendMessage', 'ReplyFromNotification', 'RateMessage'"
 
         /** The rows of a store's history kept however old they are. */
         const val HISTORY_KEPT = 20

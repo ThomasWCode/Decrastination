@@ -221,6 +221,8 @@ export interface Outcome {
   state: "applied" | "dropped" | "refused";
   why?: string | null;
   revision: number;
+  /** What takes it back, where only its owner could say. */
+  undo?: Action | null;
 }
 
 /** What's asked of a task where it takes the server's rules to make the commands (engine's views/TaskAsks.kt). */
@@ -327,4 +329,133 @@ export interface TaskView {
   edit?: OwnTaskEdit | null;
   move?: MoveView | null;
   where?: string | null;
+}
+
+export interface ChatQuote {
+  id: string;
+  who: string;
+  line: string;
+}
+
+export interface ChatChip {
+  words: string;
+  send: Action;
+}
+
+export interface ChatSourceLine {
+  title: string;
+  url?: string | null;
+}
+
+export interface ChatDid {
+  line: string;
+  undone: boolean;
+  undo?: Action | null;
+}
+
+export interface ChatButton {
+  label: string;
+  action?: Action | null;
+  edit?: OwnTaskEdit | null;
+  primary: boolean;
+  confirm?: string | null;
+  detail?: string | null;
+}
+
+export interface ChatCard {
+  id: string;
+  heading: string;
+  title?: string | null;
+  line?: string | null;
+  steps: string[];
+  notes?: string | null;
+  lines: string[];
+  note?: string | null;
+  open?: string | null;
+  state?: string | null;
+  aside: boolean;
+  buttons: ChatButton[];
+}
+
+export interface ChatRow {
+  id: string;
+  yours: boolean;
+  at: number;
+  time: string;
+  day?: string | null;
+  texts: string[];
+  about?: string | null;
+  quote?: ChatQuote | null;
+  archived: boolean;
+  waiting: boolean;
+  mark?: Action | null;
+  note?: string | null;
+  takeBack?: Action | null;
+  tryAgain: boolean;
+  chips: ChatChip[];
+  ratable: boolean;
+  rating: string;
+  feedback: string;
+  preferred: string;
+  feeling: string;
+  unsent: string[];
+  did: string;
+  wrong: string;
+  folds: boolean;
+  problem: boolean;
+  searched?: string | null;
+  sources: ChatSourceLine[];
+  shown: ChatCard[];
+  cards: ChatCard[];
+  lines: ChatDid[];
+  said?: string | null;
+}
+
+export interface ChangeRow {
+  id: string;
+  about: string;
+  words: string;
+  says?: string | null;
+  reading: boolean;
+  problem: boolean;
+  heading?: string | null;
+  lines: string[];
+  note?: string | null;
+  rewrite: boolean;
+  buttons: ChatButton[];
+}
+
+export interface ChatView {
+  name: string;
+  rows: ChatRow[];
+  earlier: number;
+  page: number;
+  more: boolean;
+  firstUnread?: string | null;
+  unread: number;
+  newestAt?: number | null;
+  typing: boolean;
+  sentAt?: number | null;
+  cancel?: Action | null;
+  claudeOff?: string | null;
+  intro?: string | null;
+  examples: string[];
+  chips: ChatChip[];
+  offer?: ChatQuote | null;
+  quiet?: string | null;
+  markAll?: Action | null;
+  clear?: ChatButton | null;
+  toCheck: ChangeRow[];
+  inUse: ChangeRow[];
+  canChange: boolean;
+  form?: OwnTaskFormView | null;
+  maxText: number;
+  maxFeedback: number;
+  readAfterMs: number;
+  undoMs: number;
+  cancelAfterMs: number;
+}
+
+export interface NoticesView {
+  unread: number;
 }

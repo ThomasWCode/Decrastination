@@ -1,4 +1,4 @@
-import type { Action, Asked, DayView, DeviceLine, Outcome, PairingCode, PhotoRead, SettingsView, TaskAsk, TaskView, WorkView } from "./types";
+import type { Action, Asked, ChatView, DayView, DeviceLine, NoticesView, Outcome, PairingCode, PhotoRead, SettingsView, TaskAsk, TaskView, WorkView } from "./types";
 
 /** A request the server answered with a refusal. */
 export class ApiError extends Error {
@@ -26,6 +26,8 @@ export const api = {
   me: () => read<{ signedIn: boolean }>("/api/me"),
   day: (date: string | null) => read<DayView>(`/api/views/day${date ? `?date=${encodeURIComponent(date)}` : ""}`),
   work: () => read<WorkView>("/api/views/work"),
+  chat: (earlier: number, reach: string | null) => read<ChatView>(`/api/views/chat?earlier=${earlier}${reach ? `&reach=${encodeURIComponent(reach)}` : ""}`),
+  notices: () => read<NoticesView>("/api/views/notices"),
   task: (id: string) => read<TaskView>(`/api/views/task/${encodeURIComponent(id)}`),
   settings: () => read<SettingsView>("/api/views/settings"),
   setCredentials: (given: Record<string, string>) => read<{ held: string[] }>("/api/credentials", posting(given)),
@@ -54,6 +56,25 @@ export async function saying(action: Action): Promise<string | null> {
   try {
     const outcome = await send(action);
     return outcome.state === "applied" ? null : (outcome.why ?? "That couldn't be done.");
+  } catch {
+    return UNREACHED;
+  }
+}
+
+/**
+ * The chat read up to [at], the newest message the page showed, on leaving it: kept alive, as the page may be going, and left
+ * unsaid if it doesn't get there, as the next visit's read will take it further.
+ */
+export function readTo(at: number) {
+  const commands = [{ id: crypto.randomUUID(), at: Date.now(), action: { type: "ReadChat", now: at } }];
+  void fetch("/api/commands", { credentials: "same-origin", keepalive: true, ...posting({ commands }) }).catch(() => undefined);
+}
+
+/** Your message that waits, asked for again: why not, if it couldn't be. */
+export async function tryAgain(): Promise<string | null> {
+  try {
+    await read<undefined>("/api/chat/try-again", { method: "POST", headers: CHANGING });
+    return null;
   } catch {
     return UNREACHED;
   }
