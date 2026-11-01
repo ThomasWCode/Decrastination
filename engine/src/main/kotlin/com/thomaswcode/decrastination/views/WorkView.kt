@@ -16,6 +16,7 @@ import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.Unplanned
 import com.thomaswcode.decrastination.core.longFinished
 import com.thomaswcode.decrastination.data.TaskState
+import com.thomaswcode.decrastination.enrich.PhotoChecker
 import com.thomaswcode.decrastination.sources.gmail.GmailThreads
 import com.thomaswcode.decrastination.sync.protocol.Action
 import com.thomaswcode.decrastination.sync.protocol.AddOwnChange
@@ -44,7 +45,13 @@ data class WorkView(
     val canChange: Boolean = false,
     /** What the form for a task of your own takes, while one can be made here. */
     val form: OwnTaskFormView? = null,
+    /** The longest side a photo of homework is sent at, while one can be read here. */
+    val photoSide: Int? = null,
 )
+
+/** A photo read into tasks to check, each as the form opens it; what couldn't be kept; Claude's question; or why there's nothing. */
+@Serializable
+data class PhotoRead(val tasks: List<OwnTaskEdit>, val leftOut: List<String> = emptyList(), val question: String? = null, val why: String? = null)
 
 /** The form for a task of your own: its kinds and limits, so the page holds none of them (D-137). */
 @Serializable
@@ -90,7 +97,7 @@ object WorkViews {
     )
 
     /** The page at [now], of [state] by [plan], your classes in [settings]. [writable]: the server applies commands, so it can be changed here. */
-    fun of(state: TaskState, plan: Plan, settings: Settings, now: Long, zone: ZoneId, asOf: Long?, writable: Boolean = false): WorkView {
+    fun of(state: TaskState, plan: Plan, settings: Settings, now: Long, zone: ZoneId, asOf: Long?, writable: Boolean = false, readsPhotos: Boolean = false): WorkView {
         val byId = state.tasks.associateBy { it.id }
         val pairs = Duplicates.candidates(state.tasks, settings.classMap, state.notSame)
         val alike = pairs.flatMap { (a, b) -> listOf(a.id to b, b.id to a) }.groupBy({ it.first }, { it.second })
@@ -113,6 +120,7 @@ object WorkViews {
             asOf = asOf,
             canChange = writable,
             form = if (writable) FORM else null,
+            photoSide = PhotoChecker.MAX_SIDE.takeIf { readsPhotos },
         )
     }
 

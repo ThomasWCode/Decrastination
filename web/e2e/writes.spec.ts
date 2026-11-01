@@ -178,6 +178,33 @@ test("your own can be home only, and back", async ({ page }) => {
   await expect(sheet.getByText("Planned anywhere")).toBeVisible();
 });
 
+// A pixel: the photo's what the browser does with it, and reading it takes Claude, whose answer's made up here.
+const PHOTO = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", "base64");
+
+test("tasks read from a photo are checked one at a time, and kept only if they're added", async ({ page }) => {
+  await page.route("**/api/views/work", async (route) => {
+    const response = await route.fetch();
+    await route.fulfill({ response, json: { ...(await response.json()), photoSide: 1568 } });
+  });
+  let sent = "";
+  await page.route("**/api/photos/tasks", (route) => {
+    sent = route.request().headers()["content-type"] ?? "";
+    const task = (title: string) => ({ title, notes: "", kind: "Homework", minutes: 30, steps: [], where: "anywhere" });
+    return route.fulfill({ json: { tasks: [{ sourceId: "photo-a", task: task("A sheet to leave") }, { sourceId: "photo-b", task: task("A sheet to keep") }], leftOut: ["The last line"], question: null } });
+  });
+  await page.goto("/work");
+  await page.locator('input[type="file"]').setInputFiles({ name: "work.png", mimeType: "image/png", buffer: PHOTO });
+  const form = page.getByRole("form", { name: "New task" });
+  await expect(form.getByLabel("What")).toHaveValue("A sheet to leave");
+  await expect(page.getByText("Left out: The last line")).toBeVisible();
+  await form.getByRole("button", { name: "Cancel" }).click();
+  await expect(form.getByLabel("What")).toHaveValue("A sheet to keep");
+  await form.getByRole("button", { name: "Add", exact: true }).click();
+  await expect(page.getByRole("button", { name: "A sheet to keep", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "A sheet to leave", exact: true })).toBeHidden();
+  expect(sent).toBe("image/jpeg");
+});
+
 /** Settings' page [name], from the side. */
 async function settingsPage(page: Page, name: string) {
   await page.goto("/settings");

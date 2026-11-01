@@ -364,6 +364,34 @@ class ApiTest {
     }
 
     @Test
+    fun `a photo's for the website, of a size, a JPEG, and not while mirroring`() = server {
+        val cookie = signIn()
+        val phone = paired()
+        suspend fun upload(bytes: ByteArray, signed: HttpRequestBuilder.() -> Unit) = plain().post("/api/photos/tasks") {
+            signed()
+            contentType(ContentType.Image.JPEG)
+            setBody(bytes)
+        }
+        val website: HttpRequestBuilder.() -> Unit = {
+            header(HttpHeaders.Cookie, cookie)
+            header("X-Requested-With", "test")
+        }
+        val jpeg = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 0)
+        assertEquals(HttpStatusCode.Conflict, upload(jpeg, website).status)
+        graph.commandsForATest()
+        assertEquals(
+            HttpStatusCode.Forbidden,
+            upload(jpeg) {
+                bearerAuth(phone.token)
+                header(Protocol.HEADER, Protocol.VERSION.toString())
+            }.status,
+        )
+        assertEquals(HttpStatusCode.UnsupportedMediaType, upload("not a photo".toByteArray(), website).status)
+        assertEquals(HttpStatusCode.PayloadTooLarge, upload(ByteArray(4 * 1024 * 1024 + 1), website).status)
+        assertEquals(HttpStatusCode.OK, upload(jpeg, website).status, "it's read, with no key saying so")
+    }
+
+    @Test
     fun `the parent code's secret comes from the phone alone, and it's taken away the same way`() = server {
         val phone = paired()
         suspend fun fromPhone(body: String) = plain().post("/api/parent-code") {

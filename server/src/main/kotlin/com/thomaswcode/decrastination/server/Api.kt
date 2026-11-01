@@ -24,6 +24,7 @@ import io.ktor.server.plugins.ratelimit.RateLimit
 import io.ktor.server.plugins.ratelimit.RateLimitName
 import io.ktor.server.plugins.ratelimit.rateLimit
 import io.ktor.server.plugins.statuspages.StatusPages
+import io.ktor.server.request.contentLength
 import io.ktor.server.request.header
 import io.ktor.server.request.httpMethod
 import io.ktor.server.request.receive
@@ -90,6 +91,12 @@ private data class Credentials(val held: Set<String>)
 
 @Serializable
 private data class StateOut(val revision: Long, val stores: List<StoreOut>, val mode: String)
+
+/** More than a page shrunk to what's sent ever comes to. */
+private const val MAX_PHOTO_BYTES = 4 * 1024 * 1024L
+
+/** Whether [bytes] starts as a JPEG does. */
+private fun isJpeg(bytes: ByteArray) = bytes.size > 3 && bytes[0] == 0xFF.toByte() && bytes[1] == 0xD8.toByte() && bytes[2] == 0xFF.toByte()
 
 private const val SESSION = "__Host-session"
 private const val OAUTH = "__Host-oauth"
@@ -292,6 +299,16 @@ private fun Route.signedInRoutes(web: Web) {
         call.respond(graph.day(date))
     }
     get("/views/work") { call.respond(graph.work()) }
+    post("/photos/tasks") {
+        if (call.client !is Client.Website) return@post call.respond(HttpStatusCode.Forbidden, Problem("A photo's read from the website"))
+        if (graph.mode != ServerGraph.COMMANDS) return@post call.respond(HttpStatusCode.Conflict, Problem("The server is mirroring the phone"))
+        // By what it says it is first, so nothing that size is read: nothing in front of this limits a body.
+        val length = call.request.contentLength()
+        if (length == null || length > MAX_PHOTO_BYTES) return@post call.respond(HttpStatusCode.PayloadTooLarge, Problem("That photo's too big"))
+        val jpeg = call.receive<ByteArray>()
+        if (!isJpeg(jpeg)) return@post call.respond(HttpStatusCode.UnsupportedMediaType, Problem("That isn't a JPEG"))
+        call.respond(graph.readPhoto(jpeg))
+    }
     get("/views/settings") { call.respond(graph.settings()) }
     post("/parent-code") {
         // The phone's, as it's the phone that makes it: never set from the website, or the code would prove nothing.

@@ -1,4 +1,4 @@
-import type { Action, Asked, DayView, DeviceLine, Outcome, PairingCode, SettingsView, TaskAsk, TaskView, WorkView } from "./types";
+import type { Action, Asked, DayView, DeviceLine, Outcome, PairingCode, PhotoRead, SettingsView, TaskAsk, TaskView, WorkView } from "./types";
 
 /** A request the server answered with a refusal. */
 export class ApiError extends Error {
@@ -34,6 +34,11 @@ export const api = {
   revoke: (id: string) => read<undefined>(`/api/devices/${encodeURIComponent(id)}`, { method: "DELETE", headers: CHANGING }),
   signOut: () => read<{ signedIn: boolean }>("/api/auth/logout", { method: "POST", headers: CHANGING }),
 };
+
+/** [jpeg], a photo of homework, read into tasks to check: a call to Claude, so only at your asking. */
+export function readPhoto(jpeg: Blob): Promise<PhotoRead> {
+  return read<PhotoRead>("/api/photos/tasks", { method: "POST", headers: { ...CHANGING, "Content-Type": "image/jpeg" }, body: jpeg });
+}
 
 /** [action] as a command, made here: the server applies it through its owner, and says what came of it (D-140). */
 export async function send(action: Action): Promise<Outcome> {

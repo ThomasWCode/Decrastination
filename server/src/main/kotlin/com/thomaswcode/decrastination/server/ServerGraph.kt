@@ -40,6 +40,8 @@ import com.thomaswcode.decrastination.ui.TaskSheetModel
 import com.thomaswcode.decrastination.views.Asked
 import com.thomaswcode.decrastination.views.DayView
 import com.thomaswcode.decrastination.views.DayViews
+import com.thomaswcode.decrastination.views.OwnTaskEdit
+import com.thomaswcode.decrastination.views.PhotoRead
 import com.thomaswcode.decrastination.views.SettingsView
 import com.thomaswcode.decrastination.views.SettingsViews
 import com.thomaswcode.decrastination.views.TaskAsk
@@ -167,7 +169,7 @@ class ServerGraph(
     }
 
     /** The owners: what they do is what a command asks, a job, and what [start] has watch the stores. */
-    val owners: ServerOwners = ServerOwners(stores, clock, scope, gateway, planning, calendarTime = { calendarTime() })
+    val owners: ServerOwners = ServerOwners(stores, clock, scope, gateway, planning, calendarTime = { calendarTime() }, photosFolder = File(dataDir, "photos"))
 
     private val commands = Commands(owners, clock)
 
@@ -411,7 +413,16 @@ class ServerGraph(
         )
     }
 
-    fun work(): WorkView = WorkViews.of(stores.tasks.value, planning.plan(), stores.settings.value, clock.now(), clock.zone(), devices.lastSeen(), writable = mode == COMMANDS)
+    fun work(): WorkView = WorkViews.of(stores.tasks.value, planning.plan(), stores.settings.value, clock.now(), clock.zone(), devices.lastSeen(), writable = mode == COMMANDS, readsPhotos = readsPhotos)
+
+    /** Whether a photo can be read into tasks here: tasks can be saved, Claude's on, and its key's on the box. */
+    private val readsPhotos: Boolean get() = mode == COMMANDS && stores.settings.value.aiEnabled && claudeKey != null
+
+    /** [jpeg], a photo of homework, read into tasks to check (NF-01), each under an id of its own: never in a command, as a call can take a minute. */
+    suspend fun readPhoto(jpeg: ByteArray): PhotoRead {
+        val (reading, why) = owners.photos.readPhotoTasks(jpeg)
+        return PhotoRead(reading?.tasks.orEmpty().map { OwnTaskEdit(Ids.next(), it) }, reading?.leftOut.orEmpty(), reading?.question, why)
+    }
 
     /** Settings as the website draws them. */
     fun settings(): SettingsView {

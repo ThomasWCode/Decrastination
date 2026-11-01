@@ -136,10 +136,28 @@ class TaskAskTest {
     }
 
     @Test
-    fun `Same and Different come ready made, in commands mode alone`() = runBlocking<Unit> {
+    fun `a photo's offered only with Claude's key on the box and tasks that can be saved`() = runBlocking<Unit> {
+        assertNull(graph.work().photoSide, "no key")
+        graph.stores.settings.update { it.copy(aiEnabled = true) }
+        assertNull(graph.work().photoSide, "Claude on, and still no key")
+        val keyed = ServerGraph(db, dir, Plain, "test", claudeKey = "a made-up key")
+        assertNotNull(keyed.work().photoSide)
+        keyed.stores.settings.update { it.copy(aiEnabled = false) }
+        assertNull(keyed.work().photoSide, "Claude's off")
+    }
+
+    @Test
+    fun `with no key, a photo says so and calls nothing`() = runBlocking<Unit> {
+        val read = graph.readPhoto(byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 0))
+        assertTrue(read.tasks.isEmpty())
+        assertNotNull(read.why)
+    }
+
+    @Test
+    fun `Work says whether anything can be changed`() = runBlocking<Unit> {
         withTasks()
         assertTrue(graph.work().canChange)
-        db.setMeta("mode", "mirror")
+        graph.modeForATest("mirror")
         assertFalse(graph.work().canChange)
     }
 }

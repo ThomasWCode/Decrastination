@@ -32,9 +32,23 @@ class WorkViewTest {
         sourceEffortMin = 30, firstSeenAt = now, lastSeenAt = now, status = status, mine = mine, doneAt = if (status == Status.Done) now else null,
     )
 
-    private fun view(vararg tasks: TaskItem, settings: Settings = Settings(), asOf: Long? = 9L): WorkView {
+    private fun view(vararg tasks: TaskItem, settings: Settings = Settings(), asOf: Long? = 9L, writable: Boolean = false): WorkView {
         val plan = Planner.plan(Planner.Input(tasks.toList(), now, LONDON, settings, windows = mapOf(monday to listOf(DayWindow(17 * 60, 22 * 60, WindowKind.Evening)))))
-        return WorkViews.of(TaskState(tasks.toList()), plan, settings, now, LONDON, asOf)
+        return WorkViews.of(TaskState(tasks.toList()), plan, settings, now, LONDON, asOf, writable)
+    }
+
+    @Test
+    fun `work that looks the same comes with what saying so sends, where it can be said`() {
+        val teams = task("Essay on energy", "2026-10-14T12:00").copy(className = "12X/Ph1")
+        val planner = task("Essay on energy", "2026-10-14T12:00", Source.PowerPlanner).copy(className = "12X/Ph1")
+        val tile = view(teams, planner, writable = true).byDue.flatMap { it.tasks }.first { it.source == "Teams" }
+        assertEquals("“Essay on energy” from Power Planner", tile.sameAs)
+        assertNotNull(tile.same)
+        assertNotNull(tile.different)
+        val mirroring = view(teams, planner).byDue.flatMap { it.tasks }.first { it.source == "Teams" }
+        assertEquals(tile.sameAs, mirroring.sameAs, "it's still said")
+        assertNull(mirroring.same)
+        assertNull(mirroring.different)
     }
 
     @Test

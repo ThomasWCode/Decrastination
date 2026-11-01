@@ -28,21 +28,25 @@ interface Row {
   was: OwnStep | null;
 }
 
-function rowsOf(edit: OwnTaskEdit | undefined): Row[] {
-  return (edit?.task.steps ?? []).map((step, index) => ({
+function rowsOf(start: OwnTaskEdit | undefined, editing: boolean): Row[] {
+  return (start?.task.steps ?? []).map((step, index) => ({
     title: step.title,
     minutes: String(step.minutes),
     home: step.where === "home",
     anyOrder: step.anyOrder ?? false,
-    wasIndex: index,
+    wasIndex: editing ? index : null,
     was: step,
   }));
 }
 
-/** A task of your own, new or [edit]ed: what the form won't take is the server's to say (`OwnTaskRules`), and its kinds and limits are too. */
-export function NewTask({ form, edit, close }: { form: OwnTaskFormView; edit?: OwnTaskEdit; close: () => void }) {
-  const start = edit?.task;
-  const [sourceId] = useState(() => edit?.sourceId ?? crypto.randomUUID());
+/**
+ * A task of your own, new, [from] what's been read for it, or [edit]ed: what the form won't take is the server's to say
+ * (`OwnTaskRules`), and its kinds and limits are too.
+ */
+export function NewTask({ form, edit, from: read, close }: { form: OwnTaskFormView; edit?: OwnTaskEdit; from?: OwnTaskEdit; close: () => void }) {
+  const given = edit ?? read;
+  const start = given?.task;
+  const [sourceId] = useState(() => given?.sourceId ?? crypto.randomUUID());
   const [title, setTitle] = useState(start?.title ?? "");
   const [kind, setKind] = useState(start?.kind ?? form.kinds[0]?.name ?? "");
   const [subject, setSubject] = useState(start?.className ?? "");
@@ -50,7 +54,7 @@ export function NewTask({ form, edit, close }: { form: OwnTaskFormView; edit?: O
   const [due, setDue] = useState(local(start?.dueAt));
   const [from, setFrom] = useState(local(start?.startFrom).slice(0, 10));
   const [notes, setNotes] = useState(start?.notes ?? "");
-  const [rows, setRows] = useState(() => rowsOf(edit));
+  const [rows, setRows] = useState(() => rowsOf(given, edit !== undefined));
   const [said, setSaid] = useState<string | null>(null);
   const event = form.kinds.find((choice) => choice.name === kind)?.event ?? false;
 

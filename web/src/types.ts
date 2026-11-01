@@ -115,6 +115,15 @@ export interface WorkView {
   asOf?: number | null;
   canChange: boolean;
   form?: OwnTaskFormView | null;
+  photoSide?: number | null;
+}
+
+/** A photo read into tasks to check, or why not. */
+export interface PhotoRead {
+  tasks: OwnTaskEdit[];
+  leftOut: string[];
+  question?: string | null;
+  why?: string | null;
 }
 
 export interface KindChoice {

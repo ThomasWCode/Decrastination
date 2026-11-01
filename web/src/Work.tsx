@@ -2,6 +2,7 @@ import { useCallback, useState } from "react";
 import { api, saying } from "./api";
 import { ago, useLive } from "./live";
 import { NewTask } from "./NewTask";
+import { PhotoTasks } from "./PhotoTasks";
 import { TaskSheet } from "./TaskSheet";
 import type { Action, TaskGroup, TaskTile, WorkView } from "./types";
 
@@ -185,6 +186,7 @@ export function WorkPage() {
             New task
           </button>
         ) : null}
+        {view.form && view.photoSide ? <PhotoTasks form={view.form} side={view.photoSide} /> : null}
         <p className="fresh">{view.asOf ? `From the phone ${ago(view.asOf)}` : "The phone hasn't sent anything yet: pair it on the Phone page."}</p>
       </header>
       {adding && view.form ? <NewTask form={view.form} close={() => setAdding(false)} /> : null}

@@ -988,6 +988,30 @@ button {
   margin-top: 8px;
 }
 
+label.button {
+  cursor: pointer;
+}
+
+.hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.photo-tasks {
+  flex: 1 0 100%;
+}
+
+.photo-tasks .new-task {
+  margin: 8px 0 0;
+}
+
+.photo-tasks .note {
+  margin: 0;
+  color: var(--quiet);
+}
+
 /* Settings: its pages down the side, what's on the one chosen beside them. */
 .settings-page {
   max-width: 1100px;
