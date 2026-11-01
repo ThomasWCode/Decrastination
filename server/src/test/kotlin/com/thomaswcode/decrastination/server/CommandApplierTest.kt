@@ -169,9 +169,11 @@ class CommandApplierTest {
         }
         val applier = CommandApplier(db, graph.backend, Commands(graph.owners, graph.clock), graph.owners, graph.clock, reload) { heard += it }
         val before = db.currentRevision()
-        assertEquals(Outcome.DROPPED, applier.apply(CommandBatch(listOf(Command("two", at, FinishOwnTask("own:s-Essay")))), "phone").single().state)
+        val outcome = applier.apply(CommandBatch(listOf(Command("two", at, FinishOwnTask("own:s-Essay")))), "phone").single()
+        assertEquals(Outcome.DROPPED, outcome.state)
         assertTrue(db.currentRevision() > before, "the job's write took one")
         assertEquals(listOf(db.currentRevision()), heard)
+        assertEquals(db.currentRevision(), outcome.revision, "and what's on record is the state it left")
     }
 
     @Test
