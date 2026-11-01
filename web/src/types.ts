@@ -79,6 +79,8 @@ export interface TaskTile {
   line: string;
   tags: string[];
   sameAs?: string | null;
+  same?: Action | null;
+  different?: Action | null;
 }
 
 export interface TaskGroup {
@@ -111,6 +113,24 @@ export interface WorkView {
   finished: TaskTile[];
   read: SourceLine[];
   asOf?: number | null;
+  canChange: boolean;
+  form?: OwnTaskFormView | null;
+}
+
+export interface KindChoice {
+  name: string;
+  label: string;
+  event: boolean;
+}
+
+/** What the form for a task of your own takes: the server's, as every rule is. */
+export interface OwnTaskFormView {
+  kinds: KindChoice[];
+  maxTitle: number;
+  maxClass: number;
+  maxNotes: number;
+  maxSteps: number;
+  defaultMinutes: number;
 }
 
 export interface DeviceLine {
@@ -136,11 +156,37 @@ export interface Outcome {
   revision: number;
 }
 
+/** What's asked of a task where it takes the server's rules to make the commands (engine's views/TaskAsks.kt). */
+export interface TaskAsk {
+  kind: string;
+  at?: number | null;
+  minutes?: number | null;
+  date?: string | null;
+  minute?: number | null;
+}
+
+/** What came of a [TaskAsk]. */
+export interface Asked {
+  done: boolean;
+  said?: string | null;
+}
+
 export interface TaskAction {
   label: string;
-  action: Action;
+  action?: Action | null;
+  ask?: TaskAsk | null;
   confirm?: string | null;
   detail?: string | null;
+  undo?: Action | null;
+}
+
+export interface TaskField {
+  kind: string;
+  label: string;
+  says: string;
+  note?: string | null;
+  changes: boolean;
+  undo?: TaskAction | null;
 }
 
 export interface StepLine {
@@ -151,8 +197,46 @@ export interface StepLine {
 
 export interface NoteLine {
   line: string;
-  delete: Action;
-  every?: string | null;
+  delete?: TaskAction | null;
+}
+
+export interface OwnStep {
+  title: string;
+  minutes: number;
+  from?: number | null;
+  dueAt?: number | null;
+  where?: string | null;
+  id?: string;
+  anyOrder?: boolean;
+}
+
+export interface OwnTask {
+  title: string;
+  notes: string;
+  kind: string;
+  className?: string | null;
+  dueAt?: number | null;
+  startFrom?: number | null;
+  minutes: number;
+  steps: OwnStep[];
+  where: string;
+}
+
+export interface OwnTaskEdit {
+  sourceId: string;
+  task: OwnTask;
+}
+
+export interface MoveDay {
+  date: string;
+  label: string;
+  allowed: boolean;
+}
+
+export interface MoveView {
+  piece: string;
+  days: MoveDay[];
+  notes: string[];
 }
 
 export interface TaskView {
@@ -166,10 +250,14 @@ export interface TaskView {
   own: boolean;
   tags: string[];
   next?: string | null;
+  fields: TaskField[];
   steps: StepLine[];
   planned: string[];
   instructions: string[];
   notes: NoteLine[];
   actions: TaskAction[];
   notable: boolean;
+  edit?: OwnTaskEdit | null;
+  move?: MoveView | null;
+  where?: string | null;
 }

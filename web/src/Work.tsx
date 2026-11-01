@@ -1,11 +1,43 @@
 import { useCallback, useState } from "react";
-import { api } from "./api";
+import { api, saying } from "./api";
 import { ago, useLive } from "./live";
 import { NewTask } from "./NewTask";
 import { TaskSheet } from "./TaskSheet";
-import type { TaskGroup, TaskTile, WorkView } from "./types";
+import type { Action, TaskGroup, TaskTile, WorkView } from "./types";
 
 type Open = (id: string) => void;
+
+/** Whether two tasks are the one piece of work: yours to say, and the server's to act on. */
+function SameLine({ task }: { task: TaskTile }) {
+  const [said, setSaid] = useState<string | null>(null);
+  const answer = (action: Action) => {
+    setSaid(null);
+    void saying(action).then(setSaid);
+  };
+  return (
+    <span className="same">
+      Looks like the same work as {task.sameAs}.
+      {task.same && task.different ? (
+        <>
+          {" "}
+          Same?{" "}
+          <button className="quiet" onClick={() => task.same && answer(task.same)}>
+            Same
+          </button>{" "}
+          <button className="quiet" onClick={() => task.different && answer(task.different)}>
+            Different
+          </button>
+        </>
+      ) : null}
+      {said ? (
+        <span className="problem" role="status">
+          {" "}
+          {said}
+        </span>
+      ) : null}
+    </span>
+  );
+}
 
 function Task({ task, open }: { task: TaskTile; open: Open }) {
   return (
@@ -25,7 +57,7 @@ function Task({ task, open }: { task: TaskTile; open: Open }) {
           ))}
         </ul>
       ) : null}
-      {task.sameAs ? <span className="same">Looks like the same work as {task.sameAs}</span> : null}
+      {task.sameAs ? <SameLine task={task} /> : null}
     </li>
   );
 }
@@ -63,7 +95,9 @@ function Folded({ view, only, open }: { view: WorkView; only: string | null; ope
           <ul>
             {notPlanned.map((gap) => (
               <li key={gap.id} className="task">
-                <span className="title">{gap.title}</span>
+                <button className="title" onClick={() => open(gap.id)}>
+                  {gap.title}
+                </button>
                 <span className="minutes">{gap.minutes}</span>
                 <span className="line">{gap.why}</span>
               </li>
@@ -146,12 +180,14 @@ export function WorkPage() {
             </button>
           ))}
         </div>
-        <button className="button" onClick={() => setAdding(true)}>
-          New task
-        </button>
+        {view.form ? (
+          <button className="button" onClick={() => setAdding(true)}>
+            New task
+          </button>
+        ) : null}
         <p className="fresh">{view.asOf ? `From the phone ${ago(view.asOf)}` : "The phone hasn't sent anything yet: pair it on the Phone page."}</p>
       </header>
-      {adding ? <NewTask close={() => setAdding(false)} /> : null}
+      {adding && view.form ? <NewTask form={view.form} close={() => setAdding(false)} /> : null}
       {shown ? (
         <div className="columns">
           {groups.map((group) => (
@@ -162,7 +198,7 @@ export function WorkPage() {
         <p className="empty">Nothing to do. New tasks appear as the sources are read, or add your own.</p>
       )}
       <Folded view={view} only={only} open={setOpened} />
-      {opened ? <TaskSheet key={opened} id={opened} close={shut} /> : null}
+      {opened ? <TaskSheet key={opened} id={opened} form={view.form ?? null} close={shut} /> : null}
     </main>
   );
 }

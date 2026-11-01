@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { saying } from "./TaskSheet";
+import { saying } from "./api";
+import type { OwnStep, OwnTaskEdit, OwnTaskFormView } from "./types";
 
 /** A datetime-local field's words as a moment, or null where it's empty. */
 export function moment(field: string): number | null {
@@ -8,17 +9,75 @@ export function moment(field: string): number | null {
   return Number.isNaN(at) ? null : at;
 }
 
-/** A task of your own: its name, how long and when it's due. What the form won't take is the server's to say (`OwnTaskRules`). */
-export function NewTask({ close }: { close: () => void }) {
-  const [title, setTitle] = useState("");
-  const [minutes, setMinutes] = useState("30");
-  const [due, setDue] = useState("");
-  const [said, setSaid] = useState<string | null>(null);
+const pad = (value: number) => String(value).padStart(2, "0");
 
-  const add = () => {
+/** [at] as a datetime-local field writes it, where this browser is. */
+export function local(at: number | null | undefined): string {
+  if (at === null || at === undefined) return "";
+  const when = new Date(at);
+  return `${when.getFullYear()}-${pad(when.getMonth() + 1)}-${pad(when.getDate())}T${pad(when.getHours())}:${pad(when.getMinutes())}`;
+}
+
+interface Row {
+  title: string;
+  minutes: string;
+  home: boolean;
+  anyOrder: boolean;
+  /** Which step it was, kept with it so a renamed one keeps its tick. */
+  wasIndex: number | null;
+  was: OwnStep | null;
+}
+
+function rowsOf(edit: OwnTaskEdit | undefined): Row[] {
+  return (edit?.task.steps ?? []).map((step, index) => ({
+    title: step.title,
+    minutes: String(step.minutes),
+    home: step.where === "home",
+    anyOrder: step.anyOrder ?? false,
+    wasIndex: index,
+    was: step,
+  }));
+}
+
+/** A task of your own, new or [edit]ed: what the form won't take is the server's to say (`OwnTaskRules`), and its kinds and limits are too. */
+export function NewTask({ form, edit, close }: { form: OwnTaskFormView; edit?: OwnTaskEdit; close: () => void }) {
+  const start = edit?.task;
+  const [sourceId] = useState(() => edit?.sourceId ?? crypto.randomUUID());
+  const [title, setTitle] = useState(start?.title ?? "");
+  const [kind, setKind] = useState(start?.kind ?? form.kinds[0]?.name ?? "");
+  const [subject, setSubject] = useState(start?.className ?? "");
+  const [minutes, setMinutes] = useState(String(start?.minutes ?? form.defaultMinutes));
+  const [due, setDue] = useState(local(start?.dueAt));
+  const [from, setFrom] = useState(local(start?.startFrom).slice(0, 10));
+  const [notes, setNotes] = useState(start?.notes ?? "");
+  const [rows, setRows] = useState(() => rowsOf(edit));
+  const [said, setSaid] = useState<string | null>(null);
+  const event = form.kinds.find((choice) => choice.name === kind)?.event ?? false;
+
+  const change = (index: number, made: Partial<Row>) => setRows(rows.map((row, at) => (at === index ? { ...row, ...made } : row)));
+  const steps = event ? [] : rows;
+
+  const save = () => {
     setSaid(null);
-    const task = { title: title.trim(), minutes: Number(minutes), dueAt: moment(due) };
-    void saying({ type: "SaveOwnTask", sourceId: crypto.randomUUID(), task, fromForm: true }).then((why) => {
+    const task = {
+      ...start,
+      title: title.trim(),
+      notes,
+      kind,
+      className: subject.trim() || null,
+      dueAt: moment(due),
+      startFrom: event ? null : moment(from ? `${from}T00:00` : ""),
+      minutes: steps.length > 0 ? steps.reduce((all, row) => all + Number(row.minutes), 0) : Number(minutes),
+      steps: steps.map((row, index) => ({
+        ...row.was,
+        title: row.title.trim(),
+        minutes: Number(row.minutes),
+        where: row.home ? "home" : null,
+        anyOrder: row.anyOrder && index > 0,
+      })),
+      where: start?.where ?? "anywhere",
+    };
+    void saying({ type: "SaveOwnTask", sourceId, task, fromForm: true, wasIndexes: steps.map((row) => row.wasIndex) }).then((why) => {
       if (why === null) close();
       else setSaid(why);
     });
@@ -27,26 +86,88 @@ export function NewTask({ close }: { close: () => void }) {
   return (
     <form
       className="new-task"
-      aria-label="New task"
+      aria-label={edit ? "Edit task" : "New task"}
       onSubmit={(event) => {
         event.preventDefault();
-        add();
+        save();
       }}
     >
-      <label>
+      <label className="long">
         What
-        <input value={title} onChange={(event) => setTitle(event.target.value)} autoFocus />
+        <input value={title} onChange={(event) => setTitle(event.target.value)} maxLength={form.maxTitle} autoFocus />
       </label>
       <label>
-        Minutes
-        <input value={minutes} onChange={(event) => setMinutes(event.target.value)} type="number" min="1" />
+        Kind
+        <select value={kind} onChange={(event) => setKind(event.target.value)}>
+          {form.kinds.map((choice) => (
+            <option key={choice.name} value={choice.name}>
+              {choice.label}
+            </option>
+          ))}
+        </select>
       </label>
       <label>
-        Due
+        Subject
+        <input value={subject} onChange={(event) => setSubject(event.target.value)} maxLength={form.maxClass} />
+      </label>
+      <label>
+        {event ? "When" : "Due"}
         <input value={due} onChange={(event) => setDue(event.target.value)} type="datetime-local" />
       </label>
+      {event ? null : (
+        <>
+          <label>
+            Can't start before
+            <input value={from} onChange={(event) => setFrom(event.target.value)} type="date" />
+          </label>
+          {steps.length === 0 ? (
+            <label>
+              Minutes
+              <input value={minutes} onChange={(event) => setMinutes(event.target.value)} type="number" min="1" />
+            </label>
+          ) : null}
+          <div className="rows">
+            {steps.map((row, index) => (
+              <div className="row" key={index} role="group" aria-label={`Step ${index + 1}`}>
+                <label>
+                  Step
+                  <input value={row.title} onChange={(event) => change(index, { title: event.target.value })} maxLength={form.maxTitle} />
+                </label>
+                <label>
+                  Minutes
+                  <input value={row.minutes} onChange={(event) => change(index, { minutes: event.target.value })} type="number" min="1" />
+                </label>
+                <label className="mark">
+                  <input type="checkbox" checked={row.home} onChange={(event) => change(index, { home: event.target.checked })} />
+                  Home only
+                </label>
+                {index > 0 ? (
+                  <label className="mark">
+                    <input type="checkbox" checked={row.anyOrder} onChange={(event) => change(index, { anyOrder: event.target.checked })} />
+                    Any order
+                  </label>
+                ) : null}
+                <button type="button" className="quiet" onClick={() => setRows(rows.filter((_, at) => at !== index))}>
+                  Remove
+                </button>
+              </div>
+            ))}
+            {rows.length < form.maxSteps ? (
+              <div>
+                <button type="button" className="quiet" onClick={() => setRows([...rows, { title: "", minutes: "30", home: false, anyOrder: false, wasIndex: null, was: null }])}>
+                  Add a step
+                </button>
+              </div>
+            ) : null}
+          </div>
+        </>
+      )}
+      <label className="long">
+        Notes
+        <textarea value={notes} onChange={(event) => setNotes(event.target.value)} maxLength={form.maxNotes} rows={3} />
+      </label>
       <button className="button" disabled={!title.trim()}>
-        Add
+        {edit ? "Save" : "Add"}
       </button>
       <button type="button" className="quiet" onClick={close}>
         Cancel

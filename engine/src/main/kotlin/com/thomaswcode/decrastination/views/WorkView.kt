@@ -7,6 +7,8 @@ import com.thomaswcode.decrastination.core.Duplicates
 import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.Ids
 import com.thomaswcode.decrastination.core.InstructionRules
+import com.thomaswcode.decrastination.core.Kind
+import com.thomaswcode.decrastination.core.OwnTaskRules
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.Source
@@ -40,7 +42,16 @@ data class WorkView(
     val asOf: Long? = null,
     /** Whether anything can be changed here: the server applies commands. */
     val canChange: Boolean = false,
+    /** What the form for a task of your own takes, while one can be made here. */
+    val form: OwnTaskFormView? = null,
 )
+
+/** The form for a task of your own: its kinds and limits, so the page holds none of them (D-137). */
+@Serializable
+data class OwnTaskFormView(val kinds: List<KindChoice>, val maxTitle: Int, val maxClass: Int, val maxNotes: Int, val maxSteps: Int, val defaultMinutes: Int)
+
+@Serializable
+data class KindChoice(val name: String, val label: String, val event: Boolean)
 
 @Serializable
 data class TaskGroup(val title: String, val tasks: List<TaskTile>)
@@ -73,6 +84,11 @@ data class SourceLine(val source: String, val read: String, val open: Int, val e
 object WorkViews {
     private val DAY = DateTimeFormatter.ofPattern("EEE d MMM", Locale.UK)
 
+    private val FORM = OwnTaskFormView(
+        OwnTaskRules.KINDS.map { KindChoice(it.name, it.label, it == Kind.Event) },
+        OwnTaskRules.MAX_TITLE, OwnTaskRules.MAX_CLASS, OwnTaskRules.MAX_NOTES, OwnTaskRules.MAX_STEPS, Kind.Homework.defaultEffortMin,
+    )
+
     /** The page at [now], of [state] by [plan], your classes in [settings]. [writable]: the server applies commands, so it can be changed here. */
     fun of(state: TaskState, plan: Plan, settings: Settings, now: Long, zone: ZoneId, asOf: Long?, writable: Boolean = false): WorkView {
         val byId = state.tasks.associateBy { it.id }
@@ -96,6 +112,7 @@ object WorkViews {
             },
             asOf = asOf,
             canChange = writable,
+            form = if (writable) FORM else null,
         )
     }
 

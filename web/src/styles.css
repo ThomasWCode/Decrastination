@@ -837,4 +837,153 @@ button {
 
 .new-task {
   margin: 0 24px 16px;
+  padding: 14px 16px;
+  background: var(--wash);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+.sheet .new-task {
+  margin: 12px 0;
+}
+
+.new-task select,
+.new-task textarea,
+.field input,
+.move input {
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  font-size: 15px;
+}
+
+.new-task label.long,
+.new-task .rows,
+.new-task .problem {
+  flex: 1 0 100%;
+}
+
+.new-task textarea {
+  resize: vertical;
+}
+
+.new-task .rows {
+  display: grid;
+  gap: 8px;
+}
+
+.new-task .row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.new-task .row input[type="checkbox"] {
+  margin: 0 4px 0 0;
+}
+
+.new-task .row label.mark {
+  display: flex;
+  align-items: center;
+  padding-bottom: 6px;
+}
+
+.fields {
+  display: grid;
+  gap: 10px;
+  margin: 14px 0;
+}
+
+.field {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0 10px;
+  align-items: baseline;
+}
+
+.field .label {
+  grid-column: 1;
+  color: var(--quiet);
+  font-size: 13px;
+}
+
+.field .says {
+  grid-column: 1;
+}
+
+.field .note {
+  grid-column: 1;
+  color: var(--quiet);
+  font-size: 13px;
+}
+
+.field .changing {
+  grid-column: 2;
+  grid-row: 1 / span 3;
+  display: flex;
+  gap: 6px;
+}
+
+.field form {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.said {
+  margin: 8px 0;
+}
+
+.move {
+  margin: 8px 0;
+  padding: 12px 14px;
+  background: var(--band);
+  border-radius: 6px;
+}
+
+.move .days {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0;
+}
+
+.move .days button {
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--paper);
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.move .days button[aria-pressed="true"] {
+  background: var(--pale);
+  color: var(--on-pale);
+  border-color: var(--navy);
+}
+
+.move .days button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.move .notes {
+  color: var(--quiet);
+  font-size: 13px;
+}
+
+.move .going {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
 }

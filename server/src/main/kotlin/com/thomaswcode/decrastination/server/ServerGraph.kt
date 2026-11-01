@@ -284,6 +284,12 @@ class ServerGraph(
         check(written == BackupService.Nightly.Written) { "The nightly file wasn't written: $written" }
     }
 
+    /** Commands from now on, for the browser tests' server, which starts in mirror mode to be seeded: what the switch does across a restart, at once. */
+    fun commandsForATest() {
+        db.setMeta("mode", COMMANDS)
+        backend.writable = true
+    }
+
     /** What runs by itself: the jobs, and, once the server applies commands, what watches the stores and the plan made again. */
     fun start(scope: CoroutineScope) {
         if (mode == COMMANDS) {
@@ -391,8 +397,8 @@ class ServerGraph(
         if (ask.kind == TaskAsk.DONE) {
             val next = piece ?: return Asked(false, "That piece has changed since (done, or planned again).")
             var kept = false
-            val said = pieceSays.kept(next, plan.now) { action -> website(action).state == Outcome.APPLIED }.also { kept = true }
-            return Asked(kept && said != NOT_KEPT, said)
+            val said = pieceSays.kept(next, plan.now) { action -> (website(action).state == Outcome.APPLIED).also { kept = it } }
+            return Asked(kept, said)
         }
         val decided = TaskAsks.decide(task, piece, ask, moves, clock.zone())
         decided.why?.let { return Asked(false, it) }
@@ -411,7 +417,6 @@ class ServerGraph(
         const val COMMANDS = "commands"
         private const val SECRETS = "secrets.bin"
         private const val GONE = "That task had gone"
-        private const val NOT_KEPT = "That piece has changed since (done, or planned again)."
         private const val MINUTE_MS = 60_000L
         private const val HOUR_MS = 60 * MINUTE_MS
         private const val SOURCES_EVERY_MS = 15 * MINUTE_MS

@@ -199,6 +199,10 @@ fun Application.api(web: Web) {
                         call.setCookie(web, SESSION, web.sessions.start(), 3600)
                         call.respond(Me(true))
                     }
+                    post("/test/commands") {
+                        web.graph.commandsForATest()
+                        call.respond(HttpStatusCode.NoContent)
+                    }
                 }
             }
 

@@ -86,6 +86,7 @@ fun main() {
     val sessions = Sessions(db, if (testing) 0 else env("ALLOWED_GITHUB_USER_ID").toLong())
     val web = Web(graph, github, sessions, secure = !testing, testing = testing)
     Log.i(Log.TAG, "Starting $version in ${graph.mode} mode")
-    graph.start(GlobalScope)
+    // A test's server does what it's asked and no more: nothing of its own in between a test's steps.
+    if (!testing) graph.start(GlobalScope)
     embeddedServer(Netty, port = (System.getenv("PORT") ?: "8080").toInt(), host = "0.0.0.0") { api(web) }.start(wait = true)
 }
