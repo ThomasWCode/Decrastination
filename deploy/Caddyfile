@@ -1,5 +1,26 @@
 # Caddy terminates TLS with a certificate from Let's Encrypt, renewed on its own, serves the website
 # and forwards /api to the server. DOMAIN comes from the service's environment.
+
+# What a log line may hold of a request: what was asked and how it went, with no headers and no sign-in's one-time code, as Caddy
+# masks only the headers it knows hold a credential. On both loggers: a request that fails is written by the default one.
+(request_lines) {
+	format filter {
+		wrap json
+		request>headers delete
+		resp_headers delete
+		request>uri query {
+			delete code
+			delete state
+		}
+	}
+}
+
+{
+	log default {
+		import request_lines
+	}
+}
+
 {$DOMAIN} {
 	# Not the event stream: each event has to reach the browser as it's sent, not when a compressor has enough to emit.
 	@compressed not path /api/events
@@ -30,6 +51,6 @@
 
 	log {
 		output stdout
-		format json
+		import request_lines
 	}
 }
