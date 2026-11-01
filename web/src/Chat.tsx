@@ -11,6 +11,13 @@ const NEAR_TOP = 120;
 const NEAR_FOOT = 48;
 
 const DRAFT = "chat-draft";
+const LOST = "chat-lost";
+
+/** The message that may have got there unheard, kept with its words so a page moved to and back still sends it as itself. */
+function lostOne(): { text: string; id: string } | null {
+  const held = sessionStorage.getItem(LOST);
+  return held ? (JSON.parse(held) as { text: string; id: string }) : null;
+}
 
 /** What a button came to, in a line under it where that wasn't what was asked. */
 function Said({ said }: { said: string | null }) {
@@ -414,8 +421,6 @@ interface Undoing {
 function Box({ view, replying, chosen, sent, letGo }: { view: ChatView; replying: ChatQuote | null; chosen: boolean; sent: () => void; letGo: () => void }) {
   const [draft, setDraft] = useState(() => sessionStorage.getItem(DRAFT) ?? "");
   const [said, setSaid] = useState<string | null>(null);
-  // One that may have got there unheard goes again as itself, so it's the one message.
-  const lost = useRef<{ text: string; id: string } | null>(null);
   const change = (text: string) => {
     setDraft(text);
     sessionStorage.setItem(DRAFT, text);
@@ -423,17 +428,19 @@ function Box({ view, replying, chosen, sent, letGo }: { view: ChatView; replying
   const go = () => {
     const text = draft.trim();
     if (!text) return;
-    const id = lost.current?.text === text ? lost.current.id : crypto.randomUUID();
+    // One that may have got there unheard goes again as itself, so it's the one message.
+    const lost = lostOne();
+    const id = lost?.text === text ? lost.id : crypto.randomUUID();
     change("");
     setSaid(null);
     sent();
     const replyTo = replying?.id ?? view.quiet ?? null;
     void saying({ type: "SendMessage", text, id, replyTo, takeItsSubject: replying !== null }).then((why) => {
       if (why === null) {
-        lost.current = null;
+        sessionStorage.removeItem(LOST);
         return;
       }
-      lost.current = { text, id };
+      sessionStorage.setItem(LOST, JSON.stringify({ text, id }));
       setSaid(why);
       setDraft((typed) => {
         const back = typed ? `${text}\n\n${typed}` : text;
@@ -443,7 +450,8 @@ function Box({ view, replying, chosen, sent, letGo }: { view: ChatView; replying
     });
   };
   const key = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key !== "Enter" || event.shiftKey) return;
+    // While an input method composes, Enter is its own: it confirms what's being written.
+    if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
     event.preventDefault();
     go();
   };
