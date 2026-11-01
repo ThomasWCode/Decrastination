@@ -22,22 +22,27 @@ async function sheetOf(page: Page, title: string): Promise<Locator> {
   return sheet;
 }
 
-const tomorrow = () => {
+const daysAhead = (days: number) => {
   const day = new Date();
-  day.setDate(day.getDate() + 1);
+  day.setDate(day.getDate() + days);
   return day;
 };
+
+const tomorrow = () => daysAhead(1);
 
 /** [day] as a date field writes it. */
 const dated = (day: Date) => `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, "0")}-${String(day.getDate()).padStart(2, "0")}`;
 
-/** A task of your own due tomorrow night, so the plan finds it room, however full its days are. */
+/**
+ * A task of your own due six days on, so the plan finds it room at any hour and inside the days [pieceOf] reads. One due tomorrow
+ * has only what's left of today and tomorrow, which the tests before it can fill by the evening.
+ */
 async function dueTask(page: Page, title: string) {
   await page.goto("/work");
   await page.getByRole("button", { name: "New task" }).click();
   const form = page.getByRole("form", { name: "New task" });
   await form.getByLabel("What").fill(title);
-  await form.getByLabel("Due").fill(`${dated(tomorrow())}T23:30`);
+  await form.getByLabel("Due").fill(`${dated(daysAhead(6))}T23:30`);
   await form.getByLabel("Minutes").fill("30");
   await form.getByRole("button", { name: "Add", exact: true }).click();
   await expect(form).toBeHidden();
