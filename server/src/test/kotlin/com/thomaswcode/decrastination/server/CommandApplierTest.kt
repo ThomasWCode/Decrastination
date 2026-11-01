@@ -20,6 +20,7 @@ import com.thomaswcode.decrastination.sync.protocol.FinishOwnTask
 import com.thomaswcode.decrastination.sync.protocol.ForgetCalibration
 import com.thomaswcode.decrastination.sync.protocol.MarkAnswered
 import com.thomaswcode.decrastination.sync.protocol.Outcome
+import com.thomaswcode.decrastination.sync.protocol.Owners
 import com.thomaswcode.decrastination.sync.protocol.RateMessage
 import com.thomaswcode.decrastination.sync.protocol.RecordCheckIn
 import com.thomaswcode.decrastination.sync.protocol.ReplyFromNotification
@@ -30,7 +31,6 @@ import com.thomaswcode.decrastination.sync.protocol.StopTimer
 import com.thomaswcode.decrastination.sync.protocol.UndoTidy
 import com.thomaswcode.decrastination.sync.protocol.UseParentCode
 import java.io.File
-import java.io.IOException
 import java.nio.file.Files
 import java.sql.Connection
 import java.sql.DriverManager
@@ -56,8 +56,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonPrimitive
-import org.sqlite.SQLiteErrorCode
-import org.sqlite.SQLiteException
 
 /** Commands on the server (docs/spec/server.md): each through its owner, all of it or none of it, once however often it's sent. */
 class CommandApplierTest {
@@ -477,19 +475,19 @@ class CommandApplierTest {
     }
 
     @Test
-    fun `what can pass is the box's, by its cause too, and what would fail the same way at every retry is the command's`() {
-        for (fault in listOf(SQLiteErrorCode.SQLITE_BUSY, SQLiteErrorCode.SQLITE_BUSY_SNAPSHOT, SQLiteErrorCode.SQLITE_LOCKED, SQLiteErrorCode.SQLITE_IOERR_WRITE, SQLiteErrorCode.SQLITE_FULL, SQLiteErrorCode.SQLITE_CORRUPT, SQLiteErrorCode.SQLITE_ERROR)) {
-            assertTrue(CommandApplier.boxFault(SQLiteException("made up", fault)), fault.name)
+    fun `a bug in a release loses nothing, as a failure's no answer, and the release that mends it applies what's waited`() = runBlocking {
+        var broken = true
+        val owners = object : Owners by graph.owners {
+            override val ownTasks get() = if (broken) error("A made-up bug") else graph.owners.ownTasks
         }
-        assertTrue(CommandApplier.boxFault(IOException("made up")))
-        assertTrue(CommandApplier.boxFault(SQLException("no code of SQLite's")))
-        assertTrue(CommandApplier.boxFault(IllegalStateException(SQLiteException("made up", SQLiteErrorCode.SQLITE_BUSY))))
-        assertTrue(CommandApplier.boxFault(IllegalStateException(IOException("made up"))))
-        for (value in listOf(SQLiteErrorCode.SQLITE_CONSTRAINT, SQLiteErrorCode.SQLITE_CONSTRAINT_TRIGGER, SQLiteErrorCode.SQLITE_TOOBIG, SQLiteErrorCode.SQLITE_MISMATCH, SQLiteErrorCode.SQLITE_RANGE)) {
-            assertFalse(CommandApplier.boxFault(SQLiteException("made up", value)), value.name)
-        }
-        assertFalse(CommandApplier.boxFault(IllegalArgumentException("made up")))
-        assertFalse(CommandApplier.boxFault(IllegalStateException(IllegalArgumentException("made up"))))
+        val applier = CommandApplier(db, graph.backend, Commands(owners, graph.clock), owners, graph.clock, reload = { graph.stores.tasks.reload() }) {}
+        val batch = CommandBatch(listOf(Command("one", at, own("Essay")), Command("two", at, own("Maths"))))
+        assertFailsWith<IllegalStateException> { applier.apply(batch, "phone") }
+        assertEquals(0, rows(), "nothing that says it's been dealt with")
+        assertTrue(graph.stores.tasks.value.tasks.isEmpty())
+        broken = false
+        assertEquals(listOf(Outcome.APPLIED, Outcome.APPLIED), applier.apply(batch, "phone").map { it.state })
+        assertEquals(setOf("Essay", "Maths"), graph.stores.tasks.value.tasks.map { it.title }.toSet())
     }
 
     @Test
@@ -513,13 +511,13 @@ class CommandApplierTest {
         val free = CompletableDeferred<Unit>()
         val holding = launch(Dispatchers.IO) { db.command { free.await() } }
         delay(100)
-        val failing = async(Dispatchers.IO) { send(Command("two", at, FinishOwnTask("own:s-Essay"))) }
+        val failing = async(Dispatchers.IO) { runCatching { send(Command("two", at, FinishOwnTask("own:s-Essay"))) } }
         delay(100)
         val next = async(Dispatchers.IO) { send(Command("three", at, own("Maths"))) }
         delay(100)
         free.complete(Unit)
         holding.join()
-        assertEquals(Outcome.DROPPED, failing.await().state)
+        assertTrue(failing.await().exceptionOrNull() is SQLException)
         assertEquals(Outcome.APPLIED, next.await().state)
         val open = { graph.stores.tasks.value.tasks.filter { it.isOpen }.map { it.title }.toSet() }
         assertEquals(setOf("Essay", "Maths"), open())
@@ -545,11 +543,9 @@ class CommandApplierTest {
         }
         val applier = CommandApplier(db, graph.backend, Commands(graph.owners, graph.clock), graph.owners, graph.clock, reload) { heard += it }
         val before = db.currentRevision()
-        val outcome = applier.apply(CommandBatch(listOf(Command("two", at, FinishOwnTask("own:s-Essay")))), "phone").single()
-        assertEquals(Outcome.DROPPED, outcome.state)
+        assertFailsWith<SQLException> { applier.apply(CommandBatch(listOf(Command("two", at, FinishOwnTask("own:s-Essay")))), "phone") }
         assertTrue(db.currentRevision() > before, "the job's write took one")
         assertEquals(listOf(db.currentRevision()), heard)
-        assertEquals(db.currentRevision(), outcome.revision, "and what's on record is the state it left")
     }
 
     @Test

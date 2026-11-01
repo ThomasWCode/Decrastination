@@ -9,13 +9,10 @@ import com.thomaswcode.decrastination.sync.protocol.CommandBatch
 import com.thomaswcode.decrastination.sync.protocol.Commands
 import com.thomaswcode.decrastination.sync.protocol.Outcome
 import com.thomaswcode.decrastination.sync.protocol.Owners
-import java.io.IOException
-import java.sql.SQLException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
-import org.sqlite.SQLiteErrorCode
 
 /**
  * Commands applied to the state, each through its owner, one at a time, in the order they arrive: all of one or none of it,
@@ -39,8 +36,8 @@ class CommandApplier(
     /**
      * [batch] in order, each one's outcome. Not cut short by the client's going away: each is finished, and said at its retry. On
      * threads of its own, not the caller's: a request's thread may be waiting for this very command to close, and on a small box
-     * there are few of them. A fault of the box's stops it there, thrown ([one]): the client sends all of it again, and what's gone
-     * through answers as it did.
+     * there are few of them. A failure stops it there, thrown ([one]): the client sends all of it again, and what's gone through
+     * answers as it did.
      */
     suspend fun apply(batch: CommandBatch, device: String): List<Outcome> = withContext(NonCancellable + Dispatchers.IO) { batch.commands.map { one(it, device) } }
 
@@ -65,14 +62,16 @@ class CommandApplier(
     }
 
     /**
-     * [sent] applied, unless it fails. A failure of its own is dropped, on record, so a retry isn't tried again for ever. A fault of the
-     * box's isn't the command's: nothing of it's on record, so its retry is applied as the first would have been, and it's thrown for
-     * the client to send again, as giving up on it would lose what only the phone has.
+     * [sent] applied, and what came of it: applied, refused by its owner, or dropped as it can't apply to the state as it now is,
+     * each with its reason. A failure is no answer: a lock, the disk and a bug in a release can't be told apart here, and none says
+     * what came of the command, so it's nothing a client should let go of. Nothing of it's on record, so its retry is applied as the
+     * first would have been, and it's thrown for the client to send again, as giving up on it would lose what only the phone has.
+     * One that never goes through waits for the release that mends it.
      */
     private suspend fun one(sent: Command, device: String): Outcome {
         val command = stamped(sent, device)
         var before = 0L
-        val outcome = db.commandOr(reload, { failed -> if (boxFault(failed)) Result.failure(failed) else Result.success(dropped(command, device, failed)) }) {
+        val outcome = db.commandOr(reload, { failed -> Result.failure(failed) }) {
             before = db.currentRevision()
             // Inside, not ahead of it: a retry racing its first send waits here, and finds what came of it.
             recorded(command.id)?.let { return@commandOr Result.success(it) }
@@ -105,12 +104,6 @@ class CommandApplier(
         return command.copy(at = if (device == Client.WEBSITE) now else minOf(command.at, now))
     }
 
-    /** What it left in memory goes with the rollback, and it's on record as dropped. */
-    private suspend fun dropped(command: Command, device: String, failed: Exception): Outcome {
-        Log.w(Log.TAG, "A command failed: ${failed::class.simpleName} at ${failed.stackTrace.firstOrNull { it.className.startsWith("com.thomaswcode") }}")
-        return Outcome(command.id, Outcome.DROPPED, "It couldn't be applied", db.currentRevision()).also { record(command, device, it) }
-    }
-
     private fun recorded(id: String): Outcome? = db.read { c ->
         c.prepareStatement("SELECT outcome, why, revision FROM commands WHERE id = ?").use { q ->
             q.setString(1, id)
@@ -135,16 +128,5 @@ class CommandApplier(
                 q.executeUpdate()
             }
         }
-    }
-
-    companion object {
-        /** SQLite's primary result codes that are about a value, not the box: `SQLException.errorCode`, as sqlite-jdbc gives them. */
-        private val OF_A_VALUE = setOf(SQLiteErrorCode.SQLITE_CONSTRAINT, SQLiteErrorCode.SQLITE_TOOBIG, SQLiteErrorCode.SQLITE_MISMATCH, SQLiteErrorCode.SQLITE_RANGE).map { it.code }.toSet()
-
-        /**
-         * Whether [failed] is the box's doing, not the command's: a lock, the disk, a release gone wrong, each of which can pass. Anything
-         * else is the command's, as is what SQLite says of a value being written, and it would fail the same way at every retry.
-         */
-        internal fun boxFault(failed: Throwable): Boolean = generateSequence(failed) { it.cause }.any { it is IOException || (it is SQLException && it.errorCode !in OF_A_VALUE) }
     }
 }
