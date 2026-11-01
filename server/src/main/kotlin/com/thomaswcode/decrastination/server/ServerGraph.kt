@@ -274,14 +274,17 @@ class ServerGraph(
         jobs.start(scope)
     }
 
-    /** Where a job at a set time that's never run counts from: today's start, as what it did before then is gone by, and the morning says today's. */
-    private fun todayBegan(now: Long): Long = Instant.ofEpochMilli(now).atZone(clock.zone()).toLocalDate().atStartOfDay(clock.zone()).toInstant().toEpochMilli()
+    /** The last moment before today, so a time at today's very start is still to come. */
+    private fun beforeToday(now: Long): Long = Instant.ofEpochMilli(now).atZone(clock.zone()).toLocalDate().atStartOfDay(clock.zone()).toInstant().toEpochMilli() - 1
 
-    /** Whether the morning's work is due: its next time since it last ran. */
-    internal fun morningDue(last: Long?, now: Long): Boolean = Daily.nextBriefing(last ?: todayBegan(now), clock.zone(), stores.settings.value, stores.school.value) <= now
+    /**
+     * Whether the morning's work is due: today's, once its time comes, if it hasn't run since. A day gone by isn't caught up on:
+     * `Briefing` says today's whenever it runs, so running it early would say it twice.
+     */
+    internal fun morningDue(last: Long?, now: Long): Boolean = Daily.nextBriefing(maxOf(last ?: 0, beforeToday(now)), clock.zone(), stores.settings.value, stores.school.value) <= now
 
-    /** Whether Sunday's work at [minute] is due: its next time since it last ran. */
-    internal fun sundayDue(last: Long?, now: Long, minute: Int): Boolean = Daily.nextSunday(last ?: todayBegan(now), clock.zone(), minute) <= now
+    /** Whether Sunday's work at [minute] is due: its next time since it last ran, or, never run, since today began, so a first run says nothing of a Sunday gone by. */
+    internal fun sundayDue(last: Long?, now: Long, minute: Int): Boolean = Daily.nextSunday(last ?: beforeToday(now), clock.zone(), minute) <= now
 
     /** Whether tonight's backup has gone: once a day, after [NIGHTLY_HOUR]. */
     private fun nightDue(last: Long?, now: Long): Boolean {

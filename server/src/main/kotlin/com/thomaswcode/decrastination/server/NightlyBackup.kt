@@ -8,6 +8,7 @@ import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.security.MessageDigest
+import java.time.Duration
 import java.time.Instant
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
@@ -66,6 +67,8 @@ class B2Folder(
     private val secret: String,
     private val bucket: String,
     private val clock: () -> Long = System::currentTimeMillis,
+    /** How long the send may take: the jobs run one at a time, so one that never answers mustn't hold up the rest. */
+    private val timeout: Duration = Duration.ofMinutes(5),
 ) : BackupService.Folder {
     private val client = HttpClient.newHttpClient()
     private val region = endpoint.removePrefix("s3.").substringBefore(".")
@@ -82,6 +85,7 @@ class B2Folder(
             .header("x-amz-date", headers.getValue("x-amz-date"))
             .header("Authorization", Sigv4.authorization("PUT", path, headers, hash, region, keyId, secret))
             .PUT(HttpRequest.BodyPublishers.ofByteArray(body))
+            .timeout(timeout)
             .build()
         return try {
             val answer = client.send(request, HttpResponse.BodyHandlers.discarding())

@@ -1,7 +1,11 @@
 package com.thomaswcode.decrastination.server
 
+import java.net.InetAddress
+import java.net.ServerSocket
+import java.time.Duration
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /** The nightly file's signature, against the worked example AWS publishes for Signature Version 4. */
@@ -35,6 +39,14 @@ class NightlyBackupTest {
     @Test
     fun `a time stamps as the header wants it`() {
         assertEquals("20130524T000000Z", Sigv4.stamp(1_369_353_600_000L))
+    }
+
+    @Test(timeout = 15_000)
+    fun `an endpoint that takes the connection and says nothing is a failure, not a wait for ever`() {
+        ServerSocket(0, 1, InetAddress.getLoopbackAddress()).use { silent ->
+            val folder = B2Folder("127.0.0.1:${silent.localPort}", "key", "secret", "bucket", timeout = Duration.ofMillis(300))
+            assertFalse(folder.write("a-file", "text"))
+        }
     }
 
     @Test

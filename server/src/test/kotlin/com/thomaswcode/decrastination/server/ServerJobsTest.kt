@@ -275,10 +275,21 @@ class ServerJobsTest {
         assertFalse(graph.morningDue(null, at(sunday, morning - 60)), "before today's time, yesterday's isn't due")
         assertTrue(graph.morningDue(null, at(sunday, morning + 1)), "today's is")
         assertFalse(graph.morningDue(at(sunday, morning + 1), at(sunday, morning + 2)), "once it's run, not again")
+        val friday = sunday.minusDays(2)
+        assertFalse(graph.morningDue(at(friday, morning + 1), at(sunday, morning - 60)), "a morning missed isn't caught up on ahead of today's")
+        assertTrue(graph.morningDue(at(friday, morning + 1), at(sunday, morning + 1)), "today's comes at its time")
         val monday = sunday.plusDays(1)
         val checkIn = graph.stores.settings.value.checkInMin
         assertTrue(graph.sundayDue(null, at(sunday, checkIn + 1), checkIn))
         assertFalse(graph.sundayDue(null, at(monday, 120), checkIn), "Monday's first run says nothing of Sunday")
+    }
+
+    @Test
+    fun `a morning set for midnight still comes`() = runBlocking {
+        val graph = ServerGraph(db, dir, Plain, "test")
+        graph.stores.settings.update { it.copy(briefingWeekendMin = 0) }
+        val sunday = LocalDate.of(2026, 11, 1).atStartOfDay(graph.clock.zone()).toInstant().toEpochMilli()
+        assertTrue(graph.morningDue(null, sunday + 60_000))
     }
 
     @Test
