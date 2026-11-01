@@ -13,6 +13,9 @@ object Protocol {
     const val VERSION = 1
     const val HEADER = "X-Protocol"
 
+    /** The phone's time zone, said with each exchange once it's sending commands, as a seed says it in its body. */
+    const val ZONE_HEADER = "X-Zone"
+
     /** A store's text as a hash, as both ends count it. */
     fun hash(text: String): String = MessageDigest.getInstance("SHA-256").digest(text.toByteArray()).joinToString("") { "%02x".format(it) }
 }

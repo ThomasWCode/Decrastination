@@ -127,6 +127,11 @@ private fun signedIn(web: Web) = createRouteScopedPlugin("SignedIn") {
     }
 }
 
+/** The zone a phone says with each exchange, read before anything's applied or answered: a day is the owner's wherever they are. */
+private fun ApplicationCall.heardZone(graph: ServerGraph) {
+    if (client is Client.Phone) request.header(Protocol.ZONE_HEADER)?.let(graph.serverClock::setZone)
+}
+
 private fun ApplicationCall.setCookie(web: Web, name: String, value: String, maxAge: Int) {
     response.cookies.append(
         Cookie(cookie(web, name), value, CookieEncoding.RAW, maxAge = maxAge, path = "/", secure = web.secure, httpOnly = true, extensions = mapOf("SameSite" to "Lax")),
@@ -228,6 +233,7 @@ private fun Route.signedInRoutes(web: Web) {
     }
 
     get("/state") {
+        call.heardZone(graph)
         val since = call.request.queryParameters["since"]?.toLongOrNull() ?: 0
         val state = graph.state(since)
         call.respond(StateOut(state.revision, state.stores.map { StoreOut(it.name, it.version, it.revision, json.parseToJsonElement(it.text)) }))
@@ -248,6 +254,7 @@ private fun Route.signedInRoutes(web: Web) {
     }
 
     post("/commands") {
+        call.heardZone(graph)
         // Mirror mode's writer is the phone, by its seeds: a command now would be undone by the next one.
         if (graph.mode != ServerGraph.COMMANDS) return@post call.respond(HttpStatusCode.Conflict, Problem("The server is mirroring the phone"))
         val device = (call.client as? Client.Phone)?.id ?: Client.WEBSITE
