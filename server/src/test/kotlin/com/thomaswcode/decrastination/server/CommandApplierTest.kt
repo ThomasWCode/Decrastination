@@ -3,6 +3,7 @@ package com.thomaswcode.decrastination.server
 import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.core.OwnTask
 import com.thomaswcode.decrastination.core.Speaker
+import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.data.Secret
 import com.thomaswcode.decrastination.data.SecretCipher
 import com.thomaswcode.decrastination.protect.Totp
@@ -19,6 +20,8 @@ import com.thomaswcode.decrastination.sync.protocol.RateMessage
 import com.thomaswcode.decrastination.sync.protocol.ReplyFromNotification
 import com.thomaswcode.decrastination.sync.protocol.SaveOwnTask
 import com.thomaswcode.decrastination.sync.protocol.SendMessage
+import com.thomaswcode.decrastination.sync.protocol.StartTimer
+import com.thomaswcode.decrastination.sync.protocol.StopTimer
 import com.thomaswcode.decrastination.sync.protocol.UseParentCode
 import java.io.File
 import java.nio.file.Files
@@ -145,6 +148,16 @@ class CommandApplierTest {
         assertEquals("Wrong code: 2 tries left", first.why)
         assertEquals("Wrong code: 1 try left", send(Command("two", at, UseParentCode(wrong(secret)))).why, "the first wrong one is counted")
         assertEquals(first.why, send(Command("one", at, UseParentCode(wrong(secret)))).why, "and a repeat answers as it did")
+    }
+
+    @Test
+    fun `a timer that can't start or stop says so`() = runBlocking<Unit> {
+        send(Command("task", at, own("Essay")))
+        assertEquals(Outcome.REFUSED, send(Command("nothing", at, StopTimer)).state)
+        graph.stores.tasks.update { state -> state.copy(tasks = state.tasks.map { it.copy(status = Status.Done) }) }
+        val start = send(Command("closed", at, StartTimer("own:s-Essay")))
+        assertEquals(Outcome.REFUSED, start.state)
+        assertNotNull(start.why)
     }
 
     @Test

@@ -163,13 +163,6 @@ internal suspend fun keepPiece(graph: AppGraph, piece: Chunk, now: Long): String
 /** What's said once a Done leaves all of [taskId]'s work done but its source's word ([PieceSays.stillPlanned]). */
 internal fun stillPlanned(graph: AppGraph, taskId: String): String? = graph.pieceSays.stillPlanned(taskId)
 
-/** A running [timer]'s time at [now], as its piece shows it: "Timer: 12 min left", "Timer: time's up", "Timer: 5 min over". */
-internal fun timerText(timer: PieceTimer, now: Long): String = when {
-    timer.leftMin(now) > 0 -> "Timer: ${Format.minutes(timer.leftMin(now))} left"
-    timer.overMin(now) == 0 -> "Timer: time's up"
-    else -> "Timer: ${Format.minutes(timer.overMin(now))} over"
-}
-
 /**
  * The clock [timer]'s time is told by on screen: read afresh at each of its whole minutes from its start, as its
  * minutes left turn then, rather than the screen's own minute, which can be from before the Start.

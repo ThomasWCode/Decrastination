@@ -410,6 +410,32 @@ class ApiTest {
     }
 
     @Test
+    fun `a drop's the website's, and not while mirroring`() = server {
+        val cookie = signIn()
+        val phone = paired()
+        val body = """{"key":"nothing","date":"2026-11-02"}"""
+        suspend fun drop(signed: HttpRequestBuilder.() -> Unit) = plain().post("/api/day/drop") {
+            signed()
+            contentType(ContentType.Application.Json)
+            setBody(body)
+        }
+        val website: HttpRequestBuilder.() -> Unit = {
+            header(HttpHeaders.Cookie, cookie)
+            header("X-Requested-With", "test")
+        }
+        assertEquals(HttpStatusCode.Conflict, drop(website).status)
+        graph.commandsForATest()
+        assertEquals(
+            HttpStatusCode.Forbidden,
+            drop {
+                bearerAuth(phone.token)
+                header(Protocol.HEADER, Protocol.VERSION.toString())
+            }.status,
+        )
+        assertEquals(HttpStatusCode.OK, drop(website).status)
+    }
+
+    @Test
     fun `the chat's views are a client's`() = server {
         assertEquals(HttpStatusCode.Unauthorized, plain().get("/api/views/chat").status)
         assertEquals(HttpStatusCode.Unauthorized, plain().get("/api/views/notices").status)

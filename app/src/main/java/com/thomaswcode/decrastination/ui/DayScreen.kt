@@ -248,23 +248,7 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
         val slot = drag.slot ?: return
         val onto = drag.dayUnder()
         val minute = drag.minuteOnGrid(grid.value.toFloat(), drag.hourPx.takeIf { it > 0f } ?: with(density) { settings.dayHourDp.dp.toPx() })
-        val moved: Moves.Moved? = if (slot.kind == SlotKind.Outside || slot.chunk == null) {
-            when {
-                onto != null -> Moves.Moved.Refused("A break outside stays on its day")
-                minute != null -> graph.moves.outsideTo(slot, day, DayLayout.dropStart(minute, drag.minutes), zone)
-                else -> null
-            }
-        } else {
-            val chunk = plan.ordered.firstOrNull { it.key == slot.chunk?.key }
-            when {
-                chunk == null -> Moves.Moved.Refused("That piece has changed since (done, or planned again).")
-                onto != null && onto == day -> null
-                onto != null -> graph.moves.toDay(chunk, onto, zone)
-                minute == null -> null
-                plan.chunksOf(chunk.taskId).firstOrNull()?.key != chunk.key -> Moves.Moved.Refused("Only its next piece takes a time: drag it onto a day above")
-                else -> graph.moves.toTime(chunk, day, DayLayout.dropStart(minute, chunk.minutes), zone)
-            }
-        }
+        val moved = graph.moves.dropped(plan, slot, day, onto, minute, drag.minutes, zone)?.let(graph.moves::sent)
         when (moved) {
             is Moves.Moved.Done -> {
                 drag.cancel()

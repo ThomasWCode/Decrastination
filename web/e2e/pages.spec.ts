@@ -13,6 +13,13 @@ test("the chat's the home, and while the phone writes it's there to read, with n
   await expect(page.getByRole("complementary", { name: "Your changes" }).getByRole("button", { name: "Take back" })).toHaveCount(0);
 });
 
+test("while the phone writes, the Day has nothing to press, and a block can't be lifted", async ({ page }) => {
+  await page.goto("/day");
+  await expect(page.getByTestId("grid")).toBeVisible();
+  await expect(page.getByRole("group", { name: "Do" })).toHaveCount(0);
+  await expect(page.locator(".block.movable")).toHaveCount(0);
+});
+
 test("signed in, the Day shows the plan's grid and what to do now", async ({ page }) => {
   await page.goto("/day");
   await expect(page.getByRole("heading", { name: "Do now" })).toBeVisible();

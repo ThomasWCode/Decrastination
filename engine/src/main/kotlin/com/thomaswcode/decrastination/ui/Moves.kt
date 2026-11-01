@@ -7,8 +7,10 @@ import com.thomaswcode.decrastination.core.Chunk
 import com.thomaswcode.decrastination.core.DayBreaks
 import com.thomaswcode.decrastination.core.Ids
 import com.thomaswcode.decrastination.core.InstructionRules
+import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Planner
 import com.thomaswcode.decrastination.core.Slot
+import com.thomaswcode.decrastination.core.SlotKind
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.WallClock
 import com.thomaswcode.decrastination.data.JsonStore
@@ -56,7 +58,8 @@ class Moves(
     /** All of [chunk]'s task on [day], made here. */
     fun toDay(chunk: Chunk, day: LocalDate, zone: ZoneId): Moved = sent(dayMove(chunk, day, zone))
 
-    private fun sent(decided: Decided): Moved {
+    /** [decided], made here: what's said of it, or why not. */
+    fun sent(decided: Decided): Moved {
         decided.why?.let { return Moved.Refused(it) }
         scope.launch { decided.actions.forEach { commands.send(it) } }
         return Moved.Done(decided.said)
@@ -100,11 +103,37 @@ class Moves(
      * A break outside ([slot]) to [minute] of its own [day] (D-116): an `OutsideAt` change of yours naming it by its own time,
      * kept to the minute as a pin is; refused where [outsideProblem] says why.
      */
-    fun outsideTo(slot: Slot, day: LocalDate, minute: Int, zone: ZoneId): Moved {
-        outsideProblem(planning.breaksOn(day), slot.outsideAt, minute, timeOf(day, minute, zone), clock.now())?.let { return Moved.Refused(it) }
+    fun outsideTo(slot: Slot, day: LocalDate, minute: Int, zone: ZoneId): Moved = sent(outsideMove(slot, day, minute, zone))
+
+    /** What [outsideTo] makes of it. */
+    fun outsideMove(slot: Slot, day: LocalDate, minute: Int, zone: ZoneId): Decided {
+        outsideProblem(planning.breaksOn(day), slot.outsideAt, minute, timeOf(day, minute, zone), clock.now())?.let { return Decided(why = it) }
         val said = "Outside at ${day.format(CHIP_DAY)} ${"%02d:%02d".format(Locale.UK, minute / 60, minute % 60)}"
-        scope.launch { commands.act(AddOwnChange(Ids.next(), said, About(day = day.toString()), Change(ChangeType.OutsideAt, date = day.toString(), outsideMin = slot.outsideAt, startMin = minute))) }
-        return Moved.Done(said)
+        return Decided(said, listOf(AddOwnChange(Ids.next(), said, About(day = day.toString()), Change(ChangeType.OutsideAt, date = day.toString(), outsideMin = slot.outsideAt, startMin = minute))))
+    }
+
+    /**
+     * A drop on the Day, judged on the [plan] as it then is (UI-04): [slot], [minutes] long, lifted from [day] and let go on the
+     * strip's day [onto], all of its task there; or on the grid with its top at [minute], its task's next piece at that time, or a
+     * break outside at that time on its own day (D-116). Null where it comes to nothing: anywhere else, or its own day.
+     */
+    fun dropped(plan: Plan, slot: Slot, day: LocalDate, onto: LocalDate?, minute: Int?, minutes: Int, zone: ZoneId): Decided? {
+        if (slot.kind == SlotKind.Outside || slot.chunk == null) {
+            return when {
+                onto != null -> Decided(why = "A break outside stays on its day")
+                minute != null -> outsideMove(slot, day, DayLayout.dropStart(minute, minutes), zone)
+                else -> null
+            }
+        }
+        val chunk = plan.ordered.firstOrNull { it.key == slot.chunk?.key }
+        return when {
+            chunk == null -> Decided(why = CHANGED)
+            onto != null && onto == day -> null
+            onto != null -> dayMove(chunk, onto, zone)
+            minute == null -> null
+            plan.chunksOf(chunk.taskId).firstOrNull()?.key != chunk.key -> Decided(why = "Only its next piece takes a time: drag it onto a day above")
+            else -> timeMove(chunk, day, DayLayout.dropStart(minute, chunk.minutes), zone)
+        }
     }
 
     /** A day kept for only other tasks (D-115): the move makes [chunk]'s task one of them, said after the move's words. */
@@ -114,6 +143,9 @@ class Moves(
 
     companion object {
         val CHIP_DAY: DateTimeFormatter = DateTimeFormatter.ofPattern("EEE d", Locale.UK)
+
+        /** Why a piece that's gone from the plan can't be moved or kept. */
+        const val CHANGED = "That piece has changed since (done, or planned again)."
 
         /**
          * Whether [task]'s work can go to [day] at [now]: not after its real deadline's day still to come (overdue work can go to any,

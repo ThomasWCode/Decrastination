@@ -43,6 +43,7 @@ import com.thomaswcode.decrastination.ui.TaskSheetModel
 import com.thomaswcode.decrastination.views.Asked
 import com.thomaswcode.decrastination.views.ChatView
 import com.thomaswcode.decrastination.views.ChatViews
+import com.thomaswcode.decrastination.views.DayDrop
 import com.thomaswcode.decrastination.views.DayView
 import com.thomaswcode.decrastination.views.DayViews
 import com.thomaswcode.decrastination.views.NoticesView
@@ -246,7 +247,7 @@ class ServerGraph(
     }
 
     /** What moves a piece, its rules the phone's: it decides, and [ask] applies. */
-    private val moves = Moves(stores.tasks, owners.instructions, commands, planning, clock, scope)
+    internal val moves = Moves(stores.tasks, owners.instructions, commands, planning, clock, scope)
 
     /** What's said of a piece as it's done. */
     private val pieceSays = PieceSays(owners.focus, stores.log, stores.settings, stores.learning, planning, clock)
@@ -419,6 +420,8 @@ class ServerGraph(
             judge = { EventJudge.judge(it, answers) },
             micro = stores.model.value.microPlans,
             asOf = devices.lastSeen(),
+            timer = stores.session.value.timer,
+            writable = mode == COMMANDS,
         )
     }
 
@@ -490,7 +493,7 @@ class ServerGraph(
     fun task(id: String): TaskView? {
         val state = stores.tasks.value
         val task = state.tasks.firstOrNull { it.id == id } ?: return null
-        return TaskViews.of(task, state.tasks.associateBy { it.id }, planning.plan(), stores.settings.value, stores.instructions.value.applied, stores.felix.value.notes, clock.now(), clock.zone(), writable = mode == COMMANDS)
+        return TaskViews.of(task, state.tasks.associateBy { it.id }, planning.plan(), stores.settings.value, stores.instructions.value.applied, stores.felix.value.notes, clock.now(), clock.zone(), writable = mode == COMMANDS, timer = stores.session.value.timer)
     }
 
     /** [ask] of task [id], made the commands the phone's sheet would make, and applied as the website's. */
@@ -499,13 +502,29 @@ class ServerGraph(
         val plan = planning.plan()
         val piece = TaskSheetModel.next(plan, id).takeIf { task.isOpen }
         if (ask.kind == TaskAsk.DONE) {
-            // The one the page showed, or none: done elsewhere since, the next one's not what was meant.
-            val shown = piece?.takeIf { it.key == ask.key } ?: return Asked(false, "That piece has changed since (done, or planned again).")
+            // The one the page showed, whichever of its task's that is (Do now's can be ahead of the first in its list, a step in any
+            // order laid sooner), or none: done elsewhere since, another's not what was meant.
+            val shown = plan.chunksOf(id).firstOrNull { it.key == ask.key } ?: return Asked(false, Moves.CHANGED)
             var kept = false
             val said = pieceSays.kept(shown, ask.at ?: plan.now) { action -> (website(action).state == Outcome.APPLIED).also { kept = it } }
             return Asked(kept, said)
         }
-        val decided = TaskAsks.decide(task, piece, ask, moves, clock.zone())
+        return made(TaskAsks.decide(task, piece, ask, moves, clock.zone()))
+    }
+
+    /** [drop] on the Day, by the phone's rules: what came of it, a move saying where it's taken back. */
+    suspend fun drop(drop: DayDrop): Asked {
+        val day = runCatching { LocalDate.parse(drop.date) }.getOrNull() ?: return Asked(false, "That needs a date")
+        val plan = planning.plan()
+        val slot = plan.bucket(day)?.slots?.firstOrNull { it.key == drop.key } ?: return Asked(false, Moves.CHANGED)
+        val onto = drop.onto?.let { date -> runCatching { LocalDate.parse(date) }.getOrNull() ?: return Asked(false, "That needs a date") }
+        val decided = moves.dropped(plan, slot, day, onto, drop.minute, ((slot.end - slot.start) / MINUTE_MS).toInt(), clock.zone()) ?: return Asked(false)
+        val moved = made(decided)
+        return if (moved.done) moved.copy(said = "${decided.said}: undone in the chat's Your changes") else moved
+    }
+
+    /** What's been [decided], applied as the website's: a step at a time, stopping at the first that doesn't go through. */
+    private suspend fun made(decided: Moves.Decided): Asked {
         decided.why?.let { return Asked(false, it) }
         for (action in decided.actions) {
             val outcome = website(action)

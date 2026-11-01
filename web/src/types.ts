@@ -30,6 +30,20 @@ export interface NextView {
   label: string;
   first?: string | null;
   then?: string | null;
+  taskId?: string | null;
+  actions: TaskAction[];
+}
+
+export interface DragView {
+  key: string;
+  minutes: number;
+}
+
+export interface TimerView {
+  label: string;
+  says: string;
+  nextAt: number;
+  stop?: Action | null;
 }
 
 export interface BlockView {
@@ -48,6 +62,8 @@ export interface BlockView {
   column: number;
   columns: number;
   span: number;
+  taskId?: string | null;
+  drag?: DragView | null;
 }
 
 export interface DayView {
@@ -67,6 +83,10 @@ export interface DayView {
   next?: NextView | null;
   week: WeekDay[];
   asOf?: number | null;
+  shortest: number;
+  canChange: boolean;
+  form?: OwnTaskFormView | null;
+  timer?: TimerView | null;
 }
 
 export interface TaskTile {
@@ -232,6 +252,8 @@ export interface TaskAsk {
   minutes?: number | null;
   date?: string | null;
   minute?: number | null;
+  key?: string | null;
+  step?: number | null;
 }
 
 /** What came of a [TaskAsk]. */
@@ -262,6 +284,7 @@ export interface StepLine {
   line: string;
   done: boolean;
   tick?: Action | null;
+  timer?: TaskAction | null;
 }
 
 export interface NoteLine {

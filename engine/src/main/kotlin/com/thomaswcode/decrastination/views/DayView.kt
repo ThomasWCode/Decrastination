@@ -5,16 +5,24 @@ import com.thomaswcode.decrastination.core.Chunk
 import com.thomaswcode.decrastination.core.DayWindow
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.SlotKind
+import com.thomaswcode.decrastination.core.Source
+import com.thomaswcode.decrastination.data.PieceTimer
 import com.thomaswcode.decrastination.data.SlotOutcome
 import com.thomaswcode.decrastination.data.SlotRecord
 import com.thomaswcode.decrastination.enrich.MicroPlan
 import com.thomaswcode.decrastination.learn.CalendarEvent
 import com.thomaswcode.decrastination.learn.EventJudge
+import com.thomaswcode.decrastination.sync.protocol.Action
+import com.thomaswcode.decrastination.sync.protocol.FinishOwnTask
+import com.thomaswcode.decrastination.sync.protocol.LaterToday
+import com.thomaswcode.decrastination.sync.protocol.StopTimer
+import com.thomaswcode.decrastination.sync.protocol.UndoKeep
 import com.thomaswcode.decrastination.ui.DayLayout
 import com.thomaswcode.decrastination.ui.DayModel
 import com.thomaswcode.decrastination.ui.Format
 import com.thomaswcode.decrastination.ui.blockKey
 import com.thomaswcode.decrastination.ui.outcomeWords
+import com.thomaswcode.decrastination.ui.timerText
 import com.thomaswcode.decrastination.ui.windowName
 import java.time.DayOfWeek
 import java.time.LocalDate
@@ -53,7 +61,26 @@ data class DayView(
     val week: List<WeekDay>,
     /** When the phone last told the server anything, for the line that says how fresh this is. */
     val asOf: Long? = null,
+    /** The shortest a block's drawn, in minutes: what they're laid side by side by, so none's drawn over another at any zoom. */
+    val shortest: Int = SHORTEST_MIN,
+    /** Whether anything can be changed here: the server applies commands. */
+    val canChange: Boolean = false,
+    /** What the form takes, for a task's sheet opened from here. */
+    val form: OwnTaskFormView? = null,
+    /** A timer running, on whichever piece. */
+    val timer: TimerView? = null,
 )
+
+/** The shortest a block is drawn. */
+private const val SHORTEST_MIN = 24
+
+/** A piece's drop on the Day: the slot of [key] lifted from [date], let go on the strip's day [onto], or on the grid with its top at [minute]. */
+@Serializable
+data class DayDrop(val key: String, val date: String, val onto: String? = null, val minute: Int? = null)
+
+/** A timer running (D-112): its piece, its time in the phone's words till [nextAt], and what stops it. */
+@Serializable
+data class TimerView(val label: String, val says: String, val nextAt: Long, val stop: Action? = null)
 
 /** A window of the day's time to work in. */
 @Serializable
@@ -71,9 +98,13 @@ data class PieceChip(val label: String, val minutes: String, val urgent: Boolean
 @Serializable
 data class WeekDay(val date: String, val weekday: String, val day: Int, val load: String?, val today: Boolean, val chosen: Boolean)
 
-/** Today's next thing to do. */
+/** Today's next thing to do, and what's to be done with it (its [taskId]'s, by [TaskAction.ask]). */
 @Serializable
-data class NextView(val label: String, val first: String? = null, val then: String? = null)
+data class NextView(val label: String, val first: String? = null, val then: String? = null, val taskId: String? = null, val actions: List<TaskAction> = emptyList())
+
+/** What a block can be dragged as: its slot's [key], and how long it is. */
+@Serializable
+data class DragView(val key: String, val minutes: Int)
 
 /** A block of the grid: [kind] one of piece, outside, event, record, busy. */
 @Serializable
@@ -98,14 +129,15 @@ data class BlockView(
     val column: Int = 0,
     val columns: Int = 1,
     val span: Int = 1,
+    /** A piece's task, whose sheet it opens. */
+    val taskId: String? = null,
+    /** Set where it can be dragged. */
+    val drag: DragView? = null,
 )
 
 object DayViews {
     private val TITLE = DateTimeFormatter.ofPattern("EEEE d MMMM", Locale.UK)
     private val WEEKDAY = DateTimeFormatter.ofPattern("EEE", Locale.UK)
-
-    /** The shortest a block is drawn: the website's grid has a pixel to the minute. */
-    private const val SHORTEST_MIN = 24
 
     /** [date] by [plan], with [events], [records], your [busy] times and its [windows], at [now]. */
     fun of(
@@ -120,6 +152,8 @@ object DayViews {
         judge: (CalendarEvent) -> EventJudge.Judgement,
         micro: Map<String, MicroPlan>,
         asOf: Long?,
+        timer: PieceTimer? = null,
+        writable: Boolean = false,
     ): DayView {
         val model = DayModel.from(plan, date, events, records, windows, now, zone, busy)
         val today = date == plan.today
@@ -132,15 +166,23 @@ object DayViews {
             opensAt = model.opensAt,
             windows = model.windows.map { WindowView(windowName(it.window.kind), it.window.startMin, it.window.endMin) },
             allDay = model.allDay.map { EventChip(it.title.ifBlank { "(no title)" }, it.colour) },
-            blocks = placed(model.blocks.mapNotNull { block(it, date, zone, judge, micro) }),
+            blocks = placed(model.blocks.mapNotNull { block(it, date, zone, judge, micro, writable) }),
             unslotted = model.unslotted.map(::chip),
             done = model.done.map { PieceChip(it.label, Format.minutes(it.workedMin)) },
             load = Format.load(model.plannedMin, model.freeMin),
             doneLine = model.doneMin.takeIf { it > 0 }?.let { "Done ${Format.minutes(it)}" },
             wontFit = model.wontFit,
-            next = next?.let { NextView(it.label, micro[it.key]?.first?.takeIf(String::isNotEmpty), plan.then?.label) },
+            next = next?.let { piece ->
+                NextView(piece.label, micro[piece.key]?.first?.takeIf(String::isNotEmpty), plan.then?.label, piece.taskId.takeIf { writable }, if (writable) actions(piece, timer, now) else emptyList())
+            },
             week = week(plan, date),
             asOf = asOf,
+            canChange = writable,
+            form = WorkViews.FORM.takeIf { writable },
+            timer = timer?.takeIf { it.running }?.let { running ->
+                // Its words turn at each of its whole minutes from its start, not the page's.
+                TimerView(running.label, timerText(running, now), now + 60_000L - Math.floorMod(now - running.startedAt, 60_000L), StopTimer.takeIf { writable })
+            },
         )
     }
 
@@ -154,7 +196,17 @@ object DayViews {
 
     private fun chip(chunk: Chunk) = PieceChip(chunk.label, Format.minutes(chunk.minutes), chunk.urgent)
 
-    private fun block(block: DayModel.Block, date: LocalDate, zone: ZoneId, judge: (CalendarEvent) -> EventJudge.Judgement, micro: Map<String, MicroPlan>): BlockView? {
+    /** What can be done with [piece] from here, as the phone's *Do now* card has it; what's the phone's own (its source opened, a photo taken) stays there. */
+    private fun actions(piece: Chunk, timer: PieceTimer?, now: Long) = buildList {
+        // One running on it is stopped where its time's said: there, on the page, wherever it was started.
+        if (timer?.takeIf { it.running && it.key == piece.key } == null) add(TaskAction("Start", ask = TaskAsk(TaskAsk.TIMER, key = piece.key, step = piece.stepIndex)))
+        add(TaskAction("Done", ask = TaskAsk(TaskAsk.DONE, at = now, key = piece.key), undo = UndoKeep(piece.key, now)))
+        add(TaskAction("Later today", LaterToday(piece.key)))
+        // Yours: nothing to ask, so all of it done is your say.
+        if (piece.source == Source.Own) add(TaskAction("All of it done", FinishOwnTask(piece.taskId)))
+    }
+
+    internal fun block(block: DayModel.Block, date: LocalDate, zone: ZoneId, judge: (CalendarEvent) -> EventJudge.Judgement, micro: Map<String, MicroPlan>, writable: Boolean): BlockView? {
         val key = blockKey(block)
         val start = minuteOf(block.start, date, zone)
         val end = minuteOf(block.end, date, zone).coerceAtLeast(start)
@@ -165,9 +217,10 @@ object DayViews {
                 val chunk = item.slot.chunk
                 val state = item.state.name.lowercase(Locale.UK)
                 if (item.slot.kind == SlotKind.Outside || chunk == null) {
-                    BlockView(key, "outside", start, end, "Outside", times, state)
+                    // Not under way (D-113, D-116).
+                    BlockView(key, "outside", start, end, "Outside", times, state, drag = DragView(item.slot.key, ((block.end - block.start) / 60_000L).toInt()).takeIf { writable && item.state == DayModel.State.Ahead })
                 } else {
-                    BlockView(key, "piece", start, end, chunk.label, times, state, chunk.urgent, micro[chunk.key]?.first?.takeIf(String::isNotEmpty))
+                    BlockView(key, "piece", start, end, chunk.label, times, state, chunk.urgent, micro[chunk.key]?.first?.takeIf(String::isNotEmpty), taskId = chunk.taskId, drag = DragView(item.slot.key, chunk.minutes).takeIf { writable })
                 }
             }
             is DayModel.Row.Event -> {
