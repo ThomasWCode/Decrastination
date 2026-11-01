@@ -524,6 +524,38 @@ class ApiTest {
     }
 
     @Test
+    fun `a browser's asking is the website's, and not while mirroring or with no keys`() = server {
+        val cookie = signIn()
+        val phone = paired()
+        val website: HttpRequestBuilder.() -> Unit = {
+            header(HttpHeaders.Cookie, cookie)
+            header("X-Requested-With", "test")
+        }
+        val asPhone: HttpRequestBuilder.() -> Unit = {
+            bearerAuth(phone.token)
+            header(Protocol.HEADER, Protocol.VERSION.toString())
+        }
+        suspend fun asks(endpoint: String, signed: HttpRequestBuilder.() -> Unit) = plain().post("/api/push/subscription") {
+            signed()
+            contentType(ContentType.Application.Json)
+            setBody("""{"endpoint":"$endpoint","p256dh":"made-up","auth":"made-up","channels":["felix"]}""")
+        }
+        suspend fun one(path: String, signed: HttpRequestBuilder.() -> Unit) = plain().post(path) {
+            signed()
+            contentType(ContentType.Application.Json)
+            setBody("""{"endpoint":"https://push.example.com/a"}""")
+        }
+        assertEquals(HttpStatusCode.Conflict, asks("https://push.example.com/a", website).status)
+        graph.commandsForATest()
+        assertEquals(HttpStatusCode.Conflict, asks("https://push.example.com/a", website).status, "no keys on this box")
+        assertEquals(HttpStatusCode.Forbidden, asks("https://push.example.com/a", asPhone).status)
+        assertEquals(HttpStatusCode.Forbidden, one("/api/push/channels", asPhone).status)
+        assertEquals(HttpStatusCode.Forbidden, one("/api/push/forget", asPhone).status)
+        assertEquals(HttpStatusCode.OK, one("/api/push/channels", website).status)
+        assertEquals(HttpStatusCode.NoContent, one("/api/push/forget", website).status)
+    }
+
+    @Test
     fun `Backup and Setup are a client's`() = server {
         val cookie = signIn()
         for (path in listOf("/api/views/backup", "/api/views/setup")) {

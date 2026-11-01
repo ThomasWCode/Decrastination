@@ -626,6 +626,74 @@ test("a sign-in is held, and what it is isn't shown", async ({ page }) => {
   await expect(page.getByText("someone@example.org")).toBeHidden();
 });
 
+/** A browser that can be asked, with no push service behind it: Chromium's own needs one to be reached. */
+async function pushable(page: Page, answer: NotificationPermission = "granted") {
+  await page.addInitScript((given) => {
+    const subscription = {
+      endpoint: "https://push.example.com/made-up",
+      toJSON: () => ({ keys: { p256dh: "made-up", auth: "made-up" } }),
+      unsubscribe: () => {
+        held = null;
+        return Promise.resolve(true);
+      },
+    };
+    let held: typeof subscription | null = null;
+    const registered = {
+      pushManager: {
+        getSubscription: () => Promise.resolve(held),
+        subscribe: () => {
+          held = subscription;
+          return Promise.resolve(subscription);
+        },
+      },
+    };
+    Object.defineProperty(navigator, "serviceWorker", {
+      value: { register: () => Promise.resolve(registered), getRegistration: () => Promise.resolve(registered), ready: Promise.resolve(registered) },
+    });
+    Object.assign(window, { PushManager: {}, Notification: { requestPermission: () => Promise.resolve(given) } });
+  }, answer);
+}
+
+test("a browser asks to be told, and stops", async ({ page }) => {
+  await pushable(page);
+  await settingsPage(page, /^Notifications/);
+  const here = page.getByRole("region", { name: "This browser" });
+  const felix = here.getByRole("checkbox", { name: "Felix's messages" });
+  await expect(felix).not.toBeChecked();
+  const asked = page.waitForRequest("**/api/push/subscription");
+  await felix.click();
+  expect((await asked).postDataJSON()).toEqual({ endpoint: "https://push.example.com/made-up", p256dh: "made-up", auth: "made-up", channels: ["felix"] });
+  await expect(felix).toBeChecked();
+  const again = page.waitForRequest("**/api/push/subscription");
+  await here.getByRole("checkbox", { name: "When a timer ends" }).click();
+  expect((await again).postDataJSON()).toMatchObject({ channels: ["felix", "timer"] });
+  await here.getByRole("checkbox", { name: "When a timer ends" }).click();
+  await expect(here.getByRole("checkbox", { name: "When a timer ends" })).not.toBeChecked();
+  const stopped = page.waitForRequest("**/api/push/forget");
+  await felix.click();
+  expect((await stopped).postDataJSON()).toEqual({ endpoint: "https://push.example.com/made-up" });
+  await expect(felix).not.toBeChecked();
+});
+
+test("a browser that won't show notifications says so, with nothing chosen", async ({ page }) => {
+  await pushable(page, "denied");
+  await settingsPage(page, /^Notifications/);
+  const here = page.getByRole("region", { name: "This browser" });
+  await here.getByRole("checkbox", { name: "Felix's messages" }).click();
+  await expect(here.getByRole("status")).toContainText("won't show notifications");
+  await expect(here.getByRole("checkbox", { name: "Felix's messages" })).not.toBeChecked();
+});
+
+test("what a browser asked for is shown when it comes back", async ({ page }) => {
+  await pushable(page);
+  await page.route("**/api/push/channels", (route) => route.fulfill({ json: { channels: ["slots"] } }));
+  await page.addInitScript(() => {
+    void navigator.serviceWorker.ready.then((registered) => registered.pushManager.subscribe());
+  });
+  await settingsPage(page, /^Notifications/);
+  await expect(page.getByRole("region", { name: "This browser" }).getByRole("checkbox", { name: "When a slot starts" })).toBeChecked();
+});
+
 /** The code the secret global-setup gave the server makes now: RFC 6238's own made-up one. */
 function parentCode(): string {
   const counter = Buffer.alloc(8);

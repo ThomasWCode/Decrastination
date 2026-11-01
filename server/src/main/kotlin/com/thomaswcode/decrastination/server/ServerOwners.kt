@@ -29,6 +29,7 @@ import com.thomaswcode.decrastination.learn.CheckIn
 import com.thomaswcode.decrastination.learn.EventJudge
 import com.thomaswcode.decrastination.learn.Learning
 import com.thomaswcode.decrastination.net.UrlConnectionHttp
+import com.thomaswcode.decrastination.notify.Channels
 import com.thomaswcode.decrastination.notify.NoticeId
 import com.thomaswcode.decrastination.notify.Notices
 import com.thomaswcode.decrastination.plan.Planning
@@ -56,6 +57,11 @@ private object NoNotices : Notices {
     override fun shown(channel: String): Boolean = false
 
     override suspend fun postHeld() = Unit
+}
+
+/** His notification alone is made here, for the browsers that asked: nothing else has anywhere to go. */
+private object FelixOnly : Notices by NoNotices {
+    override fun shown(channel: String): Boolean = channel == Channels.FELIX
 }
 
 /** Nowhere for a nightly file: a backup can still be had from the website. */
@@ -120,12 +126,18 @@ class ServerOwners(
     answersBack: suspend (Map<String, String>) -> Unit,
     /** How the stores are read as one, with no command half done in memory. */
     settled: suspend (suspend () -> String) -> String,
+    /** His notification, new, for the browsers that asked. */
+    private val told: (Outbox.Notice) -> Unit = {},
 ) : Owners {
     override val tasks: JsonStore<TaskState> = stores.tasks
 
     /** What can't be done here left out, but what's left to be asked for afresh: work of its own, as a call mustn't hold up a job's turn. */
     val ports: FelixPorts = object : FelixPorts by NoDevice {
         override fun review() = reviewSoon()
+
+        override fun show(notice: Outbox.Notice) {
+            if (notice.alert) told(notice)
+        }
 
         override fun remindLater() {
             scope.launch {
@@ -138,7 +150,7 @@ class ServerOwners(
         }
     }
 
-    private val chatOutbox = Outbox(stores.chat, stores.chatArchive, stores.settings, NoNotices, ports, chatOnScreen = { false }, chatSeen = { true }, clock)
+    private val chatOutbox = Outbox(stores.chat, stores.chatArchive, stores.settings, FelixOnly, ports, chatOnScreen = { false }, chatSeen = { true }, clock)
 
     override val focus: Focus = Focus(
         stores.tasks, stores.settings, stores.session, stores.learning, stores.protection, stores.log, clock,

@@ -57,7 +57,23 @@ data class SettingsView(
     val calls: List<CallLine> = emptyList(),
     /** What's in the phone's Settings and not here. */
     val phoneOnly: List<String> = PHONE_ONLY,
+    /** A browser told with its tab closed (W-9): there once the server's applying commands with the box's keys set. */
+    val push: PushView? = null,
 )
+
+/** What's needed to ask to be told in a browser: the box's public [key], and what can be asked for. */
+@Serializable
+data class PushView(val key: String, val channels: List<PushChannel> = CHANNELS) {
+    companion object {
+        const val FELIX = "felix"
+        const val SLOTS = "slots"
+        const val TIMER = "timer"
+        val CHANNELS = listOf(PushChannel(FELIX, "Felix's messages"), PushChannel(SLOTS, "When a slot starts"), PushChannel(TIMER, "When a timer ends"))
+    }
+}
+
+@Serializable
+data class PushChannel(val key: String, val label: String)
 
 /** A call to Claude, a line of it, and all of it to open. */
 @Serializable
@@ -132,6 +148,7 @@ object SettingsViews {
         zone: ZoneId,
         writable: Boolean,
         calls: List<CallRecord> = emptyList(),
+        pushKey: String? = null,
     ): SettingsView {
         val values = SettingsChanges.values(asked)
         val today = Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
@@ -232,6 +249,7 @@ object SettingsViews {
             factsRoom = memory.facts.takeIf { it.isNotEmpty() }?.let { "${Memories.chars(it) * 100 / Memories.FACT_BUDGET_CHARS}% of the room for facts used." },
             efforts = ModelEffort.table().map { (effort, jobs) -> "$effort: $jobs" },
             calls = calls.asReversed().map { CallLine(it.at, SetupPage.callLine(it, zone), it.details(zone)) },
+            push = pushKey?.takeIf { writable }?.let { PushView(it) },
             credentials = CREDENTIALS.map { (title, fields) -> CredentialGroup(title, fields.map { (name, label, secret) -> CredentialField(name, label, secret, name in held) }) },
             canChange = writable,
         )

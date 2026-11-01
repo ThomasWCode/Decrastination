@@ -315,6 +315,7 @@ class Database(path: String) : AutoCloseable {
                 id TEXT PRIMARY KEY, device TEXT NOT NULL, protocol INTEGER NOT NULL, payload TEXT NOT NULL,
                 received_at INTEGER NOT NULL, at INTEGER NOT NULL, outcome TEXT NOT NULL, why TEXT, revision INTEGER NOT NULL)""",
             "CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value TEXT NOT NULL)",
+            "CREATE TABLE IF NOT EXISTS push_subscriptions(endpoint TEXT PRIMARY KEY, p256dh TEXT NOT NULL, auth TEXT NOT NULL, channels TEXT NOT NULL, created_at INTEGER NOT NULL)",
         )
     }
 }

@@ -1,4 +1,5 @@
 import { useCallback, useState } from "react";
+import { BrowserPush } from "./BrowserPush";
 import { api, saying } from "./api";
 import { useLive } from "./live";
 import type { Action, CredentialGroup, ListLine, PendingLine, SettingField, SettingsPage, SettingsView } from "./types";
@@ -476,6 +477,7 @@ export function SettingsPageView() {
           {page.key === "felix" ? <Remembered view={view} /> : null}
           {page.key === "sources" && view.canChange ? <Credentials groups={view.credentials} /> : null}
           {page.key === "claude" ? <Calls view={view} /> : null}
+          {page.key === "notifications" && view.push ? <BrowserPush push={view.push} /> : null}
         </div>
       </div>
     </main>

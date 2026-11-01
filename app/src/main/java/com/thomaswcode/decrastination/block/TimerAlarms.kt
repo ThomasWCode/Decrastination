@@ -19,6 +19,8 @@ import com.thomaswcode.decrastination.sync.protocol.StartTimer
 import com.thomaswcode.decrastination.sync.protocol.StopTimer
 import com.thomaswcode.decrastination.ui.Format
 import com.thomaswcode.decrastination.ui.MainActivity
+import com.thomaswcode.decrastination.ui.timerOverText
+import com.thomaswcode.decrastination.ui.timerOverTitle
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -121,8 +123,8 @@ object TimerAlarms {
         AppGraph.get(context).notifier.post(
             NoticeId.TimerOver,
             Notify.builder(context, Channels.TIMER_OVER)
-                .setContentTitle("Time's up: ${timer.label}")
-                .setContentText("${Format.minutes(timer.minutes)} on it. Tick it when it's done, or stop the timer.")
+                .setContentTitle(timerOverTitle(timer))
+                .setContentText(timerOverText(timer))
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .setCategory(NotificationCompat.CATEGORY_REMINDER)
                 .setAutoCancel(true)

@@ -234,6 +234,17 @@ export interface SettingsView {
   effortNote: string;
   calls: CallLine[];
   phoneOnly: string[];
+  push?: PushView | null;
+}
+
+export interface PushChannel {
+  key: string;
+  label: string;
+}
+
+export interface PushView {
+  key: string;
+  channels: PushChannel[];
 }
 
 export interface CallLine {

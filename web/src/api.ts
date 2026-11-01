@@ -40,6 +40,9 @@ export const api = {
   pair: () => read<PairingCode>("/api/devices/pair", { method: "POST", headers: CHANGING }),
   revoke: (id: string) => read<undefined>(`/api/devices/${encodeURIComponent(id)}`, { method: "DELETE", headers: CHANGING }),
   signOut: () => read<{ signedIn: boolean }>("/api/auth/logout", { method: "POST", headers: CHANGING }),
+  pushKeep: (asked: { endpoint: string; p256dh: string; auth: string; channels: string[] }) => read<undefined>("/api/push/subscription", posting(asked)),
+  pushChannels: (endpoint: string) => read<{ channels: string[] }>("/api/push/channels", posting({ endpoint })),
+  pushForget: (endpoint: string) => read<undefined>("/api/push/forget", posting({ endpoint })),
 };
 
 /** [jpeg], a photo of homework, read into tasks to check: a call to Claude, so only at your asking. */

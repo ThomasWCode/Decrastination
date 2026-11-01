@@ -2173,6 +2173,13 @@ label.button:has(input:focus-visible) {
   vertical-align: middle;
 }
 
+.browser-push label {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 4px 0;
+}
+
 .calls details {
   padding: 4px 0;
 }
