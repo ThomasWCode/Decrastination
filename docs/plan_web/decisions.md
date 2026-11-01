@@ -1,6 +1,6 @@
 # Decisions: what was decided for the website, and the questions that decided it
 
-Made 31 Oct 2026. Numbered **W-n** here; each becomes a D-number in `docs/decisions.md` in the PR of the first stage that builds on it (stage 0's adds W-21; stage 1's W-1 to W-11, W-14, W-16 and W-17; stage 2's W-13, W-15, W-22 to W-24; stage 3's W-12, W-19 and W-20; stage 8's W-18). The questions continue `docs/plan_v4/answers.md`'s numbering, which ended at Q126, after the two of 4.11.0 (Q127, Q128): Q129 to Q138, in the order they were asked.
+Made 31 Oct 2026. Numbered **W-n** here; each becomes a D-number in `docs/decisions.md` in the PR of the first stage that builds on it (stage 0's adds W-21; stage 1's W-1 to W-11, W-14, W-16 and W-17; stage 2's W-13, W-15, W-22 to W-24; stage 3's W-12, W-19 and W-20; stage 8's W-18; the switch's W-26). The questions continue `docs/plan_v4/answers.md`'s numbering, which ended at Q126, after the two of 4.11.0 (Q127, Q128): Q129 to Q138, in the order they were asked, then Q139 to Q141 in building it.
 
 ## The decisions
 
@@ -31,7 +31,8 @@ Decided without asking, each with its reason, for the owner to overturn:
 - **W-22. Nothing is deleted on the phone until stage 3**, and then only the credentials the server holds. A mistake in the sync's first two stages loses no data.
 - **W-23. The protection delay is counted by the server's clock once the state is shared** (stage 2). Today the phone counts a loosening's 24 hours by its uptime clock, because the phone's date is the owner's to set; the server's clock isn't, so each pending change carries the `dueAt` the server set, the server's scheduler applies it when due, and the phone shows the list and never applies a loosening itself, online or offline. The time the phone is off now counts towards the wait; the wait still can't be hurried from either client. Until stage 2 the phone counts as today, `uptimeMark` kept beside `pending` in the synced store and read by the phone alone; stage 2 drops it.
 - **W-24. Free-time credit is spent through the outbox.** Each 30 s spend while a blocked app runs on earned time is a command recorded locally, merged with the one before it until the upload, and a pull re-applies the outbox on top of the server's copy; so a pull can neither give free time back nor lose earned time.
-- **W-25 (D-141). The switch to commands comes last** (decided in building it, 31 Oct, under Q138's "the most technically feasible order"). `stages.md` had it in stage 2, with Felix's calls, the readings and the syncs moving in stage 3: between the two, each change those make on the phone would need a command written only to be thrown away, and a sweep of the code found that 18 of the 20 stores are written by both a person and a background job. So the command layer, the outbox, the offline rules and the server's jobs are built in their stages and left dormant behind `meta.mode`, and the phone goes on mirroring, unchanged, until one last release switches it, rehearsed on real data first. Nothing about the end state changes, and the website isn't used until it's complete either way (W-11).
+- **W-25 (D-141). The switch to commands comes last** (decided in building it, 31 Oct, under Q138's "the most technically feasible order"; the owner's word on it, Q139). `stages.md` had it in stage 2, with Felix's calls, the readings and the syncs moving in stage 3: between the two, each change those make on the phone would need a command written only to be thrown away, and a sweep of the code found that 18 of the 20 stores are written by both a person and a background job. So the command layer, the outbox, the offline rules and the server's jobs are built in their stages and left dormant behind `meta.mode`, and the phone goes on mirroring, unchanged, until one last release switches it, rehearsed on real data first. Nothing about the end state changes, and the website isn't used until it's complete either way (W-11).
+- **W-26. A first pull is never at the cost of what the phone holds** (Q141). When the phone goes over to commands it writes a backup of its own first, and it refuses a first pull from a server whose stores are older than the hashes it last sent: a pull takes the server's stores whole, so one from an older copy would write over newer data.
 
 ## Asked and answered
 
@@ -57,6 +58,14 @@ Ten questions, one at a time, each with its options and a recommendation; the ow
 
 **Q138. Which comes right after the read-only view: chat, task editing, or the Day grid?** Offered: chat with Felix (recommended); task editing first; the Day grid and timer first. **The owner's answer: it doesn't matter; the website isn't used until every stage is complete; the stages go in the most technically feasible order.** → W-11, and `stages.md`'s order.
 
+Three more in building it, each put with a recommendation, the owner's answers of 1 Nov.
+
+**Q139. The switch to commands comes last: is that right?** Offered: keep it (recommended), the safest for the phone in daily use, at the cost of not trying the website's writing pages on real data until the switch. **The owner's answer: as recommended.** → W-25.
+
+**Q140. What of the room the server's history takes?** `store_history` keeps 90 days of whole copies and Litestream's 30 days of snapshots multiply it: by estimate inside R2's free 10 GB, not measured. Offered: leave it as planned and read the real size on the box after a fortnight, the snapshots cut to 7 days if it's near the limit (recommended). **The owner's answer: as recommended.** → §What the plan couldn't settle.
+
+**Q141. A first pull takes the server's stores whole: what if the server's copy is the older?** Offered: at the switch the phone writes a backup of its own first, and refuses a first pull from a server older than the hashes it last sent (recommended). **The owner's answer: as recommended.** → W-26.
+
 ## Said without being asked
 
 - "The phone should still be able to work offline to an extent." (31 Oct, while Q130 was open.) → W-2.
@@ -71,3 +80,4 @@ Open until the stage that meets each; none blocks the start.
 - **The IMAP client on JRE 21.** The phone's Gmail source uses the JVM's socket and TLS classes; stage 3 confirms it runs unchanged on the server.
 - **`calendar.json`'s `eventAnswers`.** Learnt answers that only the phone holds; a later move to the server would let the website show them. Not in this plan.
 - **Voice input on the website.** The phone uses Android's recogniser; the browser's speech API is a maybe for stage 5, not planned.
+- **The history's size.** Whether 90 days of `store_history` and 30 of snapshots stay inside R2's free tier. Read on the box after a fortnight; near the limit, the snapshots go to 7 days, as the nightly file covers the long term (Q140).
