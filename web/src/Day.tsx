@@ -29,11 +29,12 @@ export function onColour(argb: number): string {
   return luminance > 0.179 ? "#000000" : "#ffffff";
 }
 
-function placement(block: BlockView, hourPx: number): CSSProperties {
+/** Where [block] goes: never shorter than the [shortest] minutes the server laid the blocks side by side by, at any zoom, or those it put in one column would cover each other. */
+export function placement(block: BlockView, hourPx: number, shortest: number): CSSProperties {
   const share = 100 / block.columns;
   return {
     top: yOf(block.startMin, hourPx),
-    height: Math.max(yOf(block.endMin - block.startMin, hourPx), 24) - 2,
+    height: yOf(Math.max(block.endMin - block.startMin, shortest), hourPx) - 2,
     left: `${block.column * share}%`,
     width: `calc(${block.span * share}% - 4px)`,
   };
@@ -47,7 +48,7 @@ interface Lifted {
   minute: number | null;
 }
 
-function Block({ block, hourPx, lifted, open, lift }: { block: BlockView; hourPx: number; lifted: boolean; open: (id: string) => void; lift: (block: BlockView, event: PointerEvent<HTMLDivElement>) => void }) {
+function Block({ block, hourPx, shortest, lifted, open, lift }: { block: BlockView; hourPx: number; shortest: number; lifted: boolean; open: (id: string) => void; lift: (block: BlockView, event: PointerEvent<HTMLDivElement>) => void }) {
   const colours: CSSProperties =
     block.kind === "event" && block.colour != null
       ? block.free
@@ -66,7 +67,7 @@ function Block({ block, hourPx, lifted, open, lift }: { block: BlockView; hourPx
   return (
     <div
       className={kinds}
-      style={{ ...placement(block, hourPx), ...colours }}
+      style={{ ...placement(block, hourPx, shortest), ...colours }}
       data-testid={block.kind === "piece" ? "piece" : undefined}
       role={taskId ? "button" : undefined}
       tabIndex={taskId ? 0 : undefined}
@@ -122,7 +123,7 @@ function Grid({ day, hourPx, zoom, open, dropped }: { day: DayView; hourPx: numb
       const bounds = box.getBoundingClientRect();
       const under = document.elementFromPoint(event.clientX, event.clientY)?.closest("[data-date]");
       const onto = under?.getAttribute("data-date") ?? null;
-      const onGrid = onto === null && event.clientY >= bounds.top && event.clientY <= bounds.bottom;
+      const onGrid = onto === null && event.clientX >= bounds.left && event.clientX <= bounds.right && event.clientY >= bounds.top && event.clientY <= bounds.bottom;
       return { block, grab, onto, minute: onGrid ? minuteAt(event.clientY - grab - bounds.top + box.scrollTop, hourPx) : null };
     };
     const move = (event: globalThis.PointerEvent) => {
@@ -175,7 +176,7 @@ function Grid({ day, hourPx, zoom, open, dropped }: { day: DayView; hourPx: numb
             </div>
           ))}
           {day.blocks.map((block) => (
-            <Block key={block.key} block={block} hourPx={hourPx} lifted={lifted?.block.key === block.key} open={open} lift={lift} />
+            <Block key={block.key} block={block} hourPx={hourPx} shortest={day.shortest} lifted={lifted?.block.key === block.key} open={open} lift={lift} />
           ))}
           {landing !== null && lifted?.block.drag ? (
             <div className="landing" data-testid="landing" style={{ top: yOf(landing, hourPx), height: yOf(lifted.block.drag.minutes, hourPx) }}>
@@ -224,11 +225,16 @@ function Timer({ day }: { day: DayView }) {
   );
 }
 
-/** What's to be done with what's next, as the server says: Done says what it came to, with its Undo. */
-function NextButtons({ taskId, actions }: { taskId: string; actions: TaskAction[] }) {
+interface Came {
+  text: string | null;
+  undo: Action | null;
+}
+
+/** What to do now: the page's one loud thing, as it is on the phone. What a button came to stays when its piece goes, as a piece done is: its Undo with it. */
+function Now({ day }: { day: DayView }) {
   const [busy, setBusy] = useState(false);
-  const [said, setSaid] = useState<{ text: string | null; undo: Action | null } | null>(null);
-  const going = (work: Promise<{ text: string | null; undo: Action | null }>) => {
+  const [said, setSaid] = useState<Came | null>(null);
+  const going = (work: Promise<Came>) => {
     setBusy(true);
     setSaid(null);
     void work.then((came) => {
@@ -236,36 +242,12 @@ function NextButtons({ taskId, actions }: { taskId: string; actions: TaskAction[
       setSaid(came.text || came.undo ? came : null);
     });
   };
-  const press = (button: TaskAction) => {
+  const press = (taskId: string, button: TaskAction) => {
     const { ask, action } = button;
     if (ask) going(asking(taskId, ask).then(({ done, said: words }) => ({ text: words ?? null, undo: done ? (button.undo ?? null) : null })));
     else if (action) going(saying(action).then((why) => ({ text: why, undo: null })));
   };
-  return (
-    <>
-      <div className="next-actions" role="group" aria-label="Do">
-        {actions.map((button) => (
-          <button key={button.label} className="action" disabled={busy} onClick={() => press(button)}>
-            {button.label}
-          </button>
-        ))}
-      </div>
-      {said ? (
-        <p className="said" role="status">
-          {said.text}{" "}
-          {said.undo ? (
-            <button className="quiet" onClick={() => said.undo && going(saying(said.undo).then((why) => ({ text: why, undo: null })))}>
-              Undo
-            </button>
-          ) : null}
-        </p>
-      ) : null}
-    </>
-  );
-}
-
-/** What to do now: the page's one loud thing, as it is on the phone. */
-function Now({ day }: { day: DayView }) {
+  const taskId = day.next?.taskId;
   return (
     <aside className="now-panel">
       <Timer day={day} />
@@ -277,7 +259,15 @@ function Now({ day }: { day: DayView }) {
               <p className="piece">{day.next.label}</p>
               {day.next.first ? <p>First: {day.next.first}</p> : null}
               {day.next.then ? <p className="then">Then: {day.next.then}</p> : null}
-              {day.next.taskId ? <NextButtons taskId={day.next.taskId} actions={day.next.actions} /> : null}
+              {taskId ? (
+                <div className="next-actions" role="group" aria-label="Do">
+                  {day.next.actions.map((button) => (
+                    <button key={button.label} className="action" disabled={busy} onClick={() => press(taskId, button)}>
+                      {button.label}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
             </>
           ) : (
             <p className="piece">Nothing to do</p>
@@ -286,6 +276,16 @@ function Now({ day }: { day: DayView }) {
       ) : (
         <h2>{day.title}</h2>
       )}
+      {said ? (
+        <p className="said" role="status">
+          {said.text}{" "}
+          {said.undo ? (
+            <button className="quiet" onClick={() => said.undo && going(saying(said.undo).then((why) => ({ text: why, undo: null })))}>
+              Undo
+            </button>
+          ) : null}
+        </p>
+      ) : null}
       <p className="load">{day.load}</p>
       {day.doneLine ? <p>{day.doneLine}</p> : null}
       {day.wontFit ? <p className="warning">{day.wontFit}</p> : null}
@@ -320,7 +320,7 @@ export function DayPage({ date, go }: { date: string | null; go: Go }) {
   }, [nextAt]);
   if (!day) return failed ? <p className="problem">The Day couldn't be read. It tries again with the next change.</p> : null;
   const dropped = (block: BlockView, onto: string | null, minute: number | null) => {
-    if (!block.drag) return;
+    if (!block.drag || (onto === null && minute === null)) return;
     void dropping({ key: block.drag.key, date: day.date, onto, minute }).then((came) => setSaid(came.said ?? null));
   };
   return (

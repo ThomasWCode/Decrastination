@@ -83,6 +83,7 @@ export interface DayView {
   next?: NextView | null;
   week: WeekDay[];
   asOf?: number | null;
+  shortest: number;
   canChange: boolean;
   form?: OwnTaskFormView | null;
   timer?: TimerView | null;

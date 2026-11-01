@@ -61,6 +61,8 @@ data class DayView(
     val week: List<WeekDay>,
     /** When the phone last told the server anything, for the line that says how fresh this is. */
     val asOf: Long? = null,
+    /** The shortest a block's drawn, in minutes: what they're laid side by side by, so none's drawn over another at any zoom. */
+    val shortest: Int = SHORTEST_MIN,
     /** Whether anything can be changed here: the server applies commands. */
     val canChange: Boolean = false,
     /** What the form takes, for a task's sheet opened from here. */
@@ -68,6 +70,9 @@ data class DayView(
     /** A timer running, on whichever piece. */
     val timer: TimerView? = null,
 )
+
+/** The shortest a block is drawn. */
+private const val SHORTEST_MIN = 24
 
 /** A piece's drop on the Day: the slot of [key] lifted from [date], let go on the strip's day [onto], or on the grid with its top at [minute]. */
 @Serializable
@@ -133,9 +138,6 @@ data class BlockView(
 object DayViews {
     private val TITLE = DateTimeFormatter.ofPattern("EEEE d MMMM", Locale.UK)
     private val WEEKDAY = DateTimeFormatter.ofPattern("EEE", Locale.UK)
-
-    /** The shortest a block is drawn: the website's grid has a pixel to the minute. */
-    private const val SHORTEST_MIN = 24
 
     /** [date] by [plan], with [events], [records], your [busy] times and its [windows], at [now]. */
     fun of(

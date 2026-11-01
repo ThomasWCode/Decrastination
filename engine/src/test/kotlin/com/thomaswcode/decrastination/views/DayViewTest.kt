@@ -64,6 +64,11 @@ class DayViewTest {
     }
 
     @Test
+    fun `the page's told the shortest a block's drawn, as they're laid out by it`() {
+        assertEquals(24, view().shortest)
+    }
+
+    @Test
     fun `mirroring, there's nothing to do and nothing to drag`() {
         val day = view()
         assertFalse(day.canChange)

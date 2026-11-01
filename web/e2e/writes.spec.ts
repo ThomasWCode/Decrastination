@@ -352,6 +352,39 @@ test("what's next can be done from the Day, with its Undo", async ({ page }) => 
   await expect(said).toBeHidden();
 });
 
+test("a block let go off the grid stays where it was, and nothing's asked", async ({ page }) => {
+  await dueTask(page, "Let go off the grid");
+  const block = await pieceOf(page, "Let go off the grid");
+  const drops: string[] = [];
+  page.on("request", (request) => {
+    if (request.url().includes("/api/day/drop")) drops.push(request.url());
+  });
+  await drag(page, block, page.locator(".now-panel"));
+  await expect(page.getByTestId("landing")).toBeHidden();
+  await page.mouse.up();
+  await page.waitForTimeout(300);
+  expect(drops).toEqual([]);
+});
+
+test("Done on the last piece keeps what it came to, and its Undo, though the piece goes", async ({ page }) => {
+  let gone = false;
+  await page.route("**/api/views/day**", async (route) => {
+    const response = await route.fetch();
+    const json = await response.json();
+    await route.fulfill({ response, json: gone ? { ...json, next: null } : json });
+  });
+  await page.goto("/day");
+  const done = page.getByRole("group", { name: "Do" }).getByRole("button", { name: "Done", exact: true });
+  await expect(done).toBeVisible();
+  gone = true;
+  await done.click();
+  await expect(page.getByText("Nothing to do")).toBeVisible();
+  const said = page.getByRole("status").filter({ hasText: "Done" });
+  await expect(said).toBeVisible();
+  await said.getByRole("button", { name: "Undo" }).click();
+  await expect(said).toBeHidden();
+});
+
 test("how the Day looks with something to press, to be seen", async ({ page }) => {
   // Run alone, with LOOK=<a folder>, as look.spec.ts is.
   const folder = process.env.LOOK;
