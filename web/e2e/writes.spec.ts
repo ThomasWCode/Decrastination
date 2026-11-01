@@ -708,7 +708,30 @@ test("signing out goes ahead even if the browser can't be stopped", async ({ bro
   await page.route("**/api/push/forget", (route) => route.abort());
   await page.getByRole("button", { name: "Sign out" }).click();
   await expect(page.getByRole("link", { name: "Sign in with GitHub" })).toBeVisible();
+  // Nothing can reach it now: the server hears of that from its push service, at the next send.
+  const left = await page.evaluate(async () => (await navigator.serviceWorker.ready).pushManager.getSubscription());
+  expect(left).toBeNull();
   await context.close();
+});
+
+test("a browser's changes go one at a time, as each sends the whole list", async ({ page }) => {
+  await pushable(page);
+  let letGo = (): void => undefined;
+  const held = new Promise<void>((resolve) => {
+    letGo = resolve;
+  });
+  await page.route("**/api/push/subscription", async (route) => {
+    await held;
+    await route.continue();
+  });
+  await settingsPage(page, /^Notifications/);
+  const here = page.getByRole("region", { name: "This browser" });
+  await here.getByRole("checkbox", { name: "Felix's messages" }).click();
+  await expect(here.getByRole("checkbox", { name: "When a timer ends" })).toBeDisabled();
+  letGo();
+  await expect(here.getByRole("checkbox", { name: "When a timer ends" })).toBeEnabled();
+  await here.getByRole("checkbox", { name: "Felix's messages" }).click();
+  await expect(here.getByRole("checkbox", { name: "Felix's messages" })).not.toBeChecked();
 });
 
 test("a browser that won't show notifications says so, with nothing chosen", async ({ page }) => {

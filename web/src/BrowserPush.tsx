@@ -8,16 +8,25 @@ function keyBytes(key: string): Uint8Array<ArrayBuffer> {
   return Uint8Array.from(text, (letter) => letter.charCodeAt(0));
 }
 
+/**
+ * This browser told of nothing more: the browser's end first, as with that gone nothing can reach it, whatever the server
+ * hears. Its push service then says it's gone at the next send, and the server lets it go, so a failure to say so here loses nothing.
+ */
+async function stop(held: PushSubscription): Promise<void> {
+  try {
+    await held.unsubscribe();
+  } finally {
+    await api.pushForget(held.endpoint);
+  }
+}
+
 /** This browser asked to be told of [channels], or, with none, to be told of nothing: why not, if it couldn't be. */
 async function save(key: string, channels: string[]): Promise<string | null> {
   await navigator.serviceWorker.register("/sw.js");
   const registered = await navigator.serviceWorker.ready;
   const held = await registered.pushManager.getSubscription();
   if (channels.length === 0) {
-    if (held) {
-      await api.pushForget(held.endpoint);
-      await held.unsubscribe();
-    }
+    if (held) await stop(held);
     return null;
   }
   if ((await Notification.requestPermission()) !== "granted") return "This browser won't show notifications: that's changed in its own settings.";
@@ -32,9 +41,7 @@ export async function stopTelling(): Promise<void> {
   if (!("serviceWorker" in navigator)) return;
   const registered = await navigator.serviceWorker.getRegistration();
   const held = await registered?.pushManager.getSubscription();
-  if (!held) return;
-  await api.pushForget(held.endpoint);
-  await held.unsubscribe();
+  if (held) await stop(held);
 }
 
 /** What this browser's told of with its tab closed (W-9): nothing till it's asked for, as the phone tells you of all of it anyway. */
@@ -42,6 +49,8 @@ export function BrowserPush({ push }: { push: PushView }) {
   const supported = "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
   const [chosen, setChosen] = useState<string[] | null>(null);
   const [said, setSaid] = useState<string | null>(null);
+  // One change at a time: each sends the whole list, so two at once would each leave out the other's.
+  const [busy, setBusy] = useState(false);
   useEffect(() => {
     if (!supported) return;
     let gone = false;
@@ -61,12 +70,14 @@ export function BrowserPush({ push }: { push: PushView }) {
   if (!chosen) return null;
   const change = (next: string[]) => {
     setSaid(null);
+    setBusy(true);
     save(push.key, next)
       .then((why) => {
         if (why) setSaid(why);
         else setChosen(next);
       })
-      .catch(() => setSaid("That didn't reach the server. Try again."));
+      .catch(() => setSaid("That didn't reach the server. Try again."))
+      .finally(() => setBusy(false));
   };
   return (
     <section className="browser-push" aria-label="This browser">
@@ -74,7 +85,7 @@ export function BrowserPush({ push }: { push: PushView }) {
       <p className="note long">Told here with its tab closed, as well as on the phone, so only what you'd want twice.</p>
       {push.channels.map((channel) => (
         <label key={channel.key}>
-          <input type="checkbox" checked={chosen.includes(channel.key)} onChange={(event) => change(event.target.checked ? [...chosen, channel.key] : chosen.filter((one) => one !== channel.key))} />
+          <input type="checkbox" disabled={busy} checked={chosen.includes(channel.key)} onChange={(event) => change(event.target.checked ? [...chosen, channel.key] : chosen.filter((one) => one !== channel.key))} />
           {channel.label}
         </label>
       ))}
