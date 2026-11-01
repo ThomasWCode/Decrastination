@@ -2,6 +2,7 @@ package com.thomaswcode.decrastination.server
 
 import com.interaso.webpush.VapidKeys
 import com.interaso.webpush.WebPush
+import com.thomaswcode.decrastination.felix.FelixAnswers
 import com.thomaswcode.decrastination.ports.Log
 import com.thomaswcode.decrastination.views.PushView
 import java.net.URI
@@ -130,13 +131,8 @@ class Pushes(private val db: Database, private val scope: CoroutineScope, privat
         /** How much of his words a browser's sent: it shows no more. */
         private const val MAX_WORDS = 300
 
-        /** [text] as a browser can show it: whole sentences, as far as they go, or whole words where one runs on past that. */
-        fun words(text: String): String {
-            if (text.length <= MAX_WORDS) return text
-            val room = text.take(MAX_WORDS)
-            val end = room.indexOfLast { it in ".?!" }
-            return if (end > 0) room.take(end + 1) else room.substringBeforeLast(' ') + "…"
-        }
+        /** [text] as a browser can show it, by the rule his notification's held to. */
+        fun words(text: String): String = FelixAnswers.message(text, MAX_WORDS)
 
         /**
          * Whether [endpoint] is one of [SERVICES]'. By name, not by what it looks like: the server posts to whatever it's given,

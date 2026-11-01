@@ -181,6 +181,16 @@ class PushesTest {
     }
 
     @Test
+    fun `an early full stop doesn't leave a browser with next to nothing, nor a dot in a number end a sentence`() {
+        val early = Pushes.words("Morning!\n" + "word ".repeat(100).trim())
+        assertTrue(early.length > 250, early)
+        assertTrue(early.startsWith("Morning!\nword"), early)
+        assertTrue(early.endsWith(" word…"), early)
+        val dotted = Pushes.words("word ".repeat(40) + "3.5 " + "word ".repeat(40).trim())
+        assertTrue(dotted.endsWith(" word…"), dotted)
+    }
+
+    @Test
     fun `his long words reach a browser cut`() = runBlocking<Unit> {
         asks(laptop, Pushes.FELIX)
         said("m", his("m", "A made-up sentence. ".repeat(30).trim()))

@@ -5,6 +5,9 @@ import type { PushView } from "./types";
 /** From the start of signing out, unless that fails: what's still being asked for is let go, or it could outlast the session. */
 let leaving = false;
 
+/** Said when this browser's been stopped with its page still open, by a sign-out that failed. */
+const STOPPED = "browser-push-stopped";
+
 /** [key], as URL-safe base64, as the bytes a push manager takes. */
 function keyBytes(key: string): Uint8Array<ArrayBuffer> {
   const text = atob(key.replaceAll("-", "+").replaceAll("_", "/"));
@@ -68,7 +71,8 @@ async function stopHeld(): Promise<void> {
 /**
  * Signing out, by [end]: this browser told of nothing more first, as it takes the session to ask, and what's told is the owner's
  * alone. Whether or not that gets through, [end] goes ahead. It doesn't wait for what's being asked for, which a browser's own
- * prompt can hold up for as long as it's left open. Signed out, this stays set: signing in loads the page afresh.
+ * prompt can hold up for as long as it's left open. Signed out, this stays set: signing in loads the page afresh. A sign-out
+ * that fails has stopped the browser all the same, so its page reads it again.
  */
 export async function stopTelling(end: () => Promise<unknown>): Promise<void> {
   leaving = true;
@@ -79,6 +83,7 @@ export async function stopTelling(end: () => Promise<unknown>): Promise<void> {
     ended = true;
   } finally {
     leaving = ended;
+    if (!ended) dispatchEvent(new Event(STOPPED));
   }
 }
 
@@ -92,6 +97,11 @@ export function BrowserPush({ push }: { push: PushView }) {
   // What it asked for, when that couldn't be read: not nothing, or the next tick would take the rest away.
   const [unread, setUnread] = useState(false);
   const [reads, setReads] = useState(0);
+  useEffect(() => {
+    const again = () => setReads((read) => read + 1);
+    addEventListener(STOPPED, again);
+    return () => removeEventListener(STOPPED, again);
+  }, []);
   useEffect(() => {
     if (!supported) return;
     let gone = false;

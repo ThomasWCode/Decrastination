@@ -117,7 +117,7 @@ object FelixAnswers {
      * used (the second text left out, D-120), else at its last whole sentence that does, so it never stops mid-sentence
      * (the morning's did); else cut at a word, with an ellipsis.
      */
-    internal fun message(text: String, max: Int): String {
+    fun message(text: String, max: Int): String {
         if (text.length <= max) return text
         val first = text.substringBefore('\n')
         if (first.length < text.length && first.length <= max && first.length >= max / 2) return first.trimEnd()

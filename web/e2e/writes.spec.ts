@@ -779,14 +779,18 @@ test("a browser's asking that's done after the session's ended is let go too", a
   await context.close();
 });
 
-test("a sign-out that doesn't go through leaves the browser able to ask", async ({ page }) => {
+test("a sign-out that doesn't go through says so, shows the browser as it's left, and leaves it able to ask", async ({ page }) => {
   await pushable(page);
   await settingsPage(page, /^Notifications/);
-  await page.route("**/api/auth/logout", (route) => route.abort());
-  const failed = page.waitForEvent("requestfailed", (request) => request.url().endsWith("/api/auth/logout"));
-  await page.getByRole("button", { name: "Sign out" }).click();
-  await failed;
   const felix = page.getByRole("region", { name: "This browser" }).getByRole("checkbox", { name: "Felix's messages" });
+  await felix.click();
+  await expect(felix).toBeChecked();
+  const stillIn = page.getByRole("status").filter({ hasText: "still signed in" });
+  await expect(stillIn).toBeHidden();
+  await page.route("**/api/auth/logout", (route) => route.abort());
+  await page.getByRole("button", { name: "Sign out" }).click();
+  await expect(stillIn).toBeVisible();
+  await expect(felix).not.toBeChecked();
   await felix.click();
   await expect(felix).toBeChecked();
 });
