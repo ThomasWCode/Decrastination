@@ -434,6 +434,13 @@ class ApiTest {
             setBody("""{"kind":"done"}""")
         }
         assertEquals(HttpStatusCode.Conflict, asked.status)
+        val fromPhone = plain().post("/api/tasks/" + id.encodeURLPathPart() + "/ask") {
+            bearerAuth(phone.token)
+            header(Protocol.HEADER, Protocol.VERSION.toString())
+            contentType(ContentType.Application.Json)
+            setBody("""{"kind":"done"}""")
+        }
+        assertEquals(HttpStatusCode.Forbidden, fromPhone.status, "a phone sends commands of its own")
     }
 
     @Test
