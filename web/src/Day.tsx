@@ -250,7 +250,8 @@ function Now({ day }: { day: DayView }) {
   const taskId = day.next?.taskId;
   return (
     <aside className="now-panel">
-      <Timer day={day} />
+      {/* Its own words go with it, not on to the next one started. */}
+      <Timer key={day.timer?.label ?? "none"} day={day} />
       {day.today ? (
         <>
           <h2>Do now</h2>
@@ -303,7 +304,8 @@ export function DayPage({ date, go }: { date: string | null; go: Go }) {
   const { value: day, failed } = useLive(load);
   const [hourPx, setHourPx] = useState(() => Number(localStorage.getItem(ZOOM)) || HOUR_PX);
   const [opened, setOpened] = useState<string | null>(null);
-  const [said, setSaid] = useState<string | null>(null);
+  // What a drop came to, on the day it was dropped on: it says nothing of another.
+  const [said, setSaid] = useState<{ date: string; text: string } | null>(null);
   const shut = useCallback(() => setOpened(null), []);
   const zoom = useCallback((wheelUp: boolean) => {
     setHourPx((was) => {
@@ -321,11 +323,12 @@ export function DayPage({ date, go }: { date: string | null; go: Go }) {
   if (!day) return failed ? <p className="problem">The Day couldn't be read. It tries again with the next change.</p> : null;
   const dropped = (block: BlockView, onto: string | null, minute: number | null) => {
     if (!block.drag || (onto === null && minute === null)) return;
-    void dropping({ key: block.drag.key, date: day.date, onto, minute }).then((came) => setSaid(came.said ?? null));
+    void dropping({ key: block.drag.key, date: day.date, onto, minute }).then((came) => setSaid(came.said ? { date: day.date, text: came.said } : null));
   };
   return (
     <main className="day-page">
-      <Now day={day} />
+      {/* What its buttons came to is of this day. */}
+      <Now key={day.date} day={day} />
       <section className="agenda" aria-label={day.title}>
         <nav className="week" aria-label="Week">
           {day.week.map((d) => (
@@ -337,9 +340,9 @@ export function DayPage({ date, go }: { date: string | null; go: Go }) {
             </Link>
           ))}
         </nav>
-        {said ? (
+        {said?.date === day.date ? (
           <p className="day-said" role="status">
-            {said}
+            {said.text}
           </p>
         ) : null}
         {day.allDay.length > 0 ? (
