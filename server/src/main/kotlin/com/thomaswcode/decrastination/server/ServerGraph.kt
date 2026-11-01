@@ -323,11 +323,14 @@ class ServerGraph(
         ),
     )
 
-    /** His newest message, as a browser shows it: all its texts (D-120), which his notification gives a line each. */
+    /**
+     * His newest message, as a browser shows it: all its texts (D-120), from the chat, as his notification's lines are cut to its
+     * room, the opening first. Once it stands: a command's may yet be rolled back.
+     */
     private fun pushFelix(notice: Outbox.Notice) {
-        val newest = notice.lines.filter { !it.yours && (it.id == notice.replyTo || it.id.startsWith("${notice.replyTo}#")) }
-        if (newest.isEmpty()) return
-        pushes.push(Pushes.FELIX, PushMessage(notice.name, Pushes.words(newest.joinToString("\n") { it.text }), "/", Pushes.FELIX))
+        val newest = stores.chat.value.messages.lastOrNull { it.id == notice.replyTo } ?: return
+        val told = PushMessage(notice.name, Pushes.words(Outbox.lines(newest).joinToString("\n") { it.text }), "/", Pushes.FELIX)
+        db.afterCommit { pushes.push(Pushes.FELIX, told) }
     }
 
     /**

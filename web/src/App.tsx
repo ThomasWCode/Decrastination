@@ -81,7 +81,7 @@ function Bell({ go, reading, waiting }: { go: Go; reading: boolean; waiting: num
 }
 
 /** The site's bar: its pages, Setup marked while it needs you (UI-18), the bell and signing out. */
-function Bar({ url, go, signOut }: { url: URL; go: Go; signOut: () => void }) {
+function Bar({ url, go, signOut, stillIn }: { url: URL; go: Go; signOut: () => void; stillIn: boolean }) {
   const load = useCallback(() => api.notices(), []);
   const { value } = useLive(load);
   return (
@@ -96,6 +96,11 @@ function Bar({ url, go, signOut }: { url: URL; go: Go; signOut: () => void }) {
         ))}
       </nav>
       <Bell go={go} reading={url.pathname === "/"} waiting={value?.unread ?? 0} />
+      {stillIn ? (
+        <span className="still-in" role="status">
+          You're still signed in: that didn't reach the server.
+        </span>
+      ) : null}
       <button className="quiet" onClick={signOut}>
         Sign out
       </button>
@@ -105,6 +110,7 @@ function Bar({ url, go, signOut }: { url: URL; go: Go; signOut: () => void }) {
 
 export function App() {
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
+  const [stillIn, setStillIn] = useState(false);
   const [url, go] = useLocation();
   useEffect(() => {
     api
@@ -127,14 +133,13 @@ export function App() {
     // What the chat's box held goes with the session.
     sessionStorage.clear();
     // Before it ends, as it takes the session to ask: whether or not that gets through, you're signed out.
-    void stopTelling()
-      .catch(() => undefined)
-      .then(() => api.signOut())
-      .then(() => setSignedIn(false));
+    stopTelling(() => api.signOut())
+      .then(() => setSignedIn(false))
+      .catch(() => setStillIn(true));
   };
   return (
     <div className="site">
-      <Bar url={url} go={go} signOut={signOut} />
+      <Bar url={url} go={go} signOut={signOut} stillIn={stillIn} />
       {url.pathname === "/work" ? (
         <WorkPage />
       ) : url.pathname === "/stats" ? (

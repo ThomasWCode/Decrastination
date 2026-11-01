@@ -140,6 +140,16 @@ button {
   color: var(--accent);
 }
 
+.bar:has(.still-in) {
+  flex-wrap: wrap;
+}
+
+.bar .still-in {
+  order: 1;
+  flex-basis: 100%;
+  color: var(--error);
+}
+
 .bar nav {
   display: flex;
   gap: 20px;

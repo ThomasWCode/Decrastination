@@ -46,6 +46,9 @@ class Database(path: String) : AutoCloseable {
     /** What's held back ([writing]), oldest first. */
     private val held = ArrayDeque<Held>()
 
+    /** What the open command will have told as it commits ([afterCommit]). */
+    private val waitingForCommit = ArrayDeque<() -> Unit>()
+
     /** The revision the open transaction has taken, if it's taken one. */
     private var taken: Long? = null
     private var depth = 0
@@ -127,6 +130,14 @@ class Database(path: String) : AutoCloseable {
         } while (lock.withLock { held.isNotEmpty() })
     }
 
+    /**
+     * [tell], which can't be taken back, once what's been written stands: now, or, in a [command], as that commits, and not at all if
+     * it's rolled back. It's run in the command's turn, so nothing slow.
+     */
+    fun afterCommit(tell: () -> Unit) {
+        if (inACommand) lock.withLock { waitingForCommit.addLast(tell) } else tell()
+    }
+
     private suspend fun <T> attempt(block: suspend () -> T, recoverable: Boolean = false): T {
         lock.withLock {
             connection.autoCommit = false
@@ -145,11 +156,22 @@ class Database(path: String) : AutoCloseable {
             recovering = recoverable && failed is Exception
             throw failed
         } finally {
-            lock.withLock {
+            val waiting = lock.withLock {
                 taken = null
                 // Left open where it's to be put right: nothing goes in on what it's left in memory.
                 if (!recovering) closeCommand(committed)
+                waitingForCommit.toList().also { waitingForCommit.clear() }
             }
+            if (committed) waiting.forEach(::told)
+        }
+    }
+
+    /** [tell], which can't fail what's committed. */
+    private fun told(tell: () -> Unit) {
+        try {
+            tell()
+        } catch (failed: Exception) {
+            Log.w(Log.TAG, "What waited for a commit failed: ${failed::class.simpleName}")
         }
     }
 

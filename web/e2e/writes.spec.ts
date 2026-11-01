@@ -1,5 +1,5 @@
 import { createHmac } from "node:crypto";
-import { expect, test, type Locator, type Page } from "@playwright/test";
+import { expect, test, type Browser, type Locator, type Page } from "@playwright/test";
 
 // What the website changes, against a server in commands mode with a database of its own (playwright.config.ts): the tests share
 // it, so each makes what it needs, under a name of its own.
@@ -718,6 +718,81 @@ test("signing out goes ahead even if the browser can't be stopped", async ({ bro
   const left = await page.evaluate(async () => (await navigator.serviceWorker.ready).pushManager.getSubscription());
   expect(left).toBeNull();
   await context.close();
+});
+
+/** A session of its own, as these end it, on Notifications, with a push service that doesn't answer till `letGo`, and what's been sent to be kept. */
+async function askingSlowly(browser: Browser, baseURL: string | undefined) {
+  const context = await browser.newContext({ baseURL, storageState: { cookies: [], origins: [] } });
+  expect((await context.request.post("/api/test/signin")).ok()).toBeTruthy();
+  const page = await context.newPage();
+  await pushable(page);
+  await page.addInitScript(() => {
+    void navigator.serviceWorker.ready.then(({ pushManager }) => {
+      const made = pushManager.subscribe.bind(pushManager);
+      pushManager.subscribe = (options) =>
+        new Promise((resolve) => {
+          Object.assign(window, { letGo: () => resolve(made(options)) });
+        });
+    });
+  });
+  await settingsPage(page, /^Notifications/);
+  const kept: string[] = [];
+  page.on("request", (request) => {
+    if (request.url().endsWith("/api/push/subscription")) kept.push(request.url());
+  });
+  await page.getByRole("region", { name: "This browser" }).getByRole("checkbox", { name: "Felix's messages" }).click();
+  await expect.poll(() => page.evaluate(() => "letGo" in window)).toBe(true);
+  return { context, page, kept };
+}
+
+const serviceAnswers = () => (window as unknown as { letGo: () => void }).letGo();
+const stillHeld = async () => (await navigator.serviceWorker.ready).pushManager.getSubscription();
+
+test("a browser's asking that's done as the session ends is let go, not kept", async ({ browser, baseURL }) => {
+  const { context, page, kept } = await askingSlowly(browser, baseURL);
+  let ending = (): void => undefined;
+  const ended = new Promise<void>((resolve) => {
+    ending = resolve;
+  });
+  await page.route("**/api/auth/logout", async (route) => {
+    await ended;
+    await route.continue();
+  });
+  const signingOut = page.waitForRequest("**/api/auth/logout");
+  await page.getByRole("button", { name: "Sign out" }).click();
+  await signingOut;
+  await page.evaluate(serviceAnswers);
+  await expect.poll(() => page.evaluate(stillHeld)).toBeNull();
+  ending();
+  await expect(page.getByRole("link", { name: "Sign in with GitHub" })).toBeVisible();
+  expect(kept).toEqual([]);
+  await context.close();
+});
+
+test("a browser's asking that's done after the session's ended is let go too", async ({ browser, baseURL }) => {
+  const { context, page, kept } = await askingSlowly(browser, baseURL);
+  await page.getByRole("button", { name: "Sign out" }).click();
+  await expect(page.getByRole("link", { name: "Sign in with GitHub" })).toBeVisible();
+  await page.evaluate(serviceAnswers);
+  await expect.poll(() => page.evaluate(stillHeld)).toBeNull();
+  expect(kept).toEqual([]);
+  await context.close();
+});
+
+test("a sign-out that doesn't go through says so, shows the browser as it's left, and leaves it able to ask", async ({ page }) => {
+  await pushable(page);
+  await settingsPage(page, /^Notifications/);
+  const felix = page.getByRole("region", { name: "This browser" }).getByRole("checkbox", { name: "Felix's messages" });
+  await felix.click();
+  await expect(felix).toBeChecked();
+  const stillIn = page.getByRole("status").filter({ hasText: "still signed in" });
+  await expect(stillIn).toBeHidden();
+  await page.route("**/api/auth/logout", (route) => route.abort());
+  await page.getByRole("button", { name: "Sign out" }).click();
+  await expect(stillIn).toBeVisible();
+  await expect(felix).not.toBeChecked();
+  await felix.click();
+  await expect(felix).toBeChecked();
 });
 
 test("a browser's changes go one at a time, as each sends the whole list", async ({ page }) => {
