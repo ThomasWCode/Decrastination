@@ -5,6 +5,8 @@ import { DayPage } from "./Day";
 import { useLive } from "./live";
 import { PhonePage } from "./Phone";
 import { SettingsPageView } from "./Settings";
+import { StatsPage } from "./Stats";
+import { ReviewsPage, WeekPage } from "./Week";
 import { WorkPage } from "./Work";
 
 /** Where you are, kept in the address so a reload and the back button work. */
@@ -42,6 +44,9 @@ const PAGES = [
   { path: "/", name: "Chat" },
   { path: "/day", name: "Day" },
   { path: "/work", name: "Work" },
+  { path: "/stats", name: "Stats" },
+  { path: "/week", name: "This week" },
+  { path: "/reviews", name: "Reviews" },
   { path: "/settings", name: "Settings" },
   { path: "/phone", name: "Phone" },
 ];
@@ -115,6 +120,12 @@ export function App() {
       </header>
       {url.pathname === "/work" ? (
         <WorkPage />
+      ) : url.pathname === "/stats" ? (
+        <StatsPage />
+      ) : url.pathname === "/week" ? (
+        <WeekPage />
+      ) : url.pathname === "/reviews" ? (
+        <ReviewsPage />
       ) : url.pathname === "/settings" ? (
         <SettingsPageView />
       ) : url.pathname === "/phone" ? (

@@ -26,6 +26,8 @@ import com.thomaswcode.decrastination.enrich.SummaryWriter
 import com.thomaswcode.decrastination.ports.Log
 import com.thomaswcode.decrastination.protect.Protection
 import java.time.LocalDate
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
  * What the app learns from the log (docs/spec/learning.md):
@@ -64,6 +66,9 @@ class Learning(
     /** The tasks as they stand, read for how the week's weekly work went (D-124). */
     private val tasks: () -> List<TaskItem> = { emptyList() },
 ) {
+    /** Held through a review, whoever started it: what's said to have had one is only known at its end, and each is a paid call. */
+    private val reviewing = Mutex()
+
     /**
      * The weekly review (docs/spec/learning.md, item 7), unless [ifDue] and the week has had it: on
      * Sunday evening, after the check-in (or without it), the calibration is learned afresh from the
@@ -71,8 +76,11 @@ class Learning(
      * bounded changes, which apply at once, armed or not. Until then the note is the rules': what
      * changed, in words. Then what's run out of what's remembered is let go of, and the facts with neither an
      * until nor a task are tidied once they're past 70 % of the room the rest leave them (AI-21, [MemoryTidy.due]).
+     * One at a time: a second waits, and then finds the week has had it.
      */
-    suspend fun review(ifDue: Boolean) {
+    suspend fun review(ifDue: Boolean) = reviewing.withLock { makeReview(ifDue) }
+
+    private suspend fun makeReview(ifDue: Boolean) {
         val now = clock.now()
         // Once a week: the check-in runs it at once, and the evening's alarm finds it done since
         // Sunday's check-in time (a review at any other time doesn't count). The latest Sunday at or
@@ -199,11 +207,14 @@ class Learning(
     }
 
     /**
-     * [change], one of [review]'s, put back (LR-01): its setting to its value before, as a change of
-     * yours (once armed, one that loosens waits as yours do), while it's still what the review left.
-     * What happened, in words.
+     * The change to [setting] of the review made at [reviewAt] put back (LR-01): its setting to its value before, as a change of
+     * yours (once armed, one that loosens waits as yours do), while it's still what the review left, which is its last to
+     * that setting ([ReviewInput.apply]). The review's read here, not sent: what it was before is the log's to say. What
+     * happened, in words.
      */
-    suspend fun undoReviewChange(review: WeeklyReview, change: ReviewInput.Change): String {
+    suspend fun undoReviewChange(reviewAt: Long, setting: String): String {
+        val review = log.value.reviews.firstOrNull { it.at == reviewAt } ?: return "That review has gone."
+        val change = review.changes.lastOrNull { it.setting == setting } ?: return "That review didn't change it."
         val before = review.settingsBefore[change.setting] ?: return "What it was before isn't known."
         if (ReviewInput.valueOf(settings.value, change.setting) != change.value) return "It's been changed since: left as it is."
         // One end of a school day's hours back alone can meet the other: then it can't be.
@@ -214,9 +225,9 @@ class Learning(
         return if (now == before) "$label is back to ${ReviewInput.valueText(change.setting, before)}." else "$label back to ${ReviewInput.valueText(change.setting, before)} waits, as a change that loosens does once armed."
     }
 
-    /** [review]'s tidy of what's remembered undone (LR-01): its facts as they were, while they're still as it left them. What happened, in words. */
-    suspend fun undoTidy(review: WeeklyReview): String {
-        val tidy = review.memoryTidy ?: return "That review tidied nothing."
+    /** The tidy of what's remembered by the review made at [reviewAt] undone (LR-01): its facts as they were, while they're still as it left them. What happened, in words. */
+    suspend fun undoTidy(reviewAt: Long): String {
+        val tidy = log.value.reviews.firstOrNull { it.at == reviewAt }?.memoryTidy ?: return "That review tidied nothing."
         var done = false
         memory.update { state -> if (state.facts == tidy.after) state.copy(facts = tidy.before).also { done = true } else state }
         return if (done) "What's remembered is back as it was before the tidy." else "What's remembered has changed since: left as it is."
@@ -252,13 +263,17 @@ class Learning(
     /**
      * [checkIn], the week's (from Felix's five questions in the chat, or the check-in's form), kept once a
      * week: one for a week that has its check-in already (a second tap, another screen) is let go. Whether
-     * it was kept.
+     * it was kept. Trimmed at [now], never past this moment: what's older than the log keeps would go for good.
      */
     suspend fun recordCheckIn(checkIn: CheckIn, now: Long = clock.now()): Boolean {
+        val at = minOf(now, clock.now())
         var added = false
-        log.update { l -> withCheckIn(l, checkIn, now)?.also { added = true } ?: l }
+        log.update { l -> withCheckIn(l, checkIn, at)?.also { added = true } ?: l }
         return added
     }
+
+    /** Whether what's been learned about [key] can be forgotten: it's shown with its Forget. */
+    fun canForget(key: String): Boolean = Stats.calibrationRows(learning.value.calibration).any { it.forget == key }
 
     /** Records [answer] (and [note]) on the completion of [taskId] done at [doneAt] (0: its latest, for older questions). */
     suspend fun recordAssessment(taskId: String, doneAt: Long, answer: String, note: String? = null) {

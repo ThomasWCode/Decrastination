@@ -74,10 +74,12 @@ The server applies commands in the order they arrive, and the owners are the con
 | `SaveOwnTask` | the form wouldn't take it (`OwnTaskRules.problem`) | what's wrong with it |
 | `ChangeSettings` | a value the screen wouldn't take (`SettingsLimits`), or the settings' `version` | what's wrong with it |
 | `ApplyChangeNow` | the change isn't waiting now, before the code's used up | That change isn't waiting now |
+| `RecordCheckIn` | a feeling off the scale, or a week that can't be read, as one in a backup would stop every backup after it | what's wrong with it |
+| `ForgetCalibration` | it isn't one that can be forgotten now | That's nothing it's learned now |
 | any other | never: its owner takes a stale call as it does today, doing nothing, or laying the day again | |
 | one its owner fails on | always | It couldn't be applied |
 
-A client that hears only the outcome is told what takes a command back, where only its owner's answer can say (`Action.undoing`, `Outcome.undo`): Mark answered's Undo needs the moment the server marked it, which the website has no other way to know.
+A client that hears only the outcome is told what takes a command back, where only its owner's answer can say (`Action.undoing`, `Outcome.undo`): Mark answered's Undo needs the moment the server marked it, which the website has no other way to know. It's told what came of one that went through in the same way (`Action.said`, `Outcome.said`): a review's Undo may apply at once or wait its hours.
 
 A command that ran and came to nothing is `refused`, by what its owner answered (`Action.refused`), not dropped: what it did stands, so a wrong parent code still counts towards the lock, and it isn't a change lost, so Setup doesn't list it, your screen having said what came of it. The pull after one is of everything all the same, as it may have gone otherwise on the phone:
 
@@ -88,6 +90,9 @@ A command that ran and came to nothing is `refused`, by what its owner answered 
 | `UndoKeep` | That can't be taken back now |
 | `TickBlock` | That step has changed |
 | `LaterToday` | No time left today for it |
+| `StartTimer` | That piece has changed since (done, or planned again). |
+| `StopTimer` | No timer was running |
+| `RecordCheckIn` | That week's check-in is done |
 | `ApplyInstruction` | It couldn't be applied |
 
 A command's moment is the server's where a client's clock would decide something (`CommandApplier.stamped`): the website's is always the moment it lands, as it has no queue to send late and a browser can say anything, and a phone's may be earlier but never later, so neither can run the clock past a code's lock or a wait.

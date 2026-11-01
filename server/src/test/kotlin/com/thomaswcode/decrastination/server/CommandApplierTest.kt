@@ -6,6 +6,7 @@ import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.data.Secret
 import com.thomaswcode.decrastination.data.SecretCipher
+import com.thomaswcode.decrastination.learn.CheckIn
 import com.thomaswcode.decrastination.protect.Totp
 import com.thomaswcode.decrastination.sync.protocol.ApplyChangeNow
 import com.thomaswcode.decrastination.sync.protocol.ChangeSettings
@@ -14,14 +15,17 @@ import com.thomaswcode.decrastination.sync.protocol.Command
 import com.thomaswcode.decrastination.sync.protocol.CommandBatch
 import com.thomaswcode.decrastination.sync.protocol.Commands
 import com.thomaswcode.decrastination.sync.protocol.FinishOwnTask
+import com.thomaswcode.decrastination.sync.protocol.ForgetCalibration
 import com.thomaswcode.decrastination.sync.protocol.MarkAnswered
 import com.thomaswcode.decrastination.sync.protocol.Outcome
 import com.thomaswcode.decrastination.sync.protocol.RateMessage
+import com.thomaswcode.decrastination.sync.protocol.RecordCheckIn
 import com.thomaswcode.decrastination.sync.protocol.ReplyFromNotification
 import com.thomaswcode.decrastination.sync.protocol.SaveOwnTask
 import com.thomaswcode.decrastination.sync.protocol.SendMessage
 import com.thomaswcode.decrastination.sync.protocol.StartTimer
 import com.thomaswcode.decrastination.sync.protocol.StopTimer
+import com.thomaswcode.decrastination.sync.protocol.UndoTidy
 import com.thomaswcode.decrastination.sync.protocol.UseParentCode
 import java.io.File
 import java.nio.file.Files
@@ -158,6 +162,57 @@ class CommandApplierTest {
         val start = send(Command("closed", at, StartTimer("own:s-Essay")))
         assertEquals(Outcome.REFUSED, start.state)
         assertNotNull(start.why)
+    }
+
+    @Test
+    fun `a check-in a backup couldn't hold isn't taken, and a second for its week says so`() = runBlocking<Unit> {
+        val week = "2026-10-26"
+        val checkIn = CheckIn(week, at, 3, "", "", "", "")
+        assertEquals(Outcome.DROPPED, send(Command("feel", at, RecordCheckIn(checkIn.copy(feel = 9), at))).state)
+        assertEquals(Outcome.DROPPED, send(Command("week", at, RecordCheckIn(checkIn.copy(weekOf = "not a week"), at))).state)
+        assertTrue(graph.stores.log.value.checkIns.isEmpty())
+        assertEquals(Outcome.APPLIED, send(Command("first", at, RecordCheckIn(checkIn, at))).state)
+        val second = send(Command("second", at, RecordCheckIn(checkIn, at)))
+        assertEquals(Outcome.REFUSED, second.state)
+        assertEquals("That week's check-in is done", second.why)
+    }
+
+    @Test
+    fun `a review's Undo says what came of it, though nothing's changed`() = runBlocking {
+        val outcome = send(Command("undo", at, UndoTidy(5L)))
+        assertEquals(Outcome.APPLIED, outcome.state)
+        assertEquals("That review tidied nothing.", outcome.said)
+    }
+
+    @Test
+    fun `what's forgotten is what it's learned`() = runBlocking {
+        assertEquals("That's nothing it's learned now", send(Command("forget", at, ForgetCalibration("Homework|Nothing"))).why)
+    }
+
+    @Test
+    fun `a reset of the log takes the check-in's words off the record, and a command's kept till it's old`() = runBlocking {
+        send(Command("week", at, RecordCheckIn(CheckIn("2026-10-26", at, 3, "what I avoided", "", "", ""), at)))
+        send(Command("task", at, own("Essay")))
+        graph.backend.letGoOfCopies { it == "log.json" }
+        val left = db.read { c -> c.createStatement().use { s -> s.executeQuery("SELECT group_concat(payload) FROM commands").use { it.next(); it.getString(1) } } }
+        assertFalse("what I avoided" in left, left)
+        assertTrue("Essay" in left)
+        assertEquals(2, rows())
+        graph.backend.trimCommands(System.currentTimeMillis() + 1_000)
+        assertEquals(0, rows())
+    }
+
+    @Test
+    fun `the tidy lets go of the commands kept past their use, and keeps the rest`() = runBlocking {
+        send(Command("old", at, own("Essay")))
+        send(Command("new", at, own("Maths")))
+        db.transaction { c ->
+            c.prepareStatement("UPDATE commands SET received_at = 1 WHERE id = 'old'").use { it.executeUpdate() }
+        }
+        graph.tidy()
+        assertEquals(1, rows())
+        assertEquals(Outcome.APPLIED, send(Command("new", at, own("Maths"))).state)
+        assertEquals(1, rows(), "and a repeat of one kept still answers from the record")
     }
 
     @Test

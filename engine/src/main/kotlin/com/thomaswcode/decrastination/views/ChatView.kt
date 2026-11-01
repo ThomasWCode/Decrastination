@@ -127,6 +127,9 @@ data class ChatButton(
     val primary: Boolean = false,
     val confirm: String? = null,
     val detail: String? = null,
+    /** What the two answers to [confirm] are called, where they aren't the button's own and Cancel. */
+    val yes: String? = null,
+    val no: String? = null,
 )
 
 /** A card: a task he shows you ([open] its id), one he added, or what he changed; what became of it ([state]), and what's left to do. */
@@ -180,6 +183,8 @@ data class ChatRow(
     val problem: Boolean = false,
     val searched: String? = null,
     val sources: List<ChatSourceLine> = emptyList(),
+    /** His message's own button, in the app's words: the week's review, or its summary to send, both on the Reviews page. */
+    val opens: String? = null,
     /** A task he shows you, never folded; then the cards folded with the rest. */
     val shown: List<ChatCard> = emptyList(),
     val cards: List<ChatCard> = emptyList(),
@@ -285,6 +290,7 @@ object ChatViews {
                 cards = message.proposals.filter { it.open == null }.map { card(message, it, byId, live, now, zone) },
                 lines = lines(message, live),
                 said = message.note,
+                opens = message.opens?.let { if (it.startsWith(Conversation.OPENS_SUMMARY)) "Send it" else "Open the review" },
             )
         }
 

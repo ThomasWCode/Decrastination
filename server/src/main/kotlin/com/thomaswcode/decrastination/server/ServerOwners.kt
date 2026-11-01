@@ -100,6 +100,8 @@ class ServerOwners(
 
     /** What can't be done here left out, but what's left to be asked for afresh: work of its own, as a call mustn't hold up a job's turn. */
     val ports: FelixPorts = object : FelixPorts by NoDevice {
+        override fun review() = reviewSoon()
+
         override fun remindLater() {
             scope.launch {
                 try {
@@ -198,6 +200,17 @@ class ServerOwners(
         onFailure = { source, error -> Log.w(Log.TAG, "Reading ${source.label} failed: ${error::class.simpleName}") },
         ankiRates = { stores.learning.value.calibration.ankiSecondsPerCard },
     )
+
+    /** The week's review, unless the week's had it: on its own time, as it can take a minute, and never inside a command. */
+    fun reviewSoon() {
+        scope.launch {
+            try {
+                learning.review(ifDue = true)
+            } catch (failed: IOException) {
+                Log.w(Log.TAG, "The week's review failed: ${failed::class.simpleName}")
+            }
+        }
+    }
 
     /** What watches the stores, as `AppGraph` starts it, less what's the phone's: an own task with its steps done is finished. */
     fun start() = ownTasks.start()

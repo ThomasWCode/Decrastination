@@ -436,6 +436,56 @@ class ApiTest {
     }
 
     @Test
+    fun `the record's the website's, a download nothing on the way keeps`() = server {
+        assertEquals(HttpStatusCode.Unauthorized, plain().get("/api/record.zip").status)
+        val phone = paired()
+        val asPhone = plain().get("/api/record.zip") {
+            bearerAuth(phone.token)
+            header(Protocol.HEADER, Protocol.VERSION.toString())
+        }
+        assertEquals(HttpStatusCode.Forbidden, asPhone.status)
+        val record = plain().get("/api/record.zip") { header(HttpHeaders.Cookie, signIn()) }
+        assertEquals(HttpStatusCode.OK, record.status)
+        assertEquals("no-store", record.headers[HttpHeaders.CacheControl])
+        assertTrue(assertNotNull(record.headers[HttpHeaders.ContentDisposition]).startsWith("attachment"))
+    }
+
+    @Test
+    fun `a check-in's the website's, and not while mirroring`() = server {
+        val cookie = signIn()
+        val phone = paired()
+        val week = graph.week().week
+        suspend fun checkIn(signed: HttpRequestBuilder.() -> Unit) = plain().post("/api/week/check-in") {
+            signed()
+            contentType(ContentType.Application.Json)
+            setBody("""{"week":"$week","feel":3}""")
+        }
+        val website: HttpRequestBuilder.() -> Unit = {
+            header(HttpHeaders.Cookie, cookie)
+            header("X-Requested-With", "test")
+        }
+        assertEquals(HttpStatusCode.Conflict, checkIn(website).status)
+        graph.commandsForATest()
+        assertEquals(
+            HttpStatusCode.Forbidden,
+            checkIn {
+                bearerAuth(phone.token)
+                header(Protocol.HEADER, Protocol.VERSION.toString())
+            }.status,
+        )
+        assertEquals(HttpStatusCode.OK, checkIn(website).status)
+    }
+
+    @Test
+    fun `Stats, This week and the reviews are a client's`() = server {
+        val cookie = signIn()
+        for (path in listOf("/api/views/stats", "/api/views/stats?period=nonsense", "/api/views/week", "/api/views/reviews")) {
+            assertEquals(HttpStatusCode.Unauthorized, plain().get(path).status, path)
+            assertEquals(HttpStatusCode.OK, plain().get(path) { header(HttpHeaders.Cookie, cookie) }.status, path)
+        }
+    }
+
+    @Test
     fun `the chat's views are a client's`() = server {
         assertEquals(HttpStatusCode.Unauthorized, plain().get("/api/views/chat").status)
         assertEquals(HttpStatusCode.Unauthorized, plain().get("/api/views/notices").status)

@@ -156,6 +156,8 @@ The estimates are hours of sessions, from the durations measured over the 4.x re
 
 ## Stage 7: the rest of the pages
 
+**As built.** Dormant, as the rest is till the switch (W-25): in mirror mode each page is there to read, with nothing to press. In two releases, the numbers having moved on by one. 5.7.0 has Stats, This week and Reviews, what they say moved out of the phone's screens into `:engine` (`StatsPage`, `ReviewPage`), and a message's own button from stage 5. The check-in's kept by `POST /week/check-in`, not a bare command, as the review it sets off is the server's to start. The CSV download is the zip the phone shares, for the website alone (`GET /record.zip`). A review's Send it is a `mailto:` link, as the server sends no email. 5.8.0 has Backup, Reset and Setup.
+
 **Goal.** Everything else the phone shows. Release 5.6.0.
 
 **Work.** Stats (the fortnight and the calibration as tables and small charts; the CSV download), This week (the check-in's five questions, the latest review), Reviews with Undo, Backup (download the Backup-format file, import one), Reset (each kind, after a confirmation), Setup (Saved data, Sources, Claude, and a Phone page with pairing and revoking), the phone-only Settings pages listed as such.

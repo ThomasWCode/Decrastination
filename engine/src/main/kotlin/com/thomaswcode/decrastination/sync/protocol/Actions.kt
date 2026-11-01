@@ -13,12 +13,11 @@ import com.thomaswcode.decrastination.core.OwnTaskRules
 import com.thomaswcode.decrastination.core.Rule
 import com.thomaswcode.decrastination.core.SettingsLimits
 import com.thomaswcode.decrastination.data.PieceTimer
-import com.thomaswcode.decrastination.data.WeeklyReview
 import com.thomaswcode.decrastination.felix.Conversation
 import com.thomaswcode.decrastination.learn.CheckIn
-import com.thomaswcode.decrastination.learn.ReviewInput
 import com.thomaswcode.decrastination.protect.SettingsChanges
 import com.thomaswcode.decrastination.ui.Moves
+import java.time.LocalDate
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
@@ -398,22 +397,37 @@ data class CancelChange(val id: String) : Action, Answers<Unit> {
 @SerialName("RecordCheckIn")
 data class RecordCheckIn(val checkIn: CheckIn, val now: Long) : Action, Answers<Boolean> {
     override suspend fun run(owners: Owners): Boolean = owners.learning.recordCheckIn(checkIn, now)
+
+    // As a backup holds them: one that isn't would stop every backup after it.
+    override fun stale(owners: Owners) = when {
+        checkIn.feel !in 1..5 -> "How the week felt is from 1 to 5"
+        runCatching { LocalDate.parse(checkIn.weekOf) }.isFailure -> "That isn't a week"
+        else -> null
+    }
+
+    override fun refused(answer: Any?) = "That week's check-in is done".takeIf { answer == false }
 }
 
 @Serializable
 @SerialName("ForgetCalibration")
 data class ForgetCalibration(val key: String) : Action, Answers<Unit> {
     override suspend fun run(owners: Owners) = owners.learning.forgetCalibration(key)
+
+    override fun stale(owners: Owners) = "That's nothing it's learned now".takeUnless { owners.learning.canForget(key) }
 }
 
 @Serializable
 @SerialName("UndoReviewChange")
-data class UndoReviewChange(val review: WeeklyReview, val change: ReviewInput.Change) : Action, Answers<String> {
-    override suspend fun run(owners: Owners): String = owners.learning.undoReviewChange(review, change)
+data class UndoReviewChange(val reviewAt: Long, val setting: String) : Action, Answers<String> {
+    override suspend fun run(owners: Owners): String = owners.learning.undoReviewChange(reviewAt, setting)
+
+    override fun said(answer: Any?) = answer as? String
 }
 
 @Serializable
 @SerialName("UndoTidy")
-data class UndoTidy(val review: WeeklyReview) : Action, Answers<String> {
-    override suspend fun run(owners: Owners): String = owners.learning.undoTidy(review)
+data class UndoTidy(val reviewAt: Long) : Action, Answers<String> {
+    override suspend fun run(owners: Owners): String = owners.learning.undoTidy(reviewAt)
+
+    override fun said(answer: Any?) = answer as? String
 }

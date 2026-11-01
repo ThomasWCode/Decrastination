@@ -42,7 +42,6 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.thomaswcode.decrastination.AppGraph
-import com.thomaswcode.decrastination.core.Blocklist
 import com.thomaswcode.decrastination.enrich.AiUsage
 import com.thomaswcode.decrastination.learn.Export
 import com.thomaswcode.decrastination.learn.Stats
@@ -54,7 +53,6 @@ import kotlinx.coroutines.delay
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
-import java.time.temporal.ChronoUnit
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -82,8 +80,7 @@ fun StatsScreen(graph: AppGraph) {
     var period by rememberSaveable { mutableStateOf(Stats.DAYS) }
     val school by graph.school.state.collectAsStateWithLifecycle()
     val today = Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
-    val termDays = remember(school, today) { (ChronoUnit.DAYS.between(Stats.termStart(today) { school.isSchoolDay(it) }, today) + 1).toInt().coerceAtLeast(1) }
-    val days = if (period == TERM) termDays else period
+    val days = remember(school, today, period) { StatsPage.days(period, today) { school.isSchoolDay(it) } }
     val stats = remember(log, now, days) { Stats.summary(log, now, zone, days) }
     val subjects = remember(log, now, days, settings.classMap) { Stats.bySubject(log, settings.classMap, now, zone, days) }
     val heat = remember(log, now) { Stats.heat(log, now, zone) }
@@ -99,16 +96,16 @@ fun StatsScreen(graph: AppGraph) {
     val leftMin = (graph.focus.creditLeftMs(now) / 60_000).toInt()
     val usage = model.aiUsage.forMonth(AiUsage.monthOf(now, zone))
     val claudeOff = graph.gateway.claudeKey() == null && usage.calls == 0
-    val top = stats.topBlocked.joinToString { (target, times) -> "${Blocklist.NAMES[target] ?: target} $times" }
+    val facts = StatsPage.Today((credit.earnedMs / 60_000).toInt(), (credit.spentMs / 60_000).toInt(), leftMin, usage.spentUsd, usage.calls, settings.aiMonthlyCapUsd, claudeOff)
     var allDays by rememberSaveable { mutableStateOf(false) }
     var inFull by rememberSaveable { mutableStateOf(false) }
-    val shown = if (allDays) stats.days else stats.days.take(WEEK)
+    val shown = if (allDays) stats.days else stats.days.take(StatsPage.WEEK)
 
     forgetting?.let { row ->
         AlertDialog(
             onDismissRequest = { forgetting = null },
-            title = { Text("Forget this?") },
-            text = { Text("${row.line.substringBefore(':')}: what the app has learned goes, and its work so far won't teach it again. Its kind's figure stands for it meanwhile.") },
+            title = { Text(StatsPage.FORGET_TITLE) },
+            text = { Text(StatsPage.forgetDetail(row)) },
             confirmButton = {
                 TextButton(onClick = {
                     forgetting = null
@@ -121,8 +118,8 @@ fun StatsScreen(graph: AppGraph) {
     if (proposing && suggested != null) {
         AlertDialog(
             onDismissRequest = { proposing = false },
-            title = { Text("Weekday hours from your slots?") },
-            text = { Text("From ${Format.clock(suggested.startMin)} to ${Format.clock(suggested.endMin)}, where most of your kept slots were on weekdays. Now ${Format.clock(settings.weekdayHours.startMin)} to ${Format.clock(settings.weekdayHours.endMin)}.") },
+            title = { Text(StatsPage.HOURS_TITLE) },
+            text = { Text(StatsPage.hoursDetail(suggested, settings.weekdayHours)) },
             confirmButton = {
                 TextButton(onClick = {
                     proposing = false
@@ -135,7 +132,7 @@ fun StatsScreen(graph: AppGraph) {
     LazyColumn(Modifier.fillMaxWidth(), contentPadding = PaddingValues(bottom = FELIX_ROOM)) {
         item(key = "period") {
             FlowRow(Modifier.padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf(Stats.DAYS to "2 weeks", SIX_WEEKS to "6 weeks", TERM to "This term").forEach { (value, label) ->
+                StatsPage.PERIODS.forEach { (value, label) ->
                     FilterChip(selected = period == value, onClick = { period = value }, label = { Text(label) })
                 }
             }
@@ -143,31 +140,7 @@ fun StatsScreen(graph: AppGraph) {
         item(key = "tiles") {
             SectionHeading("The last $days days")
             Column(Modifier.padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                TileRow(
-                    { StatTile("Finished", "${stats.completions}", if (stats.dated > 0) "${stats.onTime} of ${stats.dated} dated on time" else "none with a deadline") },
-                    { StatTile("Slots kept", "${stats.slotsKept} of ${stats.slotsPlanned}", "earned ${stats.slotsEarned}, ${Format.minutes(stats.slotMin)} worked") },
-                )
-                TileRow(
-                    { StatTile("Blocked", "${stats.blocks}", stats.topBlocked.firstOrNull()?.let { (target, _) -> "most: ${Blocklist.NAMES[target] ?: target}" } ?: "nothing") },
-                    {
-                        StatTile(
-                            "Protection",
-                            if (stats.protectionProblems == 0) "Fine" else "${stats.protectionProblems}",
-                            if (stats.protectionProblems == 0) "no problems found" else "problems, ${stats.protectionRepaired} put right",
-                            warn = stats.protectionProblems > stats.protectionRepaired,
-                        )
-                    },
-                )
-                TileRow(
-                    { StatTile("Free time left today", Format.minutes(leftMin), "earned ${Format.minutes((credit.earnedMs / 60_000).toInt())}, spent ${Format.minutes((credit.spentMs / 60_000).toInt())}") },
-                    {
-                        StatTile(
-                            "Claude this month",
-                            if (claudeOff) "Off" else "$%.2f".format(Locale.UK, usage.spentUsd),
-                            if (claudeOff) "nothing sent" else "${usage.calls} call${if (usage.calls == 1) "" else "s"}" + (settings.aiMonthlyCapUsd?.let { ", cap $$it" } ?: ""),
-                        )
-                    },
-                )
+                StatsPage.tiles(stats, facts).chunked(2).forEach { (left, right) -> TileRow({ StatTile(left) }, { StatTile(right) }) }
             }
         }
         item(key = "days-title") { SectionHeading("Day by day", trailing = "bars: focus time") }
@@ -191,9 +164,7 @@ fun StatsScreen(graph: AppGraph) {
                     GroupTile {
                         subjects.forEach { row ->
                             Line(
-                                "${row.subject}: ${Format.minutes(row.minutes)} in ${row.pieces} piece${if (row.pieces == 1) "" else "s"}" +
-                                    (if (row.dated > 0) ", ${row.onTime} of ${row.dated} on time" else "") +
-                                    (row.ratio?.let { ", %.1f× the estimates (from %d)".format(Locale.UK, it, row.timed) } ?: ""),
+                                StatsPage.subject(row),
                             )
                         }
                     }
@@ -206,7 +177,7 @@ fun StatsScreen(graph: AppGraph) {
                 GroupTile {
                     HeatGrid(heat)
                     suggested?.let { w ->
-                        TextButton(onClick = { proposing = true }) { Text("Set weekday hours from this (${Format.clock(w.startMin)}–${Format.clock(w.endMin)})") }
+                        TextButton(onClick = { proposing = true }) { Text(StatsPage.hoursLabel(w)) }
                     }
                 }
             }
@@ -226,7 +197,7 @@ fun StatsScreen(graph: AppGraph) {
             Group("What the app has learned") {
                 GroupTile {
                     if (learned.isEmpty()) {
-                        Line("Nothing yet: it learns from finished work, at Sunday's review.")
+                        Line(StatsPage.NOTHING_LEARNED)
                     } else {
                         learned.forEach { row ->
                             if (row.forget == null) {
@@ -247,37 +218,13 @@ fun StatsScreen(graph: AppGraph) {
             if (inFull) {
                 Group {
                     GroupTile {
-                        Line("${stats.completions} finished" + if (stats.dated > 0) "; ${stats.onTime} of the ${stats.dated} with a deadline by it." else ".")
-                        Line("${stats.slotsKept} slot${if (stats.slotsKept == 1) "" else "s"} kept of ${stats.slotsPlanned}, ${stats.slotsEarned} earning free time: ${Format.minutes(stats.slotMin)} worked.")
-                        if (stats.photoChecks > 0) Line("${stats.photoChecks} piece${if (stats.photoChecks == 1) "" else "s"} a photo check found done.")
-                        Line("Blocked ${stats.blocks} time${if (stats.blocks == 1) "" else "s"}" + if (top.isNotEmpty()) ": $top." else ".")
-                        Line(
-                            when {
-                                stats.protectionProblems == 0 -> "Protection: no problems found."
-                                else -> "Protection: problems found ${stats.protectionProblems} time${if (stats.protectionProblems == 1) "" else "s"}, put right ${stats.protectionRepaired}."
-                            },
-                        )
-                        Line("Free time today: earned ${Format.minutes((credit.earnedMs / 60_000).toInt())}, spent ${Format.minutes((credit.spentMs / 60_000).toInt())}: ${Format.minutes(leftMin)} left.")
-                        Line("Shown: the last $days days" + if (period == TERM) ", this term." else ".")
-                        Line(
-                            "Claude this month: " + if (claudeOff) {
-                                "off: nothing sent."
-                            } else {
-                                "$%.2f".format(Locale.UK, usage.spentUsd) + (settings.aiMonthlyCapUsd?.let { " of $$it" } ?: "") + " in ${usage.calls} call${if (usage.calls == 1) "" else "s"}."
-                            },
-                        )
+                        StatsPage.inFull(stats, facts, days, period == StatsPage.TERM).forEach { Line(it) }
                     }
                 }
             }
         }
     }
 }
-
-private const val WEEK = 7
-
-/** The periods but two weeks (PL-10): six weeks, and this term (its days counted as the calendar has them). */
-private const val SIX_WEEKS = 42
-private const val TERM = -1
 
 /** Slots kept by weekday and hour (PL-09): a row a day, a cell an hour from 7 to 23, darker for more kept, red where more were missed. */
 @Composable
@@ -287,7 +234,7 @@ private fun HeatGrid(heat: Map<Pair<DayOfWeek, Int>, Pair<Int, Int>>) {
         DayOfWeek.entries.forEach { day ->
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(day.getDisplayName(TextStyle.SHORT, Locale.UK), style = MaterialTheme.typography.labelSmall, modifier = Modifier.width(32.dp))
-                (7..23).forEach { hour ->
+                StatsPage.HEAT_HOURS.forEach { hour ->
                     val (kept, missed) = heat[day to hour] ?: (0 to 0)
                     val colour = when {
                         missed > kept -> MaterialTheme.colorScheme.error.copy(alpha = 0.6f)
@@ -298,7 +245,7 @@ private fun HeatGrid(heat: Map<Pair<DayOfWeek, Int>, Pair<Int, Int>>) {
                 }
             }
         }
-        Text("7:00 to midnight, the last ${Stats.HEAT_WEEKS} weeks", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(StatsPage.HEAT_NOTE, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -313,26 +260,26 @@ private fun TileRow(left: @Composable () -> Unit, right: @Composable () -> Unit)
 
 /** One number to skim: what it is, the number, and a word on it. */
 @Composable
-private fun StatTile(label: String, value: String, note: String, warn: Boolean = false) {
+private fun StatTile(tile: StatsPage.Tile) {
     Column(
         Modifier.fillMaxWidth().fillMaxHeight().clip(RoundedCornerShape(20.dp)).background(MaterialTheme.colorScheme.surfaceContainerHigh).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
-        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(tile.label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
         Text(
-            value,
+            tile.value,
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
-            color = if (warn) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+            color = if (tile.warn) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
             maxLines = 1,
         )
-        Text(note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(tile.note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
 @Composable
 private fun DayRow(day: Stats.Day, most: Int, today: LocalDate) {
-    val quiet = day.completions == 0 && day.slotMin == 0 && day.blocks == 0
+    val quiet = StatsPage.quiet(day)
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(
             if (day.date == today) "Today" else day.date.format(DAY),
@@ -348,16 +295,7 @@ private fun DayRow(day: Stats.Day, most: Int, today: LocalDate) {
                 }
             }
             Text(
-                listOfNotNull(
-                    "${day.completions} done",
-                    Format.minutes(day.slotMin).takeIf { day.slotMin > 0 }?.let { "$it in slots" },
-                    "${day.blocks} block${if (day.blocks == 1) "" else "s"}".takeIf { day.blocks > 0 },
-                    when (day.planDone) {
-                        true -> "plan done"
-                        false -> "plan not done"
-                        null -> null
-                    },
-                ).joinToString(" · "),
+                StatsPage.day(day),
                 style = MaterialTheme.typography.bodySmall,
                 // An empty day fades back, so the days with something stand out.
                 color = if (quiet) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.onSurfaceVariant,

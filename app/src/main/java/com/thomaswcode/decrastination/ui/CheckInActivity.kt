@@ -70,17 +70,17 @@ class CheckInActivity : ComponentActivity() {
         Scaffold(topBar = { TopAppBar(title = { Text("This week") }) }) { padding ->
             Column(Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 if (done) {
-                    Text("This week's check-in is done.", style = MaterialTheme.typography.bodyLarge)
+                    Text(ReviewPage.CHECK_IN_DONE, style = MaterialTheme.typography.bodyLarge)
                 } else {
-                    Text("How did the week feel?", style = MaterialTheme.typography.titleSmall)
+                    Text(ReviewPage.FEEL, style = MaterialTheme.typography.titleSmall)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         for (n in 1..5) FilterChip(selected = feel == n, onClick = { feel = n }, label = { Text(n.toString()) })
                     }
-                    Text("1 is badly, 5 is well.", style = MaterialTheme.typography.bodySmall)
-                    OutlinedTextField(avoided, { avoided = it }, label = { Text("What did you avoid, and why?") }, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(inTheWay, { inTheWay = it }, label = { Text("What got in the way?") }, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(change, { change = it }, label = { Text("What would you change about the plan?") }, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(energy, { energy = it }, label = { Text("When in the day did you have most energy?") }, modifier = Modifier.fillMaxWidth())
+                    Text(ReviewPage.FEEL_NOTE, style = MaterialTheme.typography.bodySmall)
+                    OutlinedTextField(avoided, { avoided = it }, label = { Text(ReviewPage.AVOIDED) }, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(inTheWay, { inTheWay = it }, label = { Text(ReviewPage.IN_THE_WAY) }, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(change, { change = it }, label = { Text(ReviewPage.CHANGE) }, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(energy, { energy = it }, label = { Text(ReviewPage.ENERGY) }, modifier = Modifier.fillMaxWidth())
                     Button(
                         enabled = feel > 0 && !saving,
                         onClick = {
@@ -99,14 +99,14 @@ class CheckInActivity : ComponentActivity() {
                             }
                         },
                         modifier = Modifier.fillMaxWidth(),
-                    ) { Text("Save, and review the week") }
+                    ) { Text(ReviewPage.SAVE) }
                 }
                 log.reviews.maxByOrNull { it.at }?.let { review ->
                     HorizontalDivider()
                     Text("Review, ${Format.at(review.at, graph.clock.now(), graph.clock.zone())}", style = MaterialTheme.typography.titleSmall)
                     review.lines.forEach { Text("• $it", style = MaterialTheme.typography.bodyMedium) }
                     // Why the rules wrote it, where that was kept (older reviews didn't keep it).
-                    Text(if (review.by == "rules") "By the rules" + (review.why?.let { ": $it." } ?: ".") else "By Claude.", style = MaterialTheme.typography.bodySmall)
+                    Text(ReviewPage.byLine(review) + ".", style = MaterialTheme.typography.bodySmall)
                 }
             }
         }

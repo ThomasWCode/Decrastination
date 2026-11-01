@@ -26,6 +26,7 @@ import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.WebSource
 import com.thomaswcode.decrastination.data.FelixStore
 import com.thomaswcode.decrastination.data.TaskState
+import com.thomaswcode.decrastination.felix.Conversation
 import com.thomaswcode.decrastination.sync.protocol.ApplyInstruction
 import com.thomaswcode.decrastination.sync.protocol.ApplyProposal
 import com.thomaswcode.decrastination.sync.protocol.CancelAnswer
@@ -381,6 +382,14 @@ class ChatViewTest {
         val gone = view(ChatState(listOf(message))).rows.single().shown.single()
         assertEquals("A task no longer listed", gone.title)
         assertNull(gone.open)
+    }
+
+    @Test
+    fun `a review's message says what its button's for`() {
+        fun opening(opens: String?) = view(ChatState(listOf(his("m").copy(opens = opens)))).rows.single().opens
+        assertEquals("Open the review", opening(Conversation.OPENS_REVIEW))
+        assertEquals("Send it", opening(Conversation.OPENS_SUMMARY + "2026-10-12"))
+        assertNull(opening(null))
     }
 
     @Test

@@ -30,10 +30,14 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.joinAll
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -71,12 +75,18 @@ class LearningTest {
     private val told: MutableList<String> = Collections.synchronizedList(mutableListOf())
     private val offered: MutableList<String> = Collections.synchronizedList(mutableListOf())
 
+    /** Run part-way through a review, for a test to hold one there. */
+    @Volatile private var midReview: suspend () -> Unit = {}
+
     private val learning = Learning(
         stores.log, stores.learning, stores.settings, stores.memory, stores.chat, stores.instructions, clock, gateway, focus, protection,
         resets = { 0 },
         profile = { _, _ -> Profile.Block.NONE },
         // By the tasks alone: what the chat's acts hold and the sources' reads are Conversation's.
-        forgetExpired = { now -> stores.memory.update { Memories.expired(it, stores.tasks.value.tasks.associateBy { t -> t.id }, now) } },
+        forgetExpired = { now ->
+            midReview()
+            stores.memory.update { Memories.expired(it, stores.tasks.value.tasks.associateBy { t -> t.id }, now) }
+        },
         reviewed = { told += it },
         summaryReady = { offered += it },
     )
@@ -114,6 +124,26 @@ class LearningTest {
     }
 
     @Test
+    fun `two reviews at once are the one, the second waiting and finding it's been made`() = runBlocking {
+        val inside = CompletableDeferred<Unit>()
+        val letGo = CompletableDeferred<Unit>()
+        midReview = {
+            midReview = {}
+            inside.complete(Unit)
+            letGo.await()
+        }
+        val first = launch(Dispatchers.Default) { learning.review(ifDue = true) }
+        inside.await()
+        val second = launch(Dispatchers.Default) { learning.review(ifDue = true) }
+        // Long enough for a second that didn't wait to be past the check, as nothing's on record yet.
+        delay(300)
+        letGo.complete(Unit)
+        joinAll(first, second)
+        assertEquals(1, stores.log.value.reviews.size)
+        assertEquals(1, told.size)
+    }
+
+    @Test
     fun `a review of the week so far learns nothing, and Sunday's still comes and learns (D-123)`() = runBlocking {
         stores.log.update { it.copy(completions = listOf(done("a", 30, 45, "2026-10-13T18:00"), done("b", 40, 60, "2026-10-14T18:00"), done("c", 20, 30, "2026-10-14T19:00"))) }
         val before = stores.learning.value.calibration
@@ -128,23 +158,46 @@ class LearningTest {
     }
 
     @Test
+    fun `a setting a review changed twice goes back from the change that stands`() = runBlocking {
+        stores.settings.update { it.copy(softMinPerDay = 90) }
+        val changes = listOf(ReviewInput.Change("softMinPerDay", 80, "made up"), ReviewInput.Change("softMinPerDay", 90, "made up"))
+        val review = WeeklyReview(clock.now(), listOf("A made-up note."), by = "rules", changes = changes, settingsBefore = mapOf("softMinPerDay" to 60))
+        stores.log.update { it.copy(reviews = listOf(review)) }
+        assertEquals("${ReviewInput.label("softMinPerDay")} is back to ${ReviewInput.valueText("softMinPerDay", 60)}.", learning.undoReviewChange(review.at, "softMinPerDay"))
+        assertEquals(60, stores.settings.value.softMinPerDay)
+    }
+
+    @Test
     fun `a review's change is put back as a change of yours, and its tidy undone, while each is as the review left it`() = runBlocking {
         stores.settings.update { it.copy(softMinPerDay = 90) }
         val change = ReviewInput.Change("softMinPerDay", 90, "made up")
         val review = WeeklyReview(clock.now(), listOf("A made-up note."), by = "rules", changes = listOf(change), settingsBefore = mapOf("softMinPerDay" to 60))
-        assertEquals("${ReviewInput.label("softMinPerDay")} is back to ${ReviewInput.valueText("softMinPerDay", 60)}.", learning.undoReviewChange(review, change))
+        val unknown = review.copy(at = review.at + 1, settingsBefore = emptyMap())
+        stores.log.update { it.copy(reviews = listOf(review, unknown)) }
+        assertEquals("${ReviewInput.label("softMinPerDay")} is back to ${ReviewInput.valueText("softMinPerDay", 60)}.", learning.undoReviewChange(review.at, "softMinPerDay"))
         assertEquals(60, stores.settings.value.softMinPerDay)
-        assertEquals("It's been changed since: left as it is.", learning.undoReviewChange(review, change))
-        assertEquals("What it was before isn't known.", learning.undoReviewChange(review.copy(settingsBefore = emptyMap()), change))
+        assertEquals("It's been changed since: left as it is.", learning.undoReviewChange(review.at, "softMinPerDay"))
+        assertEquals("What it was before isn't known.", learning.undoReviewChange(unknown.at, "softMinPerDay"))
+        assertEquals("That review didn't change it.", learning.undoReviewChange(review.at, "maxMinPerDay"))
+        assertEquals("That review has gone.", learning.undoReviewChange(5L, "softMinPerDay"))
         // The tidy: put back while what's remembered is as it left it.
         val before = listOf(Fact("school", "Takes the bus", 1L), Fact("school", "Takes the bus at 8", 2L))
         val after = listOf(Fact("school", "Takes the bus at 8", 3L))
         stores.memory.update { it.copy(facts = after) }
-        val tidied = review.copy(memoryTidy = MemoryTidyRecord(before, after))
-        assertEquals("What's remembered is back as it was before the tidy.", learning.undoTidy(tidied))
+        val tidied = review.copy(at = review.at + 2, memoryTidy = MemoryTidyRecord(before, after))
+        stores.log.update { it.copy(reviews = it.reviews + tidied) }
+        assertEquals("What's remembered is back as it was before the tidy.", learning.undoTidy(tidied.at))
         assertEquals(before, stores.memory.value.facts)
-        assertEquals("What's remembered has changed since: left as it is.", learning.undoTidy(tidied))
-        assertEquals("That review tidied nothing.", learning.undoTidy(review))
+        assertEquals("What's remembered has changed since: left as it is.", learning.undoTidy(tidied.at))
+        assertEquals("That review tidied nothing.", learning.undoTidy(review.at))
+    }
+
+    @Test
+    fun `a check-in's moment can't reach past now and trim what the log keeps`() = runBlocking {
+        val kept = done("a", 30, 45, "2026-10-14T18:00")
+        stores.log.update { it.copy(completions = listOf(kept)) }
+        assertTrue(learning.recordCheckIn(CheckIn(week, clock.now(), 4, "", "", "", ""), clock.now() + 3_650L * 86_400_000L))
+        assertEquals(listOf(kept), stores.log.value.completions)
     }
 
     @Test

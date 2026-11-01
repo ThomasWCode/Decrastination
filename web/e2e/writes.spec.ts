@@ -374,10 +374,12 @@ test("Done on the last piece keeps what it came to, and its Undo, though the pie
     const json = await response.json();
     await route.fulfill({ response, json: gone ? { ...json, next: null } : json });
   });
+  await page.route("**/api/tasks/**", async (route) => {
+    gone = true;
+    await route.continue();
+  });
   await page.goto("/day");
   const done = page.getByRole("group", { name: "Do" }).getByRole("button", { name: "Done", exact: true });
-  await expect(done).toBeVisible();
-  gone = true;
   await done.click();
   await expect(page.getByText("Nothing to do")).toBeVisible();
   const said = page.getByRole("status").filter({ hasText: "Done" });
@@ -427,6 +429,73 @@ test("how the Day looks with something to press, to be seen", async ({ page }) =
   await page.getByRole("region", { name: "Timer" }).waitFor();
   await page.screenshot({ path: `${folder}/day-timer.png` });
   await page.getByRole("region", { name: "Timer" }).getByRole("button", { name: "Stop" }).click();
+});
+
+test("a check-in that isn't kept says why, with what's typed still there", async ({ page }) => {
+  await page.route("**/api/week/check-in", (route) => route.fulfill({ json: { done: false, said: "A made-up reason" } }));
+  await page.goto("/week");
+  const form = page.getByRole("form", { name: "This week's check-in" });
+  await form.getByRole("group", { name: "How did the week feel?" }).getByRole("button", { name: "2" }).click();
+  await form.getByLabel("What got in the way?").fill("Made-up things");
+  await form.getByRole("button", { name: "Save, and review the week" }).click();
+  await expect(form.getByRole("status")).toHaveText("A made-up reason");
+  await expect(form.getByLabel("What got in the way?")).toHaveValue("Made-up things");
+  await expect(form.getByRole("button", { name: "Save, and review the week" })).toBeEnabled();
+});
+
+test("what can't be forgotten says so", async ({ page }) => {
+  await page.route("**/api/commands", (route) => route.fulfill({ json: [{ id: "made-up", state: "dropped", why: "A made-up reason", revision: 1 }] }));
+  await page.goto("/stats");
+  await page.getByRole("button", { name: "Forget" }).first().click();
+  await page.getByRole("alertdialog", { name: "Forget this?" }).getByRole("button", { name: "Forget" }).click();
+  await expect(page.getByRole("status")).toHaveText("A made-up reason");
+});
+
+// Before the check-in: its review learns afresh, which can take a class's figure with it.
+test("what's learned can be forgotten, asking first", async ({ page }) => {
+  await page.goto("/stats");
+  const forget = page.getByRole("button", { name: "Forget" }).first();
+  await expect(forget).toBeVisible();
+  const before = await page.getByRole("button", { name: "Forget" }).count();
+  await forget.click();
+  const asking = page.getByRole("alertdialog", { name: "Forget this?" });
+  await asking.getByRole("button", { name: "Keep" }).click();
+  await expect(asking).toBeHidden();
+  await expect(page.getByRole("button", { name: "Forget" })).toHaveCount(before);
+  await forget.click();
+  await asking.getByRole("button", { name: "Forget" }).click();
+  await expect(page.getByRole("button", { name: "Forget" })).toHaveCount(before - 1);
+});
+
+test("the week's check-in is kept, and says so", async ({ page }) => {
+  await page.goto("/week");
+  const form = page.getByRole("form", { name: "This week's check-in" });
+  await expect(form.getByRole("button", { name: "Save, and review the week" })).toBeDisabled();
+  await form.getByRole("group", { name: "How did the week feel?" }).getByRole("button", { name: "4" }).click();
+  await form.getByLabel("What got in the way?").fill("Made-up things");
+  const sent = page.waitForRequest("**/api/week/check-in");
+  await form.getByRole("button", { name: "Save, and review the week" }).click();
+  expect((await sent).postDataJSON()).toMatchObject({ feel: 4, inTheWay: "Made-up things" });
+  await expect(page.getByText("This week's check-in is done.")).toBeVisible();
+  await expect(form).toBeHidden();
+});
+
+test("a review's change can be undone, once for a double click, saying what came of it", async ({ page }) => {
+  let sent = 0;
+  page.on("request", (request) => {
+    if (request.method() === "POST" && request.url().endsWith("/api/commands")) sent += 1;
+  });
+  await page.goto("/reviews");
+  await page.getByRole("button", { name: "Undo" }).first().dblclick();
+  await expect(page.getByRole("status")).toContainText(/back to|waits/);
+  expect(sent).toBe(1);
+});
+
+test("the record comes down as a file", async ({ page }) => {
+  await page.goto("/stats");
+  const download = page.waitForEvent("download");
+  await page.getByRole("link", { name: "Export the record as CSV" }).click();
+  expect((await download).suggestedFilename()).toBe("decrastination-record.zip");
 });
 
 test("a note is kept on a task, and deleted", async ({ page }) => {

@@ -5,6 +5,7 @@ import com.thomaswcode.decrastination.sync.DeviceClaim
 import com.thomaswcode.decrastination.sync.Protocol
 import com.thomaswcode.decrastination.sync.SeedBatch
 import com.thomaswcode.decrastination.sync.protocol.CommandBatch
+import com.thomaswcode.decrastination.views.CheckInAsk
 import com.thomaswcode.decrastination.views.DayDrop
 import com.thomaswcode.decrastination.views.TaskAsk
 import io.ktor.http.ContentType
@@ -29,7 +30,9 @@ import io.ktor.server.request.contentLength
 import io.ktor.server.request.header
 import io.ktor.server.request.httpMethod
 import io.ktor.server.request.receive
+import io.ktor.server.response.header
 import io.ktor.server.response.respond
+import io.ktor.server.response.respondBytes
 import io.ktor.server.response.respondRedirect
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
@@ -313,6 +316,21 @@ private fun Route.signedInRoutes(web: Web) {
         call.respond(graph.chat(call.request.queryParameters["earlier"]?.toIntOrNull() ?: 0, call.request.queryParameters["reach"]))
     }
     get("/views/notices") { call.respond(graph.notices()) }
+    get("/views/stats") { call.respond(graph.stats(call.request.queryParameters["period"])) }
+    get("/views/week") { call.respond(graph.week()) }
+    get("/views/reviews") { call.respond(graph.reviews()) }
+    post("/week/check-in") {
+        if (call.client !is Client.Website) return@post call.respond(HttpStatusCode.Forbidden, Problem("The website's form"))
+        if (graph.mode != ServerGraph.COMMANDS) return@post call.respond(HttpStatusCode.Conflict, Problem("The server is mirroring the phone"))
+        call.respond(graph.checkIn(call.receive<CheckInAsk>()))
+    }
+    get("/record.zip") {
+        if (call.client !is Client.Website) return@get call.respond(HttpStatusCode.Forbidden, Problem("The website's download"))
+        // Never kept by a cache on the way: it's the whole record.
+        call.response.header(HttpHeaders.CacheControl, "no-store")
+        call.response.header(HttpHeaders.ContentDisposition, "attachment; filename=\"decrastination-record.zip\"")
+        call.respondBytes(graph.record(), ContentType.Application.Zip)
+    }
     post("/photos/tasks") {
         if (call.client !is Client.Website) return@post call.respond(HttpStatusCode.Forbidden, Problem("A photo's read from the website"))
         if (graph.mode != ServerGraph.COMMANDS) return@post call.respond(HttpStatusCode.Conflict, Problem("The server is mirroring the phone"))
