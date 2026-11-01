@@ -78,10 +78,13 @@ class PushesTest {
         dir.deleteRecursively()
     }
 
+    /** As a browser gives them: 65 bytes and 16, as URL-safe base64. */
+    private val P256DH = "A".repeat(87)
+    private val AUTH = "A".repeat(22)
     private val laptop = "https://fcm.googleapis.com/fcm/send/laptop"
     private val other = "https://updates.push.services.mozilla.com/wpush/v2/other"
 
-    private fun asks(endpoint: String, vararg channels: String) = assertTrue(graph.pushes.keep(PushSubscription(endpoint, "made-up", "made-up", channels.toSet())))
+    private fun asks(endpoint: String, vararg channels: String) = assertTrue(graph.pushes.keep(PushSubscription(endpoint, P256DH, AUTH, channels.toSet())))
 
     private fun message(payload: String) = Json.decodeFromString<PushMessage>(payload)
 
@@ -101,8 +104,17 @@ class PushesTest {
         )) {
             assertFalse(Pushes.fit(address), address)
         }
-        assertFalse(graph.pushes.keep(PushSubscription("https://push.example.com/a", "made-up", "made-up", setOf(Pushes.FELIX))))
+        assertFalse(graph.pushes.keep(PushSubscription("https://push.example.com/a", P256DH, AUTH, setOf(Pushes.FELIX))))
         assertEquals(emptySet(), graph.pushes.channels("https://push.example.com/a"))
+    }
+
+    @Test
+    fun `keys that couldn't be sealed for aren't kept, as every send would fail and it'd never be let go of`() {
+        for ((p256dh, auth) in listOf("" to AUTH, P256DH to "", "A".repeat(80) to AUTH, P256DH to "A".repeat(20), "not base64!" to AUTH, P256DH to "not base64!")) {
+            assertFalse(graph.pushes.keep(PushSubscription(laptop, p256dh, auth, setOf(Pushes.FELIX))), "$p256dh $auth")
+        }
+        assertEquals(emptySet(), graph.pushes.channels(laptop))
+        assertTrue(graph.pushes.keep(PushSubscription(laptop, P256DH, AUTH, setOf(Pushes.FELIX))))
     }
 
     @Test
@@ -185,6 +197,14 @@ class PushesTest {
         graph.owners.ports.show(notice(alert = false, Outbox.Notice.Line("m", "A made-up word", 1L, yours = false)))
         delay(100)
         assertTrue(service.taken.isEmpty())
+    }
+
+    @Test
+    fun `a message he splits goes whole, and only that one`() = runBlocking<Unit> {
+        asks(laptop, Pushes.FELIX)
+        graph.owners.ports.show(notice(alert = true, Outbox.Notice.Line("older", "An older word", 1L, yours = false), Outbox.Notice.Line("m#0", "His first text", 2L, yours = false), Outbox.Notice.Line("m", "His last", 2L, yours = false)))
+        waitFor(1)
+        assertEquals("His first text\nHis last", message(service.taken.single().second).body)
     }
 
     @Test

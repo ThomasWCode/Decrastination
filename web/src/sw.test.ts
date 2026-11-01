@@ -4,7 +4,7 @@ import source from "../public/sw.js?raw";
 type Handler = (event: unknown) => void;
 
 /** The service worker run against a made-up browser: what it listens for, and what it was given to wait for. */
-function worker(windows: { focused?: boolean; navigate?: (url: string) => Promise<unknown> }[]) {
+function worker(windows: { focused?: boolean; focus?: () => Promise<unknown>; navigate?: (url: string) => Promise<unknown> }[]) {
   const handlers: Record<string, Handler> = {};
   const showNotification = vi.fn(() => Promise.resolve());
   const openWindow = vi.fn(() => Promise.resolve());
@@ -46,15 +46,28 @@ describe("the service worker", () => {
   });
 
   it("takes a tap to an open page", async () => {
-    const focus = vi.fn(() => Promise.resolve());
-    const navigate = vi.fn(() => Promise.resolve({ focus }));
-    const { run, openWindow } = worker([{ navigate }]);
+    const said: string[] = [];
+    const focus = vi.fn(() => {
+      said.push("focus");
+      return Promise.resolve();
+    });
+    const navigate = vi.fn(() => {
+      said.push("navigate");
+      return Promise.resolve();
+    });
+    const { run, openWindow } = worker([{ focus, navigate }]);
     const close = vi.fn();
     await run("notificationclick", { notification: { close, data: { url: "/day" } } });
     expect(close).toHaveBeenCalled();
     expect(navigate).toHaveBeenCalledWith("/day");
-    expect(focus).toHaveBeenCalled();
+    expect(said).toEqual(["focus", "navigate"]);
     expect(openWindow).not.toHaveBeenCalled();
+  });
+
+  it("opens a page where the one it found can't be sent there", async () => {
+    const { run, openWindow } = worker([{ focus: () => Promise.resolve(), navigate: () => Promise.reject(new Error("made up")) }]);
+    await run("notificationclick", { notification: { close: vi.fn(), data: { url: "/day" } } });
+    expect(openWindow).toHaveBeenCalledWith("/day");
   });
 
   it("opens the site with none open", async () => {

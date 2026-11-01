@@ -538,7 +538,7 @@ class ApiTest {
         suspend fun asks(endpoint: String, signed: HttpRequestBuilder.() -> Unit) = plain().post("/api/push/subscription") {
             signed()
             contentType(ContentType.Application.Json)
-            setBody("""{"endpoint":"$endpoint","p256dh":"made-up","auth":"made-up","channels":["felix"]}""")
+            setBody("""{"endpoint":"$endpoint","p256dh":"${"A".repeat(87)}","auth":"${"A".repeat(22)}","channels":["felix"]}""")
         }
         suspend fun one(path: String, signed: HttpRequestBuilder.() -> Unit) = plain().post(path) {
             signed()
@@ -565,7 +565,7 @@ class ApiTest {
             header(HttpHeaders.Cookie, cookie)
             header("X-Requested-With", "test")
             contentType(ContentType.Application.Json)
-            setBody("""{"endpoint":"$endpoint","p256dh":"made-up","auth":"made-up","channels":["felix"]}""")
+            setBody("""{"endpoint":"$endpoint","p256dh":"${"A".repeat(87)}","auth":"${"A".repeat(22)}","channels":["felix"]}""")
         }
         assertEquals(HttpStatusCode.Conflict, asks("https://fcm.googleapis.com/a").status)
         keyed.commandsForATest()

@@ -629,21 +629,22 @@ test("a sign-in is held, and what it is isn't shown", async ({ page }) => {
 /** A browser that can be asked, with no push service behind it: Chromium's own needs one to be reached. */
 async function pushable(page: Page, answer: NotificationPermission = "granted") {
   await page.addInitScript((given) => {
-    const subscription = {
+    const subscription = (key: ArrayBuffer) => ({
       endpoint: "https://fcm.googleapis.com/fcm/send/made-up",
-      toJSON: () => ({ keys: { p256dh: "made-up", auth: "made-up" } }),
+      options: { applicationServerKey: key },
+      toJSON: () => ({ keys: { p256dh: "A".repeat(87), auth: "A".repeat(22) } }),
       unsubscribe: () => {
         held = null;
         return Promise.resolve(true);
       },
-    };
-    let held: typeof subscription | null = null;
+    });
+    let held: ReturnType<typeof subscription> | null = null;
     const registered = {
       pushManager: {
         getSubscription: () => Promise.resolve(held),
-        subscribe: () => {
-          held = subscription;
-          return Promise.resolve(subscription);
+        subscribe: ({ applicationServerKey }: { applicationServerKey: Uint8Array<ArrayBuffer> }) => {
+          held = subscription(applicationServerKey.buffer);
+          return Promise.resolve(held);
         },
       },
     };
@@ -660,15 +661,20 @@ test("a browser asks to be told, and stops", async ({ page }) => {
   const here = page.getByRole("region", { name: "This browser" });
   const felix = here.getByRole("checkbox", { name: "Felix's messages" });
   await expect(felix).not.toBeChecked();
+  let forgotten = 0;
+  page.on("request", (request) => {
+    if (request.url().endsWith("/api/push/forget")) forgotten += 1;
+  });
   const asked = page.waitForRequest("**/api/push/subscription");
   await felix.click();
-  expect((await asked).postDataJSON()).toEqual({ endpoint: "https://fcm.googleapis.com/fcm/send/made-up", p256dh: "made-up", auth: "made-up", channels: ["felix"] });
+  expect((await asked).postDataJSON()).toEqual({ endpoint: "https://fcm.googleapis.com/fcm/send/made-up", p256dh: "A".repeat(87), auth: "A".repeat(22), channels: ["felix"] });
   await expect(felix).toBeChecked();
   const again = page.waitForRequest("**/api/push/subscription");
   await here.getByRole("checkbox", { name: "When a timer ends" }).click();
   expect((await again).postDataJSON()).toMatchObject({ channels: ["felix", "timer"] });
   await here.getByRole("checkbox", { name: "When a timer ends" }).click();
   await expect(here.getByRole("checkbox", { name: "When a timer ends" })).not.toBeChecked();
+  expect(forgotten).toBe(0);
   const stopped = page.waitForRequest("**/api/push/forget");
   await felix.click();
   expect((await stopped).postDataJSON()).toEqual({ endpoint: "https://fcm.googleapis.com/fcm/send/made-up" });
@@ -743,10 +749,29 @@ test("a browser that won't show notifications says so, with nothing chosen", asy
   await expect(here.getByRole("checkbox", { name: "Felix's messages" })).not.toBeChecked();
 });
 
+test("a browser asked under the box's old keys asks again under its new ones", async ({ page }) => {
+  await pushable(page);
+  await page.addInitScript(() => {
+    void navigator.serviceWorker.ready.then((registered) => registered.pushManager.subscribe({ applicationServerKey: new Uint8Array(65) }));
+  });
+  await page.route("**/api/push/channels", (route) => route.fulfill({ json: { channels: [] } }));
+  await settingsPage(page, /^Notifications/);
+  const felix = page.getByRole("region", { name: "This browser" }).getByRole("checkbox", { name: "Felix's messages" });
+  const stopped = page.waitForRequest("**/api/push/forget");
+  await felix.click();
+  await stopped;
+  await expect(felix).toBeChecked();
+  const key = await page.evaluate(async () => {
+    const held = await (await navigator.serviceWorker.ready).pushManager.getSubscription();
+    return new Uint8Array(held?.options.applicationServerKey ?? new ArrayBuffer(0)).some((byte) => byte !== 0);
+  });
+  expect(key).toBe(true);
+});
+
 test("what a browser asked for that can't be read isn't taken for nothing", async ({ page }) => {
   await pushable(page);
   await page.addInitScript(() => {
-    void navigator.serviceWorker.ready.then((registered) => registered.pushManager.subscribe());
+    void navigator.serviceWorker.ready.then((registered) => registered.pushManager.subscribe({ applicationServerKey: new Uint8Array(65) }));
   });
   await page.route("**/api/push/channels", (route) => route.abort());
   await settingsPage(page, /^Notifications/);
@@ -763,7 +788,7 @@ test("what a browser asked for is shown when it comes back", async ({ page }) =>
   await pushable(page);
   await page.route("**/api/push/channels", (route) => route.fulfill({ json: { channels: ["slots"] } }));
   await page.addInitScript(() => {
-    void navigator.serviceWorker.ready.then((registered) => registered.pushManager.subscribe());
+    void navigator.serviceWorker.ready.then((registered) => registered.pushManager.subscribe({ applicationServerKey: new Uint8Array(65) }));
   });
   await settingsPage(page, /^Notifications/);
   await expect(page.getByRole("region", { name: "This browser" }).getByRole("checkbox", { name: "When a slot starts" })).toBeChecked();

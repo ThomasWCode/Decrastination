@@ -17,7 +17,12 @@ self.addEventListener("notificationclick", (event) => {
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((windows) => {
       const page = windows[0];
-      return page ? page.navigate(url).then((there) => there?.focus()) : self.clients.openWindow(url);
+      if (!page) return self.clients.openWindow(url);
+      // Focus first, while the tap still counts for it. A page this worker doesn't control can't be sent anywhere: a new one, then.
+      return page
+        .focus()
+        .then(() => page.navigate(url))
+        .catch(() => self.clients.openWindow(url));
     }),
   );
 });
