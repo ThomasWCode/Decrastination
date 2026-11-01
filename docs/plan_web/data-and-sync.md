@@ -16,7 +16,7 @@ SQLite, one file, `/opt/decrastination/data/decrastination.db`, in WAL mode (Lit
 | `pairing_codes` | `code_hash`, `expires_at` | the six-digit codes, five minutes each |
 | `credentials` | `name` PK, `ciphertext`, `updated_at` | one row, the sealed `secrets.bin`: Power Planner, Gmail and the TOTP secret, under `MASTER_KEY` |
 | `push_subscriptions` | stage 9 | Web Push endpoints |
-| `meta` | `key`, `value` | the global revision, the mode (`mirror` or `commands`), the phone's time zone, each job's last run |
+| `meta` | `key`, `value` | the global revision, the mode (`mirror` or `commands`), the phone's time zone, each job's last run, the last look for what's due to a browser |
 
 Why a table of JSON documents and not a table a type: the stores are already the app's unit of writing, versioning, migrating and backing up, with months of tests behind them. The server adds transactions and history to that unit rather than replacing it. The state is one to two megabytes in all; nothing here needs a relational shape.
 
