@@ -37,7 +37,7 @@ class CommandApplier(
     private suspend fun one(sent: Command, device: String): Outcome {
         val command = stamped(sent, device)
         var before = 0L
-        val outcome = db.commandOr({ failed -> dropped(command, device, failed) }) {
+        val outcome = db.commandOr(reload, { failed -> dropped(command, device, failed) }) {
             before = db.currentRevision()
             // Inside, not ahead of it: a retry racing its first send waits here, and finds what came of it.
             recorded(command.id)?.let { return@commandOr it }
@@ -47,7 +47,9 @@ class CommandApplier(
             record(command, device, made)
             made
         }
-        if (outcome.revision > before) committed(outcome.revision)
+        // What's committed, not what it's on record at: putting a failed one right can take a revision too.
+        val now = db.currentRevision()
+        if (now > before) committed(now)
         return outcome
     }
 
@@ -63,7 +65,6 @@ class CommandApplier(
     /** What it left in memory goes with the rollback, and it's on record as dropped, so a retry isn't tried again for ever. */
     private suspend fun dropped(command: Command, device: String, failed: Exception): Outcome {
         Log.w(Log.TAG, "A command failed: ${failed::class.simpleName} at ${failed.stackTrace.firstOrNull { it.className.startsWith("com.thomaswcode") }}")
-        reload()
         return Outcome(command.id, Outcome.DROPPED, "It couldn't be applied", db.currentRevision()).also { record(command, device, it) }
     }
 

@@ -8,6 +8,7 @@ import com.thomaswcode.decrastination.sync.protocol.ApplyChangeNow
 import com.thomaswcode.decrastination.sync.protocol.ChangeSettings
 import com.thomaswcode.decrastination.sync.protocol.Command
 import com.thomaswcode.decrastination.sync.protocol.CommandBatch
+import com.thomaswcode.decrastination.sync.protocol.Commands
 import com.thomaswcode.decrastination.sync.protocol.FinishOwnTask
 import com.thomaswcode.decrastination.sync.protocol.Outcome
 import com.thomaswcode.decrastination.sync.protocol.SaveOwnTask
@@ -21,6 +22,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -234,6 +236,29 @@ class CommandApplierTest {
         assertEquals(setOf("Essay", "Maths"), open())
         graph.stores.tasks.reload()
         assertEquals(setOf("Essay", "Maths"), open(), "and nothing of it reached the database")
+    }
+
+    @Test
+    fun `a revision taken in putting a failed command right is heard, as any other is`() = runBlocking {
+        send(Command("one", at, own("Essay")))
+        // Only the tasks can be written: finishing one writes them, and fails at the next store it reaches.
+        db.transaction { c ->
+            c.createStatement().use { it.execute("CREATE TRIGGER only_tasks BEFORE INSERT ON store_history WHEN NEW.name <> 'tasks.json' BEGIN SELECT RAISE(ABORT, 'no room'); END") }
+        }
+        val heard = mutableListOf<Long>()
+        var first = true
+        // A job's write as the stores are read again: held, as the command's still being put right, and made afresh.
+        val reload: suspend () -> Unit = {
+            if (first) {
+                first = false
+                CoroutineScope(Dispatchers.IO).async { graph.stores.tasks.update { state -> state.copy(tasks = state.tasks.map { it.copy(detail = "A job's") }) } }.await()
+            }
+        }
+        val applier = CommandApplier(db, graph.backend, Commands(graph.owners, graph.clock), graph.owners, graph.clock, reload) { heard += it }
+        val before = db.currentRevision()
+        assertEquals(Outcome.DROPPED, applier.apply(CommandBatch(listOf(Command("two", at, FinishOwnTask("own:s-Essay")))), "phone").single().state)
+        assertTrue(db.currentRevision() > before, "the job's write took one")
+        assertEquals(listOf(db.currentRevision()), heard)
     }
 
     @Test

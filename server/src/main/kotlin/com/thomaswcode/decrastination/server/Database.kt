@@ -38,7 +38,7 @@ class Database(path: String) : AutoCloseable {
     private val closed = lock.newCondition()
 
     /** A store's write from outside the open command, waiting for it to close. */
-    private class Held(val name: String, val write: () -> Unit) {
+    private class Held(val name: String, val write: () -> Unit, val remake: () -> Unit) {
         /** The command has written the store since: what it wrote takes this in, as a store changes in memory one change at a time. */
         var overtaken = false
     }
@@ -71,24 +71,37 @@ class Database(path: String) : AutoCloseable {
     suspend fun <T> command(block: suspend () -> T): T = commanding.withLock { attempt(block) }
 
     /**
-     * A [command] that [recover] answers for if it fails, a transaction of its own, with no other let in between the two: what
-     * the failed one left in memory has to be put right before another can build on it.
+     * A [command] that [recover] answers for if it fails, a transaction of its own, with no other let in between the two and no
+     * write let through: what the failed one left in memory has to go, by [reload], before anything can build on it. What was held
+     * back meanwhile was made from that memory, so it's made afresh on what's committed ([putRight]).
      */
-    suspend fun <T> commandOr(recover: suspend (Exception) -> T, block: suspend () -> T): T = commanding.withLock {
+    suspend fun <T> commandOr(reload: suspend () -> Unit, recover: suspend (Exception) -> T, block: suspend () -> T): T = commanding.withLock {
         try {
-            attempt(block)
+            attempt(block, recoverable = true)
         } catch (failed: Exception) {
-            attempt { recover(failed) }
+            attempt({ recover(failed).also { putRight(reload) } })
         }
     }
 
-    private suspend fun <T> attempt(block: suspend () -> T): T {
+    /**
+     * Each write held back made again on what's committed, in its order, then the stores read from the result, and again for any
+     * that came while they were: each is in the database once, and nothing of the failed command is in memory or in a write.
+     */
+    private suspend fun putRight(reload: suspend () -> Unit) {
+        do {
+            while (true) (lock.withLock { held.removeFirstOrNull() } ?: break).remake()
+            reload()
+        } while (lock.withLock { held.isNotEmpty() })
+    }
+
+    private suspend fun <T> attempt(block: suspend () -> T, recoverable: Boolean = false): T {
         lock.withLock {
             connection.autoCommit = false
             depth = 1
             commandOpen = true
         }
         var committed = false
+        var recovering = false
         try {
             val result = withContext(inCommand.asContextElement(true)) { block() }
             lock.withLock { connection.commit() }
@@ -96,15 +109,19 @@ class Database(path: String) : AutoCloseable {
             return result
         } catch (failed: Throwable) {
             lock.withLock { connection.rollback() }
+            recovering = recoverable && failed is Exception
             throw failed
         } finally {
             lock.withLock {
                 taken = null
-                depth = 0
-                commandOpen = false
-                connection.autoCommit = true
-                letThrough(committed)
-                closed.signalAll()
+                // Left open where it's to be put right: nothing goes in on what it's left in memory.
+                if (!recovering) {
+                    depth = 0
+                    commandOpen = false
+                    connection.autoCommit = true
+                    letThrough(committed)
+                    closed.signalAll()
+                }
             }
         }
     }
@@ -112,16 +129,16 @@ class Database(path: String) : AutoCloseable {
     /**
      * Store [name]'s write: now, or, while a command's open that this isn't part of, as that closes. It doesn't wait, as whoever
      * writes a store holds the store's lock and perhaps an owner's, which the command may be waiting for; and it doesn't join the
-     * command, or a rollback would take it too.
+     * command, or a rollback would take it too. [remake] is the same change made afresh, for a command that fails ([commandOr]).
      */
-    fun writing(name: String, write: () -> Unit) = lock.withLock {
+    fun writing(name: String, remake: (() -> Unit)? = null, write: () -> Unit) = lock.withLock {
         when {
             !commandOpen -> write()
             inACommand -> {
                 held.forEach { if (it.name == name) it.overtaken = true }
                 write()
             }
-            else -> held.addLast(Held(name, write))
+            else -> held.addLast(Held(name, write, remake ?: write))
         }
     }
 

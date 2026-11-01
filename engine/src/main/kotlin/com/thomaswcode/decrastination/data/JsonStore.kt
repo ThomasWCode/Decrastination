@@ -131,12 +131,24 @@ class JsonStore<T>(
         val next = onWrite(transform(_state.value))
         if (next != _state.value) {
             withContext(NonCancellable + Dispatchers.IO) {
-                write(next)
+                backend.write(name, version, json.encodeToString(serializer, next)) { base -> remade(base, transform) }
                 _state.value = next
                 unsaved = false
             }
         }
         next
+    }
+
+    /** What [transform] makes of [base], this store's text, as a write's made afresh on what's there. Null where that can't be read: what reads it says so. */
+    private fun remade(base: String?, transform: (T) -> T): String? {
+        val state = if (base == null) default() else parsed(base) ?: return null
+        return json.encodeToString(serializer, onWrite(transform(state)))
+    }
+
+    private fun parsed(text: String): T? {
+        val tree = runCatching { json.parseToJsonElement(text) as? JsonObject }.getOrNull() ?: return null
+        val upgraded = runCatching { Migration.upgrade(tree, version, migrations) }.getOrNull() ?: return null
+        return runCatching { json.decodeFromJsonElement(serializer, upgraded) }.getOrNull()?.let(onLoad)
     }
 
     /**
