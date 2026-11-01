@@ -74,6 +74,11 @@ class Replica(
         archiveSent = NOT_SENT
     }
 
+    /** What the server didn't apply, read and put away. */
+    suspend fun clearDropped() {
+        sync.update { it.copy(dropped = emptyList()) }
+    }
+
     /** The server's address, for a test on a PC. */
     suspend fun server(url: String) {
         sync.update { it.copy(server = url.trimEnd('/')) }
@@ -122,7 +127,7 @@ class Replica(
      */
     private suspend fun exchange(): Boolean {
         val token = stores.secrets[Secret.DeviceToken] ?: return false
-        val headers = mapOf("Content-Type" to "application/json", "Authorization" to "Bearer $token", Protocol.HEADER to Protocol.VERSION.toString())
+        val headers = mapOf("Content-Type" to "application/json", "Authorization" to "Bearer $token", Protocol.HEADER to Protocol.VERSION.toString(), Protocol.ZONE_HEADER to clock.zone().id)
         val server = sync.value.server
         val waiting = stores.outbox.value.commands
         // A stopped process may have left a command half made, or not made at all. What the server makes of it comes in the pull,
@@ -143,9 +148,9 @@ class Replica(
                 val heard = outcomes.map { it.id }.toSet()
                 stores.outbox.update { state -> state.copy(commands = state.commands.filterNot { it.id in heard }) }
             }
-            val answer = http.get("$server/api/state?since=${sync.value.revision}", headers)
-            if (!answer.ok) return failed(problem(answer.code))
-            val pulled = JSON.decodeFromString(PulledState.serializer(), answer.body)
+            var pulled = pull(server, headers, sync.value.revision) ?: return false
+            // A server behind what this phone last took has been restored: nothing above that would come, so all of it's asked for.
+            if (pulled.revision < sync.value.revision) pulled = pull(server, headers, 0) ?: return false
             val here = stores.mirrored.associateBy { it.name }
             val taken = pulled.stores.filter { it.name in here || ChatArchiveStore.isMonth(it.name) }
             val newer = taken.filter { (here[it.name]?.version ?: stores.chatArchive.version) < it.version }.map { it.name }
@@ -167,6 +172,16 @@ class Replica(
             Log.w(Log.TAG, "Keeping in step with the server failed: ${failed::class.simpleName}")
             return failed("The server can't be reached")
         }
+    }
+
+    /** Every store changed on the server since [revision], or null, said, if it wouldn't answer. */
+    private suspend fun pull(server: String, headers: Map<String, String>, revision: Long): PulledState? {
+        val answer = http.get("$server/api/state?since=$revision", headers)
+        if (!answer.ok) {
+            failed(problem(answer.code))
+            return null
+        }
+        return JSON.decodeFromString(PulledState.serializer(), answer.body)
     }
 
     private suspend fun failed(why: String): Boolean {
