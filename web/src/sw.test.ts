@@ -39,10 +39,10 @@ describe("the service worker", () => {
     expect(showNotification).toHaveBeenCalledWith("Felix", { body: "A made-up word", tag: "felix", data: { url: "/" } });
   });
 
-  it("leaves it to a page you're looking at", async () => {
-    const { run, showNotification } = worker([{ focused: false }, { focused: true }]);
+  it("shows it with a page in front too, as a browser can stop sending to a site whose pushes show nothing", async () => {
+    const { run, showNotification } = worker([{ focused: true }]);
     await run("push", pushed);
-    expect(showNotification).not.toHaveBeenCalled();
+    expect(showNotification).toHaveBeenCalled();
   });
 
   it("takes a tap to an open page", async () => {

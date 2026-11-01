@@ -2,10 +2,13 @@ package com.thomaswcode.decrastination.server
 
 import com.interaso.webpush.VapidKeys
 import com.interaso.webpush.WebPush
-import com.interaso.webpush.WebPushService
 import com.thomaswcode.decrastination.ports.Log
 import com.thomaswcode.decrastination.views.PushView
 import java.net.URI
+import java.net.http.HttpClient
+import java.net.http.HttpRequest
+import java.net.http.HttpResponse
+import java.time.Duration
 import java.util.Base64
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -111,6 +114,9 @@ class Pushes(private val db: Database, private val scope: CoroutineScope, privat
         /** What a push service's address runs to at most. */
         private const val MAX_ENDPOINT = 1024
 
+        /** The browsers' push services: Chrome's and what's built on it, Firefox's, Safari's and Edge's. */
+        private val SERVICES = listOf("fcm.googleapis.com", "push.services.mozilla.com", "web.push.apple.com", "notify.windows.com")
+
         /** How much of his words a browser's sent: it shows no more. */
         private const val MAX_WORDS = 300
 
@@ -123,27 +129,37 @@ class Pushes(private val db: Database, private val scope: CoroutineScope, privat
         }
 
         /**
-         * Whether [endpoint] could be a push service's: https, and a name, as the server posts to whatever it's given, so never
-         * an address of its own or of what's beside it.
+         * Whether [endpoint] is one of [SERVICES]'. By name, not by what it looks like: the server posts to whatever it's given,
+         * and any other name can be made to point at what's beside it.
          */
         fun fit(endpoint: String): Boolean {
             if (endpoint.length > MAX_ENDPOINT) return false
             val uri = runCatching { URI(endpoint) }.getOrNull() ?: return false
             val host = uri.host ?: return false
-            return uri.scheme == "https" && '.' in host && host.any(Char::isLetter) && ':' !in host && !host.endsWith(".internal") && !host.endsWith(".local")
+            return uri.scheme == "https" && uri.port == -1 && uri.userInfo == null && SERVICES.any { host == it || host.endsWith(".$it") }
         }
     }
 }
 
-/** The real thing: the box's keys ([keys]) and the sender's name ([subject]), through its push service. */
-class WebPushSender(subject: String, private val keys: VapidKeys) : Pushes.Sender {
-    private val service = WebPushService(subject, keys)
+/**
+ * The real thing: the box's keys ([keys]) and the sender's name ([subject]), through its push service. On a client of its
+ * own, as the library's has no timeout, and one service that never answers would hold up every browser after it.
+ */
+class WebPushSender(subject: String, private val keys: VapidKeys, private val timeout: Duration = Duration.ofSeconds(30)) : Pushes.Sender {
+    private val push = WebPush(subject, keys)
+    private val client = HttpClient.newBuilder().connectTimeout(timeout).build()
 
     /** The public key, as a browser's `applicationServerKey`. */
     val applicationKey: String get() = Base64.getUrlEncoder().withoutPadding().encodeToString(keys.applicationServerKey)
 
-    override fun send(subscription: PushSubscription, payload: String): Boolean =
-        service.send(payload, subscription.endpoint, subscription.p256dh, subscription.auth, TTL_SECONDS) != WebPush.SubscriptionState.EXPIRED
+    override fun send(subscription: PushSubscription, payload: String): Boolean {
+        val decoder = Base64.getUrlDecoder()
+        val body = push.getBody(payload.toByteArray(), decoder.decode(subscription.p256dh), decoder.decode(subscription.auth))
+        val request = HttpRequest.newBuilder(URI(subscription.endpoint)).timeout(timeout)
+        push.getHeaders(subscription.endpoint, TTL_SECONDS, null, null).forEach { (name, value) -> request.header(name, value) }
+        val answer = client.send(request.POST(HttpRequest.BodyPublishers.ofByteArray(body)).build(), HttpResponse.BodyHandlers.ofString())
+        return push.getSubscriptionState(answer.statusCode(), answer.body()) != WebPush.SubscriptionState.EXPIRED
+    }
 
     private companion object {
         /** A day: what's told after that is no use. */

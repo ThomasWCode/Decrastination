@@ -543,12 +543,12 @@ class ApiTest {
         suspend fun one(path: String, signed: HttpRequestBuilder.() -> Unit) = plain().post(path) {
             signed()
             contentType(ContentType.Application.Json)
-            setBody("""{"endpoint":"https://push.example.com/a"}""")
+            setBody("""{"endpoint":"https://fcm.googleapis.com/a"}""")
         }
-        assertEquals(HttpStatusCode.Conflict, asks("https://push.example.com/a", website).status)
+        assertEquals(HttpStatusCode.Conflict, asks("https://fcm.googleapis.com/a", website).status)
         graph.commandsForATest()
-        assertEquals(HttpStatusCode.Conflict, asks("https://push.example.com/a", website).status, "no keys on this box")
-        assertEquals(HttpStatusCode.Forbidden, asks("https://push.example.com/a", asPhone).status)
+        assertEquals(HttpStatusCode.Conflict, asks("https://fcm.googleapis.com/a", website).status, "no keys on this box")
+        assertEquals(HttpStatusCode.Forbidden, asks("https://fcm.googleapis.com/a", asPhone).status)
         assertEquals(HttpStatusCode.Forbidden, one("/api/push/channels", asPhone).status)
         assertEquals(HttpStatusCode.Forbidden, one("/api/push/forget", asPhone).status)
         assertEquals(HttpStatusCode.OK, one("/api/push/channels", website).status)
@@ -567,11 +567,11 @@ class ApiTest {
             contentType(ContentType.Application.Json)
             setBody("""{"endpoint":"$endpoint","p256dh":"made-up","auth":"made-up","channels":["felix"]}""")
         }
-        assertEquals(HttpStatusCode.Conflict, asks("https://push.example.com/a").status)
+        assertEquals(HttpStatusCode.Conflict, asks("https://fcm.googleapis.com/a").status)
         keyed.commandsForATest()
-        assertEquals(HttpStatusCode.BadRequest, asks("http://push.example.com/a").status)
-        assertEquals(HttpStatusCode.NoContent, asks("https://push.example.com/a").status)
-        assertEquals(setOf("felix"), keyed.pushes.channels("https://push.example.com/a"))
+        assertEquals(HttpStatusCode.BadRequest, asks("https://push.example.com/a").status)
+        assertEquals(HttpStatusCode.NoContent, asks("https://fcm.googleapis.com/a").status)
+        assertEquals(setOf("felix"), keyed.pushes.channels("https://fcm.googleapis.com/a"))
     }
 
     @Test

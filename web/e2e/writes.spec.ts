@@ -630,7 +630,7 @@ test("a sign-in is held, and what it is isn't shown", async ({ page }) => {
 async function pushable(page: Page, answer: NotificationPermission = "granted") {
   await page.addInitScript((given) => {
     const subscription = {
-      endpoint: "https://push.example.com/made-up",
+      endpoint: "https://fcm.googleapis.com/fcm/send/made-up",
       toJSON: () => ({ keys: { p256dh: "made-up", auth: "made-up" } }),
       unsubscribe: () => {
         held = null;
@@ -662,7 +662,7 @@ test("a browser asks to be told, and stops", async ({ page }) => {
   await expect(felix).not.toBeChecked();
   const asked = page.waitForRequest("**/api/push/subscription");
   await felix.click();
-  expect((await asked).postDataJSON()).toEqual({ endpoint: "https://push.example.com/made-up", p256dh: "made-up", auth: "made-up", channels: ["felix"] });
+  expect((await asked).postDataJSON()).toEqual({ endpoint: "https://fcm.googleapis.com/fcm/send/made-up", p256dh: "made-up", auth: "made-up", channels: ["felix"] });
   await expect(felix).toBeChecked();
   const again = page.waitForRequest("**/api/push/subscription");
   await here.getByRole("checkbox", { name: "When a timer ends" }).click();
@@ -671,7 +671,7 @@ test("a browser asks to be told, and stops", async ({ page }) => {
   await expect(here.getByRole("checkbox", { name: "When a timer ends" })).not.toBeChecked();
   const stopped = page.waitForRequest("**/api/push/forget");
   await felix.click();
-  expect((await stopped).postDataJSON()).toEqual({ endpoint: "https://push.example.com/made-up" });
+  expect((await stopped).postDataJSON()).toEqual({ endpoint: "https://fcm.googleapis.com/fcm/send/made-up" });
   await expect(felix).not.toBeChecked();
   const left = await page.evaluate(async () => (await navigator.serviceWorker.ready).pushManager.getSubscription());
   expect(left).toBeNull();
@@ -741,6 +741,22 @@ test("a browser that won't show notifications says so, with nothing chosen", asy
   await here.getByRole("checkbox", { name: "Felix's messages" }).click();
   await expect(here.getByRole("status")).toContainText("won't show notifications");
   await expect(here.getByRole("checkbox", { name: "Felix's messages" })).not.toBeChecked();
+});
+
+test("what a browser asked for that can't be read isn't taken for nothing", async ({ page }) => {
+  await pushable(page);
+  await page.addInitScript(() => {
+    void navigator.serviceWorker.ready.then((registered) => registered.pushManager.subscribe());
+  });
+  await page.route("**/api/push/channels", (route) => route.abort());
+  await settingsPage(page, /^Notifications/);
+  const here = page.getByRole("region", { name: "This browser" });
+  await expect(here.getByText("couldn't be read")).toBeVisible();
+  await expect(here.getByRole("checkbox")).toHaveCount(0);
+  await page.unroute("**/api/push/channels");
+  await page.route("**/api/push/channels", (route) => route.fulfill({ json: { channels: ["slots"] } }));
+  await here.getByRole("button", { name: "Try again" }).click();
+  await expect(here.getByRole("checkbox", { name: "When a slot starts" })).toBeChecked();
 });
 
 test("what a browser asked for is shown when it comes back", async ({ page }) => {

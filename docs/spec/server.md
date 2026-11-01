@@ -37,7 +37,7 @@ Everything is under `/api`, on the same origin as the website. Open: `GET /healt
 | `POST /backup/import` | the website | a backup taken in, all of it or none; a 409 in mirror mode, a 413 past 8 MB by what it says it is |
 | `POST /backup/copy` | the website | a reset's copy, by its name, taken in the same way; a 409 in mirror mode |
 | `POST /photos/tasks` | the website | a JPEG of homework read into tasks to check, one at a time; a 409 in mirror mode, or with another being read |
-| `POST /push/subscription` | the website | a browser asking to be told of what it names; a 409 in mirror mode or with no keys on the box, a 400 at an address that isn't a push service's |
+| `POST /push/subscription` | the website | a browser asking to be told of what it names; a 409 in mirror mode or with no keys on the box, a 400 at an address that isn't one of the browsers' push services |
 | `POST /push/channels`, `POST /push/forget` | the website | what a browser's asked for, and its stopping |
 | `GET /credentials`, `POST /credentials` | the website | which sign-ins are held, and setting them: never their values back |
 | `POST /parent-code` | a phone | the parent code's secret |
