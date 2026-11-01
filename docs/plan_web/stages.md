@@ -126,6 +126,8 @@ The estimates are hours of sessions, from the durations measured over the 4.x re
 
 ## Stage 5: Felix on the website
 
+**As built.** Dormant, as the rest is till the switch (W-25): in mirror mode the chat's there to read, with nothing to press. 5.5.0, the numbers having moved on by one. The chat's rules moved out of the phone's screen into `:engine` (`ChatRows`, `Replies.turn`, `Outbox.unreadOf`), so both use them. Four things went otherwise than planned below. The archive is read by count, as the phone reads it, through `GET /views/chat?earlier=&reach=`, not by month: a month gives no way to page or to find a quote's message. Your changes sit beside the chat, not on a tab, as a wide page has the room. What he did says itself in a line beside its fold, where it's always shown, not in a label that slides out for five seconds. A message's own button, to the week's review or to send a summary, comes with stage 7, with the pages it opens. Claude in the browser tests is a stand-in of their own (`web/e2e/claude-stand-in.mjs`), not `scripts/claude_stub.py`, whose answer is an empty object: the chat needs answers its parser takes, and cards.
+
 **Goal.** The chat as the website's home. Release 5.4.0.
 
 **Work.** Conversation, Looks and the reminders already run on the server (stage 3); this stage is the page: messages, cards with Undo, replies, chips, the archive on scroll-back (`/api/chat/archive/{month}`), ratings and the unsent texts' pick, the read-at command, the in-page notices (the tab's count, the bell, the unread marker, W-9). The phone's chat is unchanged.

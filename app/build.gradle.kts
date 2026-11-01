@@ -12,8 +12,8 @@ android {
         applicationId = "com.thomaswcode.decrastination"
         minSdk = 26
         targetSdk = 36
-        versionCode = 106
-        versionName = "5.4.0"
+        versionCode = 107
+        versionName = "5.5.0"
     }
 
     signingConfigs {

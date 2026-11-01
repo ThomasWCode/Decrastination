@@ -77,6 +77,8 @@ The server applies commands in the order they arrive, and the owners are the con
 | any other | never: its owner takes a stale call as it does today, doing nothing, or laying the day again | |
 | one its owner fails on | always | It couldn't be applied |
 
+A client that hears only the outcome is told what takes a command back, where only its owner's answer can say (`Action.undoing`, `Outcome.undo`): Mark answered's Undo needs the moment the server marked it, which the website has no other way to know.
+
 A command that ran and came to nothing is `refused`, by what its owner answered (`Action.refused`), not dropped: what it did stands, so a wrong parent code still counts towards the lock, and it isn't a change lost, so Setup doesn't list it, your screen having said what came of it. The pull after one is of everything all the same, as it may have gone otherwise on the phone:
 
 | Command | Said |

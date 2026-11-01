@@ -73,7 +73,9 @@ fun main() {
     val dataDir = File(System.getenv("DATA_DIR") ?: "/data").apply { mkdirs() }
     val db = Database(File(dataDir, "decrastination.db").path)
     val version = System.getenv("APP_VERSION") ?: "dev"
-    val graph = ServerGraph(db, dataDir, MasterKeyCipher(if (testing) Base64.getEncoder().encodeToString(ByteArray(32)) else env("MASTER_KEY")), version, claudeKey = System.getenv("ANTHROPIC_API_KEY")?.takeIf { it.isNotBlank() }, heartbeatUrl = System.getenv("HEARTBEAT_URL")?.takeIf { it.isNotBlank() }, nightly = nightlyFolder())
+    // Only a test's server has a stand-in for Claude: one on a box would send the owner's tasks to it.
+    val standIn = System.getenv("CLAUDE_STAND_IN")?.takeIf { testing }
+    val graph = ServerGraph(db, dataDir, MasterKeyCipher(if (testing) Base64.getEncoder().encodeToString(ByteArray(32)) else env("MASTER_KEY")), version, claudeKey = System.getenv("ANTHROPIC_API_KEY")?.takeIf { it.isNotBlank() }, claudeEndpoint = standIn, heartbeatUrl = System.getenv("HEARTBEAT_URL")?.takeIf { it.isNotBlank() }, nightly = nightlyFolder())
     val github: GitHub = if (testing) {
         object : GitHub {
             override fun authorizeUrl(state: String, challenge: String) = "/"

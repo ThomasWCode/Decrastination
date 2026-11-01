@@ -9,6 +9,9 @@ for (const scheme of ["light", "dark"] as const) {
   test(`how the pages look, ${scheme}`, async ({ page }) => {
     await page.emulateMedia({ colorScheme: scheme });
     await page.goto("/");
+    await page.getByTestId("message").first().waitFor();
+    await page.screenshot({ path: `${folder}/chat-${scheme}.png` });
+    await page.goto("/day");
     await page.getByTestId("grid").waitFor();
     await page.waitForTimeout(600);
     await page.screenshot({ path: `${folder}/day-${scheme}.png` });

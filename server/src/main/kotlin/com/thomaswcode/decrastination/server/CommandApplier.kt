@@ -50,7 +50,7 @@ class CommandApplier(
                 command.action.refused(answer)
             }
             val state = if (why == null) Outcome.APPLIED else if (stale != null) Outcome.DROPPED else Outcome.REFUSED
-            val made = Outcome(command.id, state, why, db.currentRevision(), undo.takeIf { why == null })
+            val made = Outcome(command.id, state, why, db.currentRevision(), undo)
             record(command, device, made)
             made
         }

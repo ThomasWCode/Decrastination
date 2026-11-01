@@ -1,6 +1,8 @@
-import { useEffect, useState, type MouseEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type MouseEvent, type ReactNode } from "react";
 import { api } from "./api";
+import { ChatPage } from "./Chat";
 import { DayPage } from "./Day";
+import { useLive } from "./live";
 import { PhonePage } from "./Phone";
 import { SettingsPageView } from "./Settings";
 import { WorkPage } from "./Work";
@@ -37,11 +39,38 @@ export function Link({ to, go, current, children }: { to: string; go: Go; curren
 }
 
 const PAGES = [
-  { path: "/", name: "Day" },
+  { path: "/", name: "Chat" },
+  { path: "/day", name: "Day" },
   { path: "/work", name: "Work" },
   { path: "/settings", name: "Settings" },
   { path: "/phone", name: "Phone" },
 ];
+
+/** What waits for you, wherever you are (W-9): his unread, by the bell and in the tab's title, but while you're [reading] them. */
+function Bell({ go, reading }: { go: Go; reading: boolean }) {
+  const load = useCallback(() => api.notices(), []);
+  const { value } = useLive(load);
+  const [hidden, setHidden] = useState(document.hidden);
+  useEffect(() => {
+    const moved = () => setHidden(document.hidden);
+    document.addEventListener("visibilitychange", moved);
+    return () => document.removeEventListener("visibilitychange", moved);
+  }, []);
+  const unread = reading && !hidden ? 0 : (value?.unread ?? 0);
+  useEffect(() => {
+    document.title = unread > 0 ? `(${unread}) Decrastination` : "Decrastination";
+  }, [unread]);
+  return (
+    <Link to="/" go={go}>
+      <span className="bell" role="img" aria-label={unread > 0 ? `${unread} unread` : "Nothing unread"}>
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 3a6 6 0 0 0-6 6v4l-2 3v1h16v-1l-2-3V9a6 6 0 0 0-6-6Zm-2 15a2 2 0 0 0 4 0" />
+        </svg>
+        {unread > 0 ? <span className="count">{unread}</span> : null}
+      </span>
+    </Link>
+  );
+}
 
 export function App() {
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
@@ -77,6 +106,7 @@ export function App() {
             </Link>
           ))}
         </nav>
+        <Bell go={go} reading={url.pathname === "/"} />
         <button className="quiet" onClick={signOut}>
           Sign out
         </button>
@@ -87,8 +117,10 @@ export function App() {
         <SettingsPageView />
       ) : url.pathname === "/phone" ? (
         <PhonePage />
-      ) : (
+      ) : url.pathname === "/day" ? (
         <DayPage date={url.searchParams.get("date")} go={go} />
+      ) : (
+        <ChatPage go={go} />
       )}
     </div>
   );

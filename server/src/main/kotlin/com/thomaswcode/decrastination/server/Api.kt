@@ -303,6 +303,10 @@ private fun Route.signedInRoutes(web: Web) {
         call.respond(graph.day(date))
     }
     get("/views/work") { call.respond(graph.work()) }
+    get("/views/chat") {
+        call.respond(graph.chat(call.request.queryParameters["earlier"]?.toIntOrNull() ?: 0, call.request.queryParameters["reach"]))
+    }
+    get("/views/notices") { call.respond(graph.notices()) }
     post("/photos/tasks") {
         if (call.client !is Client.Website) return@post call.respond(HttpStatusCode.Forbidden, Problem("A photo's read from the website"))
         if (graph.mode != ServerGraph.COMMANDS) return@post call.respond(HttpStatusCode.Conflict, Problem("The server is mirroring the phone"))

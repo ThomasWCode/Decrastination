@@ -91,7 +91,7 @@ data class SourceLine(val source: String, val read: String, val open: Int, val e
 object WorkViews {
     private val DAY = DateTimeFormatter.ofPattern("EEE d MMM", Locale.UK)
 
-    private val FORM = OwnTaskFormView(
+    internal val FORM = OwnTaskFormView(
         OwnTaskRules.KINDS.map { KindChoice(it.name, it.label, it == Kind.Event) },
         OwnTaskRules.MAX_TITLE, OwnTaskRules.MAX_CLASS, OwnTaskRules.MAX_NOTES, OwnTaskRules.MAX_STEPS, Kind.Homework.defaultEffortMin,
     )

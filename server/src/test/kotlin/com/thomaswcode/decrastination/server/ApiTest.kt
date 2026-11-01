@@ -1,6 +1,8 @@
 package com.thomaswcode.decrastination.server
 
 import com.thomaswcode.decrastination.Fixtures
+import com.thomaswcode.decrastination.core.ChatMessage
+import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.Secret
 import com.thomaswcode.decrastination.data.SecretCipher
@@ -43,6 +45,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.encodeToString
@@ -389,6 +392,31 @@ class ApiTest {
         assertEquals(HttpStatusCode.UnsupportedMediaType, upload("not a photo".toByteArray(), website).status)
         assertEquals(HttpStatusCode.PayloadTooLarge, upload(ByteArray(4 * 1024 * 1024 + 1), website).status)
         assertEquals(HttpStatusCode.OK, upload(jpeg, website).status, "it's read, with no key saying so")
+    }
+
+    @Test
+    fun `Try again asks again, at your word alone, and not while mirroring`() = server {
+        val cookie = signIn()
+        suspend fun again() = plain().post("/api/chat/try-again") {
+            header(HttpHeaders.Cookie, cookie)
+            header("X-Requested-With", "test")
+        }
+        assertEquals(HttpStatusCode.Conflict, again().status)
+        graph.commandsForATest()
+        // Answered with nothing usable, it waits for your word: with no key that's as far as the call gets, and it says so.
+        graph.stores.chat.update { it.copy(messages = listOf(ChatMessage("y", Speaker.You, "Well?", 1L, note = "Unreadable", stuck = true))) }
+        assertEquals(HttpStatusCode.NoContent, again().status)
+        withTimeout(5_000) { graph.stores.chat.state.first { chat -> !chat.messages.single().stuck } }
+    }
+
+    @Test
+    fun `the chat's views are a client's`() = server {
+        assertEquals(HttpStatusCode.Unauthorized, plain().get("/api/views/chat").status)
+        assertEquals(HttpStatusCode.Unauthorized, plain().get("/api/views/notices").status)
+        val cookie = signIn()
+        val chat = plain().get("/api/views/chat?earlier=not-a-number&reach=x") { header(HttpHeaders.Cookie, cookie) }
+        assertEquals(HttpStatusCode.OK, chat.status, "a page's asking is taken as far as it makes sense")
+        assertEquals(HttpStatusCode.OK, plain().get("/api/views/notices") { header(HttpHeaders.Cookie, cookie) }.status)
     }
 
     @Test
