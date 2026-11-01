@@ -2,6 +2,7 @@ package com.thomaswcode.decrastination.sync
 
 import java.security.MessageDigest
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
 
 /**
  * What the phone and the server say to each other (docs/plan_web/data-and-sync.md). Every request names [VERSION]
@@ -11,6 +12,9 @@ import kotlinx.serialization.Serializable
 object Protocol {
     const val VERSION = 1
     const val HEADER = "X-Protocol"
+
+    /** The phone's time zone, said with each exchange once it's sending commands, as a seed says it in its body. */
+    const val ZONE_HEADER = "X-Zone"
 
     /** A store's text as a hash, as both ends count it. */
     fun hash(text: String): String = MessageDigest.getInstance("SHA-256").digest(text.toByteArray()).joinToString("") { "%02x".format(it) }
@@ -37,6 +41,14 @@ data class SeedBatch(
  */
 @Serializable
 data class SeedAnswer(val revision: Long, val refused: List<String> = emptyList(), val server: String = "", val holds: Map<String, String> = emptyMap())
+
+/** A store as a pull brings it: its text as JSON. */
+@Serializable
+data class PulledStore(val name: String, val version: Int, val revision: Long, val json: JsonElement)
+
+/** Every store above the revision asked for, the revision they're as of, and the server's mode: a restore can take it back to mirroring. */
+@Serializable
+data class PulledState(val revision: Long, val stores: List<PulledStore>, val mode: String? = null)
 
 /** What a client can ask of the server with no sign-in: its version, the protocol and each store's version. */
 @Serializable

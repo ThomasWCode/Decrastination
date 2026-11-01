@@ -69,7 +69,7 @@ A route never writes a store. It turns the request into a command and hands it t
 
 ## The sync, in brief
 
-`data-and-sync.md` has it in full. A client changes the state by sending a **command** (an owner's operation with its arguments, given an id by the client). The server applies it through the owner, in one SQLite transaction, which bumps the global **revision** and writes a history row. Clients pull the stores changed since the revision they last saw. The phone also sends **observations**: facts only it can know (Teams rows, AnkiDroid counts, the calendar's busy time, slots and blocks recorded). The phone applies its own commands locally first, through the same owner code, so what it shows offline is what the server will show once the command lands; a pull replaces the replica with the server's copies and applies the commands still in the outbox again on top.
+`data-and-sync.md` has it in full. A client changes the state by sending a **command** (an owner's operation with its arguments, given an id by the client). The server applies it through the owner, in one SQLite transaction, which bumps the global **revision** and writes a history row. Clients pull the stores changed since the revision they last saw. The phone also sends **observations**: facts only it can know (Teams rows, AnkiDroid counts, the calendar's busy time, slots and blocks recorded). The phone applies its own commands locally first, through the same owner code, so what it shows offline is what the server will show once the command lands; a pull replaces the replica with the server's copies, and is taken only with the outbox empty.
 
 ## Offline on the phone
 

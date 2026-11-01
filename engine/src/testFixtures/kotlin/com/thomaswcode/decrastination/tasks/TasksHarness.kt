@@ -10,6 +10,7 @@ import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.data.SecretCipher
 import com.thomaswcode.decrastination.data.Stores
+import com.thomaswcode.decrastination.data.SyncState
 import com.thomaswcode.decrastination.enrich.KeyProblem
 import com.thomaswcode.decrastination.enrich.ModelGateway
 import com.thomaswcode.decrastination.enrich.Profile
@@ -110,14 +111,14 @@ class TasksHarness(start: String = "2026-10-19T16:00", private val claude: Boole
     }
     override val ownTasks = OwnTasks(stores.tasks, stores.instructions, stores.chat, owners, scope) { settled.incrementAndGet() }
 
+    override val tasks get() = stores.tasks
     override val conversation: Conversation get() = error("No conversation here")
     override val looks: Looks get() = error("No looks here")
     override val protection: Protection get() = error("No protection here")
     override val learning: Learning get() = error("No learning here")
 
     /** A screen's changes, as `AppGraph`'s: only the owners here have any. */
-    val commands = Commands(this, owners)
-
+    val commands = Commands(this, owners, stores.outbox, queuing = { stores.sync.value.mode == SyncState.COMMANDS }, unfinished = { stores.sync.update { it.copy(revision = 0) } })
 
     /** A source's task, made up: Teams homework due on [due], taking [minutes]. */
     fun teams(id: String, due: Long? = Fixtures.at("2026-10-23T09:00"), minutes: Int = 60) = TaskItem(

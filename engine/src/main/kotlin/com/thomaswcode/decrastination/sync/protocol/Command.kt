@@ -5,6 +5,9 @@ import com.thomaswcode.decrastination.core.Ids
 import com.thomaswcode.decrastination.core.Replay
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.WallClock
+import com.thomaswcode.decrastination.data.JsonStore
+import com.thomaswcode.decrastination.data.OutboxState
+import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.felix.Conversation
 import com.thomaswcode.decrastination.felix.Looks
 import com.thomaswcode.decrastination.learn.Learning
@@ -12,6 +15,7 @@ import com.thomaswcode.decrastination.protect.Protection
 import com.thomaswcode.decrastination.protect.SettingsChanges
 import com.thomaswcode.decrastination.tasks.Instructions
 import com.thomaswcode.decrastination.tasks.OwnTasks
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.asContextElement
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -26,6 +30,19 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class Command(val id: String, val at: Long, val action: Action)
 
+/** A client's commands, in the order it made them. */
+@Serializable
+data class CommandBatch(val commands: List<Command>)
+
+/** What came of a command: [state] one of [APPLIED], [DROPPED]; why, if it was dropped; and the revision it left the state at. */
+@Serializable
+data class Outcome(val id: String, val state: String, val why: String? = null, val revision: Long = 0) {
+    companion object {
+        const val APPLIED = "applied"
+        const val DROPPED = "dropped"
+    }
+}
+
 /**
  * What a screen asks of an owner, as data. Each is one owner's operation, its class beside its call ([run]), so the phone
  * and the server apply it through the same code. An action's arguments hold nothing of the device's.
@@ -33,6 +50,9 @@ data class Command(val id: String, val at: Long, val action: Action)
 @Serializable
 sealed interface Action {
     suspend fun run(owners: Owners): Any?
+
+    /** Why this can't be applied to the state as it now is, or null: what it's about has gone since it was made (docs/spec/sync.md §Stale commands). */
+    fun stale(owners: Owners): String? = null
 }
 
 /** An action's answer, typed, for the screen that asked it. */
@@ -42,6 +62,7 @@ interface Answers<out R> {
 
 /** The owners an action can reach: a graph's own. */
 interface Owners {
+    val tasks: JsonStore<TaskState>
     val ownTasks: OwnTasks
     val instructions: Instructions
     val focus: Focus
@@ -55,17 +76,49 @@ interface Owners {
  * Where a screen's change goes (D-140): each is made a [Command] and applied through its owner, inside a [Replay] of it.
  * No screen calls an owner's change itself (`ArchitectureTest`).
  */
-class Commands(private val owners: Owners, private val clock: WallClock) {
+class Commands(
+    private val owners: Owners,
+    private val clock: WallClock,
+    /** Where a command waits for the server's answer, once the two keep in step by commands. */
+    private val outbox: JsonStore<OutboxState>? = null,
+    private val queuing: () -> Boolean = { false },
+    /** A command here threw part-way: what it left may be in a store the server's run of it won't change, as a stopped process's may. */
+    private val unfinished: suspend () -> Unit = {},
+) {
+    /** Held while a command's recorded and applied, and while a pull replaces the stores: neither sees the other half-way. */
+    private val gate = Mutex()
+
     /** Held across a change to the settings: [changeSettings]. */
     private val changingSettings = Mutex()
 
     suspend fun <R, A> act(action: A): R where A : Action, A : Answers<R> {
         val command = Command(Ids.next(), clock.now(), action)
-        return replaying(command) { action.run(owners) }
+        if (outbox == null || !queuing()) return replaying(command) { action.run(owners) }
+        return gate.withLock {
+            // On the disk first, so it's sent whatever stops this process: the server's copy then brings what it made (`Replica`).
+            outbox.update { it.copy(commands = it.commands + command) }
+            try {
+                replaying(command) { action.run(owners) }
+            } catch (failed: Throwable) {
+                withContext(NonCancellable) { unfinished() }
+                throw failed
+            }
+        }
     }
 
     /** [command], made elsewhere, applied here as it was there. */
     suspend fun apply(command: Command): Any? = replaying(command) { command.action.run(owners) }
+
+    /**
+     * [replace] with no command let in, and only with none waiting; whether it ran. What's waiting is already in the stores, and
+     * a pull that doesn't touch a store it changed couldn't take it out, so applying it again on top would make it twice: it
+     * goes first, at the next upload, and the pull after it lands on an empty outbox.
+     */
+    suspend fun replacing(replace: suspend () -> Unit): Boolean = gate.withLock {
+        if (outbox?.value?.commands?.isNotEmpty() == true) return@withLock false
+        replace()
+        true
+    }
 
     /** [block] reading [command]'s moment, and drawing its ids from its own. */
     private suspend fun <T> replaying(command: Command, block: suspend () -> T): T =

@@ -1,6 +1,7 @@
 package com.thomaswcode.decrastination.server
 
 import com.thomaswcode.decrastination.core.Notes
+import com.thomaswcode.decrastination.core.ReplayClock
 import com.thomaswcode.decrastination.core.SchoolDays
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.WallClock
@@ -20,6 +21,7 @@ import com.thomaswcode.decrastination.sync.Protocol
 import com.thomaswcode.decrastination.sync.SeedAnswer
 import com.thomaswcode.decrastination.sync.SeedBatch
 import com.thomaswcode.decrastination.sync.ServerVersion
+import com.thomaswcode.decrastination.sync.protocol.Commands
 import com.thomaswcode.decrastination.views.DayView
 import com.thomaswcode.decrastination.views.DayViews
 import com.thomaswcode.decrastination.views.WorkView
@@ -71,7 +73,11 @@ class ServerClock(private val db: Database) : WallClock {
  * whole store comes in, and nothing here changes one.
  */
 class ServerGraph(val db: Database, dataDir: File, cipher: SecretCipher, private val version: String) {
-    val clock = ServerClock(db)
+    /** The clock the phone's zone is told to. */
+    val serverClock = ServerClock(db)
+
+    /** What the owners read: a command's own moment while one's applied. */
+    val clock: WallClock = ReplayClock(serverClock)
     val backend = SqliteBackend(db).apply { writable = (db.meta("mode") ?: MIRROR) != MIRROR }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -92,6 +98,11 @@ class ServerGraph(val db: Database, dataDir: File, cipher: SecretCipher, private
         onFailure = {},
         notes = { task: TaskItem -> Notes.forTask(task, stores.felix.value.notes, stores.settings.value.classMap).map { it.text } },
     )
+
+    /** The owners, none of them started: what they do is what a command asks. */
+    val owners = ServerOwners(stores, clock, scope, gateway, planning, calendarTime = { calendarTime() })
+
+    private val commands = Commands(owners, clock)
 
     private val _revisions = MutableSharedFlow<Long>(extraBufferCapacity = 16)
 
@@ -136,7 +147,7 @@ class ServerGraph(val db: Database, dataDir: File, cipher: SecretCipher, private
      * version newer than this build reads isn't kept, and is said. The server's copies are read again, for what it computes.
      */
     suspend fun seed(batch: SeedBatch, device: String): SeedAnswer = writing.withLock {
-        clock.setZone(batch.zone)
+        serverClock.setZone(batch.zone)
         val refused = mutableListOf<String>()
         val written = mutableListOf<String>()
         backend.cause = "seed:$device"
@@ -159,15 +170,25 @@ class ServerGraph(val db: Database, dataDir: File, cipher: SecretCipher, private
         SeedAnswer(revision, refused, version, backend.hashes())
     }
 
+    /** Commands applied as they arrive, one at a time. */
+    val applier = CommandApplier(db, backend, commands, owners, clock, reload = { reloadAll() }, committed = { _revisions.tryEmit(it) })
+
+    /** Every store read again from what's committed. */
+    private suspend fun reloadAll() {
+        byName.values.forEach { it.reload() }
+        stores.chatArchive.forget()
+    }
+
     /** Every store above revision [since], whole, with the revision they're as of: both read together, so a cursor can't pass a commit it hasn't seen. */
-    fun state(since: Long): StateAnswer = db.transactionless { c ->
+    fun state(since: Long): StateAnswer = db.read { c ->
         val texts = c.prepareStatement("SELECT name, version, revision, json FROM stores WHERE revision > ? ORDER BY name").use { q ->
             q.setLong(1, since)
             q.executeQuery().use { r ->
                 buildList { while (r.next()) add(StoreRow(r.getString(1), r.getInt(2), r.getLong(3), r.getString(4))) }
             }
         }
-        StateAnswer(db.currentRevision(), texts)
+        val revision = c.prepareStatement("SELECT value FROM meta WHERE key = 'revision'").use { q -> q.executeQuery().use { r -> if (r.next()) r.getString(1).toLong() else 0L } }
+        StateAnswer(revision, texts)
     }
 
     /** The history let go of as its rule says: older than [SqliteBackend.HISTORY_MS], but each store's last few. */
@@ -195,9 +216,11 @@ class ServerGraph(val db: Database, dataDir: File, cipher: SecretCipher, private
 
     fun work(): WorkView = WorkViews.of(stores.tasks.value, planning.plan(), stores.settings.value, clock.now(), clock.zone(), devices.lastSeen())
 
-    private companion object {
-        const val MIRROR = "mirror"
-        const val TIDY_EVERY_MS = 24 * 3_600_000L
+    companion object {
+        /** The mode where commands apply: `meta.mode`, one way, from mirror mode. */
+        const val COMMANDS = "commands"
+        private const val MIRROR = "mirror"
+        private const val TIDY_EVERY_MS = 24 * 3_600_000L
     }
 
     private object NoAlerts : ModelGateway.Alerts {

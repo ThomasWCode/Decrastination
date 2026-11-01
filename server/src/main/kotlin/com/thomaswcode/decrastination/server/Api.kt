@@ -4,6 +4,7 @@ import com.thomaswcode.decrastination.ports.Log
 import com.thomaswcode.decrastination.sync.DeviceClaim
 import com.thomaswcode.decrastination.sync.Protocol
 import com.thomaswcode.decrastination.sync.SeedBatch
+import com.thomaswcode.decrastination.sync.protocol.CommandBatch
 import io.ktor.http.ContentType
 import io.ktor.http.Cookie
 import io.ktor.http.CookieEncoding
@@ -58,6 +59,11 @@ sealed interface Client {
     data object Website : Client
 
     data class Phone(val id: String) : Client
+
+    companion object {
+        /** What the commands' record calls the website. */
+        const val WEBSITE = "web"
+    }
 }
 
 private val CLIENT = AttributeKey<Client>("client")
@@ -74,7 +80,7 @@ private data class Me(val signedIn: Boolean)
 private data class StoreOut(val name: String, val version: Int, val revision: Long, val json: JsonElement)
 
 @Serializable
-private data class StateOut(val revision: Long, val stores: List<StoreOut>)
+private data class StateOut(val revision: Long, val stores: List<StoreOut>, val mode: String)
 
 private const val SESSION = "__Host-session"
 private const val OAUTH = "__Host-oauth"
@@ -119,6 +125,11 @@ private fun signedIn(web: Web) = createRouteScopedPlugin("SignedIn") {
             else -> call.respond(HttpStatusCode.Unauthorized, Problem("Sign in first"))
         }
     }
+}
+
+/** The zone a phone says with each exchange, read before anything's applied or answered: a day is the owner's wherever they are. */
+private fun ApplicationCall.heardZone(graph: ServerGraph) {
+    if (client is Client.Phone) request.header(Protocol.ZONE_HEADER)?.let(graph.serverClock::setZone)
 }
 
 private fun ApplicationCall.setCookie(web: Web, name: String, value: String, maxAge: Int) {
@@ -222,9 +233,10 @@ private fun Route.signedInRoutes(web: Web) {
     }
 
     get("/state") {
+        call.heardZone(graph)
         val since = call.request.queryParameters["since"]?.toLongOrNull() ?: 0
         val state = graph.state(since)
-        call.respond(StateOut(state.revision, state.stores.map { StoreOut(it.name, it.version, it.revision, json.parseToJsonElement(it.text)) }))
+        call.respond(StateOut(state.revision, state.stores.map { StoreOut(it.name, it.version, it.revision, json.parseToJsonElement(it.text)) }, graph.mode))
     }
     sse("/events") {
         // The heartbeat lets a dropped connection be seen, from either end; a comment, so a client hears nothing new in it.
@@ -237,7 +249,16 @@ private fun Route.signedInRoutes(web: Web) {
     }
     post("/stores/seed") {
         val phone = call.client as? Client.Phone ?: return@post call.respond(HttpStatusCode.Forbidden, Problem("Only a phone seeds"))
+        if (graph.mode == ServerGraph.COMMANDS) return@post call.respond(HttpStatusCode.Conflict, Problem("The server takes commands now"))
         call.respond(graph.seed(call.receive<SeedBatch>(), phone.id))
+    }
+
+    post("/commands") {
+        call.heardZone(graph)
+        // Mirror mode's writer is the phone, by its seeds: a command now would be undone by the next one.
+        if (graph.mode != ServerGraph.COMMANDS) return@post call.respond(HttpStatusCode.Conflict, Problem("The server is mirroring the phone"))
+        val device = (call.client as? Client.Phone)?.id ?: Client.WEBSITE
+        call.respond(graph.applier.apply(call.receive<CommandBatch>(), device))
     }
 
     get("/views/day") {

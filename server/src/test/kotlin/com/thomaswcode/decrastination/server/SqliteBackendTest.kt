@@ -89,10 +89,22 @@ class SqliteBackendTest {
     }
 
     @Test
-    fun `a store deleted is gone`() {
+    fun `a store deleted is left empty, at a revision of its own, for clients to hear of`() {
         backend.write("a.json", 1, "a")
+        val before = db.currentRevision()
+        backend.delete("a.json", "empty")
+        assertEquals("empty", backend.read("a.json"))
+        assertEquals(before + 1, db.currentRevision())
+    }
+
+    @Test
+    fun `deleting writes nothing where nothing's held, or in mirror mode`() {
         backend.delete("a.json", "empty")
         assertFalse(backend.holds("a.json"))
+        backend.write("b.json", 1, "b")
+        backend.writable = false
+        backend.delete("b.json", "empty")
+        assertEquals("b", backend.read("b.json"))
     }
 
     @Test
@@ -136,5 +148,17 @@ class SqliteBackendTest {
         override fun encrypt(plain: ByteArray) = plain
 
         override fun decrypt(sealed: ByteArray) = sealed
+    }
+
+    @Test
+    fun `a store emptied already takes no new revision for being emptied again`() {
+        val db = Database(":memory:")
+        val backend = SqliteBackend(db)
+        backend.write("chat-archive-2026-10.json", 1, """{"messages":["words"]}""")
+        backend.delete("chat-archive-2026-10.json", "{}")
+        val revision = db.currentRevision()
+        backend.delete("chat-archive-2026-10.json", "{}")
+        assertEquals(revision, db.currentRevision())
+        db.close()
     }
 }

@@ -48,6 +48,32 @@ So that the same command does the same on the phone and the server, each is appl
 
 What isn't a command, and why: a change that's only of this phone (its pairing, the parent code's secret, its calendar's answers), one that starts a job rather than changes the state (a sync, a reading), housekeeping that runs by itself (what Felix remembers past its date let go as its page opens), and what's reached only through Claude until that moves to the server.
 
+## The exchange, once the server applies commands
+
+Built and tested in 5.2.0, and dormant: `SyncState.mode` stays `mirror`, and the phone behaves as it did, till the server goes over to commands (D-141). The server says so by answering a seed with a 409, and `GET /api/version` by its `mode`; the phone then keeps in step this way, from its next upload.
+
+- **A change** is recorded in `outbox.json` before it's applied (`Commands.act`), so it's sent whatever stops the process, and the screens show it at once. It isn't applied a second time at a start: a process stopped part-way may have made some of it, or all, with nothing to say which. The server applies it once, and the pull after a start with commands waiting is of everything, so whatever was left of it goes.
+- **An upload** posts what's waiting, in order, to `POST /api/commands`, and each that's answered leaves the outbox. A command the server dropped is said on Setup (`SyncState.dropped`), which it was, when and why, till it's cleared, and what it did here goes: the server changed nothing a pull of what's changed would bring, so the next pull is of everything (the revision goes back to 0).
+- **Then a pull**: `GET /api/state?since=` for every store changed since the last, each taken whole (`JsonStore.adopt`). Only with nothing waiting (`Commands.replacing`): a command made since the upload began is already in the stores, and applying it again on top would make it twice, so it goes first, and the pull's asked for again after it. No command is applied while the stores are replaced. A month of the chat's archive that comes empty is a chat cleared elsewhere, and goes here with its copies (`ChatArchiveStore.adopt`).
+- A pull follows only an answer. With none, what's waiting may already be on the server, and it mustn't be applied twice over.
+- A store newer than this build can read stops the pull whole, and Setup says to install: the stores change together, and half of them new is worse than all of them old.
+- A server behind the revision this phone last took has been restored, and what's here is all that's left of what it lost: nothing's taken from it, and Setup says so. The restore steps set it back to mirroring ([server.md](server.md)), which each pull and a turned-away command tell the phone (`PulledState.mode`): the phone goes back too, and seeds all it holds, what's waiting in the outbox with it, as that's in the stores already. A restored server that's since passed this phone's revision can't be told from one that hasn't, which is why the steps set the mode rather than leave it to be noticed.
+- A command that throws part-way here is half made as a stopped process's is, and the next pull is of everything (`Replica.pullEverything`).
+- The phone's time zone goes with each exchange (`Protocol.ZONE_HEADER`), a command waiting or none, as a seed says it in its body.
+
+An answer lost on the way does no harm: the retry's id is one the server's seen, and it answers as it did the first time, applying nothing.
+
+## Stale commands
+
+The server applies commands in the order they arrive, and the owners are the conflict policy, as they are when a sync and a tap race on the phone (D-140). A command that can't apply to the state as it now is, is dropped, with its reason (`Action.stale`), and nothing of it is applied.
+
+| Command | Stale when | Said |
+|---|---|---|
+| `FinishOwnTask`, `ReopenOwnTask`, `DeleteOwnTask`, `TickBlock`, `StartTimer`, `AddNote` | its task has gone | That task had gone |
+| `AddOwnChange` | the task it's about has gone | That task had gone |
+| any other | never: its owner takes a stale call as it does today, doing nothing, or laying the day again | |
+| one its owner fails on | always | It couldn't be applied |
+
 ## Testing
 
-`ReplicaTest`, on temporary stores and a stand-in server. From a PC, on the phone (`adb reverse`, then these debug commands): `sync-server` with `url`, a test server's address (`http://127.0.0.1:<port>`, the one address `res/xml/network_security.xml` allows in plain HTTP), `sync-pair` with `code`, `sync-send` and `sync-state`.
+`ReplicaTest`, on temporary stores and a stand-in server; `SyncHarnessTest` in `:server`, a real applier over a real database and two phones on stores of their own, a wire between them that can be cut or lose an answer; `CommandApplierTest`. From a PC, on the phone (`adb reverse`, then these debug commands): `sync-server` with `url`, a test server's address (`http://127.0.0.1:<port>`, the one address `res/xml/network_security.xml` allows in plain HTTP), `sync-pair` with `code`, `sync-send` and `sync-state`.

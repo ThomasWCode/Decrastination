@@ -72,7 +72,8 @@ class ChatArchiveStore(private val backend: StoreBackend, private val clock: () 
 
     /**
      * Whether it holds any message: whether it has a month's file, none read. A month emptied has its file
-     * let go ([update], [clear]), so one there holds messages, or did and couldn't be read: shown, and said.
+     * let go ([update], [clear]), so one there holds messages, or did and couldn't be read: shown, and said. On the server a
+     * month emptied stays as an empty row, so this says only that it's held one.
      */
     val holdsAny: Boolean get() = files().isNotEmpty()
 
@@ -220,6 +221,25 @@ class ChatArchiveStore(private val backend: StoreBackend, private val clock: () 
     /** What's held of the months read let go, as their rows have been written from elsewhere: each read again when it's wanted. */
     fun forget() {
         synchronized(reading) { months.clear() }
+        _changes.update { it + 1 }
+    }
+
+    /**
+     * [file], a month, taken whole from the server's copy. One with nothing in it is a chat cleared elsewhere, the server keeping
+     * the month only to say so: it's let go here with its copies, as a month cleared here is, so none offers *Earlier messages*.
+     */
+    suspend fun adopt(file: String, version: Int, text: String): Unit = writing.withLock {
+        val store = synchronized(reading) { month(file) }
+        store.adopt(version, text)
+        if (store.value.messages.isEmpty() && store.problem == null) {
+            withContext(Dispatchers.IO) {
+                synchronized(reading) {
+                    months.remove(file)
+                    letGo(file)
+                    backend.letGoOfCopies { it == file }
+                }
+            }
+        }
         _changes.update { it + 1 }
     }
 

@@ -64,13 +64,14 @@ class SqliteBackend(private val db: Database, private val clock: () -> Long = Sy
         }
     }
 
+    /**
+     * Not a row gone, which would tell a client nothing: `/state` says what's changed, and can't say what isn't there. It's left
+     * [empty] at a new revision, which a client takes as it takes any change, so a chat cleared on one goes from the others.
+     */
     override fun delete(name: String, empty: String) {
-        db.transaction { c ->
-            c.prepareStatement("DELETE FROM stores WHERE name = ?").use { q ->
-                q.setString(1, name)
-                q.executeUpdate()
-            }
-        }
+        if (!writable || read(name) == empty) return
+        val version = db.transactionless { c -> c.single("SELECT version FROM stores WHERE name = ?", name) } ?: return
+        keep(name, version.toInt(), empty)
     }
 
     /** Nothing to do: the row of the text before is there already. */

@@ -1,0 +1,13 @@
+{
+    "commands": [
+        {
+            "id": "command-1",
+            "at": 1793000000000,
+            "action": {
+                "type": "FinishOwnTask",
+                "taskId": "own:essay"
+            }
+        }
+    ],
+    "version": 1
+}

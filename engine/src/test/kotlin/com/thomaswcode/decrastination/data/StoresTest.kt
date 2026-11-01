@@ -209,7 +209,7 @@ class StoresTest {
         assertEquals(stores.all.size, stores.all.map { it.file }.toSet().size)
         // Every JSON store's shape is known to a backup, at the version its state says, each with a migration from every one before.
         assertEquals(made - "secrets.bin", stores.shapes.keys)
-        assertEquals(mapOf("calendar.json" to 2, "chat.json" to 13, "chat-archive.json" to 12, "felix.json" to 3, "instructions.json" to 6, "log.json" to 4, "memory.json" to 2, "protection.json" to 2, "runtime.json" to 4, "session.json" to 3, "settings.json" to 4, "tasks.json" to 5), stores.shapes.filterValues { it.version > 1 }.mapValues { it.value.version })
+        assertEquals(mapOf("calendar.json" to 2, "chat.json" to 13, "chat-archive.json" to 12, "felix.json" to 3, "instructions.json" to 6, "log.json" to 4, "memory.json" to 2, "protection.json" to 2, "runtime.json" to 4, "session.json" to 3, "settings.json" to 4, "sync.json" to 2, "tasks.json" to 5), stores.shapes.filterValues { it.version > 1 }.mapValues { it.value.version })
         assertTrue(stores.shapes.values.all { Migration.complete(it.version, it.migrations) })
         // And each is said in words when it can't be read, not by its file's name.
         for (file in made) assertTrue(!JsonStore.Unreadable(file, null, kept = false, at = 0).says.startsWith(file), file)

@@ -138,6 +138,7 @@ class CommandsTest {
             val stores = Stores(dir, Plain)
             val made = Protection(stores.settings, stores.protection, stores.device, stores.secrets, clock, this, adminActive = { false }) {}
             val owners = object : Owners {
+                override val tasks = stores.tasks
                 override val ownTasks: OwnTasks get() = error("not here")
                 override val instructions: Instructions get() = error("not here")
                 override val focus: Focus get() = error("not here")
