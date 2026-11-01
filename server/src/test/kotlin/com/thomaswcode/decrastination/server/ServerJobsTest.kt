@@ -443,6 +443,89 @@ class ServerJobsTest {
         assertEquals(listOf("job"), store.value.by)
     }
 
+    @Test(timeout = STUCK_MS)
+    fun `a recovery that itself fails writes nothing of the command, and leaves memory as what's committed`() = runBlocking {
+        val store = store(SqliteBackend(db))
+        val outside = CoroutineScope(Dispatchers.IO)
+        val failed = assertFailsWith<IllegalStateException> {
+            db.commandOr(
+                { store.reload() },
+                { error("no room for the record") },
+            ) {
+                store.update { it.copy(by = it.by + "command") }
+                outside.async { store.update { it.copy(by = it.by + "job") } }.await()
+                error("no room")
+            }
+        }
+        assertEquals("no room for the record", failed.message)
+        assertEquals(emptyList(), store.value.by, "in memory")
+        store.reload()
+        assertEquals(emptyList(), store.value.by, "and committed")
+        db.setMeta("after", "the database still takes writes")
+        assertEquals("the database still takes writes", db.meta("after"))
+    }
+
+    @Test(timeout = STUCK_MS)
+    fun `stores that can't be read again let go of what's held, as it can't be told from the command's`() = runBlocking {
+        val store = store(SqliteBackend(db))
+        val outside = CoroutineScope(Dispatchers.IO)
+        var first = true
+        assertFailsWith<IllegalStateException> {
+            db.commandOr(
+                {
+                    if (first) {
+                        first = false
+                        outside.async { store.update { it.copy(by = it.by + "job") } }.await()
+                        error("can't be read")
+                    }
+                    store.reload()
+                },
+                { "dropped" },
+            ) {
+                store.update { it.copy(by = it.by + "command") }
+                error("no room")
+            }
+        }
+        store.reload()
+        assertEquals(emptyList(), store.value.by, "nothing of the command, by way of the job's write")
+    }
+
+    @Test(timeout = STUCK_MS)
+    fun `a held write that can't be made again is let go, and the rest aren't`() = runBlocking {
+        val store = store(SqliteBackend(db))
+        val outside = CoroutineScope(Dispatchers.IO)
+        val answer = db.commandOr({ store.reload() }, { "dropped" }) {
+            store.update { it.copy(by = it.by + "command") }
+            // Made on the command's change, so it can't be made on what's committed.
+            outside.async { store.update { seen -> check("command" in seen.by); seen.copy(by = seen.by + "bad") } }.await()
+            outside.async { store.update { it.copy(by = it.by + "good") } }.await()
+            error("no room")
+        }
+        assertEquals("dropped", answer)
+        assertTrue("good" in store.value.by)
+        assertFalse("command" in store.value.by)
+    }
+
+    @Test
+    fun `a failure beside the morning's briefing isn't its, and only its own runs it again`() = runBlocking {
+        val graph = ServerGraph(db, dir, Plain, "test")
+        var briefed = 0
+        val failing: suspend () -> Unit = { error("no") }
+        graph.morning(failing, failing, { briefed++ }, failing)
+        assertEquals(1, briefed, "they don't stop it")
+        assertFailsWith<IllegalStateException> { graph.morning({}, {}, { error("no") }, {}) }
+        Unit
+    }
+
+    @Test
+    fun `a mode set while it runs waits for a restart, as everything that hangs on it does`() = runBlocking {
+        val graph = ServerGraph(db, dir, Plain, "test")
+        db.setMeta("mode", ServerGraph.COMMANDS)
+        assertEquals("mirror", graph.mode)
+        assertFalse(graph.backend.writable)
+        assertEquals(ServerGraph.COMMANDS, ServerGraph(db, dir, Plain, "test").mode)
+    }
+
     @Test
     fun `a nightly file not written is a failure, to be tried again, not a night gone without`() = runBlocking {
         val folder = object : BackupService.Folder {

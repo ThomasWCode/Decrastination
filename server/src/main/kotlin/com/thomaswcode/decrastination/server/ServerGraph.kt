@@ -55,6 +55,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.util.concurrent.ConcurrentHashMap
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -122,7 +123,12 @@ class ServerGraph(
 
     /** What the owners read: a command's own moment while one's applied. */
     val clock: WallClock = ReplayClock(serverClock)
-    val backend = SqliteBackend(db).apply { writable = (db.meta("mode") ?: MIRROR) != MIRROR }
+
+    /** Whether the server is taking the phone's stores whole, or commands: read once, at a start, so everything that hangs on it goes together. */
+    var mode: String = db.meta("mode") ?: MIRROR
+        private set
+
+    val backend = SqliteBackend(db).apply { writable = mode != MIRROR }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     /**
@@ -196,9 +202,6 @@ class ServerGraph(
         }
     }
 
-    /** Whether the server is taking the phone's stores whole, or commands (from stage 2). */
-    val mode: String get() = db.meta("mode") ?: MIRROR
-
     fun calendarTime(): EventJudge.Time = calendarRead.value.time(stores.instructions.value.applied, clock.now(), clock.zone())
 
     fun version() = ServerVersion(version, Protocol.VERSION, mode, versions)
@@ -270,10 +273,7 @@ class ServerGraph(
             },
             ServerJob.every("sources", SOURCES_EVERY_MS) { owners.syncer.sync(setOf(Source.PowerPlanner, Source.Gmail)) },
             ServerJob("morning", due = { last, now -> morningDue(last, now) }) {
-                owners.conversation.forgetExpired()
-                owners.ownTasks.rollWeeks()
-                owners.briefing.run()
-                owners.conversation.pruneFelix()
+                morning({ owners.conversation.forgetExpired() }, { owners.ownTasks.rollWeeks() }, { owners.briefing.run() }, { owners.conversation.pruneFelix() })
             },
             ServerJob("check-in", due = { last, now -> sundayDue(last, now, stores.settings.value.checkInMin) }) { owners.conversation.remindCheckIn() },
             ServerJob("review", due = { last, now -> sundayDue(last, now, stores.settings.value.checkInMin + Daily.REVIEW_AFTER_MIN) }) { owners.learning.review(ifDue = true) },
@@ -288,11 +288,15 @@ class ServerGraph(
         check(written == BackupService.Nightly.Written) { "The nightly file wasn't written: $written" }
     }
 
-    /** Commands from now on, for the browser tests' server, which starts in mirror mode to be seeded: what the switch does across a restart, at once. */
-    fun commandsForATest() {
-        db.setMeta("mode", COMMANDS)
-        backend.writable = true
+    /** The mode set at once, for a test: what a restart does. */
+    internal fun modeForATest(set: String) {
+        db.setMeta("mode", set)
+        mode = set
+        backend.writable = set != MIRROR
     }
+
+    /** Commands from now on, for the browser tests' server, which starts in mirror mode to be seeded. */
+    fun commandsForATest() = modeForATest(COMMANDS)
 
     /** What runs by itself: the jobs, and, once the server applies commands, what watches the stores and the plan made again. */
     fun start(scope: CoroutineScope) {
@@ -301,6 +305,24 @@ class ServerGraph(
             planning.watcher.start()
         }
         jobs.start(scope)
+    }
+
+    /** What the phone's morning alarm does, as it does it: only the [briefing] can fail the job, as a retry would say it again. */
+    internal suspend fun morning(forget: suspend () -> Unit, roll: suspend () -> Unit, briefing: suspend () -> Unit, prune: suspend () -> Unit) {
+        aside("Forgetting what's run out", forget)
+        aside("Rolling the weeks", roll)
+        briefing()
+        aside("Pruning Felix's notes", prune)
+    }
+
+    private suspend fun aside(what: String, step: suspend () -> Unit) {
+        try {
+            step()
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failed: Exception) {
+            Log.w(Log.TAG, "$what failed: ${failed::class.simpleName}")
+        }
     }
 
     /** The last moment before today, so a time at today's very start is still to come. */

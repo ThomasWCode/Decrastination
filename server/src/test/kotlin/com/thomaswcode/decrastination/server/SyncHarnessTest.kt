@@ -163,6 +163,7 @@ class SyncHarnessTest {
     /** The server as a restore's steps leave it: back to taking seeds. */
     private fun mirroring() {
         db.setMeta("mode", "mirror")
+        graph.modeForATest("mirror")
     }
 
     @Test

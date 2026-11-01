@@ -73,13 +73,36 @@ class Database(path: String) : AutoCloseable {
     /**
      * A [command] that [recover] answers for if it fails, a transaction of its own, with no other let in between the two and no
      * write let through: what the failed one left in memory has to go, by [reload], before anything can build on it. What was held
-     * back meanwhile was made from that memory, so it's made afresh on what's committed ([putRight]).
+     * back meanwhile was made from that memory, so it's made afresh on what's committed ([putRight]). Should that fail too, what's
+     * held is let go rather than written, as it can't be told from what the command left: the stores are read from what's committed
+     * whatever happens, and the failure's the caller's.
      */
     suspend fun <T> commandOr(reload: suspend () -> Unit, recover: suspend (Exception) -> T, block: suspend () -> T): T = commanding.withLock {
         try {
             attempt(block, recoverable = true)
         } catch (failed: Exception) {
-            attempt({ recover(failed).also { putRight(reload) } })
+            try {
+                attempt({
+                    putRight(reload)
+                    recover(failed)
+                }, recoverable = true)
+            } catch (worse: Exception) {
+                Log.w(Log.TAG, "Putting a failed command right failed: ${worse::class.simpleName}")
+                gaveUp(reload)
+                throw worse
+            }
+        }
+    }
+
+    /** Nothing more can be done for a failed command: what's held goes unwritten, the stores are read from what's committed, and the command's closed. */
+    private suspend fun gaveUp(reload: suspend () -> Unit) {
+        try {
+            withContext(inCommand.asContextElement(true)) { reload() }
+        } finally {
+            lock.withLock {
+                held.clear()
+                closeCommand(committed = false)
+            }
         }
     }
 
@@ -92,7 +115,14 @@ class Database(path: String) : AutoCloseable {
      */
     private suspend fun putRight(reload: suspend () -> Unit) {
         do {
-            while (true) (lock.withLock { held.removeFirstOrNull() } ?: break).remake()
+            while (true) {
+                val next = lock.withLock { held.removeFirstOrNull() } ?: break
+                try {
+                    next.remake()
+                } catch (failed: Exception) {
+                    Log.w(Log.TAG, "A write held back for a failed command couldn't be made again: ${failed::class.simpleName}")
+                }
+            }
             reload()
         } while (lock.withLock { held.isNotEmpty() })
     }
@@ -118,15 +148,18 @@ class Database(path: String) : AutoCloseable {
             lock.withLock {
                 taken = null
                 // Left open where it's to be put right: nothing goes in on what it's left in memory.
-                if (!recovering) {
-                    depth = 0
-                    commandOpen = false
-                    connection.autoCommit = true
-                    letThrough(committed)
-                    closed.signalAll()
-                }
+                if (!recovering) closeCommand(committed)
             }
         }
+    }
+
+    /** With the [lock] held: the command over, what was held back through, and what was waiting for it told. */
+    private fun closeCommand(committed: Boolean) {
+        depth = 0
+        commandOpen = false
+        connection.autoCommit = true
+        letThrough(committed)
+        closed.signalAll()
     }
 
     /**
