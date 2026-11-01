@@ -506,8 +506,9 @@ class ServerGraph(
         val plan = planning.plan()
         val piece = TaskSheetModel.next(plan, id).takeIf { task.isOpen }
         if (ask.kind == TaskAsk.DONE) {
-            // The one the page showed, or none: done elsewhere since, the next one's not what was meant.
-            val shown = piece?.takeIf { it.key == ask.key } ?: return Asked(false, "That piece has changed since (done, or planned again).")
+            // The one the page showed, whichever of its task's that is (Do now's can be ahead of the first in its list, a step in any
+            // order laid sooner), or none: done elsewhere since, another's not what was meant.
+            val shown = plan.chunksOf(id).firstOrNull { it.key == ask.key } ?: return Asked(false, Moves.CHANGED)
             var kept = false
             val said = pieceSays.kept(shown, ask.at ?: plan.now) { action -> (website(action).state == Outcome.APPLIED).also { kept = it } }
             return Asked(kept, said)
