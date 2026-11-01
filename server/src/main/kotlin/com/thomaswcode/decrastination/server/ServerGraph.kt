@@ -299,7 +299,7 @@ class ServerGraph(
     /** Commands applied as they arrive, one at a time. */
     val applier = CommandApplier(db, backend, commands, owners, clock, reload = { reloadAll() }, committed = { _revisions.tryEmit(it) })
 
-    /** Each minute, what's due, once the server applies commands (docs/spec/server.md §Jobs). */
+    /** Each minute, what's due, once the server applies commands, and the heartbeat from the start (docs/spec/server.md §Jobs). */
     val jobs = ServerJobs(
         db, clock, running = { mode == COMMANDS },
         listOf(
@@ -319,13 +319,15 @@ class ServerGraph(
             ServerJob("check-in", due = { last, now -> sundayDue(last, now, stores.settings.value.checkInMin) }) { owners.conversation.remindCheckIn() },
             ServerJob("review", due = { last, now -> sundayDue(last, now, stores.settings.value.checkInMin + Daily.REVIEW_AFTER_MIN) }) { owners.learning.review(ifDue = true) },
             ServerJob("nightly", due = { last, now -> nightDue(last, now) }, retryMs = HOUR_MS) { nightly() },
-            ServerJob.every("heartbeat", MINUTE_MS) { heartbeat() },
+            ServerJob.every("heartbeat", MINUTE_MS, inMirror = true) { heartbeat() },
         ),
     )
 
     /**
      * The minute's heartbeat, only from a box that can still write: one whose disk is full answers its health check and does nothing
-     * else, with what's waiting on it held up unseen. A brief fault costs a beat or two, which the check's grace allows for.
+     * else, with what's waiting on it held up unseen. A brief fault costs a beat or two, which the check's grace allows for. It's in
+     * the jobs' own loop in either mode, so a job that never returns stops it too, and it runs while mirroring as a stopped box is worth
+     * hearing of from the day it goes up, not from the switch.
      */
     internal fun heartbeat() {
         db.setMeta(BEAT, clock.now().toString())
