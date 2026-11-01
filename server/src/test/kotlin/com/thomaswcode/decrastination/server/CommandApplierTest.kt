@@ -203,6 +203,19 @@ class CommandApplierTest {
     }
 
     @Test
+    fun `the tidy lets go of the commands kept past their use, and keeps the rest`() = runBlocking {
+        send(Command("old", at, own("Essay")))
+        send(Command("new", at, own("Maths")))
+        db.transaction { c ->
+            c.prepareStatement("UPDATE commands SET received_at = 1 WHERE id = 'old'").use { it.executeUpdate() }
+        }
+        graph.tidy()
+        assertEquals(1, rows())
+        assertEquals(Outcome.APPLIED, send(Command("new", at, own("Maths"))).state)
+        assertEquals(1, rows(), "and a repeat of one kept still answers from the record")
+    }
+
+    @Test
     fun `an answer that takes back what it did says what does`() = runBlocking {
         graph.stores.chat.update { it.copy(messages = listOf(ChatMessage("q", Speaker.Felix, "A question", at))) }
         val marked = send(Command("one", at, MarkAnswered(listOf("q"))))

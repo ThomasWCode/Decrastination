@@ -20,8 +20,10 @@ import com.thomaswcode.decrastination.enrich.KeyProblem
 import com.thomaswcode.decrastination.enrich.ModelGateway
 import com.thomaswcode.decrastination.enrich.PhotoTasks
 import com.thomaswcode.decrastination.felix.Outbox
+import com.thomaswcode.decrastination.learn.CheckIn
 import com.thomaswcode.decrastination.learn.Daily
 import com.thomaswcode.decrastination.learn.EventJudge
+import com.thomaswcode.decrastination.learn.Export
 import com.thomaswcode.decrastination.net.Http
 import com.thomaswcode.decrastination.net.UrlConnectionHttp
 import com.thomaswcode.decrastination.plan.Planning
@@ -35,26 +37,34 @@ import com.thomaswcode.decrastination.sync.protocol.Action
 import com.thomaswcode.decrastination.sync.protocol.Command
 import com.thomaswcode.decrastination.sync.protocol.CommandBatch
 import com.thomaswcode.decrastination.sync.protocol.Commands
+import com.thomaswcode.decrastination.sync.protocol.EndCheckInFlow
 import com.thomaswcode.decrastination.sync.protocol.Outcome
+import com.thomaswcode.decrastination.sync.protocol.RecordCheckIn
 import com.thomaswcode.decrastination.ui.ChatRows
 import com.thomaswcode.decrastination.ui.Moves
 import com.thomaswcode.decrastination.ui.PieceSays
+import com.thomaswcode.decrastination.ui.StatsPage
 import com.thomaswcode.decrastination.ui.TaskSheetModel
 import com.thomaswcode.decrastination.views.Asked
 import com.thomaswcode.decrastination.views.ChatView
 import com.thomaswcode.decrastination.views.ChatViews
+import com.thomaswcode.decrastination.views.CheckInAsk
 import com.thomaswcode.decrastination.views.DayDrop
 import com.thomaswcode.decrastination.views.DayView
 import com.thomaswcode.decrastination.views.DayViews
 import com.thomaswcode.decrastination.views.NoticesView
 import com.thomaswcode.decrastination.views.OwnTaskEdit
 import com.thomaswcode.decrastination.views.PhotoRead
+import com.thomaswcode.decrastination.views.ReviewsView
 import com.thomaswcode.decrastination.views.SettingsView
 import com.thomaswcode.decrastination.views.SettingsViews
+import com.thomaswcode.decrastination.views.StatsView
+import com.thomaswcode.decrastination.views.StatsViews
 import com.thomaswcode.decrastination.views.TaskAsk
 import com.thomaswcode.decrastination.views.TaskAsks
 import com.thomaswcode.decrastination.views.TaskView
 import com.thomaswcode.decrastination.views.TaskViews
+import com.thomaswcode.decrastination.views.WeekView
 import com.thomaswcode.decrastination.views.WorkView
 import com.thomaswcode.decrastination.views.WorkViews
 import java.io.File
@@ -485,10 +495,53 @@ class ServerGraph(
         val quotes = (read.takeLast(shown) + chat.messages).mapNotNull { message -> message.replyTo?.takeIf { it !in known } }.distinct().mapNotNull(archive::find)
         return ChatViews.of(
             chat, read, shown, older = shown == 0 && archive.recent(1).isNotEmpty(), quotes, stores.tasks.value, settings, stores.memory.value, stores.felix.value, stores.instructions.value,
-            owners.conversation.keptAt(now), owners.conversation.answeringSince.value, settings.aiEnabled && (if (writable) claudeKey != null else settings.aiKeyActive),
+            owners.conversation.keptAt(now), owners.conversation.answeringSince.value, claudeOn,
             owners.focus.today(now), now, clock.zone(), writable,
         )
     }
+
+    /** Whether Claude's on, by this box's key where it's asked here, and by the phone's while it's asked there. */
+    private val claudeOn: Boolean
+        get() = stores.settings.value.let { it.aiEnabled && (if (mode == COMMANDS) claudeKey != null else it.aiKeyActive) }
+
+    /** Stats for the [period] named, for the website. */
+    fun stats(period: String?): StatsView {
+        val now = clock.now()
+        val zone = clock.zone()
+        val settings = stores.settings.value
+        val credit = stores.session.value.credit.on(owners.focus.today(now))
+        val usage = stores.model.value.aiUsage.forMonth(AiUsage.monthOf(now, zone))
+        val today = StatsPage.Today(
+            (credit.earnedMs / MINUTE_MS).toInt(),
+            (credit.spentMs / MINUTE_MS).toInt(),
+            (owners.focus.creditLeftMs(now) / MINUTE_MS).toInt(),
+            usage.spentUsd,
+            usage.calls,
+            settings.aiMonthlyCapUsd,
+            claudeOff = !claudeOn && usage.calls == 0,
+        )
+        return StatsViews.of(stores.log.value, stores.learning.value.calibration, stores.school.value, settings, today, period, now, zone, mode == COMMANDS)
+    }
+
+    /** The week's form and the latest review, for the website. */
+    fun week(): WeekView = StatsViews.week(stores.log.value, stores.settings.value, clock.now(), clock.zone(), mode == COMMANDS)
+
+    /** The reviews, for the website. */
+    fun reviews(): ReviewsView = StatsViews.reviews(stores.log.value, stores.settings.value, stores.memory.value, clock.zone(), mode == COMMANDS)
+
+    /** The week's [ask]ed check-in, as the phone's form keeps it; and, kept, Felix's questions ended and the review set off, on its own time. */
+    suspend fun checkIn(ask: CheckInAsk): Asked {
+        val now = clock.now()
+        val checkIn = CheckIn(ask.week, now, ask.feel, ask.avoided.trim(), ask.inTheWay.trim(), ask.change.trim(), ask.energy.trim())
+        val kept = website(RecordCheckIn(checkIn, now))
+        if (kept.state != Outcome.APPLIED) return Asked(false, kept.why)
+        website(EndCheckInFlow)
+        owners.reviewSoon()
+        return Asked(true)
+    }
+
+    /** The record as CSV files in a zip, as the phone's Export gives it. */
+    fun record(): ByteArray = Export.zipped(Export.csv(stores.log.value, stores.learning.value.calibration, clock.zone(), stores.chatArchive.value.messages + stores.chat.value.messages))
 
     /** What's said wherever you are on the website. */
     fun notices(): NoticesView = NoticesView(Outbox.unreadOf(stores.chat.value).size)

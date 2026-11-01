@@ -1,6 +1,7 @@
 package com.thomaswcode.decrastination.server
 
 import com.thomaswcode.decrastination.core.ChangeType
+import com.thomaswcode.decrastination.core.CheckInDraft
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.OwnTask
 import com.thomaswcode.decrastination.core.OwnTaskRules
@@ -9,17 +10,20 @@ import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.data.SecretCipher
+import com.thomaswcode.decrastination.enrich.AiUsage
 import com.thomaswcode.decrastination.sync.protocol.Command
 import com.thomaswcode.decrastination.sync.protocol.CommandBatch
 import com.thomaswcode.decrastination.sync.protocol.SaveOwnTask
 import com.thomaswcode.decrastination.ui.Moves
 import com.thomaswcode.decrastination.views.Asked
+import com.thomaswcode.decrastination.views.CheckInAsk
 import com.thomaswcode.decrastination.views.DayDrop
 import com.thomaswcode.decrastination.views.TaskAsk
 import java.io.File
 import java.io.IOException
 import java.nio.file.Files
 import java.time.Instant
+import java.util.zip.ZipInputStream
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -31,7 +35,9 @@ import kotlin.test.assertTrue
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 
 /** What the website asks of a task (docs/spec/website.md): made the commands the phone's sheet would make, by the phone's rules. */
 class TaskAskTest {
@@ -313,6 +319,59 @@ class TaskAskTest {
         val answer = graph.ask("own:long", TaskAsk(TaskAsk.DONE, at = System.currentTimeMillis(), key = later.key))
         assertTrue(answer.done, answer.said)
         assertEquals(listOf(later.key), graph.stores.log.value.slots.map { it.key })
+    }
+
+    @Test
+    fun `the week's check-in is kept as the phone's form keeps it, trimmed, once, and sets off the review`() = runBlocking<Unit> {
+        val week = graph.week().week
+        val kept = graph.checkIn(CheckInAsk(week, 4, avoided = "  the essay  ", energy = "evenings"))
+        assertTrue(kept.done, kept.said)
+        val checkIn = graph.stores.log.value.checkIns.single()
+        assertEquals("the essay", checkIn.avoided)
+        assertEquals("evenings", checkIn.energy)
+        assertEquals(4, checkIn.feel)
+        assertTrue(graph.week().done)
+        withTimeout(10_000) { graph.stores.log.state.first { it.reviews.isNotEmpty() } }
+        val again = graph.checkIn(CheckInAsk(week, 2))
+        assertFalse(again.done)
+        assertEquals("That week's check-in is done", again.said)
+        assertEquals(4, graph.stores.log.value.checkIns.single().feel)
+    }
+
+    @Test
+    fun `a check-in finished in the chat sets off the review too`() = runBlocking<Unit> {
+        graph.owners.ports.review()
+        withTimeout(10_000) { graph.stores.log.state.first { it.reviews.isNotEmpty() } }
+    }
+
+    @Test
+    fun `a check-in ends Felix's questions, should he have begun them`() = runBlocking<Unit> {
+        graph.stores.chat.update { it.copy(felix = it.felix.copy(checkInDraft = CheckInDraft(graph.week().week))) }
+        assertTrue(graph.checkIn(CheckInAsk(graph.week().week, 3)).done)
+        assertNull(graph.stores.chat.value.felix.checkInDraft)
+    }
+
+    @Test
+    fun `a feeling off the scale isn't kept, and nothing follows it`() = runBlocking<Unit> {
+        graph.stores.chat.update { it.copy(felix = it.felix.copy(checkInDraft = CheckInDraft(graph.week().week))) }
+        assertEquals("How the week felt is from 1 to 5", graph.checkIn(CheckInAsk(graph.week().week, 0)).said)
+        assertTrue(graph.stores.log.value.checkIns.isEmpty())
+        assertNotNull(graph.stores.chat.value.felix.checkInDraft)
+    }
+
+    @Test
+    fun `the record's a zip of its tables`() = runBlocking<Unit> {
+        withTasks()
+        val names = ZipInputStream(graph.record().inputStream()).use { zip -> generateSequence { zip.nextEntry }.map { it.name }.toList() }
+        assertTrue("completions.csv" in names, names.toString())
+    }
+
+    @Test
+    fun `Claude's off on Stats while there's no key and nothing's been spent`() = runBlocking<Unit> {
+        fun claude() = graph.stats(null).tiles.single { it.label == "Claude this month" }
+        assertEquals("Off", claude().value)
+        graph.stores.model.update { it.copy(aiUsage = AiUsage(AiUsage.monthOf(System.currentTimeMillis(), graph.clock.zone()), 0.5, 3)) }
+        assertEquals("$0.50", claude().value, "what's been spent is said, whoever's key it was")
     }
 
     @Test

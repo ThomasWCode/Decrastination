@@ -4,7 +4,9 @@ import com.thomaswcode.decrastination.core.Calibration
 import com.thomaswcode.decrastination.core.ChatHistory
 import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.data.ActivityLog
+import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.OutputStream
 import java.time.Instant
 import java.time.ZoneId
 import java.util.zip.ZipEntry
@@ -68,7 +70,14 @@ object Export {
     /** [files] zipped into [out]. */
     fun zip(files: Map<String, String>, out: File) {
         out.parentFile?.mkdirs()
-        ZipOutputStream(out.outputStream()).use { zip ->
+        zip(files, out.outputStream())
+    }
+
+    /** [files] as a zip's bytes. */
+    fun zipped(files: Map<String, String>): ByteArray = ByteArrayOutputStream().also { zip(files, it) }.toByteArray()
+
+    private fun zip(files: Map<String, String>, out: OutputStream) {
+        ZipOutputStream(out).use { zip ->
             for ((name, text) in files) {
                 zip.putNextEntry(ZipEntry(name))
                 zip.write(text.toByteArray(Charsets.UTF_8))
