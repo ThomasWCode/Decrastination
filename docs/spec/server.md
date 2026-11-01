@@ -37,6 +37,8 @@ Everything is under `/api`, on the same origin as the website. Open: `GET /healt
 | `POST /backup/import` | the website | a backup taken in, all of it or none; a 409 in mirror mode, a 413 past 8 MB by what it says it is |
 | `POST /backup/copy` | the website | a reset's copy, by its name, taken in the same way; a 409 in mirror mode |
 | `POST /photos/tasks` | the website | a JPEG of homework read into tasks to check, one at a time; a 409 in mirror mode, or with another being read |
+| `POST /push/subscription` | the website | a browser asking to be told of what it names; a 409 in mirror mode or with no keys on the box, a 400 at an address that isn't a push service's |
+| `POST /push/channels`, `POST /push/forget` | the website | what a browser's asked for, and its stopping |
 | `GET /credentials`, `POST /credentials` | the website | which sign-ins are held, and setting them: never their values back |
 | `POST /parent-code` | a phone | the parent code's secret |
 
@@ -61,6 +63,7 @@ SQLite, one file, in WAL mode (`server/Database.kt`), the server its only writer
 - `stores`: each store's JSON, its version and the revision that last wrote it. A revision is one transaction. No row goes: `/api/state` can't say what isn't there, so what's deleted (a month of a cleared chat) stays as an empty row at a new revision, and clients take that as any change.
 - `store_history`: each store's every text, with what caused it, kept 90 days and at least the last 20 of each, let go of at each start and daily after (`ServerGraph.tidy`).
 - `commands`: every command received, whose it was, and what came of it, kept 90 days (`ServerGraph.tidy`). A repeat of an id answers from here, looked up inside the command's lock, so a retry racing its first send waits and finds what came of it. Clearing the chat blanks what those that hold its words sent (`SendMessage`, `ReplyFromNotification`, `RateMessage`), as it lets go of its history, and letting go of the log's copies blanks a check-in's (`RecordCheckIn`): each stays on record, so a repeat still answers, with none of its words.
+- `push_subscriptions`: each browser that's asked to be told (W-9): where its push service takes a message, what it's sealed for (RFC 8291), and of what. Not a store, as it's one browser's, and neither the phone nor a backup has any use for it.
 - `devices`, `pairing_codes`, `sessions`, `meta`.
 
 A command is one transaction, all of it or none (`CommandApplier`, `Database.command`), one at a time, in the order they arrive. A backup taken in is held the same way (`CommandApplier.alone`), but isn't on record as one: its file doesn't belong in `commands`, and each store's text before it is in `store_history`. The owners suspend and change thread on the way, so it's held by a coroutine's lock, and reads that mustn't see it half-way go through a second connection (`Database.read`), which in WAL mode sees only what's committed. One that fails is rolled back, every store read again from what's committed, mirrored or not, and it's on record as dropped, all before another's let in (`Database.commandOr`): what it left in memory mustn't be built on.
@@ -77,6 +80,7 @@ What runs with nobody asking (`ServerJobs`), once the server applies commands (D
 |---|---|---|
 | `slots` | each minute | today's slots as they pass; a loosening's wait over, counted by the server's clock (W-23) |
 | `looks` | each minute | Felix's looks and your reminders |
+| `pushes` | each minute | a slot's start and a timer's zero, to the browsers that asked (W-9); a look missed is made up for five minutes at most. It only reads: that a timer's been told is the phone's to mark |
 | `sources` | every 15 minutes | Power Planner and Gmail read (D-133), what follows a read as on the phone, the readings |
 | `morning` | the briefing's time | the day on record, Felix's morning, what's run out let go |
 | `check-in`, `review` | Sunday's | the week's check-in asked, and its review |

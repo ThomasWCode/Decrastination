@@ -170,6 +170,8 @@ The estimates are hours of sessions, from the durations measured over the 4.x re
 
 ## Stage 8 (optional): the phone told at once
 
+**As built.** Not built: it needs a Firebase project, which is the owner's to make, and it only matters from the switch on, as till then the phone's the one writing.
+
 **Goal.** A change on the server reaches the phone in seconds, not at the next 15-minute sync. Release 5.7.0.
 
 **Work.** A Firebase project (the owner), `google-services.json` in `:app` (it holds project ids and a public key, as every app's does; nothing secret), the FCM token uploaded as an observation, the server sending a data message on each revision (coalesced to one a few seconds), the message starting an expedited `SyncWorker`. The 15-minute cycle stays as the fallback.
@@ -179,6 +181,8 @@ The estimates are hours of sessions, from the durations measured over the 4.x re
 **Estimate.** 2 to 3 hours.
 
 ## Stage 9 (optional): Web Push
+
+**As built.** Dormant, as the rest is till the switch (W-25): nothing's offered till the server applies commands and the box has its keys (`java -jar server-all.jar vapid-keys`, into `.env`). 5.9.0, the numbers having moved on by two. `com.interaso:webpush`, as it brings nothing with it. Which channels is a browser's own, kept with its subscription, not a setting: it's about that browser, and a setting would go to the phone. A slot's start is new: the phone has no such notification, its alarm only making the plan again. A timer's zero is read, not marked told, or the phone's own "time's up" wouldn't sound. His message is told where it would sound on the phone (`Notice.alert`), so his notification made again tells nothing.
 
 **Goal.** Felix's messages, slot starts and the timer reach a closed tab (W-9).
 
