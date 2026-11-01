@@ -140,6 +140,8 @@ The Reviews page (LR-01) lists each review with its note, each change with *Undo
 
 `Stats.weekLines` gives this week so far and last in figures, by subject, as Felix is told them when he asks (G6, [felix.md](felix.md)).
 
+What the Stats, check-in and Reviews pages say is in `ui/StatsPage.kt` and `ui/ReviewPage.kt`, the website's as well as the phone's ([website.md](website.md)).
+
 ## The daily jobs
 
 `learn/DailyAlarms.kt` keeps three alarms at the times `learn/Daily.kt` works out, each set again once it has run: one that ran today stands for today, and one that failed is tried again 10 minutes later, up to three times (`Daily.failed`).

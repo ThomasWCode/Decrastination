@@ -27,10 +27,12 @@ Everything is under `/api`, on the same origin as the website. Open: `GET /healt
 | `POST /commands` | a client | a batch of commands, each one's outcome; a 409 in mirror mode |
 | `GET /state?since=` | a client | every store above a revision, whole |
 | `GET /events` | a client | the state's revision: the one it's at on connecting, then each new one, with a heartbeat every 25 seconds |
-| `GET /views/day?date=`, `GET /views/work`, `GET /views/task/{id}`, `GET /views/settings`, `GET /views/chat?earlier=&reach=`, `GET /views/notices` | a client | the pages' view models, [website.md](website.md) |
+| `GET /views/day?date=`, `GET /views/work`, `GET /views/task/{id}`, `GET /views/settings`, `GET /views/chat?earlier=&reach=`, `GET /views/notices`, `GET /views/stats?period=`, `GET /views/week`, `GET /views/reviews` | a client | the pages' view models, [website.md](website.md) |
 | `POST /tasks/{id}/ask` | the website | what's asked of a task, made the commands the phone's sheet would make; a 409 in mirror mode |
 | `POST /day/drop` | the website | a block let go on the Day, judged as the phone judges one; a 409 in mirror mode |
 | `POST /chat/try-again` | a client | your message that waits asked for again, outside any command; a 409 in mirror mode |
+| `POST /week/check-in` | the website | the week's check-in, kept as the phone's form keeps it, setting off the review; a 409 in mirror mode |
+| `GET /record.zip` | the website | the record as CSVs, zipped, a download nothing on the way keeps |
 | `POST /photos/tasks` | the website | a JPEG of homework read into tasks to check, one at a time; a 409 in mirror mode, or with another being read |
 | `GET /credentials`, `POST /credentials` | the website | which sign-ins are held, and setting them: never their values back |
 | `POST /parent-code` | a phone | the parent code's secret |
@@ -55,7 +57,7 @@ SQLite, one file, in WAL mode (`server/Database.kt`), the server its only writer
 
 - `stores`: each store's JSON, its version and the revision that last wrote it. A revision is one transaction. No row goes: `/api/state` can't say what isn't there, so what's deleted (a month of a cleared chat) stays as an empty row at a new revision, and clients take that as any change.
 - `store_history`: each store's every text, with what caused it, kept 90 days and at least the last 20 of each, let go of at each start and daily after (`ServerGraph.tidy`).
-- `commands`: every command received, whose it was, and what came of it. A repeat of an id answers from here, looked up inside the command's lock, so a retry racing its first send waits and finds what came of it. Clearing the chat blanks what those that hold its words sent (`SendMessage`, `ReplyFromNotification`, `RateMessage`), as it lets go of its history: each stays on record, so a repeat still answers, with none of its words.
+- `commands`: every command received, whose it was, and what came of it, kept 90 days (`ServerGraph.tidy`). A repeat of an id answers from here, looked up inside the command's lock, so a retry racing its first send waits and finds what came of it. Clearing the chat blanks what those that hold its words sent (`SendMessage`, `ReplyFromNotification`, `RateMessage`), as it lets go of its history, and letting go of the log's copies blanks a check-in's (`RecordCheckIn`): each stays on record, so a repeat still answers, with none of its words.
 - `devices`, `pairing_codes`, `sessions`, `meta`.
 
 A command is one transaction, all of it or none (`CommandApplier`, `Database.command`), one at a time, in the order they arrive. The owners suspend and change thread on the way, so it's held by a coroutine's lock, and reads that mustn't see it half-way go through a second connection (`Database.read`), which in WAL mode sees only what's committed. One that fails is rolled back, the stores read again from what's committed, and it's on record as dropped, all before another's let in (`Database.commandOr`): what it left in memory mustn't be built on.
