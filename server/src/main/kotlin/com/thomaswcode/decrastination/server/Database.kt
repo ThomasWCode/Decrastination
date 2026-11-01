@@ -83,6 +83,9 @@ class Database(path: String) : AutoCloseable {
         }
     }
 
+    /** [block] between commands, none let in till it's done: what's in memory is then what's committed. Not for anything slow. */
+    suspend fun <T> betweenCommands(block: suspend () -> T): T = commanding.withLock { block() }
+
     /**
      * Each write held back made again on what's committed, in its order, then the stores read from the result, and again for any
      * that came while they were: each is in the database once, and nothing of the failed command is in memory or in a write.
