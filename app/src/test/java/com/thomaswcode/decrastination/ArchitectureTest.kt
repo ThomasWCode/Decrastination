@@ -125,6 +125,15 @@ class ArchitectureTest {
         assertTrue(replaces.containsMatchIn(sources.getValue("data/BackupService.kt")))
     }
 
+    @Test
+    fun `only the replica takes a store whole from the server`() {
+        // What the server sent going round every store's owner (D-107): the pull's, and the archive's own for its months.
+        val adopts = Regex("""\.adopt\(""")
+        val stray = outside(adopts, setOf("sync/Replica.kt", "data/ChatArchiveStore.kt"))
+        assertTrue(stray.isEmpty(), "A store adopted outside sync/Replica.kt: $stray")
+        assertTrue(adopts.containsMatchIn(sources.getValue("sync/Replica.kt")))
+    }
+
     private companion object {
         /** An update of a store, by the name every file holds it by: `tasks.update {`, `graph.stores.model.update(`. */
         val UPDATE = Regex("""(?<![\w.])(?:graph\.(?:stores\.)?|stores\.)?(tasks|settings|runtime|session|protection|device|model|anki|learning|log|instructions|chat|school|memory|felix|calendar|sync|outbox|writes)\.update\s*[({]""")

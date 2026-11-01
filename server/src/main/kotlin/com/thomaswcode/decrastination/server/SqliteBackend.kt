@@ -82,7 +82,7 @@ class SqliteBackend(private val db: Database, private val clock: () -> Long = Sy
      * [empty] at a new revision, which a client takes as it takes any change, so a chat cleared on one goes from the others.
      */
     override fun delete(name: String, empty: String) {
-        if (!writable) return
+        if (!writable || read(name) == empty) return
         val version = db.transactionless { c -> c.single("SELECT version FROM stores WHERE name = ?", name) } ?: return
         val by = writer
         db.writing(name) { keep(name, version.toInt(), empty, by) }

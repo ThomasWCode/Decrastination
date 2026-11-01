@@ -17,6 +17,10 @@ import com.thomaswcode.decrastination.net.Http
 import com.thomaswcode.decrastination.net.HttpResponse
 import com.thomaswcode.decrastination.sync.Protocol
 import com.thomaswcode.decrastination.sync.Replica
+import com.thomaswcode.decrastination.sync.SeedAnswer
+import com.thomaswcode.decrastination.sync.SeedBatch
+import com.thomaswcode.decrastination.sync.ServerVersion
+import com.thomaswcode.decrastination.sync.protocol.AddNote
 import com.thomaswcode.decrastination.sync.protocol.AddOwnChange
 import com.thomaswcode.decrastination.sync.protocol.ClearChat
 import com.thomaswcode.decrastination.sync.protocol.Command
@@ -33,7 +37,9 @@ import java.time.ZoneId
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.builtins.ListSerializer
@@ -62,14 +68,21 @@ class SyncHarnessTest {
     private inner class Wire(private val device: String) : Http {
         var cut = false
         var losesAnswers = 0
+        var seeds = 0
 
         /** What happens on the phone while its pull is on its way, once. */
         var duringPull: (() -> Unit)? = null
 
         override fun post(url: String, headers: Map<String, String>, body: String): HttpResponse {
             if (cut) throw IOException("cut")
+            if (url.endsWith("/api/stores/seed")) {
+                seeds++
+                if (graph.mode == ServerGraph.COMMANDS) return HttpResponse(409, "{}")
+                return HttpResponse(200, json.encodeToString(SeedAnswer.serializer(), runBlocking { graph.seed(json.decodeFromString(SeedBatch.serializer(), body), device) }))
+            }
             check(url.endsWith("/api/commands")) { url }
             headers[Protocol.ZONE_HEADER]?.let(graph.serverClock::setZone)
+            if (graph.mode != ServerGraph.COMMANDS) return HttpResponse(409, "{}")
             val batch = json.decodeFromString(CommandBatch.serializer(), body)
             val outcomes = runBlocking { graph.applier.apply(batch, device) }
             if (losesAnswers > 0) {
@@ -81,12 +94,14 @@ class SyncHarnessTest {
 
         override fun get(url: String, headers: Map<String, String>): HttpResponse {
             if (cut) throw IOException("cut")
+            if (url.endsWith("/api/version")) return HttpResponse(200, json.encodeToString(ServerVersion.serializer(), graph.version()))
             duringPull?.also { duringPull = null }?.invoke()
             headers[Protocol.ZONE_HEADER]?.let(graph.serverClock::setZone)
             val since = url.substringAfter("since=").toLong()
             val state = graph.state(since)
             val body = buildJsonObject {
                 put("revision", state.revision)
+                put("mode", graph.mode)
                 put("stores", json.encodeToJsonElement(ListSerializer(JsonElement.serializer()), state.stores.map { row ->
                     buildJsonObject {
                         put("name", row.name)
@@ -132,16 +147,68 @@ class SyncHarnessTest {
     }
 
     @Test
-    fun `a server restored to an earlier revision is read whole, not taken at its word`() = runBlocking {
+    fun `a server restored to an earlier revision takes nothing from this phone, which holds what it's lost`() = runBlocking {
         val phone = phone()
         phone.h.commands.act(own("Essay"))
         assertTrue(phone.replica.upload())
         // This phone has been further than the server now has: it took what a restore has since taken back.
         phone.h.stores.sync.update { it.copy(revision = 1_000) }
-        phone.h.stores.tasks.update { state -> state.copy(tasks = state.tasks.map { it.copy(title = "Gone with the restore") }) }
+        phone.h.stores.tasks.update { state -> state.copy(tasks = state.tasks.map { it.copy(title = "Newer than the restore") }) }
+        assertFalse(phone.replica.upload())
+        assertEquals(setOf("Newer than the restore"), phone.titles)
+        assertEquals(1_000, phone.h.stores.sync.value.revision, "it's not taken at its word")
+        assertTrue(assertNotNull(phone.h.stores.sync.value.lastError).startsWith("The server has gone back"))
+    }
+
+    /** The server as a restore's steps leave it: back to taking seeds. */
+    private fun mirroring() {
+        db.setMeta("mode", "mirror")
+    }
+
+    @Test
+    fun `a server put back to mirroring is sent all this phone holds, with a pull, and what's waiting goes with it`() = runBlocking {
+        val phone = phone()
+        phone.h.commands.act(own("Essay"))
         assertTrue(phone.replica.upload())
-        assertEquals(setOf("Essay"), phone.titles)
-        assertEquals(db.currentRevision(), phone.h.stores.sync.value.revision)
+        phone.h.commands.act(own("Maths"))
+        mirroring()
+        assertTrue(phone.replica.upload(), "its command's turned away, and it goes back")
+        assertEquals(SyncState.MIRROR, phone.h.stores.sync.value.mode)
+        assertEquals(0, phone.waiting, "it's in the stores, and goes with them")
+        assertEquals(setOf("Essay", "Maths"), phone.titles, "nothing's taken from here")
+        assertTrue(phone.replica.upload())
+        assertEquals(setOf("Essay", "Maths"), serverTitles)
+    }
+
+    @Test
+    fun `a phone with nothing waiting hears the server's gone back to mirroring from its pull`() = runBlocking {
+        val phone = phone()
+        phone.h.commands.act(own("Essay"))
+        assertTrue(phone.replica.upload())
+        phone.h.stores.tasks.update { state -> state.copy(tasks = state.tasks.map { it.copy(title = "Newer than the restore") }) }
+        mirroring()
+        assertTrue(phone.replica.upload())
+        assertEquals(SyncState.MIRROR, phone.h.stores.sync.value.mode)
+        assertEquals(setOf("Newer than the restore"), phone.titles)
+    }
+
+    @Test
+    fun `going over to commands takes one seed, not three`() = runBlocking {
+        val phone = phone()
+        phone.h.stores.sync.update { it.copy(mode = SyncState.MIRROR) }
+        assertTrue(phone.replica.upload())
+        assertEquals(1, phone.wire.seeds)
+        assertEquals(SyncState.COMMANDS, phone.h.stores.sync.value.mode)
+    }
+
+    @Test
+    fun `a command that throws here makes the next pull one of everything, as a stopped process's does`() = runBlocking {
+        val phone = phone()
+        phone.h.commands.act(own("Essay"))
+        assertTrue(phone.replica.upload())
+        assertTrue(phone.h.stores.sync.value.revision > 0)
+        assertFailsWith<IllegalStateException> { phone.h.commands.act(AddNote("own:s-Essay", "a note")) }
+        assertEquals(0, phone.h.stores.sync.value.revision)
     }
 
     @Test
@@ -167,7 +234,8 @@ class SyncHarnessTest {
         assertTrue(one.replica.upload())
         two.h.commands.act(FinishOwnTask("own:s-Essay"))
         assertTrue(two.replica.upload())
-        assertEquals(listOf("That task had gone"), two.h.stores.sync.value.dropped)
+        val line = two.h.stores.sync.value.dropped.single()
+        assertTrue(line.startsWith("Finish own task, ") && line.endsWith(": That task had gone"), line)
         two.replica.clearDropped()
         assertEquals(emptyList(), two.h.stores.sync.value.dropped)
     }
@@ -211,7 +279,7 @@ class SyncHarnessTest {
         one.replica.upload()
         two.wire.cut = false
         assertTrue(two.replica.upload())
-        assertEquals(listOf("That task had gone"), two.h.stores.sync.value.dropped)
+        assertTrue(two.h.stores.sync.value.dropped.single().endsWith(": That task had gone"))
         assertEquals(emptySet(), two.titles)
         assertEquals(0, two.waiting)
     }

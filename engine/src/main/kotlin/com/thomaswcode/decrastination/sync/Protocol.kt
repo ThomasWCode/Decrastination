@@ -46,9 +46,9 @@ data class SeedAnswer(val revision: Long, val refused: List<String> = emptyList(
 @Serializable
 data class PulledStore(val name: String, val version: Int, val revision: Long, val json: JsonElement)
 
-/** Every store above the revision asked for, and the revision they're as of. */
+/** Every store above the revision asked for, the revision they're as of, and the server's mode: a restore can take it back to mirroring. */
 @Serializable
-data class PulledState(val revision: Long, val stores: List<PulledStore>)
+data class PulledState(val revision: Long, val stores: List<PulledStore>, val mode: String? = null)
 
 /** What a client can ask of the server with no sign-in: its version, the protocol and each store's version. */
 @Serializable

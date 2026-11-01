@@ -72,7 +72,8 @@ class ChatArchiveStore(private val backend: StoreBackend, private val clock: () 
 
     /**
      * Whether it holds any message: whether it has a month's file, none read. A month emptied has its file
-     * let go ([update], [clear]), so one there holds messages, or did and couldn't be read: shown, and said.
+     * let go ([update], [clear]), so one there holds messages, or did and couldn't be read: shown, and said. On the server a
+     * month emptied stays as an empty row, so this says only that it's held one.
      */
     val holdsAny: Boolean get() = files().isNotEmpty()
 
