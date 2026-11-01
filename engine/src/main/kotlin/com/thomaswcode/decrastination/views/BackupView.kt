@@ -86,11 +86,8 @@ object SetupViews {
             SetupPage.anki(tasks.status(Source.Anki), allowed = true),
             SetupPage.gmail(tasks.status(Source.Gmail), !writable || Secret.GmailAppPassword.name in held, settings.gmailFinishes, givenUp = emptyList()),
         ).map(::line),
-        claude = line(SetupPage.claude(!writable || keyHeld, settings, usage, BOX_KEY.takeIf { writable })),
+        claude = line(SetupPage.claude(!writable || keyHeld, settings, usage, onBox = writable)),
     )
-
-    /** Once the server asks Claude, its key is the box's (W-12), not one entered on a page. */
-    private const val BOX_KEY = "Put a new key in the box's .env and start the server again"
 
     private fun line(line: SetupPage.Line) = SetupLine(line.title, line.done, line.detail)
 

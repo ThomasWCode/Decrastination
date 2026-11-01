@@ -508,7 +508,7 @@ class ServerGraph(
 
     /** Whether Claude's on, by this box's key where it's asked here, and by the phone's while it's asked there. */
     private val claudeOn: Boolean
-        get() = stores.settings.value.let { it.aiEnabled && (if (mode == COMMANDS) claudeKey != null else it.aiKeyActive) }
+        get() = if (mode == COMMANDS) gateway.claudeKey() != null else stores.settings.value.let { it.aiEnabled && it.aiKeyActive }
 
     /** Stats for the [period] named, for the website. */
     fun stats(period: String?): StatsView {
@@ -551,11 +551,22 @@ class ServerGraph(
 
     /** The Backup page, by what a backup of things as they stand comes to: on a thread of its own, as the chat's archive is read whole for it. */
     suspend fun backupView(): BackupView = withContext(Dispatchers.IO) {
+        val (leftOut, tooBig, refused) = fitNow()
+        BackupViews.of(leftOut, tooBig, refused, stores.runtime.value.lastBackupAt, owners.backups.resetCopies(), stores.instructions.value.applied, clock.now(), mode == COMMANDS)
+    }
+
+    /** What a backup came to, and at which revision. */
+    @Volatile
+    private var backupFit: Pair<Long, Triple<Int, Boolean, String?>>? = null
+
+    /** What a backup comes to: asked for at each change and each minute the page is open, and it takes a whole backup to say, so once a revision. */
+    private fun fitNow(): Triple<Int, Boolean, String?> {
+        val revision = db.currentRevision()
+        backupFit?.takeIf { it.first == revision }?.let { return it.second }
         val backups = owners.backups
-        val (leftOut, tooBig, refused) = runCatching {
-            backups.encoded().let { (text, leftOut) -> Triple(leftOut, backups.tooBig(text), backups.unrestorable(text)) }
-        }.getOrDefault(Triple(0, false, null))
-        BackupViews.of(leftOut, tooBig, refused, stores.runtime.value.lastBackupAt, backups.resetCopies(), stores.instructions.value.applied, clock.now(), mode == COMMANDS)
+        val fit = runCatching { backups.encoded().let { (text, leftOut) -> Triple(leftOut, backups.tooBig(text), backups.unrestorable(text)) } }.getOrDefault(Triple(0, false, null))
+        backupFit = revision to fit
+        return fit
     }
 
     /**
