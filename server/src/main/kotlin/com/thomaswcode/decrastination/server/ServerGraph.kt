@@ -43,6 +43,7 @@ import com.thomaswcode.decrastination.ui.TaskSheetModel
 import com.thomaswcode.decrastination.views.Asked
 import com.thomaswcode.decrastination.views.ChatView
 import com.thomaswcode.decrastination.views.ChatViews
+import com.thomaswcode.decrastination.views.DayDrop
 import com.thomaswcode.decrastination.views.DayView
 import com.thomaswcode.decrastination.views.DayViews
 import com.thomaswcode.decrastination.views.NoticesView
@@ -419,6 +420,8 @@ class ServerGraph(
             judge = { EventJudge.judge(it, answers) },
             micro = stores.model.value.microPlans,
             asOf = devices.lastSeen(),
+            timer = stores.session.value.timer,
+            writable = mode == COMMANDS,
         )
     }
 
@@ -504,7 +507,22 @@ class ServerGraph(
             val said = pieceSays.kept(shown, ask.at ?: plan.now) { action -> (website(action).state == Outcome.APPLIED).also { kept = it } }
             return Asked(kept, said)
         }
-        val decided = TaskAsks.decide(task, piece, ask, moves, clock.zone())
+        return made(TaskAsks.decide(task, piece, ask, moves, clock.zone()))
+    }
+
+    /** [drop] on the Day, by the phone's rules: what came of it, a move saying where it's taken back. */
+    suspend fun drop(drop: DayDrop): Asked {
+        val day = runCatching { LocalDate.parse(drop.date) }.getOrNull() ?: return Asked(false, "That needs a date")
+        val plan = planning.plan()
+        val slot = plan.bucket(day)?.slots?.firstOrNull { it.key == drop.key } ?: return Asked(false, Moves.CHANGED)
+        val onto = drop.onto?.let { date -> runCatching { LocalDate.parse(date) }.getOrNull() ?: return Asked(false, "That needs a date") }
+        val decided = moves.dropped(plan, slot, day, onto, drop.minute, ((slot.end - slot.start) / MINUTE_MS).toInt(), clock.zone()) ?: return Asked(false)
+        val moved = made(decided)
+        return if (moved.done) moved.copy(said = "${decided.said}: undone in the chat's Your changes") else moved
+    }
+
+    /** What's been [decided], applied as the website's: a step at a time, stopping at the first that doesn't go through. */
+    private suspend fun made(decided: Moves.Decided): Asked {
         decided.why?.let { return Asked(false, it) }
         for (action in decided.actions) {
             val outcome = website(action)

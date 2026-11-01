@@ -18,6 +18,7 @@ import com.thomaswcode.decrastination.felix.Conversation
 import com.thomaswcode.decrastination.learn.CheckIn
 import com.thomaswcode.decrastination.learn.ReviewInput
 import com.thomaswcode.decrastination.protect.SettingsChanges
+import com.thomaswcode.decrastination.ui.Moves
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
@@ -178,12 +179,16 @@ data class StartTimer(val taskId: String, val stepIndex: Int? = null, val key: S
     override suspend fun run(owners: Owners): PieceTimer? = owners.focus.startTimer(taskId, stepIndex, key)
 
     override fun stale(owners: Owners) = owners.gone(taskId)
+
+    override fun refused(answer: Any?) = Moves.CHANGED.takeIf { answer == null }
 }
 
 @Serializable
 @SerialName("StopTimer")
 data object StopTimer : Action, Answers<Boolean> {
     override suspend fun run(owners: Owners): Boolean = owners.focus.stopTimer()
+
+    override fun refused(answer: Any?) = "No timer was running".takeIf { answer == false }
 }
 
 @Serializable

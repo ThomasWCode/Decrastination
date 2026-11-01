@@ -5,6 +5,7 @@ import com.thomaswcode.decrastination.sync.DeviceClaim
 import com.thomaswcode.decrastination.sync.Protocol
 import com.thomaswcode.decrastination.sync.SeedBatch
 import com.thomaswcode.decrastination.sync.protocol.CommandBatch
+import com.thomaswcode.decrastination.views.DayDrop
 import com.thomaswcode.decrastination.views.TaskAsk
 import io.ktor.http.ContentType
 import io.ktor.http.Cookie
@@ -301,6 +302,11 @@ private fun Route.signedInRoutes(web: Web) {
     get("/views/day") {
         val date = call.request.queryParameters["date"]?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
         call.respond(graph.day(date))
+    }
+    post("/day/drop") {
+        if (call.client !is Client.Website) return@post call.respond(HttpStatusCode.Forbidden, Problem("A drop's the website's"))
+        if (graph.mode != ServerGraph.COMMANDS) return@post call.respond(HttpStatusCode.Conflict, Problem("The server is mirroring the phone"))
+        call.respond(graph.drop(call.receive<DayDrop>()))
     }
     get("/views/work") { call.respond(graph.work()) }
     get("/views/chat") {

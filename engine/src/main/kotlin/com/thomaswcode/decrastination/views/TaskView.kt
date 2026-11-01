@@ -18,6 +18,7 @@ import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.core.TaskItem
+import com.thomaswcode.decrastination.data.PieceTimer
 import com.thomaswcode.decrastination.sync.protocol.Action
 import com.thomaswcode.decrastination.sync.protocol.AddOwnChange
 import com.thomaswcode.decrastination.sync.protocol.DeleteNote
@@ -25,6 +26,7 @@ import com.thomaswcode.decrastination.sync.protocol.DeleteOwnTask
 import com.thomaswcode.decrastination.sync.protocol.FinishOwnTask
 import com.thomaswcode.decrastination.sync.protocol.LaterToday
 import com.thomaswcode.decrastination.sync.protocol.ReopenOwnTask
+import com.thomaswcode.decrastination.sync.protocol.StopTimer
 import com.thomaswcode.decrastination.sync.protocol.TakeBackQuick
 import com.thomaswcode.decrastination.sync.protocol.TickBlock
 import com.thomaswcode.decrastination.sync.protocol.UndoKeep
@@ -34,6 +36,7 @@ import com.thomaswcode.decrastination.ui.OwnChange
 import com.thomaswcode.decrastination.ui.TaskSheetModel
 import com.thomaswcode.decrastination.ui.ownChange
 import com.thomaswcode.decrastination.ui.stepLine
+import com.thomaswcode.decrastination.ui.timerText
 import java.time.ZoneId
 import kotlinx.serialization.Serializable
 
@@ -86,7 +89,7 @@ data class TaskField(
 )
 
 @Serializable
-data class StepLine(val line: String, val done: Boolean, val tick: Action? = null)
+data class StepLine(val line: String, val done: Boolean, val tick: Action? = null, val timer: TaskAction? = null)
 
 @Serializable
 data class NoteLine(val line: String, val delete: TaskAction? = null)
@@ -121,7 +124,7 @@ object TaskViews {
     private const val MOVE_DAYS = 14L
 
     /** [task]'s sheet in [plan] at [now], with what's in use on it. [writable]: the server applies commands, so it can be changed here. */
-    fun of(task: TaskItem, byId: Map<String, TaskItem>, plan: Plan, settings: Settings, applied: List<Instruction>, notes: List<Note>, now: Long, zone: ZoneId, writable: Boolean): TaskView {
+    fun of(task: TaskItem, byId: Map<String, TaskItem>, plan: Plan, settings: Settings, applied: List<Instruction>, notes: List<Note>, now: Long, zone: ZoneId, timer: PieceTimer? = null, writable: Boolean): TaskView {
         val own = task.source == Source.Own
         val changeable = writable && task.isOpen && !task.derived
         val next = TaskSheetModel.next(plan, task.id).takeIf { task.isOpen }
@@ -130,6 +133,8 @@ object TaskViews {
         val actions = buildList {
             if (!writable) return@buildList
             next?.let { piece ->
+                // A task with no steps: a timer on its next piece (D-112); with steps, each has its own.
+                if (task.subSteps.isEmpty()) add(timerAction(timer?.takeIf { it.running && it.key == piece.key }, piece.stepIndex, piece.key, now))
                 add(TaskAction("Done", ask = TaskAsk(TaskAsk.DONE, at = now, key = piece.key), undo = UndoKeep(piece.key, now)))
                 add(TaskAction("Later today", LaterToday(piece.key)))
                 val tomorrow = plan.today.plusDays(1)
@@ -159,7 +164,13 @@ object TaskViews {
             next = next?.let { piece -> "Next: ${piece.shown ?: if (piece.parts > 1) "part ${piece.part} of ${piece.parts}" else piece.title}, ${Format.minutes(piece.minutes)}" },
             fields = fields(task, applied, changeable, now, zone),
             steps = task.subSteps.mapIndexed { index, step ->
-                StepLine(stepLine(step.title, step.minutes, step.from, step.dueAt, step.anyOrder, now, zone), step.done, if (writable && Focus.tickable(task) && task.isOpen && !step.done) TickBlock(task.id, index, step.title) else null)
+                val timed = writable && task.isOpen && !task.hidden && !step.done
+                StepLine(
+                    stepLine(step.title, step.minutes, step.from, step.dueAt, step.anyOrder, now, zone),
+                    step.done,
+                    if (writable && Focus.tickable(task) && task.isOpen && !step.done) TickBlock(task.id, index, step.title) else null,
+                    if (timed) timerAction(timer?.takeIf { it.running && it.taskId == task.id && it.stepIndex == index }, index, null, now) else null,
+                )
             },
             planned = TaskSheetModel.planned(plan, task.id, zone).map { TaskSheetModel.line(it, plan.today, zone) },
             instructions = TaskSheetModel.instructions(applied, task.id),
@@ -176,6 +187,10 @@ object TaskViews {
     }
 
     private fun home(task: TaskItem) = OwnTaskRules.draftOf(task).where == "home"
+
+    /** Stop for the [timer] running on a piece, with its time; else Start, on step [step]'s next, or on the piece [key]. */
+    private fun timerAction(timer: PieceTimer?, step: Int?, key: String?, now: Long) =
+        if (timer != null) TaskAction("Stop (${timerText(timer, now).removePrefix("Timer: ")})", StopTimer) else TaskAction("Start", ask = TaskAsk(TaskAsk.TIMER, key = key, step = step))
 
     /** Its values as the sheet has them: an event by its time; the rest by when it's due, how long it takes and when it can start. */
     private fun fields(task: TaskItem, applied: List<Instruction>, changeable: Boolean, now: Long, zone: ZoneId): List<TaskField> {

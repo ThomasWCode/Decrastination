@@ -9,7 +9,9 @@ import com.thomaswcode.decrastination.core.OwnTaskRules
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.sync.protocol.AddOwnChange
+import com.thomaswcode.decrastination.sync.protocol.NoteActivity
 import com.thomaswcode.decrastination.sync.protocol.SaveOwnTask
+import com.thomaswcode.decrastination.sync.protocol.StartTimer
 import com.thomaswcode.decrastination.ui.Moves
 import com.thomaswcode.decrastination.ui.OwnChange
 import com.thomaswcode.decrastination.ui.dueChange
@@ -22,13 +24,14 @@ import kotlinx.serialization.Serializable
 
 /**
  * What a page asks of a task that takes the phone's rules to turn into commands: a value for one of its fields ([at] a moment,
- * [minutes], [date] a day), one taken off it, where it's planned, a move ([date], with [minute] for a time), or its next piece done
- * ([key] the piece the page showed, and [at] when: it's that one that's done, or none). The page says what you gave, and what's
+ * [minutes], [date] a day), one taken off it, where it's planned, a move ([date], with [minute] for a time), a timer on a piece
+ * ([key], or its [step]'s next), or its next piece done ([key] the piece the page showed, and [at] when: it's that one that's done,
+ * or none). The page says what you gave, and what's
  * made of it, in what words, is made once, here (D-137), of the task as it is then: a copy of it sent from a page drawn before
  * would put back what's changed since (D-4).
  */
 @Serializable
-data class TaskAsk(val kind: String, val at: Long? = null, val minutes: Int? = null, val date: String? = null, val minute: Int? = null, val key: String? = null) {
+data class TaskAsk(val kind: String, val at: Long? = null, val minutes: Int? = null, val date: String? = null, val minute: Int? = null, val key: String? = null, val step: Int? = null) {
     companion object {
         const val DONE = "done"
         const val DUE = "due"
@@ -40,6 +43,7 @@ data class TaskAsk(val kind: String, val at: Long? = null, val minutes: Int? = n
         const val ANYWHERE = "anywhere"
         const val TO_DAY = "toDay"
         const val TO_TIME = "toTime"
+        const val TIMER = "timer"
     }
 }
 
@@ -69,6 +73,8 @@ object TaskAsks {
             TaskAsk.HOME, TaskAsk.ANYWHERE -> if (task.source != Source.Own) NOT_ON_IT else Moves.Decided(
                 actions = listOf(SaveOwnTask.of(task.sourceId, OwnTaskRules.draftOf(task).copy(where = if (ask.kind == TaskAsk.HOME) "home" else "anywhere"))),
             )
+            // Something done on its task, too (D-112), so Felix's nudge for its slot stays off after a Stop.
+            TaskAsk.TIMER -> Moves.Decided(actions = listOf(StartTimer(task.id, ask.step, ask.key), NoteActivity(listOf(task.id))))
             TaskAsk.TO_DAY, TaskAsk.TO_TIME -> when {
                 piece == null -> Moves.Decided(why = "It has no piece in the plan to move")
                 day == null -> Moves.Decided(why = "That needs a date")
