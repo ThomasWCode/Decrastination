@@ -268,6 +268,25 @@ class ServerBackupTest {
         val keyed = ServerGraph(other, File(dir, "other").apply { mkdirs() }, Plain, "test", claudeKey = "made-up")
         keyed.stores.settings.update { it.copy(aiEnabled = true, aiKeyActive = true) }
         assertEquals(true, keyed.setup().claude.done)
+        keyed.stores.settings.update { it.copy(aiKeyActive = false) }
+        assertEquals(true, keyed.setup().claude.done, "the phone's flag has nothing to do with the box's key")
+        assertNull(keyed.chat(0, null).claudeOff, "and the chat goes by what the gateway does, which is to call")
+        keyed.stores.settings.update { it.copy(aiEnabled = false) }
+        assertNotNull(keyed.chat(0, null).claudeOff)
+        other.close()
+    }
+
+    @Test
+    fun `what a backup comes to is worked out once a revision`() = runBlocking<Unit> {
+        val other = Database(File(dir, "other.db").path)
+        val mirror = ServerGraph(other, File(dir, "other").apply { mkdirs() }, Plain, "test")
+        assertTrue(mirror.backupView().canDownload)
+        // In memory alone: while mirroring, nothing here moves the revision.
+        val big = TaskItem("own:big", Source.Own, "big", "x".repeat(Backups.MAX_BYTES + 1), kind = Kind.Homework, firstSeenAt = 1L, lastSeenAt = 1L)
+        mirror.stores.tasks.update { it.copy(tasks = listOf(big)) }
+        assertTrue(mirror.backupView().canDownload, "the same revision, the same answer")
+        mirror.seed(SeedBatch("Europe/London", "test", listOf(StoreText("school.json", mirror.stores.school.version, "{}"))), "phone")
+        assertFalse(mirror.backupView().canDownload, "a new one, worked out again")
         other.close()
     }
 

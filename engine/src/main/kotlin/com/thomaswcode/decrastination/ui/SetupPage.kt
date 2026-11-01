@@ -54,19 +54,22 @@ object SetupPage {
             givenUp.joinToString("") { " " + GmailWrites.failure(it) + " Its sheet's It's sorted clears this." },
     )
 
-    /** Claude, from whether a key's held, as the month's [usage] stands: [newKey], how a new one's given, where it isn't as on the phone. */
-    fun claude(keyHeld: Boolean, settings: Settings, usage: AiUsage, newKey: String? = null): Line {
+    /** A new key, for a server that asks Claude: it's the box's (W-12), and no page takes one. */
+    private const val BOX_KEY = "Put a new key in the box's .env and start the server again"
+
+    /** Claude, from whether a key's held, as the month's [usage] stands. A key [onBox] is in use as it's there, whatever the phone's is. */
+    fun claude(keyHeld: Boolean, settings: Settings, usage: AiUsage, onBox: Boolean = false): Line {
         val keyProblem = usage.keyProblem
         val lastError = usage.lastError
         return Line(
             "Claude",
-            settings.aiEnabled && settings.aiKeyActive && keyHeld && usage.lastError == null && usage.keyProblem == null,
+            settings.aiEnabled && (onBox || settings.aiKeyActive) && keyHeld && usage.lastError == null && usage.keyProblem == null,
             when {
                 !keyHeld -> "No API key: the rules do what they can, and nothing is sent to Claude."
-                !settings.aiKeyActive -> "Key saved, not in use yet: enter it again to use it."
+                !onBox && !settings.aiKeyActive -> "Key saved, not in use yet: enter it again to use it."
                 !settings.aiEnabled -> "Key saved; switched off in Settings, so nothing is sent."
                 // The key or its account can't be used: said with what puts it right.
-                keyProblem != null -> "${keyProblem.says}. ${newKey?.takeIf { keyProblem == KeyProblem.Rejected } ?: keyProblem.fix}: the rules stand in, and it's tried again an hour after each failed try."
+                keyProblem != null -> "${keyProblem.says}. ${if (onBox && keyProblem == KeyProblem.Rejected) BOX_KEY else keyProblem.fix}: the rules stand in, and it's tried again an hour after each failed try."
                 // Its calls failing (a bad key, no connection): said, so it can be put right.
                 lastError != null -> "On, but its last call failed (${lastError.take(80)}): the rules stand in, and it's tried again after an hour."
                 else -> "On: $%.2f this month".format(Locale.UK, usage.spentUsd) + (settings.aiMonthlyCapUsd?.let { " of $$it" } ?: ", no cap: it stops when the account's credit runs out") + "."

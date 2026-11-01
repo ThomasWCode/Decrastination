@@ -133,6 +133,15 @@ class BackupViewTest {
     }
 
     @Test
+    fun `a key on the box is in use whatever the phone's is`() {
+        val waiting = Settings(aiEnabled = true, aiKeyActive = false)
+        assertEquals(true, setup(settings = waiting, keyHeld = true).claude.done)
+        assertTrue(setup(settings = waiting, keyHeld = true).claude.detail.startsWith("On: "), "no asking for a key the box has")
+        assertEquals("Key saved, not in use yet: enter it again to use it.", setup(settings = waiting, writable = false).claude.detail)
+        assertEquals(false, setup(settings = waiting, writable = false).claude.done)
+    }
+
+    @Test
     fun `what couldn't be read is said, the sign-ins' in the server's words`() {
         val lost = setup(unreadable = listOf(JsonStore.Unreadable("secrets.bin", null, false, now))).saved.single()
         assertEquals(false, lost.done)
