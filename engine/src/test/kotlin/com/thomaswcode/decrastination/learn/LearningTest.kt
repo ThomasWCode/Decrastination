@@ -30,10 +30,14 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.joinAll
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -71,12 +75,18 @@ class LearningTest {
     private val told: MutableList<String> = Collections.synchronizedList(mutableListOf())
     private val offered: MutableList<String> = Collections.synchronizedList(mutableListOf())
 
+    /** Run part-way through a review, for a test to hold one there. */
+    @Volatile private var midReview: suspend () -> Unit = {}
+
     private val learning = Learning(
         stores.log, stores.learning, stores.settings, stores.memory, stores.chat, stores.instructions, clock, gateway, focus, protection,
         resets = { 0 },
         profile = { _, _ -> Profile.Block.NONE },
         // By the tasks alone: what the chat's acts hold and the sources' reads are Conversation's.
-        forgetExpired = { now -> stores.memory.update { Memories.expired(it, stores.tasks.value.tasks.associateBy { t -> t.id }, now) } },
+        forgetExpired = { now ->
+            midReview()
+            stores.memory.update { Memories.expired(it, stores.tasks.value.tasks.associateBy { t -> t.id }, now) }
+        },
         reviewed = { told += it },
         summaryReady = { offered += it },
     )
@@ -114,6 +124,26 @@ class LearningTest {
     }
 
     @Test
+    fun `two reviews at once are the one, the second waiting and finding it's been made`() = runBlocking {
+        val inside = CompletableDeferred<Unit>()
+        val letGo = CompletableDeferred<Unit>()
+        midReview = {
+            midReview = {}
+            inside.complete(Unit)
+            letGo.await()
+        }
+        val first = launch(Dispatchers.Default) { learning.review(ifDue = true) }
+        inside.await()
+        val second = launch(Dispatchers.Default) { learning.review(ifDue = true) }
+        // Long enough for a second that didn't wait to be past the check, as nothing's on record yet.
+        delay(300)
+        letGo.complete(Unit)
+        joinAll(first, second)
+        assertEquals(1, stores.log.value.reviews.size)
+        assertEquals(1, told.size)
+    }
+
+    @Test
     fun `a review of the week so far learns nothing, and Sunday's still comes and learns (D-123)`() = runBlocking {
         stores.log.update { it.copy(completions = listOf(done("a", 30, 45, "2026-10-13T18:00"), done("b", 40, 60, "2026-10-14T18:00"), done("c", 20, 30, "2026-10-14T19:00"))) }
         val before = stores.learning.value.calibration
@@ -125,6 +155,16 @@ class LearningTest {
         learning.review(ifDue = true)
         assertEquals(2, stores.log.value.reviews.size)
         assertTrue(stores.learning.value.calibration != before, "Sunday's learned")
+    }
+
+    @Test
+    fun `a setting a review changed twice goes back from the change that stands`() = runBlocking {
+        stores.settings.update { it.copy(softMinPerDay = 90) }
+        val changes = listOf(ReviewInput.Change("softMinPerDay", 80, "made up"), ReviewInput.Change("softMinPerDay", 90, "made up"))
+        val review = WeeklyReview(clock.now(), listOf("A made-up note."), by = "rules", changes = changes, settingsBefore = mapOf("softMinPerDay" to 60))
+        stores.log.update { it.copy(reviews = listOf(review)) }
+        assertEquals("${ReviewInput.label("softMinPerDay")} is back to ${ReviewInput.valueText("softMinPerDay", 60)}.", learning.undoReviewChange(review.at, "softMinPerDay"))
+        assertEquals(60, stores.settings.value.softMinPerDay)
     }
 
     @Test

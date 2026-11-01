@@ -44,7 +44,6 @@ import com.thomaswcode.decrastination.tasks.Instructions
 import com.thomaswcode.decrastination.tasks.OwnTasks
 import java.io.File
 import java.io.IOException
-import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
@@ -202,19 +201,13 @@ class ServerOwners(
         ankiRates = { stores.learning.value.calibration.ankiSecondsPerCard },
     )
 
-    /** Whether the week's review is being made: one at a time, as the phone's job is, as it can be a paid call. */
-    private val reviewing = AtomicBoolean()
-
-    /** The week's review, unless the week's had it or it's being made: on its own time, as it can take a minute, and never inside a command. */
+    /** The week's review, unless the week's had it: on its own time, as it can take a minute, and never inside a command. */
     fun reviewSoon() {
-        if (!reviewing.compareAndSet(false, true)) return
         scope.launch {
             try {
                 learning.review(ifDue = true)
             } catch (failed: IOException) {
                 Log.w(Log.TAG, "The week's review failed: ${failed::class.simpleName}")
-            } finally {
-                reviewing.set(false)
             }
         }
     }

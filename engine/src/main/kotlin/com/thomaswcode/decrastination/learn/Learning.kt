@@ -26,6 +26,8 @@ import com.thomaswcode.decrastination.enrich.SummaryWriter
 import com.thomaswcode.decrastination.ports.Log
 import com.thomaswcode.decrastination.protect.Protection
 import java.time.LocalDate
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
  * What the app learns from the log (docs/spec/learning.md):
@@ -64,6 +66,9 @@ class Learning(
     /** The tasks as they stand, read for how the week's weekly work went (D-124). */
     private val tasks: () -> List<TaskItem> = { emptyList() },
 ) {
+    /** Held through a review, whoever started it: what's said to have had one is only known at its end, and each is a paid call. */
+    private val reviewing = Mutex()
+
     /**
      * The weekly review (docs/spec/learning.md, item 7), unless [ifDue] and the week has had it: on
      * Sunday evening, after the check-in (or without it), the calibration is learned afresh from the
@@ -71,8 +76,11 @@ class Learning(
      * bounded changes, which apply at once, armed or not. Until then the note is the rules': what
      * changed, in words. Then what's run out of what's remembered is let go of, and the facts with neither an
      * until nor a task are tidied once they're past 70 % of the room the rest leave them (AI-21, [MemoryTidy.due]).
+     * One at a time: a second waits, and then finds the week has had it.
      */
-    suspend fun review(ifDue: Boolean) {
+    suspend fun review(ifDue: Boolean) = reviewing.withLock { makeReview(ifDue) }
+
+    private suspend fun makeReview(ifDue: Boolean) {
         val now = clock.now()
         // Once a week: the check-in runs it at once, and the evening's alarm finds it done since
         // Sunday's check-in time (a review at any other time doesn't count). The latest Sunday at or
@@ -200,12 +208,13 @@ class Learning(
 
     /**
      * The change to [setting] of the review made at [reviewAt] put back (LR-01): its setting to its value before, as a change of
-     * yours (once armed, one that loosens waits as yours do), while it's still what the review left. The review's
-     * read here, not sent: what it was before is the log's to say. What happened, in words.
+     * yours (once armed, one that loosens waits as yours do), while it's still what the review left, which is its last to
+     * that setting ([ReviewInput.apply]). The review's read here, not sent: what it was before is the log's to say. What
+     * happened, in words.
      */
     suspend fun undoReviewChange(reviewAt: Long, setting: String): String {
         val review = log.value.reviews.firstOrNull { it.at == reviewAt } ?: return "That review has gone."
-        val change = review.changes.firstOrNull { it.setting == setting } ?: return "That review didn't change it."
+        val change = review.changes.lastOrNull { it.setting == setting } ?: return "That review didn't change it."
         val before = review.settingsBefore[change.setting] ?: return "What it was before isn't known."
         if (ReviewInput.valueOf(settings.value, change.setting) != change.value) return "It's been changed since: left as it is."
         // One end of a school day's hours back alone can meet the other: then it can't be.

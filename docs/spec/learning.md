@@ -108,7 +108,7 @@ In quiet hours a reminder opens the form instead (`Conversation.remindCheckIn`),
 ## The weekly review
 
 `Learning.review` runs 90 minutes after the check-in's time (21:00), answered or not, or as soon as the last answer is in; once a week (`Review.reviewed`). One asked for before the week's Sunday ("Save, and review the week" midweek) reviews the week so far, its days Monday to then, its note and its summary its own, with nothing learned or changed by it; Sunday's still runs, learns as ever, and is the week's: the one the next week's review and the summary page read (D-123).
-It runs as a job (`ReviewWorker`), which waits for a connection while Claude is on.
+It runs as a job (`ReviewWorker`), which waits for a connection while Claude is on. One runs at a time: a second, from a check-in just as the evening's starts, waits and finds the week has had it.
 
 The rules' part always runs:
 - the calibration learned afresh from the record, and put in use at once;
@@ -123,7 +123,7 @@ It writes a note of at most five lines, opening on how last week's change went, 
 - a school day's start and end (`weekdayHoursStart`, `weekdayHoursEnd`), each within an hour of where it is.
 
 It never changes `boxMin` (a piece's length is yours, D-33), what's blocked, quiet hours, protection, or any hours but a school day's; the free-time rate is the only blocking setting in its reach.
-Its changes apply at once, armed or not (`Protection.applyReviewChanges`, IMP-P2-015), in place of any waiting change of yours to the same setting; each is kept with its value before it (`WeeklyReview.changes`, `settingsBefore`).
+Its changes apply at once, armed or not (`Protection.applyReviewChanges`, IMP-P2-015), in place of any waiting change of yours to the same setting, the last standing if it changes one twice; each is kept with its value before it (`WeeklyReview.changes`, `settingsBefore`).
 
 After it, what's run out of what Felix remembers is let go of, and the facts with neither an until nor a task are tidied once they're past 70 % of the room the rest leave them (AI-21, `MemoryTidy.due`, [felix.md](felix.md)); the week's totals are kept (`Stats.rollup`, PL-10); Felix's message in the chat gives the review's first line, with *Open the review* (`Conversation.reviewed`), on his notification; then the week's summary for home is written (NF-02), with a message of his offering to send it (`Conversation.summaryReady`).
 The Reviews page (LR-01) lists each review with its note, each change with *Undo* while it's still what the review left (a change of yours, so once armed one that loosens blocking waits).
