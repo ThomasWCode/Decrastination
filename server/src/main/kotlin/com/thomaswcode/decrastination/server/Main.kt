@@ -86,6 +86,6 @@ fun main() {
     val sessions = Sessions(db, if (testing) 0 else env("ALLOWED_GITHUB_USER_ID").toLong())
     val web = Web(graph, github, sessions, secure = !testing, testing = testing)
     Log.i(Log.TAG, "Starting $version in ${graph.mode} mode")
-    graph.jobs.start(GlobalScope)
+    graph.start(GlobalScope)
     embeddedServer(Netty, port = (System.getenv("PORT") ?: "8080").toInt(), host = "0.0.0.0") { api(web) }.start(wait = true)
 }

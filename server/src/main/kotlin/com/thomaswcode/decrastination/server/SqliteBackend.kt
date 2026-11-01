@@ -13,7 +13,7 @@ import java.sql.Connection
 class SqliteBackend(private val db: Database, private val clock: () -> Long = System::currentTimeMillis) : StoreBackend {
     /** Why the writes of the moment are made: a command's id, or who seeded them. */
     @Volatile
-    var cause: String = "server"
+    var cause: String = SERVER
 
     override fun read(name: String): String? = db.transactionless { c -> c.single("SELECT json FROM stores WHERE name = ?", name) }
 
@@ -26,15 +26,20 @@ class SqliteBackend(private val db: Database, private val clock: () -> Long = Sy
     var writable: Boolean = true
 
     override fun write(name: String, version: Int, text: String) {
-        if (writable) keep(name, version, text)
+        if (!writable) return
+        val by = writer
+        db.writing(name) { keep(name, version, text, by) }
     }
+
+    /** Why a write made now is made: the open command's, or the server's own work. */
+    private val writer: String get() = if (db.inACommand) cause else SERVER
 
     /** A revision made by a job, outside any command: heard by the website as a command's is. */
     @Volatile
     var written: (Long) -> Unit = {}
 
     /** [text] kept as [name], with its history, whatever [writable] says: a seed's. */
-    fun keep(name: String, version: Int, text: String) {
+    fun keep(name: String, version: Int, text: String, cause: String = this.cause) {
         val revision = db.transaction { c ->
             val revision = db.revision()
             val now = clock()
@@ -77,7 +82,8 @@ class SqliteBackend(private val db: Database, private val clock: () -> Long = Sy
     override fun delete(name: String, empty: String) {
         if (!writable) return
         val version = db.transactionless { c -> c.single("SELECT version FROM stores WHERE name = ?", name) } ?: return
-        keep(name, version.toInt(), empty)
+        val by = writer
+        db.writing(name) { keep(name, version.toInt(), empty, by) }
     }
 
     /** Nothing to do: the row of the text before is there already. */
@@ -93,22 +99,27 @@ class SqliteBackend(private val db: Database, private val clock: () -> Long = Sy
         }
     }
 
-    override fun setAside(name: String, now: Long): String? = db.transaction { c ->
-        val text = read(name) ?: return@transaction null
-        val revision = db.revision()
-        history(c, revision, name, 0, text, UNREADABLE, now)
-        copyName(name, revision)
+    /** Nothing kept while a command's open that this isn't part of: a store's read can't wait for one, and the next read asks again. */
+    override fun setAside(name: String, now: Long): String? = db.ifFree {
+        db.transaction { c ->
+            val text = read(name) ?: return@transaction null
+            val revision = db.revision()
+            history(c, revision, name, 0, text, UNREADABLE, now)
+            copyName(name, revision)
+        }
     }
 
     override fun letGoOfCopies(of: (String) -> Boolean) {
-        db.transaction { c ->
-            val names = c.prepareStatement("SELECT DISTINCT name FROM store_history").use { q ->
-                q.executeQuery().use { r -> buildList { while (r.next()) add(r.getString(1)) } }
-            }
-            names.filter(of).forEach { name ->
-                c.prepareStatement("DELETE FROM store_history WHERE name = ?").use { q ->
-                    q.setString(1, name)
-                    q.executeUpdate()
+        db.writing(COPIES) {
+            db.transaction { c ->
+                val names = c.prepareStatement("SELECT DISTINCT name FROM store_history").use { q ->
+                    q.executeQuery().use { r -> buildList { while (r.next()) add(r.getString(1)) } }
+                }
+                names.filter(of).forEach { name ->
+                    c.prepareStatement("DELETE FROM store_history WHERE name = ?").use { q ->
+                        q.setString(1, name)
+                        q.executeUpdate()
+                    }
                 }
             }
         }
@@ -152,6 +163,12 @@ class SqliteBackend(private val db: Database, private val clock: () -> Long = Sy
 
     companion object {
         private const val UNREADABLE = "unreadable"
+
+        /** Why the server's own work writes. */
+        private const val SERVER = "server"
+
+        /** What [Database.writing] calls a change to no one store. */
+        private const val COPIES = ""
 
         /** The rows of a store's history kept however old they are. */
         const val HISTORY_KEPT = 20
