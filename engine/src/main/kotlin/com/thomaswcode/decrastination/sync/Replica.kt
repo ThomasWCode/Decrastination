@@ -34,7 +34,7 @@ class Replica(
     private val build: String,
     /** The calendar as last read, which only this phone can read. */
     private val calendar: () -> CalendarRead,
-    /** Where a pull goes through: no command applied half-way, and those waiting applied again on top. */
+    /** Where a pull goes through: no command applied half-way, and none waiting, as what a command made is already in the stores. */
     private val commands: Commands? = null,
 ) {
     private val sync: JsonStore<SyncState> = stores.sync
