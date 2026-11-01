@@ -44,7 +44,6 @@ import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.data.Backups
 import com.thomaswcode.decrastination.data.Secret
-import com.thomaswcode.decrastination.data.SourceStatus
 import com.thomaswcode.decrastination.enrich.AiUsage
 import com.thomaswcode.decrastination.enrich.EnrichWorker
 import com.thomaswcode.decrastination.enrich.ModelAlerts
@@ -54,7 +53,6 @@ import com.thomaswcode.decrastination.sources.anki.AnkiProvider
 import com.thomaswcode.decrastination.sync.ReplicaWorker
 import com.thomaswcode.decrastination.sync.SyncWorker
 import com.thomaswcode.decrastination.core.GmailWrites
-import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -145,7 +143,7 @@ fun SetupScreen(graph: AppGraph, activity: Activity, parts: Set<SetupPart> = Set
                     val input = requireNotNull(activity.contentResolver.openInputStream(uri)) { "no file to read" }
                     input.use { Backups.read(it) }
                 }
-                if (bytes == null) "That file is too big to be a backup." else graph.backups.importBackup(bytes.decodeToString())
+                if (bytes == null) BackupPage.TOO_BIG else graph.backups.importBackup(bytes.decodeToString())
             }.getOrElse { "Couldn't read it: ${it.message}" }
         }
     }
@@ -165,53 +163,17 @@ fun SetupScreen(graph: AppGraph, activity: Activity, parts: Set<SetupPart> = Set
             }
         }
         if (SetupPart.Sources in parts) Group("Sources") {
+            SetupItem(SetupPage.teams(state.status(Source.Teams)))
+            SetupItem(SetupPage.powerPlanner(state.status(Source.PowerPlanner), Secret.PowerPlannerPassword in secrets), action = "Enter" to { editing = Credential.PowerPlanner })
+            SetupItem(SetupPage.anki(state.status(Source.Anki), ankiAllowed), action = if (ankiAllowed) null else "Allow" to { requestAnki.launch(AnkiProvider.PERMISSION) })
             SetupItem(
-                title = "Teams Assignments widget",
-                done = state.status(Source.Teams).works,
-                detail = sourceDetail(state.status(Source.Teams), "Needs the widget, 0.3.1 or later, signed with the same key."),
-            )
-            SetupItem(
-                title = "Power Planner login",
-                done = Secret.PowerPlannerPassword in secrets && state.status(Source.PowerPlanner).works,
-                detail = sourceDetail(state.status(Source.PowerPlanner), if (Secret.PowerPlannerPassword in secrets) "Saved." else "Not saved."),
-                action = "Enter" to { editing = Credential.PowerPlanner },
-            )
-            SetupItem(
-                title = "AnkiDroid access",
-                done = ankiAllowed && state.status(Source.Anki).works,
-                detail = if (ankiAllowed) sourceDetail(state.status(Source.Anki), "Allowed.") else "AnkiDroid asks you to allow it once.",
-                action = if (ankiAllowed) null else "Allow" to { requestAnki.launch(AnkiProvider.PERMISSION) },
-            )
-            SetupItem(
-                title = "Gmail app password",
-                done = Secret.GmailAppPassword in secrets && state.status(Source.Gmail).works,
-                // The star is the decision (DX-03): said where the account is set up.
-                detail = sourceDetail(state.status(Source.Gmail), if (Secret.GmailAppPassword in secrets) "Saved." else "Not saved. Nothing is ever sent, deleted or marked read.") +
-                    " The app reads your starred emails only, each with its whole conversation. Star an email in Gmail to make it a task; unstar it when it's done, or finish its work here" +
-                    (if (graph.settings.value.gmailFinishes) ", which unstars and archives it in Gmail (Settings → Sources)." else ".") +
-                    GmailWrites.givenUp(graph.gmailFinishes.value).joinToString("") { " " + GmailWrites.failure(it) + " Its sheet's It's sorted clears this." },
+                SetupPage.gmail(state.status(Source.Gmail), Secret.GmailAppPassword in secrets, graph.settings.value.gmailFinishes, GmailWrites.givenUp(graph.gmailFinishes.value)),
                 action = "Enter" to { editing = Credential.Gmail },
             )
         }
         if (SetupPart.Claude in parts) Group("Claude") {
             val usage = model.aiUsage.forMonth(AiUsage.monthOf(graph.clock.now(), graph.clock.zone()))
-            val keyProblem = usage.keyProblem
-            val lastError = usage.lastError
-            SetupItem(
-                title = "Claude",
-                done = settings.aiEnabled && settings.aiKeyActive && Secret.AnthropicApiKey in secrets && usage.lastError == null && usage.keyProblem == null,
-                detail = when {
-                    Secret.AnthropicApiKey !in secrets -> "No API key: the rules do what they can, and nothing is sent to Claude."
-                    !settings.aiKeyActive -> "Key saved, not in use yet: enter it again to use it."
-                    !settings.aiEnabled -> "Key saved; switched off in Settings, so nothing is sent."
-                    // The key or its account can't be used: said with what puts it right.
-                    keyProblem != null -> "${keyProblem.says}. ${keyProblem.fix}: the rules stand in, and it's tried again an hour after each failed try."
-                    // Its calls failing (a bad key, no connection): said, so it can be put right.
-                    lastError != null -> "On, but its last call failed (${lastError.take(80)}): the rules stand in, and it's tried again after an hour."
-                    else -> "On: $%.2f this month".format(Locale.UK, usage.spentUsd) + (settings.aiMonthlyCapUsd?.let { " of $$it" } ?: ", no cap: it stops when the account's credit runs out") + "."
-                },
-                action = "Enter key" to { enteringKey = true },
-            )
+            SetupItem(SetupPage.claude(Secret.AnthropicApiKey in secrets, settings, usage), action = "Enter key" to { enteringKey = true })
         }
         if (SetupPart.Website in parts) Group("The website") { WebsiteItem(graph) }
         if (SetupPart.Phone in parts) Group("This phone") {
@@ -234,13 +196,13 @@ fun SetupScreen(graph: AppGraph, activity: Activity, parts: Set<SetupPart> = Set
             SetupItem(
                 title = "Back up",
                 done = null,
-                detail = backupNote ?: "The settings, the log, what the app has learned, your calendar answers and your instructions in use, to a file you choose. No passwords or keys.",
+                detail = backupNote ?: BackupPage.BACK_UP,
                 action = "Export" to { exporter.launch("decrastination-backup.json") },
             )
             SetupItem(
                 title = "Restore",
                 done = null,
-                detail = restoreNote ?: "From a backup. Once protection is armed, a setting that loosens blocking waits, as one changed in Settings does.",
+                detail = restoreNote ?: BackupPage.RESTORE,
                 action = "Import" to { importer.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) },
             )
         }
@@ -273,11 +235,6 @@ fun SetupScreen(graph: AppGraph, activity: Activity, parts: Set<SetupPart> = Set
         }
     }
 }
-
-private val SourceStatus.works: Boolean get() = lastSuccessAt != null && error == null
-
-private fun sourceDetail(status: SourceStatus, otherwise: String): String =
-    status.error?.let { "Last read failed: $it" } ?: if (status.lastSuccessAt != null) "Reading it works." else otherwise
 
 private enum class Credential(val source: Source, val title: String, val user: Secret, val userLabel: String, val password: Secret, val passwordLabel: String, val resets: List<Secret>) {
     PowerPlanner(Source.PowerPlanner, "Power Planner login", Secret.PowerPlannerUsername, "Username", Secret.PowerPlannerPassword, "Password", Secret.POWER_PLANNER_SESSION),
@@ -407,6 +364,10 @@ private fun KeyDialog(onDismiss: () -> Unit, onSave: (String) -> Unit) {
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
 }
+
+/** One checklist row in the words both clients use. */
+@Composable
+private fun SetupItem(line: SetupPage.Line, action: Pair<String, () -> Unit>? = null) = SetupItem(line.title, line.done, line.detail, action)
 
 /** One checklist row, a tile of a [Group]. [done] null means it isn't a thing to tick. */
 @Composable
