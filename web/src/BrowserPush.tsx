@@ -2,6 +2,9 @@ import { useEffect, useState } from "react";
 import { api } from "./api";
 import type { PushView } from "./types";
 
+/** From the start of signing out, unless that fails: what's still being asked for is let go, or it could outlast the session. */
+let leaving = false;
+
 /** [key], as URL-safe base64, as the bytes a push manager takes. */
 function keyBytes(key: string): Uint8Array<ArrayBuffer> {
   const text = atob(key.replaceAll("-", "+").replaceAll("_", "/"));
@@ -44,17 +47,39 @@ async function save(key: string, channels: string[]): Promise<string | null> {
     held = null;
   }
   const subscription = held ?? (await registered.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(key) }));
+  // Signing out can't see one still being made, and may already have looked.
+  if (leaving) {
+    await subscription.unsubscribe();
+    return "Signing out stopped that.";
+  }
   const sealed = subscription.toJSON().keys;
   await api.pushKeep({ endpoint: subscription.endpoint, p256dh: sealed?.p256dh ?? "", auth: sealed?.auth ?? "", channels });
   return null;
 }
 
-/** This browser told of nothing more: for signing out, as it takes the session to ask, and what's told is the owner's alone. */
-export async function stopTelling(): Promise<void> {
+/** What this browser holds stopped, if it holds anything. */
+async function stopHeld(): Promise<void> {
   if (!("serviceWorker" in navigator)) return;
   const registered = await navigator.serviceWorker.getRegistration();
   const held = await registered?.pushManager.getSubscription();
   if (held) await stop(held);
+}
+
+/**
+ * Signing out, by [end]: this browser told of nothing more first, as it takes the session to ask, and what's told is the owner's
+ * alone. Whether or not that gets through, [end] goes ahead. It doesn't wait for what's being asked for, which a browser's own
+ * prompt can hold up for as long as it's left open. Signed out, this stays set: signing in loads the page afresh.
+ */
+export async function stopTelling(end: () => Promise<unknown>): Promise<void> {
+  leaving = true;
+  let ended = false;
+  try {
+    await stopHeld().catch(() => undefined);
+    await end();
+    ended = true;
+  } finally {
+    leaving = ended;
+  }
 }
 
 /** What this browser's told of with its tab closed (W-9): nothing till it's asked for, as the phone tells you of all of it anyway. */

@@ -463,6 +463,44 @@ class CommandApplierTest {
     }
 
     @Test
+    fun `what can't be taken back comes after the commit, in its order, and now with no command open`() = runBlocking<Unit> {
+        val told = mutableListOf<String>()
+        db.afterCommit { told += "with none open" }
+        assertEquals(listOf("with none open"), told)
+        db.command {
+            db.setMeta("probe", "written")
+            db.afterCommit { told += db.read { c -> c.prepareStatement("SELECT value FROM meta WHERE key = 'probe'").use { q -> q.executeQuery().use { it.next(); it.getString(1) } } } }
+            db.afterCommit { told += "second" }
+            assertEquals(listOf("with none open"), told)
+        }
+        assertEquals(listOf("with none open", "written", "second"), told)
+        db.command { db.setMeta("probe", "the next") }
+        assertEquals(listOf("with none open", "written", "second"), told, "once")
+    }
+
+    @Test
+    fun `what can't be taken back never comes for a command rolled back, nor at the next one`() = runBlocking<Unit> {
+        val told = mutableListOf<String>()
+        assertTrue(runCatching { db.command { db.afterCommit { told += "rolled back" }; error("no") } }.isFailure)
+        db.command { db.afterCommit { told += "the next" } }
+        assertEquals(listOf("the next"), told)
+    }
+
+    @Test
+    fun `what comes after a commit can't fail what's committed, nor stop what comes after it`() = runBlocking<Unit> {
+        val told = mutableListOf<String>()
+        val answer = db.command {
+            db.setMeta("probe", "written")
+            db.afterCommit { error("made up") }
+            db.afterCommit { told += "the rest" }
+            "committed"
+        }
+        assertEquals("committed", answer)
+        assertEquals(listOf("the rest"), told)
+        assertEquals("written", db.meta("probe"))
+    }
+
+    @Test
     fun `one that throws in a command is gone`() = runBlocking {
         db.setMeta("probe", "before")
         val failed = runCatching {

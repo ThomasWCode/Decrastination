@@ -2,8 +2,13 @@ package com.thomaswcode.decrastination.server
 
 import com.interaso.webpush.VapidKeys
 import com.sun.net.httpserver.HttpServer
+import com.thomaswcode.decrastination.core.ChatMessage
+import com.thomaswcode.decrastination.core.MessageKind
 import com.thomaswcode.decrastination.core.OwnTask
+import com.thomaswcode.decrastination.core.Proposal
+import com.thomaswcode.decrastination.core.ProposalState
 import com.thomaswcode.decrastination.core.SlotKind
+import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.data.PieceTimer
 import com.thomaswcode.decrastination.data.SecretCipher
 import com.thomaswcode.decrastination.felix.Outbox
@@ -178,7 +183,7 @@ class PushesTest {
     @Test
     fun `his long words reach a browser cut`() = runBlocking<Unit> {
         asks(laptop, Pushes.FELIX)
-        graph.owners.ports.show(notice(alert = true, Outbox.Notice.Line("m", "A made-up sentence. ".repeat(30).trim(), 1L, yours = false)))
+        said("m", his("m", "A made-up sentence. ".repeat(30).trim()))
         waitFor(1)
         assertEquals(Pushes.words("A made-up sentence. ".repeat(30).trim()), message(service.taken.single().second).body)
     }
@@ -189,12 +194,18 @@ class PushesTest {
         assertContentEquals(keys.applicationServerKey, VapidKeys.create(keys.x509PublicKey, keys.pkcs8PrivateKey).applicationServerKey)
     }
 
-    private fun notice(alert: Boolean, vararg lines: Outbox.Notice.Line) = Outbox.Notice("Felix", lines.toList(), "m", emptyList(), "m", alert)
+    private fun his(id: String, text: String, kind: MessageKind = MessageKind.Chat) = ChatMessage(id, Speaker.Felix, text, System.currentTimeMillis(), kind = kind)
+
+    /** [messages] in the chat, and his notification made from it as the phone's is, cut to its room, sounding for [alertFor]. */
+    private suspend fun said(alertFor: String?, vararg messages: ChatMessage) {
+        graph.stores.chat.update { it.copy(messages = it.messages + messages) }
+        graph.owners.ports.show(assertNotNull(Outbox.notice(graph.stores.chat.value, "Felix", quiet = false, alertFor = alertFor)))
+    }
 
     @Test
     fun `his notification made again says nothing new, and goes nowhere`() = runBlocking<Unit> {
         asks(laptop, Pushes.FELIX)
-        graph.owners.ports.show(notice(alert = false, Outbox.Notice.Line("m", "A made-up word", 1L, yours = false)))
+        said(null, his("m", "A made-up word"))
         delay(100)
         assertTrue(service.taken.isEmpty())
     }
@@ -202,15 +213,61 @@ class PushesTest {
     @Test
     fun `a message he splits goes whole, and only that one`() = runBlocking<Unit> {
         asks(laptop, Pushes.FELIX)
-        graph.owners.ports.show(notice(alert = true, Outbox.Notice.Line("older", "An older word", 1L, yours = false), Outbox.Notice.Line("m#0", "His first text", 2L, yours = false), Outbox.Notice.Line("m", "His last", 2L, yours = false)))
+        said("m", his("older", "An older word"), his("m", "His first text\nHis last", MessageKind.Morning))
         waitFor(1)
         assertEquals("His first text\nHis last", message(service.taken.single().second).body)
     }
 
     @Test
+    fun `a long message goes from its opening, though his notification only has room for its end`() = runBlocking<Unit> {
+        asks(laptop, Pushes.FELIX)
+        val end = "A made-up sentence. ".repeat(20).trim()
+        said("m", his("m", "A made-up opening.\n$end", MessageKind.Morning))
+        assertTrue(assertNotNull(Outbox.notice(graph.stores.chat.value, "Felix", quiet = false)).lines.none { it.text.startsWith("A made-up opening") })
+        waitFor(1)
+        val body = message(service.taken.single().second).body
+        assertTrue(body.startsWith("A made-up opening.\nA made-up sentence."), body)
+    }
+
+    @Test
+    fun `what a message made goes with it, as on the phone`() = runBlocking<Unit> {
+        asks(laptop, Pushes.FELIX)
+        said("m", his("m", "That's in.").copy(proposals = listOf(Proposal("p", OwnTask(title = "Made-up essay"), state = ProposalState.Applied))))
+        waitFor(1)
+        assertEquals("That's in.\nAdded “Made-up essay”", message(service.taken.single().second).body)
+    }
+
+    @Test
+    fun `what a command says is told only once it stands`() = runBlocking<Unit> {
+        asks(laptop, Pushes.FELIX)
+        var before = -1
+        db.command {
+            graph.owners.conversation.reviewed("A made-up word on the week")
+            delay(200)
+            before = service.taken.size
+        }
+        assertEquals(0, before)
+        waitFor(1)
+        assertEquals("A made-up word on the week", message(service.taken.single().second).body)
+    }
+
+    @Test
+    fun `what a command that fails said is told to nobody, as it's put right or by the next`() = runBlocking<Unit> {
+        asks(laptop, Pushes.FELIX)
+        val answer = db.commandOr({ graph.stores.chat.reload() }, { "put right" }) {
+            graph.owners.conversation.reviewed("A made-up word on the week")
+            error("made up")
+        }
+        assertEquals("put right", answer)
+        db.command { db.setMeta("probe", "the next") }
+        delay(200)
+        assertTrue(service.taken.isEmpty())
+    }
+
+    @Test
     fun `what's told is his newest, not a reply of yours under it`() = runBlocking<Unit> {
         asks(laptop, Pushes.FELIX)
-        graph.owners.ports.show(notice(alert = true, Outbox.Notice.Line("m", "His word", 1L, yours = false), Outbox.Notice.Line("y", "Your reply", 2L, yours = true)))
+        said("m", his("m", "His word"), ChatMessage("y", Speaker.You, "Your reply", System.currentTimeMillis(), replyTo = "m"))
         waitFor(1)
         assertEquals("His word", message(service.taken.single().second).body)
     }

@@ -127,10 +127,7 @@ export function App() {
     // What the chat's box held goes with the session.
     sessionStorage.clear();
     // Before it ends, as it takes the session to ask: whether or not that gets through, you're signed out.
-    void stopTelling()
-      .catch(() => undefined)
-      .then(() => api.signOut())
-      .then(() => setSignedIn(false));
+    void stopTelling(() => api.signOut()).then(() => setSignedIn(false));
   };
   return (
     <div className="site">
