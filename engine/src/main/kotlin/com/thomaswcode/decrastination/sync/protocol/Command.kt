@@ -91,13 +91,20 @@ class Commands(
     /** Held across a change to the settings: [changeSettings]. */
     private val changingSettings = Mutex()
 
-    suspend fun <R, A> act(action: A): R where A : Action, A : Answers<R> {
+    suspend fun <R, A> act(action: A): R where A : Action, A : Answers<R> = made(action) { action.run(owners) }
+
+    /** [action], what it answers left aside: one decided on elsewhere, whichever it is. */
+    suspend fun send(action: Action) {
+        made(action) { action.run(owners) }
+    }
+
+    private suspend fun <R> made(action: Action, run: suspend () -> R): R {
         val command = Command(Ids.next(), clock.now(), action)
-        if (outbox == null || !queuing()) return replaying(command) { action.run(owners) }
+        if (outbox == null || !queuing()) return replaying(command) { run() }
         return gate.withLock {
             // On the disk first, so it's sent whatever stops this process: the server's copy then brings what it made (`Replica`).
             outbox.update { it.copy(commands = it.commands + command) }
-            replaying(command) { action.run(owners) }
+            replaying(command) { run() }
         }
     }
 

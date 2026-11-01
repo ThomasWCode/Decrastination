@@ -1,5 +1,6 @@
 package com.thomaswcode.decrastination.server
 
+import com.thomaswcode.decrastination.core.Ids
 import com.thomaswcode.decrastination.core.Notes
 import com.thomaswcode.decrastination.core.ReplayClock
 import com.thomaswcode.decrastination.core.SchoolDays
@@ -27,9 +28,21 @@ import com.thomaswcode.decrastination.sync.Protocol
 import com.thomaswcode.decrastination.sync.SeedAnswer
 import com.thomaswcode.decrastination.sync.SeedBatch
 import com.thomaswcode.decrastination.sync.ServerVersion
+import com.thomaswcode.decrastination.sync.protocol.Action
+import com.thomaswcode.decrastination.sync.protocol.Command
+import com.thomaswcode.decrastination.sync.protocol.CommandBatch
 import com.thomaswcode.decrastination.sync.protocol.Commands
+import com.thomaswcode.decrastination.sync.protocol.Outcome
+import com.thomaswcode.decrastination.ui.Moves
+import com.thomaswcode.decrastination.ui.PieceSays
+import com.thomaswcode.decrastination.ui.TaskSheetModel
+import com.thomaswcode.decrastination.views.Asked
 import com.thomaswcode.decrastination.views.DayView
 import com.thomaswcode.decrastination.views.DayViews
+import com.thomaswcode.decrastination.views.TaskAsk
+import com.thomaswcode.decrastination.views.TaskAsks
+import com.thomaswcode.decrastination.views.TaskView
+import com.thomaswcode.decrastination.views.TaskViews
 import com.thomaswcode.decrastination.views.WorkView
 import com.thomaswcode.decrastination.views.WorkViews
 import java.io.File
@@ -215,6 +228,12 @@ class ServerGraph(
         SeedAnswer(revision, refused, version, backend.hashes())
     }
 
+    /** What moves a piece, its rules the phone's: it decides, and [ask] applies. */
+    private val moves = Moves(stores.tasks, owners.instructions, commands, planning, clock, scope)
+
+    /** What's said of a piece as it's done. */
+    private val pieceSays = PieceSays(owners.focus, stores.log, stores.settings, stores.learning, planning, clock)
+
     /** Commands applied as they arrive, one at a time. */
     val applier = CommandApplier(db, backend, commands, owners, clock, reload = { reloadAll() }, committed = { _revisions.tryEmit(it) })
 
@@ -352,12 +371,44 @@ class ServerGraph(
         )
     }
 
-    fun work(): WorkView = WorkViews.of(stores.tasks.value, planning.plan(), stores.settings.value, clock.now(), clock.zone(), devices.lastSeen())
+    fun work(): WorkView = WorkViews.of(stores.tasks.value, planning.plan(), stores.settings.value, clock.now(), clock.zone(), devices.lastSeen(), writable = mode == COMMANDS)
+
+    /** Task [id]'s sheet, if there's such a task. */
+    fun task(id: String): TaskView? {
+        val state = stores.tasks.value
+        val task = state.tasks.firstOrNull { it.id == id } ?: return null
+        return TaskViews.of(task, state.tasks.associateBy { it.id }, planning.plan(), stores.settings.value, stores.instructions.value.applied, stores.felix.value.notes, clock.now(), clock.zone(), writable = mode == COMMANDS)
+    }
+
+    /** [ask] of task [id], made the commands the phone's sheet would make, and applied as the website's. */
+    suspend fun ask(id: String, ask: TaskAsk): Asked {
+        val task = stores.tasks.value.tasks.firstOrNull { it.id == id } ?: return Asked(false, GONE)
+        val plan = planning.plan()
+        val piece = TaskSheetModel.next(plan, id).takeIf { task.isOpen }
+        if (ask.kind == TaskAsk.DONE) {
+            val next = piece ?: return Asked(false, "That piece has changed since (done, or planned again).")
+            var kept = false
+            val said = pieceSays.kept(next, plan.now) { action -> website(action).state == Outcome.APPLIED }.also { kept = true }
+            return Asked(kept && said != NOT_KEPT, said)
+        }
+        val decided = TaskAsks.decide(task, piece, ask, moves, clock.zone())
+        decided.why?.let { return Asked(false, it) }
+        for (action in decided.actions) {
+            val outcome = website(action)
+            if (outcome.state != Outcome.APPLIED) return Asked(false, outcome.why)
+        }
+        return Asked(true, decided.said.ifEmpty { null })
+    }
+
+    /** [action] as one of the website's commands, made here. */
+    private suspend fun website(action: Action): Outcome = applier.apply(CommandBatch(listOf(Command(Ids.next(), clock.now(), action))), Client.WEBSITE).single()
 
     companion object {
         /** The mode where commands apply: `meta.mode`, one way, from mirror mode. */
         const val COMMANDS = "commands"
         private const val SECRETS = "secrets.bin"
+        private const val GONE = "That task had gone"
+        private const val NOT_KEPT = "That piece has changed since (done, or planned again)."
         private const val MINUTE_MS = 60_000L
         private const val HOUR_MS = 60 * MINUTE_MS
         private const val SOURCES_EVERY_MS = 15 * MINUTE_MS

@@ -5,6 +5,7 @@ import com.thomaswcode.decrastination.sync.DeviceClaim
 import com.thomaswcode.decrastination.sync.Protocol
 import com.thomaswcode.decrastination.sync.SeedBatch
 import com.thomaswcode.decrastination.sync.protocol.CommandBatch
+import com.thomaswcode.decrastination.views.TaskAsk
 import io.ktor.http.ContentType
 import io.ktor.http.Cookie
 import io.ktor.http.CookieEncoding
@@ -276,4 +277,13 @@ private fun Route.signedInRoutes(web: Web) {
         call.respond(graph.day(date))
     }
     get("/views/work") { call.respond(graph.work()) }
+    get("/views/task/{id}") {
+        val view = graph.task(call.parameters["id"].orEmpty()) ?: return@get call.respond(HttpStatusCode.NotFound, Problem("That task isn't here"))
+        call.respond(view)
+    }
+    post("/tasks/{id}/ask") {
+        if (call.client !is Client.Website) return@post call.respond(HttpStatusCode.Forbidden, Problem("A task is asked of from the website"))
+        if (graph.mode != ServerGraph.COMMANDS) return@post call.respond(HttpStatusCode.Conflict, Problem("The server is mirroring the phone"))
+        call.respond(graph.ask(call.parameters["id"].orEmpty(), call.receive<TaskAsk>()))
+    }
 }

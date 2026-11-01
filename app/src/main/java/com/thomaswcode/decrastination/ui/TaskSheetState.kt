@@ -21,6 +21,7 @@ import com.thomaswcode.decrastination.sync.protocol.LaterToday
 import com.thomaswcode.decrastination.sync.protocol.ReopenOwnTask
 import com.thomaswcode.decrastination.sync.protocol.SaveOwnTask
 import com.thomaswcode.decrastination.sync.protocol.TakeBackQuick
+import com.thomaswcode.decrastination.views.TaskAsks
 import java.time.LocalDate
 import java.time.ZoneId
 
@@ -71,13 +72,9 @@ class TaskSheetState(
      * what's wrong is said); a source's given it as a quick change of yours, in [text].
      */
     suspend fun make(task: TaskItem, change: Change, text: String) {
-        if (task.source == Source.Own) {
-            val draft = OwnTaskRules.draftWith(task, change) ?: return
-            message = OwnTaskRules.problem(draft)
-            if (message == null) commands.act(SaveOwnTask.of(task.sourceId, draft))
-        } else {
-            commands.act(AddOwnChange(Ids.next(), text, About(taskId = task.id, taskTitle = task.title), change))
-        }
+        val decided = TaskAsks.made(task, change, text)
+        if (task.source == Source.Own) message = decided.why
+        decided.actions.forEach { commands.send(it) }
     }
 
     /** Your quick change of [type] to [task] taken back: what its source says stands again. */
