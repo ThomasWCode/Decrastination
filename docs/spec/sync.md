@@ -61,7 +61,7 @@ Built and tested in 5.2.0, and dormant: `SyncState.mode` stays `mirror`, and the
 - A command that throws part-way here is half made as a stopped process's is, and the next pull is of everything (`Replica.pullEverything`).
 - The phone's time zone goes with each exchange (`Protocol.ZONE_HEADER`), a command waiting or none, as a seed says it in its body.
 
-An answer lost on the way does no harm: the retry's id is one the server's seen, and it answers as it did the first time, applying nothing.
+An answer lost on the way does no harm: the retry's id is one the server's seen, and it answers as it did the first time, applying nothing, but for what only the first answer carried (`Outcome.undo`, `Outcome.said`).
 
 ## Stale commands
 

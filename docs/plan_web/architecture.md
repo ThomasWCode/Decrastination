@@ -1,6 +1,6 @@
 # Architecture: the shape the code takes
 
-What the repository looks like once the plan is built, and the rules that keep it so. `docs/plan_v4/architecture.md` describes the app as it is today; this file says what changes and what doesn't. Nothing here is built yet.
+What the repository looks like once the plan is built, and the rules that keep it so. `docs/plan_v4/architecture.md` describes the app as it is today; this file says what changes and what doesn't. Stages 0 to 7 and 9 are built, dormant till the switch (D-141), and what's below is put right where they were built otherwise; what the switch still has to do is said where it comes up. How each part works now is in `docs/spec/`.
 
 ## The shape
 
@@ -37,14 +37,14 @@ One state, on the server. Two clients: the phone, which keeps a replica and work
 | `:core` | `kotlin.jvm`, as today | the domain types and the pure rules: the planner, merge, duplicates, the Anki rules, the instructions, the chat's types, the weekly rules | `kotlinx-serialization-json` |
 | `:engine` (new, stage 0) | `kotlin.jvm` | everything in `:app` today that imports nothing from `android.*`: the owners (`sync/Sync`, `tasks/OwnTasks`, `tasks/Instructions`, `felix/Conversation`, `felix/Looks`, `plan/Planning`, `block/Focus`'s rules, `protect/Protection`, `learn/Learning`), `data/Stores`, `JsonStore` over a `StoreBackend`, `Backup`, `Reset`, the migrations, `enrich/ModelGateway` and the prompts, Felix's rules, the calibrator, the screens' models (`DayModel`, `WidgetModel`, `Groups`, `TaskSheetModel`), the sync protocol's types, and the **ports** the owners need from a platform (a clock, a notifier, a scheduler, a file for photos) | `:core`, `anthropic-java`, `kotlinx-serialization-json` |
 | `:server` (new, stage 1) | `kotlin.jvm` with the `io.ktor.plugin` | the HTTP API, sign-in and device tokens, the SQLite `StoreBackend`, the command applier, the scheduler for the jobs, the ports' server implementations, the Docker image | `:engine`, Ktor 3.6, `sqlite-jdbc` |
-| `:app` | Android, as today | the screens, the services and receivers, the workers, the device adapters (Teams, AnkiDroid, calendar, blocker, notifications), the ports' Android implementations, the replica (`FileBackend`), the outbox and the sync | `:engine`, Compose, Glance, WorkManager |
+| `:app` | Android, as today | the screens, the services and receivers, the workers, the device adapters (Teams, AnkiDroid, calendar, blocker, notifications), the ports' Android implementations, and the workers that run the sync (`SyncWorker`, `ReplicaWorker`) | `:engine`, Compose, Glance, WorkManager |
 | `web/` (new, stage 1) | npm, outside Gradle | the SPA: Vite, React 19, TypeScript strict, vitest for units, Playwright against a test server; ESLint as the owner's other sites | the server's API alone |
 
 The cut of `:engine` is the compiler's: a module with no Android dependency can't hold a line that needs one. Where an owner needs the platform (to post a notification, to schedule an alarm, to read the clock), it takes an interface from `:engine`'s ports, which `:app` implements with Android and `:server` with its own means. `docs/plan_v4/architecture.md` already names ports among the platform; stage 0 finds the rest.
 
 ## The server
 
-A Ktor application (3.6.x, the CIO or Netty engine; both run on arm64 Linux) on a JRE 21, built as a fat JAR and copied into an `eclipse-temurin:21-jre` image (`hosting.md` §Deploy). It is one process with one writer: a `Mutex` serialises the application of commands from start to commit (`ModelGateway`'s lock, by contrast, guards only its hold check and its count of calls in flight; the calls themselves run side by side).
+A Ktor application (3.6.x, on Netty) on a JRE 21, built as a fat JAR and copied into an `eclipse-temurin:21-jre` image (`hosting.md` §Deploy). It is one process with one writer: a `Mutex` serialises the application of commands from start to commit (`ModelGateway`'s lock, by contrast, guards only its hold check and its count of calls in flight; the calls themselves run side by side).
 
 **Routes** (all under `/api`, all behind sign-in except `health`, `version` and the sign-in routes themselves):
 
@@ -55,17 +55,18 @@ A Ktor application (3.6.x, the CIO or Netty engine; both run on arm64 Linux) on 
 | `GET /state?since={revision}` | every store whose revision is above the one given, whole (`data-and-sync.md` §Revisions) |
 | `GET /events` | a server-sent event stream of revision numbers; a client pulls `state` when one arrives |
 | `POST /commands` | a batch of commands, applied in order through the owners; one outcome each |
-| `POST /observations` | a batch of the phone's device-born facts, applied the same way |
-| `POST /stores/seed` | stage 1 only: a whole store from the phone while the server is in mirror mode |
+| `POST /observations` | a batch of the phone's device-born facts, applied the same way: with the switch, not built |
+| `POST /stores/seed` | the phone's one write till the switch: a whole store, while the server is in mirror mode |
 | `GET /views/day?date=`, `GET /views/work`, `GET /views/task/{id}`, … | the screens' models, computed on the server by the same Kotlin the phone's screens use (§The website) |
 | `GET /views/chat?earlier=&reach=` | the chat, with as much of the archive as it asks for: counted in messages, as the phone reads it on scroll-back, or as far as a quote's message |
-| `POST /photos` | a photo for the photo-to-tasks path (stage 4) |
+| `POST /photos/tasks` | a photo for the photo-to-tasks path (stage 4) |
 | `GET /backup`, `POST /backup/import`, `POST /backup/copy` | the Backup-format file out and in, and a reset's copy back; a reset itself is a command (stage 7) |
+| `POST /push/subscription`, `/push/channels`, `/push/forget` | a browser asking to be told with its tab closed (stage 9) |
 | `GET /health`, `GET /version` | for Caddy, the heartbeat and the clients (the protocol version and each store's version) |
 
 A route never writes a store. It turns the request into a command and hands it to the applier, which calls the owner; the same rule as "no screen is among a store's writers" (D-107), moved to the server. A backup taken in goes to the applier too, held as a command is, but isn't one: its file doesn't belong on record.
 
-**Jobs.** A scheduler loop (a coroutine, every minute) runs what is due, with each job's `lastRanAt` in the server's own runtime store: the Power Planner and Gmail syncs every 15 minutes (stage 3), the readings of new tasks, planning ahead, the memory tidy, the daily briefing's text and the weekly review's at their times, the nightly backup to B2 (W-20). The phone's WorkManager jobs that did these go (`inventory.md` §Integrations); the phone's `SyncWorker` becomes the sync alone.
+**Jobs.** A scheduler loop (a coroutine, every minute) runs what is due, with each job's last run in `meta`: the Power Planner and Gmail syncs every 15 minutes (stage 3), the readings of new tasks, planning ahead, the memory tidy, the daily briefing's text and the weekly review's at their times, the nightly backup to B2 (W-20). The phone's WorkManager jobs that did these go (`inventory.md` §Integrations); the phone's `SyncWorker` becomes the sync alone.
 
 ## The sync, in brief
 
@@ -78,15 +79,15 @@ The owner's word (31 Oct): the phone works offline to an extent. The extent:
 - **Reads**: every screen, the widget and the block screen read the replica, as they read the files today.
 - **The blocker, the timer and the alarms** run from the replica: blocking never needs the network.
 - **Writes**: a task added or finished, a slot moved, the timer started, a setting changed, a check-in answered: applied locally through the owner and queued in the outbox. A message to Felix is queued too, and answered when the network is back, as a message sent with no key is today.
-- **The plan**: the phone's planner runs over the replica when it changes while offline, so DO NOW and the blocker follow a task finished; those slots are **provisional** and the calendar is never written from them (W-15). Once the outbox has drained and the server's slots have arrived, they replace the provisional ones.
+- **The plan**: the phone's planner runs over the replica when it changes while offline, so DO NOW and the blocker follow a task finished; those slots are **provisional** and the calendar is never written from them (W-15): not built, it comes with the switch. Once the outbox has drained and the server's slots have arrived, they replace the provisional ones.
 - **Felix and the syncs** need a connection, as they do today.
-- After seven days without a sync, the Day shows a line saying so.
+- After seven days without a sync, the Day shows a line saying so: not built, it comes with the switch.
 
 ## The website
 
 One origin: Caddy serves the SPA's files and proxies `/api` to the server, so the session is an ordinary cookie and there is no CORS. The SPA renders **view models the server computes** (W-14): `DayModel`, `Groups`, `TaskSheetModel`, `WidgetModel` and the stats' tables are Kotlin in `:engine` after stage 0, and `/views/*` serve their output as JSON. The TypeScript does layout, interaction and words only; it holds no rule about what a task, a slot or a day is. Where the phone's screen does maths that is really layout (the Day grid's pixel positions in `DayLayout.kt`), the web has its own.
 
-The pages are the phone's, laid out for a wide screen: the chat as the home with the day beside it, the Work list, the Day grid, Stats, This week, Reviews, Settings, Backup and Reset, Setup, and a Phone page for pairing and revoking devices. The colours and the words are the phone's. Interaction that the phone does by touch (drag a piece, pinch the grid) is done by pointer and wheel.
+The pages are the phone's, laid out for a wide screen: the chat as the home with your changes beside it, the Work list, the Day grid, Stats, This week, Reviews, Settings, Backup and Reset, Setup, and a Phone page for pairing and revoking devices. The colours and the words are the phone's. Interaction that the phone does by touch (drag a piece, pinch the grid) is done by pointer and wheel.
 
 The SPA keeps nothing offline: the laptop is online, and the phone is the offline client.
 
@@ -94,13 +95,13 @@ The SPA keeps nothing offline: the laptop is online, and the phone is the offlin
 
 **The website** signs in with GitHub, through a GitHub App whose callback is the server's `/api/auth/callback`, as edit.thomaswhite.me's Worker does. The server allows one GitHub user id, from its environment, and refuses every other. A session is a random id in a cookie (`HttpOnly`, `Secure`, `SameSite=Lax`, 30 days sliding), held in the `sessions` table. Routes that change state also require a header the SPA sets (`X-Requested-With`), which a cross-site form can't.
 
-**The phone** holds a **device token**: 256 random bits, kept hashed on the server in `devices`, sent as `Authorization: Bearer`. Pairing: the website's Phone page asks the server for a one-time six-digit code (five minutes), the owner types it into the phone's Setup → This phone, the phone claims the token. A device can be named and revoked from the website. The token lives in the phone's `SecretStore` beside the TOTP secret.
+**The phone** holds a **device token**: 256 random bits, kept hashed on the server in `devices`, sent as `Authorization: Bearer`. Pairing: the website's Phone page asks the server for a one-time six-digit code (five minutes), the owner types it into the phone's Setup → This phone, the phone claims the token. It gives its own name as it claims, and it can be revoked from the website. The token lives in the phone's `SecretStore` beside the TOTP secret.
 
-Sign-in, pairing and claiming are rate-limited; everything else is behind the session or the token.
+Sign-in and claiming are rate-limited; everything else is behind the session or the token.
 
 ## Claude
 
-`ModelGateway` moves to the server in stage 3, with the cap, the rests, the record and the goldens, and the Anthropic key becomes an environment variable on the box (W-12). The phone no longer calls Claude: a chat message, a reply, a look, a photo are commands, and the server's Conversation makes the call; the answer reaches the phone as a revision. The record of calls (`model.json`) syncs down, so Settings → Claude → Recent calls reads on both. The month's cap is one, on the server. `GoldenPromptsTest`, `SchemaCompileTest` and `FelixInputsDocTest` move with the prompts to `:engine`'s tests.
+Built in stage 3 and in use from the switch, the phone calling Claude as it always has till then (D-142): `ModelGateway` moves to the server, with the cap, the rests, the record and the goldens, and the Anthropic key becomes an environment variable on the box (W-12). The phone no longer calls Claude: a chat message, a reply, a look, a photo are commands, and the server's Conversation makes the call; the answer reaches the phone as a revision. The record of calls (`model.json`) syncs down, so Settings → Claude → Recent calls reads on both. The month's cap is one, on the server. `GoldenPromptsTest`, `SchemaCompileTest` and `FelixInputsDocTest` move with the prompts to `:engine`'s tests.
 
 The research call (web search, its own call) and the readings stay as they are, now made by the server's jobs.
 
@@ -119,34 +120,34 @@ The phone keeps everything that touches the device, and each becomes an observat
 
 ## Protection on the website
 
-`Protection.changeSettings` runs on the server for every settings command, from either client, so a loosening asked on the website waits its 24 hours as one asked on the phone does, and the pending list (now in the synced `protection.json`) shows on both. The wait is counted by the server's clock (W-23): today the phone counts by its uptime, because the phone's date is the owner's to set; the server's isn't, so each pending change carries the `dueAt` the server set, the server applies it when due, and the phone shows the list and applies nothing itself, online or offline. The time the phone is off now counts towards the wait; the wait still can't be hurried from either client. The parent's TOTP code is verified on the server as well as the phone, so a code typed on the website works; the secret is held on both (`§Secrets`). When armed, the website's Settings pages that could loosen show the delay rather than hide the page: the server enforces, the page explains. The settings guard that presses Back on the phone's own pages stays the phone's.
+`Protection.changeSettings` runs on the server for every settings command, from either client, so a loosening asked on the website waits its 24 hours as one asked on the phone does, and the pending list (now in the synced `protection.json`) shows on both. The wait is counted by the server's clock (W-23): today the phone counts by its uptime, because the phone's date is the owner's to set; the server's isn't, so the server applies a pending change when its wait's over by that clock, and the phone shows the list and applies nothing itself, online or offline. The time the phone is off now counts towards the wait; the wait still can't be hurried from either client. The parent's TOTP code is verified on the server as well as the phone, so a code typed on the website works; the secret is held on both (`§Secrets`). When armed, the website's Settings pages that could loosen show the delay rather than hide the page: the server enforces, the page explains. The settings guard that presses Back on the phone's own pages stays the phone's.
 
 ## Secrets
 
 | Secret | Today | After the plan |
 |---|---|---|
-| Anthropic key | `secrets.bin` on the phone | `ANTHROPIC_API_KEY` in the box's `.env` (stage 3); gone from the phone |
-| Power Planner username and password | `secrets.bin` | the server's `credentials` table, AES-256-GCM under `MASTER_KEY` from `.env`, entered on the website's Setup (stage 3); gone from the phone |
+| Anthropic key | `secrets.bin` on the phone | `ANTHROPIC_API_KEY` in the box's `.env`; gone from the phone at the switch |
+| Power Planner username and password | `secrets.bin` | the server's `credentials` table, AES-256-GCM under `MASTER_KEY` from `.env`, entered on the website's Settings, Sources; gone from the phone at the switch |
 | Gmail address and app password | `secrets.bin` | the same |
 | TOTP secret | `secrets.bin` | both: the phone's copy verifies offline, the server's verifies the website's (stage 4) |
 | Device token | — | the phone's `secrets.bin`; hashed in the server's `devices` |
-| GitHub App client id and secret, the allowed user id, `SESSION_SECRET` | — | `.env` |
+| GitHub App client id and secret, the allowed user id | — | `.env` |
 | R2 access keys (Litestream); a B2 application key for the nightly file, able to write and not to delete | — | `.env` |
 
 Credentials are **re-entered on the website**, never uploaded from the phone (W-19): the phone's release that stops holding one deletes it once the server reports it has its own. Nothing in `.env` is ever in the repository; `deploy/env.production.example` lists the names with no values, as SharpnPro's does.
 
 ## Notifications
 
-The phone stays the notifier throughout. The website shows notices in the page from stage 5 (the tab's title count, a bell, the chat's unread marker). Web Push is an optional last stage (W-9). The phone learns of the server's changes at its next sync, every 15 minutes or on the app's opening; stage 8, optional, adds Firebase Cloud Messaging so a data message wakes the sync at once (W-18).
+The phone stays the notifier throughout. The website shows notices in the page from stage 5 (the tab's title count, a bell, the chat's unread marker). Web Push is built, for a browser that asks for it (stage 9, W-9). The phone learns of the server's changes at its next sync, every 15 minutes or on the app's opening; stage 8, optional and not built, would add Firebase Cloud Messaging so a data message wakes the sync at once (W-18).
 
 ## What `ArchitectureTest` comes to hold
 
 - Every owner lives in `:engine`; `:app` holds none.
-- A store's writers, as today, plus the sync: `sync/Replica` may call `Stores.replace` beside `BackupService`, and nothing else may.
-- On the server, only `CommandApplier` calls an owner; no route does.
+- A store's writers, as today, plus the sync: `sync/Replica` adopts a store's text as a pull brings it (`JsonStore.adopt`), `BackupService` alone calls `Stores.replace`, and nothing else goes round an owner.
+- On the server, a change that's a command goes through `CommandApplier`. What isn't one is `ServerGraph`'s: the jobs, a photo read, Try again, a backup taken in. No route calls an owner.
 - Every owner operation a screen can reach has a command class in `:engine`'s protocol, and every command class is applied by the applier (a test lists both sides).
 - `ModelGateway.build` is the one place a client is built, in `:engine`, and `:app` holds no key.
-- Nothing in `web/` holds a rule: a lint rule forbids importing anything but the API's types into the views (the owner's call whether to keep it).
+- Nothing in `web/` holds a rule: the pages lay out what the server sends (D-137), which review holds them to, as no lint rule does.
 
 ## Conventions kept
 

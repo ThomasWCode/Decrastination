@@ -11,7 +11,7 @@ What runs on the box: the API, how a client signs in, how the state is held, and
 
 ## The API
 
-Everything is under `/api`, on the same origin as the website. Open: `GET /health`, `GET /version`, `GET /me`, sign-in, and `POST /devices/claim`. Every other route needs a client (`signedIn` in `server/Api.kt`): a device's bearer token, or a session.
+Everything is under `/api`, on the same origin as the website. Open: `GET /health`, `GET /version`, `GET /me`, signing in and out, and `POST /devices/claim`. Every other route needs a client (`signedIn` in `server/Api.kt`): a device's bearer token, or a session.
 
 | Route | Who | Does |
 |---|---|---|
@@ -68,7 +68,7 @@ SQLite, one file, in WAL mode (`server/Database.kt`), the server its only writer
 
 A command is one transaction, all of it or none (`CommandApplier`, `Database.command`), one at a time, in the order they arrive. A backup taken in is held the same way (`CommandApplier.alone`), but isn't on record as one: its file doesn't belong in `commands`, and each store's text before it is in `store_history`. The owners suspend and change thread on the way, so it's held by a coroutine's lock, and reads that mustn't see it half-way go through a second connection (`Database.read`), which in WAL mode sees only what's committed. One that fails is rolled back, every store read again from what's committed, mirrored or not, and it's on record as dropped, all before another's let in (`Database.commandOr`): what it left in memory mustn't be built on.
 
-The owners are `ServerOwners`, wired as `AppGraph` wires the phone's, what touches the device left out. In mirror mode nothing on the server watches a store or runs by itself. Once it applies commands, `ServerGraph.start` sets off the jobs below and what watches the stores: an own task with its steps done is finished, a weekly rule's week rolled (`OwnTasks.start`), and the plan made again as what it's made from changes (`PlanWatcher`), with today's starts kept and the work done ahead, as on the phone but for its alarms, its calendar and its widget. The mode is read once, at a start, so everything that hangs on it goes together, and the switch to commands takes a restart.
+The owners are `ServerOwners`, wired as `AppGraph` wires the phone's, what touches the device left out. In mirror mode nothing on the server watches a store or runs by itself, but the tidy of its history. Once it applies commands, `ServerGraph.start` sets off the jobs below and what watches the stores: an own task with its steps done is finished, a weekly rule's week rolled (`OwnTasks.start`), and the plan made again as what it's made from changes (`PlanWatcher`), with today's starts kept and the work done ahead, as on the phone but for its alarms, its calendar and its widget. The mode is read once, at a start, so everything that hangs on it goes together, and the switch to commands takes a restart.
 
 The server's time zone is the phone's: each batch says it (`ServerClock`), as a day is the owner's wherever they are. Its time is what a loosening's wait is counted by on the server: a mark of the phone's is another clock's, so the gap from it counts nothing and the count goes on from there.
 

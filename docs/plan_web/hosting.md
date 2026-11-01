@@ -18,7 +18,7 @@ A free-only account has no Oracle support, and an account left idle 30 days can 
 
 ## What runs on it
 
-`/opt/decrastination/`, as SharpnPro's `/opt/sharpn/`: `compose.yaml`, `Caddyfile`, `litestream.yml`, `.env` (mode 0600), `data/`.
+`/opt/decrastination/`, as SharpnPro's `/opt/sharpn/`: `compose.yaml`, `litestream.yml`, `.env` (mode 0600), `data/`. The `Caddyfile` is in the web image.
 
 | Service | Image | Does | Memory |
 |---|---|---|---|
@@ -38,13 +38,13 @@ The domain's nameservers are Spaceship's, and `thomaswhite.me` points at GitHub 
 
 ## Deploy
 
-GitHub Actions, in `ci.yml`'s workflow or a `deploy.yml` beside it, on a push to `main`:
+GitHub Actions, in `ci.yml`, on a push to `main`:
 
 1. Gradle builds and tests as today, plus `:server:buildFatJar` (the Ktor plugin's task; the JAR lands in `server/build/libs/`). `web/`: `npm ci`, lint, vitest, `vite build`.
 2. Two images, built with `docker/build-push-action`, pushed to GHCR with the workflow's `GITHUB_TOKEN` (`packages: write`), tagged with the release's version and `latest`:
    - `decrastination-server`: `FROM eclipse-temurin:21-jre`, `COPY` the JAR. The base image is published for arm64 and amd64, and a JAR is the same on both, so one `COPY` gives a multi-arch image with **no QEMU and no compilation under emulation**. (The repository is public, so GitHub's native `ubuntu-24.04-arm` runners are free as well, if a step ever needs to run on arm.)
    - `decrastination-web`: `FROM caddy:2-alpine`, `COPY dist/ /srv/`, `COPY Caddyfile /etc/caddy/Caddyfile`.
-3. On the box, `decrastination-update.timer` runs every three minutes: `docker compose pull`, and `up -d` only if a digest changed, as SharpnPro's `sharpn-update.sh` does.
+3. On the box, `decrastination-update.timer` runs every three minutes: `docker compose pull`, then `up -d`, which changes nothing unless an image has.
 
 The phone's APK comes from the same CI run as today. Order on a release that changes the stores or the protocol: the APK is checked on the phone (the merge checklist), then the merge deploys the server (`data-and-sync.md` §Versions and compatibility).
 
@@ -75,13 +75,13 @@ Restore on a fresh box: `litestream restore -config /etc/litestream.yml -if-db-n
 
 ## Monitoring
 
-As SharpnPro: a heartbeat to healthchecks.io every minute from the server's scheduler (a missed one means the box or the process is down, reclaimed included), and an uptime check on `GET /api/health` from outside. Alerts by email to the owner, through whatever SharpnPro uses today. Logs are JSON lines on stdout, `docker compose logs`. No log line ever holds a store's content, a credential or a request header (the owner's rule).
+As SharpnPro: a heartbeat to healthchecks.io every minute from the server's scheduler (a missed one means the box or the process is down, reclaimed included), which starts with the jobs at the switch, and an uptime check, which is all that notices a stopped box till then, on `GET /api/health` from outside. Alerts by email to the owner, through whatever SharpnPro uses today. Logs are JSON lines on stdout, `docker compose logs`. No log line ever holds a store's content, a credential or a request header (the owner's rule).
 
 ## Security
 
 - SSH by key only; `unattended-upgrades` on; Docker from Docker's repository; the containers run as non-root users; `.env` and `data/` are 0600/0700.
 - Caddy: TLS only, HSTS, the headers above, no `Server` header. The CSP keeps the SPA to its own origin.
-- Every `/api` route behind the session or a device token except health, version and sign-in; sign-in, pairing and claiming rate-limited.
+- Every `/api` route behind the session or a device token except health, version and sign-in; sign-in and claiming rate-limited.
 - The database file holds credentials only encrypted (`MASTER_KEY`), and device tokens only hashed.
 - R2 bucket private; its keys scoped to that bucket.
 - The repository is public: the server's code, the compose file and the Caddyfile are world-readable, as they should be; nothing in them is a secret.

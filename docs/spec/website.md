@@ -4,7 +4,7 @@
 
 It holds no rule of its own (D-137). The server computes each page with the phone's own code (`engine/.../views/`: `DayViews`, `WorkViews`, `ChatViews`, `StatsViews`, `BackupViews`, `SetupViews`, from `DayModel`, `Groups`, `ChatRows`, `StatsPage`, `ReviewPage`, `BackupPage` and `SetupPage`) and sends it in the phone's words; the TypeScript lays it out. A change to how a day or a task reads is made once, in Kotlin.
 
-Nothing is shown to the world: everything needs the owner's sign-in (D-128). It's read-only till the switch (D-141): while the server's mirroring the phone, each page says so by what it's sent, with nothing to press, as the phone's seeds are what change the state. Once it applies commands, the same pages can change things. A change is a command the page sends as the server gave it, or, where it takes the phone's rules to make one, a `TaskAsk`: what you gave, made into commands on the server (`TaskAsks`, `POST /api/tasks/{id}/ask`), so what a task allows and what's said of it are written once.
+Nothing is shown to the world: everything needs the owner's sign-in (D-128). It can't change the state till the switch (D-141): while the server's mirroring the phone, each page says so by what it's sent, with nothing to press, as the phone's seeds are what change the state. Pairing and revoking a phone work all the same, as they're no part of it. Once it applies commands, the same pages can change things. A change is a command the page sends as the server gave it, or, where it takes the phone's rules to make one, a `TaskAsk`: what you gave, made into commands on the server (`TaskAsks`, `POST /api/tasks/{id}/ask`), so what a task allows and what's said of it are written once.
 
 ## The pages
 
@@ -20,7 +20,7 @@ Nothing is shown to the world: everything needs the owner's sign-in (D-128). It'
 - **Setup** (`/setup`, `web/src/Setup.tsx`, `SetupViews`). What the server couldn't read at its start, how each source reads, and Claude, each with whether it needs you, in the phone's words. While mirroring, the sign-ins and the key in use are the phone's, so what's said goes by how each source reads; after, by what's held here. It's marked in the bar while it needs you, by the phone's rule (`SetupPage.attention`, in `GET /views/notices`).
 - **Phone** (`/phone`, `web/src/Phone.tsx`). A code to pair a phone with, what's paired, when each was last heard from, and revoking one, which asks first.
 
-Each page says how fresh it is: "From the phone 5 min ago". In mirror mode the phone is where the state comes from.
+The Day and Work say how fresh they are: "From the phone 5 min ago". In mirror mode the phone is where the state comes from.
 
 ## Staying current
 
@@ -42,4 +42,4 @@ The phone's navy and paper, in CSS variables with a dark scheme, Atkinson Hyperl
 
 The chat's tests run against a stand-in for Claude (`web/e2e/claude-stand-in.mjs`), which each answers by the words of the message it's given. The test server is given a made-up key and the stand-in's address (`CLAUDE_STAND_IN`, read only by a test's server), so no test can reach Claude, whatever's in the machine's environment.
 
-`web/`: `npm ci`, then `npm run lint`, `npm run test:unit` (vitest), `npm run build` and `npm run test:e2e`. The last is Playwright in Chromium (`npx playwright install chromium` once) against the fat JAR in test mode (`DECRASTINATION_TEST=1`: its own database, sign-in stubbed, refused on a domain), with the newest `fixtures/stores/` seeded as a phone would, under the live site's content security policy. It runs two servers, each with a database of its own: `reading` against one that mirrors, as the site does till the switch, and `writing` (`e2e/writes.spec.ts`) against one taken into commands by `POST /api/test/commands`, with a made-up parent code. `LOOK=<a folder> npx playwright test look` takes screenshots of each page in both schemes.
+`web/`: `npm ci`, then `npm run lint`, `npm run test:unit` (vitest), `npm run build` and `npm run test:e2e`. The last is Playwright in Chromium (`npx playwright install chromium` once) against the fat JAR in test mode (`DECRASTINATION_TEST=1`: its own database, sign-in stubbed, refused on a domain), with the newest `fixtures/stores/` seeded as a phone would, under the live site's content security policy. It runs two servers, each with a database of its own: `reading` against one that mirrors, as the site does till the switch, and `writing` (`e2e/writes.spec.ts`, `e2e/chat.spec.ts`) against one taken into commands by `POST /api/test/commands`, with a made-up parent code. `LOOK=<a folder> npx playwright test look` takes screenshots of each page in both schemes.

@@ -59,7 +59,7 @@ The estimates are hours of sessions, from the durations measured over the 4.x re
 
 ## Stage 2: commands
 
-**The order changed in building it (W-25).** Everything below is built here, dormant, and the switch itself (step 2's `commands` mode, step 6's clock) is the last release, not this stage's. 5.1.0 is the command layer on the phone with nothing behaving differently.
+**The order changed in building it (W-25).** Everything below is built here, dormant, but for what's the last release's, not this stage's: the switch itself (step 2's `commands` mode, step 6's clock), and step 3's provisional slots and seven-day line. 5.1.0 is the command layer on the phone with nothing behaving differently.
 
 **The switch's own step.** A phone mirroring queues nothing, so what it changed since its last accepted seed is on the phone alone, and the first pull would write over it. So the switch is a final seed: the server, told to go over, takes one more whole seed from the phone and sets `meta.mode` in that seed's transaction, and the phone goes over with its revision from the answer, needing no pull at all. A harness case holds a change made after the last seed through the switch. Observations and the free-time spends as commands (W-24) land with it, as a pull otherwise writes over what the phone writes outside commands: Focus's half-minute writes to `session.json`, the Teams and Gmail syncs, Felix's background writes.
 
