@@ -118,7 +118,7 @@ class TasksHarness(start: String = "2026-10-19T16:00", private val claude: Boole
     override val learning: Learning get() = error("No learning here")
 
     /** A screen's changes, as `AppGraph`'s: only the owners here have any. */
-    val commands = Commands(this, owners, stores.outbox, queuing = { stores.sync.value.mode == SyncState.COMMANDS })
+    val commands = Commands(this, owners, stores.outbox, queuing = { stores.sync.value.mode == SyncState.COMMANDS }, unfinished = { stores.sync.update { it.copy(revision = 0) } })
 
     /** A source's task, made up: Teams homework due on [due], taking [minutes]. */
     fun teams(id: String, due: Long? = Fixtures.at("2026-10-23T09:00"), minutes: Int = 60) = TaskItem(
