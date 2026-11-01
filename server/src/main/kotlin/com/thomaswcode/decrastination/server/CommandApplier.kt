@@ -3,6 +3,7 @@ package com.thomaswcode.decrastination.server
 import com.thomaswcode.decrastination.core.WallClock
 import com.thomaswcode.decrastination.ports.Log
 import com.thomaswcode.decrastination.sync.Protocol
+import com.thomaswcode.decrastination.sync.protocol.Action
 import com.thomaswcode.decrastination.sync.protocol.Command
 import com.thomaswcode.decrastination.sync.protocol.CommandBatch
 import com.thomaswcode.decrastination.sync.protocol.Commands
@@ -42,8 +43,12 @@ class CommandApplier(
             // Inside, not ahead of it: a retry racing its first send waits here, and finds what came of it.
             recorded(command.id)?.let { return@commandOr it }
             backend.cause = command.id
-            val why = command.action.stale(owners) ?: command.action.refused(commands.apply(command))
-            val made = Outcome(command.id, if (why == null) Outcome.APPLIED else Outcome.DROPPED, why, db.currentRevision())
+            var undo: Action? = null
+            val why = command.action.stale(owners) ?: commands.apply(command).let { answer ->
+                undo = command.action.undoing(answer)
+                command.action.refused(answer)
+            }
+            val made = Outcome(command.id, if (why == null) Outcome.APPLIED else Outcome.DROPPED, why, db.currentRevision(), undo.takeIf { why == null })
             record(command, device, made)
             made
         }

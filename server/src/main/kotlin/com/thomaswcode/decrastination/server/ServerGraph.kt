@@ -351,11 +351,11 @@ class ServerGraph(
         return now >= tonight && (last == null || last < tonight)
     }
 
-    /** What waits for Claude asked for, after a command's landed: on its own time, as a call can take a minute. */
-    fun answerSoon() {
+    /** Your message that waits asked for again, at your Try again: on its own time, as a call can take a minute. */
+    fun tryAgain() {
         scope.launch {
             try {
-                owners.answerWhatWaits()
+                owners.conversation.answerChat(retry = true)
             } catch (failed: IOException) {
                 Log.w(Log.TAG, "Asking Claude failed: ${failed::class.simpleName}")
             }

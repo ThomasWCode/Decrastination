@@ -1136,7 +1136,7 @@ private fun Yours(graph: AppGraph, message: ChatMessage, quote: ChatMessage?, na
             Text(note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 6.dp))
             Row {
                 TextButton(onClick = { graph.scope.launch { graph.conversation.answerChat(retry = true) } }) { Text("Try again") }
-                TextButton(onClick = { scope.launch { graph.act(WithdrawQuestion) } }) { Text("Take back") }
+                TextButton(onClick = { scope.launch { graph.act(WithdrawQuestion(message.id)) } }) { Text("Take back") }
             }
         }
     }
