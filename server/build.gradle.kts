@@ -32,6 +32,7 @@ dependencies {
     implementation(libs.ktor.server.forwarded.header)
     implementation(libs.ktor.serialization.json)
     implementation(libs.sqlite.jdbc)
+    implementation(libs.webpush)
 
     testImplementation(testFixtures(project(":engine")))
     testImplementation(libs.ktor.server.test.host)
