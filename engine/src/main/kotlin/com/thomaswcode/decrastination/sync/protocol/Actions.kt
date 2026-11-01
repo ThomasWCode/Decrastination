@@ -13,10 +13,8 @@ import com.thomaswcode.decrastination.core.OwnTaskRules
 import com.thomaswcode.decrastination.core.Rule
 import com.thomaswcode.decrastination.core.SettingsLimits
 import com.thomaswcode.decrastination.data.PieceTimer
-import com.thomaswcode.decrastination.data.WeeklyReview
 import com.thomaswcode.decrastination.felix.Conversation
 import com.thomaswcode.decrastination.learn.CheckIn
-import com.thomaswcode.decrastination.learn.ReviewInput
 import com.thomaswcode.decrastination.protect.SettingsChanges
 import com.thomaswcode.decrastination.ui.Moves
 import java.time.LocalDate
