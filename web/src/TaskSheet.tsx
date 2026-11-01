@@ -175,9 +175,9 @@ export function TaskSheet({ id, form, close }: { id: string; form: OwnTaskFormVi
       <button className="close" onClick={close} aria-label="Close">
         ×
       </button>
-      {!task ? (
-        failed ? <p className="problem">That task has gone.</p> : null
-      ) : (
+      {failed ? (
+        <p className="problem">That task has gone, or it can't be read just now.</p>
+      ) : !task ? null : (
         <>
           <h2>{task.title}</h2>
           <p className="line">{task.line}</p>

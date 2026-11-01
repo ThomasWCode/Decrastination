@@ -306,16 +306,18 @@ function Remembered({ view }: { view: SettingsView }) {
 }
 
 /** Sign-ins, entered here and kept sealed on the server (W-19): it says which it holds, never what they are. */
-function Credentials({ groups, saved }: { groups: CredentialGroup[]; saved: () => void }) {
+function Credentials({ groups }: { groups: CredentialGroup[] }) {
   const [typed, setTyped] = useState<Record<string, string>>({});
+  // What it says it holds, from its answer: a sign-in is in no store, so no revision says it's changed.
+  const [held, setHeld] = useState<string[] | null>(null);
   const [said, setSaid] = useState<string | null>(null);
   const save = () => {
     setSaid(null);
     api
       .setCredentials(typed)
-      .then(() => {
+      .then((answer) => {
         setTyped({});
-        saved();
+        setHeld(answer.held);
       })
       .catch(() => setSaid("That didn't reach the server. Try again."));
   };
@@ -337,7 +339,7 @@ function Credentials({ groups, saved }: { groups: CredentialGroup[]; saved: () =
               <input
                 type={field.secret ? "password" : "text"}
                 autoComplete="off"
-                placeholder={field.held ? "Held" : "Not set"}
+                placeholder={(held?.includes(field.name) ?? field.held) ? "Held" : "Not set"}
                 value={typed[field.name] ?? ""}
                 onChange={(event) => setTyped({ ...typed, [field.name]: event.target.value })}
               />
@@ -412,7 +414,6 @@ export function SettingsPageView() {
   const load = useCallback(() => api.settings(), []);
   const { value: view, failed } = useLive(load);
   const [shown, setShown] = useState("about");
-  const [fresh, setFresh] = useState(0);
   if (!view) return failed ? <p className="problem">Settings couldn't be read. It tries again with the next change.</p> : null;
   const page = view.pages.find((one) => one.key === shown) ?? view.pages[0];
   if (!page) return null;
@@ -445,9 +446,9 @@ export function SettingsPageView() {
         <div className="settings-body">
           <h2>{page.title}</h2>
           {page.key === "school" ? <School view={view} /> : null}
-          {page.fields.length > 0 ? <Fields key={`${page.key}-${fresh}`} page={page} canChange={view.canChange} /> : null}
+          {page.fields.length > 0 ? <Fields key={page.key} page={page} canChange={view.canChange} /> : null}
           {page.key === "felix" ? <Remembered view={view} /> : null}
-          {page.key === "sources" && view.canChange ? <Credentials groups={view.credentials} saved={() => setFresh(fresh + 1)} /> : null}
+          {page.key === "sources" && view.canChange ? <Credentials groups={view.credentials} /> : null}
         </div>
       </div>
     </main>

@@ -30,6 +30,12 @@ async function seeded(server: string, sessionFile: string, commands: boolean) {
   if (commands) {
     const over = await api.post("/api/test/commands");
     if (!over.ok()) throw new Error(`Going over to commands failed: ${over.status()}`);
+    // A made-up parent code, as the phone would send it: RFC 6238's own, which the test works out.
+    const code = await api.post("/api/parent-code", {
+      headers: { Authorization: `Bearer ${token}`, "X-Protocol": "1" },
+      data: { secret: "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ" },
+    });
+    if (!code.ok()) throw new Error(`The parent code wasn't taken: ${code.status()}`);
   }
   // The session for the browser: the same cookie on the website's own origin.
   const state = await api.storageState();
