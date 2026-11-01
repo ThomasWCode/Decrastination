@@ -4,6 +4,7 @@ import com.thomaswcode.decrastination.core.WallClock
 import com.thomaswcode.decrastination.ports.Log
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -55,7 +56,8 @@ class ServerJobs(
         }
     }
 
-    fun start(scope: CoroutineScope): Job = scope.launch {
+    /** The loop, on threads that can wait: a job's writes wait for an open command, and the default pool is as small as the box. */
+    fun start(scope: CoroutineScope): Job = scope.launch(Dispatchers.IO) {
         while (isActive) {
             tick()
             delay(TURN_MS)

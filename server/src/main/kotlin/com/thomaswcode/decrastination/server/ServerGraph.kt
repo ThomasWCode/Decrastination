@@ -246,7 +246,7 @@ class ServerGraph(
 
     init {
         // A store's every write is kept for a while: at each start, and daily while it runs.
-        scope.launch {
+        scope.launch(Dispatchers.IO) {
             while (true) {
                 try {
                     tidy()

@@ -9,6 +9,7 @@ import com.thomaswcode.decrastination.data.Secret
 import com.thomaswcode.decrastination.data.SecretCipher
 import com.thomaswcode.decrastination.learn.CheckIn
 import com.thomaswcode.decrastination.protect.Totp
+import com.thomaswcode.decrastination.sync.DeviceClaim
 import com.thomaswcode.decrastination.sync.protocol.ApplyChangeNow
 import com.thomaswcode.decrastination.sync.protocol.ChangeSettings
 import com.thomaswcode.decrastination.sync.protocol.ClearChat
@@ -30,6 +31,7 @@ import com.thomaswcode.decrastination.sync.protocol.UndoTidy
 import com.thomaswcode.decrastination.sync.protocol.UseParentCode
 import java.io.File
 import java.nio.file.Files
+import java.util.concurrent.Executors
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -39,7 +41,9 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
@@ -201,6 +205,61 @@ class CommandApplierTest {
         assertEquals(2, rows())
         graph.backend.trimCommands(System.currentTimeMillis() + 1_000)
         assertEquals(0, rows())
+    }
+
+    /** [body] on one thread, as a small box's requests are, which it then blocks, as a request that writes does. */
+    private fun onOneThread(body: suspend CoroutineScope.() -> Unit) {
+        val request = Executors.newSingleThreadExecutor()
+        try {
+            runBlocking(request.asCoroutineDispatcher(), body)
+        } finally {
+            request.shutdownNow()
+        }
+    }
+
+    @Test(timeout = 15_000)
+    fun `a command doesn't need the thread that's waiting for it`() = onOneThread {
+        val command = launch(start = CoroutineStart.UNDISPATCHED) { graph.applier.apply(CommandBatch(listOf(Command("alone", at, own("Essay")))), "phone") }
+        db.setMeta("made-up", "1")
+        command.join()
+        assertEquals(1, rows())
+    }
+
+    @Test(timeout = 15_000)
+    fun `nor does what's too wide for a command`() = onOneThread {
+        val inside = CompletableDeferred<Unit>()
+        val command = launch {
+            graph.applier.alone("test", Unit) {
+                inside.complete(Unit)
+                delay(200)
+                graph.stores.memory.update { it.copy(rules = listOf(Rule("A made-up rule", 1L))) }
+            }
+        }
+        inside.await()
+        db.setMeta("made-up", "1")
+        command.join()
+        assertEquals(1, graph.stores.memory.value.rules.size)
+    }
+
+    @Test(timeout = 15_000)
+    fun `who's asking is told with a command open, as every request asks`() = runBlocking<Unit> {
+        val sessions = Sessions(db, 1L)
+        val session = sessions.start()
+        val code = graph.devices.pair().code
+        val phone = assertNotNull(graph.devices.claim(DeviceClaim(code, "A made-up phone")))
+        val inside = CompletableDeferred<Unit>()
+        val letGo = CompletableDeferred<Unit>()
+        val command = launch(Dispatchers.IO) {
+            graph.applier.alone("test", Unit) {
+                inside.complete(Unit)
+                letGo.await()
+            }
+        }
+        inside.await()
+        val told = sessions.check(session) to graph.devices.check(phone.token)
+        letGo.complete(Unit)
+        command.join()
+        assertEquals(true to phone.id, told)
     }
 
     @Test

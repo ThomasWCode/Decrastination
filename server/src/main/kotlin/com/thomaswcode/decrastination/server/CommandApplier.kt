@@ -9,6 +9,7 @@ import com.thomaswcode.decrastination.sync.protocol.CommandBatch
 import com.thomaswcode.decrastination.sync.protocol.Commands
 import com.thomaswcode.decrastination.sync.protocol.Outcome
 import com.thomaswcode.decrastination.sync.protocol.Owners
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -32,15 +33,19 @@ class CommandApplier(
 ) {
     private val json = Json { encodeDefaults = true }
 
-    /** [batch] in order, each one's outcome. Not cut short by the client's going away: each is finished, and said at its retry. */
-    suspend fun apply(batch: CommandBatch, device: String): List<Outcome> = withContext(NonCancellable) { batch.commands.map { one(it, device) } }
+    /**
+     * [batch] in order, each one's outcome. Not cut short by the client's going away: each is finished, and said at its retry. On
+     * threads of its own, not the caller's: a request's thread may be waiting for this very command to close, and on a small box
+     * there are few of them.
+     */
+    suspend fun apply(batch: CommandBatch, device: String): List<Outcome> = withContext(NonCancellable + Dispatchers.IO) { batch.commands.map { one(it, device) } }
 
     /**
      * [block], a change too wide for a command (a backup taken in, whose file doesn't belong on record), held as a command is: all
-     * of it or none, one at a time, one revision, and finished whether or not the client stays. [failed] is what's answered if
-     * it fails, with nothing of it kept.
+     * of it or none, one at a time, one revision, on threads of its own, and finished whether or not the client stays. [failed]
+     * is what's answered if it fails, with nothing of it kept.
      */
-    suspend fun <T> alone(cause: String, failed: T, block: suspend () -> T): T = withContext(NonCancellable) {
+    suspend fun <T> alone(cause: String, failed: T, block: suspend () -> T): T = withContext(NonCancellable + Dispatchers.IO) {
         var before = 0L
         val answer = db.commandOr(reload, { error ->
             Log.w(Log.TAG, "$cause failed: ${error::class.simpleName} at ${error.stackTrace.firstOrNull { it.className.startsWith("com.thomaswcode") }}")
