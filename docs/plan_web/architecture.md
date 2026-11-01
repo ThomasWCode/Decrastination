@@ -58,7 +58,7 @@ A Ktor application (3.6.x, the CIO or Netty engine; both run on arm64 Linux) on 
 | `POST /observations` | a batch of the phone's device-born facts, applied the same way |
 | `POST /stores/seed` | stage 1 only: a whole store from the phone while the server is in mirror mode |
 | `GET /views/day?date=`, `GET /views/work`, `GET /views/task/{id}`, … | the screens' models, computed on the server by the same Kotlin the phone's screens use (§The website) |
-| `GET /chat/archive/{yyyy-MM}` | a month of the archive, as the phone reads one on scroll-back |
+| `GET /views/chat?earlier=&reach=` | the chat, with as much of the archive as it asks for: counted in messages, as the phone reads it on scroll-back, or as far as a quote's message |
 | `POST /photos` | a photo for the photo-to-tasks path (stage 4) |
 | `GET /backup`, `POST /backup/import`, `POST /reset/{kind}` | the Backup-format file out and in, the resets (stage 7) |
 | `GET /health`, `GET /version` | for Caddy, the heartbeat and the clients (the protocol version and each store's version) |

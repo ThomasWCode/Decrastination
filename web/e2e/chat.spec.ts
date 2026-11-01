@@ -98,6 +98,15 @@ test("Mark answered takes it off, and its Undo puts it back", async ({ page }) =
   await expect(question.getByText("waiting for your answer")).toBeVisible();
 });
 
+test("a Mark answered that doesn't go through says why", async ({ page }) => {
+  await page.goto("/");
+  const question = message(page, "Can you work through the first made-up event?");
+  await page.route("**/api/commands", (route) => route.fulfill({ json: [{ id: "x", state: "dropped", why: "That couldn't go through", revision: 0 }] }));
+  await question.hover();
+  await question.getByRole("button", { name: "Mark answered" }).click();
+  await expect(page.getByText("That couldn't go through")).toBeVisible();
+});
+
 test("one of his chosen shows its own replies, and a chip pressed answers it, with no call", async ({ page }) => {
   await page.goto("/");
   const question = message(page, "Can you work through the second made-up event?");
@@ -274,6 +283,19 @@ test("leaving reads what the page showed, not what's been written since", async 
   await page.waitForTimeout(3_400);
   await page.getByRole("navigation", { name: "Pages" }).getByRole("link", { name: "Work" }).click();
   await expect(page.getByRole("img", { name: "Nothing unread" })).toBeVisible();
+});
+
+test("signing out takes what the box held with it", async ({ browser, baseURL }) => {
+  // A session of its own, as this one ends it.
+  const context = await browser.newContext({ baseURL, storageState: { cookies: [], origins: [] } });
+  expect((await context.request.post("/api/test/signin")).ok()).toBeTruthy();
+  const page = await context.newPage();
+  await page.goto("/");
+  await page.getByRole("textbox", { name: /^Tell / }).fill("Not for whoever's next");
+  await page.getByRole("button", { name: "Sign out" }).click();
+  await expect(page.getByRole("link", { name: "Sign in with GitHub" })).toBeVisible();
+  expect(await page.evaluate(() => sessionStorage.length)).toBe(0);
+  await context.close();
 });
 
 test("how the chat looks, to be seen", async ({ page }) => {

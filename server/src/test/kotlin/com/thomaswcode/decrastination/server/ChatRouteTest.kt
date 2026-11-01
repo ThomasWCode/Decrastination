@@ -91,6 +91,13 @@ class ChatRouteTest {
     }
 
     @Test
+    fun `however far a page asks to go back, it's what the archive holds`() = runBlocking<Unit> {
+        graph.stores.chat.update { it.copy(messages = listOf(his("new", 0))) }
+        archived(3)
+        assertEquals(listOf("old1", "old2", "old3", "new"), graph.chat(Int.MAX_VALUE, null).rows.map { it.id })
+    }
+
+    @Test
     fun `what's unread is counted as the phone counts it`() = runBlocking<Unit> {
         assertEquals(0, graph.notices().unread)
         graph.stores.chat.update { it.copy(messages = listOf(his("read", 2), his("one", 1), his("two", 0).copy(answeredAt = now), his("three", 0)), readAt = now - 36 * 3_600_000L) }

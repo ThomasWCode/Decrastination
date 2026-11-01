@@ -471,7 +471,8 @@ class ServerGraph(
         val writable = mode == COMMANDS
         val settings = stores.settings.value
         val back = reach?.let(archive::back) ?: 0
-        val shown = maxOf(earlier, back)
+        // However far a page asks: it's added to a page's length below.
+        val shown = minOf(maxOf(earlier, back), Int.MAX_VALUE - ChatRows.PAGE)
         val read = if (shown > 0) archive.recent(shown + ChatRows.PAGE) else emptyList()
         val known = (chat.messages + read).mapTo(HashSet()) { it.id }
         val quotes = (read.takeLast(shown) + chat.messages).mapNotNull { message -> message.replyTo?.takeIf { it !in known } }.distinct().mapNotNull(archive::find)

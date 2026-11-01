@@ -237,7 +237,11 @@ object ChatViews {
 
         fun quote(message: ChatMessage) = ChatQuote(message.id, if (message.from == Speaker.Felix) name else "You", message.text.trim().lineSequence().first())
 
-        fun chips(message: ChatMessage) = message.suggestedReplies.mapIndexed { index, reply -> ChatChip(reply, SendMessage(reply, id = "${message.id}-chip-$index", replyTo = message.id)) }
+        // An id fixed by what's been said so far: a press made twice before the page has heard is the one message, one made after it another.
+        fun chips(message: ChatMessage): List<ChatChip> {
+            val replies = chat.messages.count { it.from == Speaker.You && it.replyTo == message.id }
+            return message.suggestedReplies.mapIndexed { index, reply -> ChatChip(reply, SendMessage(reply, id = "${message.id}-chip-$index-$replies", replyTo = message.id)) }
+        }
 
         fun lines(message: ChatMessage, live: Boolean): List<ChatDid> =
             message.memoryEdits.mapIndexed { index, edit -> ChatDid(edit.line, edit.undone, UndoMemory(message.id, index).takeIf { live && !edit.undone && Memories.undo(memory, edit) != null }) } +

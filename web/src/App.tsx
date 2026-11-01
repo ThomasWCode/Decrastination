@@ -93,6 +93,8 @@ export function App() {
     );
   }
   const signOut = () => {
+    // What the chat's box held goes with the session.
+    sessionStorage.clear();
     api.signOut().then(() => setSignedIn(false));
   };
   return (
