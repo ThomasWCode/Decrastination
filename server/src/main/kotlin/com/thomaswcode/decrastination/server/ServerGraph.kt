@@ -492,7 +492,7 @@ class ServerGraph(
     fun task(id: String): TaskView? {
         val state = stores.tasks.value
         val task = state.tasks.firstOrNull { it.id == id } ?: return null
-        return TaskViews.of(task, state.tasks.associateBy { it.id }, planning.plan(), stores.settings.value, stores.instructions.value.applied, stores.felix.value.notes, clock.now(), clock.zone(), writable = mode == COMMANDS)
+        return TaskViews.of(task, state.tasks.associateBy { it.id }, planning.plan(), stores.settings.value, stores.instructions.value.applied, stores.felix.value.notes, clock.now(), clock.zone(), writable = mode == COMMANDS, timer = stores.session.value.timer)
     }
 
     /** [ask] of task [id], made the commands the phone's sheet would make, and applied as the website's. */

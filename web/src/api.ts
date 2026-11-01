@@ -80,6 +80,15 @@ export async function tryAgain(): Promise<string | null> {
   }
 }
 
+/** What came of a block let go on the Day: the server judges it by the phone's rules, on the plan as it then is. */
+export async function dropping(drop: { key: string; date: string; onto: string | null; minute: number | null }): Promise<Asked> {
+  try {
+    return await read<Asked>("/api/day/drop", posting(drop));
+  } catch {
+    return { done: false, said: UNREACHED };
+  }
+}
+
 /** What came of asking [ask] of task [id], the server making it the commands the phone's sheet would. */
 export async function asking(id: string, ask: TaskAsk): Promise<Asked> {
   try {

@@ -25,14 +25,14 @@ function useLocation(): [URL, (to: string) => void] {
 export type Go = (to: string) => void;
 
 /** A link inside the site: the address changes, nothing reloads. */
-export function Link({ to, go, current, children }: { to: string; go: Go; current?: boolean; children: ReactNode }) {
+export function Link({ to, go, current, date, children }: { to: string; go: Go; current?: boolean; date?: string; children: ReactNode }) {
   const follow = (event: MouseEvent) => {
     if (event.metaKey || event.ctrlKey) return;
     event.preventDefault();
     go(to);
   };
   return (
-    <a href={to} onClick={follow} aria-current={current ? "page" : undefined}>
+    <a href={to} onClick={follow} aria-current={current ? "page" : undefined} data-date={date}>
       {children}
     </a>
   );

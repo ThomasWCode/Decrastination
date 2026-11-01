@@ -1792,3 +1792,81 @@ label.button {
     border-left: 0;
   }
 }
+
+/* The Day's grid, to drag: a block lifted, where it will land, and what's said of the drop. */
+.block[role="button"] {
+  cursor: pointer;
+}
+
+.block.movable {
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.block.lifted {
+  opacity: 0.5;
+}
+
+.landing {
+  position: absolute;
+  left: 0;
+  right: 4px;
+  z-index: 3;
+  padding: 2px 6px;
+  border: 2px dashed var(--accent);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--pale) 60%, transparent);
+  color: var(--on-pale);
+  font-size: 12px;
+  font-weight: 600;
+  pointer-events: none;
+}
+
+.day-said {
+  padding: 6px 14px;
+  border-bottom: 1px solid var(--line);
+  background: var(--wash);
+  font-size: 13px;
+}
+
+/* The timer, and what's to be done with what's next, on the navy slab. */
+.now-panel .timer {
+  display: grid;
+  gap: 4px;
+  margin: 0 0 12px;
+  padding: 0 0 12px;
+  border-top: 0;
+  border-bottom: 1px solid rgb(215 227 255 / 30%);
+}
+
+.now-panel .timer .piece {
+  font-size: 16px;
+}
+
+.now-panel .timer .says {
+  font-weight: 600;
+}
+
+.now-panel .timer .action {
+  justify-self: start;
+}
+
+.now-panel .next-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.now-panel .action {
+  border-color: rgb(215 227 255 / 50%);
+}
+
+.now-panel .action:hover {
+  background: rgb(215 227 255 / 15%);
+}
+
+.now-panel .quiet {
+  color: inherit;
+}

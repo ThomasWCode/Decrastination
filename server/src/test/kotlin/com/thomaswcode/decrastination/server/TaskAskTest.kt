@@ -1,14 +1,20 @@
 package com.thomaswcode.decrastination.server
 
+import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.OwnTask
 import com.thomaswcode.decrastination.core.OwnTaskRules
+import com.thomaswcode.decrastination.core.SlotKind
 import com.thomaswcode.decrastination.core.Source
+import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.data.SecretCipher
 import com.thomaswcode.decrastination.sync.protocol.Command
 import com.thomaswcode.decrastination.sync.protocol.CommandBatch
 import com.thomaswcode.decrastination.sync.protocol.SaveOwnTask
+import com.thomaswcode.decrastination.ui.Moves
+import com.thomaswcode.decrastination.views.Asked
+import com.thomaswcode.decrastination.views.DayDrop
 import com.thomaswcode.decrastination.views.TaskAsk
 import java.io.File
 import java.io.IOException
@@ -167,6 +173,85 @@ class TaskAskTest {
         val jpeg = byteArrayOf(0xFF.toByte(), 0xD8.toByte())
         assertFailsWith<IOException> { graph.readPhoto(jpeg) { throw IOException("The call failed") } }
         assertEquals("Next", graph.readPhoto(jpeg) { null to "Next" }?.why)
+    }
+
+    private fun slotOf(id: String) = graph.planning.plan().buckets.flatMap { bucket -> bucket.slots.map { bucket.date to it } }.first { (_, slot) -> slot.chunk?.taskId == id }
+
+    @Test
+    fun `a timer's started on the piece the page shows, as something done on its task`() = runBlocking<Unit> {
+        withTasks()
+        val start = assertNotNull(assertNotNull(graph.task(own)).actions.first { it.label == "Start" }.ask)
+        assertTrue(graph.ask(own, start).done)
+        val timer = assertNotNull(graph.stores.session.value.timer)
+        assertEquals(start.key, timer.key)
+        assertTrue(timer.running)
+        assertTrue(graph.stores.chat.value.felix.activity.containsKey(own), "so his nudge stays off")
+        assertTrue(assertNotNull(graph.task(own)).actions.any { it.label.startsWith("Stop") })
+    }
+
+    @Test
+    fun `a timer on a task that's gone says so`() = runBlocking<Unit> {
+        withTasks()
+        graph.stores.tasks.update { state -> state.copy(tasks = state.tasks.map { if (it.id == own) it.copy(status = Status.Done) else it }) }
+        assertEquals(Moves.CHANGED, graph.ask(own, TaskAsk(TaskAsk.TIMER)).said)
+    }
+
+    @Test
+    fun `dropped on the grid, its next piece takes that time, to the nearest five, said in the phone's words`() = runBlocking<Unit> {
+        withTasks()
+        val (day, slot) = slotOf(own)
+        val answer = graph.drop(DayDrop(slot.key, day.toString(), minute = 17 * 60 + 3))
+        assertTrue(answer.done, answer.said)
+        assertTrue(assertNotNull(answer.said).endsWith(": undone in the chat's Your changes"), answer.said)
+        assertTrue(answer.said!!.contains("17:05"), answer.said)
+        assertEquals(17 * 60 + 5, graph.stores.instructions.value.applied.last().changes.single().startMin)
+    }
+
+    @Test
+    fun `dropped on another day, all of it goes there`() = runBlocking<Unit> {
+        withTasks()
+        val (day, slot) = slotOf(own)
+        val answer = graph.drop(DayDrop(slot.key, day.toString(), onto = day.plusDays(2).toString()))
+        assertTrue(answer.done, answer.said)
+        assertTrue(assertNotNull(answer.said).startsWith("All of it on"), answer.said)
+    }
+
+    @Test
+    fun `dropped on its own day, or nowhere, nothing happens and nothing's said`() = runBlocking<Unit> {
+        withTasks()
+        val (day, slot) = slotOf(own)
+        assertEquals(Asked(false), graph.drop(DayDrop(slot.key, day.toString(), onto = day.toString())))
+        assertEquals(Asked(false), graph.drop(DayDrop(slot.key, day.toString())))
+        assertTrue(graph.stores.instructions.value.applied.isEmpty())
+    }
+
+    @Test
+    fun `a drop's refused where the piece has gone, or the date can't be read`() = runBlocking<Unit> {
+        withTasks()
+        val (day, slot) = slotOf(own)
+        assertEquals(Moves.CHANGED, graph.drop(DayDrop("no such piece", day.toString(), minute = 600)).said)
+        assertEquals("That needs a date", graph.drop(DayDrop(slot.key, "not a date", minute = 600)).said)
+        assertEquals("That needs a date", graph.drop(DayDrop(slot.key, day.toString(), onto = "not a date")).said)
+    }
+
+    @Test
+    fun `only its next piece takes a time`() = runBlocking<Unit> {
+        withTasks()
+        graph.applier.apply(CommandBatch(listOf(Command("long", System.currentTimeMillis(), SaveOwnTask("long", OwnTask(title = "A long one", minutes = 400))))), Client.WEBSITE)
+        val pieces = graph.planning.plan().buckets.flatMap { bucket -> bucket.slots.map { bucket.date to it } }.filter { (_, slot) -> slot.chunk?.taskId == "own:long" }
+        assertTrue(pieces.size > 1, "it's in pieces")
+        val (day, later) = pieces.last()
+        assertEquals("Only its next piece takes a time: drag it onto a day above", graph.drop(DayDrop(later.key, day.toString(), minute = 600)).said)
+    }
+
+    @Test
+    fun `a break outside stays on its day`() = runBlocking<Unit> {
+        withTasks()
+        val (day, slot) = graph.planning.plan().buckets.flatMap { bucket -> bucket.slots.map { bucket.date to it } }.first { (_, slot) -> slot.kind == SlotKind.Outside }
+        assertEquals("A break outside stays on its day", graph.drop(DayDrop(slot.key, day.toString(), onto = day.plusDays(1).toString())).said)
+        val moved = graph.drop(DayDrop(slot.key, day.toString(), minute = 20 * 60))
+        assertTrue(moved.done, moved.said)
+        assertEquals(ChangeType.OutsideAt, graph.stores.instructions.value.applied.single().changes.single().type)
     }
 
     @Test

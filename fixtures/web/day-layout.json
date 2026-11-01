@@ -1,0 +1,33 @@
+{
+  "minuteAt": [
+    { "y": 0, "hourPx": 60, "minute": 0 },
+    { "y": 90, "hourPx": 60, "minute": 90 },
+    { "y": 90, "hourPx": 120, "minute": 45 },
+    { "y": 91, "hourPx": 120, "minute": 45 },
+    { "y": 45, "hourPx": 30, "minute": 90 },
+    { "y": 1439.5, "hourPx": 60, "minute": 1439 }
+  ],
+  "yOf": [
+    { "minute": 0, "hourPx": 60, "y": 0 },
+    { "minute": 90, "hourPx": 60, "y": 90 },
+    { "minute": 90, "hourPx": 120, "y": 180 },
+    { "minute": 90, "hourPx": 30, "y": 45 }
+  ],
+  "snap": [
+    { "minute": 0, "snapped": 0 },
+    { "minute": 2, "snapped": 0 },
+    { "minute": 3, "snapped": 5 },
+    { "minute": 7, "snapped": 5 },
+    { "minute": 8, "snapped": 10 },
+    { "minute": 1437, "snapped": 1435 },
+    { "minute": 1438, "snapped": 1440 }
+  ],
+  "dropStart": [
+    { "minute": 62, "minutes": 30, "start": 60 },
+    { "minute": 63, "minutes": 30, "start": 65 },
+    { "minute": -40, "minutes": 30, "start": 0 },
+    { "minute": 1430, "minutes": 30, "start": 1410 },
+    { "minute": 1500, "minutes": 60, "start": 1380 },
+    { "minute": 100, "minutes": 2000, "start": 0 }
+  ]
+}

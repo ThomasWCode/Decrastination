@@ -19,6 +19,8 @@ import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.core.SubStep
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.WindowKind
+import com.thomaswcode.decrastination.data.PieceTimer
+import com.thomaswcode.decrastination.sync.protocol.StopTimer
 import com.thomaswcode.decrastination.sync.protocol.TakeBackQuick
 import java.time.LocalDate
 import kotlin.test.Test
@@ -38,9 +40,9 @@ class TaskViewTest {
         sourceEffortMin = 30, firstSeenAt = now, lastSeenAt = now, status = status, subSteps = steps, doneAt = if (status == Status.Done) now else null,
     )
 
-    private fun view(task: TaskItem, writable: Boolean = true, applied: List<Instruction> = emptyList(), notes: List<Note> = emptyList()): TaskView {
+    private fun view(task: TaskItem, writable: Boolean = true, applied: List<Instruction> = emptyList(), notes: List<Note> = emptyList(), timer: PieceTimer? = null): TaskView {
         val plan = Planner.plan(Planner.Input(listOf(task), now, LONDON, Settings(), windows = mapOf(monday to listOf(DayWindow(17 * 60, 22 * 60, WindowKind.Evening)))))
-        return TaskViews.of(task, mapOf(task.id to task), plan, Settings(), applied, notes, now, LONDON, writable)
+        return TaskViews.of(task, mapOf(task.id to task), plan, Settings(), applied, notes, now, LONDON, writable, timer)
     }
 
     private fun TaskView.labels() = actions.map { it.label }
@@ -48,7 +50,7 @@ class TaskViewTest {
     @Test
     fun `a source's open task can be done, put off, and called not a task, which asks first`() {
         val sheet = view(task())
-        assertEquals(listOf("Done", "Later today", "Tomorrow", "Not a task"), sheet.labels())
+        assertEquals(listOf("Start", "Done", "Later today", "Tomorrow", "Not a task"), sheet.labels())
         assertEquals(TaskAsk.DONE, sheet.actions[0].ask?.kind)
         assertNotNull(sheet.actions[0].undo, "a Done can be taken back")
         assertNull(sheet.actions[1].confirm)
@@ -59,7 +61,7 @@ class TaskViewTest {
     @Test
     fun `one of your own can be finished, placed and deleted, and goes to the form`() {
         val sheet = view(task(source = Source.Own))
-        assertEquals(listOf("Done", "Later today", "Tomorrow", "All of it done", "Not a task", "Home only", "Delete"), sheet.labels())
+        assertEquals(listOf("Start", "Done", "Later today", "Tomorrow", "All of it done", "Not a task", "Home only", "Delete"), sheet.labels())
         assertEquals("Delete “The a”?", sheet.actions.last().confirm)
         assertEquals("a", sheet.edit?.sourceId)
         assertEquals("Planned anywhere, a free period at school too", sheet.where)
@@ -116,6 +118,33 @@ class TaskViewTest {
         assertEquals("Undo", undo?.label)
         assertEquals(TakeBackQuick(source.id, ChangeType.DueBy), undo?.action)
         assertNull(view(source).fields.first { it.kind == TaskAsk.DUE }.undo, "with nothing of yours on it, there's nothing to undo")
+    }
+
+    @Test
+    fun `a task with no steps has a timer on its next piece, Stop saying its time while it runs`() {
+        val task = task()
+        val start = view(task).actions.first()
+        assertEquals("Start", start.label)
+        val key = assertNotNull(start.ask?.key)
+        assertEquals(TaskAsk.TIMER, start.ask?.kind)
+        val running = PieceTimer(key, task.id, null, null, "A piece", 30, now - 600_000L)
+        val stop = view(task, timer = running).actions.first()
+        assertEquals("Stop (20 min left)", stop.label)
+        assertEquals(StopTimer, stop.action)
+        assertEquals("Start", view(task, timer = running.copy(stoppedAt = now)).actions.first().label, "stopped, it can be started again")
+        assertEquals("Start", view(task, timer = running.copy(key = "another piece")).actions.first().label, "and one on another piece isn't this one's")
+    }
+
+    @Test
+    fun `a task with steps has a timer on each still to do, not on the task`() {
+        val task = task().copy(subSteps = listOf(SubStep("First", 10, done = true), SubStep("Second", 20)))
+        val sheet = view(task)
+        assertFalse("Start" in sheet.labels())
+        assertEquals(listOf(null, "Start"), sheet.steps.map { it.timer?.label })
+        assertEquals(TaskAsk(TaskAsk.TIMER, step = 1), sheet.steps[1].timer?.ask)
+        val running = PieceTimer("a piece", task.id, 1, "Second", "A piece", 30, now - 600_000L)
+        assertEquals("Stop (20 min left)", view(task, timer = running).steps[1].timer?.label)
+        assertNull(view(task, writable = false).steps[1].timer, "and none while mirroring")
     }
 
     @Test

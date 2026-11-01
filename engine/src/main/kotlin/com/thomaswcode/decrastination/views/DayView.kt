@@ -204,7 +204,7 @@ object DayViews {
         if (piece.source == Source.Own) add(TaskAction("All of it done", FinishOwnTask(piece.taskId)))
     }
 
-    private fun block(block: DayModel.Block, date: LocalDate, zone: ZoneId, judge: (CalendarEvent) -> EventJudge.Judgement, micro: Map<String, MicroPlan>, writable: Boolean): BlockView? {
+    internal fun block(block: DayModel.Block, date: LocalDate, zone: ZoneId, judge: (CalendarEvent) -> EventJudge.Judgement, micro: Map<String, MicroPlan>, writable: Boolean): BlockView? {
         val key = blockKey(block)
         val start = minuteOf(block.start, date, zone)
         val end = minuteOf(block.end, date, zone).coerceAtLeast(start)

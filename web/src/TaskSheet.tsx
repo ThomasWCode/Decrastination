@@ -230,9 +230,14 @@ export function TaskSheet({ id, form, close }: { id: string; form: OwnTaskFormVi
             <section>
               <h3>Steps</h3>
               <ul className="steps">
-                {task.steps.map(({ line, done, tick }) => (
+                {task.steps.map(({ line, done, tick, timer }) => (
                   <li key={line} className={done ? "done" : undefined}>
                     <span>{line}</span>
+                    {timer ? (
+                      <button className="quiet" disabled={busy} onClick={() => press(timer)}>
+                        {timer.label}
+                      </button>
+                    ) : null}
                     {tick ? (
                       <button className="quiet" disabled={busy} onClick={() => act(tick)}>
                         Done

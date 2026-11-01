@@ -124,7 +124,7 @@ object TaskViews {
     private const val MOVE_DAYS = 14L
 
     /** [task]'s sheet in [plan] at [now], with what's in use on it. [writable]: the server applies commands, so it can be changed here. */
-    fun of(task: TaskItem, byId: Map<String, TaskItem>, plan: Plan, settings: Settings, applied: List<Instruction>, notes: List<Note>, now: Long, zone: ZoneId, timer: PieceTimer? = null, writable: Boolean): TaskView {
+    fun of(task: TaskItem, byId: Map<String, TaskItem>, plan: Plan, settings: Settings, applied: List<Instruction>, notes: List<Note>, now: Long, zone: ZoneId, writable: Boolean, timer: PieceTimer? = null): TaskView {
         val own = task.source == Source.Own
         val changeable = writable && task.isOpen && !task.derived
         val next = TaskSheetModel.next(plan, task.id).takeIf { task.isOpen }
