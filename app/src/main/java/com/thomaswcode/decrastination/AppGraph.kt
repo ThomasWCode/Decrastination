@@ -556,7 +556,7 @@ class AppGraph private constructor(context: Context) : Owners {
     }
 
     /** Backups and resets ([BackupService]): made when first asked for, as it takes the instructions' lock. */
-    val backups: BackupService by lazy {
+    override val backups: BackupService by lazy {
         BackupService(
             stores, clock, scope, AndroidBackupFolder(app.contentResolver), File(app.filesDir, RESET_COPIES), BuildConfig.VERSION_NAME,
             changeSettings = { change -> protection.changeSettings(change) },

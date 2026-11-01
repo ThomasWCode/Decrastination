@@ -10,8 +10,10 @@ import com.thomaswcode.decrastination.core.Rule
 import com.thomaswcode.decrastination.core.SchoolCalendar
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.SettingsLimits
+import com.thomaswcode.decrastination.data.CallRecord
 import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.enrich.AiUsage
+import com.thomaswcode.decrastination.enrich.ModelEffort
 import com.thomaswcode.decrastination.protect.PendingChange
 import com.thomaswcode.decrastination.protect.SettingsChanges
 import kotlin.test.Test
@@ -37,6 +39,18 @@ class SettingsViewTest {
     ) = SettingsViews.of(settings, pending, TaskState(), school, memory, AiUsage(), held, parentCode, now, LONDON, writable)
 
     private fun SettingsView.field(name: String) = pages.flatMap { it.fields }.single { it.name == name }
+
+    @Test
+    fun `what's the phone's alone is said, and Claude's calls are shown newest first`() {
+        assertEquals(listOf("Blocking and protection", "Calendar", "This phone's pairing", "The last crash"), view().phoneOnly)
+        assertEquals(ModelEffort.table().size, view().efforts.size)
+        assertTrue(view().efforts.first().startsWith(ModelEffort.table().first().first + ": "), view().efforts.first())
+        val calls = listOf(CallRecord(1L, "older", effort = "high", outcome = "ok"), CallRecord(2L, "newer", effort = "high", outcome = "ok"))
+        val shown = SettingsViews.of(Settings(), emptyList(), TaskState(), SchoolCalendar(), MemoryState(), AiUsage(), emptySet(), false, now, LONDON, true, calls).calls
+        assertEquals(listOf(2L, 1L), shown.map { it.at })
+        assertEquals(calls.last().details(LONDON), shown.first().details)
+        assertTrue("newer" in shown.first().line, shown.first().line)
+    }
 
     @Test
     fun `the pages are the phone's that are shared state, and leave out what's the phone's own`() {

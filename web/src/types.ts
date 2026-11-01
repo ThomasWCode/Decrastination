@@ -230,6 +230,46 @@ export interface SettingsView {
   factsRoom?: string | null;
   credentials: CredentialGroup[];
   canChange: boolean;
+  efforts: string[];
+  effortNote: string;
+  calls: CallLine[];
+  phoneOnly: string[];
+}
+
+export interface CallLine {
+  at: number;
+  line: string;
+  details: string;
+}
+
+export interface ResetChoice {
+  title: string;
+  takes: string;
+  button: ChatButton;
+}
+
+export interface BackupView {
+  backUp: string;
+  restore: string;
+  fit?: string | null;
+  canDownload: boolean;
+  lastNightly?: string | null;
+  copies: string[];
+  resets: ResetChoice[];
+  tooBig: string;
+  canChange: boolean;
+}
+
+export interface SetupLine {
+  title: string;
+  done?: boolean | null;
+  detail: string;
+}
+
+export interface SetupView {
+  saved: SetupLine[];
+  sources: SetupLine[];
+  claude: SetupLine;
 }
 
 /** A command's action, as the server makes it or as a form fills it in: `type` says which. */
@@ -486,6 +526,7 @@ export interface ChatView {
 
 export interface NoticesView {
   unread: number;
+  setup: boolean;
 }
 
 export interface PeriodChoice {

@@ -288,7 +288,7 @@ class SettingsActivity : ComponentActivity() {
                         item {
                             Section("How hard it thinks")
                             ModelEffort.table().forEach { (effort, jobs) -> Note("$effort: $jobs") }
-                            Note("By job, not set here: high for what the plan is made from, medium for what someone's waiting for (AC-02).")
+                            Note(SetupPage.EFFORT_NOTE)
                         }
                         item { RecentCalls(model.calls, graph.clock.zone()) }
                         item { LastCrash(this@SettingsActivity) }
@@ -553,7 +553,7 @@ private fun RecentCalls(calls: List<CallRecord>, zone: ZoneId) {
             val opened = open == call.at
             Column(Modifier.fillMaxWidth().clickable { open = if (opened) null else call.at }.padding(vertical = 4.dp)) {
                 Text(
-                    listOfNotNull(Instant.ofEpochMilli(call.at).atZone(zone).toLocalTime().withSecond(0).withNano(0).toString(), call.job, call.title, call.outcome).joinToString(" · ") + " · $%.3f".format(Locale.UK, call.costUsd),
+                    SetupPage.callLine(call, zone),
                     style = MaterialTheme.typography.bodySmall,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -617,16 +617,10 @@ private fun ResetPage(graph: AppGraph) {
         said?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.secondary, modifier = Modifier.padding(horizontal = 16.dp)) }
     }
     asking?.let { r ->
-        val changes = if (r == Reset.Instructions || r == Reset.Everything) graph.instructions.value.applied.map { it.text.take(80) } else emptyList()
         AlertDialog(
             onDismissRequest = { asking = null },
-            title = { Text("Reset ${r.title.replaceFirstChar(Char::lowercase)}?") },
-            text = {
-                Text(
-                    "This goes: ${r.takes}." + (if (changes.isNotEmpty()) " Your changes: " + changes.joinToString("; ") { "“$it”" } + "." else "") +
-                        " A copy of everything is saved first.",
-                )
-            },
+            title = { Text(BackupPage.resetTitle(r)) },
+            text = { Text(BackupPage.resetAsks(r, graph.instructions.value.applied)) },
             confirmButton = {
                 TextButton(onClick = {
                     asking = null
@@ -662,13 +656,7 @@ private fun NightlyBackup(graph: AppGraph, last: Long?, now: Long) {
         } else {
             Note("Every night, all the app keeps goes to Documents/Decrastination on the phone, the last two weeks of them kept. Import opens one through the file picker. A copy off the phone is yours to make: a sync app mirroring the folder, or Export.")
             Note("Last backup: " + (last?.let { Format.ago(it, now) } ?: "not yet"))
-            if (tooBig) {
-                Note("All the app keeps is more than Import reads (8 MB), even without the chat's earlier messages, so the nightly backup isn't written: one couldn't be restored. The last two weeks' are kept as they are.")
-            } else if (refused != null) {
-                Note("Import would refuse a backup of what the app keeps now ($refused), so the nightly backup isn't written: one couldn't be restored. The last two weeks' are kept as they are.")
-            } else if (leftOut > 0) {
-                Note("The chat's $leftOut earliest messages are left out of the backup, as with them it would be more than Import reads (8 MB). They're still in the chat.")
-            }
+            BackupPage.fit(leftOut, tooBig, refused)?.let { Note(it) }
         }
         if (copies.isNotEmpty()) {
             Section("Copies saved before a reset")

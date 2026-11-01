@@ -42,6 +42,8 @@ class ModelGateway(
     private val clock: WallClock,
     private val alerts: Alerts,
     private val scope: CoroutineScope,
+    /** Whether the key's in use, as [Settings] holds it: the phone's flag, which a server's own key has nothing to do with. */
+    private val keyInUse: (Settings) -> Boolean = Settings::aiKeyActive,
     /** A failure's rest over after this long: what only the rules have read is asked again then. */
     private val retryAfter: (Long) -> Unit,
 ) {
@@ -91,7 +93,7 @@ class ModelGateway(
     /** Claude's API key, while Claude is switched on and the key is in use; else null. */
     fun claudeKey(): String? {
         val s = settings.value
-        if (!s.aiEnabled || !s.aiKeyActive) return null
+        if (!s.aiEnabled || !keyInUse(s)) return null
         return savedKey()?.takeIf { it.isNotBlank() }
     }
 

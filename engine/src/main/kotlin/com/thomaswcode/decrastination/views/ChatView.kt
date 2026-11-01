@@ -99,9 +99,9 @@ data class ChatView(
     val cancelAfterMs: Long = ChatRows.CANCEL_AFTER_S * 1_000,
 )
 
-/** What's said wherever you are on the website (W-9): how many of his wait unread. */
+/** What's said wherever you are on the website (W-9): how many of his wait unread, and whether Setup needs you (UI-18). */
 @Serializable
-data class NoticesView(val unread: Int)
+data class NoticesView(val unread: Int, val setup: Boolean = false)
 
 /** Who wrote a message replied to, and its first line. */
 @Serializable

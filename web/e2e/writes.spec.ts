@@ -617,6 +617,10 @@ test("a sign-in is held, and what it is isn't shown", async ({ page }) => {
   await form.getByRole("button", { name: "Save sign-ins" }).click();
   await expect(address).toHaveValue("");
   await expect(address).toHaveAttribute("placeholder", "Held");
+  // A field typed in and cleared isn't a sign-in taken away.
+  await address.fill("made up");
+  await address.fill("");
+  await expect(form.getByRole("button", { name: "Save sign-ins" })).toBeDisabled();
   await settingsPage(page, /^Sources/);
   await expect(page.getByRole("form", { name: "Sign-ins" }).getByLabel("Address")).toHaveAttribute("placeholder", "Held");
   await expect(page.getByText("someone@example.org")).toBeHidden();
@@ -659,4 +663,40 @@ test("armed, a loosening waits, with its Cancel and a parent's code", async ({ p
   await code.getByRole("button", { name: "Apply" }).click();
   await expect(waiting).toBeHidden();
   await expect(page.getByLabel("Minutes of work for one of free time †")).toHaveValue("2");
+});
+
+test("a backup comes down and goes back in, saying what came of it", async ({ page }) => {
+  await page.goto("/backup");
+  const download = page.waitForEvent("download");
+  await page.getByRole("link", { name: "Download a backup" }).click();
+  await page.getByLabel("Import a backup").setInputFiles(await (await download).path());
+  await expect(page.getByRole("status")).toContainText("Restored the settings");
+});
+
+test("a file that isn't a backup says so", async ({ page }) => {
+  await page.goto("/backup");
+  await page.getByLabel("Import a backup").setInputFiles({ name: "made-up.json", mimeType: "application/json", buffer: Buffer.from("not a backup") });
+  await expect(page.getByRole("status")).toContainText("That isn't a Decrastination backup");
+});
+
+test("a file past what Import reads says so", async ({ page }) => {
+  await page.route("**/api/backup/import", (route) => route.fulfill({ status: 413, json: { error: "made up" } }));
+  await page.goto("/backup");
+  await page.getByLabel("Import a backup").setInputFiles({ name: "made-up.json", mimeType: "application/json", buffer: Buffer.from("{}") });
+  await expect(page.getByRole("status")).toHaveText("That file is too big to be a backup.");
+});
+
+test("a reset asks first, says what it did, and its copy brings it back", async ({ page }) => {
+  await page.goto("/backup");
+  const row = page.getByRole("listitem").filter({ hasText: "What Felix remembers" });
+  await row.getByRole("button", { name: "Reset" }).click();
+  const asking = page.getByRole("alertdialog", { name: "Reset what Felix remembers?" });
+  await asking.getByRole("button", { name: "Keep it" }).click();
+  await expect(asking).toBeHidden();
+  await expect(page.getByRole("status")).toHaveCount(0);
+  await row.getByRole("button", { name: "Reset" }).click();
+  await asking.getByRole("button", { name: "Reset" }).click();
+  await expect(page.getByRole("status")).toContainText("What Felix remembers: reset. A copy of everything from before is in the app's own files");
+  await page.getByRole("listitem").filter({ hasText: /^reset-/ }).first().getByRole("button", { name: "Restore" }).click();
+  await expect(page.getByRole("status")).toContainText("Restored the settings");
 });

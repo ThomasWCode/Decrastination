@@ -81,6 +81,41 @@ class BackupServiceTest {
         )
     }
 
+    @Test
+    fun `where a copy's sent on, a reset keeps it here first and says where it's restored from`() = runTest {
+        val phone = Phone(full = true)
+        val sent = mutableListOf<String>()
+        val service = BackupService(
+            phone.stores, clock, scope, phone.folder, File(phone.dir, "backups"), "test",
+            changeSettings = { change -> phone.stores.replace(phone.stores.settings, change) }, applying = Mutex(),
+            layInstructions = {}, layTaskOverrides = {}, schedule = {}, reread = {}, cancelFelix = {},
+            restoredFrom = "the Backup page",
+            sendCopy = { name, _ -> sent += name },
+        )
+        val said = service.reset(Reset.Calibration)
+        assertEquals(service.resetCopies(), sent)
+        assertEquals(1, sent.size)
+        assertTrue(phone.folder.files.isEmpty(), "the folder's only for what can be read back")
+        assertTrue("which the Backup page can restore" in said, said)
+    }
+
+    @Test
+    fun `a backup's calendar answers go where they're told to`() = runTest {
+        val full = Phone(full = true)
+        val empty = Phone(full = false)
+        var back: Map<String, String>? = null
+        val service = BackupService(
+            empty.stores, clock, scope, empty.folder, File(empty.dir, "backups"), "test",
+            changeSettings = { change -> empty.stores.replace(empty.stores.settings, change) }, applying = Mutex(),
+            layInstructions = {}, layTaskOverrides = {}, schedule = {}, reread = {}, cancelFelix = {},
+            answersBack = { back = it },
+        )
+        service.importBackup(full.service.exportBackup())
+        settle()
+        assertEquals(full.stores.calendar.value.eventAnswers, back)
+        assertTrue(empty.stores.calendar.value.eventAnswers.isEmpty())
+    }
+
     /** What's launched on the service's scope (the calendar read again after a restore): waited for. */
     private fun settle() = runBlocking { job.children.toList().joinAll() }
 

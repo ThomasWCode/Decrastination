@@ -35,6 +35,26 @@ class CommandApplier(
     /** [batch] in order, each one's outcome. Not cut short by the client's going away: each is finished, and said at its retry. */
     suspend fun apply(batch: CommandBatch, device: String): List<Outcome> = withContext(NonCancellable) { batch.commands.map { one(it, device) } }
 
+    /**
+     * [block], a change too wide for a command (a backup taken in, whose file doesn't belong on record), held as a command is: all
+     * of it or none, one at a time, one revision, and finished whether or not the client stays. [failed] is what's answered if
+     * it fails, with nothing of it kept.
+     */
+    suspend fun <T> alone(cause: String, failed: T, block: suspend () -> T): T = withContext(NonCancellable) {
+        var before = 0L
+        val answer = db.commandOr(reload, { error ->
+            Log.w(Log.TAG, "$cause failed: ${error::class.simpleName} at ${error.stackTrace.firstOrNull { it.className.startsWith("com.thomaswcode") }}")
+            failed
+        }) {
+            before = db.currentRevision()
+            backend.cause = cause
+            block()
+        }
+        val now = db.currentRevision()
+        if (now > before) committed(now)
+        answer
+    }
+
     private suspend fun one(sent: Command, device: String): Outcome {
         val command = stamped(sent, device)
         var before = 0L

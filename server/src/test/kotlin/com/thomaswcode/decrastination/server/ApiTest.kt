@@ -3,6 +3,7 @@ package com.thomaswcode.decrastination.server
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.core.Speaker
+import com.thomaswcode.decrastination.data.Backups
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.Secret
 import com.thomaswcode.decrastination.data.SecretCipher
@@ -448,6 +449,87 @@ class ApiTest {
         assertEquals(HttpStatusCode.OK, record.status)
         assertEquals("no-store", record.headers[HttpHeaders.CacheControl])
         assertTrue(assertNotNull(record.headers[HttpHeaders.ContentDisposition]).startsWith("attachment"))
+    }
+
+    @Test
+    fun `a backup comes down to the website alone, nothing on the way keeping it`() = server {
+        assertEquals(HttpStatusCode.Unauthorized, plain().get("/api/backup").status)
+        val phone = paired()
+        val asPhone = plain().get("/api/backup") {
+            bearerAuth(phone.token)
+            header(Protocol.HEADER, Protocol.VERSION.toString())
+        }
+        assertEquals(HttpStatusCode.Forbidden, asPhone.status)
+        val backup = plain().get("/api/backup") { header(HttpHeaders.Cookie, signIn()) }
+        assertEquals(HttpStatusCode.OK, backup.status)
+        assertEquals("no-store", backup.headers[HttpHeaders.CacheControl])
+        assertEquals(graph.backupName(), assertNotNull(backup.headers[HttpHeaders.ContentDisposition]).substringAfter("filename=\"").substringBefore("\""))
+        assertNotNull(Backups.decode(backup.bodyAsText(), graph.stores.shapes))
+    }
+
+    @Test
+    fun `a backup's taken in by the website alone, not while mirroring, and not past what Import reads`() = server {
+        val cookie = signIn()
+        val phone = paired()
+        val website: HttpRequestBuilder.() -> Unit = {
+            header(HttpHeaders.Cookie, cookie)
+            header("X-Requested-With", "test")
+        }
+        suspend fun taken(body: ByteArray, signed: HttpRequestBuilder.() -> Unit) = plain().post("/api/backup/import") {
+            signed()
+            contentType(ContentType.Application.OctetStream)
+            setBody(body)
+        }
+        val made = plain().get("/api/backup") { header(HttpHeaders.Cookie, cookie) }.bodyAsText().toByteArray()
+        assertEquals(HttpStatusCode.Conflict, taken(made, website).status)
+        graph.commandsForATest()
+        assertEquals(
+            HttpStatusCode.Forbidden,
+            taken(made) {
+                bearerAuth(phone.token)
+                header(Protocol.HEADER, Protocol.VERSION.toString())
+            }.status,
+        )
+        assertEquals(HttpStatusCode.PayloadTooLarge, taken(ByteArray(Backups.MAX_BYTES + 1), website).status)
+        val answer = taken(made, website)
+        assertEquals(HttpStatusCode.OK, answer.status)
+        assertTrue("Restored the settings" in answer.bodyAsText())
+    }
+
+    @Test
+    fun `a reset's copy is restored by the website alone, and not while mirroring`() = server {
+        val cookie = signIn()
+        val phone = paired()
+        suspend fun copy(signed: HttpRequestBuilder.() -> Unit) = plain().post("/api/backup/copy") {
+            signed()
+            contentType(ContentType.Application.Json)
+            setBody("""{"name":"reset-made-up.json"}""")
+        }
+        val website: HttpRequestBuilder.() -> Unit = {
+            header(HttpHeaders.Cookie, cookie)
+            header("X-Requested-With", "test")
+        }
+        assertEquals(HttpStatusCode.Conflict, copy(website).status)
+        graph.commandsForATest()
+        assertEquals(
+            HttpStatusCode.Forbidden,
+            copy {
+                bearerAuth(phone.token)
+                header(Protocol.HEADER, Protocol.VERSION.toString())
+            }.status,
+        )
+        val answer = copy(website)
+        assertEquals(HttpStatusCode.OK, answer.status)
+        assertTrue("That copy isn't there." in answer.bodyAsText())
+    }
+
+    @Test
+    fun `Backup and Setup are a client's`() = server {
+        val cookie = signIn()
+        for (path in listOf("/api/views/backup", "/api/views/setup")) {
+            assertEquals(HttpStatusCode.Unauthorized, plain().get(path).status, path)
+            assertEquals(HttpStatusCode.OK, plain().get(path) { header(HttpHeaders.Cookie, cookie) }.status, path)
+        }
     }
 
     @Test

@@ -11,6 +11,7 @@ import com.thomaswcode.decrastination.core.SchoolDays
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.WallClock
+import com.thomaswcode.decrastination.data.BackupService
 import com.thomaswcode.decrastination.data.Stores
 import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.data.JsonStore
@@ -45,6 +46,7 @@ import com.thomaswcode.decrastination.tasks.OwnTasks
 import java.io.File
 import java.io.IOException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 /** What a server has no notifications for: nothing's posted, and none's held back. */
@@ -54,6 +56,17 @@ private object NoNotices : Notices {
     override fun shown(channel: String): Boolean = false
 
     override suspend fun postHeld() = Unit
+}
+
+/** Nowhere for a nightly file: a backup can still be had from the website. */
+private object NoFolder : BackupService.Folder {
+    override val available = false
+
+    override fun write(name: String, text: String) = false
+
+    override fun names(): List<String> = emptyList()
+
+    override fun delete(name: String) = false
 }
 
 /** What Felix asks of the phone, which a server hasn't got. The phone's own notifications and alarms follow the state it pulls. */
@@ -95,6 +108,18 @@ class ServerOwners(
     private val calendarTime: () -> EventJudge.Time,
     /** Where a task's photo would be kept: read here, a photo of homework is kept nowhere. */
     photosFolder: File,
+    /** Where the nightly file goes, if it's set up. */
+    nightly: BackupService.Folder?,
+    /** Where a reset's copy is kept. */
+    resetCopies: File,
+    /** This build's version, which a backup names. */
+    version: String,
+    /** Your answers about events, as the phone last sent them. */
+    eventAnswers: () -> Map<String, String>,
+    /** A backup's answers about events taken in, those here winning. */
+    answersBack: suspend (Map<String, String>) -> Unit,
+    /** How the stores are read as one, with no command half done in memory. */
+    settled: suspend (suspend () -> String) -> String,
 ) : Owners {
     override val tasks: JsonStore<TaskState> = stores.tasks
 
@@ -169,12 +194,32 @@ class ServerOwners(
 
     override val learning: Learning = Learning(
         stores.log, stores.learning, stores.settings, stores.memory, stores.chat, stores.instructions, clock, gateway, focus, protection,
-        resets = { 0 },
+        resets = { backups.resets.get() },
         profile = { now, remembered -> conversation.profile(now, remembered) },
         forgetExpired = { now -> conversation.forgetExpired(now) },
         reviewed = { line -> conversation.reviewed(line) },
         summaryReady = { week -> conversation.summaryReady(week) },
         tasks = { stores.tasks.value.tasks },
+    )
+
+    /**
+     * The Backup-format file, as the phone writes it, so the phone's Import can read it; and what takes one in, and the resets. A
+     * reset's copy stays on the box, where it can be restored from, and goes on to the nightly place on its own time.
+     */
+    override val backups: BackupService = BackupService(
+        stores, clock, scope, nightly ?: NoFolder, resetCopies, version,
+        changeSettings = { change -> protection.changeSettings(change) },
+        applying = instructions.applying,
+        layInstructions = { instructions.layInstructions() },
+        layTaskOverrides = { instructions.layTaskOverrides() },
+        schedule = {},
+        reread = {},
+        cancelFelix = {},
+        eventAnswers = eventAnswers,
+        answersBack = answersBack,
+        settled = settled,
+        restoredFrom = "the Backup page",
+        sendCopy = { name, text -> nightly?.let { folder -> scope.launch(Dispatchers.IO) { folder.write(name, text) } } },
     )
 
     /** The tasks' readings, by Claude while it can be asked, by the rules otherwise. */

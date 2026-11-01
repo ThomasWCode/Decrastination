@@ -1,11 +1,15 @@
 package com.thomaswcode.decrastination.server
 
+import com.thomaswcode.decrastination.data.Backups
 import com.thomaswcode.decrastination.ports.Log
 import com.thomaswcode.decrastination.sync.DeviceClaim
 import com.thomaswcode.decrastination.sync.Protocol
 import com.thomaswcode.decrastination.sync.SeedBatch
 import com.thomaswcode.decrastination.sync.protocol.CommandBatch
+import com.thomaswcode.decrastination.ui.BackupPage
+import com.thomaswcode.decrastination.views.Asked
 import com.thomaswcode.decrastination.views.CheckInAsk
+import com.thomaswcode.decrastination.views.CopyAsk
 import com.thomaswcode.decrastination.views.DayDrop
 import com.thomaswcode.decrastination.views.TaskAsk
 import io.ktor.http.ContentType
@@ -330,6 +334,29 @@ private fun Route.signedInRoutes(web: Web) {
         call.response.header(HttpHeaders.CacheControl, "no-store")
         call.response.header(HttpHeaders.ContentDisposition, "attachment; filename=\"decrastination-record.zip\"")
         call.respondBytes(graph.record(), ContentType.Application.Zip)
+    }
+    get("/views/backup") { call.respond(graph.backupView()) }
+    get("/views/setup") { call.respond(graph.setup()) }
+    get("/backup") {
+        if (call.client !is Client.Website) return@get call.respond(HttpStatusCode.Forbidden, Problem("The website's download"))
+        val backup = graph.backup() ?: return@get call.respond(HttpStatusCode.Conflict, Problem("It's more than Import reads, so it couldn't be restored"))
+        // Never kept by a cache on the way: it's all the app keeps.
+        call.response.header(HttpHeaders.CacheControl, "no-store")
+        call.response.header(HttpHeaders.ContentDisposition, "attachment; filename=\"${graph.backupName()}\"")
+        call.respondText(backup, ContentType.Application.Json)
+    }
+    post("/backup/import") {
+        if (call.client !is Client.Website) return@post call.respond(HttpStatusCode.Forbidden, Problem("A backup's taken in from the website"))
+        if (graph.mode != ServerGraph.COMMANDS) return@post call.respond(HttpStatusCode.Conflict, Problem("The server is mirroring the phone"))
+        // By what it says it is first, so nothing that size is read: nothing in front of this limits a body.
+        val length = call.request.contentLength()
+        if (length == null || length > Backups.MAX_BYTES) return@post call.respond(HttpStatusCode.PayloadTooLarge, Problem(BackupPage.TOO_BIG))
+        call.respond(Asked(true, graph.importBackup(call.receive<ByteArray>().decodeToString())))
+    }
+    post("/backup/copy") {
+        if (call.client !is Client.Website) return@post call.respond(HttpStatusCode.Forbidden, Problem("A backup's taken in from the website"))
+        if (graph.mode != ServerGraph.COMMANDS) return@post call.respond(HttpStatusCode.Conflict, Problem("The server is mirroring the phone"))
+        call.respond(Asked(true, graph.restoreCopy(call.receive<CopyAsk>().name)))
     }
     post("/photos/tasks") {
         if (call.client !is Client.Website) return@post call.respond(HttpStatusCode.Forbidden, Problem("A photo's read from the website"))

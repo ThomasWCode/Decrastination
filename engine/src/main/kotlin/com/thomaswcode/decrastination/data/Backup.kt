@@ -254,9 +254,11 @@ object Backups {
             addAll(SettingsLimits.problems(backup.settings))
             val log = backup.log
             if (log.slots.any { it.workedMin !in 0..DAY_MIN || it.plannedMin !in 0..DAY_MIN || it.start < 0 || it.end < it.start }) add("a slot's minutes")
+            if (log.slots.any { runCatching { LocalDate.parse(it.date) }.isFailure }) add("a slot's day")
             if (log.completions.any { it.estimateMin < 0 || it.workedMin < 0 }) add("a finished task's minutes")
             if (log.days.any { it.plannedMin < 0 || (it.doneMin ?: 0) < 0 || runCatching { LocalDate.parse(it.date) }.isFailure }) add("a day's plan")
             if (log.checkIns.any { it.feel !in 1..5 }) add("a check-in's answer")
+            if (log.reviews.any { review -> review.week?.let { runCatching { LocalDate.parse(it) }.isFailure } == true }) add("a review's week")
             // The weeks' rollups (PL-10), as a review writes them: each from its Monday, no count below
             // nothing, and none past what a week holds.
             if (log.weeks.any { w ->

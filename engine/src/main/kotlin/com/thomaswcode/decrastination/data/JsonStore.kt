@@ -279,6 +279,7 @@ class JsonStore<T>(
                     "memory.json" -> "What Felix remembers"
                     "felix.json" -> "Felix's notes and reminders"
                     "calendar.json" -> "The record of what the app wrote to your calendar, and your answers about its events"
+                    "calendar-read.json" -> "What the phone last sent of your calendar, and your answers about its events"
                     "gmail-writes.json" -> "The record of what the app has written to Gmail for emails finished here"
                     "sync.json" -> "What the app keeps of its pairing with the website"
                     "outbox.json" -> "Changes on their way to the website"

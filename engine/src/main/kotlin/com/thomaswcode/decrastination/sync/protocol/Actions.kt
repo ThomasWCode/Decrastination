@@ -12,7 +12,9 @@ import com.thomaswcode.decrastination.core.OwnTask
 import com.thomaswcode.decrastination.core.OwnTaskRules
 import com.thomaswcode.decrastination.core.Rule
 import com.thomaswcode.decrastination.core.SettingsLimits
+import com.thomaswcode.decrastination.data.BackupService
 import com.thomaswcode.decrastination.data.PieceTimer
+import com.thomaswcode.decrastination.data.Reset
 import com.thomaswcode.decrastination.felix.Conversation
 import com.thomaswcode.decrastination.learn.CheckIn
 import com.thomaswcode.decrastination.protect.SettingsChanges
@@ -414,6 +416,17 @@ data class ForgetCalibration(val key: String) : Action, Answers<Unit> {
     override suspend fun run(owners: Owners) = owners.learning.forgetCalibration(key)
 
     override fun stale(owners: Owners) = "That's nothing it's learned now".takeUnless { owners.learning.canForget(key) }
+}
+
+/** [what] reset (LR-08), a copy of everything saved first. What it came to is said either way, and one that couldn't be is refused: nothing went. */
+@Serializable
+@SerialName("ResetData")
+data class ResetData(val what: Reset) : Action, Answers<String> {
+    override suspend fun run(owners: Owners): String = owners.backups.reset(what)
+
+    override fun refused(answer: Any?) = (answer as? String)?.takeIf { it.startsWith(BackupService.NOTHING_RESET) }
+
+    override fun said(answer: Any?) = answer as? String
 }
 
 @Serializable

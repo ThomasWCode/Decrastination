@@ -94,7 +94,7 @@ A copy off the phone is yours to make: a sync app mirroring the folder, or Expor
 
 ## Restoring
 
-`BackupService.importBackup` restores nothing from a file that isn't one of this app's, is a newer format, carries a store newer than this build's (a store it doesn't carry, as `anki.json`, may be newer), has a part its store's migrations can't bring to this build's shape (a step missing, or a migration failing on it), is over 8 MB, or holds what the app never writes (`Backups.problem`: a setting out of the screen's range, negative minutes, a learned figure out of bounds, a write to Gmail by ids that aren't Gmail's, and so on). A backup's parts from a store of an older version are brought to this build's shape first, by that store's migrations (`Backups.decode`). Otherwise:
+`BackupService.importBackup` restores nothing from a file that isn't one of this app's, is a newer format, carries a store newer than this build's (a store it doesn't carry, as `anki.json`, may be newer), has a part its store's migrations can't bring to this build's shape (a step missing, or a migration failing on it), is over 8 MB, or holds what the app never writes (`Backups.problem`: a setting out of the screen's range, negative minutes, a slot's day or a review's week that can't be read, a learned figure out of bounds, a write to Gmail by ids that aren't Gmail's, and so on). A backup's parts from a store of an older version are brought to this build's shape first, by that store's migrations (`Backups.decode`). Otherwise:
 - the settings go through `changeSettings`, keeping this phone's protection, Claude's key in use and its calendars: once armed, one that loosens the blocker waits;
 - your changes in use come back as applying each here would (one that would make tasks wait for each other in a circle stays unclear, saying so), and those not in use (a reset's copy holds them: one being read, or left unclear) as they were, one being read read when Claude can be asked; your own tasks not here are added, with your changes laid over them again;
 - the school calendar is merged; what's remembered is merged by topic and words, this phone's winning, after the chat (below), what's run out on either side let go of first (D-103); the chat comes back whole only where this phone's is empty, its earlier messages and Felix's state with it; into a chat that isn't, his own messages it hasn't come back by id, with your replies to them, as the log's records of them were merged before 4.0.0, those read there read here as far as that goes without passing one of his unread here; into either, none of your messages still waiting for an answer, or for its Try again: either would be sent, words from then, as the chat opens or with your next words (his turn takes yours that come one after another together), so they're left out, the restore saying how many, the backup file still holding them;
@@ -104,6 +104,8 @@ A copy off the phone is yours to make: a sync app mirroring the folder, or Expor
 - the reminders' alarms are set again, the calendar read again, and today's record made again.
 
 It then says what came back, and what waits.
+
+**On the server** the same service, the same file. The website's Backup page downloads one (`GET /backup`), read between commands and seeds so neither is half in it, and once the server applies commands takes one in (`POST /backup/import`): all of it or none, one revision, no command let in between (`CommandApplier.alone`), which the phone's Import, a store at a time, isn't. Your answers about events go where the server reads them (`CalendarRead`), and the phone's own wins, as here. Each store's text from before is in `store_history` for 90 days. The server's file has no receipts of writes to Gmail, as that store isn't mirrored till Gmail's finish moves.
 
 ## Resets
 
@@ -120,6 +122,8 @@ Nothing goes until its copy is saved. What the copy holds is what goes: what lan
 | Everything learned | All of these |
 
 Each asks first, naming what goes, your changes listed. A reset's copy is never pruned: import it to undo the reset.
+
+On the server a reset is a command (`ResetData`, sent from the Backup page), so a retry resets once, it's all of it or none, and it takes a review out at the time with it (LR-08), as on the phone. The copy goes to `reset-copies/` beside the database, which the Backup page restores from, and on to B2 on its own time, as a send can take minutes that a reset mustn't wait: there it's let go by the bucket's lifecycle rule, as the nightly files are. On the box it's never pruned, but `reset-copies/` isn't in Litestream's stream.
 
 ## Commands from a PC
 

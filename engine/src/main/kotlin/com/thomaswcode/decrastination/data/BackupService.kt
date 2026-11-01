@@ -68,8 +68,17 @@ class BackupService(
     private val backupCap: Int = Backups.MAX_BYTES,
     /** Your answers about events, from where they're kept here. */
     private val eventAnswers: () -> Map<String, String> = { stores.calendar.value.eventAnswers },
+    /** A backup's answers about events taken in where they're kept here, those here winning over its. */
+    private val answersBack: suspend (Map<String, String>) -> Unit = { backed -> stores.replace(stores.calendar) { it.copy(eventAnswers = backed + it.eventAnswers) } },
     /** How the stores are read as one: on the server, with no command half done in memory. */
     private val settled: suspend (suspend () -> String) -> String = { it() },
+    /** Where a reset's copy in [copies] can be restored from, to say so. */
+    private val restoredFrom: String = "Settings → Backup",
+    /**
+     * Where there is one, a reset's copy goes to [copies] first, not [folder], and is handed on to this: the server's [folder] can
+     * only be written, can't be read back, and a send can take minutes that a reset mustn't wait.
+     */
+    private val sendCopy: ((name: String, text: String) -> Unit)? = null,
 ) {
     /** Where backups go: Documents/Decrastination, through MediaStore on the phone; a map in a test. */
     interface Folder {
@@ -276,7 +285,7 @@ class BackupService(
         // One from before 1.8.0 under its rule now, as at a start, from the log as merged.
         val calibration = Calibrator.upgraded(backup.calibration, stores.log.value.completions) ?: backup.calibration
         stores.replace(stores.learning) { it.copy(calibration = calibration) }
-        stores.replace(stores.calendar) { it.copy(eventAnswers = backup.eventAnswers + it.eventAnswers) }
+        answersBack(backup.eventAnswers)
         // Read with the restored answers, and today's record made again, as an answer given here does.
         scope.launch { reread() }
         return "Restored the settings, ${backup.log.completions.size} completions and ${backup.log.slots.size} slots, what the app had learned, and your calendar answers.$waits$told"
@@ -374,22 +383,23 @@ class BackupService(
         }
         // The copies kept of every store it cleared with them (D-94): what's reset isn't kept in one.
         stores.letGoOfCopies(what)
-        "${what.title}: reset. A copy of everything from before is in ${saved.where}${if (saved.own) ", which Settings → Backup can restore" else ""}.$archived"
+        "${what.title}: reset. A copy of everything from before is in ${saved.where}${if (saved.own) ", which $restoredFrom can restore" else ""}.$archived"
     }
 
     /** Where [keep] put a file, in words: in Documents, or in the app's own files ([own]), which the file picker can't reach. */
     private data class Kept(val where: String, val own: Boolean)
 
     /**
-     * [text] saved as [name] in Documents/Decrastination, or, where that can't be written, in the app's own
-     * files, from which Settings → Backup restores a reset's copy itself ([resetCopies]). Null where it
-     * couldn't be saved.
+     * [text] saved as [name] in Documents/Decrastination, or, where that can't be written or [sendCopy] says
+     * otherwise, in the app's own files, from which Settings → Backup restores a reset's copy itself
+     * ([resetCopies]). Null where it couldn't be saved.
      */
     private suspend fun keep(name: String, text: String): Kept? = runCatching {
-        if (folder.available && withContext(Dispatchers.IO) { folder.write(name, text) }) {
+        if (sendCopy == null && folder.available && withContext(Dispatchers.IO) { folder.write(name, text) }) {
             Kept("Documents/Decrastination/$name", own = false)
         } else {
             withContext(Dispatchers.IO) { File(copies.apply { mkdirs() }, name).writeText(text) }
+            sendCopy?.invoke(name, text)
             Kept("the app's own files ($name)", own = true)
         }
     }.getOrNull()
@@ -403,5 +413,10 @@ class BackupService(
         if (name !in resetCopies()) return "That copy isn't there."
         val bytes = withContext(Dispatchers.IO) { File(copies, name).inputStream().use { Backups.read(it) } } ?: return "That copy is too big to be a backup."
         return importBackup(bytes.decodeToString())
+    }
+
+    companion object {
+        /** How [reset] starts what it says when it hasn't. */
+        const val NOTHING_RESET = "Nothing was reset"
     }
 }
