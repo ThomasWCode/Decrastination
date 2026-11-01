@@ -88,7 +88,7 @@ function Input({ field, value, change, off }: { field: SettingField; value: Valu
                 value={classes[code] ?? ""}
                 maxLength={field.max ?? undefined}
                 onChange={(event) => {
-                  const { [code]: _gone, ...rest } = classes;
+                  const rest = Object.fromEntries(Object.entries(classes).filter(([name]) => name !== code));
                   change(event.target.value ? { ...rest, [code]: event.target.value } : rest);
                 }}
               />

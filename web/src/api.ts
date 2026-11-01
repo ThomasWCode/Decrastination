@@ -1,4 +1,4 @@
-import type { Action, Asked, DayView, DeviceLine, Outcome, PairingCode, TaskAsk, TaskView, WorkView } from "./types";
+import type { Action, Asked, DayView, DeviceLine, Outcome, PairingCode, SettingsView, TaskAsk, TaskView, WorkView } from "./types";
 
 /** A request the server answered with a refusal. */
 export class ApiError extends Error {
@@ -27,6 +27,8 @@ export const api = {
   day: (date: string | null) => read<DayView>(`/api/views/day${date ? `?date=${encodeURIComponent(date)}` : ""}`),
   work: () => read<WorkView>("/api/views/work"),
   task: (id: string) => read<TaskView>(`/api/views/task/${encodeURIComponent(id)}`),
+  settings: () => read<SettingsView>("/api/views/settings"),
+  setCredentials: (given: Record<string, string>) => read<{ held: string[] }>("/api/credentials", posting(given)),
   devices: () => read<DeviceLine[]>("/api/devices"),
   pair: () => read<PairingCode>("/api/devices/pair", { method: "POST", headers: CHANGING }),
   revoke: (id: string) => read<undefined>(`/api/devices/${encodeURIComponent(id)}`, { method: "DELETE", headers: CHANGING }),

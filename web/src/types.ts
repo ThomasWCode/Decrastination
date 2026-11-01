@@ -145,6 +145,64 @@ export interface PairingCode {
   expiresAt: number;
 }
 
+export interface SettingField {
+  name: string;
+  label: string;
+  kind: string;
+  value: unknown;
+  min?: number | null;
+  max?: number | null;
+  overnight: boolean;
+  waits: boolean;
+  note?: string | null;
+  codes: string[];
+}
+
+export interface SettingsPage {
+  key: string;
+  title: string;
+  says: string;
+  fields: SettingField[];
+  note?: string | null;
+}
+
+export interface PendingLine {
+  id: string;
+  line: string;
+  cancel?: Action | null;
+}
+
+export interface ListLine {
+  line: string;
+  delete?: Action | null;
+}
+
+export interface CredentialField {
+  name: string;
+  label: string;
+  secret: boolean;
+  held: boolean;
+}
+
+export interface CredentialGroup {
+  title: string;
+  fields: CredentialField[];
+}
+
+export interface SettingsView {
+  pages: SettingsPage[];
+  pending: PendingLine[];
+  armed: boolean;
+  delayHours: number;
+  parentCode: boolean;
+  school: ListLine[];
+  rules: ListLine[];
+  facts: ListLine[];
+  factsRoom?: string | null;
+  credentials: CredentialGroup[];
+  canChange: boolean;
+}
+
 /** A command's action, as the server makes it or as a form fills it in: `type` says which. */
 export type Action = { type: string } & Record<string, unknown>;
 
