@@ -326,7 +326,7 @@ class ServerGraph(
     /** His newest words, as a browser shows them. */
     private fun pushFelix(notice: Outbox.Notice) {
         val newest = notice.lines.lastOrNull { !it.yours } ?: return
-        pushes.push(Pushes.FELIX, PushMessage(notice.name, newest.text.take(PUSH_WORDS), "/", Pushes.FELIX))
+        pushes.push(Pushes.FELIX, PushMessage(notice.name, Pushes.words(newest.text), "/", Pushes.FELIX))
     }
 
     /**
@@ -703,9 +703,6 @@ class ServerGraph(
 
         /** The most that's made up after a look missed. */
         private const val PUSH_REACH_MS = 5 * 60_000L
-
-        /** How much of his words a browser's sent: it shows no more. */
-        private const val PUSH_WORDS = 300
         private const val MINUTE_MS = 60_000L
         private const val HOUR_MS = 60 * MINUTE_MS
         private const val SOURCES_EVERY_MS = 15 * MINUTE_MS

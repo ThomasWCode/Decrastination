@@ -27,6 +27,16 @@ async function save(key: string, channels: string[]): Promise<string | null> {
   return null;
 }
 
+/** This browser told of nothing more: for signing out, as it takes the session to ask, and what's told is the owner's alone. */
+export async function stopTelling(): Promise<void> {
+  if (!("serviceWorker" in navigator)) return;
+  const registered = await navigator.serviceWorker.getRegistration();
+  const held = await registered?.pushManager.getSubscription();
+  if (!held) return;
+  await api.pushForget(held.endpoint);
+  await held.unsubscribe();
+}
+
 /** What this browser's told of with its tab closed (W-9): nothing till it's asked for, as the phone tells you of all of it anyway. */
 export function BrowserPush({ push }: { push: PushView }) {
   const supported = "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;

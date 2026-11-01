@@ -111,6 +111,17 @@ class Pushes(private val db: Database, private val scope: CoroutineScope, privat
         /** What a push service's address runs to at most. */
         private const val MAX_ENDPOINT = 1024
 
+        /** How much of his words a browser's sent: it shows no more. */
+        private const val MAX_WORDS = 300
+
+        /** [text] as a browser can show it: whole sentences, as far as they go, or whole words where one runs on past that. */
+        fun words(text: String): String {
+            if (text.length <= MAX_WORDS) return text
+            val room = text.take(MAX_WORDS)
+            val end = room.indexOfLast { it in ".?!" }
+            return if (end > 0) room.take(end + 1) else room.substringBeforeLast(' ') + "…"
+        }
+
         /**
          * Whether [endpoint] could be a push service's: https, and a name, as the server posts to whatever it's given, so never
          * an address of its own or of what's beside it.

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type MouseEvent, type ReactNode } from "react";
 import { api } from "./api";
 import { BackupPage } from "./Backup";
+import { stopTelling } from "./BrowserPush";
 import { ChatPage } from "./Chat";
 import { DayPage } from "./Day";
 import { useLive } from "./live";
@@ -125,7 +126,11 @@ export function App() {
   const signOut = () => {
     // What the chat's box held goes with the session.
     sessionStorage.clear();
-    api.signOut().then(() => setSignedIn(false));
+    // Before it ends, as it takes the session to ask: whether or not that gets through, you're signed out.
+    void stopTelling()
+      .catch(() => undefined)
+      .then(() => api.signOut())
+      .then(() => setSignedIn(false));
   };
   return (
     <div className="site">

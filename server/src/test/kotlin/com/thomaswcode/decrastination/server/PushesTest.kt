@@ -32,6 +32,7 @@ import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
 import kotlin.test.AfterTest
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
@@ -141,6 +142,31 @@ class PushesTest {
         assertEquals("A made-up word on the week", told.body)
         assertEquals("/", told.url)
         assertEquals(Pushes.FELIX, told.tag)
+    }
+
+    @Test
+    fun `what's told is cut at a whole sentence, or a whole word`() {
+        assertEquals("Short.", Pushes.words("Short."))
+        val sentences = Pushes.words("A made-up sentence. ".repeat(30).trim())
+        assertTrue(sentences.length <= 300, sentences)
+        assertTrue(sentences.endsWith("made-up sentence."), sentences)
+        val onAndOn = Pushes.words("word ".repeat(100).trim())
+        assertTrue(onAndOn.length <= 301, onAndOn)
+        assertTrue(onAndOn.endsWith(" word…"), onAndOn)
+    }
+
+    @Test
+    fun `his long words reach a browser cut`() = runBlocking<Unit> {
+        asks(laptop, Pushes.FELIX)
+        graph.owners.ports.show(notice(alert = true, Outbox.Notice.Line("m", "A made-up sentence. ".repeat(30).trim(), 1L, yours = false)))
+        waitFor(1)
+        assertEquals(Pushes.words("A made-up sentence. ".repeat(30).trim()), message(service.taken.single().second).body)
+    }
+
+    @Test
+    fun `keys as they're kept in the box's env read back the same`() {
+        val keys = VapidKeys.generate()
+        assertContentEquals(keys.applicationServerKey, VapidKeys.create(keys.x509PublicKey, keys.pkcs8PrivateKey).applicationServerKey)
     }
 
     private fun notice(alert: Boolean, vararg lines: Outbox.Notice.Line) = Outbox.Notice("Felix", lines.toList(), "m", emptyList(), "m", alert)

@@ -182,7 +182,7 @@ The estimates are hours of sessions, from the durations measured over the 4.x re
 
 ## Stage 9 (optional): Web Push
 
-**As built.** Dormant, as the rest is till the switch (W-25): nothing's offered till the server applies commands and the box has its keys (`java -jar server-all.jar vapid-keys`, into `.env`). 5.9.0, the numbers having moved on by two. `com.interaso:webpush`, as it brings nothing with it. Which channels is a browser's own, kept with its subscription, not a setting: it's about that browser, and a setting would go to the phone. A slot's start is new: the phone has no such notification, its alarm only making the plan again. A timer's zero is read, not marked told, or the phone's own "time's up" wouldn't sound. His message is told where it would sound on the phone (`Notice.alert`), so his notification made again tells nothing.
+**As built.** Dormant, as the rest is till the switch (W-25): nothing's offered till the server applies commands and the box has its keys (`docker compose run --rm server vapid-keys`, into `.env`). 5.9.0, the numbers having moved on by two. `com.interaso:webpush`, as it brings nothing with it. Which channels is a browser's own, kept with its subscription, not a setting: it's about that browser, and a setting would go to the phone. A slot's start is new: the phone has no such notification, its alarm only making the plan again. A timer's zero is read, not marked told, or the phone's own "time's up" wouldn't sound. His message is told where it would sound on the phone (`Notice.alert`), so his notification made again tells nothing.
 
 **Goal.** Felix's messages, slot starts and the timer reach a closed tab (W-9).
 

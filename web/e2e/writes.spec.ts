@@ -677,6 +677,40 @@ test("a browser asks to be told, and stops", async ({ page }) => {
   expect(left).toBeNull();
 });
 
+test("signing out stops this browser being told", async ({ browser, baseURL }) => {
+  // A session of its own, as this one ends it.
+  const context = await browser.newContext({ baseURL, storageState: { cookies: [], origins: [] } });
+  expect((await context.request.post("/api/test/signin")).ok()).toBeTruthy();
+  const page = await context.newPage();
+  await pushable(page);
+  await settingsPage(page, /^Notifications/);
+  const felix = page.getByRole("region", { name: "This browser" }).getByRole("checkbox", { name: "Felix's messages" });
+  await felix.click();
+  await expect(felix).toBeChecked();
+  const stopped = page.waitForRequest("**/api/push/forget");
+  await page.getByRole("button", { name: "Sign out" }).click();
+  await stopped;
+  await expect(page.getByRole("link", { name: "Sign in with GitHub" })).toBeVisible();
+  const left = await page.evaluate(async () => (await navigator.serviceWorker.ready).pushManager.getSubscription());
+  expect(left).toBeNull();
+  await context.close();
+});
+
+test("signing out goes ahead even if the browser can't be stopped", async ({ browser, baseURL }) => {
+  const context = await browser.newContext({ baseURL, storageState: { cookies: [], origins: [] } });
+  expect((await context.request.post("/api/test/signin")).ok()).toBeTruthy();
+  const page = await context.newPage();
+  await pushable(page);
+  await settingsPage(page, /^Notifications/);
+  const felix = page.getByRole("region", { name: "This browser" }).getByRole("checkbox", { name: "Felix's messages" });
+  await felix.click();
+  await expect(felix).toBeChecked();
+  await page.route("**/api/push/forget", (route) => route.abort());
+  await page.getByRole("button", { name: "Sign out" }).click();
+  await expect(page.getByRole("link", { name: "Sign in with GitHub" })).toBeVisible();
+  await context.close();
+});
+
 test("a browser that won't show notifications says so, with nothing chosen", async ({ page }) => {
   await pushable(page, "denied");
   await settingsPage(page, /^Notifications/);
