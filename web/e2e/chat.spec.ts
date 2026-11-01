@@ -42,6 +42,15 @@ test("a look that's lasted reads it, and the mark's gone at the next visit", asy
   await expect(page.getByText("New messages")).toBeHidden();
 });
 
+test("Enter that confirms what an input method's composing sends nothing", async ({ page }) => {
+  await page.goto("/");
+  const box = page.getByRole("textbox", { name: /^Tell / });
+  await box.fill("Still being composed");
+  await box.dispatchEvent("keydown", { key: "Enter", isComposing: true, bubbles: true });
+  await expect(box).toHaveValue("Still being composed");
+  await box.fill("");
+});
+
 test("his question's offered to the box, and turned down it stays so, its chips still there", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByText("Replying to Fe")).toBeVisible();
@@ -218,7 +227,7 @@ test("a quote goes to what it quotes, in the archive too", async ({ page }) => {
   await expect(page.locator("#message-seed-old-asked")).toBeInViewport();
 });
 
-test("what got there unheard goes again as itself, so it's the one message", async ({ page }) => {
+test("what got there unheard goes again as itself, so it's the one message, a move to another page between", async ({ page }) => {
   await page.goto("/");
   let lost = false;
   await page.route("**/api/commands", async (route) => {
@@ -231,6 +240,9 @@ test("what got there unheard goes again as itself, so it's the one message", asy
   await box.fill("Said once");
   await page.getByRole("button", { name: "Send", exact: true }).click();
   await expect(page.getByText("That didn't reach the server. Try again.")).toBeVisible();
+  await expect(box).toHaveValue("Said once");
+  await page.getByRole("navigation", { name: "Pages" }).getByRole("link", { name: "Work" }).click();
+  await page.getByRole("navigation", { name: "Pages" }).getByRole("link", { name: "Chat" }).click();
   await expect(box).toHaveValue("Said once");
   await page.getByRole("button", { name: "Send", exact: true }).click();
   await expect(box).toHaveValue("");
