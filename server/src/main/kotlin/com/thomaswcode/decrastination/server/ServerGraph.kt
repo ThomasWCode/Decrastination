@@ -592,13 +592,13 @@ class ServerGraph(
     /** The reviews, for the website. */
     fun reviews(): ReviewsView = StatsViews.reviews(stores.log.value, stores.settings.value, stores.memory.value, clock.zone(), mode == COMMANDS)
 
-    /** The week's [ask]ed check-in, as the phone's form keeps it; and, kept, Felix's questions ended and the review set off, on its own time. */
+    /** The week's [ask]ed check-in, as the phone's form keeps it; and, kept, which is what's said whatever comes of the rest, Felix's questions ended and the review set off, on its own time. */
     suspend fun checkIn(ask: CheckInAsk): Asked {
         val now = clock.now()
         val checkIn = CheckIn(ask.week, now, ask.feel, ask.avoided.trim(), ask.inTheWay.trim(), ask.change.trim(), ask.energy.trim())
         val kept = website(RecordCheckIn(checkIn, now))
         if (kept.state != Outcome.APPLIED) return Asked(false, kept.why)
-        website(EndCheckInFlow)
+        following(EndCheckInFlow)
         owners.reviewSoon()
         return Asked(true)
     }
@@ -696,11 +696,19 @@ class ServerGraph(
     /** What's been [decided], applied as the website's: a step at a time, stopping at the first that doesn't go through. */
     private suspend fun made(decided: Moves.Decided): Asked {
         decided.why?.let { return Asked(false, it) }
-        for (action in decided.actions) {
-            val outcome = website(action)
+        decided.actions.forEachIndexed { step, action ->
+            val outcome = (if (step == 0) website(action) else following(action)) ?: return Asked(false, PART_OF_IT)
             if (outcome.state != Outcome.APPLIED) return Asked(false, outcome.why)
         }
         return Asked(true, decided.said.ifEmpty { null })
+    }
+
+    /** [action], following one that's gone through, which no failure here takes back: logged, and none, not thrown for a page to say nothing happened. */
+    private suspend fun following(action: Action): Outcome? = try {
+        website(action)
+    } catch (failed: Exception) {
+        Log.w(Log.TAG, "What follows a command failed: ${failed::class.simpleName} at ${failed.stackTrace.firstOrNull { it.className.startsWith("com.thomaswcode") }}")
+        null
     }
 
     /** [action] as one of the website's commands, made here. */
@@ -712,6 +720,7 @@ class ServerGraph(
         private const val SECRETS = "secrets.bin"
         private const val GONE = "That task had gone"
         private const val NOT_RESTORED = "Nothing was restored: it couldn't be applied."
+        private const val PART_OF_IT = "Only part of that went through"
         private const val PUSHED = "pushed"
         private const val BEAT = "beat"
 

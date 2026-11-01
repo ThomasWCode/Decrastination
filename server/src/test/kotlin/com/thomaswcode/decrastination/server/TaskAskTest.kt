@@ -22,6 +22,7 @@ import com.thomaswcode.decrastination.views.TaskAsk
 import java.io.File
 import java.io.IOException
 import java.nio.file.Files
+import java.sql.SQLException
 import java.time.Instant
 import java.util.zip.ZipInputStream
 import kotlin.test.AfterTest
@@ -349,6 +350,45 @@ class TaskAskTest {
         graph.stores.chat.update { it.copy(felix = it.felix.copy(checkInDraft = CheckInDraft(graph.week().week))) }
         assertTrue(graph.checkIn(CheckInAsk(graph.week().week, 3)).done)
         assertNull(graph.stores.chat.value.felix.checkInDraft)
+    }
+
+    /** Store [name] can't be written, as with a bug: what writes it fails, and what's gone before it stands. */
+    private fun noWriting(name: String) = db.transaction { c ->
+        c.createStatement().use { it.execute("CREATE TRIGGER no_writing BEFORE INSERT ON store_history WHEN NEW.name = '$name' BEGIN SELECT RAISE(ABORT, 'made up'); END") }
+    }
+
+    private fun writing() = db.transaction { c -> c.createStatement().use { it.execute("DROP TRIGGER no_writing") } }
+
+    @Test
+    fun `a check-in kept is said to be, whatever comes of what follows it, and its review is set off all the same`() = runBlocking<Unit> {
+        graph.stores.chat.update { it.copy(felix = it.felix.copy(checkInDraft = CheckInDraft(graph.week().week))) }
+        noWriting("chat.json")
+        val kept = graph.checkIn(CheckInAsk(graph.week().week, 3))
+        writing()
+        assertTrue(kept.done, kept.said)
+        assertEquals(1, graph.stores.log.value.checkIns.size)
+        assertEquals(graph.week().week, graph.stores.chat.value.felix.checkInDraft?.week, "what failed is put right, not half done")
+        withTimeout(10_000) { graph.stores.log.state.first { it.reviews.isNotEmpty() } }
+    }
+
+    @Test
+    fun `a step failing after one that stood says part of it went through, not that nothing did`() = runBlocking<Unit> {
+        withTasks()
+        noWriting("chat.json")
+        val started = graph.ask(own, TaskAsk(TaskAsk.TIMER))
+        writing()
+        assertFalse(started.done)
+        assertEquals("Only part of that went through", started.said)
+        assertEquals(true, graph.stores.session.value.timer?.running, "the first stands")
+    }
+
+    @Test
+    fun `the first step failing is thrown, as nothing's happened, and the page can say so`() = runBlocking<Unit> {
+        withTasks()
+        noWriting("session.json")
+        assertFailsWith<SQLException> { graph.ask(own, TaskAsk(TaskAsk.TIMER)) }
+        writing()
+        assertNull(graph.stores.session.value.timer)
     }
 
     @Test
