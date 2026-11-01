@@ -278,6 +278,7 @@ class ServerJobsTest {
         val friday = sunday.minusDays(2)
         assertFalse(graph.morningDue(at(friday, morning + 1), at(sunday, morning - 60)), "a morning missed isn't caught up on ahead of today's")
         assertTrue(graph.morningDue(at(friday, morning + 1), at(sunday, morning + 1)), "today's comes at its time")
+        assertFalse(graph.morningDue(at(sunday, morning - 60), at(sunday, morning + 60)), "a run today stands for today, its time moved later since")
         val monday = sunday.plusDays(1)
         val checkIn = graph.stores.settings.value.checkInMin
         assertTrue(graph.sundayDue(null, at(sunday, checkIn + 1), checkIn))
@@ -334,6 +335,73 @@ class ServerJobsTest {
         delay(200)
         assertTrue(graph.stores.tasks.value.tasks.single().isOpen)
         scope.cancel()
+    }
+
+    @Test(timeout = STUCK_MS)
+    fun `a job's write made over a command's doesn't bring it back when the command fails`() = runBlocking {
+        val store = store(SqliteBackend(db))
+        val entered = CompletableDeferred<Unit>()
+        val letGo = CompletableDeferred<Unit>()
+        val command = async(Dispatchers.IO) {
+            db.commandOr({ store.reload() }, { "dropped" }) {
+                store.update { it.copy(by = it.by + "command") }
+                entered.complete(Unit)
+                letGo.await()
+                error("no room")
+            }
+        }
+        entered.await()
+        store.update { it.copy(by = it.by + "job") }
+        store.update { it.copy(by = it.by + "job again") }
+        letGo.complete(Unit)
+        assertEquals("dropped", command.await())
+        assertEquals(listOf("job", "job again"), store.value.by, "in memory")
+        store.reload()
+        assertEquals(listOf("job", "job again"), store.value.by, "and committed, each once")
+    }
+
+    @Test(timeout = STUCK_MS)
+    fun `a write that comes while a failed command's put right goes in once, nothing of the command with it`() = runBlocking {
+        val store = store(SqliteBackend(db))
+        val answer = db.commandOr(
+            { store.reload() },
+            {
+                // From outside the command, as a job's is: a scope of its own carries none of its context.
+                CoroutineScope(Dispatchers.IO).async { store.update { it.copy(by = it.by + "job") } }.await()
+                "dropped"
+            },
+        ) {
+            store.update { it.copy(by = it.by + "command") }
+            error("no room")
+        }
+        assertEquals("dropped", answer)
+        assertEquals(listOf("job"), store.value.by)
+        store.reload()
+        assertEquals(listOf("job"), store.value.by)
+    }
+
+    @Test(timeout = STUCK_MS)
+    fun `a write that comes as the stores are read again isn't lost, nor does it bring the command back`() = runBlocking {
+        val store = store(SqliteBackend(db))
+        var first = true
+        val answer = db.commandOr(
+            {
+                // On memory the command's still in, and held; then read again, which takes it from memory, leaving only what's held.
+                if (first) {
+                    first = false
+                    CoroutineScope(Dispatchers.IO).async { store.update { it.copy(by = it.by + "job") } }.await()
+                }
+                store.reload()
+            },
+            { "dropped" },
+        ) {
+            store.update { it.copy(by = it.by + "command") }
+            error("no room")
+        }
+        assertEquals("dropped", answer)
+        assertEquals(listOf("job"), store.value.by)
+        store.reload()
+        assertEquals(listOf("job"), store.value.by)
     }
 
     @Test

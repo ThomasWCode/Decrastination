@@ -14,6 +14,12 @@ interface StoreBackend {
     /** [text], of the state's [version], as store [name]'s, whole or not at all. */
     fun write(name: String, version: Int, text: String)
 
+    /**
+     * [write], and what the same change makes of another text ([remade]; null, nothing): for a backend that may find what this
+     * was made from has gone, as the server's does when a command fails.
+     */
+    fun write(name: String, version: Int, text: String, remade: (String?) -> String?) = write(name, version, text)
+
     /** The stores it holds, by name. */
     fun names(): List<String>
 

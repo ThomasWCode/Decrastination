@@ -25,10 +25,12 @@ class SqliteBackend(private val db: Database, private val clock: () -> Long = Sy
     @Volatile
     var writable: Boolean = true
 
-    override fun write(name: String, version: Int, text: String) {
+    override fun write(name: String, version: Int, text: String) = write(name, version, text) { text }
+
+    override fun write(name: String, version: Int, text: String, remade: (String?) -> String?) {
         if (!writable) return
         val by = writer
-        db.writing(name) { keep(name, version, text, by) }
+        db.writing(name, remake = { remade(read(name))?.let { keep(name, version, it, by) } }) { keep(name, version, text, by) }
     }
 
     /** Why a write made now is made: the open command's, or the server's own work. */
