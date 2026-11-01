@@ -16,7 +16,12 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonPrimitive
@@ -68,6 +73,27 @@ class CommandApplierTest {
     }
 
     @Test
+    fun `a retry racing its first send applies nothing twice, and gets the same answer`() = runBlocking {
+        val command = Command("one", at, own("Essay"))
+        val answers = (1..8).map { async(Dispatchers.IO) { send(command) } }.awaitAll()
+        assertEquals(1, answers.toSet().size, "every send heard the one outcome")
+        assertEquals(Outcome.APPLIED, answers.first().state)
+        assertEquals(1, rows())
+        assertEquals(1L, db.currentRevision())
+    }
+
+    @Test
+    fun `a repeat says no revision, as the stream only goes forward`() = runBlocking {
+        val said = mutableListOf<Long>()
+        val watching = launch(Dispatchers.Unconfined) { graph.revisions.collect { said += it } }
+        send(Command("one", at, own("Essay")))
+        send(Command("two", at, own("Maths")))
+        send(Command("one", at, own("Essay")))
+        watching.cancel()
+        assertEquals(listOf(1L, 2L), said)
+    }
+
+    @Test
     fun `a batch goes in order, and a later one sees what an earlier one did`() = runBlocking {
         val task = "own:s-Essay"
         val outcomes = graph.applier.apply(CommandBatch(listOf(Command("one", at, own("Essay")), Command("two", at + 1, FinishOwnTask(task)))), "phone")
@@ -97,6 +123,30 @@ class CommandApplierTest {
         assertEquals(1L, db.currentRevision())
         assertEquals(Outcome.APPLIED, send(Command("three", at, own("Maths"))).state)
         assertEquals(setOf("Essay", "Maths"), graph.stores.tasks.value.tasks.map { it.title }.toSet())
+    }
+
+    @Test
+    fun `a command waiting behind one that fails part-way builds on nothing it left in memory`() = runBlocking {
+        send(Command("one", at, own("Essay")))
+        // Only the tasks can be written: finishing one writes them, and fails at the next store it reaches.
+        db.transaction { c ->
+            c.createStatement().use { it.execute("CREATE TRIGGER only_tasks BEFORE INSERT ON store_history WHEN NEW.name <> 'tasks.json' BEGIN SELECT RAISE(ABORT, 'no room'); END") }
+        }
+        val free = CompletableDeferred<Unit>()
+        val holding = launch(Dispatchers.IO) { db.command { free.await() } }
+        delay(100)
+        val failing = async(Dispatchers.IO) { send(Command("two", at, FinishOwnTask("own:s-Essay"))) }
+        delay(100)
+        val next = async(Dispatchers.IO) { send(Command("three", at, own("Maths"))) }
+        delay(100)
+        free.complete(Unit)
+        holding.join()
+        assertEquals(Outcome.DROPPED, failing.await().state)
+        assertEquals(Outcome.APPLIED, next.await().state)
+        val open = { graph.stores.tasks.value.tasks.filter { it.isOpen }.map { it.title }.toSet() }
+        assertEquals(setOf("Essay", "Maths"), open())
+        graph.stores.tasks.reload()
+        assertEquals(setOf("Essay", "Maths"), open(), "and nothing of it reached the database")
     }
 
     @Test

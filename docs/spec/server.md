@@ -47,24 +47,24 @@ The website shows a six-digit code; a phone that gives it back within five minut
 
 SQLite, one file, in WAL mode (`server/Database.kt`), the server its only writer. `SqliteBackend` is the `StoreBackend` that `Stores` runs on here, as `FileBackend` is on the phone, so a store has the same shape, migrations and versions on both.
 
-- `stores`: each store's JSON, its version and the revision that last wrote it. A revision is one transaction.
+- `stores`: each store's JSON, its version and the revision that last wrote it. A revision is one transaction. No row goes: `/api/state` can't say what isn't there, so what's deleted (a month of a cleared chat) stays as an empty row at a new revision, and clients take that as any change.
 - `store_history`: each store's every text, with what caused it, kept 90 days and at least the last 20 of each, let go of at each start and daily after (`ServerGraph.tidy`).
-- `commands`: every command received, whose it was, and what came of it. A repeat of an id answers from here.
+- `commands`: every command received, whose it was, and what came of it. A repeat of an id answers from here, looked up inside the command's lock, so a retry racing its first send waits and finds what came of it.
 - `devices`, `pairing_codes`, `sessions`, `meta`.
 
-A command is one transaction, all of it or none (`CommandApplier`, `Database.command`), one at a time, in the order they arrive. The owners suspend and change thread on the way, so it's held by a coroutine's lock, and reads that mustn't see it half-way go through a second connection (`Database.read`), which in WAL mode sees only what's committed. One that fails is rolled back, the stores read again from what's committed, and it's on record as dropped.
+A command is one transaction, all of it or none (`CommandApplier`, `Database.command`), one at a time, in the order they arrive. The owners suspend and change thread on the way, so it's held by a coroutine's lock, and reads that mustn't see it half-way go through a second connection (`Database.read`), which in WAL mode sees only what's committed. One that fails is rolled back, the stores read again from what's committed, and it's on record as dropped, all before another's let in (`Database.commandOr`): what it left in memory mustn't be built on.
 
-The owners are `ServerOwners`, wired as `AppGraph` wires the phone's, what touches the device left out. None is started: nothing on the server watches a store or runs by itself.
+The owners are `ServerOwners`, wired as `AppGraph` wires the phone's, what touches the device left out. In mirror mode nothing on the server watches a store or runs by itself. Once it applies commands, `ServerGraph.start` sets off the jobs below and what watches the stores: an own task with its steps done is finished, and a weekly rule's week rolled (`OwnTasks.start`). The mode is read at a start, so the switch to commands takes a restart.
 
-The server's time zone is the phone's: each batch says it (`ServerClock`), as a day is the owner's wherever they are.
+The server's time zone is the phone's: each batch says it (`ServerClock`), as a day is the owner's wherever they are. Its time is what a loosening's wait is counted by on the server: a mark of the phone's is another clock's, so the gap from it counts nothing and the count goes on from there.
 
 ## Jobs
 
-What runs with nobody asking (`ServerJobs`), once the server applies commands (D-141): each minute, whatever's due, one at a time, each's last run in `meta`, so a restart neither repeats one nor misses one. A job that fails is logged and tried at its next turn.
+What runs with nobody asking (`ServerJobs`), once the server applies commands (D-141): each minute, whatever's due, one at a time, each's last run in `meta`, so a restart neither repeats one nor misses one. A job that fails is logged and tried again: one that runs on a cadence at its next turn, one at a set time 15 minutes on, the nightly file an hour on, so nothing that reaches Claude or a source goes round each minute.
 
 | Job | When | Does |
 |---|---|---|
-| `slots` | each minute | today's slots as they pass; a loosening's wait over |
+| `slots` | each minute | today's slots as they pass; a loosening's wait over, counted by the server's clock (W-23) |
 | `looks` | each minute | Felix's looks and your reminders |
 | `sources` | every 15 minutes | Power Planner and Gmail read (D-133), what follows a read as on the phone, the readings |
 | `morning` | the briefing's time | the day on record, Felix's morning, what's run out let go |
@@ -72,7 +72,7 @@ What runs with nobody asking (`ServerJobs`), once the server applies commands (D
 | `nightly` | after 03:00 | the Backup-format file to B2 (W-20), under a key that can't delete; the bucket's lifecycle rule lets the old ones go |
 | `heartbeat` | each minute | healthchecks.io, so a stopped box is noticed |
 
-A job's writes aren't a command's: each is a revision of its own, and waits while a command's open, so one that's rolled back takes nothing of theirs with it. What's waiting for Claude is asked after a command lands, never inside it, as a call can't hold the state's write lock.
+A job's writes aren't a command's: each is a revision of its own. One made while a command's open is held back, in its order, till that closes (`Database.writing`), so a rollback takes nothing of theirs with it. It never waits there: whoever writes a store holds the store's lock, and perhaps an owner's, which the command may be waiting for. If the command stands, what it wrote since takes the job's change in, as a store changes in memory one change at a time. If it fails having written that store first, what the job wrote holds that part of it: a job's change isn't lost to put that right. What's waiting for Claude is asked after a command lands, never inside it, as a call can't hold the state's write lock.
 
 **Credentials.** The sources' sign-ins, entered on the website (W-19, `POST /credentials`, the website's alone; `GET /credentials` says only which are held). Sealed under `MASTER_KEY`, in `secrets.bin` and in the `credentials` table, so Litestream carries them and a rebuilt box gets them back. Claude's key is `ANTHROPIC_API_KEY` in `.env`.
 

@@ -1,5 +1,6 @@
 package com.thomaswcode.decrastination.server
 
+import com.thomaswcode.decrastination.ports.Log
 import java.sql.Connection
 import java.sql.DriverManager
 import java.util.concurrent.locks.ReentrantLock
@@ -13,7 +14,8 @@ import kotlinx.coroutines.withContext
  * The state's one file (docs/plan_web/data-and-sync.md §The database): SQLite in WAL mode, as Litestream needs it, written
  * by this process alone through one connection. A [transaction] is all of it or none of it, and takes a revision the
  * first time it writes a store: every store one transaction changes takes the same one. A [command] is one that can suspend,
- * as the owners do; a read that mustn't see one half-way goes through [read].
+ * as the owners do; a read that mustn't see one half-way goes through [read], and a store's write from outside one is held
+ * back till it closes ([writing]).
  */
 class Database(path: String) : AutoCloseable {
     private val connection: Connection = DriverManager.getConnection("jdbc:sqlite:$path")
@@ -34,6 +36,15 @@ class Database(path: String) : AutoCloseable {
 
     /** Signalled as a command closes. */
     private val closed = lock.newCondition()
+
+    /** A store's write from outside the open command, waiting for it to close. */
+    private class Held(val name: String, val write: () -> Unit) {
+        /** The command has written the store since: what it wrote takes this in, as a store changes in memory one change at a time. */
+        var overtaken = false
+    }
+
+    /** What's held back ([writing]), oldest first. */
+    private val held = ArrayDeque<Held>()
 
     /** The revision the open transaction has taken, if it's taken one. */
     private var taken: Long? = null
@@ -57,16 +68,32 @@ class Database(path: String) : AutoCloseable {
      * [block], which can suspend and change thread on the way, all of it committed or, if it throws, none of it. Everything
      * written while it runs is part of it, whichever thread writes it.
      */
-    suspend fun <T> command(block: suspend () -> T): T = commanding.withLock {
+    suspend fun <T> command(block: suspend () -> T): T = commanding.withLock { attempt(block) }
+
+    /**
+     * A [command] that [recover] answers for if it fails, a transaction of its own, with no other let in between the two: what
+     * the failed one left in memory has to be put right before another can build on it.
+     */
+    suspend fun <T> commandOr(recover: suspend (Exception) -> T, block: suspend () -> T): T = commanding.withLock {
+        try {
+            attempt(block)
+        } catch (failed: Exception) {
+            attempt { recover(failed) }
+        }
+    }
+
+    private suspend fun <T> attempt(block: suspend () -> T): T {
         lock.withLock {
             connection.autoCommit = false
             depth = 1
             commandOpen = true
         }
+        var committed = false
         try {
             val result = withContext(inCommand.asContextElement(true)) { block() }
             lock.withLock { connection.commit() }
-            result
+            committed = true
+            return result
         } catch (failed: Throwable) {
             lock.withLock { connection.rollback() }
             throw failed
@@ -76,10 +103,46 @@ class Database(path: String) : AutoCloseable {
                 depth = 0
                 commandOpen = false
                 connection.autoCommit = true
+                letThrough(committed)
                 closed.signalAll()
             }
         }
     }
+
+    /**
+     * Store [name]'s write: now, or, while a command's open that this isn't part of, as that closes. It doesn't wait, as whoever
+     * writes a store holds the store's lock and perhaps an owner's, which the command may be waiting for; and it doesn't join the
+     * command, or a rollback would take it too.
+     */
+    fun writing(name: String, write: () -> Unit) = lock.withLock {
+        when {
+            !commandOpen -> write()
+            inACommand -> {
+                held.forEach { if (it.name == name) it.overtaken = true }
+                write()
+            }
+            else -> held.addLast(Held(name, write))
+        }
+    }
+
+    /**
+     * What was held back, in its order, under the [lock], so nothing newer gets in ahead of it. Each is a revision of its own. What
+     * the command overtook is in what it wrote, if that stands; if it's gone, the write is all there is of the change.
+     */
+    private fun letThrough(committed: Boolean) {
+        while (true) {
+            val next = held.removeFirstOrNull() ?: return
+            if (committed && next.overtaken) continue
+            try {
+                next.write()
+            } catch (failed: Exception) {
+                Log.w(Log.TAG, "A write held back for a command failed: ${failed::class.simpleName}")
+            }
+        }
+    }
+
+    /** [block], unless a command's open that it isn't part of: for what can go without, and can't wait for one. */
+    fun <T> ifFree(block: () -> T): T? = lock.withLock { if (commandOpen && !inACommand) null else block() }
 
     /** Whether no transaction is open: what's just been written has been committed. */
     val notNested: Boolean get() = lock.withLock { depth == 0 }
@@ -141,7 +204,7 @@ class Database(path: String) : AutoCloseable {
         }
     }
 
-    fun setMeta(key: String, value: String) = transactionless { c ->
+    fun setMeta(key: String, value: String) = transaction { c ->
         c.prepareStatement("INSERT INTO meta(key, value) VALUES(?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").use { q ->
             q.setString(1, key)
             q.setString(2, value)
@@ -158,8 +221,11 @@ class Database(path: String) : AutoCloseable {
         }
     }
 
-    /** [sealed] kept as [name], taking a revision so Litestream's stream carries it as it does a store. */
-    fun setCredentials(name: String, sealed: ByteArray, now: Long) {
+    /**
+     * [sealed] kept as [name], here so Litestream's stream carries it as it does a store. Like a store's write it doesn't wait for
+     * a command ([writing]): whoever seals one holds the `SecretStore`'s lock, and a job a source's too.
+     */
+    fun setCredentials(name: String, sealed: ByteArray, now: Long) = writing(name) {
         transaction { c ->
             c.prepareStatement("INSERT INTO credentials(name, ciphertext, updated_at) VALUES(?, ?, ?) ON CONFLICT(name) DO UPDATE SET ciphertext = excluded.ciphertext, updated_at = excluded.updated_at").use { q ->
                 q.setString(1, name)

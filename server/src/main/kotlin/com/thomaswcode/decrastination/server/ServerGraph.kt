@@ -5,6 +5,7 @@ import com.thomaswcode.decrastination.core.ReplayClock
 import com.thomaswcode.decrastination.core.SchoolDays
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
+import com.thomaswcode.decrastination.core.Uptime
 import com.thomaswcode.decrastination.core.WallClock
 import com.thomaswcode.decrastination.data.BackupService
 import com.thomaswcode.decrastination.data.CalendarRead
@@ -60,6 +61,12 @@ class ServerClock(private val db: Database) : WallClock {
 
     override fun zone(): ZoneId = zone
 
+    /**
+     * What a loosening's wait is counted by (W-23). The phone counts by its uptime, as its date is the owner's to set; this clock
+     * isn't, so its time is its uptime, one count across a restart, and a mark of the phone's is another clock's.
+     */
+    override fun uptime() = Uptime(BOOT, now())
+
     /** The phone's zone, as it says it. A zone that isn't one is left. */
     fun setZone(id: String) {
         val told = runCatching { ZoneId.of(id) }.getOrNull() ?: return
@@ -71,6 +78,9 @@ class ServerClock(private val db: Database) : WallClock {
 
     private companion object {
         const val ZONE = "zone"
+
+        /** No phone's count of its starts, nor the one for a count unread ([Uptime.UNKNOWN_BOOT]): a mark of the phone's is never taken for this clock's. */
+        const val BOOT = -2
     }
 }
 
@@ -131,7 +141,7 @@ class ServerGraph(
         backend.written = { _revisions.tryEmit(it) }
     }
 
-    /** The owners, none of them started: what they do is what a command asks, and a job. */
+    /** The owners: what they do is what a command asks, a job, and what [start] has watch the stores. */
     val owners = ServerOwners(stores, clock, scope, gateway, planning, calendarTime = { calendarTime() })
 
     private val commands = Commands(owners, clock)
@@ -240,10 +250,22 @@ class ServerGraph(
             },
             ServerJob("check-in", due = { last, now -> Daily.nextSunday(last ?: (now - DAY_MS), clock.zone(), stores.settings.value.checkInMin) <= now }) { owners.conversation.remindCheckIn() },
             ServerJob("review", due = { last, now -> Daily.nextSunday(last ?: (now - DAY_MS), clock.zone(), stores.settings.value.checkInMin + Daily.REVIEW_AFTER_MIN) <= now }) { owners.learning.review(ifDue = true) },
-            ServerJob("nightly", due = { last, now -> nightDue(last, now) }) { backups?.backupNow() },
+            ServerJob("nightly", due = { last, now -> nightDue(last, now) }, retryMs = HOUR_MS) { nightly() },
             ServerJob.every("heartbeat", MINUTE_MS) { heartbeatUrl?.let { http.get(it, emptyMap()) } },
         ),
     )
+
+    /** Tonight's file, or a failure, so it's tried again rather than the night going without. */
+    internal suspend fun nightly() {
+        val written = backups?.backupNow() ?: return
+        check(written == BackupService.Nightly.Written) { "The nightly file wasn't written: $written" }
+    }
+
+    /** What runs by itself: the jobs, and, once the server applies commands, what watches the stores. */
+    fun start(scope: CoroutineScope) {
+        if (mode == COMMANDS) owners.start()
+        jobs.start(scope)
+    }
 
     /** Whether tonight's backup has gone: once a day, after [NIGHTLY_HOUR]. */
     private fun nightDue(last: Long?, now: Long): Boolean {
@@ -319,6 +341,7 @@ class ServerGraph(
         const val COMMANDS = "commands"
         private const val SECRETS = "secrets.bin"
         private const val MINUTE_MS = 60_000L
+        private const val HOUR_MS = 60 * MINUTE_MS
         private const val SOURCES_EVERY_MS = 15 * MINUTE_MS
         private const val DAY_MS = 24 * 3_600_000L
         private const val NIGHTLY_HOUR = 3

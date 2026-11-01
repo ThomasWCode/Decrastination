@@ -1,14 +1,22 @@
 package com.thomaswcode.decrastination.server
 
+import com.thomaswcode.decrastination.core.About
+import com.thomaswcode.decrastination.core.Change
+import com.thomaswcode.decrastination.core.ChangeType
+import com.thomaswcode.decrastination.core.ChatArchive
+import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.core.OwnTask
+import com.thomaswcode.decrastination.core.Speaker
+import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.SecretCipher
 import com.thomaswcode.decrastination.data.Secret
 import com.thomaswcode.decrastination.data.CalendarRead
-import com.thomaswcode.decrastination.data.Queued
 import com.thomaswcode.decrastination.data.SyncState
 import com.thomaswcode.decrastination.net.Http
 import com.thomaswcode.decrastination.net.HttpResponse
 import com.thomaswcode.decrastination.sync.Replica
+import com.thomaswcode.decrastination.sync.protocol.AddOwnChange
+import com.thomaswcode.decrastination.sync.protocol.ClearChat
 import com.thomaswcode.decrastination.sync.protocol.Command
 import com.thomaswcode.decrastination.sync.protocol.CommandBatch
 import com.thomaswcode.decrastination.sync.protocol.DeleteOwnTask
@@ -191,17 +199,77 @@ class SyncHarnessTest {
     }
 
     @Test
-    fun `a command recorded and not applied, its process stopped, is applied once at the next start`() = runBlocking {
+    fun `a pull isn't taken over a command waiting, which it couldn't take out, and comes in once that's gone`() = runBlocking {
+        val one = phone("one")
+        val two = phone("two")
+        one.h.commands.act(own("Essay"))
+        one.replica.upload()
+        two.replica.upload()
+        one.h.commands.act(own("Maths"))
+        one.replica.upload()
+        val revision = two.h.stores.sync.value.revision
+        // A store the pull doesn't hold, and a change that adds a row each time it's applied.
+        val change = AddOwnChange("i", "words", About(taskId = "own:s-Essay"), Change(ChangeType.OnDay, taskId = "own:s-Essay", date = "2026-11-02"))
+        two.wire.duringPull = { runBlocking { two.h.commands.act(change) } }
+        assertTrue(two.replica.upload())
+        assertEquals(setOf("Essay"), two.titles, "not taken yet")
+        assertEquals(1, two.h.stores.instructions.value.instructions.size, "made once")
+        assertEquals(revision, two.h.stores.sync.value.revision, "so it's asked for again")
+        assertTrue(two.replica.upload())
+        assertEquals(setOf("Essay", "Maths"), two.titles)
+        assertEquals(1, two.h.stores.instructions.value.instructions.size)
+    }
+
+    @Test
+    fun `a chat cleared on the server goes from a phone, and leaves it no empty month`() = runBlocking {
         val phone = phone()
-        val command = Command("stopped", phone.h.clock.now(), own("Essay"))
-        phone.h.stores.outbox.update { it.copy(commands = listOf(Queued(command))) }
-        phone.h.commands.resume()
-        assertEquals(setOf("Essay"), phone.titles)
-        assertTrue(phone.h.stores.outbox.value.commands.single().applied)
-        phone.h.commands.resume()
-        assertEquals(1, phone.h.stores.tasks.value.tasks.size)
+        val month = "chat-archive-2026-10.json"
+        val words = ChatArchive(listOf(ChatMessage("a", Speaker.Felix, "words", 1_792_000_000_000L)))
+        graph.backend.keep(month, words.version, JsonStore.json.encodeToString(ChatArchive.serializer(), words))
         assertTrue(phone.replica.upload())
-        assertEquals(setOf("Essay"), serverTitles)
+        assertEquals(listOf(month), phone.h.stores.chatArchive.texts().map { it.name })
+        graph.applier.apply(CommandBatch(listOf(Command("clear", 1_792_000_000_000L, ClearChat))), "website")
+        assertTrue(phone.replica.upload())
+        assertEquals(emptyList(), phone.h.stores.chatArchive.texts().map { it.name })
+    }
+
+    private fun change(id: String, taskId: String) = AddOwnChange(id, "words", About(taskId = taskId), Change(ChangeType.OnDay, taskId = taskId, date = "2026-11-02"))
+
+    @Test
+    fun `what a dropped command did here goes, though the server changed nothing a pull since the last would bring`() = runBlocking {
+        val one = phone("one")
+        val two = phone("two")
+        one.h.commands.act(own("Essay"))
+        one.h.commands.act(own("Maths"))
+        one.h.commands.act(change("kept", "own:s-Maths"))
+        assertTrue(one.replica.upload())
+        assertTrue(two.replica.upload())
+        one.h.commands.act(DeleteOwnTask("own:s-Essay"))
+        assertTrue(one.replica.upload())
+        two.h.commands.act(change("dropped", "own:s-Essay"))
+        assertEquals(2, two.h.stores.instructions.value.instructions.size)
+        assertTrue(two.replica.upload())
+        assertEquals(listOf("kept"), two.h.stores.instructions.value.instructions.map { it.id }, "as the server has it")
+        assertEquals(setOf("Maths"), two.titles)
+        assertEquals(1, two.h.stores.sync.value.dropped.size)
+        assertEquals(graph.state(0).revision, two.h.stores.sync.value.revision)
+    }
+
+    @Test
+    fun `a command a stopped process half made reaches the server once, and the pull after is of everything`() = runBlocking {
+        val phone = phone()
+        phone.h.commands.act(own("Essay"))
+        phone.h.commands.act(change("kept", "own:s-Essay"))
+        assertTrue(phone.replica.upload())
+        // Stopped with a command recorded, and a store written that the server won't change.
+        phone.h.stores.instructions.update { it.copy(instructions = emptyList()) }
+        phone.h.stores.outbox.update { it.copy(commands = listOf(Command("stopped", phone.h.clock.now(), own("Maths")))) }
+        val started = Replica(phone.h.stores, phone.wire, phone.h.clock, "test", { CalendarRead() }, phone.h.commands)
+        assertTrue(started.upload())
+        assertEquals(setOf("Essay", "Maths"), serverTitles)
+        assertEquals(setOf("Essay", "Maths"), phone.titles, "made here by the pull")
+        assertEquals(0, phone.waiting)
+        assertEquals(listOf("kept"), phone.h.stores.instructions.value.instructions.map { it.id }, "put back by it")
     }
 
     @Test

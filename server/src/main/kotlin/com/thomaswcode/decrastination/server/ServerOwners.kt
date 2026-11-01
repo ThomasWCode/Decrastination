@@ -41,7 +41,9 @@ import com.thomaswcode.decrastination.sync.Syncer
 import com.thomaswcode.decrastination.sync.protocol.Owners
 import com.thomaswcode.decrastination.tasks.Instructions
 import com.thomaswcode.decrastination.tasks.OwnTasks
+import java.io.IOException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 
 /** What a server has no notifications for: nothing's posted, and none's held back. */
 private object NoNotices : Notices {
@@ -79,8 +81,8 @@ private object NoDevice : FelixPorts {
 
 /**
  * The owners, on the server's stores (docs/spec/server.md), wired as `AppGraph` wires the phone's, what touches the device
- * left out. None of them is started: nothing here watches a store or runs by itself, so all they do is what a command
- * asks. In mirror mode no command comes, and their writes would go nowhere.
+ * left out. Nothing here watches a store or runs by itself till [start], once the server applies commands: in mirror mode no
+ * command comes, and their writes would go nowhere.
  */
 class ServerOwners(
     private val stores: Stores,
@@ -92,7 +94,20 @@ class ServerOwners(
 ) : Owners {
     override val tasks: JsonStore<TaskState> = stores.tasks
 
-    private val chatOutbox = Outbox(stores.chat, stores.chatArchive, stores.settings, NoNotices, NoDevice, chatOnScreen = { false }, chatSeen = { true }, clock)
+    /** What can't be done here left out, but what's left to be asked for afresh: work of its own, as a call mustn't hold up a job's turn. */
+    val ports: FelixPorts = object : FelixPorts by NoDevice {
+        override fun remindLater() {
+            scope.launch {
+                try {
+                    looks.remindNow()
+                } catch (failed: IOException) {
+                    Log.w(Log.TAG, "Asking Felix for a reminder's words failed: ${failed::class.simpleName}")
+                }
+            }
+        }
+    }
+
+    private val chatOutbox = Outbox(stores.chat, stores.chatArchive, stores.settings, NoNotices, ports, chatOnScreen = { false }, chatSeen = { true }, clock)
 
     override val focus: Focus = Focus(
         stores.tasks, stores.settings, stores.session, stores.learning, stores.protection, stores.log, clock,
@@ -101,7 +116,7 @@ class ServerOwners(
     ) { state, settings, now -> planning.plan(state, settings, now) }
 
     override val looks: Looks = Looks(
-        stores.tasks, stores.settings, stores.model, stores.log, stores.chat, stores.felix, clock, scope, gateway, focus, planning, NoDevice, chatOutbox,
+        stores.tasks, stores.settings, stores.model, stores.log, stores.chat, stores.felix, clock, scope, gateway, focus, planning, ports, chatOutbox,
         calendarTime = calendarTime,
         profile = { conversation.profile(it) },
         remember = { conversation.remember(it) },
@@ -111,7 +126,7 @@ class ServerOwners(
     )
 
     override val conversation: Conversation = Conversation(
-        stores.tasks, stores.settings, stores.learning, stores.log, stores.instructions, stores.chat, stores.school, stores.memory, stores.felix, clock, scope, gateway, NoNotices, focus, planning, NoDevice, chatOutbox,
+        stores.tasks, stores.settings, stores.learning, stores.log, stores.instructions, stores.chat, stores.school, stores.memory, stores.felix, clock, scope, gateway, NoNotices, focus, planning, ports, chatOutbox,
         owners = object : Conversation.Owners {
             override suspend fun saveOwnTask(sourceId: String, task: OwnTask): Boolean = ownTasks.saveOwnTask(sourceId, task)
             override suspend fun finishOwnTask(taskId: String) { ownTasks.finishOwnTask(taskId) }
@@ -176,6 +191,9 @@ class ServerOwners(
         onFailure = { source, error -> Log.w(Log.TAG, "Reading ${source.label} failed: ${error::class.simpleName}") },
         ankiRates = { stores.learning.value.calibration.ankiSecondsPerCard },
     )
+
+    /** What watches the stores, as `AppGraph` starts it, less what's the phone's: an own task with its steps done is finished. */
+    fun start() = ownTasks.start()
 
     init {
         // What follows a read, as `AppGraph` has it, less what's the phone's: its calendar, its notifications.
