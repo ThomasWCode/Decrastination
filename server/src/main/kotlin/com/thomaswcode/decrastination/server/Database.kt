@@ -1,17 +1,21 @@
 package com.thomaswcode.decrastination.server
 
+import com.thomaswcode.decrastination.ports.Log
 import java.sql.Connection
 import java.sql.DriverManager
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
+import kotlinx.coroutines.asContextElement
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 /**
  * The state's one file (docs/plan_web/data-and-sync.md §The database): SQLite in WAL mode, as Litestream needs it, written
  * by this process alone through one connection. A [transaction] is all of it or none of it, and takes a revision the
  * first time it writes a store: every store one transaction changes takes the same one. A [command] is one that can suspend,
- * as the owners do; a read that mustn't see one half-way goes through [read].
+ * as the owners do; a read that mustn't see one half-way goes through [read], and a store's write from outside one is held
+ * back till it closes ([writing]).
  */
 class Database(path: String) : AutoCloseable {
     private val connection: Connection = DriverManager.getConnection("jdbc:sqlite:$path")
@@ -23,6 +27,24 @@ class Database(path: String) : AutoCloseable {
 
     /** One [command] at a time: held across suspensions, which the [lock] can't be, being its thread's. */
     private val commanding = Mutex()
+
+    /** Whether a [command]'s transaction is open. What's written by anything else waits for it: a job's write mustn't go with a command that's rolled back. */
+    private var commandOpen = false
+
+    /** A command's own coroutine, on whichever thread it's reached: its writes are the transaction's. */
+    private val inCommand = ThreadLocal<Boolean?>()
+
+    /** Signalled as a command closes. */
+    private val closed = lock.newCondition()
+
+    /** A store's write from outside the open command, waiting for it to close. */
+    private class Held(val name: String, val write: () -> Unit, val remake: () -> Unit) {
+        /** The command has written the store since: what it wrote takes this in, as a store changes in memory one change at a time. */
+        var overtaken = false
+    }
+
+    /** What's held back ([writing]), oldest first. */
+    private val held = ArrayDeque<Held>()
 
     /** The revision the open transaction has taken, if it's taken one. */
     private var taken: Long? = null
@@ -49,37 +71,137 @@ class Database(path: String) : AutoCloseable {
     suspend fun <T> command(block: suspend () -> T): T = commanding.withLock { attempt(block) }
 
     /**
-     * A [command] that [recover] answers for if it fails, a transaction of its own, with no other let in between the two: what
-     * the failed one left in memory has to be put right before another can build on it.
+     * A [command] that [recover] answers for if it fails, a transaction of its own, with no other let in between the two and no
+     * write let through: what the failed one left in memory has to go, by [reload], before anything can build on it. What was held
+     * back meanwhile was made from that memory, so it's made afresh on what's committed ([putRight]). Should that fail too, what's
+     * held is let go rather than written, as it can't be told from what the command left: the stores are read from what's committed
+     * whatever happens, and the failure's the caller's.
      */
-    suspend fun <T> commandOr(recover: suspend (Exception) -> T, block: suspend () -> T): T = commanding.withLock {
+    suspend fun <T> commandOr(reload: suspend () -> Unit, recover: suspend (Exception) -> T, block: suspend () -> T): T = commanding.withLock {
         try {
-            attempt(block)
+            attempt(block, recoverable = true)
         } catch (failed: Exception) {
-            attempt { recover(failed) }
+            try {
+                attempt({
+                    putRight(reload)
+                    recover(failed)
+                }, recoverable = true)
+            } catch (worse: Exception) {
+                Log.w(Log.TAG, "Putting a failed command right failed: ${worse::class.simpleName}")
+                gaveUp(reload)
+                throw worse
+            }
         }
     }
 
-    private suspend fun <T> attempt(block: suspend () -> T): T {
+    /** Nothing more can be done for a failed command: what's held goes unwritten, the stores are read from what's committed, and the command's closed. */
+    private suspend fun gaveUp(reload: suspend () -> Unit) {
+        try {
+            withContext(inCommand.asContextElement(true)) { reload() }
+        } finally {
+            lock.withLock {
+                held.clear()
+                closeCommand(committed = false)
+            }
+        }
+    }
+
+    /** [block] between commands, none let in till it's done: what's in memory is then what's committed. Not for anything slow. */
+    suspend fun <T> betweenCommands(block: suspend () -> T): T = commanding.withLock { block() }
+
+    /**
+     * Each write held back made again on what's committed, in its order, then the stores read from the result, and again for any
+     * that came while they were: each is in the database once, and nothing of the failed command is in memory or in a write.
+     */
+    private suspend fun putRight(reload: suspend () -> Unit) {
+        do {
+            while (true) {
+                val next = lock.withLock { held.removeFirstOrNull() } ?: break
+                try {
+                    next.remake()
+                } catch (failed: Exception) {
+                    Log.w(Log.TAG, "A write held back for a failed command couldn't be made again: ${failed::class.simpleName}")
+                }
+            }
+            reload()
+        } while (lock.withLock { held.isNotEmpty() })
+    }
+
+    private suspend fun <T> attempt(block: suspend () -> T, recoverable: Boolean = false): T {
         lock.withLock {
             connection.autoCommit = false
             depth = 1
+            commandOpen = true
         }
+        var committed = false
+        var recovering = false
         try {
-            val result = block()
+            val result = withContext(inCommand.asContextElement(true)) { block() }
             lock.withLock { connection.commit() }
+            committed = true
             return result
         } catch (failed: Throwable) {
             lock.withLock { connection.rollback() }
+            recovering = recoverable && failed is Exception
             throw failed
         } finally {
             lock.withLock {
                 taken = null
-                depth = 0
-                connection.autoCommit = true
+                // Left open where it's to be put right: nothing goes in on what it's left in memory.
+                if (!recovering) closeCommand(committed)
             }
         }
     }
+
+    /** With the [lock] held: the command over, what was held back through, and what was waiting for it told. */
+    private fun closeCommand(committed: Boolean) {
+        depth = 0
+        commandOpen = false
+        connection.autoCommit = true
+        letThrough(committed)
+        closed.signalAll()
+    }
+
+    /**
+     * Store [name]'s write: now, or, while a command's open that this isn't part of, as that closes. It doesn't wait, as whoever
+     * writes a store holds the store's lock and perhaps an owner's, which the command may be waiting for; and it doesn't join the
+     * command, or a rollback would take it too. [remake] is the same change made afresh, for a command that fails ([commandOr]).
+     */
+    fun writing(name: String, remake: (() -> Unit)? = null, write: () -> Unit) = lock.withLock {
+        when {
+            !commandOpen -> write()
+            inACommand -> {
+                held.forEach { if (it.name == name) it.overtaken = true }
+                write()
+            }
+            else -> held.addLast(Held(name, write, remake ?: write))
+        }
+    }
+
+    /**
+     * What was held back, in its order, under the [lock], so nothing newer gets in ahead of it. Each is a revision of its own. What
+     * the command overtook is in what it wrote, if that stands; if it's gone, the write is all there is of the change.
+     */
+    private fun letThrough(committed: Boolean) {
+        while (true) {
+            val next = held.removeFirstOrNull() ?: return
+            if (committed && next.overtaken) continue
+            try {
+                next.write()
+            } catch (failed: Exception) {
+                Log.w(Log.TAG, "A write held back for a command failed: ${failed::class.simpleName}")
+            }
+        }
+    }
+
+    /** [block], unless a command's open that it isn't part of: for what can go without, and can't wait for one. */
+    fun <T> ifFree(block: () -> T): T? = lock.withLock { if (commandOpen && !inACommand) null else block() }
+
+    /** Whether no transaction is open: what's just been written has been committed. */
+    val notNested: Boolean get() = lock.withLock { depth == 0 }
+
+    /** Whether the caller's inside a [command]: its writes reach the world as that commits. */
+    val inACommand: Boolean get() = inCommand.get() == true
 
     /** [block] on what's committed, one moment's view however many statements it runs. */
     fun <T> read(block: (Connection) -> T): T = if (reader === connection) {
@@ -98,6 +220,7 @@ class Database(path: String) : AutoCloseable {
 
     /** [block] with the connection, all of it committed or, if it throws, none of it. Inside another, it's part of that one. */
     fun <T> transaction(block: (Connection) -> T): T = lock.withLock {
+        while (commandOpen && !inACommand) closed.await()
         if (depth > 0) return block(connection)
         connection.autoCommit = false
         depth = 1
@@ -134,13 +257,36 @@ class Database(path: String) : AutoCloseable {
         }
     }
 
-    fun setMeta(key: String, value: String) = transactionless { c ->
+    fun setMeta(key: String, value: String) = transaction { c ->
         c.prepareStatement("INSERT INTO meta(key, value) VALUES(?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").use { q ->
             q.setString(1, key)
             q.setString(2, value)
             q.executeUpdate()
         }
         Unit
+    }
+
+    /** The sealed bytes kept as [name]. */
+    fun credentials(name: String): ByteArray? = read { c ->
+        c.prepareStatement("SELECT ciphertext FROM credentials WHERE name = ?").use { q ->
+            q.setString(1, name)
+            q.executeQuery().use { if (it.next()) it.getBytes(1) else null }
+        }
+    }
+
+    /**
+     * [sealed] kept as [name], here so Litestream's stream carries it as it does a store. Like a store's write it doesn't wait for
+     * a command ([writing]): whoever seals one holds the `SecretStore`'s lock, and a job a source's too.
+     */
+    fun setCredentials(name: String, sealed: ByteArray, now: Long) = writing(name) {
+        transaction { c ->
+            c.prepareStatement("INSERT INTO credentials(name, ciphertext, updated_at) VALUES(?, ?, ?) ON CONFLICT(name) DO UPDATE SET ciphertext = excluded.ciphertext, updated_at = excluded.updated_at").use { q ->
+                q.setString(1, name)
+                q.setBytes(2, sealed)
+                q.setLong(3, now)
+                q.executeUpdate()
+            }
+        }
     }
 
     /** [block] with the connection, in the open transaction if there's one. */
@@ -164,6 +310,7 @@ class Database(path: String) : AutoCloseable {
                 id TEXT PRIMARY KEY, name TEXT NOT NULL, token_hash TEXT NOT NULL UNIQUE, created_at INTEGER NOT NULL, last_seen_at INTEGER, revoked_at INTEGER)""",
             "CREATE TABLE IF NOT EXISTS sessions(id TEXT PRIMARY KEY, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, last_seen_at INTEGER NOT NULL)",
             "CREATE TABLE IF NOT EXISTS pairing_codes(code_hash TEXT PRIMARY KEY, expires_at INTEGER NOT NULL)",
+            "CREATE TABLE IF NOT EXISTS credentials(name TEXT PRIMARY KEY, ciphertext BLOB NOT NULL, updated_at INTEGER NOT NULL)",
             """CREATE TABLE IF NOT EXISTS commands(
                 id TEXT PRIMARY KEY, device TEXT NOT NULL, protocol INTEGER NOT NULL, payload TEXT NOT NULL,
                 received_at INTEGER NOT NULL, at INTEGER NOT NULL, outcome TEXT NOT NULL, why TEXT, revision INTEGER NOT NULL)""",

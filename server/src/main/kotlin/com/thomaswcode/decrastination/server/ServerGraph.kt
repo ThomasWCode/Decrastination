@@ -3,17 +3,23 @@ package com.thomaswcode.decrastination.server
 import com.thomaswcode.decrastination.core.Notes
 import com.thomaswcode.decrastination.core.ReplayClock
 import com.thomaswcode.decrastination.core.SchoolDays
+import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
+import com.thomaswcode.decrastination.core.Uptime
 import com.thomaswcode.decrastination.core.WallClock
+import com.thomaswcode.decrastination.data.BackupService
 import com.thomaswcode.decrastination.data.CalendarRead
 import com.thomaswcode.decrastination.data.JsonStore
+import com.thomaswcode.decrastination.data.Secret
 import com.thomaswcode.decrastination.data.SecretCipher
 import com.thomaswcode.decrastination.data.SecretStore
 import com.thomaswcode.decrastination.data.Stores
 import com.thomaswcode.decrastination.enrich.KeyProblem
 import com.thomaswcode.decrastination.enrich.ModelGateway
-import com.thomaswcode.decrastination.enrich.Profile
+import com.thomaswcode.decrastination.learn.Daily
 import com.thomaswcode.decrastination.learn.EventJudge
+import com.thomaswcode.decrastination.net.Http
+import com.thomaswcode.decrastination.net.UrlConnectionHttp
 import com.thomaswcode.decrastination.plan.Planning
 import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.ports.Log
@@ -27,11 +33,13 @@ import com.thomaswcode.decrastination.views.DayViews
 import com.thomaswcode.decrastination.views.WorkView
 import com.thomaswcode.decrastination.views.WorkViews
 import java.io.File
+import java.io.IOException
 import java.sql.SQLException
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.util.concurrent.ConcurrentHashMap
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -53,6 +61,12 @@ class ServerClock(private val db: Database) : WallClock {
 
     override fun zone(): ZoneId = zone
 
+    /**
+     * What a loosening's wait is counted by (W-23). The phone counts by its uptime, as its date is the owner's to set; this clock
+     * isn't, so its time is its uptime, one count across a restart, and a mark of the phone's is another clock's.
+     */
+    override fun uptime() = Uptime(BOOT, now())
+
     /** The phone's zone, as it says it. A zone that isn't one is left. */
     fun setZone(id: String) {
         val told = runCatching { ZoneId.of(id) }.getOrNull() ?: return
@@ -64,6 +78,9 @@ class ServerClock(private val db: Database) : WallClock {
 
     private companion object {
         const val ZONE = "zone"
+
+        /** No phone's count of its starts, nor the one for a count unread ([Uptime.UNKNOWN_BOOT]): a mark of the phone's is never taken for this clock's. */
+        const val BOOT = -2
     }
 }
 
@@ -72,35 +89,69 @@ class ServerClock(private val db: Database) : WallClock {
  * phone's. The same stores, on rows; the same plan, from them. In mirror mode (stage 1) the phone is the only writer: a
  * whole store comes in, and nothing here changes one.
  */
-class ServerGraph(val db: Database, dataDir: File, cipher: SecretCipher, private val version: String) {
+class ServerGraph(
+    val db: Database,
+    dataDir: File,
+    cipher: SecretCipher,
+    private val version: String,
+    /** Claude's key, from the box's `.env` (W-12): none, and the rules do what they can. */
+    private val claudeKey: String? = null,
+    /** Where a minute's heartbeat is sent (healthchecks.io), if anywhere. */
+    private val heartbeatUrl: String? = null,
+    private val http: Http = UrlConnectionHttp(),
+    /** Where the nightly file goes (W-20), if it's set up. */
+    nightly: BackupService.Folder? = null,
+) {
     /** The clock the phone's zone is told to. */
     val serverClock = ServerClock(db)
 
     /** What the owners read: a command's own moment while one's applied. */
     val clock: WallClock = ReplayClock(serverClock)
-    val backend = SqliteBackend(db).apply { writable = (db.meta("mode") ?: MIRROR) != MIRROR }
+
+    /** Whether the server is taking the phone's stores whole, or commands: read once, at a start, so everything that hangs on it goes together. */
+    var mode: String = db.meta("mode") ?: MIRROR
+        private set
+
+    val backend = SqliteBackend(db).apply { writable = mode != MIRROR }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
-    val stores = Stores(backend, SecretStore(File(dataDir, "secrets.bin"), cipher))
+    /**
+     * The credentials, sealed under `MASTER_KEY` (W-19), in the database as well as beside it, so a restore carries them: a
+     * file on a rebuilt box comes back from there before it's read.
+     */
+    private val secrets: SecretStore = File(dataDir, SECRETS).let { file ->
+        if (!file.exists()) db.credentials(SECRETS)?.let(file::writeBytes)
+        SecretStore(file, cipher, saved = { db.setCredentials(SECRETS, it, serverClock.now()) })
+    }
+
+    val stores = Stores(backend, secrets)
     val calendarRead = JsonStore(backend, CalendarRead.NAME, CalendarRead.serializer(), ::CalendarRead)
     val devices = Devices(db)
 
-    private val gateway = ModelGateway(stores.settings, { null }, stores.model, stores.tasks, clock, NoAlerts, scope) {}
+    private val gateway = ModelGateway(stores.settings, { claudeKey }, stores.model, stores.tasks, clock, NoAlerts, scope) {}
 
-    val planning = Planning(
+    val planning: Planning = Planning(
         stores.tasks, stores.settings, stores.session, stores.learning, stores.model, stores.log, stores.instructions, stores.school, clock, scope, gateway,
         calendarTime = { calendarTime() },
         calendarChanges = emptyFlow<Unit>(),
-        sweep = {},
-        hooks = emptyList(),
-        profile = { Profile.Block.NONE },
-        draftAhead = { _, _ -> },
-        onFailure = {},
+        sweep = { owners.slots.sweep() },
+        // As the phone's, less what's its own: its alarms, its calendar, its widget.
+        hooks = listOf(
+            { _ -> owners.focus.forgetPlan() },
+            { _ -> owners.focus.settleTimer() },
+        ),
+        profile = { owners.conversation.profile(it) },
+        draftAhead = { made, now -> owners.looks.draftAhead(made, now) },
+        onFailure = { Log.w(Log.TAG, "Replanning failed: ${it::class.simpleName}") },
         notes = { task: TaskItem -> Notes.forTask(task, stores.felix.value.notes, stores.settings.value.classMap).map { it.text } },
     )
 
-    /** The owners, none of them started: what they do is what a command asks. */
-    val owners = ServerOwners(stores, clock, scope, gateway, planning, calendarTime = { calendarTime() })
+    init {
+        backend.written = { _revisions.tryEmit(it) }
+    }
+
+    /** The owners: what they do is what a command asks, a job, and what [start] has watch the stores. */
+    val owners: ServerOwners = ServerOwners(stores, clock, scope, gateway, planning, calendarTime = { calendarTime() })
 
     private val commands = Commands(owners, clock)
 
@@ -134,9 +185,6 @@ class ServerGraph(val db: Database, dataDir: File, cipher: SecretCipher, private
             }
         }
     }
-
-    /** Whether the server is taking the phone's stores whole, or commands (from stage 2). */
-    val mode: String get() = db.meta("mode") ?: MIRROR
 
     fun calendarTime(): EventJudge.Time = calendarRead.value.time(stores.instructions.value.applied, clock.now(), clock.zone())
 
@@ -172,6 +220,129 @@ class ServerGraph(val db: Database, dataDir: File, cipher: SecretCipher, private
 
     /** Commands applied as they arrive, one at a time. */
     val applier = CommandApplier(db, backend, commands, owners, clock, reload = { reloadAll() }, committed = { _revisions.tryEmit(it) })
+
+    /** The Backup-format file, as the phone writes it, so the phone's Import can read it. */
+    private val backups: BackupService? = nightly?.let { folder ->
+        BackupService(
+            stores, clock, scope, folder, File(dataDir, "reset-copies"), version,
+            changeSettings = { change -> owners.protection.changeSettings(change) },
+            applying = owners.instructions.applying,
+            layInstructions = { owners.instructions.layInstructions() },
+            layTaskOverrides = { owners.instructions.layTaskOverrides() },
+            schedule = {},
+            reread = {},
+            cancelFelix = {},
+            eventAnswers = { calendarRead.value.answers },
+            settled = { read -> db.betweenCommands(read) },
+        )
+    }
+
+    /** Each minute, what's due, once the server applies commands (docs/spec/server.md §Jobs). */
+    val jobs = ServerJobs(
+        db, clock, running = { mode == COMMANDS },
+        listOf(
+            ServerJob.every("slots", MINUTE_MS) {
+                owners.slots.sweep()
+                owners.protection.applyDueChanges()
+            },
+            ServerJob.every("looks", MINUTE_MS) {
+                owners.looks.check()
+                owners.looks.sweepReminders()
+            },
+            ServerJob.every("sources", SOURCES_EVERY_MS) { owners.syncer.sync(setOf(Source.PowerPlanner, Source.Gmail)) },
+            ServerJob("morning", due = { last, now -> morningDue(last, now) }) {
+                morning({ owners.conversation.forgetExpired() }, { owners.ownTasks.rollWeeks() }, { owners.briefing.run() }, { owners.conversation.pruneFelix() })
+            },
+            ServerJob("check-in", due = { last, now -> sundayDue(last, now, stores.settings.value.checkInMin) }) { owners.conversation.remindCheckIn() },
+            ServerJob("review", due = { last, now -> sundayDue(last, now, stores.settings.value.checkInMin + Daily.REVIEW_AFTER_MIN) }) { owners.learning.review(ifDue = true) },
+            ServerJob("nightly", due = { last, now -> nightDue(last, now) }, retryMs = HOUR_MS) { nightly() },
+            ServerJob.every("heartbeat", MINUTE_MS) { heartbeatUrl?.let { http.get(it, emptyMap()) } },
+        ),
+    )
+
+    /** Tonight's file, or a failure, so it's tried again rather than the night going without. */
+    internal suspend fun nightly() {
+        val written = backups?.backupNow() ?: return
+        check(written == BackupService.Nightly.Written) { "The nightly file wasn't written: $written" }
+    }
+
+    /** The mode set at once, for a test: what a restart does. */
+    internal fun modeForATest(set: String) {
+        mode = set
+        backend.writable = set != MIRROR
+    }
+
+    /** What runs by itself: the jobs, and, once the server applies commands, what watches the stores and the plan made again. */
+    fun start(scope: CoroutineScope) {
+        if (mode == COMMANDS) {
+            owners.start()
+            planning.watcher.start()
+        }
+        jobs.start(scope)
+    }
+
+    /** What the phone's morning alarm does, as it does it: only the [briefing] can fail the job, as a retry would say it again. */
+    internal suspend fun morning(forget: suspend () -> Unit, roll: suspend () -> Unit, briefing: suspend () -> Unit, prune: suspend () -> Unit) {
+        aside("Forgetting what's run out", forget)
+        aside("Rolling the weeks", roll)
+        briefing()
+        aside("Pruning Felix's notes", prune)
+    }
+
+    private suspend fun aside(what: String, step: suspend () -> Unit) {
+        try {
+            step()
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failed: Exception) {
+            Log.w(Log.TAG, "$what failed: ${failed::class.simpleName}")
+        }
+    }
+
+    /** The last moment before today, so a time at today's very start is still to come. */
+    private fun beforeToday(now: Long): Long = Instant.ofEpochMilli(now).atZone(clock.zone()).toLocalDate().atStartOfDay(clock.zone()).toInstant().toEpochMilli() - 1
+
+    /**
+     * Whether the morning's work is due: today's, once its time comes. A run today stands for today, even with its time moved
+     * later since (as `Daily.from` has it on the phone), and a day gone by isn't caught up on: `Briefing` says today's whenever it
+     * runs, so running it early would say it twice.
+     */
+    internal fun morningDue(last: Long?, now: Long): Boolean {
+        val zone = clock.zone()
+        val ranToday = last != null && Instant.ofEpochMilli(last).atZone(zone).toLocalDate() == Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
+        return !ranToday && Daily.nextBriefing(beforeToday(now), zone, stores.settings.value, stores.school.value) <= now
+    }
+
+    /** Whether Sunday's work at [minute] is due: its next time since it last ran, or, never run, since today began, so a first run says nothing of a Sunday gone by. */
+    internal fun sundayDue(last: Long?, now: Long, minute: Int): Boolean = Daily.nextSunday(last ?: beforeToday(now), clock.zone(), minute) <= now
+
+    /** Whether tonight's backup has gone: once a day, after [NIGHTLY_HOUR]. */
+    private fun nightDue(last: Long?, now: Long): Boolean {
+        val zone = clock.zone()
+        val tonight = Instant.ofEpochMilli(now).atZone(zone).toLocalDate().atTime(NIGHTLY_HOUR, 0).atZone(zone).toInstant().toEpochMilli()
+        return now >= tonight && (last == null || last < tonight)
+    }
+
+    /** What waits for Claude asked for, after a command's landed: on its own time, as a call can take a minute. */
+    fun answerSoon() {
+        scope.launch {
+            try {
+                owners.answerWhatWaits()
+            } catch (failed: IOException) {
+                Log.w(Log.TAG, "Asking Claude failed: ${failed::class.simpleName}")
+            }
+        }
+    }
+
+    /** The credentials held, by name. Never their values. */
+    fun credentials(): Set<String> = stores.secrets.present.value.map { it.name }.toSet()
+
+    /** Credentials as the website's given them: those it may set, a blank one taken away. */
+    suspend fun setCredentials(given: Map<String, String>) {
+        val changed = CREDENTIALS.filter { it.name in given }.associateWith<Secret, String?> { given[it.name] }
+        val login = changed.keys.any { it == Secret.PowerPlannerUsername || it == Secret.PowerPlannerPassword }
+        stores.secrets.put(changed + if (login) Secret.POWER_PLANNER_SESSION.associateWith { null } else emptyMap())
+    }
 
     /** Every store read again from what's committed. */
     private suspend fun reloadAll() {
@@ -219,6 +390,14 @@ class ServerGraph(val db: Database, dataDir: File, cipher: SecretCipher, private
     companion object {
         /** The mode where commands apply: `meta.mode`, one way, from mirror mode. */
         const val COMMANDS = "commands"
+        private const val SECRETS = "secrets.bin"
+        private const val MINUTE_MS = 60_000L
+        private const val HOUR_MS = 60 * MINUTE_MS
+        private const val SOURCES_EVERY_MS = 15 * MINUTE_MS
+        private const val NIGHTLY_HOUR = 3
+
+        /** What the website can set: the sources' sign-ins, entered there (W-19). Claude's key is the box's, and the parent code's the phone's. */
+        private val CREDENTIALS = setOf(Secret.PowerPlannerUsername, Secret.PowerPlannerPassword, Secret.GmailAddress, Secret.GmailAppPassword)
         private const val MIRROR = "mirror"
         private const val TIDY_EVERY_MS = 24 * 3_600_000L
     }

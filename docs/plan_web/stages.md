@@ -87,6 +87,8 @@ The estimates are hours of sessions, from the durations measured over the 4.x re
 
 ## Stage 3: the server's jobs, Claude on the server, the credentials
 
+**As built (W-25).** The jobs, the credentials and the nightly file are 5.3.0, dormant until the switch; the phone's workers stop, and its Setup drops the entries, in the switch's release. The website's page for the credentials comes with its Settings pages in stage 4.
+
 **Goal.** The state is fresh while the phone sleeps; Claude is called from one place on the server; the credentials that can leave the phone have. Release 5.2.0.
 
 **Work.**

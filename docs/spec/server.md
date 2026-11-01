@@ -54,9 +54,27 @@ SQLite, one file, in WAL mode (`server/Database.kt`), the server its only writer
 
 A command is one transaction, all of it or none (`CommandApplier`, `Database.command`), one at a time, in the order they arrive. The owners suspend and change thread on the way, so it's held by a coroutine's lock, and reads that mustn't see it half-way go through a second connection (`Database.read`), which in WAL mode sees only what's committed. One that fails is rolled back, the stores read again from what's committed, and it's on record as dropped, all before another's let in (`Database.commandOr`): what it left in memory mustn't be built on.
 
-The owners are `ServerOwners`, wired as `AppGraph` wires the phone's, what touches the device left out. None is started: nothing on the server watches a store or runs by itself.
+The owners are `ServerOwners`, wired as `AppGraph` wires the phone's, what touches the device left out. In mirror mode nothing on the server watches a store or runs by itself. Once it applies commands, `ServerGraph.start` sets off the jobs below and what watches the stores: an own task with its steps done is finished, a weekly rule's week rolled (`OwnTasks.start`), and the plan made again as what it's made from changes (`PlanWatcher`), with today's starts kept and the work done ahead, as on the phone but for its alarms, its calendar and its widget. The mode is read once, at a start, so everything that hangs on it goes together, and the switch to commands takes a restart.
 
-The server's time zone is the phone's: each batch says it (`ServerClock`), as a day is the owner's wherever they are.
+The server's time zone is the phone's: each batch says it (`ServerClock`), as a day is the owner's wherever they are. Its time is what a loosening's wait is counted by on the server: a mark of the phone's is another clock's, so the gap from it counts nothing and the count goes on from there.
+
+## Jobs
+
+What runs with nobody asking (`ServerJobs`), once the server applies commands (D-141): each minute, whatever's due, one at a time, each's last run in `meta`, so a restart neither repeats one nor misses one. A job that fails is logged and tried again: one that runs on a cadence at its next turn, one at a set time 15 minutes on, the nightly file an hour on, so nothing that reaches Claude or a source goes round each minute. One at a set time that's never run counts from the start of today, so the first run is today's, and nothing gone by before it is caught up on. The morning never catches up, even with a run on record: it says today's whenever it runs, so a morning missed is left, and today's comes at its time; and a run today stands for today, even with its time moved later since. The nightly file's text is made between commands, so it holds none half done, and its send, outside that, is bounded (five minutes), as the jobs run one at a time.
+
+| Job | When | Does |
+|---|---|---|
+| `slots` | each minute | today's slots as they pass; a loosening's wait over, counted by the server's clock (W-23) |
+| `looks` | each minute | Felix's looks and your reminders |
+| `sources` | every 15 minutes | Power Planner and Gmail read (D-133), what follows a read as on the phone, the readings |
+| `morning` | the briefing's time | the day on record, Felix's morning, what's run out let go |
+| `check-in`, `review` | Sunday's | the week's check-in asked, and its review |
+| `nightly` | after 03:00 | the Backup-format file to B2 (W-20), under a key that can't delete; the bucket's lifecycle rule lets the old ones go |
+| `heartbeat` | each minute | healthchecks.io, so a stopped box is noticed |
+
+A job's writes aren't a command's: each is a revision of its own. One made while a command's open is held back, in its order, till that closes (`Database.writing`), so a rollback takes nothing of theirs with it. It never waits there: whoever writes a store holds the store's lock, and perhaps an owner's, which the command may be waiting for. If the command stands, what it wrote since takes the job's change in, as a store changes in memory one change at a time. If it fails, what's held back was made from memory the command had been at, so nothing's let through: with the command rolled back each held write is made afresh on what's committed, in its order (`Database.commandOr`), the stores are read again from the result, and again for any that came meanwhile. Each job's change is in the database once, and nothing the command wrote to that store is. That's store by store: a change can carry what it read from another store while the command was open, so a job's work can still reflect a command that then failed, which the next run of it sees past. Should putting it right fail as well, what's held is let go rather than written, the stores are read again from what's committed, and the failure's said. What's waiting for Claude is asked after a command lands, never inside it, as a call can't hold the state's write lock.
+
+**Credentials.** The sources' sign-ins, entered on the website (W-19, `POST /credentials`, the website's alone; `GET /credentials` says only which are held). Sealed under `MASTER_KEY`, in `secrets.bin` and in the `credentials` table, so Litestream carries them and a rebuilt box gets them back. Claude's key is `ANTHROPIC_API_KEY` in `.env`.
 
 ## Deployment
 

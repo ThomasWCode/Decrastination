@@ -29,6 +29,12 @@ enum class Secret {
 
     /** What this phone shows the server it's paired with (docs/plan_web/architecture.md §Sign-in). */
     DeviceToken,
+    ;
+
+    companion object {
+        /** What a Power Planner sign-in left: it goes with the login, or a new one would never be tried and a cleared one would go on working. */
+        val POWER_PLANNER_SESSION = listOf(PowerPlannerSession, PowerPlannerAccountId)
+    }
 }
 
 /** Encrypts the secrets file. The real one keeps its key in the Android Keystore. */
@@ -50,6 +56,8 @@ class SecretStore(
     private val clock: () -> Long = System::currentTimeMillis,
     /** Between tries to decrypt: the keystore can fail for a moment. */
     private val retryWaitMs: Long = RETRY_WAIT_MS,
+    /** What's written, as it's written, sealed: the server keeps a copy where its database's backups reach. */
+    private val saved: (ByteArray) -> Unit = {},
 ) {
     private val mutex = Mutex()
 
@@ -116,9 +124,11 @@ class SecretStore(
         val dir = requireNotNull(file.absoluteFile.parentFile)
         dir.mkdirs()
         val tmp = File(dir, "${file.name}.tmp")
-        tmp.writeBytes(cipher.encrypt(plain.encodeToByteArray()))
+        val sealed = cipher.encrypt(plain.encodeToByteArray())
+        tmp.writeBytes(sealed)
         // As the stores are written: a replace refused for a moment (Windows) tried a few times more.
         JsonStore.moveOver(tmp, file)
+        saved(sealed)
     }
 
     private companion object {
