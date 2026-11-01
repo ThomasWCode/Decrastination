@@ -112,7 +112,7 @@ function Card({ card, say }: { card: ReviewCard; say: (undo: Action) => void }) 
       {card.summary ? (
         <>
           <p className="note">The week's summary</p>
-          <p>{card.summary}</p>
+          <p className="review-summary">{card.summary}</p>
           {card.mailto ? (
             <a className="quiet" href={card.mailto}>
               Send it

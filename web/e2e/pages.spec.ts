@@ -59,6 +59,7 @@ test("a review's summary goes by the mail app, nothing being sent from here", as
   await page.route("**/api/views/reviews", (route) => route.fulfill({ json: { cards: [card] } }));
   await page.goto("/reviews");
   await expect(page.getByRole("link", { name: "Send it" })).toHaveAttribute("href", card.mailto);
+  await expect(page.getByText("A made-up week")).toHaveCSS("white-space", "pre-wrap");
 });
 
 test("signed in, the Day shows the plan's grid and what to do now", async ({ page }) => {

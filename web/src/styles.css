@@ -2109,6 +2109,10 @@ label.button {
   margin: 0;
 }
 
+.review-summary {
+  white-space: pre-wrap;
+}
+
 @media (max-width: 860px) {
   .stat-day {
     grid-template-columns: 72px minmax(0, 1fr);
