@@ -103,6 +103,15 @@ class StatsPageTest {
     }
 
     @Test
+    fun `a setting changed twice can be undone only from the change that stands`() {
+        val changes = listOf(ReviewInput.Change("softMinPerDay", 80, "made up"), ReviewInput.Change("softMinPerDay", 90, "made up"))
+        val twice = WeeklyReview(1L, listOf("A made-up note."), by = "rules", changes = changes, settingsBefore = mapOf("softMinPerDay" to 60))
+        fun undoable(settings: Settings) = ReviewPage.cards(ActivityLog(reviews = listOf(twice)), settings, MemoryState(), zone).single().changes.map { it.undoable }
+        assertEquals(listOf(false, true), undoable(Settings(softMinPerDay = 90)))
+        assertEquals(listOf(false, false), undoable(Settings(softMinPerDay = 80)), "set back to the first's by hand, neither stands")
+    }
+
+    @Test
     fun `a tidy can be undone only while what's remembered is as it left it`() {
         val after = listOf(Fact("school", "Takes the bus", 1L))
         val review = WeeklyReview(1L, emptyList(), by = "rules", memoryTidy = MemoryTidyRecord(after + after, after))

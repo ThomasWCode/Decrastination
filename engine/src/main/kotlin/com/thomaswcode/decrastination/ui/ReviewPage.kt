@@ -54,8 +54,10 @@ object ReviewPage {
                 "Week of ${monday.format(DAY)}",
                 byLine(review),
                 review.lines,
-                review.changes.map { change ->
-                    Change(change.setting, ReviewInput.changeText(change, review.settingsBefore[change.setting]), review.settingsBefore[change.setting] != null && ReviewInput.valueOf(settings, change.setting) == change.value)
+                review.changes.mapIndexed { index, change ->
+                    // Only a setting's last change stands, so only that one can be put back.
+                    val stands = index == review.changes.indexOfLast { it.setting == change.setting }
+                    Change(change.setting, ReviewInput.changeText(change, review.settingsBefore[change.setting]), stands && review.settingsBefore[change.setting] != null && ReviewInput.valueOf(settings, change.setting) == change.value)
                 },
                 review.memoryTidy?.let { "What's remembered tidied: ${it.before.size} facts into ${it.after.size}" },
                 review.memoryTidy?.let { memory.facts == it.after } == true,

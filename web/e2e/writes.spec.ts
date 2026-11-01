@@ -480,12 +480,15 @@ test("the week's check-in is kept, and says so", async ({ page }) => {
   await expect(form).toBeHidden();
 });
 
-test("a review's change can be undone, saying what came of it", async ({ page }) => {
+test("a review's change can be undone, once for a double click, saying what came of it", async ({ page }) => {
+  let sent = 0;
+  page.on("request", (request) => {
+    if (request.method() === "POST" && request.url().endsWith("/api/commands")) sent += 1;
+  });
   await page.goto("/reviews");
-  const undo = page.getByRole("button", { name: "Undo" }).first();
-  await undo.click();
-  await expect(page.getByRole("status")).not.toBeEmpty();
+  await page.getByRole("button", { name: "Undo" }).first().dblclick();
   await expect(page.getByRole("status")).toContainText(/back to|waits/);
+  expect(sent).toBe(1);
 });
 
 test("the record comes down as a file", async ({ page }) => {

@@ -79,13 +79,13 @@ export function WeekPage() {
 }
 
 /** A line of a review with its Undo, while what it did stands. */
-function Line({ line, say }: { line: ReviewLine; say: (undo: Action) => void }) {
+function Line({ line, say, busy }: { line: ReviewLine; say: (undo: Action) => void; busy: boolean }) {
   const undo = line.undo;
   return (
     <li>
       <span>{line.text}</span>
       {undo ? (
-        <button className="quiet" onClick={() => say(undo)}>
+        <button className="quiet" disabled={busy} onClick={() => say(undo)}>
           Undo
         </button>
       ) : null}
@@ -93,7 +93,8 @@ function Line({ line, say }: { line: ReviewLine; say: (undo: Action) => void }) 
   );
 }
 
-function Card({ card, say }: { card: ReviewCard; say: (undo: Action) => void }) {
+function Card({ card, say, busy }: { card: ReviewCard; say: (undo: Action) => void; busy: boolean }) {
+  const summary = card.summary;
   return (
     <section className="review-card" aria-label={card.week} data-testid="review">
       <h2>{card.week}</h2>
@@ -104,20 +105,25 @@ function Card({ card, say }: { card: ReviewCard; say: (undo: Action) => void }) 
       {card.changes.length > 0 || card.tidy ? (
         <ul className="stat-lines">
           {card.changes.map((line) => (
-            <Line key={line.text} line={line} say={say} />
+            <Line key={line.text} line={line} say={say} busy={busy} />
           ))}
-          {card.tidy ? <Line line={card.tidy} say={say} /> : null}
+          {card.tidy ? <Line line={card.tidy} say={say} busy={busy} /> : null}
         </ul>
       ) : null}
-      {card.summary ? (
+      {summary ? (
         <>
           <p className="note">The week's summary</p>
-          <p className="review-summary">{card.summary}</p>
-          {card.mailto ? (
-            <a className="quiet" href={card.mailto}>
-              Send it
-            </a>
-          ) : null}
+          <p className="review-summary">{summary}</p>
+          <div className="buttons">
+            {card.mailto ? (
+              <a className="quiet" href={card.mailto}>
+                Send it
+              </a>
+            ) : null}
+            <button className="quiet" onClick={() => void navigator.clipboard.writeText(summary)}>
+              Copy
+            </button>
+          </div>
         </>
       ) : null}
       {card.checkIn ? <p className="note">{card.checkIn}</p> : null}
@@ -129,15 +135,23 @@ export function ReviewsPage() {
   const load = useCallback(() => api.reviews(), []);
   const { value: view, failed } = useLive(load);
   const [said, setSaid] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
   if (!view) return failed ? <p className="problem">The reviews couldn't be read. It tries again with the next change.</p> : null;
-  const say = (undo: Action) => void telling(undo).then(setSaid);
+  // One at a time: a second press of the same Undo would say it had changed since, over what the first came to.
+  const say = (undo: Action) => {
+    setBusy(true);
+    void telling(undo).then((words) => {
+      setBusy(false);
+      setSaid(words);
+    });
+  };
   return (
     <main className="week-page">
       <h1>Reviews</h1>
       {said ? <p role="status">{said}</p> : null}
       {view.none ? <p>{view.none}</p> : null}
       {view.cards.map((card) => (
-        <Card key={card.id} card={card} say={say} />
+        <Card key={card.id} card={card} say={say} busy={busy} />
       ))}
     </main>
   );
