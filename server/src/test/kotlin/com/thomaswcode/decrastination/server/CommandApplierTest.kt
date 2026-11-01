@@ -415,6 +415,21 @@ class CommandApplierTest {
         return DriverManager.getConnection("jdbc:sqlite:${File(dir, "test.db").path}").apply { createStatement().use { it.execute("BEGIN IMMEDIATE") } }
     }
 
+    /** The lock let go, as a brief fault passes. */
+    private fun Connection.letGo() {
+        createStatement().use { it.execute("ROLLBACK") }
+        close()
+    }
+
+    /**
+     * An applier on which the fault in [lock] passes as a failed command's put right: a brief one, gone by the moment it could be
+     * given up on. While one lasts, nothing could go on record anyway.
+     */
+    private fun passing(lock: () -> Connection?) = CommandApplier(db, graph.backend, Commands(graph.owners, graph.clock), graph.owners, graph.clock, reload = {
+        lock()?.letGo()
+        graph.stores.tasks.reload()
+    }) {}
+
     private fun rowsOf(state: String) = db.read { c ->
         c.prepareStatement("SELECT COUNT(*) FROM commands WHERE outcome = ?").use { q ->
             q.setString(1, state)
@@ -425,10 +440,9 @@ class CommandApplierTest {
     @Test
     fun `a fault of the box leaves a command to go again, nothing of it on record, and its retry is applied`() = runBlocking {
         val command = Command("one", at, own("Essay"))
-        locked().use { lock ->
-            assertFailsWith<SQLException> { send(command) }
-            lock.createStatement().use { it.execute("ROLLBACK") }
-        }
+        var lock: Connection? = locked()
+        val applier = passing { lock.also { lock = null } }
+        assertFailsWith<SQLException> { applier.apply(CommandBatch(listOf(command)), "phone") }
         assertEquals(0, rows(), "so it can't be answered as gone")
         assertTrue(graph.stores.tasks.value.tasks.isEmpty(), "and nothing of it's left in memory")
         assertEquals(Outcome.APPLIED, send(command).state)
@@ -440,15 +454,20 @@ class CommandApplierTest {
     fun `a batch stops at a fault, and sent again goes in order, what went through answering as it did`() = runBlocking {
         val batch = CommandBatch(listOf(Command("one", at, own("Essay")), Command("two", at, FinishOwnTask("own:s-Essay")), Command("three", at, own("Maths"))))
         var lock: Connection? = null
+        var taken = false
         // The lock taken as the first has gone through.
-        val applier = CommandApplier(db, graph.backend, Commands(graph.owners, graph.clock), graph.owners, graph.clock, reload = { graph.stores.tasks.reload() }) {
-            if (lock == null) lock = locked()
+        val applier = CommandApplier(db, graph.backend, Commands(graph.owners, graph.clock), graph.owners, graph.clock, reload = {
+            lock?.letGo()
+            lock = null
+            graph.stores.tasks.reload()
+        }) {
+            if (!taken) lock = locked()
+            taken = true
         }
         assertFailsWith<SQLException> { applier.apply(batch, "phone") }
         assertEquals(setOf("Essay"), graph.stores.tasks.value.tasks.map { it.title }.toSet(), "nothing goes ahead of the one that failed")
         assertTrue(graph.stores.tasks.value.tasks.single().isOpen)
         assertEquals(1, rows())
-        lock?.use { held -> held.createStatement().use { it.execute("ROLLBACK") } }
         val first = 1L
         val answers = applier.apply(batch, "phone")
         assertEquals(listOf(Outcome.APPLIED, Outcome.APPLIED, Outcome.APPLIED), answers.map { it.state })

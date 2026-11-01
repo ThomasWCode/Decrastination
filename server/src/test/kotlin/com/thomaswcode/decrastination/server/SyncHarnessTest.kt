@@ -34,7 +34,6 @@ import com.thomaswcode.decrastination.tasks.TasksHarness
 import java.io.File
 import java.io.IOException
 import java.nio.file.Files
-import java.sql.DriverManager
 import java.sql.SQLException
 import java.time.ZoneId
 import kotlin.test.AfterTest
@@ -259,12 +258,10 @@ class SyncHarnessTest {
         phone.h.commands.act(own("Essay"))
         assertTrue(phone.replica.upload())
         phone.h.commands.act(own("Maths"))
-        db.transactionless { c -> c.createStatement().use { it.execute("PRAGMA busy_timeout=20") } }
-        DriverManager.getConnection("jdbc:sqlite:${File(dir, "test.db").path}").use { lock ->
-            lock.createStatement().use { it.execute("BEGIN IMMEDIATE") }
-            assertFalse(phone.replica.upload())
-            lock.createStatement().use { it.execute("ROLLBACK") }
-        }
+        // A store can't be written, and the command log can: given up on, it'd go on record, and the phone would let it go.
+        db.transaction { c -> c.createStatement().use { it.execute("ALTER TABLE store_history RENAME TO store_history_gone") } }
+        assertFalse(phone.replica.upload())
+        db.transaction { c -> c.createStatement().use { it.execute("ALTER TABLE store_history_gone RENAME TO store_history") } }
         assertEquals(1, phone.waiting)
         assertEquals(emptyList(), phone.h.stores.sync.value.dropped)
         assertEquals("The server said no (500)", phone.h.stores.sync.value.lastError)
