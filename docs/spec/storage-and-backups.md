@@ -105,7 +105,7 @@ A copy off the phone is yours to make: a sync app mirroring the folder, or Expor
 
 It then says what came back, and what waits.
 
-**On the server** the same service, the same file. The website's Backup page downloads one (`GET /backup`), read between commands so none is half in it, and once the server applies commands takes one in (`POST /backup/import`): all of it or none, one revision, no command let in between (`CommandApplier.alone`), which the phone's Import, a store at a time, isn't. Your answers about events go where the server reads them (`CalendarRead`), and the phone's own wins, as here. Each store's text from before is in `store_history` for 90 days. The server's file has no receipts of writes to Gmail, as that store isn't mirrored till Gmail's finish moves.
+**On the server** the same service, the same file. The website's Backup page downloads one (`GET /backup`), read between commands and seeds so neither is half in it, and once the server applies commands takes one in (`POST /backup/import`): all of it or none, one revision, no command let in between (`CommandApplier.alone`), which the phone's Import, a store at a time, isn't. Your answers about events go where the server reads them (`CalendarRead`), and the phone's own wins, as here. Each store's text from before is in `store_history` for 90 days. The server's file has no receipts of writes to Gmail, as that store isn't mirrored till Gmail's finish moves.
 
 ## Resets
 

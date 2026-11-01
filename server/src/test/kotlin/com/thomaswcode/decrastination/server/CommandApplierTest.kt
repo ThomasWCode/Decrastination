@@ -208,10 +208,14 @@ class CommandApplierTest {
         val before = db.currentRevision()
         val answer = graph.applier.alone("test", "It didn't go") {
             graph.stores.memory.update { it.copy(rules = listOf(Rule("A made-up rule", 1L))) }
+            graph.stores.runtime.update { it.copy(lastBackupAt = 5L) }
+            graph.calendarRead.update { it.copy(answers = mapOf("Made up" to "busy")) }
             error("made up")
         }
         assertEquals("It didn't go", answer)
         assertTrue(graph.stores.memory.value.rules.isEmpty(), "nothing of it stays in memory")
+        assertNull(graph.stores.runtime.value.lastBackupAt, "a store that isn't mirrored as much as one that is")
+        assertTrue(graph.calendarRead.value.answers.isEmpty())
         assertEquals(before, db.currentRevision(), "nor on record")
         assertEquals("It went", graph.applier.alone("test", "It didn't go") { "It went" })
     }

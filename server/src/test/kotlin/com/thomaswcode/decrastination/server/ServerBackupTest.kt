@@ -12,12 +12,15 @@ import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.data.ActivityLog
 import com.thomaswcode.decrastination.data.BackupService
 import com.thomaswcode.decrastination.data.Backups
+import com.thomaswcode.decrastination.data.CalendarRead
 import com.thomaswcode.decrastination.data.CallRecord
 import com.thomaswcode.decrastination.data.Reset
 import com.thomaswcode.decrastination.data.SecretCipher
 import com.thomaswcode.decrastination.data.SourceStatus
 import com.thomaswcode.decrastination.data.WeeklyReview
 import com.thomaswcode.decrastination.learn.CheckIn
+import com.thomaswcode.decrastination.sync.SeedBatch
+import com.thomaswcode.decrastination.sync.StoreText
 import com.thomaswcode.decrastination.sync.protocol.Action
 import com.thomaswcode.decrastination.sync.protocol.Command
 import com.thomaswcode.decrastination.sync.protocol.CommandBatch
@@ -277,6 +280,46 @@ class ServerBackupTest {
         assertEquals(SchoolCalendar(), read.stores.school.value)
         assertTrue("Your school calendar" in read.setup().saved.single().detail)
         assertTrue(read.notices().setup)
+        other.close()
+    }
+
+    @Test
+    fun `the calendar's copy that couldn't be read is said too, and marks Setup`() = runBlocking<Unit> {
+        val other = Database(File(dir, "other.db").path).apply { setMeta("mode", ServerGraph.COMMANDS) }
+        SqliteBackend(other).keep(CalendarRead.NAME, 1, "not what it should be")
+        val read = ServerGraph(other, File(dir, "other").apply { mkdirs() }, Plain, "test")
+        read.stores.tasks.update { it.copy(sources = Source.SYNCED.associateWith { SourceStatus(lastSuccessAt = 1L) }) }
+        assertEquals(CalendarRead(), read.calendarRead.value)
+        assertTrue("What the phone last sent of your calendar" in read.setup().saved.single().detail)
+        assertTrue(read.notices().setup)
+        other.close()
+    }
+
+    @Test
+    fun `a backup waits out a seed, being all of the one or all of the other`() = runBlocking<Unit> {
+        val other = Database(File(dir, "other.db").path)
+        val mirror = ServerGraph(other, File(dir, "other").apply { mkdirs() }, Plain, "test")
+        val inside = CompletableDeferred<Unit>()
+        val letGo = CompletableDeferred<Unit>()
+        // A store held, so the seed stops between reading one store again and the next, past its transaction.
+        val holder = launch(Dispatchers.IO) {
+            mirror.stores.school.update {
+                inside.complete(Unit)
+                runBlocking { letGo.await() }
+                it
+            }
+        }
+        inside.await()
+        val seed = async(Dispatchers.IO) { mirror.seed(SeedBatch("Europe/London", "test", listOf(StoreText("school.json", mirror.stores.school.version, "{}"))), "phone") }
+        delay(500)
+        val backup = async(Dispatchers.IO) { mirror.backup() }
+        delay(300)
+        val waited = !backup.isCompleted
+        letGo.complete(Unit)
+        holder.join()
+        seed.await()
+        assertNotNull(backup.await())
+        assertTrue(waited)
         other.close()
     }
 
