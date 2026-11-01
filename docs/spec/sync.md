@@ -79,13 +79,13 @@ The server applies commands in the order they arrive, and the owners are the con
 | any other | never: its owner takes a stale call as it does today, doing nothing, or laying the day again | |
 | one its owner fails on | always | It couldn't be applied |
 
-A client that hears only the outcome is told what takes a command back, where only its owner's answer can say (`Action.undoing`, `Outcome.undo`): Mark answered's Undo needs the moment the server marked it, which the website has no other way to know. It's told what came of one that went through in the same way (`Action.said`, `Outcome.said`): a review's Undo may apply at once or wait its hours.
+A client that hears only the outcome is told what takes a command back, where only its owner's answer can say (`Action.undoing`, `Outcome.undo`): Mark answered's Undo needs the moment the server marked it, which the website has no other way to know. It's told what came of one that went through in the same way (`Action.said`, `Outcome.said`): a review's Undo may apply at once or wait its hours, and a reset says where its copy is.
 
 A command that ran and came to nothing is `refused`, by what its owner answered (`Action.refused`), not dropped: what it did stands, so a wrong parent code still counts towards the lock, and it isn't a change lost, so Setup doesn't list it, your screen having said what came of it. The pull after one is of everything all the same, as it may have gone otherwise on the phone:
 
 | Command | Said |
 |---|---|
-| `UseParentCode`, `ApplyChangeNow`, `AddNote`, `UndoAct`, `UndoMemory` | what its owner said |
+| `UseParentCode`, `ApplyChangeNow`, `AddNote`, `UndoAct`, `UndoMemory`, `ResetData` | what its owner said |
 | `KeepSlot` | That piece isn't there now |
 | `UndoKeep` | That can't be taken back now |
 | `TickBlock` | That step has changed |

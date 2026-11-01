@@ -1,11 +1,18 @@
 package com.thomaswcode.decrastination.server
 
+import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.core.Fact
+import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.OwnTask
+import com.thomaswcode.decrastination.core.Rule
+import com.thomaswcode.decrastination.core.SchoolCalendar
+import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.core.Source
+import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.data.ActivityLog
 import com.thomaswcode.decrastination.data.BackupService
 import com.thomaswcode.decrastination.data.Backups
+import com.thomaswcode.decrastination.data.CallRecord
 import com.thomaswcode.decrastination.data.Reset
 import com.thomaswcode.decrastination.data.SecretCipher
 import com.thomaswcode.decrastination.data.SourceStatus
@@ -26,6 +33,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
@@ -142,6 +150,21 @@ class ServerBackupTest {
     }
 
     @Test
+    fun `everything can be reset, its history with it, and what's on the record of it isn't kept`() = runBlocking<Unit> {
+        graph.stores.chat.update { it.copy(messages = listOf(ChatMessage("m", Speaker.Felix, "A made-up word", 1L))) }
+        graph.stores.memory.update { it.copy(facts = listOf(Fact("made up", "A made-up fact", 1L))) }
+        graph.stores.log.update { it.copy(checkIns = listOf(CheckIn("2026-10-12", 1L, 3, "", "", "", ""))) }
+        val outcome = send(ResetData(Reset.Everything))
+        assertEquals(Outcome.APPLIED, outcome.state, outcome.why)
+        assertTrue(graph.stores.chat.value.messages.isEmpty())
+        assertTrue(graph.stores.memory.value.facts.isEmpty())
+        assertTrue(graph.stores.log.value.checkIns.isEmpty())
+        val left = db.read { c -> c.createStatement().use { s -> s.executeQuery("SELECT COUNT(*) FROM store_history WHERE json LIKE '%A made-up word%'").use { it.next(); it.getInt(1) } } }
+        assertEquals(0, left)
+        assertEquals(1, copies().size)
+    }
+
+    @Test
     fun `only a copy that's there can be restored`() = runBlocking<Unit> {
         File(dir, "reset-copies").mkdirs()
         File(dir, "secret.json").writeText("{}")
@@ -201,6 +224,66 @@ class ServerBackupTest {
         graph.stores.log.update { it.copy(reviews = listOf(WeeklyReview(1L, listOf("A made-up note."), by = "rules", week = "not a week"))) }
         assertTrue("a review's week" in assertNotNull(graph.backupView().fit))
         assertNotNull(graph.backup())
+    }
+
+    @Test
+    fun `a backup past what Import reads isn't given, as it couldn't be restored`() = runBlocking<Unit> {
+        val big = TaskItem("own:big", Source.Own, "big", "x".repeat(Backups.MAX_BYTES + 1), kind = Kind.Homework, firstSeenAt = 1L, lastSeenAt = 1L)
+        graph.stores.tasks.update { it.copy(tasks = listOf(big)) }
+        assertNull(graph.backup())
+        assertFalse(graph.backupView().canDownload)
+    }
+
+    @Test
+    fun `a backup waits out a command, and holds nothing of it`() = runBlocking<Unit> {
+        val inside = CompletableDeferred<Unit>()
+        val letGo = CompletableDeferred<Unit>()
+        val command = async(Dispatchers.IO) {
+            graph.applier.alone("test", Unit) {
+                graph.stores.memory.update { it.copy(rules = listOf(Rule("A made-up rule", 1L))) }
+                inside.complete(Unit)
+                letGo.await()
+                error("made up")
+            }
+        }
+        inside.await()
+        val backup = async(Dispatchers.IO) { graph.backup() }
+        delay(300)
+        // Read before it's let go, and said after: a failure here mustn't leave the command held.
+        val waited = !backup.isCompleted
+        letGo.complete(Unit)
+        command.await()
+        assertTrue(waited)
+        assertFalse("A made-up rule" in assertNotNull(backup.await()))
+    }
+
+    @Test
+    fun `Claude's said by this box's key, once the server asks it`() = runBlocking<Unit> {
+        graph.stores.settings.update { it.copy(aiEnabled = true, aiKeyActive = true) }
+        assertEquals("No API key: the rules do what they can, and nothing is sent to Claude.", graph.setup().claude.detail)
+        val other = Database(File(dir, "other.db").path).apply { setMeta("mode", ServerGraph.COMMANDS) }
+        val keyed = ServerGraph(other, File(dir, "other").apply { mkdirs() }, Plain, "test", claudeKey = "made-up")
+        keyed.stores.settings.update { it.copy(aiEnabled = true, aiKeyActive = true) }
+        assertEquals(true, keyed.setup().claude.done)
+        other.close()
+    }
+
+    @Test
+    fun `what the server couldn't read at its start is said, and marks Setup`() = runBlocking<Unit> {
+        val other = Database(File(dir, "other.db").path).apply { setMeta("mode", ServerGraph.COMMANDS) }
+        SqliteBackend(other).keep("school.json", 1, "not what it should be")
+        val read = ServerGraph(other, File(dir, "other").apply { mkdirs() }, Plain, "test")
+        read.stores.tasks.update { it.copy(sources = Source.SYNCED.associateWith { SourceStatus(lastSuccessAt = 1L) }) }
+        assertEquals(SchoolCalendar(), read.stores.school.value)
+        assertTrue("Your school calendar" in read.setup().saved.single().detail)
+        assertTrue(read.notices().setup)
+        other.close()
+    }
+
+    @Test
+    fun `Claude's calls reach the settings page`() = runBlocking<Unit> {
+        graph.stores.model.update { it.copy(calls = listOf(CallRecord(1L, "made up", effort = "high", outcome = "ok"))) }
+        assertEquals(listOf(1L), graph.settings().calls.map { it.at })
     }
 
     @Test

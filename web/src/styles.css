@@ -2113,6 +2113,12 @@ label.button {
   white-space: pre-wrap;
 }
 
+/* A file input is hidden behind its label: the label shows where the keyboard is. */
+label.button:has(input:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .setup-lines {
   display: grid;
   gap: 10px;

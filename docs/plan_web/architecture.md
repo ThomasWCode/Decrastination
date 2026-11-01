@@ -60,10 +60,10 @@ A Ktor application (3.6.x, the CIO or Netty engine; both run on arm64 Linux) on 
 | `GET /views/day?date=`, `GET /views/work`, `GET /views/task/{id}`, … | the screens' models, computed on the server by the same Kotlin the phone's screens use (§The website) |
 | `GET /views/chat?earlier=&reach=` | the chat, with as much of the archive as it asks for: counted in messages, as the phone reads it on scroll-back, or as far as a quote's message |
 | `POST /photos` | a photo for the photo-to-tasks path (stage 4) |
-| `GET /backup`, `POST /backup/import`, `POST /reset/{kind}` | the Backup-format file out and in, the resets (stage 7) |
+| `GET /backup`, `POST /backup/import`, `POST /backup/copy` | the Backup-format file out and in, and a reset's copy back; a reset itself is a command (stage 7) |
 | `GET /health`, `GET /version` | for Caddy, the heartbeat and the clients (the protocol version and each store's version) |
 
-A route never writes a store. It turns the request into a command and hands it to the applier, which calls the owner; the same rule as "no screen is among a store's writers" (D-107), moved to the server.
+A route never writes a store. It turns the request into a command and hands it to the applier, which calls the owner; the same rule as "no screen is among a store's writers" (D-107), moved to the server. A backup taken in goes to the applier too, held as a command is, but isn't one: its file doesn't belong on record.
 
 **Jobs.** A scheduler loop (a coroutine, every minute) runs what is due, with each job's `lastRanAt` in the server's own runtime store: the Power Planner and Gmail syncs every 15 minutes (stage 3), the readings of new tasks, planning ahead, the memory tidy, the daily briefing's text and the weekly review's at their times, the nightly backup to B2 (W-20). The phone's WorkManager jobs that did these go (`inventory.md` §Integrations); the phone's `SyncWorker` becomes the sync alone.
 
