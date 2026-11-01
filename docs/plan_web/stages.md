@@ -33,6 +33,8 @@ The estimates are hours of sessions, from the durations measured over the 4.x re
 
 ## Stage 1: the server skeleton, mirror mode, the read-only website
 
+**As built.** Live on the box, mirroring, since 1 Nov 2026 (5.9.2, then 5.9.3): the phone paired, every store the same as the phone's by hash, a change made with the network off reaching an open page by itself once it's back, and the restore drill run on a PC from the real bucket. What's left of the drill is the nightly file into a test build's Import, as no nightly file exists till the switch. The heartbeat came forward from the switch: it runs while mirroring.
+
 **Goal.** The server runs on the box with the owner's state mirrored into it; the website signs in and shows the Day and the Work list, read-only, as the phone shows them. Release 5.0.0.
 
 **Work.**

@@ -93,6 +93,26 @@ class ServerJobsTest {
     }
 
     @Test
+    fun `a box still mirroring runs the heartbeat and nothing else, as a stopped one is worth hearing of before the switch too`() = runBlocking {
+        val url = "https://beat.example/made-up"
+        val asked = Collections.synchronizedList(mutableListOf<String>())
+        val graph = ServerGraph(db, dir, Plain, "test", heartbeatUrl = url, http = Http { to, _, _ -> asked += to; HttpResponse(200, "") })
+        assertEquals("mirror", graph.mode)
+        graph.jobs.tick()
+        assertEquals(listOf(url), asked.toList())
+        val ran = db.transaction { c -> c.createStatement().use { s -> s.executeQuery("SELECT key FROM meta WHERE key LIKE 'job:%'").use { r -> buildList { while (r.next()) add(r.getString(1)) } } } }
+        assertEquals(listOf("job:heartbeat"), ran, "the phone does all the rest till then")
+    }
+
+    @Test
+    fun `only a job that's the box's own runs before the server applies commands`() = runBlocking {
+        val ran = mutableListOf<String>()
+        val loop = jobs(ServerJob.every("the phone's", 1L) { ran += "the phone's" }, ServerJob.every("the box's", 1L, inMirror = true) { ran += "the box's" }, running = false)
+        loop.tick()
+        assertEquals(listOf("the box's"), ran)
+    }
+
+    @Test
     fun `the minute's job is that heartbeat`() = runBlocking {
         db.setMeta("mode", ServerGraph.COMMANDS)
         val url = "https://beat.example/made-up"
@@ -106,7 +126,7 @@ class ServerJobsTest {
     }
 
     @Test
-    fun `in mirror mode nothing runs`() = runBlocking {
+    fun `in mirror mode nothing of the phone's runs`() = runBlocking {
         var ran = 0
         jobs(ServerJob.every("a", 60_000) { ran++ }, running = false).tick()
         assertEquals(0, ran)

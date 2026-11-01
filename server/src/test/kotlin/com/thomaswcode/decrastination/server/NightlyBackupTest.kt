@@ -50,7 +50,7 @@ class NightlyBackupTest {
     }
 
     @Test
-    fun `B2's key can't delete, so nothing's listed or deleted`() {
+    fun `the bucket lets the old ones go by its own rule, so nothing's listed or deleted here`() {
         val folder = B2Folder("s3.eu-central-003.backblazeb2.com", "key", "secret", "bucket")
         assertTrue(folder.available)
         assertEquals(emptyList(), folder.names())

@@ -10,21 +10,25 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
-/** Something the server does by itself: when it's due, given when it last ran, how long after a failure it's tried again, and the work. */
-class ServerJob(val name: String, val due: (last: Long?, now: Long) -> Boolean, val retryMs: Long = RETRY_MS, val work: suspend () -> Unit) {
+/**
+ * Something the server does by itself: when it's due, given when it last ran, how long after a failure it's tried again, whether it's
+ * the box's own and so runs in mirror mode too, and the work.
+ */
+class ServerJob(val name: String, val due: (last: Long?, now: Long) -> Boolean, val retryMs: Long = RETRY_MS, val inMirror: Boolean = false, val work: suspend () -> Unit) {
     companion object {
         /** A failed job's wait: one that reaches Claude or a source isn't to go round every minute. */
         const val RETRY_MS = 15 * 60_000L
 
         /** Due [everyMs] after it last ran, or failed, and at once if it never has. */
-        fun every(name: String, everyMs: Long, work: suspend () -> Unit) = ServerJob(name, { last, now -> last == null || now - last >= everyMs }, everyMs, work)
+        fun every(name: String, everyMs: Long, inMirror: Boolean = false, work: suspend () -> Unit) = ServerJob(name, { last, now -> last == null || now - last >= everyMs }, everyMs, inMirror, work)
     }
 }
 
 /**
  * What runs with nobody asking (docs/spec/server.md §Jobs): each minute, whatever's due, one at a time, each's last run kept
  * in `meta` so a restart neither repeats it nor misses it. Only once the server applies commands: in mirror mode the phone
- * does all of this. A job that fails is on the log and tried again after its wait; it stops neither the others nor the loop.
+ * does all of this, but for what's the box's own ([ServerJob.inMirror]). A job that fails is on the log and tried again after
+ * its wait; it stops neither the others nor the loop.
  */
 class ServerJobs(
     private val db: Database,
@@ -37,8 +41,9 @@ class ServerJobs(
 
     /** One turn of the loop: what's due now. */
     suspend fun tick() {
-        if (!running()) return
+        val applying = running()
         for (job in jobs) {
+            if (!applying && !job.inMirror) continue
             val key = "job:${job.name}"
             val now = clock.now()
             if (failedAt[job.name]?.let { now - it < job.retryMs } == true) continue

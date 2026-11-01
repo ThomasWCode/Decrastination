@@ -8,6 +8,7 @@ import com.thomaswcode.decrastination.data.Backups
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.Secret
 import com.thomaswcode.decrastination.data.SecretCipher
+import com.thomaswcode.decrastination.ports.Log
 import com.thomaswcode.decrastination.sync.DeviceToken
 import com.thomaswcode.decrastination.sync.PairingCode
 import com.thomaswcode.decrastination.sync.Protocol
@@ -40,9 +41,14 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.http.encodeURLPathPart
 import io.ktor.http.setCookie
+import io.ktor.server.routing.get
+import io.ktor.server.routing.routing
 import io.ktor.server.testing.ApplicationTestBuilder
 import io.ktor.server.testing.testApplication
+import io.ktor.util.cio.ChannelWriteException
+import java.io.IOException
 import java.nio.file.Files
+import java.util.Collections
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -136,6 +142,28 @@ class ApiTest {
                 }
                 assertEquals(listOf("0", "1"), heard.toList())
             }
+        }
+    }
+
+    @Test
+    fun `a client gone mid-answer is no failure on the log, as that's how an event stream ends, and anything else still is`() = testApplication {
+        val said = Collections.synchronizedList(mutableListOf<String>())
+        val sink = Log.sink
+        Log.sink = Log.Sink { _, _, message, _ -> said += message }
+        try {
+            application {
+                api(web)
+                routing {
+                    get("/gone") { throw ChannelWriteException("made up", IOException("made up")) }
+                    get("/broken") { error("made up") }
+                }
+            }
+            client.get("/gone")
+            assertEquals(emptyList(), said.filter { "A request failed" in it })
+            assertEquals(HttpStatusCode.InternalServerError, client.get("/broken").status)
+            assertEquals(1, said.count { "A request failed" in it })
+        } finally {
+            Log.sink = sink
         }
     }
 

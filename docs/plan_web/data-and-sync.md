@@ -79,12 +79,12 @@ Stage 1 runs the server in **mirror** mode: the phone is still the only writer, 
 Three independent copies of the state exist at all times (W-20):
 
 1. **Litestream** streams SQLite's WAL to a private Cloudflare R2 bucket (`hosting.md` §Litestream), continuously; a dead box loses seconds. Snapshots kept 30 days.
-2. **The nightly backup**: the server writes a Backup-format file (format 11 by then, as `data/Backup.kt` writes it, with the same exclusions) to a **Backblaze B2** bucket under an application key of its own, one that can write and not delete, 60 kept: another provider and another credential, so no one mistake (a leaked key, a deleted bucket, a suspended account) takes both off-box copies. It is readable with no SQLite and no server: the phone's Import takes it, so the oldest restore path in the app stays alive.
+2. **The nightly backup**: the server writes a Backup-format file (format 11 by then, as `data/Backup.kt` writes it, with the same exclusions) to a **Backblaze B2** bucket under an application key of its own, with the bucket's Object Lock to hold each file 60 days (`hosting.md` §Litestream), 60 kept: another provider and another credential, so no one mistake (a leaked key, a deleted bucket, a suspended account) takes both off-box copies. It is readable with no SQLite and no server: the phone's Import takes it, so the oldest restore path in the app stays alive.
 3. **The phone**: its replica is a full copy of every synced store, and `BackupWorker` keeps writing its daily file to `Documents/Decrastination/` as today.
 
-The Oracle volume backup (five in the allowance) is a fourth, weekly, for the whole box.
+An Oracle volume backup (five in the allowance) could be a fourth, weekly, for the whole box. It isn't set up: the box can be rebuilt from `deploy/` and R2 alone, as the restore drill shows.
 
-**Restore drill** (stage 1's done-when, then every quarter): a clean machine, `litestream restore` from R2, the server started from the file, the owner's state read whole; and the nightly file imported into the phone's Import on a test build. `scripts/rehearse.sh` (a migration's rehearsal on a backup) gains a server mode that runs the server's migrations over a restored database.
+**Restore drill** (stage 1's done-when, then every quarter): a clean machine, `litestream restore` from R2, the server started from the file, the owner's state read whole; and the nightly file imported into the phone's Import on a test build. `scripts/rehearse.sh` (a migration's rehearsal on a backup) gains a server mode that runs the server's migrations over a restored database. First run on the real bucket on 1 Nov 2026, on a PC, not the box (`private/tools/restore_drill.py`): restored in ten seconds, every store the same as the box's by hash, and read whole through the real image's API. What's left of it is the nightly file into a test build's Import, as no nightly file exists till the switch.
 
 ## Testing the sync
 
