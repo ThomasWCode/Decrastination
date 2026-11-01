@@ -132,19 +132,32 @@ class LearningTest {
         stores.settings.update { it.copy(softMinPerDay = 90) }
         val change = ReviewInput.Change("softMinPerDay", 90, "made up")
         val review = WeeklyReview(clock.now(), listOf("A made-up note."), by = "rules", changes = listOf(change), settingsBefore = mapOf("softMinPerDay" to 60))
-        assertEquals("${ReviewInput.label("softMinPerDay")} is back to ${ReviewInput.valueText("softMinPerDay", 60)}.", learning.undoReviewChange(review, change))
+        val unknown = review.copy(at = review.at + 1, settingsBefore = emptyMap())
+        stores.log.update { it.copy(reviews = listOf(review, unknown)) }
+        assertEquals("${ReviewInput.label("softMinPerDay")} is back to ${ReviewInput.valueText("softMinPerDay", 60)}.", learning.undoReviewChange(review.at, "softMinPerDay"))
         assertEquals(60, stores.settings.value.softMinPerDay)
-        assertEquals("It's been changed since: left as it is.", learning.undoReviewChange(review, change))
-        assertEquals("What it was before isn't known.", learning.undoReviewChange(review.copy(settingsBefore = emptyMap()), change))
+        assertEquals("It's been changed since: left as it is.", learning.undoReviewChange(review.at, "softMinPerDay"))
+        assertEquals("What it was before isn't known.", learning.undoReviewChange(unknown.at, "softMinPerDay"))
+        assertEquals("That review didn't change it.", learning.undoReviewChange(review.at, "maxMinPerDay"))
+        assertEquals("That review has gone.", learning.undoReviewChange(5L, "softMinPerDay"))
         // The tidy: put back while what's remembered is as it left it.
         val before = listOf(Fact("school", "Takes the bus", 1L), Fact("school", "Takes the bus at 8", 2L))
         val after = listOf(Fact("school", "Takes the bus at 8", 3L))
         stores.memory.update { it.copy(facts = after) }
-        val tidied = review.copy(memoryTidy = MemoryTidyRecord(before, after))
-        assertEquals("What's remembered is back as it was before the tidy.", learning.undoTidy(tidied))
+        val tidied = review.copy(at = review.at + 2, memoryTidy = MemoryTidyRecord(before, after))
+        stores.log.update { it.copy(reviews = it.reviews + tidied) }
+        assertEquals("What's remembered is back as it was before the tidy.", learning.undoTidy(tidied.at))
         assertEquals(before, stores.memory.value.facts)
-        assertEquals("What's remembered has changed since: left as it is.", learning.undoTidy(tidied))
-        assertEquals("That review tidied nothing.", learning.undoTidy(review))
+        assertEquals("What's remembered has changed since: left as it is.", learning.undoTidy(tidied.at))
+        assertEquals("That review tidied nothing.", learning.undoTidy(review.at))
+    }
+
+    @Test
+    fun `a check-in's moment can't reach past now and trim what the log keeps`() = runBlocking {
+        val kept = done("a", 30, 45, "2026-10-14T18:00")
+        stores.log.update { it.copy(completions = listOf(kept)) }
+        assertTrue(learning.recordCheckIn(CheckIn(week, clock.now(), 4, "", "", "", ""), clock.now() + 3_650L * 86_400_000L))
+        assertEquals(listOf(kept), stores.log.value.completions)
     }
 
     @Test

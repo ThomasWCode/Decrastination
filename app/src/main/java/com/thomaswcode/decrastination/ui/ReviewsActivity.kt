@@ -93,8 +93,8 @@ private fun Reviews(graph: AppGraph) {
                     settings,
                     tidyUndoable = review.memoryTidy?.let { memory.facts == it.after } == true,
                     zone = zone,
-                    onUndo = { change -> scope.launch { said = graph.act(UndoReviewChange(review, change)) } },
-                    onUndoTidy = { scope.launch { said = graph.act(UndoTidy(review)) } },
+                    onUndo = { change -> scope.launch { said = graph.act(UndoReviewChange(review.at, change.setting)) } },
+                    onUndoTidy = { scope.launch { said = graph.act(UndoTidy(review.at)) } },
                 )
             }
         }

@@ -68,7 +68,7 @@ class CommandsTest {
         RateMessage("m", true, "good", "this one"), ReadChat(5L), ClearChat, ApplyProposal("m", "p", OwnTask(title = "t")), UndoProposal("m", "p"), DiscardProposal("m", "p", false), UndoAct("m", 1), UndoMemory("m", 1), EndCheckInFlow,
         Remember(listOf(Given(text = "a rule", kind = Given.RULE))), DeleteRule(Rule("a rule", 5L)), DeleteFact(Fact("topic", "a fact", 5L)), AddNote("t", "a note"), DeleteNote("n"),
         ChangeSettings(mapOf("boxMin" to JsonPrimitive(30))), UseParentCode("123456", 9L), ApplyChangeNow("c", "123456"), CancelChange("c"),
-        RecordCheckIn(CheckIn("2026-W44", 5L, 3, "", "", "", ""), 5L), ForgetCalibration("k"), UndoReviewChange(review, ReviewInput.Change("boxMin", 30, "why")), UndoTidy(review),
+        RecordCheckIn(CheckIn("2026-W44", 5L, 3, "", "", "", ""), 5L), ForgetCalibration("k"), UndoReviewChange(5L, "boxMin"), UndoTidy(5L),
     )
 
     @Test

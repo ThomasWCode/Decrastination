@@ -123,14 +123,26 @@ class SqliteBackend(private val db: Database, private val clock: () -> Long = Sy
                         q.executeUpdate()
                     }
                 }
-                // The commands on record are a copy of what the chat was told and what you said of it: their words go with it.
-                if (of(CHAT)) c.prepareStatement("UPDATE commands SET payload = '{}' WHERE json_extract(payload, '$.action.type') IN ($CHAT_WORDS)").use { it.executeUpdate() }
+                // The commands on record are a copy of what you said: their words go with what they went to.
+                KEPT_WORDS.filterKeys(of).values.forEach { kinds ->
+                    c.prepareStatement("UPDATE commands SET payload = '{}' WHERE json_extract(payload, '$.action.type') IN ($kinds)").use { it.executeUpdate() }
+                }
             }
         }
     }
 
     /** Nothing to do: `store_history` is trimmed by its own rule ([trimHistory]). */
     override fun letGoOfOldShapes(before: Long, of: (String) -> Boolean) = Unit
+
+    /** The commands on record from before [before] let go: they're kept to answer a repeat, and what they hold is in the stores by then. */
+    fun trimCommands(before: Long) {
+        db.transaction { c ->
+            c.prepareStatement("DELETE FROM commands WHERE received_at < ?").use { q ->
+                q.setLong(1, before)
+                q.executeUpdate()
+            }
+        }
+    }
 
     /** The history older than [before] let go, but each store's newest [keep] rows. */
     fun trimHistory(before: Long, keep: Int = HISTORY_KEPT) {
@@ -174,10 +186,8 @@ class SqliteBackend(private val db: Database, private val clock: () -> Long = Sy
         /** What [Database.writing] calls a change to no one store. */
         private const val COPIES = ""
 
-        private const val CHAT = "chat.json"
-
-        /** The commands that hold the chat's words. */
-        private const val CHAT_WORDS = "'SendMessage', 'ReplyFromNotification', 'RateMessage'"
+        /** The commands that hold your words, by the store they went to. */
+        private val KEPT_WORDS = mapOf("chat.json" to "'SendMessage', 'ReplyFromNotification', 'RateMessage'", "log.json" to "'RecordCheckIn'")
 
         /** The rows of a store's history kept however old they are. */
         const val HISTORY_KEPT = 20

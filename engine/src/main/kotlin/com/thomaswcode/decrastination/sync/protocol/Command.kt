@@ -43,6 +43,8 @@ data class Outcome(
     val revision: Long = 0,
     /** What takes it back, where that needs what only its owner knows ([Action.undoing]): a client can't make it itself. */
     val undo: Action? = null,
+    /** What's said of it, where its owner's words are the answer ([Action.said]), which went through or not. */
+    val said: String? = null,
 ) {
     companion object {
         const val APPLIED = "applied"
@@ -69,6 +71,9 @@ sealed interface Action {
 
     /** What takes this back, by the [answer] its owner gave, or null: for a client that hears only the [Outcome]. */
     fun undoing(answer: Any?): Action? = null
+
+    /** What's said of this, where the [answer] its owner gave is words, or null: for a client that hears only the [Outcome]. */
+    fun said(answer: Any?): String? = null
 }
 
 /** An action's answer, typed, for the screen that asked it. */

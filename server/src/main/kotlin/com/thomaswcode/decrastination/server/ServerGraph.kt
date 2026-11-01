@@ -401,7 +401,11 @@ class ServerGraph(
     }
 
     /** The history let go of as its rule says: older than [SqliteBackend.HISTORY_MS], but each store's last few. */
-    fun tidy() = backend.trimHistory(clock.now() - SqliteBackend.HISTORY_MS)
+    fun tidy() {
+        val before = clock.now() - SqliteBackend.HISTORY_MS
+        backend.trimHistory(before)
+        backend.trimCommands(before)
+    }
 
     /** [date] as the Day shows it, today's if none's given. */
     fun day(date: LocalDate?): DayView {

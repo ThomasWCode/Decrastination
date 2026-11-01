@@ -199,11 +199,13 @@ class Learning(
     }
 
     /**
-     * [change], one of [review]'s, put back (LR-01): its setting to its value before, as a change of
-     * yours (once armed, one that loosens waits as yours do), while it's still what the review left.
-     * What happened, in words.
+     * The change to [setting] of the review made at [reviewAt] put back (LR-01): its setting to its value before, as a change of
+     * yours (once armed, one that loosens waits as yours do), while it's still what the review left. The review's
+     * read here, not sent: what it was before is the log's to say. What happened, in words.
      */
-    suspend fun undoReviewChange(review: WeeklyReview, change: ReviewInput.Change): String {
+    suspend fun undoReviewChange(reviewAt: Long, setting: String): String {
+        val review = log.value.reviews.firstOrNull { it.at == reviewAt } ?: return "That review has gone."
+        val change = review.changes.firstOrNull { it.setting == setting } ?: return "That review didn't change it."
         val before = review.settingsBefore[change.setting] ?: return "What it was before isn't known."
         if (ReviewInput.valueOf(settings.value, change.setting) != change.value) return "It's been changed since: left as it is."
         // One end of a school day's hours back alone can meet the other: then it can't be.
@@ -214,9 +216,9 @@ class Learning(
         return if (now == before) "$label is back to ${ReviewInput.valueText(change.setting, before)}." else "$label back to ${ReviewInput.valueText(change.setting, before)} waits, as a change that loosens does once armed."
     }
 
-    /** [review]'s tidy of what's remembered undone (LR-01): its facts as they were, while they're still as it left them. What happened, in words. */
-    suspend fun undoTidy(review: WeeklyReview): String {
-        val tidy = review.memoryTidy ?: return "That review tidied nothing."
+    /** The tidy of what's remembered by the review made at [reviewAt] undone (LR-01): its facts as they were, while they're still as it left them. What happened, in words. */
+    suspend fun undoTidy(reviewAt: Long): String {
+        val tidy = log.value.reviews.firstOrNull { it.at == reviewAt }?.memoryTidy ?: return "That review tidied nothing."
         var done = false
         memory.update { state -> if (state.facts == tidy.after) state.copy(facts = tidy.before).also { done = true } else state }
         return if (done) "What's remembered is back as it was before the tidy." else "What's remembered has changed since: left as it is."
@@ -252,13 +254,17 @@ class Learning(
     /**
      * [checkIn], the week's (from Felix's five questions in the chat, or the check-in's form), kept once a
      * week: one for a week that has its check-in already (a second tap, another screen) is let go. Whether
-     * it was kept.
+     * it was kept. Trimmed at [now], never past this moment: what's older than the log keeps would go for good.
      */
     suspend fun recordCheckIn(checkIn: CheckIn, now: Long = clock.now()): Boolean {
+        val at = minOf(now, clock.now())
         var added = false
-        log.update { l -> withCheckIn(l, checkIn, now)?.also { added = true } ?: l }
+        log.update { l -> withCheckIn(l, checkIn, at)?.also { added = true } ?: l }
         return added
     }
+
+    /** Whether what's been learned about [key] can be forgotten: it's shown with its Forget. */
+    fun canForget(key: String): Boolean = Stats.calibrationRows(learning.value.calibration).any { it.forget == key }
 
     /** Records [answer] (and [note]) on the completion of [taskId] done at [doneAt] (0: its latest, for older questions). */
     suspend fun recordAssessment(taskId: String, doneAt: Long, answer: String, note: String? = null) {
