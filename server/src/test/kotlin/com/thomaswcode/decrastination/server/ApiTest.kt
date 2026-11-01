@@ -556,6 +556,25 @@ class ApiTest {
     }
 
     @Test
+    fun `with the box's keys a browser's taken, but not while mirroring, nor at an address that isn't a push service's`() = testApplication {
+        val keyedDb = Database(":memory:")
+        val keyed = ServerGraph(keyedDb, Files.createTempDirectory("keyed").toFile(), Plain, "test", pushSender = Pushes.Sender { _, _ -> true }, pushKey = "made-up")
+        application { api(Web(keyed, github, Sessions(keyedDb, ALLOWED), secure = false)) }
+        val cookie = signIn()
+        suspend fun asks(endpoint: String) = plain().post("/api/push/subscription") {
+            header(HttpHeaders.Cookie, cookie)
+            header("X-Requested-With", "test")
+            contentType(ContentType.Application.Json)
+            setBody("""{"endpoint":"$endpoint","p256dh":"made-up","auth":"made-up","channels":["felix"]}""")
+        }
+        assertEquals(HttpStatusCode.Conflict, asks("https://push.example.com/a").status)
+        keyed.commandsForATest()
+        assertEquals(HttpStatusCode.BadRequest, asks("http://push.example.com/a").status)
+        assertEquals(HttpStatusCode.NoContent, asks("https://push.example.com/a").status)
+        assertEquals(setOf("felix"), keyed.pushes.channels("https://push.example.com/a"))
+    }
+
+    @Test
     fun `Backup and Setup are a client's`() = server {
         val cookie = signIn()
         for (path in listOf("/api/views/backup", "/api/views/setup")) {

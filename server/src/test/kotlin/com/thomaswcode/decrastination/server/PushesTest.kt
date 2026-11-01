@@ -6,6 +6,7 @@ import com.thomaswcode.decrastination.core.OwnTask
 import com.thomaswcode.decrastination.core.SlotKind
 import com.thomaswcode.decrastination.data.PieceTimer
 import com.thomaswcode.decrastination.data.SecretCipher
+import com.thomaswcode.decrastination.felix.Outbox
 import com.thomaswcode.decrastination.sync.protocol.Command
 import com.thomaswcode.decrastination.sync.protocol.CommandBatch
 import com.thomaswcode.decrastination.sync.protocol.SaveOwnTask
@@ -142,6 +143,24 @@ class PushesTest {
         assertEquals(Pushes.FELIX, told.tag)
     }
 
+    private fun notice(alert: Boolean, vararg lines: Outbox.Notice.Line) = Outbox.Notice("Felix", lines.toList(), "m", emptyList(), "m", alert)
+
+    @Test
+    fun `his notification made again says nothing new, and goes nowhere`() = runBlocking<Unit> {
+        asks(laptop, Pushes.FELIX)
+        graph.owners.ports.show(notice(alert = false, Outbox.Notice.Line("m", "A made-up word", 1L, yours = false)))
+        delay(100)
+        assertTrue(service.taken.isEmpty())
+    }
+
+    @Test
+    fun `what's told is his newest, not a reply of yours under it`() = runBlocking<Unit> {
+        asks(laptop, Pushes.FELIX)
+        graph.owners.ports.show(notice(alert = true, Outbox.Notice.Line("m", "His word", 1L, yours = false), Outbox.Notice.Line("y", "Your reply", 2L, yours = true)))
+        waitFor(1)
+        assertEquals("His word", message(service.taken.single().second).body)
+    }
+
     private fun timer(now: Long, overMs: Long) = PieceTimer("own:s#-1#1", "own:s", null, null, "Made-up essay", 30, now - 30 * 60_000L - overMs)
 
     @Test
@@ -172,6 +191,24 @@ class PushesTest {
         graph.pushDue()
         delay(100)
         assertTrue(service.taken.isEmpty())
+    }
+
+    @Test
+    fun `the jobs look each minute`() = runBlocking<Unit> {
+        asks(laptop, Pushes.TIMER)
+        val now = System.currentTimeMillis()
+        graph.stores.session.update { it.copy(timer = timer(now, 30_000L)) }
+        db.setMeta("pushed", (now - 60_000L).toString())
+        graph.jobs.tick()
+        waitFor(1)
+    }
+
+    @Test
+    fun `with no keys there's no looking`() {
+        val keyless = Database(File(dir, "keyless.db").path).apply { setMeta("mode", ServerGraph.COMMANDS) }
+        ServerGraph(keyless, File(dir, "keyless").apply { mkdirs() }, Plain, "test").pushDue()
+        assertNull(keyless.meta("pushed"))
+        keyless.close()
     }
 
     @Test
