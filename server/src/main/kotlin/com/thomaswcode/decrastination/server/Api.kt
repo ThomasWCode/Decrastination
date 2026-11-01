@@ -80,6 +80,10 @@ private data class Me(val signedIn: Boolean)
 @Serializable
 private data class StoreOut(val name: String, val version: Int, val revision: Long, val json: JsonElement)
 
+/** The parent code's secret from the phone, or none: it's been taken away. */
+@Serializable
+private data class ParentCode(val secret: String? = null)
+
 /** Which credentials the server holds, by name: never a value. */
 @Serializable
 private data class Credentials(val held: Set<String>)
@@ -288,6 +292,13 @@ private fun Route.signedInRoutes(web: Web) {
         call.respond(graph.day(date))
     }
     get("/views/work") { call.respond(graph.work()) }
+    get("/views/settings") { call.respond(graph.settings()) }
+    post("/parent-code") {
+        // The phone's, as it's the phone that makes it: never set from the website, or the code would prove nothing.
+        if (call.client !is Client.Phone) return@post call.respond(HttpStatusCode.Forbidden, Problem("The parent code is set on the phone"))
+        graph.setParentCode(call.receive<ParentCode>().secret)
+        call.respond(HttpStatusCode.NoContent)
+    }
     get("/views/task/{id}") {
         val view = graph.task(call.parameters["id"].orEmpty()) ?: return@get call.respond(HttpStatusCode.NotFound, Problem("That task isn't here"))
         call.respond(view)

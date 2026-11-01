@@ -15,6 +15,7 @@ import com.thomaswcode.decrastination.data.Secret
 import com.thomaswcode.decrastination.data.SecretCipher
 import com.thomaswcode.decrastination.data.SecretStore
 import com.thomaswcode.decrastination.data.Stores
+import com.thomaswcode.decrastination.enrich.AiUsage
 import com.thomaswcode.decrastination.enrich.KeyProblem
 import com.thomaswcode.decrastination.enrich.ModelGateway
 import com.thomaswcode.decrastination.learn.Daily
@@ -39,6 +40,8 @@ import com.thomaswcode.decrastination.ui.TaskSheetModel
 import com.thomaswcode.decrastination.views.Asked
 import com.thomaswcode.decrastination.views.DayView
 import com.thomaswcode.decrastination.views.DayViews
+import com.thomaswcode.decrastination.views.SettingsView
+import com.thomaswcode.decrastination.views.SettingsViews
 import com.thomaswcode.decrastination.views.TaskAsk
 import com.thomaswcode.decrastination.views.TaskAsks
 import com.thomaswcode.decrastination.views.TaskView
@@ -386,6 +389,20 @@ class ServerGraph(
     }
 
     fun work(): WorkView = WorkViews.of(stores.tasks.value, planning.plan(), stores.settings.value, clock.now(), clock.zone(), devices.lastSeen(), writable = mode == COMMANDS)
+
+    /** Settings as the website draws them. */
+    fun settings(): SettingsView {
+        val now = clock.now()
+        val zone = clock.zone()
+        val usage = stores.model.value.aiUsage.forMonth(AiUsage.monthOf(now, zone))
+        return SettingsViews.of(
+            owners.protection.asked, owners.protection.pending, stores.tasks.value, stores.school.value, stores.memory.value, usage,
+            credentials(), stores.secrets.has(Secret.TotpSecret), now, zone, writable = mode == COMMANDS,
+        )
+    }
+
+    /** The parent code's secret, as the phone sends it or takes it away (W-19): held here so a code typed on the website can be checked. */
+    suspend fun setParentCode(secret: String?) = stores.secrets.put(Secret.TotpSecret, secret?.takeIf { it.isNotBlank() })
 
     /** Task [id]'s sheet, if there's such a task. */
     fun task(id: String): TaskView? {

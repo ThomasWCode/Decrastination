@@ -27,3 +27,4 @@ node_modules/
 /web/test-results/
 /web/playwright-report/
 /web/e2e/.state.json
+/web/e2e/.state-writes.json
