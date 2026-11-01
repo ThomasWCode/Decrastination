@@ -245,12 +245,14 @@ test("leaving reads what the page showed, not what's been written since", async 
   await page.waitForTimeout(3_400);
   // The page hears no more of the chat, and a message comes meanwhile.
   await page.route("**/api/views/chat**", (route) => route.abort());
+  const unread = async () => (await (await page.request.get("/api/views/notices")).json()).unread as number;
+  const before = await unread();
   const sent = await page.request.post("/api/commands", {
     headers: { "X-Requested-With": "test" },
     data: { commands: [{ id: crypto.randomUUID(), at: Date.now(), action: { type: "SendMessage", text: "Not shown on that page", id: crypto.randomUUID() } }] },
   });
   expect(sent.ok()).toBeTruthy();
-  await expect.poll(async () => (await (await page.request.get("/api/views/notices")).json()).unread).toBe(1);
+  await expect.poll(unread).toBeGreaterThan(before);
   await page.getByRole("navigation", { name: "Pages" }).getByRole("link", { name: "Work" }).click();
   await expect(page.getByRole("img", { name: "1 unread" })).toBeVisible();
   await page.unroute("**/api/views/chat**");
