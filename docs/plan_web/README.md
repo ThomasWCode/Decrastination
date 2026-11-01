@@ -1,6 +1,6 @@
 # The website: Decrastination at decrastination.thomaswhite.me
 
-Planned 31 Oct 2026, from ten questions answered that day ([decisions.md](decisions.md)). Being built: stage 0 is done (4.12.0 to 4.13.0), stage 1 is 5.0.0; how each built part works now is in `docs/spec/` ([server.md](../spec/server.md), [website.md](../spec/website.md), [sync.md](../spec/sync.md)). The folder is the plan's record, as `docs/plan_v4/` was the 4.x plan's: this file is the outline, [architecture.md](architecture.md) the shape the code takes, [data-and-sync.md](data-and-sync.md) how the state moves and is kept, [hosting.md](hosting.md) where it runs and what that costs (with the evidence read for it), [stages.md](stages.md) the steps in order with their estimates, [decisions.md](decisions.md) the choices made and the questions they answered, and [inventory.md](inventory.md) what the phone app holds and does today and where each piece goes.
+Planned 31 Oct 2026, from ten questions answered that day ([decisions.md](decisions.md)). Built to 5.9.0: stages 0 to 7 and 9, dormant till the switch, the last release (D-141), with stage 8 waiting on a Firebase project; how each built part works now is in `docs/spec/` ([server.md](../spec/server.md), [website.md](../spec/website.md), [sync.md](../spec/sync.md)). The folder is the plan's record, as `docs/plan_v4/` was the 4.x plan's: this file is the outline, [architecture.md](architecture.md) the shape the code takes, [data-and-sync.md](data-and-sync.md) how the state moves and is kept, [hosting.md](hosting.md) where it runs and what that costs (with the evidence read for it), [stages.md](stages.md) the steps in order with their estimates, [decisions.md](decisions.md) the choices made and the questions they answered, and [inventory.md](inventory.md) what the phone app holds and does today and where each piece goes.
 
 ## Why
 
@@ -37,14 +37,15 @@ In the most technically feasible order (the owner's word on 31 Oct: the website 
 |---|---|---|
 | 0 | `:engine`: the app's Android-free code moved into a JVM module both the app and the server build | 4.12.x, cleanups; 4.13.0 the store split |
 | 1 | `:server` skeleton on the box: Ktor, SQLite, sign-in, device tokens, the image, Caddy, Litestream; the phone uploads its stores; the website shows the Day and the Work list read-only | 5.0.0 |
-| 2 | The command log: the phone sends commands, the server applies them through the owners, revisions flow back; the outbox and the offline rules | 5.1.0 |
-| 3 | The server's jobs: Power Planner and Gmail syncs, the readings, planning ahead, memory tidy, nightly backups; Claude's key and gateway move to the server; the phone calls Claude through it | 5.2.0 |
-| 4 | The website writes: the Work list, task sheet, own tasks, Done, Same?, instructions, Settings (protection's delays enforced by the server) | 5.3.0 |
-| 5 | Felix on the website: the chat as its home, replies, cards, ratings; Conversation, looks and reminders on the server | 5.4.0 |
-| 6 | The Day grid with drag, and the timer, on the website | 5.5.0 |
-| 7 | This week, Reviews, Stats, Backup and Reset, Setup on the website | 5.6.0 |
-| 8 | Optional: the phone told at once of the server's changes (Firebase Cloud Messaging) | 5.7.0 |
-| 9 | Optional: Web Push for Felix's messages, slot starts and the timer (W-9) | — |
+| 2 | The command log: the phone sends commands, the server applies them through the owners, revisions flow back; the outbox and the offline rules | 5.1.0, 5.2.0 |
+| 3 | The server's jobs: Power Planner and Gmail syncs, the readings, planning ahead, memory tidy, nightly backups; Claude's key and gateway on the server, in use from the switch | 5.3.0 |
+| 4 | The website writes: the Work list, task sheet, own tasks, Done, Same?, instructions, Settings (protection's delays enforced by the server) | 5.4.0 |
+| 5 | Felix on the website: the chat as its home, replies, cards, ratings; Conversation, looks and reminders on the server | 5.5.0 |
+| 6 | The Day grid with drag, and the timer, on the website | 5.6.0 |
+| 7 | This week, Reviews, Stats, Backup and Reset, Setup on the website | 5.7.0, 5.8.0 |
+| 8 | Optional: the phone told at once of the server's changes (Firebase Cloud Messaging) | not built: it needs a Firebase project |
+| 9 | Optional: Web Push for Felix's messages, slot starts and the timer (W-9) | 5.9.0 |
+| Last | The switch: the phone goes over to commands, and what's dormant wakes (D-141). It needs the box | to come |
 
 Estimated at 61 to 83 hours of sessions in all (66 to 90 with the two optional stages), from the durations measured in the 4.x releases (`stages.md` §Estimates), plus the owner's own time at the Oracle console, the DNS, the GitHub App and the phone.
 
@@ -55,14 +56,6 @@ Estimated at 61 to 83 hours of sessions in all (66 to 90 with the two optional s
 - The phone, with its network off, shows its plan and tasks, blocks, runs the timer, and takes a task added and a task finished; with the network back, both reach the website and the server's plan replaces the phone's.
 - A restore drill has been run: the box's database rebuilt from R2 on a clean machine and the server started from it, with the owner's state whole.
 - The server has run a month with no state lost, Claude's spend as before, and nothing paid for hosting.
-
-## Found on the way (not this plan's to fix)
-
-Noted by the inventory's read of the code against the docs, each for a docs PR of its own:
-
-- `README.md` says the app is at 4.9.6; `app/build.gradle.kts` has 4.10.0.
-- `docs/spec/storage-and-backups.md` says the backup format is 9 and `chat.json` is at version 12; `data/Backup.kt` has 10 and `core/Chat.kt` 13.
-- `docs/plan_v4/architecture.md`'s shape lists the calibration's maths under `:core`; `learn/Calibrator.kt` computes it in the app.
 
 ## After the plan
 

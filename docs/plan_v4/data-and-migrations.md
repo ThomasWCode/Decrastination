@@ -8,7 +8,7 @@ What's kept where, and how each change to stored data is made safely on a phone 
 |---|---|---|---|
 | `tasks.json` | the open tasks whole; finished ones as records, their text dropped a fortnight after they're finished; pairs told apart | Sync (Readings, Instructions and OwnTasks write their own parts) | at each sync, tick or reading |
 | `instructions.json` | your changes and Felix's, read into values laid on the tasks (`TaskItem.mine`), each with who set it | Instructions | at each change |
-| `settings.json` | the settings, a change still waiting among them | several, each its own fields | on a change |
+| `settings.json` | the settings, a change still waiting among them | Protection | on a change |
 | `runtime.json` | the daily runs, the last backup, Teams' auto-sync, the files found unreadable, the notifier's counts and held list | small owners | rarely |
 | `session.json` | credit, today's slots, slots being kept, photo checks under way, completions rewarded | Focus | every half minute |
 | `protection.json` | changes waiting, the override, the code's lock, the uptime mark | Protection | on a change |
@@ -25,7 +25,7 @@ What's kept where, and how each change to stored data is made safely on a phone 
 | `gmail-writes.json` | the Gmail writes journaled and not yet made, and the receipts of those made, kept while their Undo stands | Sync | at a finish, a try, an undo |
 | `log.json` | slots, completions, blocks, days, check-ins, reviews | Learning | at each slot and completion |
 | `learning.json` | the calibration | Learning | at the review |
-| `school.json` | the school calendar | Planning | rarely |
+| `school.json` | the school calendar | Instructions, and Conversation | rarely |
 
 Each is made in `data/Stores.kt` with its version and migrations; `Stores.all` says what a backup keeps of each and which resets change it, so a new store can't be left out of either.
 

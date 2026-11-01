@@ -18,27 +18,27 @@ The app's structure as the 4.x plan left it (4.3.2, D-107), and the conventions 
  │ Stores (every file, versions,        │   │ Planner, Slotter, Merge, Sittings, Rebalance │
  │   migrations)                        │   │ the instructions' fold, the chat's types and │
  │ ModelGateway (Claude)                │   │ acts, memory, notes, reminders, GmailFinish, │
- │ Notifier (ids, channels, policy)     │   │ the calibration's maths, the domain types    │
+ │ Notifier (ids, channels, policy)     │   │ the calibration's type, the domain types     │
  │ WallClock, ports to Android          │   │ (no Android, no services: the :core module)  │
  └──────────────────────────────────────┘   └─────────────────────────────────────────────┘
 
  AppGraph: makes the platform, then the services, and wires their flows. Nothing else.
 ```
 
-Three Gradle modules hold this: `:core` the pure rules and types; `:engine` every line of the app that needs nothing of Android, in the packages it had, what it needs of a platform a port (D-125); `:app` the screens and their state holders, the Android entry points, the device adapters and the ports' Android implementations, with `AppGraph`; no owner, prompt or migration (`ArchitectureTest`). So a package can be split across two modules, its Android-free part in `engine/src/main/kotlin` and the rest in `app/src/main/java`; the classes Android holds by name are in `:app`, under the names they always had.
+Four Gradle modules hold this: `:core` the pure rules and types; `:engine` every line of the app that needs nothing of Android, in the packages it had, what it needs of a platform a port (D-125); `:app` the screens and their state holders, the Android entry points, the device adapters and the ports' Android implementations, with `AppGraph`, and no owner, prompt or migration (`ArchitectureTest`); `:server` the website's server, which runs the same services from a graph of its own ([server.md](../spec/server.md)). So a package can be split across two modules, its Android-free part in `engine/src/main/kotlin` and the rest in `app/src/main/java`; the classes Android holds by name are in `:app`, under the names they always had.
 
 ## The rules
 
 1. **`core` stays pure**: no Android, no stores, no services. It's a module of its own (`:core`, `core/`), so the compiler holds it; a rule or a type that needs neither goes there, tested there. **`:engine` is free of Android** the same way: plain Kotlin, held by its build, which is why code in it can run on the server.
-2. **A store is written only by its named writers.** Each store belongs to one service, which calls `update` on it; others read its `StateFlow`, or call the service. Where several services each write their own part of one store (the tasks', the chat's, the log's, the half-minute state's), `ArchitectureTest` names each with what it writes, so no other can start to. `Stores.replace` is the one way round an owner, for a restore or a reset, called by the backup service and nothing else; the test names it. A single writer for every store isn't planned (D-107).
+2. **A store is written only by its named writers.** Each store belongs to one service, which calls `update` on it; others read its `StateFlow`, or call the service. Where several services each write their own part of one store (the tasks', the chat's, the log's, the half-minute state's), `ArchitectureTest` names each with what it writes, so no other can start to. `Stores.replace` is one way round an owner, for a restore or a reset, called by the backup service and nothing else, and `adopt` the other, for what a pull from the server brings, called by `sync/Replica`; the test names both. A single writer for every store isn't planned (D-107).
 3. **Services are built like `Focus`**: stores, the clock and small interfaces for Android's effects (notifications, the calendar provider, work, alarms, content resolvers) in the constructor. `AppGraph` passes the real ones; tests pass fakes and stores on temporary files.
-4. **Screens call services.** A composable may read flows and call a service's function; it never calls `update` on a store. The largest screens (the chat, Settings, the task sheet) have a state holder, a plain class tested without Compose (`ChatScreenState`, `SettingsScreenState`, `TaskSheetState`); the composables only draw.
+4. **Screens act through commands.** A composable may read flows; a change it makes is an action handed to `graph.act` (D-140), never a call on an owner, and it never calls `update` on a store. The largest screens (the chat, Settings, the task sheet) have a state holder, a plain class tested without Compose (`ChatScreenState`, `SettingsScreenState`, `TaskSheetState`); the composables only draw.
 5. **No cycles.** A service may call another's functions (the Conversation acts on instructions, your own tasks and the focus); none calls back into one that called it. Where two need each other, the later one takes a callback, as `Focus` takes `onOwnTaskDone` and the Conversation takes `requestSync`.
 6. **`ArchitectureTest`** holds the rules that can be checked by reading the code: only the notifier posts; only the gateway builds a Claude client; `core` imports nothing of Android or the services (held by the module's build too); nothing but a store's named writers calls its `update`, and no screen calls one.
 
 ## `AppGraph`
 
-Makes the stores (through `Stores`), the gateway, the notifier and the services; wires the flows that join them (a new plan's hooks: slot alarms, the reminders' alarm, the calendar, the widget, writing ahead; the instructions' values laid when tasks or instructions change); `get(context)`. Its members are the services (`graph.conversation`, `graph.planning`, `graph.sync`, `graph.instructions`, `graph.ownTasks`, …), not functions of its own. 537 lines at 4.3.2, accepted as wiring whatever its length (D-107).
+Makes the stores (through `Stores`), the gateway, the notifier and the services; wires the flows that join them (a new plan's hooks: slot alarms, the reminders' alarm, the calendar, the widget, writing ahead; the instructions' values laid when tasks or instructions change); `get(context)`. Its members are the services (`graph.conversation`, `graph.planning`, `graph.sync`, `graph.instructions`, `graph.ownTasks`, …), and `act`, which every screen's change goes through, not functions of its own. 537 lines at 4.3.2, accepted as wiring whatever its length (D-107).
 
 ## The services
 
@@ -63,7 +63,7 @@ Each service is a class in the package that holds its concern; `Slots`, `AnkiWat
 
 ### `Stores`
 
-Every store is made in one place, `data/Stores.kt`, with its file name, its schema version and its migrations ([data-and-migrations.md](data-and-migrations.md)). It reports the files that couldn't be read whole (`Stores.problems`), says of each store what a backup keeps of it and which resets change it (`Stores.all`), and has the one way round a store's owner, `Stores.replace`, which the backup service alone calls; `AppGraph` hands each service its stores from it. So a new store can't be left out of a backup or a reset. The chat's archive is the one store that isn't a single file: `ChatArchiveStore`, made in `Stores` as the others are, makes its own `JsonStore` a month as each is first wanted; a backup holds them as one `chat-archive.json` part.
+Every store is made in one place, `data/Stores.kt`, with its file name, its schema version and its migrations ([data-and-migrations.md](data-and-migrations.md)). It reports the files that couldn't be read whole (`Stores.problems`), says of each store what a backup keeps of it and which resets change it (`Stores.all`), and has `Stores.replace`, a way round a store's owner which the backup service alone calls; `AppGraph` hands each service its stores from it. So a new store can't be left out of a backup or a reset. The chat's archive is the one store that isn't a single file: `ChatArchiveStore`, made in `Stores` as the others are, makes its own `JsonStore` a month as each is first wanted; a backup holds them as one `chat-archive.json` part.
 
 ### `ModelGateway`
 
@@ -142,11 +142,12 @@ A cleanup PR claims to keep behaviour, and shows it four ways: every test passes
 | Where | What |
 |---|---|
 | `README.md` | what the app is, how to build and install it, where everything else is |
-| `docs/spec/` | how the app works now, one area a file: `sources.md`, `readings.md`, `planner.md`, `slots-and-calendar.md`, `day.md`, `blocking-and-protection.md`, `felix.md` (with `felix-inputs.md`, everything Felix is sent, written by a test), `learning.md`, `storage-and-backups.md`, `privacy.md`; and `requirement-ids.md`, what each id the code cites asks of the app |
+| `docs/spec/` | how the app works now, one area a file: `sources.md`, `readings.md`, `planner.md`, `slots-and-calendar.md`, `day.md`, `blocking-and-protection.md`, `felix.md` (with `felix-inputs.md`, everything Felix is sent, written by a test), `learning.md`, `storage-and-backups.md`, `privacy.md`, `sync.md`, `server.md`, `website.md`; and `requirement-ids.md`, what each id the code cites asks of the app |
 | `docs/decisions.md` | your decisions, numbered (D-1…), dated, each with what it means for the code and where it applies; and what's still open for you |
 | `docs/development.md` | how changes are made, reviewed, checked on the phone and shipped; the public repository's rules |
 | `docs/plan_v4/` | the 4.x plan's record: this file, the plan's README, the stores and migrations, the questions answered |
-| `docs/astra-review-4.3.13/` | the review of 4.3.13 and what became of each finding |
+| `docs/plan_web/` | the website's plan, built but for the switch |
+| `docs/astra-review-4.3.13/`, `docs/astra-review-29-10-26/` | the reviews of 4.3.13 and 4.9.1, and what became of each finding |
 
 Nothing else: the old plans, reviews, findings and per-release notes were deleted once their decisions and still-true facts had moved, and there's no change log or history folder; git's tags and the PR descriptions hold what changed when.
 

@@ -72,7 +72,7 @@ Apps with access to all files (a file manager, a sync app) can read it, and so c
 ## Secrets
 
 `data/SecretStore.kt` keeps the credentials and keys (`Secret`) in `secrets.bin`, encrypted with AES-256-GCM under a key that never leaves the Android Keystore (`KeystoreCipher`).
-- It holds the Power Planner login and its session, the Gmail address and app password, Claude's API key, and the parent code's authenticator secret.
+- It holds the Power Planner login and its session, the Gmail address and app password, Claude's API key, the parent code's authenticator secret, and, paired, the website's device token.
 - Values are never logged, shown or exported: screens and the `state` command show only which are set, and backups never hold them.
 - They're typed into Setup, or loaded from the PC's user environment by `scripts/load_credentials.py` through a file the app imports and deletes (`import-credentials`).
 - The authenticator secret is shown once, as a QR code, at arming.
