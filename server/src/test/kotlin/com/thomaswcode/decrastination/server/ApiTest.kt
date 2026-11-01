@@ -2,6 +2,7 @@ package com.thomaswcode.decrastination.server
 
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.core.ChatMessage
+import com.thomaswcode.decrastination.core.OwnTask
 import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.data.Backups
 import com.thomaswcode.decrastination.data.JsonStore
@@ -14,6 +15,9 @@ import com.thomaswcode.decrastination.sync.SeedAnswer
 import com.thomaswcode.decrastination.sync.SeedBatch
 import com.thomaswcode.decrastination.sync.ServerVersion
 import com.thomaswcode.decrastination.sync.StoreText
+import com.thomaswcode.decrastination.sync.protocol.Command
+import com.thomaswcode.decrastination.sync.protocol.CommandBatch
+import com.thomaswcode.decrastination.sync.protocol.SaveOwnTask
 import com.thomaswcode.decrastination.views.DayView
 import com.thomaswcode.decrastination.views.SettingsView
 import com.thomaswcode.decrastination.views.TaskView
@@ -246,6 +250,35 @@ class ApiTest {
         val cookie = signIn()
         plain().post("/api/auth/logout") { header(HttpHeaders.Cookie, cookie); header("X-Requested-With", "test") }
         assertEquals(HttpStatusCode.Unauthorized, plain().get("/api/views/work") { header(HttpHeaders.Cookie, cookie) }.status)
+    }
+
+    @Test
+    fun `a session's cookie lasts a month from its last use, as the session does, and a refused request changes nothing`() = server {
+        val cookie = signIn()
+        val again = plain().get("/api/views/work") { header(HttpHeaders.Cookie, cookie) }.setCookie().single { it.name == "session" }
+        assertEquals(cookie, "session=" + again.value)
+        assertEquals((Sessions.LIFE_MS / 1000).toInt(), again.maxAge)
+        assertTrue(plain().get("/api/views/work").setCookie().none { it.name == "session" })
+        assertTrue(plain().post("/api/devices/pair") { header(HttpHeaders.Cookie, cookie) }.setCookie().none { it.name == "session" }, "what's refused isn't its use")
+        assertTrue(plain().get("/api/views/work") { header(HttpHeaders.Cookie, "session=not-a-session") }.setCookie().none { it.name == "session" })
+    }
+
+    @Test
+    fun `a fault of the box answers a 500, with nothing said of the command, and sent again it lands`() = server {
+        val cookie = signIn()
+        graph.commandsForATest()
+        val batch = CommandBatch(listOf(Command("one", 1L, SaveOwnTask("s-Essay", OwnTask(title = "Essay")))))
+        suspend fun sent() = plain().post("/api/commands") {
+            header(HttpHeaders.Cookie, cookie)
+            header("X-Requested-With", "test")
+            contentType(ContentType.Application.Json)
+            setBody(json.encodeToString(CommandBatch.serializer(), batch))
+        }
+        db.transaction { c -> c.createStatement().use { it.execute("ALTER TABLE store_history RENAME TO store_history_gone") } }
+        assertEquals(HttpStatusCode.InternalServerError, sent().status)
+        db.transaction { c -> c.createStatement().use { it.execute("ALTER TABLE store_history_gone RENAME TO store_history") } }
+        assertEquals(HttpStatusCode.OK, sent().status)
+        assertEquals(listOf("Essay"), graph.stores.tasks.value.tasks.map { it.title })
     }
 
     @Test
@@ -572,6 +605,8 @@ class ApiTest {
         assertEquals(HttpStatusCode.BadRequest, asks("https://push.example.com/a").status)
         assertEquals(HttpStatusCode.NoContent, asks("https://fcm.googleapis.com/a").status)
         assertEquals(setOf("felix"), keyed.pushes.channels("https://fcm.googleapis.com/a"))
+        plain().post("/api/auth/logout") { header(HttpHeaders.Cookie, cookie); header("X-Requested-With", "test") }
+        assertEquals(emptySet(), keyed.pushes.channels("https://fcm.googleapis.com/a"), "it goes with the session that asked")
     }
 
     @Test

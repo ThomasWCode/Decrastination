@@ -60,6 +60,9 @@ class Database(path: String) : AutoCloseable {
             s.execute("PRAGMA busy_timeout=5000")
             s.execute("PRAGMA foreign_keys=ON")
             SCHEMA.forEach(s::execute)
+            // Added, as a table from before hasn't got it: what a browser's told goes with the session that asked ([Pushes]).
+            val columns = s.executeQuery("PRAGMA table_info(push_subscriptions)").use { r -> buildList { while (r.next()) add(r.getString("name")) } }
+            if ("session" !in columns) s.execute("ALTER TABLE push_subscriptions ADD COLUMN session TEXT REFERENCES sessions(id) ON DELETE CASCADE")
         }
         connection.autoCommit = true
         if (reader !== connection) {

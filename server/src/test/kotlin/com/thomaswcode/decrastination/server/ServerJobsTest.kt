@@ -19,13 +19,18 @@ import com.thomaswcode.decrastination.data.Backups
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.Secret
 import com.thomaswcode.decrastination.data.SecretCipher
+import com.thomaswcode.decrastination.net.Http
+import com.thomaswcode.decrastination.net.HttpResponse
 import com.thomaswcode.decrastination.sync.protocol.Command
 import com.thomaswcode.decrastination.sync.protocol.CommandBatch
 import com.thomaswcode.decrastination.sync.protocol.SaveOwnTask
 import java.io.File
 import java.nio.file.Files
+import java.sql.DriverManager
+import java.sql.SQLException
 import java.time.Instant
 import java.time.LocalDate
+import java.util.Collections
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
@@ -65,6 +70,40 @@ class ServerJobsTest {
     }
 
     private fun jobs(vararg jobs: ServerJob, running: Boolean = true) = ServerJobs(db, clock, { running }, jobs.toList())
+
+    /** [block] with another connection holding the write lock: writes here are told the database is busy, at once. */
+    private inline fun <T> whileLocked(block: () -> T): T {
+        db.transactionless { c -> c.createStatement().use { it.execute("PRAGMA busy_timeout=20") } }
+        return DriverManager.getConnection("jdbc:sqlite:${File(dir, "test.db").path}").use { lock ->
+            lock.createStatement().use { it.execute("BEGIN IMMEDIATE") }
+            block().also { lock.createStatement().use { it.execute("ROLLBACK") } }
+        }
+    }
+
+    @Test
+    fun `the heartbeat goes only from a box that can still write, as one that can't still answers its health check`() {
+        val beats = mutableListOf<String>()
+        val graph = ServerGraph(db, dir, Plain, "test", heartbeatUrl = "https://beat.example/made-up", http = Http { url, _, _ -> beats += url; HttpResponse(200, "") })
+        graph.heartbeat()
+        assertEquals(listOf("https://beat.example/made-up"), beats)
+        whileLocked { assertFailsWith<SQLException> { graph.heartbeat() } }
+        assertEquals(1, beats.size, "so the check notices")
+        graph.heartbeat()
+        assertEquals(2, beats.size, "and it's back as that passes")
+    }
+
+    @Test
+    fun `the minute's job is that heartbeat`() = runBlocking {
+        db.setMeta("mode", ServerGraph.COMMANDS)
+        val url = "https://beat.example/made-up"
+        val asked = Collections.synchronizedList(mutableListOf<String>())
+        val graph = ServerGraph(db, dir, Plain, "test", heartbeatUrl = url, http = Http { to, _, _ -> asked += to; HttpResponse(200, "") })
+        graph.jobs.tick()
+        assertEquals(1, asked.count { it == url })
+        db.transaction { c -> c.createStatement().use { it.execute("DELETE FROM meta WHERE key = 'job:heartbeat'") } }
+        whileLocked { graph.jobs.tick() }
+        assertEquals(1, asked.count { it == url })
+    }
 
     @Test
     fun `in mirror mode nothing runs`() = runBlocking {

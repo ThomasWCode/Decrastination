@@ -34,6 +34,7 @@ import com.thomaswcode.decrastination.tasks.TasksHarness
 import java.io.File
 import java.io.IOException
 import java.nio.file.Files
+import java.sql.SQLException
 import java.time.ZoneId
 import kotlin.test.AfterTest
 import kotlin.test.Test
@@ -71,6 +72,13 @@ class SyncHarnessTest {
         var losesAnswers = 0
         var seeds = 0
 
+        /** What the server's routes answer a request that throws. */
+        private fun failing(request: () -> HttpResponse): HttpResponse = try {
+            request()
+        } catch (failed: SQLException) {
+            HttpResponse(500, "{}")
+        }
+
         /** What happens on the phone while its pull is on its way, once. */
         var duringPull: (() -> Unit)? = null
 
@@ -85,12 +93,14 @@ class SyncHarnessTest {
             headers[Protocol.ZONE_HEADER]?.let(graph.serverClock::setZone)
             if (graph.mode != ServerGraph.COMMANDS) return HttpResponse(409, "{}")
             val batch = json.decodeFromString(CommandBatch.serializer(), body)
-            val outcomes = runBlocking { graph.applier.apply(batch, device) }
-            if (losesAnswers > 0) {
-                losesAnswers--
-                throw IOException("lost")
+            return failing {
+                val outcomes = runBlocking { graph.applier.apply(batch, device) }
+                if (losesAnswers > 0) {
+                    losesAnswers--
+                    throw IOException("lost")
+                }
+                HttpResponse(200, json.encodeToString(ListSerializer(Outcome.serializer()), outcomes))
             }
-            return HttpResponse(200, json.encodeToString(ListSerializer(Outcome.serializer()), outcomes))
         }
 
         override fun get(url: String, headers: Map<String, String>): HttpResponse {
@@ -240,6 +250,27 @@ class SyncHarnessTest {
         assertTrue(line.startsWith("Finish own task, ") && line.endsWith(": That task had gone"), line)
         two.replica.clearDropped()
         assertEquals(emptyList(), two.h.stores.sync.value.dropped)
+    }
+
+    @Test
+    fun `a fault on the server loses nothing, the phone's change waiting, none said to be dropped, till it lands once that's past`() = runBlocking {
+        val phone = phone()
+        phone.h.commands.act(own("Essay"))
+        assertTrue(phone.replica.upload())
+        phone.h.commands.act(own("Maths"))
+        // A store can't be written, and the command log can: given up on, it'd go on record, and the phone would let it go.
+        db.transaction { c -> c.createStatement().use { it.execute("ALTER TABLE store_history RENAME TO store_history_gone") } }
+        assertFalse(phone.replica.upload())
+        db.transaction { c -> c.createStatement().use { it.execute("ALTER TABLE store_history_gone RENAME TO store_history") } }
+        assertEquals(1, phone.waiting)
+        assertEquals(emptyList(), phone.h.stores.sync.value.dropped)
+        assertEquals("The server said no (500)", phone.h.stores.sync.value.lastError)
+        assertEquals(setOf("Essay", "Maths"), phone.titles, "and what it did here stands")
+        assertTrue(phone.replica.upload())
+        assertEquals(0, phone.waiting)
+        assertEquals(setOf("Essay", "Maths"), serverTitles)
+        assertEquals(setOf("Essay", "Maths"), phone.titles)
+        assertEquals(null, phone.h.stores.sync.value.lastError)
     }
 
     @Test

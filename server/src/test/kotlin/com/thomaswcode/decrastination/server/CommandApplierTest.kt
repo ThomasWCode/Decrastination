@@ -30,11 +30,16 @@ import com.thomaswcode.decrastination.sync.protocol.StopTimer
 import com.thomaswcode.decrastination.sync.protocol.UndoTidy
 import com.thomaswcode.decrastination.sync.protocol.UseParentCode
 import java.io.File
+import java.io.IOException
 import java.nio.file.Files
+import java.sql.Connection
+import java.sql.DriverManager
+import java.sql.SQLException
 import java.util.concurrent.Executors
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -51,6 +56,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonPrimitive
+import org.sqlite.SQLiteErrorCode
+import org.sqlite.SQLiteException
 
 /** Commands on the server (docs/spec/server.md): each through its owner, all of it or none of it, once however often it's sent. */
 class CommandApplierTest {
@@ -400,6 +407,100 @@ class CommandApplierTest {
         assertEquals(1L, db.currentRevision())
         assertEquals(Outcome.APPLIED, send(Command("three", at, own("Maths"))).state)
         assertEquals(setOf("Essay", "Maths"), graph.stores.tasks.value.tasks.map { it.title }.toSet())
+    }
+
+    /** Another connection holding the write lock, as a checkpoint can: writes here are told the database is busy, at once. */
+    private fun locked(): Connection {
+        db.transactionless { c -> c.createStatement().use { it.execute("PRAGMA busy_timeout=20") } }
+        return DriverManager.getConnection("jdbc:sqlite:${File(dir, "test.db").path}").apply { createStatement().use { it.execute("BEGIN IMMEDIATE") } }
+    }
+
+    /** The lock let go, as a brief fault passes. */
+    private fun Connection.letGo() {
+        createStatement().use { it.execute("ROLLBACK") }
+        close()
+    }
+
+    /**
+     * An applier on which the fault in [lock] passes as a failed command's put right: a brief one, gone by the moment it could be
+     * given up on. While one lasts, nothing could go on record anyway.
+     */
+    private fun passing(lock: () -> Connection?) = CommandApplier(db, graph.backend, Commands(graph.owners, graph.clock), graph.owners, graph.clock, reload = {
+        lock()?.letGo()
+        graph.stores.tasks.reload()
+    }) {}
+
+    private fun rowsOf(state: String) = db.read { c ->
+        c.prepareStatement("SELECT COUNT(*) FROM commands WHERE outcome = ?").use { q ->
+            q.setString(1, state)
+            q.executeQuery().use { it.next(); it.getInt(1) }
+        }
+    }
+
+    @Test
+    fun `a fault of the box leaves a command to go again, nothing of it on record, and its retry is applied`() = runBlocking {
+        val command = Command("one", at, own("Essay"))
+        var lock: Connection? = locked()
+        val applier = passing { lock.also { lock = null } }
+        assertFailsWith<SQLException> { applier.apply(CommandBatch(listOf(command)), "phone") }
+        assertEquals(0, rows(), "so it can't be answered as gone")
+        assertTrue(graph.stores.tasks.value.tasks.isEmpty(), "and nothing of it's left in memory")
+        assertEquals(Outcome.APPLIED, send(command).state)
+        assertEquals(listOf("Essay"), graph.stores.tasks.value.tasks.map { it.title })
+        assertEquals(1, rowsOf(Outcome.APPLIED))
+    }
+
+    @Test
+    fun `a batch stops at a fault, and sent again goes in order, what went through answering as it did`() = runBlocking {
+        val batch = CommandBatch(listOf(Command("one", at, own("Essay")), Command("two", at, FinishOwnTask("own:s-Essay")), Command("three", at, own("Maths"))))
+        var lock: Connection? = null
+        var taken = false
+        // The lock taken as the first has gone through.
+        val applier = CommandApplier(db, graph.backend, Commands(graph.owners, graph.clock), graph.owners, graph.clock, reload = {
+            lock?.letGo()
+            lock = null
+            graph.stores.tasks.reload()
+        }) {
+            if (!taken) lock = locked()
+            taken = true
+        }
+        assertFailsWith<SQLException> { applier.apply(batch, "phone") }
+        assertEquals(setOf("Essay"), graph.stores.tasks.value.tasks.map { it.title }.toSet(), "nothing goes ahead of the one that failed")
+        assertTrue(graph.stores.tasks.value.tasks.single().isOpen)
+        assertEquals(1, rows())
+        val first = 1L
+        val answers = applier.apply(batch, "phone")
+        assertEquals(listOf(Outcome.APPLIED, Outcome.APPLIED, Outcome.APPLIED), answers.map { it.state })
+        assertEquals(first, answers.first().revision, "the first answers as it did, and isn't applied twice")
+        assertEquals(setOf("Essay", "Maths"), graph.stores.tasks.value.tasks.map { it.title }.toSet())
+        assertFalse(graph.stores.tasks.value.tasks.single { it.title == "Essay" }.isOpen)
+    }
+
+    @Test
+    fun `what can pass is the box's, by its cause too, and what would fail the same way at every retry is the command's`() {
+        for (fault in listOf(SQLiteErrorCode.SQLITE_BUSY, SQLiteErrorCode.SQLITE_BUSY_SNAPSHOT, SQLiteErrorCode.SQLITE_LOCKED, SQLiteErrorCode.SQLITE_IOERR_WRITE, SQLiteErrorCode.SQLITE_FULL, SQLiteErrorCode.SQLITE_CORRUPT, SQLiteErrorCode.SQLITE_ERROR)) {
+            assertTrue(CommandApplier.boxFault(SQLiteException("made up", fault)), fault.name)
+        }
+        assertTrue(CommandApplier.boxFault(IOException("made up")))
+        assertTrue(CommandApplier.boxFault(SQLException("no code of SQLite's")))
+        assertTrue(CommandApplier.boxFault(IllegalStateException(SQLiteException("made up", SQLiteErrorCode.SQLITE_BUSY))))
+        assertTrue(CommandApplier.boxFault(IllegalStateException(IOException("made up"))))
+        for (value in listOf(SQLiteErrorCode.SQLITE_CONSTRAINT, SQLiteErrorCode.SQLITE_CONSTRAINT_TRIGGER, SQLiteErrorCode.SQLITE_TOOBIG, SQLiteErrorCode.SQLITE_MISMATCH, SQLiteErrorCode.SQLITE_RANGE)) {
+            assertFalse(CommandApplier.boxFault(SQLiteException("made up", value)), value.name)
+        }
+        assertFalse(CommandApplier.boxFault(IllegalArgumentException("made up")))
+        assertFalse(CommandApplier.boxFault(IllegalStateException(IllegalArgumentException("made up"))))
+    }
+
+    @Test
+    fun `what the box does with a database that's lost a table isn't taken out on the command`() = runBlocking {
+        send(Command("one", at, own("Essay")))
+        // A release gone wrong: every command would fail, and none of them is at fault.
+        db.transaction { c -> c.createStatement().use { it.execute("ALTER TABLE store_history RENAME TO store_history_gone") } }
+        assertFailsWith<SQLException> { send(Command("two", at, own("Maths"))) }
+        assertEquals(0, rowsOf(Outcome.DROPPED))
+        db.transaction { c -> c.createStatement().use { it.execute("ALTER TABLE store_history_gone RENAME TO store_history") } }
+        assertEquals(Outcome.APPLIED, send(Command("two", at, own("Maths"))).state)
     }
 
     @Test

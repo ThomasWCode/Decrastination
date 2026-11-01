@@ -138,18 +138,23 @@ private fun signedIn(web: Web) = createRouteScopedPlugin("SignedIn") {
                 }
                 call.attributes.put(CLIENT, Client.Phone(phone))
             }
-            web.sessions.check(call.request.cookies[cookie(web, SESSION)]) -> {
+            web.sessions.check(call.session(web)) -> {
                 // A cross-site form can't send this header: what changes something needs it.
                 if (call.request.httpMethod != HttpMethod.Get && call.request.header("X-Requested-With") == null) {
                     call.respond(HttpStatusCode.Forbidden, Problem("Missing X-Requested-With"))
                     return@onCall
                 }
+                // Its use keeps it good here too, or the browser would let it go a month from signing in, however often it's used.
+                call.setCookie(web, SESSION, call.session(web).orEmpty(), (Sessions.LIFE_MS / 1000).toInt())
                 call.attributes.put(CLIENT, Client.Website)
             }
             else -> call.respond(HttpStatusCode.Unauthorized, Problem("Sign in first"))
         }
     }
 }
+
+/** The session a request came with. */
+private fun ApplicationCall.session(web: Web): String? = request.cookies[cookie(web, SESSION)]
 
 /** The zone a phone says with each exchange, read before anything's applied or answered: a day is the owner's wherever they are. */
 private fun ApplicationCall.heardZone(graph: ServerGraph) {
@@ -225,13 +230,13 @@ fun Application.api(web: Web) {
                 }
             }
 
-            get("/me") { call.respond(Me(web.sessions.check(call.request.cookies[cookie(web, SESSION)]))) }
+            get("/me") { call.respond(Me(web.sessions.check(call.session(web)))) }
             post("/auth/logout") {
                 if (call.request.header("X-Requested-With") == null) {
                     call.respond(HttpStatusCode.Forbidden, Problem("Missing X-Requested-With"))
                     return@post
                 }
-                web.sessions.end(call.request.cookies[cookie(web, SESSION)])
+                web.sessions.end(call.session(web))
                 call.setCookie(web, SESSION, "", 0)
                 call.respond(Me(false))
             }
@@ -339,7 +344,7 @@ private fun Route.signedInRoutes(web: Web) {
         if (call.client !is Client.Website) return@post call.respond(HttpStatusCode.Forbidden, Problem("A browser asks for itself"))
         if (graph.mode != ServerGraph.COMMANDS) return@post call.respond(HttpStatusCode.Conflict, Problem("The server is mirroring the phone"))
         if (!graph.pushes.on) return@post call.respond(HttpStatusCode.Conflict, Problem("The box has no keys for that"))
-        if (!graph.pushes.keep(call.receive<PushSubscription>())) return@post call.respond(HttpStatusCode.BadRequest, Problem("That isn't a push service's address"))
+        if (!graph.pushes.keep(call.receive<PushSubscription>(), Tokens.hash(call.session(web).orEmpty()))) return@post call.respond(HttpStatusCode.BadRequest, Problem("That isn't a push service's address"))
         call.respond(HttpStatusCode.NoContent)
     }
     post("/push/channels") {

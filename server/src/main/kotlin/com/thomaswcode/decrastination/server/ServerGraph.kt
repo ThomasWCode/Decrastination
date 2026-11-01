@@ -319,9 +319,18 @@ class ServerGraph(
             ServerJob("check-in", due = { last, now -> sundayDue(last, now, stores.settings.value.checkInMin) }) { owners.conversation.remindCheckIn() },
             ServerJob("review", due = { last, now -> sundayDue(last, now, stores.settings.value.checkInMin + Daily.REVIEW_AFTER_MIN) }) { owners.learning.review(ifDue = true) },
             ServerJob("nightly", due = { last, now -> nightDue(last, now) }, retryMs = HOUR_MS) { nightly() },
-            ServerJob.every("heartbeat", MINUTE_MS) { heartbeatUrl?.let { http.get(it, emptyMap()) } },
+            ServerJob.every("heartbeat", MINUTE_MS) { heartbeat() },
         ),
     )
+
+    /**
+     * The minute's heartbeat, only from a box that can still write: one whose disk is full answers its health check and does nothing
+     * else, with what's waiting on it held up unseen. A brief fault costs a beat or two, which the check's grace allows for.
+     */
+    internal fun heartbeat() {
+        db.setMeta(BEAT, clock.now().toString())
+        heartbeatUrl?.let { http.get(it, emptyMap()) }
+    }
 
     /**
      * His newest message, as a browser shows it: all its texts (D-120), from the chat, as his notification's lines are cut to its
@@ -704,6 +713,7 @@ class ServerGraph(
         private const val GONE = "That task had gone"
         private const val NOT_RESTORED = "Nothing was restored: it couldn't be applied."
         private const val PUSHED = "pushed"
+        private const val BEAT = "beat"
 
         /** The most that's made up after a look missed. */
         private const val PUSH_REACH_MS = 5 * 60_000L

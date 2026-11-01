@@ -36,8 +36,10 @@ data class PushMessage(val title: String, val body: String, val url: String, val
 
 /**
  * Telling a closed tab (W-9): the browsers that asked, each for what it asked, kept here and not in a store, as a
- * subscription is one browser's and nothing the phone holds or a backup should carry. Nothing's sent without a [sender],
- * the box's VAPID keys. A send goes on its own time, never in a command, as a push service can take seconds.
+ * subscription is one browser's and nothing the phone holds or a backup should carry. Each for as long as the session that
+ * asked lasts: what's told is the owner's alone, so a browser no longer signed in isn't told, however its session ended, and
+ * its line goes with that session. Nothing's sent without a [sender], the box's VAPID keys. A send goes on its own time, never
+ * in a command, as a push service can take seconds.
  */
 class Pushes(private val db: Database, private val scope: CoroutineScope, private val sender: Sender?, private val clock: () -> Long = System::currentTimeMillis) {
     /** Hands a message to a browser's push service. */
@@ -50,19 +52,23 @@ class Pushes(private val db: Database, private val scope: CoroutineScope, privat
 
     val on: Boolean get() = sender != null
 
-    /** [given] kept, for what's known of what it asks: false, and nothing kept, if it isn't a push service's address, or can't be sealed for. */
-    fun keep(given: PushSubscription): Boolean {
+    /**
+     * [given] kept for [session], the hash `sessions` holds it by, for what's known of what it asks: false, and nothing kept, if it
+     * isn't a push service's address, or can't be sealed for.
+     */
+    fun keep(given: PushSubscription, session: String): Boolean {
         if (!fit(given.endpoint) || !sealable(given)) return false
         db.transaction { c ->
             c.prepareStatement(
-                """INSERT INTO push_subscriptions(endpoint, p256dh, auth, channels, created_at) VALUES(?, ?, ?, ?, ?)
-                   ON CONFLICT(endpoint) DO UPDATE SET p256dh = excluded.p256dh, auth = excluded.auth, channels = excluded.channels""",
+                """INSERT INTO push_subscriptions(endpoint, p256dh, auth, channels, created_at, session) VALUES(?, ?, ?, ?, ?, ?)
+                   ON CONFLICT(endpoint) DO UPDATE SET p256dh = excluded.p256dh, auth = excluded.auth, channels = excluded.channels, session = excluded.session""",
             ).use { q ->
                 q.setString(1, given.endpoint)
                 q.setString(2, given.p256dh)
                 q.setString(3, given.auth)
                 q.setString(4, given.channels.filter { it in KNOWN }.joinToString(","))
                 q.setLong(5, clock())
+                q.setString(6, session)
                 q.executeUpdate()
             }
         }
@@ -81,8 +87,10 @@ class Pushes(private val db: Database, private val scope: CoroutineScope, privat
     /** What the browser at [endpoint] asked for: nothing, if it isn't one that asked. */
     fun channels(endpoint: String): Set<String> = subscriptions().firstOrNull { it.endpoint == endpoint }?.channels.orEmpty()
 
+    /** The browsers whose session still lasts: one that's run out is gone from `sessions` only at the next sign-in. */
     private fun subscriptions(): List<PushSubscription> = db.read { c ->
-        c.prepareStatement("SELECT endpoint, p256dh, auth, channels FROM push_subscriptions").use { q ->
+        c.prepareStatement("SELECT p.endpoint, p.p256dh, p.auth, p.channels FROM push_subscriptions p JOIN sessions s ON s.id = p.session WHERE s.expires_at > ?").use { q ->
+            q.setLong(1, clock())
             q.executeQuery().use { r ->
                 buildList {
                     while (r.next()) add(PushSubscription(r.getString(1), r.getString(2), r.getString(3), r.getString(4).split(",").filter(String::isNotEmpty).toSet()))
