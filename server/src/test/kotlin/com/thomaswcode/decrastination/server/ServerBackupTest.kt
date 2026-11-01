@@ -268,9 +268,11 @@ class ServerBackupTest {
         val keyed = ServerGraph(other, File(dir, "other").apply { mkdirs() }, Plain, "test", claudeKey = "made-up")
         keyed.stores.settings.update { it.copy(aiEnabled = true, aiKeyActive = true) }
         assertEquals(true, keyed.setup().claude.done)
-        assertNull(keyed.chat(0, null).claudeOff)
         keyed.stores.settings.update { it.copy(aiKeyActive = false) }
-        assertNotNull(keyed.chat(0, null).claudeOff, "the chat says what the gateway does: no call goes")
+        assertEquals(true, keyed.setup().claude.done, "the phone's flag has nothing to do with the box's key")
+        assertNull(keyed.chat(0, null).claudeOff, "and the chat goes by what the gateway does, which is to call")
+        keyed.stores.settings.update { it.copy(aiEnabled = false) }
+        assertNotNull(keyed.chat(0, null).claudeOff)
         other.close()
     }
 

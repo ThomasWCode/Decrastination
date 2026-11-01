@@ -57,16 +57,16 @@ object SetupPage {
     /** A new key, for a server that asks Claude: it's the box's (W-12), and no page takes one. */
     private const val BOX_KEY = "Put a new key in the box's .env and start the server again"
 
-    /** Claude, from whether a key's held, as the month's [usage] stands, the key being the box's where it's [onBox]. */
+    /** Claude, from whether a key's held, as the month's [usage] stands. A key [onBox] is in use as it's there, whatever the phone's is. */
     fun claude(keyHeld: Boolean, settings: Settings, usage: AiUsage, onBox: Boolean = false): Line {
         val keyProblem = usage.keyProblem
         val lastError = usage.lastError
         return Line(
             "Claude",
-            settings.aiEnabled && settings.aiKeyActive && keyHeld && usage.lastError == null && usage.keyProblem == null,
+            settings.aiEnabled && (onBox || settings.aiKeyActive) && keyHeld && usage.lastError == null && usage.keyProblem == null,
             when {
                 !keyHeld -> "No API key: the rules do what they can, and nothing is sent to Claude."
-                !settings.aiKeyActive -> if (onBox) "Key on the box, not in use yet: a key entered on the phone starts it." else "Key saved, not in use yet: enter it again to use it."
+                !onBox && !settings.aiKeyActive -> "Key saved, not in use yet: enter it again to use it."
                 !settings.aiEnabled -> "Key saved; switched off in Settings, so nothing is sent."
                 // The key or its account can't be used: said with what puts it right.
                 keyProblem != null -> "${keyProblem.says}. ${if (onBox && keyProblem == KeyProblem.Rejected) BOX_KEY else keyProblem.fix}: the rules stand in, and it's tried again an hour after each failed try."

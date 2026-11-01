@@ -173,7 +173,7 @@ class ServerGraph(
     val calendarRead = JsonStore(backend, CalendarRead.NAME, CalendarRead.serializer(), ::CalendarRead)
     val devices = Devices(db)
 
-    private val gateway = ModelGateway(stores.settings, { claudeKey }, stores.model, stores.tasks, clock, NoAlerts, scope) {}.apply { endpoint = claudeEndpoint }
+    private val gateway = ModelGateway(stores.settings, { claudeKey }, stores.model, stores.tasks, clock, NoAlerts, scope, keyInUse = { true }) {}.apply { endpoint = claudeEndpoint }
 
     val planning: Planning = Planning(
         stores.tasks, stores.settings, stores.session, stores.learning, stores.model, stores.log, stores.instructions, stores.school, clock, scope, gateway,

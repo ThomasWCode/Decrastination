@@ -71,6 +71,16 @@ class ModelGatewayTest {
         .body(JsonValue.from(mapOf("type" to "error", "error" to mapOf("type" to "authentication_error", "message" to "invalid x-api-key")))).build()
 
     @Test
+    fun `a key's in use as the settings say, unless the gateway's told it's another's`() = runTest {
+        settings.update { it.copy(aiKeyActive = false) }
+        assertNull(gateway.claudeKey())
+        val boxes = ModelGateway(settings, { key }, model, tasks, clock, alerts, CoroutineScope(job + Dispatchers.Default), keyInUse = { true }) {}
+        assertEquals(key, boxes.claudeKey())
+        settings.update { it.copy(aiEnabled = false) }
+        assertNull(boxes.claudeKey(), "off is off, whoever's key it is")
+    }
+
+    @Test
     fun `off, nothing is sent and it says so`() = runTest {
         settings.update { it.copy(aiEnabled = false) }
         var sent = false

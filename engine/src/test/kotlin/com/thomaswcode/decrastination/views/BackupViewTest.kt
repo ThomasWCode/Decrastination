@@ -133,10 +133,12 @@ class BackupViewTest {
     }
 
     @Test
-    fun `a key not in use says how it comes to be, where it's held`() {
+    fun `a key on the box is in use whatever the phone's is`() {
         val waiting = Settings(aiEnabled = true, aiKeyActive = false)
-        assertEquals("Key on the box, not in use yet: a key entered on the phone starts it.", setup(settings = waiting, keyHeld = true).claude.detail)
+        assertEquals(true, setup(settings = waiting, keyHeld = true).claude.done)
+        assertTrue(setup(settings = waiting, keyHeld = true).claude.detail.startsWith("On: "), "no asking for a key the box has")
         assertEquals("Key saved, not in use yet: enter it again to use it.", setup(settings = waiting, writable = false).claude.detail)
+        assertEquals(false, setup(settings = waiting, writable = false).claude.done)
     }
 
     @Test
