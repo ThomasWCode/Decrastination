@@ -673,6 +673,8 @@ test("a browser asks to be told, and stops", async ({ page }) => {
   await felix.click();
   expect((await stopped).postDataJSON()).toEqual({ endpoint: "https://push.example.com/made-up" });
   await expect(felix).not.toBeChecked();
+  const left = await page.evaluate(async () => (await navigator.serviceWorker.ready).pushManager.getSubscription());
+  expect(left).toBeNull();
 });
 
 test("a browser that won't show notifications says so, with nothing chosen", async ({ page }) => {
