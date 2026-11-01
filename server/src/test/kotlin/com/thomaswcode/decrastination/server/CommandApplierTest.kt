@@ -30,6 +30,7 @@ import com.thomaswcode.decrastination.sync.protocol.StopTimer
 import com.thomaswcode.decrastination.sync.protocol.UndoTidy
 import com.thomaswcode.decrastination.sync.protocol.UseParentCode
 import java.io.File
+import java.io.IOException
 import java.nio.file.Files
 import java.sql.Connection
 import java.sql.DriverManager
@@ -55,6 +56,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonPrimitive
+import org.sqlite.SQLiteErrorCode
+import org.sqlite.SQLiteException
 
 /** Commands on the server (docs/spec/server.md): each through its owner, all of it or none of it, once however often it's sent. */
 class CommandApplierTest {
@@ -452,6 +455,22 @@ class CommandApplierTest {
         assertEquals(first, answers.first().revision, "the first answers as it did, and isn't applied twice")
         assertEquals(setOf("Essay", "Maths"), graph.stores.tasks.value.tasks.map { it.title }.toSet())
         assertFalse(graph.stores.tasks.value.tasks.single { it.title == "Essay" }.isOpen)
+    }
+
+    @Test
+    fun `what can pass is the box's, by its cause too, and what would fail the same way at every retry is the command's`() {
+        for (fault in listOf(SQLiteErrorCode.SQLITE_BUSY, SQLiteErrorCode.SQLITE_BUSY_SNAPSHOT, SQLiteErrorCode.SQLITE_LOCKED, SQLiteErrorCode.SQLITE_IOERR_WRITE, SQLiteErrorCode.SQLITE_FULL, SQLiteErrorCode.SQLITE_CORRUPT, SQLiteErrorCode.SQLITE_ERROR)) {
+            assertTrue(CommandApplier.boxFault(SQLiteException("made up", fault)), fault.name)
+        }
+        assertTrue(CommandApplier.boxFault(IOException("made up")))
+        assertTrue(CommandApplier.boxFault(SQLException("no code of SQLite's")))
+        assertTrue(CommandApplier.boxFault(IllegalStateException(SQLiteException("made up", SQLiteErrorCode.SQLITE_BUSY))))
+        assertTrue(CommandApplier.boxFault(IllegalStateException(IOException("made up"))))
+        for (value in listOf(SQLiteErrorCode.SQLITE_CONSTRAINT, SQLiteErrorCode.SQLITE_CONSTRAINT_TRIGGER, SQLiteErrorCode.SQLITE_TOOBIG, SQLiteErrorCode.SQLITE_MISMATCH, SQLiteErrorCode.SQLITE_RANGE)) {
+            assertFalse(CommandApplier.boxFault(SQLiteException("made up", value)), value.name)
+        }
+        assertFalse(CommandApplier.boxFault(IllegalArgumentException("made up")))
+        assertFalse(CommandApplier.boxFault(IllegalStateException(IllegalArgumentException("made up"))))
     }
 
     @Test

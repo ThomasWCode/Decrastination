@@ -97,12 +97,6 @@ class CommandApplier(
     }
 
     /**
-     * Whether [failed] is the box's doing, not the command's: a lock, the disk, a release gone wrong, each of which can pass. Anything
-     * else is the command's, as is what SQLite says of a value being written, and it would fail the same way at every retry.
-     */
-    private fun boxFault(failed: Throwable): Boolean = generateSequence(failed) { it.cause }.any { it is IOException || (it is SQLException && it.errorCode !in OF_A_VALUE) }
-
-    /**
      * [command] at the moment it's read as. The website's is this one: it has no queue to send late, and a browser can say
      * anything. A phone's may be earlier, as one made offline is, but never later: the moment decides a code's lock and a wait.
      */
@@ -143,8 +137,14 @@ class CommandApplier(
         }
     }
 
-    private companion object {
+    companion object {
         /** SQLite's primary result codes that are about a value, not the box: `SQLException.errorCode`, as sqlite-jdbc gives them. */
-        val OF_A_VALUE = setOf(SQLiteErrorCode.SQLITE_CONSTRAINT, SQLiteErrorCode.SQLITE_TOOBIG, SQLiteErrorCode.SQLITE_MISMATCH, SQLiteErrorCode.SQLITE_RANGE).map { it.code }.toSet()
+        private val OF_A_VALUE = setOf(SQLiteErrorCode.SQLITE_CONSTRAINT, SQLiteErrorCode.SQLITE_TOOBIG, SQLiteErrorCode.SQLITE_MISMATCH, SQLiteErrorCode.SQLITE_RANGE).map { it.code }.toSet()
+
+        /**
+         * Whether [failed] is the box's doing, not the command's: a lock, the disk, a release gone wrong, each of which can pass. Anything
+         * else is the command's, as is what SQLite says of a value being written, and it would fail the same way at every retry.
+         */
+        internal fun boxFault(failed: Throwable): Boolean = generateSequence(failed) { it.cause }.any { it is IOException || (it is SQLException && it.errorCode !in OF_A_VALUE) }
     }
 }
