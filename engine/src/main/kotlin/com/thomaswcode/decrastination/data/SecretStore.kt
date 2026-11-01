@@ -29,6 +29,12 @@ enum class Secret {
 
     /** What this phone shows the server it's paired with (docs/plan_web/architecture.md §Sign-in). */
     DeviceToken,
+    ;
+
+    companion object {
+        /** What a Power Planner sign-in left: it goes with the login, or a new one would never be tried and a cleared one would go on working. */
+        val POWER_PLANNER_SESSION = listOf(PowerPlannerSession, PowerPlannerAccountId)
+    }
 }
 
 /** Encrypts the secrets file. The real one keeps its key in the Android Keystore. */

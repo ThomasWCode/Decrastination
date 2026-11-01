@@ -8,12 +8,14 @@ import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.OwnStep
 import com.thomaswcode.decrastination.core.OwnTask
 import com.thomaswcode.decrastination.core.Reminder
+import com.thomaswcode.decrastination.core.SlotState
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.core.SubStep
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.Uptime
 import com.thomaswcode.decrastination.data.BackupService
+import com.thomaswcode.decrastination.data.Backups
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.Secret
 import com.thomaswcode.decrastination.data.SecretCipher
@@ -22,6 +24,8 @@ import com.thomaswcode.decrastination.sync.protocol.CommandBatch
 import com.thomaswcode.decrastination.sync.protocol.SaveOwnTask
 import java.io.File
 import java.nio.file.Files
+import java.time.Instant
+import java.time.LocalDate
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
@@ -235,6 +239,79 @@ class ServerJobsTest {
         graph.stores.tasks.update { state -> state.copy(tasks = state.tasks.map { task -> task.copy(subSteps = task.subSteps.map { it.copy(done = true) }) }) }
         withTimeout(5_000) { graph.stores.tasks.state.first { state -> state.tasks.single { it.id == id }.status == Status.Done } }
         scope.cancel()
+    }
+
+    @Test
+    fun `the plan is made and its day kept, once the server applies commands`() = runBlocking {
+        db.setMeta("mode", ServerGraph.COMMANDS)
+        val graph = ServerGraph(db, dir, Plain, "test")
+        val scope = CoroutineScope(Dispatchers.Default)
+        graph.start(scope)
+        withTimeout(10_000) { graph.stores.session.state.first { it.slots.date.isNotEmpty() } }
+        scope.cancel()
+    }
+
+    @Test
+    fun `a piece gone by is marked before a new plan lays it again`() = runBlocking {
+        db.setMeta("mode", ServerGraph.COMMANDS)
+        val graph = ServerGraph(db, dir, Plain, "test")
+        graph.applier.apply(CommandBatch(listOf(Command("one", clock.now(), SaveOwnTask("s-a", OwnTask(title = "A", minutes = 30))))), "website")
+        val piece = graph.planning.plan().ordered.first()
+        val now = System.currentTimeMillis()
+        val today = Instant.ofEpochMilli(now).atZone(graph.clock.zone()).toLocalDate()
+        graph.stores.session.update { it.copy(slots = SlotState(today.toString(), mapOf(piece.key to now - 3 * 3_600_000L))) }
+        graph.planning.watcher.start()
+        withTimeout(10_000) { graph.stores.log.state.first { log -> log.slots.any { it.key == piece.key } } }
+        Unit
+    }
+
+    @Test
+    fun `a morning or a Sunday gone by is no job to catch up on, a first run being today's`() {
+        val graph = ServerGraph(db, dir, Plain, "test")
+        val zone = graph.clock.zone()
+        val sunday = LocalDate.of(2026, 11, 1)
+        fun at(day: LocalDate, minute: Int) = day.atStartOfDay(zone).toInstant().toEpochMilli() + minute * 60_000L
+        val morning = graph.stores.settings.value.briefingWeekendMin
+        assertFalse(graph.morningDue(null, at(sunday, morning - 60)), "before today's time, yesterday's isn't due")
+        assertTrue(graph.morningDue(null, at(sunday, morning + 1)), "today's is")
+        assertFalse(graph.morningDue(at(sunday, morning + 1), at(sunday, morning + 2)), "once it's run, not again")
+        val monday = sunday.plusDays(1)
+        val checkIn = graph.stores.settings.value.checkInMin
+        assertTrue(graph.sundayDue(null, at(sunday, checkIn + 1), checkIn))
+        assertFalse(graph.sundayDue(null, at(monday, 120), checkIn), "Monday's first run says nothing of Sunday")
+    }
+
+    @Test
+    fun `a new Power Planner login takes the old one's session with it, and another credential doesn't`() = runBlocking {
+        val graph = ServerGraph(db, dir, Plain, "test")
+        val secrets = graph.stores.secrets
+        secrets.put(mapOf(Secret.PowerPlannerSession to "session", Secret.PowerPlannerAccountId to "1"))
+        graph.setCredentials(mapOf("GmailAppPassword" to "secret"))
+        assertEquals("session", secrets[Secret.PowerPlannerSession])
+        graph.setCredentials(mapOf("PowerPlannerPassword" to ""))
+        assertEquals(null, secrets[Secret.PowerPlannerSession])
+        assertEquals(null, secrets[Secret.PowerPlannerAccountId])
+    }
+
+    @Test
+    fun `the nightly file holds the calendar answers the phone sent`() = runBlocking {
+        var written = ""
+        val folder = object : BackupService.Folder {
+            override val available = true
+
+            override fun write(name: String, text: String): Boolean {
+                written = text
+                return true
+            }
+
+            override fun names() = emptyList<String>()
+
+            override fun delete(name: String) = false
+        }
+        val graph = ServerGraph(db, dir, Plain, "test", nightly = folder)
+        graph.calendarRead.update { it.copy(answers = mapOf("an event" to "free")) }
+        graph.nightly()
+        assertEquals(mapOf("an event" to "free"), assertNotNull(Backups.decode(written, graph.stores.shapes)).eventAnswers)
     }
 
     @Test

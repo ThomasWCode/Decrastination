@@ -280,7 +280,7 @@ private fun sourceDetail(status: SourceStatus, otherwise: String): String =
     status.error?.let { "Last read failed: $it" } ?: if (status.lastSuccessAt != null) "Reading it works." else otherwise
 
 private enum class Credential(val source: Source, val title: String, val user: Secret, val userLabel: String, val password: Secret, val passwordLabel: String, val resets: List<Secret>) {
-    PowerPlanner(Source.PowerPlanner, "Power Planner login", Secret.PowerPlannerUsername, "Username", Secret.PowerPlannerPassword, "Password", listOf(Secret.PowerPlannerSession, Secret.PowerPlannerAccountId)),
+    PowerPlanner(Source.PowerPlanner, "Power Planner login", Secret.PowerPlannerUsername, "Username", Secret.PowerPlannerPassword, "Password", Secret.POWER_PLANNER_SESSION),
     Gmail(Source.Gmail, "Gmail", Secret.GmailAddress, "Address", Secret.GmailAppPassword, "App password", emptyList()),
 }
 
