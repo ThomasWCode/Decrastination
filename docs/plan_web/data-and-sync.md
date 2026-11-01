@@ -15,7 +15,7 @@ SQLite, one file, `/opt/decrastination/data/decrastination.db`, in WAL mode (Lit
 | `sessions` | `id`, `created_at`, `expires_at`, `last_seen_at` | the website's sign-ins |
 | `pairing_codes` | `code_hash`, `expires_at` | the six-digit codes, five minutes each |
 | `credentials` | `name` PK, `ciphertext`, `updated_at` | one row, the sealed `secrets.bin`: Power Planner, Gmail and the TOTP secret, under `MASTER_KEY` |
-| `push_subscriptions` | stage 9 | Web Push endpoints |
+| `push_subscriptions` | stage 9 | Web Push endpoints, each with the session that asked |
 | `meta` | `key`, `value` | the global revision, the mode (`mirror` or `commands`), the phone's time zone, each job's last run, the last look for what's due to a browser |
 
 Why a table of JSON documents and not a table a type: the stores are already the app's unit of writing, versioning, migrating and backing up, with months of tests behind them. The server adds transactions and history to that unit rather than replacing it. The state is one to two megabytes in all; nothing here needs a relational shape.
@@ -53,7 +53,7 @@ The phone spends free-time credit every 30 seconds while a blocked app runs on e
 
 ## Order and conflicts
 
-The server applies commands in the order they arrive, each device's in the order it sent them. There is no merge of two states: the owners are the conflict policy, as they are the policy today when a sync and a tap race on the phone. Each owner is already deterministic and tolerant of a stale call (Done on a task that has gone is a no-op; a move onto a slot that has changed re-lays the day). The table of stale cases, command by command, with the outcome each gets, is in `docs/spec/sync.md`, and tested. A command that can't apply is recorded `dropped` with its reason, and the client shows a card ("that task had gone"); nothing is applied half-way.
+The server applies commands in the order they arrive, each device's in the order it sent them. There is no merge of two states: the owners are the conflict policy, as they are the policy today when a sync and a tap race on the phone. Each owner is already deterministic and tolerant of a stale call (Done on a task that has gone is a no-op; a move onto a slot that has changed re-lays the day). The table of stale cases, command by command, with the outcome each gets, is in `docs/spec/sync.md`, and tested. A command that can't apply is recorded `dropped` with its reason, and the client shows a card ("that task had gone"); nothing is applied half-way. A fault of the box's isn't that: nothing's recorded, and the client sends it again.
 
 A scalar setting changed on both clients while one was offline: the later arrival wins, and Protection's delay still applies to whichever loosens. The delay is counted by the server's clock (W-23): the server applies a pending change when its wait's over by that clock, and the phone, online or offline, never applies a loosening itself, so the two sides can't disagree about when a change is due.
 
