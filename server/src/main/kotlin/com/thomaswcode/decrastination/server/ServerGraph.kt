@@ -252,6 +252,7 @@ class ServerGraph(
             reread = {},
             cancelFelix = {},
             eventAnswers = { calendarRead.value.answers },
+            settled = { read -> db.betweenCommands(read) },
         )
     }
 

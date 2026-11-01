@@ -68,6 +68,8 @@ class BackupService(
     private val backupCap: Int = Backups.MAX_BYTES,
     /** Your answers about events, from where they're kept here. */
     private val eventAnswers: () -> Map<String, String> = { stores.calendar.value.eventAnswers },
+    /** How the stores are read as one: on the server, with no command half done in memory. */
+    private val settled: suspend (suspend () -> String) -> String = { it() },
 ) {
     /** Where backups go: Documents/Decrastination, through MediaStore on the phone; a map in a test. */
     interface Folder {
@@ -158,7 +160,7 @@ class BackupService(
         if (!folder.available) return@withContext Nightly.NotWritten
         val now = clock.now()
         val name = BackupNames.nightlyName(Instant.ofEpochMilli(now).atZone(clock.zone()).toLocalDate().toString())
-        val text = exportBackup()
+        val text = settled { exportBackup() }
         // More than Import reads even without the chat's earlier messages, it couldn't be restored: not written,
         // and the older ones, which can be, not let go of for it (Settings → Backup says so).
         if (tooBig(text)) return@withContext Nightly.TooBig

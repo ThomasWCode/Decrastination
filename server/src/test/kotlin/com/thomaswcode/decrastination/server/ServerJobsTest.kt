@@ -326,6 +326,45 @@ class ServerJobsTest {
         assertEquals(mapOf("an event" to "free"), assertNotNull(Backups.decode(written, graph.stores.shapes)).eventAnswers)
     }
 
+    @Test(timeout = STUCK_MS)
+    fun `the nightly file waits out a command, and holds nothing of one that fails`() = runBlocking {
+        db.setMeta("mode", ServerGraph.COMMANDS)
+        var written = ""
+        val folder = object : BackupService.Folder {
+            override val available = true
+
+            override fun write(name: String, text: String): Boolean {
+                written = text
+                return true
+            }
+
+            override fun names() = emptyList<String>()
+
+            override fun delete(name: String) = false
+        }
+        val graph = ServerGraph(db, dir, Plain, "test", nightly = folder)
+        val now = System.currentTimeMillis()
+        val half = TaskItem("own:half", Source.Own, "half", "Half made", kind = Kind.Homework, firstSeenAt = now, lastSeenAt = now)
+        val entered = CompletableDeferred<Unit>()
+        val letGo = CompletableDeferred<Unit>()
+        val command = async(Dispatchers.IO) {
+            db.commandOr({ graph.stores.tasks.reload() }, { "dropped" }) {
+                graph.stores.tasks.update { it.copy(tasks = it.tasks + half) }
+                entered.complete(Unit)
+                letGo.await()
+                error("no room")
+            }
+        }
+        entered.await()
+        val night = async(Dispatchers.IO) { graph.nightly() }
+        withContext(Dispatchers.IO) { Thread.sleep(150) }
+        assertEquals("", written, "not while it's open")
+        letGo.complete(Unit)
+        command.await()
+        night.await()
+        assertTrue(assertNotNull(Backups.decode(written, graph.stores.shapes)).ownTasks.none { it.title == "Half made" })
+    }
+
     @Test
     fun `in mirror mode nothing watches the stores`() = runBlocking {
         val graph = ServerGraph(db, dir, Plain, "test")
