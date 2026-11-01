@@ -66,6 +66,8 @@ class BackupService(
     private val cancelFelix: () -> Unit,
     /** What a backup holds at most, as Import reads it ([Backups.MAX_BYTES]; smaller in a test). */
     private val backupCap: Int = Backups.MAX_BYTES,
+    /** Your answers about events, from where they're kept here. */
+    private val eventAnswers: () -> Map<String, String> = { stores.calendar.value.eventAnswers },
 ) {
     /** Where backups go: Documents/Decrastination, through MediaStore on the phone; a map in a test. */
     interface Folder {
@@ -115,7 +117,7 @@ class BackupService(
             settings = SettingsChanges.requested(stores.settings.value, stores.protection.value.pending),
             log = stores.log.value,
             calibration = stores.learning.value.calibration,
-            eventAnswers = stores.calendar.value.eventAnswers,
+            eventAnswers = eventAnswers(),
             aiUsage = stores.model.value.aiUsage,
             // Those in use; for a reset's copy ([every]) all of them, one still being read or left unclear too,
             // as the reset takes them all.

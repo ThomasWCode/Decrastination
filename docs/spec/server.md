@@ -54,13 +54,13 @@ SQLite, one file, in WAL mode (`server/Database.kt`), the server its only writer
 
 A command is one transaction, all of it or none (`CommandApplier`, `Database.command`), one at a time, in the order they arrive. The owners suspend and change thread on the way, so it's held by a coroutine's lock, and reads that mustn't see it half-way go through a second connection (`Database.read`), which in WAL mode sees only what's committed. One that fails is rolled back, the stores read again from what's committed, and it's on record as dropped, all before another's let in (`Database.commandOr`): what it left in memory mustn't be built on.
 
-The owners are `ServerOwners`, wired as `AppGraph` wires the phone's, what touches the device left out. In mirror mode nothing on the server watches a store or runs by itself. Once it applies commands, `ServerGraph.start` sets off the jobs below and what watches the stores: an own task with its steps done is finished, and a weekly rule's week rolled (`OwnTasks.start`). The mode is read at a start, so the switch to commands takes a restart.
+The owners are `ServerOwners`, wired as `AppGraph` wires the phone's, what touches the device left out. In mirror mode nothing on the server watches a store or runs by itself. Once it applies commands, `ServerGraph.start` sets off the jobs below and what watches the stores: an own task with its steps done is finished, a weekly rule's week rolled (`OwnTasks.start`), and the plan made again as what it's made from changes (`PlanWatcher`), with today's starts kept and the work done ahead, as on the phone but for its alarms, its calendar and its widget. The mode is read at a start, so the switch to commands takes a restart.
 
 The server's time zone is the phone's: each batch says it (`ServerClock`), as a day is the owner's wherever they are. Its time is what a loosening's wait is counted by on the server: a mark of the phone's is another clock's, so the gap from it counts nothing and the count goes on from there.
 
 ## Jobs
 
-What runs with nobody asking (`ServerJobs`), once the server applies commands (D-141): each minute, whatever's due, one at a time, each's last run in `meta`, so a restart neither repeats one nor misses one. A job that fails is logged and tried again: one that runs on a cadence at its next turn, one at a set time 15 minutes on, the nightly file an hour on, so nothing that reaches Claude or a source goes round each minute.
+What runs with nobody asking (`ServerJobs`), once the server applies commands (D-141): each minute, whatever's due, one at a time, each's last run in `meta`, so a restart neither repeats one nor misses one. A job that fails is logged and tried again: one that runs on a cadence at its next turn, one at a set time 15 minutes on, the nightly file an hour on, so nothing that reaches Claude or a source goes round each minute. One at a set time that's never run counts from the start of today, so the first run is today's, and nothing gone by before it is caught up on.
 
 | Job | When | Does |
 |---|---|---|

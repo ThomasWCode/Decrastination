@@ -16,7 +16,6 @@ import com.thomaswcode.decrastination.data.SecretStore
 import com.thomaswcode.decrastination.data.Stores
 import com.thomaswcode.decrastination.enrich.KeyProblem
 import com.thomaswcode.decrastination.enrich.ModelGateway
-import com.thomaswcode.decrastination.enrich.Profile
 import com.thomaswcode.decrastination.learn.Daily
 import com.thomaswcode.decrastination.learn.EventJudge
 import com.thomaswcode.decrastination.net.Http
@@ -125,15 +124,19 @@ class ServerGraph(
 
     private val gateway = ModelGateway(stores.settings, { claudeKey }, stores.model, stores.tasks, clock, NoAlerts, scope) {}
 
-    val planning = Planning(
+    val planning: Planning = Planning(
         stores.tasks, stores.settings, stores.session, stores.learning, stores.model, stores.log, stores.instructions, stores.school, clock, scope, gateway,
         calendarTime = { calendarTime() },
         calendarChanges = emptyFlow<Unit>(),
-        sweep = {},
-        hooks = emptyList(),
-        profile = { Profile.Block.NONE },
-        draftAhead = { _, _ -> },
-        onFailure = {},
+        sweep = { owners.slots.sweep() },
+        // As the phone's, less what's its own: its alarms, its calendar, its widget.
+        hooks = listOf(
+            { _ -> owners.focus.forgetPlan() },
+            { _ -> owners.focus.settleTimer() },
+        ),
+        profile = { owners.conversation.profile(it) },
+        draftAhead = { made, now -> owners.looks.draftAhead(made, now) },
+        onFailure = { Log.w(Log.TAG, "Replanning failed: ${it::class.simpleName}") },
         notes = { task: TaskItem -> Notes.forTask(task, stores.felix.value.notes, stores.settings.value.classMap).map { it.text } },
     )
 
@@ -142,7 +145,7 @@ class ServerGraph(
     }
 
     /** The owners: what they do is what a command asks, a job, and what [start] has watch the stores. */
-    val owners = ServerOwners(stores, clock, scope, gateway, planning, calendarTime = { calendarTime() })
+    val owners: ServerOwners = ServerOwners(stores, clock, scope, gateway, planning, calendarTime = { calendarTime() })
 
     private val commands = Commands(owners, clock)
 
@@ -226,6 +229,7 @@ class ServerGraph(
             schedule = {},
             reread = {},
             cancelFelix = {},
+            eventAnswers = { calendarRead.value.answers },
         )
     }
 
@@ -242,14 +246,14 @@ class ServerGraph(
                 owners.looks.sweepReminders()
             },
             ServerJob.every("sources", SOURCES_EVERY_MS) { owners.syncer.sync(setOf(Source.PowerPlanner, Source.Gmail)) },
-            ServerJob("morning", due = { last, now -> Daily.nextBriefing(last ?: (now - DAY_MS), clock.zone(), stores.settings.value, stores.school.value) <= now }) {
+            ServerJob("morning", due = { last, now -> morningDue(last, now) }) {
                 owners.conversation.forgetExpired()
                 owners.ownTasks.rollWeeks()
                 owners.briefing.run()
                 owners.conversation.pruneFelix()
             },
-            ServerJob("check-in", due = { last, now -> Daily.nextSunday(last ?: (now - DAY_MS), clock.zone(), stores.settings.value.checkInMin) <= now }) { owners.conversation.remindCheckIn() },
-            ServerJob("review", due = { last, now -> Daily.nextSunday(last ?: (now - DAY_MS), clock.zone(), stores.settings.value.checkInMin + Daily.REVIEW_AFTER_MIN) <= now }) { owners.learning.review(ifDue = true) },
+            ServerJob("check-in", due = { last, now -> sundayDue(last, now, stores.settings.value.checkInMin) }) { owners.conversation.remindCheckIn() },
+            ServerJob("review", due = { last, now -> sundayDue(last, now, stores.settings.value.checkInMin + Daily.REVIEW_AFTER_MIN) }) { owners.learning.review(ifDue = true) },
             ServerJob("nightly", due = { last, now -> nightDue(last, now) }, retryMs = HOUR_MS) { nightly() },
             ServerJob.every("heartbeat", MINUTE_MS) { heartbeatUrl?.let { http.get(it, emptyMap()) } },
         ),
@@ -261,11 +265,23 @@ class ServerGraph(
         check(written == BackupService.Nightly.Written) { "The nightly file wasn't written: $written" }
     }
 
-    /** What runs by itself: the jobs, and, once the server applies commands, what watches the stores. */
+    /** What runs by itself: the jobs, and, once the server applies commands, what watches the stores and the plan made again. */
     fun start(scope: CoroutineScope) {
-        if (mode == COMMANDS) owners.start()
+        if (mode == COMMANDS) {
+            owners.start()
+            planning.watcher.start()
+        }
         jobs.start(scope)
     }
+
+    /** Where a job at a set time that's never run counts from: today's start, as what it did before then is gone by, and the morning says today's. */
+    private fun todayBegan(now: Long): Long = Instant.ofEpochMilli(now).atZone(clock.zone()).toLocalDate().atStartOfDay(clock.zone()).toInstant().toEpochMilli()
+
+    /** Whether the morning's work is due: its next time since it last ran. */
+    internal fun morningDue(last: Long?, now: Long): Boolean = Daily.nextBriefing(last ?: todayBegan(now), clock.zone(), stores.settings.value, stores.school.value) <= now
+
+    /** Whether Sunday's work at [minute] is due: its next time since it last ran. */
+    internal fun sundayDue(last: Long?, now: Long, minute: Int): Boolean = Daily.nextSunday(last ?: todayBegan(now), clock.zone(), minute) <= now
 
     /** Whether tonight's backup has gone: once a day, after [NIGHTLY_HOUR]. */
     private fun nightDue(last: Long?, now: Long): Boolean {
@@ -290,7 +306,9 @@ class ServerGraph(
 
     /** Credentials as the website's given them: those it may set, a blank one taken away. */
     suspend fun setCredentials(given: Map<String, String>) {
-        stores.secrets.put(CREDENTIALS.filter { it.name in given }.associateWith { given[it.name] })
+        val changed = CREDENTIALS.filter { it.name in given }.associateWith<Secret, String?> { given[it.name] }
+        val login = changed.keys.any { it == Secret.PowerPlannerUsername || it == Secret.PowerPlannerPassword }
+        stores.secrets.put(changed + if (login) Secret.POWER_PLANNER_SESSION.associateWith { null } else emptyMap())
     }
 
     /** Every store read again from what's committed. */
@@ -343,7 +361,6 @@ class ServerGraph(
         private const val MINUTE_MS = 60_000L
         private const val HOUR_MS = 60 * MINUTE_MS
         private const val SOURCES_EVERY_MS = 15 * MINUTE_MS
-        private const val DAY_MS = 24 * 3_600_000L
         private const val NIGHTLY_HOUR = 3
 
         /** What the website can set: the sources' sign-ins, entered there (W-19). Claude's key is the box's, and the parent code's the phone's. */
