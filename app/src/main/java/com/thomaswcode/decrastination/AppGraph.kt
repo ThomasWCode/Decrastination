@@ -359,7 +359,7 @@ class AppGraph private constructor(context: Context) : Owners {
     )
 
     /** Where a screen's changes go (D-140): each a command, applied through its owner. */
-    val commands = Commands(this, clock, stores.outbox, queuing = { stores.sync.value.mode == SyncState.COMMANDS })
+    val commands = Commands(this, clock, stores.outbox, queuing = { stores.sync.value.mode == SyncState.COMMANDS }, unfinished = { replica.pullEverything() })
 
     /** [action] applied as a command, its answer the owner's. */
     suspend fun <R, A> act(action: A): R where A : Action, A : Answers<R> = commands.act(action)

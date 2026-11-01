@@ -89,7 +89,7 @@ private data class ParentCode(val secret: String? = null)
 private data class Credentials(val held: Set<String>)
 
 @Serializable
-private data class StateOut(val revision: Long, val stores: List<StoreOut>)
+private data class StateOut(val revision: Long, val stores: List<StoreOut>, val mode: String)
 
 private const val SESSION = "__Host-session"
 private const val OAUTH = "__Host-oauth"
@@ -249,7 +249,7 @@ private fun Route.signedInRoutes(web: Web) {
         call.heardZone(graph)
         val since = call.request.queryParameters["since"]?.toLongOrNull() ?: 0
         val state = graph.state(since)
-        call.respond(StateOut(state.revision, state.stores.map { StoreOut(it.name, it.version, it.revision, json.parseToJsonElement(it.text)) }))
+        call.respond(StateOut(state.revision, state.stores.map { StoreOut(it.name, it.version, it.revision, json.parseToJsonElement(it.text)) }, graph.mode))
     }
     sse("/events") {
         // The heartbeat lets a dropped connection be seen, from either end; a comment, so a client hears nothing new in it.

@@ -149,4 +149,16 @@ class SqliteBackendTest {
 
         override fun decrypt(sealed: ByteArray) = sealed
     }
+
+    @Test
+    fun `a store emptied already takes no new revision for being emptied again`() {
+        val db = Database(":memory:")
+        val backend = SqliteBackend(db)
+        backend.write("chat-archive-2026-10.json", 1, """{"messages":["words"]}""")
+        backend.delete("chat-archive-2026-10.json", "{}")
+        val revision = db.currentRevision()
+        backend.delete("chat-archive-2026-10.json", "{}")
+        assertEquals(revision, db.currentRevision())
+        db.close()
+    }
 }

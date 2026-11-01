@@ -15,6 +15,7 @@ import com.thomaswcode.decrastination.protect.Protection
 import com.thomaswcode.decrastination.protect.SettingsChanges
 import com.thomaswcode.decrastination.tasks.Instructions
 import com.thomaswcode.decrastination.tasks.OwnTasks
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.asContextElement
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -84,6 +85,8 @@ class Commands(
     /** Where a command waits for the server's answer, once the two keep in step by commands. */
     private val outbox: JsonStore<OutboxState>? = null,
     private val queuing: () -> Boolean = { false },
+    /** A command here threw part-way: what it left may be in a store the server's run of it won't change, as a stopped process's may. */
+    private val unfinished: suspend () -> Unit = {},
 ) {
     /** Held while a command's recorded and applied, and while a pull replaces the stores: neither sees the other half-way. */
     private val gate = Mutex()
@@ -104,7 +107,12 @@ class Commands(
         return gate.withLock {
             // On the disk first, so it's sent whatever stops this process: the server's copy then brings what it made (`Replica`).
             outbox.update { it.copy(commands = it.commands + command) }
-            replaying(command) { run() }
+            try {
+                replaying(command) { run() }
+            } catch (failed: Throwable) {
+                withContext(NonCancellable) { unfinished() }
+                throw failed
+            }
         }
     }
 

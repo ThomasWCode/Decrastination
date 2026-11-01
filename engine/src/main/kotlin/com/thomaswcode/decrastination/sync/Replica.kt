@@ -10,6 +10,8 @@ import com.thomaswcode.decrastination.data.Stores
 import com.thomaswcode.decrastination.data.SyncState
 import com.thomaswcode.decrastination.net.Http
 import com.thomaswcode.decrastination.ports.Log
+import com.thomaswcode.decrastination.sync.protocol.Command
+import com.thomaswcode.decrastination.ui.Format
 import java.io.IOException
 import com.thomaswcode.decrastination.sync.protocol.CommandBatch
 import com.thomaswcode.decrastination.sync.protocol.Commands
@@ -74,6 +76,11 @@ class Replica(
         archiveSent = NOT_SENT
     }
 
+    /** The next pull to be of everything: what's here may hold what the server's run of a command won't change. */
+    suspend fun pullEverything() {
+        sync.update { it.copy(revision = 0) }
+    }
+
     /** What the server didn't apply, read and put away. */
     suspend fun clearDropped() {
         sync.update { it.copy(dropped = emptyList()) }
@@ -91,7 +98,7 @@ class Replica(
         // changed while it went, which work already running can't be asked for a second time.
         var sent = send()
         var rounds = 1
-        while (rounds < ROUNDS && (sent == Sent.Behind || (sent == Sent.InStep && unsent()))) {
+        while (rounds < ROUNDS && sync.value.mode != SyncState.COMMANDS && (sent == Sent.Behind || (sent == Sent.InStep && unsent()))) {
             sent = send()
             rounds++
         }
@@ -103,17 +110,30 @@ class Replica(
 
     private enum class Sent { InStep, Behind, Failed }
 
+    /** The server's mode, as it says it; null if it won't. */
+    private fun serverMode(headers: Map<String, String>): String? = try {
+        val answer = http.get("${sync.value.server}/api/version", headers)
+        if (answer.ok) JSON.decodeFromString(ServerVersion.serializer(), answer.body).mode else null
+    } catch (failed: IOException) {
+        Log.w(Log.TAG, "Asking the server its mode failed: ${failed::class.simpleName}")
+        null
+    }
+
     /** Whether the server says it now applies commands: this phone then keeps in step that way, at its next upload. */
     private suspend fun switched(headers: Map<String, String>): Boolean {
-        val mode = try {
-            val answer = http.get("${sync.value.server}/api/version", headers)
-            if (answer.ok) JSON.decodeFromString(ServerVersion.serializer(), answer.body).mode else null
-        } catch (failed: IOException) {
-            Log.w(Log.TAG, "Asking the server its mode failed: ${failed::class.simpleName}")
-            null
-        }
-        if (mode != SyncState.COMMANDS) return false
+        if (serverMode(headers) != SyncState.COMMANDS) return false
         sync.update { it.copy(mode = SyncState.COMMANDS, sent = emptyMap(), lastError = null) }
+        return true
+    }
+
+    /**
+     * The server's taking seeds again, as a restore's steps leave it (docs/spec/server.md): what's here is the newest there is, so
+     * it's all sent, from the next upload, what's waiting in the outbox with it, as that's in the stores already.
+     */
+    private suspend fun backToMirroring(): Boolean {
+        stores.outbox.update { it.copy(commands = emptyList()) }
+        sync.update { it.copy(mode = SyncState.MIRROR, revision = 0, sent = emptyMap(), lastError = null) }
+        archiveSent = NOT_SENT
         return true
     }
 
@@ -123,7 +143,8 @@ class Replica(
      * everything that follows. A pull that follows no answer isn't made, and one that finds a command made meanwhile isn't taken:
      * stores are replaced only with nothing waiting ([Commands.replacing]).
      * A store newer than this build can read stops the pull whole: the stores change together, and half of them new is worse than
-     * all of them old.
+     * all of them old. So does a server behind what this phone last took: it's been restored, and what's here is all that's left of
+     * what it's lost.
      */
     private suspend fun exchange(): Boolean {
         val token = stores.secrets[Secret.DeviceToken] ?: return false
@@ -139,18 +160,18 @@ class Replica(
         try {
             if (waiting.isNotEmpty()) {
                 val answer = http.post("$server/api/commands", headers, JSON.encodeToString(CommandBatch.serializer(), CommandBatch(waiting)))
-                if (!answer.ok) return failed(problem(answer.code))
+                if (!answer.ok) return if (answer.code == 409 && serverMode(headers) == SyncState.MIRROR) backToMirroring() else failed(problem(answer.code))
                 val outcomes = JSON.decodeFromString(ListSerializer(Outcome.serializer()), answer.body)
                 // What a dropped command did here is in stores the server hasn't changed, so a pull of what's changed wouldn't take it
                 // out: the next is of everything. Before it leaves the outbox, so a process stopped between the two hears it again.
-                val dropped = outcomes.filter { it.state == Outcome.DROPPED }.map { it.why ?: "It couldn't be applied" }
+                val dropped = outcomes.filter { it.state == Outcome.DROPPED }.map { outcome -> droppedLine(waiting.firstOrNull { it.id == outcome.id }, outcome.why ?: "It couldn't be applied") }
                 if (dropped.isNotEmpty()) sync.update { it.copy(dropped = (it.dropped + dropped).takeLast(DROPPED_KEPT), revision = 0) }
                 val heard = outcomes.map { it.id }.toSet()
                 stores.outbox.update { state -> state.copy(commands = state.commands.filterNot { it.id in heard }) }
             }
-            var pulled = pull(server, headers, sync.value.revision) ?: return false
-            // A server behind what this phone last took has been restored: nothing above that would come, so all of it's asked for.
-            if (pulled.revision < sync.value.revision) pulled = pull(server, headers, 0) ?: return false
+            val pulled = pull(server, headers, sync.value.revision) ?: return false
+            if (pulled.mode == SyncState.MIRROR) return backToMirroring()
+            if (pulled.revision < sync.value.revision) return failed(GONE_BACK)
             val here = stores.mirrored.associateBy { it.name }
             val taken = pulled.stores.filter { it.name in here || ChatArchiveStore.isMonth(it.name) }
             val newer = taken.filter { (here[it.name]?.version ?: stores.chatArchive.version) < it.version }.map { it.name }
@@ -172,6 +193,15 @@ class Replica(
             Log.w(Log.TAG, "Keeping in step with the server failed: ${failed::class.simpleName}")
             return failed("The server can't be reached")
         }
+    }
+
+    /** What's said of a command the server dropped: which it was and when, as a reason alone can't say what's to be done again. */
+    private fun droppedLine(command: Command?, why: String): String {
+        val which = command?.let { made ->
+            val name = made.action::class.simpleName.orEmpty().replace(WORD, " $0").trim().lowercase().replaceFirstChar(Char::uppercase)
+            "$name, ${Format.at(made.at, clock.now(), clock.zone())}"
+        }
+        return listOfNotNull(which, why).joinToString(": ")
     }
 
     /** Every store changed on the server since [revision], or null, said, if it wouldn't answer. */
@@ -254,6 +284,11 @@ class Replica(
 
         /** The commands said to have been dropped, kept for Setup. */
         private const val DROPPED_KEPT = 20
+
+        /** The start of each word of an action's name. */
+        private val WORD = Regex("[A-Z]")
+
+        private const val GONE_BACK = "The server has gone back to an earlier copy: nothing's been taken from it. See its restore steps."
 
         /** The most sends one upload makes: the first, and two to catch what it left. */
         private const val ROUNDS = 3
