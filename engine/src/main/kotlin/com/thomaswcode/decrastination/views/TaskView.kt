@@ -25,7 +25,6 @@ import com.thomaswcode.decrastination.sync.protocol.DeleteOwnTask
 import com.thomaswcode.decrastination.sync.protocol.FinishOwnTask
 import com.thomaswcode.decrastination.sync.protocol.LaterToday
 import com.thomaswcode.decrastination.sync.protocol.ReopenOwnTask
-import com.thomaswcode.decrastination.sync.protocol.SaveOwnTask
 import com.thomaswcode.decrastination.sync.protocol.TakeBackQuick
 import com.thomaswcode.decrastination.sync.protocol.TickBlock
 import com.thomaswcode.decrastination.sync.protocol.UndoKeep
@@ -143,7 +142,7 @@ object TaskViews {
                 val (change, text) = ownChange(task, OwnChange.NotATask, plan.today, zone)
                 add(TaskAction("Not a task", AddOwnChange(Ids.next(), text, about, change), confirm = "Not a task?", detail = "“${task.title}” comes off the plan and the list, as an email that's only to read does. It's listed under Not tasks, and taken back in Ask Claude, under Your changes."))
             }
-            if (own && changeable) add(TaskAction(if (home(task)) "Anywhere" else "Home only", SaveOwnTask.of(task.sourceId, OwnTaskRules.draftOf(task).copy(where = if (home(task)) "anywhere" else "home"))))
+            if (own && changeable) add(if (home(task)) TaskAction("Anywhere", ask = TaskAsk(TaskAsk.ANYWHERE)) else TaskAction("Home only", ask = TaskAsk(TaskAsk.HOME)))
             if (own) add(TaskAction("Delete", DeleteOwnTask(task.id), confirm = "Delete “${task.title}”?", detail = "It goes from the plan and the list. Its kept slots stay in the log."))
         }
         return TaskView(
@@ -185,7 +184,7 @@ object TaskViews {
         if (task.kind == Kind.Event) return listOf(TaskField(TaskAsk.DUE, "When", task.dueAt?.let { Format.at(it, now, zone) } ?: "No time", changes = own && changeable))
         fun quick(type: ChangeType) = !own && changeable && InstructionRules.quickInForce(applied, task.id, type)
         fun undo(type: ChangeType) = TaskAction("Undo", TakeBackQuick(task.id, type))
-        fun clear(type: ChangeType) = TaskAction("Clear", OwnTaskRules.draftWith(task, Change(type, taskId = task.id, time = null))?.let { SaveOwnTask.of(task.sourceId, it) })
+        fun clear(kind: String) = TaskAction("Clear", ask = TaskAsk(kind))
         val due = task.deadlineAt(now) ?: task.dueAt
         val start = if (own) task.notBefore else task.mine.from?.value
         val hiddenUntil = task.availableFrom?.takeIf { it > now && !own }
@@ -205,7 +204,7 @@ object TaskViews {
                 ).joinToString(". ").takeIf { it.isNotEmpty() },
                 changes = changeable,
                 undo = when {
-                    own && changeable && task.dueAt != null -> clear(ChangeType.DueBy)
+                    own && changeable && task.dueAt != null -> clear(TaskAsk.CLEAR_DUE)
                     quick(ChangeType.DueBy) -> undo(ChangeType.DueBy)
                     else -> null
                 },
@@ -224,7 +223,7 @@ object TaskViews {
                 note = hiddenUntil?.let { "Hidden from the plan until ${Format.at(it, now, zone)}, ${task.source.label} says" },
                 changes = changeable,
                 undo = when {
-                    own && changeable && task.notBefore != null -> clear(ChangeType.StartFrom)
+                    own && changeable && task.notBefore != null -> clear(TaskAsk.CLEAR_START)
                     quick(ChangeType.StartFrom) -> undo(ChangeType.StartFrom)
                     else -> null
                 },

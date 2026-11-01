@@ -40,7 +40,7 @@ function given(kind: string, value: string): TaskAsk | null {
   return kind === "minutes" ? { kind, minutes: Number(value) } : { kind, date: value };
 }
 
-function Field({ field, ask, press }: { field: TaskField; ask: (ask: TaskAsk) => void; press: (button: TaskAction) => void }) {
+function Field({ field, ask, press, busy }: { field: TaskField; ask: (ask: TaskAsk) => void; press: (button: TaskAction) => void; busy: boolean }) {
   const [changing, setChanging] = useState(false);
   const [value, setValue] = useState("");
   const set = () => {
@@ -62,7 +62,7 @@ function Field({ field, ask, press }: { field: TaskField; ask: (ask: TaskAsk) =>
           </button>
         ) : null}
         {field.undo ? (
-          <button className="quiet" aria-label={`${field.undo.label} ${field.label}`} onClick={() => field.undo && press(field.undo)}>
+          <button className="quiet" aria-label={`${field.undo.label} ${field.label}`} disabled={busy} onClick={() => field.undo && press(field.undo)}>
             {field.undo.label}
           </button>
         ) : null}
@@ -191,7 +191,7 @@ export function TaskSheet({ id, form, close }: { id: string; form: OwnTaskFormVi
           {task.detail ? <p className="detail">{task.detail}</p> : null}
           <div className="fields">
             {task.fields.map((field) => (
-              <Field key={field.kind} field={field} ask={ask} press={ifSure} />
+              <Field key={field.kind} field={field} ask={ask} press={ifSure} busy={busy} />
             ))}
           </div>
           {task.next ? <p className="next">{task.next}</p> : null}

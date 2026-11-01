@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { readPhoto } from "./api";
+import { ApiError, readPhoto } from "./api";
 import { NewTask } from "./NewTask";
 import type { OwnTaskFormView, PhotoRead } from "./types";
 
@@ -36,7 +36,7 @@ export function PhotoTasks({ form, side }: { form: OwnTaskFormView; side: number
         setRead(answer);
         setSaid(answer.why ?? null);
       })
-      .catch(() => setSaid("The photo couldn't be read. Try again, or add it with New task."))
+      .catch((failed: unknown) => setSaid(failed instanceof ApiError && failed.status === 409 ? "Another photo is being read. Try again once it's done." : "The photo couldn't be read. Try again, or add it with New task."))
       .finally(() => {
         setReading(false);
         if (input.current) input.current.value = "";

@@ -307,7 +307,7 @@ private fun Route.signedInRoutes(web: Web) {
         if (length == null || length > MAX_PHOTO_BYTES) return@post call.respond(HttpStatusCode.PayloadTooLarge, Problem("That photo's too big"))
         val jpeg = call.receive<ByteArray>()
         if (!isJpeg(jpeg)) return@post call.respond(HttpStatusCode.UnsupportedMediaType, Problem("That isn't a JPEG"))
-        call.respond(graph.readPhoto(jpeg))
+        graph.readPhoto(jpeg)?.let { call.respond(it) } ?: call.respond(HttpStatusCode.Conflict, Problem("A photo is being read already"))
     }
     get("/views/settings") { call.respond(graph.settings()) }
     post("/parent-code") {

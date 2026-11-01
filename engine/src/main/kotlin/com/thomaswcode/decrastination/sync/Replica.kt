@@ -163,9 +163,10 @@ class Replica(
                 if (!answer.ok) return if (answer.code == 409 && serverMode(headers) == SyncState.MIRROR) backToMirroring() else failed(problem(answer.code))
                 val outcomes = JSON.decodeFromString(ListSerializer(Outcome.serializer()), answer.body)
                 // What a dropped command did here is in stores the server hasn't changed, so a pull of what's changed wouldn't take it
-                // out: the next is of everything. Before it leaves the outbox, so a process stopped between the two hears it again.
+                // out: the next is of everything. A refused one's isn't a change lost, your screen having said what came of it, but it may
+                // have gone otherwise here. Before it leaves the outbox, so a process stopped between the two hears it again.
                 val dropped = outcomes.filter { it.state == Outcome.DROPPED }.map { outcome -> droppedLine(waiting.firstOrNull { it.id == outcome.id }, outcome.why ?: "It couldn't be applied") }
-                if (dropped.isNotEmpty()) sync.update { it.copy(dropped = (it.dropped + dropped).takeLast(DROPPED_KEPT), revision = 0) }
+                if (dropped.isNotEmpty() || outcomes.any { it.state == Outcome.REFUSED }) sync.update { it.copy(dropped = (it.dropped + dropped).takeLast(DROPPED_KEPT), revision = 0) }
                 val heard = outcomes.map { it.id }.toSet()
                 stores.outbox.update { state -> state.copy(commands = state.commands.filterNot { it.id in heard }) }
             }

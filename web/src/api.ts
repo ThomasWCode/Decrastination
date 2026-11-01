@@ -53,7 +53,7 @@ export async function send(action: Action): Promise<Outcome> {
 export async function saying(action: Action): Promise<string | null> {
   try {
     const outcome = await send(action);
-    return outcome.state === "dropped" ? (outcome.why ?? "That couldn't be done.") : null;
+    return outcome.state === "applied" ? null : (outcome.why ?? "That couldn't be done.");
   } catch {
     return UNREACHED;
   }

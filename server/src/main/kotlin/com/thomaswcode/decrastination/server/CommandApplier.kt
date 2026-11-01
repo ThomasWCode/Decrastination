@@ -42,8 +42,10 @@ class CommandApplier(
             // Inside, not ahead of it: a retry racing its first send waits here, and finds what came of it.
             recorded(command.id)?.let { return@commandOr it }
             backend.cause = command.id
-            val why = command.action.stale(owners) ?: command.action.refused(commands.apply(command))
-            val made = Outcome(command.id, if (why == null) Outcome.APPLIED else Outcome.DROPPED, why, db.currentRevision())
+            val stale = command.action.stale(owners)
+            val why = stale ?: command.action.refused(commands.apply(command))
+            val state = if (why == null) Outcome.APPLIED else if (stale != null) Outcome.DROPPED else Outcome.REFUSED
+            val made = Outcome(command.id, state, why, db.currentRevision())
             record(command, device, made)
             made
         }

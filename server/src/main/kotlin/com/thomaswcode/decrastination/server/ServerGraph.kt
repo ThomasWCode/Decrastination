@@ -18,6 +18,7 @@ import com.thomaswcode.decrastination.data.Stores
 import com.thomaswcode.decrastination.enrich.AiUsage
 import com.thomaswcode.decrastination.enrich.KeyProblem
 import com.thomaswcode.decrastination.enrich.ModelGateway
+import com.thomaswcode.decrastination.enrich.PhotoTasks
 import com.thomaswcode.decrastination.learn.Daily
 import com.thomaswcode.decrastination.learn.EventJudge
 import com.thomaswcode.decrastination.net.Http
@@ -57,6 +58,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -418,10 +420,23 @@ class ServerGraph(
     /** Whether a photo can be read into tasks here: tasks can be saved, Claude's on, and its key's on the box. */
     private val readsPhotos: Boolean get() = mode == COMMANDS && stores.settings.value.aiEnabled && claudeKey != null
 
-    /** [jpeg], a photo of homework, read into tasks to check (NF-01), each under an id of its own: never in a command, as a call can take a minute. */
-    suspend fun readPhoto(jpeg: ByteArray): PhotoRead {
-        val (reading, why) = owners.photos.readPhotoTasks(jpeg)
-        return PhotoRead(reading?.tasks.orEmpty().map { OwnTaskEdit(Ids.next(), it) }, reading?.leftOut.orEmpty(), reading?.question, why)
+    /** Whether a photo is being read: one at a time, as on the phone, as each is a paid call. */
+    private val readingPhoto = AtomicBoolean()
+
+    /**
+     * [jpeg], a photo of homework, read into tasks to check (NF-01), each under an id of its own: never in a command, as a call can
+     * take a minute. Null while another's being read.
+     */
+    suspend fun readPhoto(jpeg: ByteArray): PhotoRead? = readPhoto(jpeg) { owners.photos.readPhotoTasks(it) }
+
+    internal suspend fun readPhoto(jpeg: ByteArray, read: suspend (ByteArray) -> Pair<PhotoTasks.Reading?, String?>): PhotoRead? {
+        if (!readingPhoto.compareAndSet(false, true)) return null
+        try {
+            val (reading, why) = read(jpeg)
+            return PhotoRead(reading?.tasks.orEmpty().map { OwnTaskEdit(Ids.next(), it) }, reading?.leftOut.orEmpty(), reading?.question, why)
+        } finally {
+            readingPhoto.set(false)
+        }
     }
 
     /** Settings as the website draws them. */

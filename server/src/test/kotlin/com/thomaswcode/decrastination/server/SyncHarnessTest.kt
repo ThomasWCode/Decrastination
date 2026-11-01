@@ -26,6 +26,7 @@ import com.thomaswcode.decrastination.sync.protocol.ClearChat
 import com.thomaswcode.decrastination.sync.protocol.Command
 import com.thomaswcode.decrastination.sync.protocol.CommandBatch
 import com.thomaswcode.decrastination.sync.protocol.DeleteOwnTask
+import com.thomaswcode.decrastination.sync.protocol.UndoKeep
 import com.thomaswcode.decrastination.sync.protocol.FinishOwnTask
 import com.thomaswcode.decrastination.sync.protocol.Outcome
 import com.thomaswcode.decrastination.sync.protocol.SaveOwnTask
@@ -349,6 +350,20 @@ class SyncHarnessTest {
     }
 
     private fun change(id: String, taskId: String) = AddOwnChange(id, "words", About(taskId = taskId), Change(ChangeType.OnDay, taskId = taskId, date = "2026-11-02"))
+
+    @Test
+    fun `a command the server refused isn't said as a change lost, and what it did here goes all the same`() = runBlocking {
+        val phone = phone()
+        phone.h.commands.act(own("Essay"))
+        assertTrue(phone.replica.upload())
+        // What the server's copy hasn't: as a refused one can have gone otherwise here.
+        phone.h.stores.tasks.update { state -> state.copy(tasks = state.tasks.map { it.copy(detail = "Only here") }) }
+        phone.h.commands.act(UndoKeep("no such piece", 5L))
+        assertTrue(phone.replica.upload())
+        assertEquals(emptyList(), phone.h.stores.sync.value.dropped)
+        assertEquals(setOf(""), phone.h.stores.tasks.value.tasks.mapTo(HashSet()) { it.detail })
+        assertEquals(graph.state(0).revision, phone.h.stores.sync.value.revision)
+    }
 
     @Test
     fun `what a dropped command did here goes, though the server changed nothing a pull since the last would bring`() = runBlocking {
