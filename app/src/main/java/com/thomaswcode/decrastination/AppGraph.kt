@@ -5,6 +5,7 @@ import android.app.admin.DevicePolicyManager
 import android.content.Context
 import android.util.Log
 import com.thomaswcode.decrastination.block.AnkiWatch
+import com.thomaswcode.decrastination.block.BlockPolicy
 import com.thomaswcode.decrastination.block.Focus
 import com.thomaswcode.decrastination.block.PhotoChecks
 import com.thomaswcode.decrastination.block.Photos
@@ -28,6 +29,7 @@ import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.WallClock
 import com.thomaswcode.decrastination.data.AndroidBackupFolder
 import com.thomaswcode.decrastination.data.BackupService
+import com.thomaswcode.decrastination.data.CalendarRead
 import com.thomaswcode.decrastination.data.DeviceClock
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.KeystoreCipher
@@ -75,9 +77,20 @@ import com.thomaswcode.decrastination.sync.Sync
 import com.thomaswcode.decrastination.sync.SyncWorker
 import com.thomaswcode.decrastination.sync.Syncer
 import com.thomaswcode.decrastination.sync.protocol.Action
+import com.thomaswcode.decrastination.sync.protocol.AddOwnChange
 import com.thomaswcode.decrastination.sync.protocol.Answers
+import com.thomaswcode.decrastination.sync.protocol.AskAboutEvent
+import com.thomaswcode.decrastination.sync.protocol.AttachPhoto
 import com.thomaswcode.decrastination.sync.protocol.Commands
+import com.thomaswcode.decrastination.sync.protocol.NoteSource
+import com.thomaswcode.decrastination.sync.protocol.ObserveCalendar
+import com.thomaswcode.decrastination.sync.protocol.ObserveSources
 import com.thomaswcode.decrastination.sync.protocol.Owners
+import com.thomaswcode.decrastination.sync.protocol.RecordBlock
+import com.thomaswcode.decrastination.sync.protocol.RecordProtection
+import com.thomaswcode.decrastination.sync.protocol.SettleEvent
+import com.thomaswcode.decrastination.sync.protocol.SpendFreeTime
+import com.thomaswcode.decrastination.sync.protocol.TimerOver
 import com.thomaswcode.decrastination.tasks.Instructions
 import com.thomaswcode.decrastination.tasks.OwnTasks
 import com.thomaswcode.decrastination.ui.Moves
@@ -174,6 +187,12 @@ class AppGraph private constructor(context: Context) : Owners {
     /** Takes [seen] off Setup's list of files found unreadable. */
     suspend fun forgetUnreadable(seen: JsonStore.Unreadable) = runtime.update { it.seenUnreadable(seen) }
 
+    /**
+     * Whether a change goes to the server as a command (D-140), the two keeping in step by commands: what only this phone can know
+     * goes as one too (W-24), as a pull takes the server's stores whole. Till then the stores carry it, whole.
+     */
+    private val sendsCommands: () -> Boolean = { stores.sync.value.mode == SyncState.COMMANDS }
+
     private val syncer = Syncer(
         tasks = tasks,
         settings = settings,
@@ -187,19 +206,25 @@ class AppGraph private constructor(context: Context) : Owners {
         onFailure = { source, error -> Log.w(TAG, "Reading ${source.label} failed", error) },
         // What a card takes, per deck, as learned (DX-11).
         ankiRates = { stores.learning.value.calibration.ankiSecondsPerCard },
+        observing = sendsCommands,
+        observed = { seen -> commands.act(ObserveSources(seen)) },
     )
+
+    override val sources: Syncer get() = syncer
 
     /**
      * What the app reads ([Sync]): the sources through the syncer, the Teams widget asked and watched,
      * and the calendar as busy time. Made before the plan, which is made again as the calendar's read.
      */
     val sync: Sync = Sync(
-        tasks, settings, stores.calendar, stores.instructions, clock, scope, syncer, AndroidSyncPorts(app),
+        settings, stores.calendar, stores.instructions, clock, scope, syncer, AndroidSyncPorts(app),
         forgetPlan = { focus.forgetPlan() },
         watchCalendar = { calendarWriter.watchCalendar() },
-        askAboutEvent = { key, title, day, start, answers -> conversation.askAboutEvent(key, title, day, start, answers) },
-        settleEvent = { conversation.settleEvent(it) },
+        // What this phone's calendar and what it's asked decide, as a command once the two keep in step by them (W-24).
+        askAboutEvent = { key, title, day, start, answers -> if (sendsCommands()) commands.send(AskAboutEvent(key, title, day, start, answers)) else conversation.askAboutEvent(key, title, day, start, answers) },
+        settleEvent = { key -> if (sendsCommands()) commands.send(SettleEvent(key)) else conversation.settleEvent(key) },
         replan = { planning.watcher.poke() },
+        noteSource = { source, note -> if (sendsCommands()) commands.send(NoteSource(source, note)) else syncer.note(source, note) },
     )
 
     /**
@@ -251,7 +276,7 @@ class AppGraph private constructor(context: Context) : Owners {
     )
 
     /** The blocker's state and decisions (block/Focus.kt). */
-    override val focus = Focus(
+    override val focus: Focus = Focus(
         tasks, settings, stores.session, stores.learning, stores.protection, log, clock,
         onOwnTaskDone = { ownTasks.finishOwnTask(it) },
         // An email's work all done by a keep or a tick is finished in Gmail; taken back, so is its finish, once its work isn't all done.
@@ -260,6 +285,8 @@ class AppGraph private constructor(context: Context) : Owners {
         // A school day by the school calendar (BL-02): a day off blocks from the weekend's time.
         schoolDay = { SchoolDays.kindOf(it, school.value) == DayKind.Weekday },
         forceActiveUntil = { stores.device.value.forceActiveUntil },
+        // Free time spent, sent once the two keep in step by commands, merged with the one before till it goes (W-24).
+        saveSpend = { ms, day -> if (sendsCommands()) commands.send(SpendFreeTime(day.toString(), ms)) else focus.spend(ms, day) },
     ) { state, s, now -> planning.plan(state, s, now) }
 
     /**
@@ -270,7 +297,8 @@ class AppGraph private constructor(context: Context) : Owners {
     val calendarWriter = CalendarWriter(
         tasks, settings, stores.model, stores.calendar, clock, scope, SlotCalendar(app),
         sayRefused = { move, zone, why -> SlotCalendar.sayRefused(app, move, zone, why) },
-        addOwnChange = { id, text, about, change -> instructions.addOwnChange(id, text, about, change) },
+        // A slot moved by hand in the calendar: what only this phone sees, as a command once the two keep in step by them.
+        addOwnChange = { id, text, about, change -> if (sendsCommands()) commands.send(AddOwnChange(id, text, about, change)) else instructions.addOwnChange(id, text, about, change) },
         replan = { planning.watcher.poke() },
         settleEvent = { conversation.settleEvent(it) },
         reread = {
@@ -286,10 +314,16 @@ class AppGraph private constructor(context: Context) : Owners {
 
     /** Time in AnkiDroid as work (NF-03, DX-11). */
     val anki = AnkiWatch(
-        stores.anki, stores.learning, tasks, clock, scope, focus, planning, sync, AnkiProvider.PACKAGE,
+        stores.anki, stores.learning, tasks, clock, scope, focus, planning,
+        readAnki = { sync.sync(setOf(Source.Anki)) },
+        ankiPackage = AnkiProvider.PACKAGE,
         decks = { if (AnkiProvider.hasPermission(app)) AnkiProvider.decks(app.contentResolver) else null },
         noteActivity = { taskIds, now -> looks.noteActivity(taskIds, now) },
+        observing = sendsCommands,
+        send = { commands.send(it) },
     )
+
+    override val ankiWatch: AnkiWatch get() = anki
 
     /** What Felix's service asks of Android: his notification, and the work and alarms that outlive what asked. */
     private val felixPorts = AndroidFelixPorts(app)
@@ -364,6 +398,17 @@ class AppGraph private constructor(context: Context) : Owners {
     /** [action] applied as a command, its answer the owner's. */
     suspend fun <R, A> act(action: A): R where A : Action, A : Answers<R> = commands.act(action)
 
+    /** A block as the blocker saw it, on record: sent as a command once the two keep in step by them (W-24). */
+    suspend fun recordBlock(target: Focus.Target, reason: BlockPolicy.Reason) =
+        if (sendsCommands()) commands.send(RecordBlock(target.name, reason.name)) else focus.recordBlock(target, reason)
+
+    /** The timer's zero reached and not yet told: told, and sent as a command once the two keep in step by them. Whether it was. */
+    suspend fun timerOver(now: Long): Boolean = if (sendsCommands()) commands.act(TimerOver) else focus.timerOver(now)
+
+    /** Protection as the watchdog found it, on record, sent likewise. */
+    suspend fun recordProtection(problems: List<String>, repaired: Boolean) =
+        if (sendsCommands()) commands.send(RecordProtection(problems, repaired)) else focus.recordProtection(problems, repaired)
+
     /** A piece moved by hand ([Moves]). */
     val moves: Moves = Moves(tasks, instructions, commands, planning, clock, scope)
 
@@ -385,11 +430,16 @@ class AppGraph private constructor(context: Context) : Owners {
     )
 
     /** Photos ([Photos]): of a task's work, of homework to make tasks from, and of written work checked. */
-    val photos: Photos = Photos(
+    override val photos: Photos = Photos(
         tasks, settings, chat, clock, scope, gateway, focus, File(app.filesDir, "photos"), PhotoChecks::shrink,
         profile = { conversation.profile() },
         read = { taskId -> readings.enrichNow(only = taskId) },
+        // Kept with its task as a command once the two keep in step by them, or a pull would take it away, and the file with it.
+        keeping = { taskId, photo -> if (sendsCommands()) commands.send(AttachPhoto(taskId, photo)) else photos.keep(taskId, photo) },
     )
+
+    /** The calendar's this phone's, read here: nothing to keep of what it sent. */
+    override suspend fun calendarSeen(read: CalendarRead) = Unit
 
     /** Protection ([Protection]): settings changes, waiting once armed if they loosen blocking; the parent code; the device admin. */
     override val protection = Protection(settings, stores.protection, stores.device, secrets, clock, scope, adminActive = { Watchdog.isAdminActive(app) }) {
@@ -527,6 +577,16 @@ class AppGraph private constructor(context: Context) : Owners {
         // Anything the server keeps a copy of changed, the calendar as read and the chat's archive among it: sent within the minute, by work that keeps its network.
         scope.launch {
             merge(stores.mirrored.map { it.state.drop(1) }.merge(), sync.calendarState.drop(1), stores.chatArchive.changes.drop(1)).collect { if (replica.paired) ReplicaWorker.soon(app) }
+        }
+        // The calendar as read, which the server plans by and can't read, sent as it changes once the two keep in step by commands
+        // (W-24): a seed carried it before. The same as last sent isn't sent again.
+        scope.launch {
+            var sent: CalendarRead? = null
+            sync.calendarState.collect {
+                if (!sendsCommands() || !replica.paired) return@collect
+                val read = sync.calendarRead()
+                if (read != sent) runCatching { commands.send(ObserveCalendar(read)) }.onSuccess { sent = read }.onFailure { e -> Log.w(TAG, "Sending the calendar as read failed", e) }
+            }
         }
         // Redraw the widget whenever what it shows may have changed.
         scope.launch {

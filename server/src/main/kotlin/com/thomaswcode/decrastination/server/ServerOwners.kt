@@ -1,5 +1,6 @@
 package com.thomaswcode.decrastination.server
 
+import com.thomaswcode.decrastination.block.AnkiWatch
 import com.thomaswcode.decrastination.block.Focus
 import com.thomaswcode.decrastination.block.Photos
 import com.thomaswcode.decrastination.block.Slots
@@ -12,6 +13,7 @@ import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.WallClock
 import com.thomaswcode.decrastination.data.BackupService
+import com.thomaswcode.decrastination.data.CalendarRead
 import com.thomaswcode.decrastination.data.Stores
 import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.data.JsonStore
@@ -130,6 +132,8 @@ class ServerOwners(
     private val told: (Outbox.Notice) -> Unit = {},
     /** No command open: what a command sets off that reaches Claude waits here, so one rolled back finds nothing to ask. */
     private val afterCommands: suspend () -> Unit = {},
+    /** The calendar as the phone last read it, kept, as the plan's made from it here (`ObserveCalendar`). */
+    private val seenCalendar: suspend (CalendarRead) -> Unit = {},
 ) : Owners {
     override val tasks: JsonStore<TaskState> = stores.tasks
 
@@ -261,14 +265,27 @@ class ServerOwners(
         settled = afterCommands,
     )
 
-    /** A photo of homework read into tasks of your own: the browser's shrunk it already. */
-    val photos: Photos = Photos(stores.tasks, stores.settings, stores.chat, clock, scope, gateway, focus, photosFolder, shrink = { null }, profile = { conversation.profile() }, read = {})
+    /** A photo of homework read into tasks of your own: the browser's shrunk it already. A task's photo, the phone's, kept with it by name. */
+    override val photos: Photos = Photos(stores.tasks, stores.settings, stores.chat, clock, scope, gateway, focus, photosFolder, shrink = { null }, profile = { conversation.profile() }, read = {})
+
+    /** Time in AnkiDroid as work, as the phone saw it and sent it (`AnkiCame`, `AnkiWent`): its decks read there, and nothing to read here. */
+    override val ankiWatch: AnkiWatch = AnkiWatch(
+        stores.anki, stores.learning, stores.tasks, clock, scope, focus, planning,
+        readAnki = {},
+        ankiPackage = "",
+        decks = { null },
+        noteActivity = { taskIds, now -> looks.noteActivity(taskIds, now) },
+    )
+
+    override suspend fun calendarSeen(read: CalendarRead) = seenCalendar(read)
 
     /** Today's slots as they pass. */
     val slots: Slots = Slots(stores.session, stores.settings, stores.tasks, stores.school, clock, planning, focus)
 
     /** The morning, its calendar what the phone last sent. */
     val briefing: Briefing = Briefing(planning, stores.log, stores.runtime, stores.school, clock, NoNotices, readCalendar = {}, looks, conversation)
+
+    override val sources: Syncer get() = syncer
 
     /** The sources that need no phone (D-133): read here, merged as the phone merges them. */
     val syncer: Syncer = Syncer(

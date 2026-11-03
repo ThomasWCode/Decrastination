@@ -1,11 +1,14 @@
 package com.thomaswcode.decrastination.sync.protocol
 
+import com.thomaswcode.decrastination.block.AnkiWatch
 import com.thomaswcode.decrastination.block.Focus
+import com.thomaswcode.decrastination.block.Photos
 import com.thomaswcode.decrastination.core.Ids
 import com.thomaswcode.decrastination.core.Replay
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.WallClock
 import com.thomaswcode.decrastination.data.BackupService
+import com.thomaswcode.decrastination.data.CalendarRead
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.OutboxState
 import com.thomaswcode.decrastination.data.TaskState
@@ -14,8 +17,13 @@ import com.thomaswcode.decrastination.felix.Looks
 import com.thomaswcode.decrastination.learn.Learning
 import com.thomaswcode.decrastination.protect.Protection
 import com.thomaswcode.decrastination.protect.SettingsChanges
+import com.thomaswcode.decrastination.sync.Syncer
 import com.thomaswcode.decrastination.tasks.Instructions
 import com.thomaswcode.decrastination.tasks.OwnTasks
+import java.util.concurrent.ConcurrentHashMap
+import kotlin.coroutines.AbstractCoroutineContextElement
+import kotlin.coroutines.CoroutineContext
+import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.asContextElement
 import kotlinx.coroutines.sync.Mutex
@@ -93,6 +101,17 @@ interface Owners {
     val protection: Protection
     val learning: Learning
     val backups: BackupService
+
+    /** What merges a source's read into the tasks, the phone's read as the server's own ([ObserveSources]). */
+    val sources: Syncer
+
+    /** Time in AnkiDroid as work, as the phone saw it ([AnkiCame], [AnkiWent]). */
+    val ankiWatch: AnkiWatch
+
+    val photos: Photos
+
+    /** The calendar as the phone last read it ([ObserveCalendar]): kept where it's planned by from it, the server; nothing on the phone, whose it is. */
+    suspend fun calendarSeen(read: CalendarRead)
 }
 
 /**
@@ -114,26 +133,67 @@ class Commands(
     /** Held across a change to the settings: [changeSettings]. */
     private val changingSettings = Mutex()
 
+    /**
+     * The commands that may have gone to the server, so none is merged into ([Merging]): those waiting at this start, as a process
+     * stopped mid-send can't say, and each handed to a send since ([sending]).
+     */
+    private val mayHaveGone: MutableSet<String> = ConcurrentHashMap.newKeySet<String>().apply { outbox?.value?.commands?.forEach { add(it.id) } }
+
+    /**
+     * What's waiting in the outbox, to be sent: none of it merged into from now on, as it may reach the server as it is now. Read and
+     * marked with no command let in between, so what's sent is what's marked.
+     */
+    suspend fun sending(): List<Command> = gate.withLock {
+        outbox?.value?.commands.orEmpty().also { waiting -> waiting.forEach { mayHaveGone += it.id } }
+    }
+
     suspend fun <R, A> act(action: A): R where A : Action, A : Answers<R> = made(action) { action.run(owners) }
 
-    /** [action], what it answers left aside: one decided on elsewhere, whichever it is. */
+    /**
+     * [action], what it answers left aside: one decided on elsewhere, whichever it is. One made while another's being applied (an
+     * event to ask about, found by a read the other set off) is made as that closes, as a command of its own: the gate it would
+     * wait for is that one's.
+     */
     suspend fun send(action: Action) {
+        coroutineContext[Applying]?.let { applying ->
+            applying.after += action
+            return
+        }
         made(action) { action.run(owners) }
     }
 
     private suspend fun <R> made(action: Action, run: suspend () -> R): R {
         val command = Command(Ids.next(), clock.now(), action)
         if (outbox == null || !queuing()) return replaying(command) { run() }
-        return gate.withLock {
-            // On the disk first, so it's sent whatever stops this process: the server's copy then brings what it made (`Replica`).
-            outbox.update { it.copy(commands = it.commands + command) }
-            try {
-                replaying(command) { run() }
-            } catch (failed: Throwable) {
-                withContext(NonCancellable) { unfinished() }
-                throw failed
+        check(coroutineContext[Applying] == null) { "${action::class.simpleName} made inside another command, whose gate it would wait for" }
+        val after = Applying()
+        try {
+            return gate.withLock {
+                // On the disk first, so it's sent whatever stops this process: the server's copy then brings what it made (`Replica`).
+                // Into the one before it, where that takes it in and hasn't gone: what's applied here is this one's alone.
+                outbox.update { state ->
+                    val last = state.commands.lastOrNull()
+                    val merged = last?.takeIf { it.id !in mayHaveGone }?.let { (it.action as? Merging)?.merged(action) }
+                    state.copy(commands = if (last != null && merged != null) state.commands.dropLast(1) + last.copy(action = merged) else state.commands + command)
+                }
+                try {
+                    withContext(after) { replaying(command) { run() } }
+                } catch (failed: Throwable) {
+                    withContext(NonCancellable) { unfinished() }
+                    throw failed
+                }
             }
+        } finally {
+            // What it set off to make, made, whatever came of it: what a read found is found all the same.
+            withContext(NonCancellable) { after.after.forEach { send(it) } }
         }
+    }
+
+    /** A command being applied here, and what's to be made once it closes ([send]). */
+    private class Applying : AbstractCoroutineContextElement(Applying) {
+        val after = mutableListOf<Action>()
+
+        companion object Key : CoroutineContext.Key<Applying>
     }
 
     /** [command], made elsewhere, applied here as it was there. */

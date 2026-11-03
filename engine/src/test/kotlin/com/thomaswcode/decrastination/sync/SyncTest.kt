@@ -77,7 +77,7 @@ class SyncTest {
     private val gmail = FakeSource(Source.Gmail) { throw IOException("No network") }
 
     private val sync = Sync(
-        tasks, settings, calendar, instructions, clock, scope, Syncer(tasks, settings, listOf(teams, gmail), clock), ports,
+        settings, calendar, instructions, clock, scope, Syncer(tasks, settings, listOf(teams, gmail), clock), ports,
         forgetPlan = { forgot.incrementAndGet() },
         watchCalendar = { watched.incrementAndGet() },
         askAboutEvent = { key, _, _, _, _ -> asked += key },

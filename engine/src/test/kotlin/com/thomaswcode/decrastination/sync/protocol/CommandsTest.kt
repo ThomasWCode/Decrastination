@@ -1,6 +1,8 @@
 package com.thomaswcode.decrastination.sync.protocol
 
+import com.thomaswcode.decrastination.block.AnkiWatch
 import com.thomaswcode.decrastination.block.Focus
+import com.thomaswcode.decrastination.block.Photos
 import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.Change
 import com.thomaswcode.decrastination.core.ChangeType
@@ -17,6 +19,7 @@ import com.thomaswcode.decrastination.core.ReplayClock
 import com.thomaswcode.decrastination.core.Rule
 import com.thomaswcode.decrastination.core.newStepId
 import com.thomaswcode.decrastination.data.BackupService
+import com.thomaswcode.decrastination.data.CalendarRead
 import com.thomaswcode.decrastination.data.Reset
 import com.thomaswcode.decrastination.data.SecretCipher
 import com.thomaswcode.decrastination.data.Stores
@@ -27,6 +30,7 @@ import com.thomaswcode.decrastination.learn.CheckIn
 import com.thomaswcode.decrastination.learn.Learning
 import com.thomaswcode.decrastination.learn.ReviewInput
 import com.thomaswcode.decrastination.protect.Protection
+import com.thomaswcode.decrastination.sync.Syncer
 import com.thomaswcode.decrastination.tasks.Instructions
 import com.thomaswcode.decrastination.tasks.OwnTasks
 import com.thomaswcode.decrastination.tasks.TasksHarness
@@ -157,6 +161,11 @@ class CommandsTest {
                 override val protection = made
                 override val learning: Learning get() = error("not here")
                 override val backups: BackupService get() = error("not here")
+                override val sources: Syncer get() = error("not here")
+                override val ankiWatch: AnkiWatch get() = error("not here")
+                override val photos: Photos get() = error("not here")
+
+                override suspend fun calendarSeen(read: CalendarRead) = error("not here")
             }
             val commands = Commands(owners, clock)
             (1..30).map { i -> async(Dispatchers.Default) { commands.changeSettings { it.copy(hintsSeen = it.hintsSeen + "hint $i") } } }.awaitAll()

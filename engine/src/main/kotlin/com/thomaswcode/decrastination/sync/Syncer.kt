@@ -13,6 +13,7 @@ import com.thomaswcode.decrastination.sources.ReadContext
 import com.thomaswcode.decrastination.sources.SourceRead
 import com.thomaswcode.decrastination.sources.TaskSource
 import com.thomaswcode.decrastination.sources.gmail.GmailThreads
+import com.thomaswcode.decrastination.sync.protocol.SourceObserved
 import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -24,6 +25,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeout
+import kotlinx.serialization.json.Json
 
 /** What one sync found, for the log, the credit and the self-assessment prompts. */
 data class SyncReport(
@@ -66,6 +68,13 @@ class Syncer(
     readContext: CoroutineContext = Dispatchers.IO,
     /** Seconds a card per Anki deck, as learned (DX-11). */
     private val ankiRates: () -> Map<Long, Double> = { emptyMap() },
+    /**
+     * Whether what's read here goes to the server as what's seen (W-24), once the two keep in step by commands: Teams and Anki,
+     * which only this phone can read, sent as one command a sync ([observed]), and what the server reads itself left to it.
+     */
+    private val observing: () -> Boolean = { false },
+    /** What was read, as a command: applied here through [observe], as on the server. */
+    private val observed: suspend (List<SourceObserved>) -> SyncReport = { SyncReport() },
 ) {
     private val sources = sources.sortedBy { it.source == Source.Anki }
     private val readers = CoroutineScope(SupervisorJob() + readContext)
@@ -75,6 +84,9 @@ class Syncer(
     /** Each source's latest read, one given up on included: touched only under [lock]. */
     private val reads = HashMap<Source, Deferred<SourceRead>>()
     private val afterEvery = mutableListOf<suspend () -> Unit>()
+
+    /** Each source's read as last sent, by its hash: one read the same again is sent as its status alone. Under [lock]. */
+    private val lastSent = HashMap<Source, String>()
 
     /** Called after each sync that changed anything, in the order added. */
     fun addListener(listener: suspend (SyncReport) -> Unit) {
@@ -87,45 +99,111 @@ class Syncer(
     }
 
     suspend fun sync(only: Set<Source>? = null): SyncReport = lock.withLock {
+        if (observing()) return@withLock sent(only)
         var report = SyncReport()
         for (source in sources) {
             if (only != null && source.source !in only) continue
-            report += readOne(source)
+            report += when (val read = read(source)) {
+                is Read.Done -> merged(source.source, read.read, read.startedAt)
+                is Read.Failed -> failed(source.source, read.startedAt, read.why)
+            }
         }
+        after(report)
+        report
+    }
+
+    /**
+     * What this phone alone can read, read and sent to the server as what's seen, one command a sync, applied here as there
+     * ([observe]); what the server reads itself (Power Planner, Gmail) isn't read here. A read the same as the last sent goes as
+     * its status alone, so the server's record doesn't fill with copies of it.
+     */
+    private suspend fun sent(only: Set<Source>?): SyncReport {
+        val seen = sources.filter { (only == null || it.source in only) && it.source !in Source.SERVERS }.map { source ->
+            when (val read = read(source)) {
+                is Read.Failed -> SourceObserved(source.source, read.startedAt, failed = read.why)
+                is Read.Done -> {
+                    val hash = Protocol.hash(JSON.encodeToString(SourceRead.serializer(), read.read))
+                    SourceObserved(source.source, read.startedAt, read.read.takeUnless { lastSent[source.source] == hash }).also { lastSent[source.source] = hash }
+                }
+            }
+        }
+        return if (seen.isEmpty()) SyncReport() else observed(seen)
+    }
+
+    /**
+     * What a phone read and sent ([ObserveSources]), merged as a read here is, the same on the server and on the phone that read
+     * it; then what follows a sync. A source read the same as before has only its status, as its tasks are as that read left them.
+     */
+    suspend fun observe(seen: List<SourceObserved>): SyncReport {
+        var report = SyncReport()
+        for (one in seen) {
+            report += when {
+                one.failed != null -> failed(one.source, one.startedAt, one.failed)
+                one.read != null -> merged(one.source, one.read, one.startedAt)
+                else -> readAgain(one.source, one.startedAt)
+            }
+        }
+        after(report)
+        return report
+    }
+
+    /** [source]'s note, a refusal to sync say, where its status shows it: the next read takes its place. */
+    suspend fun note(source: Source, note: String) {
+        tasks.update { state -> state.copy(sources = state.sources + (source to state.status(source).copy(note = note))) }
+    }
+
+    /** What follows a sync: what's listening, where something changed, then what follows every one. */
+    private suspend fun after(report: SyncReport) {
         if (report.completed.isNotEmpty() || report.reopened.isNotEmpty() || report.added.isNotEmpty() || report.missed.isNotEmpty()) {
             listeners.forEach { it(report) }
         }
         afterEvery.forEach { it() }
-        report
     }
 
-    private suspend fun readOne(source: TaskSource): SyncReport {
+    /** A source's read, or why there's none. */
+    private sealed interface Read {
+        data class Done(val read: SourceRead, val startedAt: Long) : Read
+
+        data class Failed(val why: String, val startedAt: Long) : Read
+    }
+
+    private suspend fun read(source: TaskSource): Read {
         val startedAt = clock.now()
         val state = tasks.value
         val context = ReadContext(startedAt, clock.zone(), settings.value, state.tasks, state.ankiDay, ankiRates())
         // The last read given up on, still stuck in a call that can't be stopped: not another.
-        if (reads[source.source]?.isCompleted == false) return failed(source.source, startedAt, "Still waiting for the last read, which hasn't answered")
+        if (reads[source.source]?.isCompleted == false) return Read.Failed("Still waiting for the last read, which hasn't answered", startedAt)
         val reading = readers.async { source.read(context) }
         reads[source.source] = reading
-        val read = try {
-            withTimeout(timeoutMs) { reading.await() }
+        return try {
+            Read.Done(withTimeout(timeoutMs) { reading.await() }, startedAt)
         } catch (e: TimeoutCancellationException) {
             reading.cancel()
             onFailure(source.source, e)
-            return failed(source.source, startedAt, "No answer in ${timeoutMs / 1000} s")
+            Read.Failed("No answer in ${timeoutMs / 1000} s", startedAt)
         } catch (e: CancellationException) {
             // The sync itself was cancelled: so is the read, and that's no failure of the source.
             reading.cancel()
             throw e
         } catch (e: Exception) {
             onFailure(source.source, e)
-            return failed(source.source, startedAt, e.message ?: e.javaClass.simpleName)
+            Read.Failed(e.message ?: e.javaClass.simpleName, startedAt)
         }
+    }
+
+    /** [source] read again as it was last: its tasks as they are, its status as read now. */
+    private suspend fun readAgain(source: Source, startedAt: Long): SyncReport {
+        tasks.update { state -> state.copy(sources = state.sources + (source to state.status(source).copy(lastSuccessAt = clock.now(), lastAttemptAt = startedAt, error = null))) }
+        return SyncReport()
+    }
+
+    /** [read], [source]'s, merged into the tasks. */
+    private suspend fun merged(source: Source, read: SourceRead, startedAt: Long): SyncReport {
         var report = SyncReport()
         tasks.update { current ->
             val now = clock.now()
             // Merged, and what was finished a fortnight ago kept as its record (C-Q3), whichever source it's from.
-            val merged = Merge.apply(current.tasks, source.source, read.items, now).let { it.copy(tasks = Merge.trimmed(it.tasks, now, GmailThreads.TEXT_EXTRAS)) }
+            val merged = Merge.apply(current.tasks, source, read.items, now).let { it.copy(tasks = Merge.trimmed(it.tasks, now, GmailThreads.TEXT_EXTRAS)) }
             report = SyncReport(
                 completed = merged.completed,
                 reopened = merged.reopened,
@@ -147,7 +225,7 @@ class Syncer(
                 // Their free time and record are given after; saved here, they can't be lost.
                 // An email that's just an email, or a task you've said isn't one, finished isn't work done: nothing to reward.
                 unrewarded = current.unrewarded + merged.completed.filterNot { it.hidden },
-                sources = current.sources + (source.source to SourceStatus(lastSuccessAt = now, lastAttemptAt = startedAt, dataAsOf = read.dataAsOf, note = read.note)),
+                sources = current.sources + (source to SourceStatus(lastSuccessAt = now, lastAttemptAt = startedAt, dataAsOf = read.dataAsOf, note = read.note)),
                 ankiDay = read.ankiDay ?: current.ankiDay,
                 deckTopics = read.deckTopics ?: current.deckTopics,
                 timetable = read.timetable ?: current.timetable,
@@ -162,5 +240,9 @@ class Syncer(
             current.copy(sources = current.sources + (source to previous.copy(lastAttemptAt = at, error = why)))
         }
         return SyncReport(failures = mapOf(source to why))
+    }
+
+    private companion object {
+        val JSON = Json { encodeDefaults = true }
     }
 }

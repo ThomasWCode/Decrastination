@@ -287,7 +287,7 @@ class FocusService : AccessibilityService() {
             BlockedActivity.intent(this, target, reason)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NO_USER_ACTION),
         )
-        scope.launch { graph.focus.recordBlock(target, reason) }
+        scope.launch { graph.recordBlock(target, reason) }
     }
 
     // --- Free time ---

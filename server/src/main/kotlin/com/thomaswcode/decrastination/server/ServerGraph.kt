@@ -98,7 +98,6 @@ import kotlinx.coroutines.job
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
-import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -207,7 +206,8 @@ class ServerGraph(
     val planning: Planning = Planning(
         stores.tasks, stores.settings, stores.session, stores.learning, stores.model, stores.log, stores.instructions, stores.school, clock, scope, gateway,
         calendarTime = { calendarTime() },
-        calendarChanges = emptyFlow<Unit>(),
+        // The calendar as the phone last saw it, each time it says so (W-24).
+        calendarChanges = calendarRead.state,
         sweep = { owners.slots.sweep() },
         // As the phone's, less what's its own: its alarms, its calendar, its widget.
         hooks = listOf(
@@ -240,6 +240,8 @@ class ServerGraph(
         settled = { read -> db.betweenCommands(read) },
         told = { notice -> pushFelix(notice) },
         afterCommands = { db.betweenCommands {} },
+        // The phone's calendar as read: its events, and your answers about them, which only the phone can take.
+        seenCalendar = { read -> calendarRead.update { read } },
     )
 
     /** Whether a nightly file has somewhere to go. */

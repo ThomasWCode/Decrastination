@@ -68,7 +68,6 @@ data class TeamsAnswer(val started: Boolean, val reason: String?)
  */
 @OptIn(FlowPreview::class)
 class Sync(
-    private val tasks: JsonStore<TaskState>,
     private val settings: JsonStore<Settings>,
     private val calendar: JsonStore<CalendarState>,
     /** Your instructions, read for what they say about events. */
@@ -87,6 +86,8 @@ class Sync(
     private val settleEvent: suspend (String) -> Unit,
     /** The plan made again ([com.thomaswcode.decrastination.plan.PlanWatcher.poke]). */
     private val replan: () -> Unit,
+    /** A source's note where its status shows it ([Syncer.note]), or, once the two keep in step by commands, sent as one. */
+    private val noteSource: suspend (Source, String) -> Unit = { source, note -> syncer.note(source, note) },
 ) {
     /** Every source read now, or only [only], one sync at a time ([Syncer.sync]). */
     suspend fun sync(only: Set<Source>? = null): SyncReport = syncer.sync(only)
@@ -120,9 +121,7 @@ class Sync(
             scope.launch {
                 // Refused (its service off, already syncing): say so where the widget shows it.
                 // The next read of Teams replaces the note with the widget's own state.
-                requestTeamsSync()?.let { reason ->
-                    tasks.update { state -> state.copy(sources = state.sources + (Source.Teams to state.status(Source.Teams).copy(note = reason))) }
-                }
+                requestTeamsSync()?.let { reason -> noteSource(Source.Teams, reason) }
             }
         }
         ports.syncNow()
