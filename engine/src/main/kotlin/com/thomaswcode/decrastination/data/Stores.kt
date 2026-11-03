@@ -110,7 +110,7 @@ class Stores(
     val calendar = store("calendar.json", CalendarState.serializer(), ::CalendarState, migrations = listOf(RuntimeSplit.CALENDAR))
 
     /** This phone's pairing with the server, and what's been sent it. */
-    val sync = store("sync.json", SyncState.serializer(), ::SyncState, migrations = listOf(SyncState.V2))
+    val sync = store("sync.json", SyncState.serializer(), ::SyncState, migrations = listOf(SyncState.V2, SyncState.V3))
 
     /** The commands the server hasn't answered yet: none till the two keep in step by commands (docs/spec/sync.md). */
     val outbox = store("outbox.json", OutboxState.serializer(), ::OutboxState)

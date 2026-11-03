@@ -187,7 +187,12 @@ class CommandActivity : Activity() {
                 ReplicaWorker.now(this)
                 Log.i(TAG, "Sending asked for; last error ${graph.replica.state.value.lastError}")
             }
-            "sync-state" -> graph.replica.state.value.let { Log.i(TAG, "The server: ${it.server}; paired ${graph.replica.paired}, last sent ${it.lastSyncAt}, ${it.sent.size} stores, error ${it.lastError}, refused ${it.refused}") }
+            "sync-state" -> graph.replica.state.value.let { Log.i(TAG, "The server: ${it.server}; paired ${graph.replica.paired}, last sent ${it.lastSyncAt}, ${it.sent.size} stores, error ${it.lastError}, refused ${it.refused}, Firebase's id held ${it.pushId != null}") }
+            // Firebase's part, from a PC: what's waiting sent, Firebase's id with it, then the server asked to tell this phone now. The message is logged as it's heard.
+            "sync-push-test" -> {
+                graph.replica.upload()
+                Log.i(TAG, "Told through Firebase: ${graph.replica.testPush() ?: "not paired"}")
+            }
             "sync" -> {
                 val only = intent.getStringExtra("sources")?.split(",")?.mapNotNull { name ->
                     Source.entries.firstOrNull { it.name.equals(name.trim(), ignoreCase = true) }

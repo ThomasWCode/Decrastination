@@ -37,13 +37,26 @@ class ReplicaTest {
         var version = "5.0.1"
         var failure: ((String) -> HttpResponse)? = null
 
+        /** A seed alone answered with this, every other route as it would. */
+        var seedFailure: Int? = null
+
         /** What happens on the phone while a send is on its way, once. */
         var meanwhile: (() -> Unit)? = null
+
+        /** Where Firebase reaches the phone, each as it was sent, and what's answered to one. */
+        val pushIds = mutableListOf<String>()
+        var pushAnswer = 204
 
         override fun post(url: String, headers: Map<String, String>, body: String): HttpResponse {
             this.headers += headers
             failure?.let { return it(url) }
             if (url.endsWith("/claim")) return HttpResponse(200, """{"id":"device-1","token":"secret-token"}""")
+            if (url.endsWith("/api/devices/push")) {
+                pushIds += Json.decodeFromString(PushId.serializer(), body).fid
+                return HttpResponse(pushAnswer, "")
+            }
+            if (url.endsWith("/api/devices/push/test")) return HttpResponse(200, Json.encodeToString(PushTried.serializer(), PushTried(true)))
+            seedFailure?.let { return HttpResponse(it, "") }
             val batch = Json.decodeFromString(SeedBatch.serializer(), body)
             seeds += batch
             meanwhile?.also { meanwhile = null }?.invoke()
@@ -267,5 +280,75 @@ class ReplicaTest {
         paired()
         replica.upload()
         assertTrue(server.seeds.last().stores.size > 1)
+    }
+
+    @Test
+    fun `the id Firebase registers goes with the next upload that goes through, once a process, and again when it changes`() = runBlocking {
+        paired()
+        replica.registered("cMadeUpFid000000000aaa")
+        assertTrue(replica.upload())
+        replica.upload()
+        assertEquals(listOf("cMadeUpFid000000000aaa"), server.pushIds, "once")
+        assertEquals("Bearer secret-token", server.headers.last()["Authorization"])
+        replica.registered("cMadeUpFid000000000bbb")
+        replica.upload()
+        assertEquals(listOf("cMadeUpFid000000000aaa", "cMadeUpFid000000000bbb"), server.pushIds)
+        // The next process, on the same files: the server may have lost it since, restored, say.
+        Replica(Stores(dir, Plain), server, clock, "5.0.0", calendar = { read }).upload()
+        assertEquals(listOf("cMadeUpFid000000000aaa", "cMadeUpFid000000000bbb", "cMadeUpFid000000000bbb"), server.pushIds)
+    }
+
+    @Test
+    fun `an id the server doesn't take goes again at the next upload, and Setup says nothing of it`() = runBlocking {
+        paired()
+        replica.registered("cMadeUpFid000000000aaa")
+        server.pushAnswer = 404
+        assertTrue(replica.upload(), "the stores went all the same")
+        assertNull(stores.sync.value.lastError)
+        server.pushAnswer = 204
+        replica.upload()
+        replica.upload()
+        assertEquals(listOf("cMadeUpFid000000000aaa", "cMadeUpFid000000000aaa"), server.pushIds)
+    }
+
+    @Test
+    fun `the id waits while unpaired or when a send fails, and outlives forgetting the server`() = runBlocking {
+        replica.registered("cMadeUpFid000000000aaa")
+        assertFalse(replica.upload())
+        paired()
+        // The seed alone fails: the route for the id would take it, and isn't asked.
+        server.seedFailure = 503
+        assertFalse(replica.upload())
+        assertEquals(emptyList(), server.pushIds, "not after a send that didn't go")
+        server.seedFailure = null
+        replica.upload()
+        assertEquals(listOf("cMadeUpFid000000000aaa"), server.pushIds)
+        replica.forget()
+        assertEquals("cMadeUpFid000000000aaa", stores.sync.value.pushId, "this phone's, so kept")
+        paired()
+        replica.upload()
+        assertEquals(listOf("cMadeUpFid000000000aaa", "cMadeUpFid000000000aaa"), server.pushIds, "sent again to the new pairing")
+        paired()
+        replica.upload()
+        assertEquals(3, server.pushIds.size, "and to one made over the last, unpaired or not")
+    }
+
+    @Test
+    fun `asked to be told now, it hears what the server said, and asks nothing while unpaired`() = runBlocking {
+        assertNull(replica.testPush())
+        paired()
+        assertEquals(PushTried(true), replica.testPush())
+        server.failure = { HttpResponse(401, "") }
+        assertEquals(PushTried(false, "The server doesn't know this phone: pair it again"), replica.testPush())
+    }
+
+    @Test
+    fun `told while mirroring, it sends as at any other time`() = runBlocking {
+        paired()
+        replica.upload()
+        val before = server.seeds.size
+        // A revision it holds, as far as its pulls go: while mirroring it has none, and sends all the same.
+        assertTrue(replica.told(0))
+        assertEquals(before + 1, server.seeds.size)
     }
 }

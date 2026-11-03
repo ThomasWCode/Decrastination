@@ -16,6 +16,7 @@ import com.thomaswcode.decrastination.data.SyncState
 import com.thomaswcode.decrastination.net.Http
 import com.thomaswcode.decrastination.net.HttpResponse
 import com.thomaswcode.decrastination.sync.Protocol
+import com.thomaswcode.decrastination.sync.PushId
 import com.thomaswcode.decrastination.sync.Replica
 import com.thomaswcode.decrastination.sync.SeedAnswer
 import com.thomaswcode.decrastination.sync.SeedBatch
@@ -72,6 +73,15 @@ class SyncHarnessTest {
         var losesAnswers = 0
         var seeds = 0
 
+        /** The pulls it's carried. */
+        var pulls = 0
+
+        /** Where Firebase reaches the phone, each as it was sent. */
+        val pushIds = mutableListOf<String>()
+
+        /** Pulls answered with a failure, every other route as it would. */
+        var pullFails = false
+
         /** What the server's routes answer a request that throws. */
         private fun failing(request: () -> HttpResponse): HttpResponse = try {
             request()
@@ -88,6 +98,10 @@ class SyncHarnessTest {
                 seeds++
                 if (graph.mode == ServerGraph.COMMANDS) return HttpResponse(409, "{}")
                 return HttpResponse(200, json.encodeToString(SeedAnswer.serializer(), runBlocking { graph.seed(json.decodeFromString(SeedBatch.serializer(), body), device) }))
+            }
+            if (url.endsWith("/api/devices/push")) {
+                pushIds += json.decodeFromString(PushId.serializer(), body).fid
+                return HttpResponse(204, "")
             }
             check(url.endsWith("/api/commands")) { url }
             headers[Protocol.ZONE_HEADER]?.let(graph.serverClock::setZone)
@@ -106,6 +120,8 @@ class SyncHarnessTest {
         override fun get(url: String, headers: Map<String, String>): HttpResponse {
             if (cut) throw IOException("cut")
             if (url.endsWith("/api/version")) return HttpResponse(200, json.encodeToString(ServerVersion.serializer(), graph.version()))
+            pulls++
+            if (pullFails) return HttpResponse(500, "{}")
             duringPull?.also { duringPull = null }?.invoke()
             headers[Protocol.ZONE_HEADER]?.let(graph.serverClock::setZone)
             val since = url.substringAfter("since=").toLong()
@@ -287,6 +303,42 @@ class SyncHarnessTest {
         assertEquals(0, phone.waiting)
         assertEquals(setOf("Essay"), serverTitles)
         assertEquals(setOf("Essay"), phone.titles)
+    }
+
+    @Test
+    fun `told of a revision it holds, with nothing waiting, a phone asks nothing, and told of a newer one, or with a change waiting, it exchanges`() = runBlocking {
+        val one = phone("one")
+        val two = phone("two")
+        one.h.commands.act(own("Essay"))
+        one.replica.upload()
+        val held = one.h.stores.sync.value.revision
+        val pulls = one.wire.pulls
+        assertTrue(one.replica.told(held))
+        assertEquals(pulls, one.wire.pulls, "what it said is here")
+        two.h.commands.act(own("Maths"))
+        two.replica.upload()
+        assertTrue(one.replica.told(db.currentRevision()))
+        assertEquals(setOf("Essay", "Maths"), one.titles)
+        one.h.commands.act(own("Physics"))
+        assertTrue(one.replica.told(held))
+        assertEquals(setOf("Essay", "Maths", "Physics"), serverTitles, "what was waiting went")
+    }
+
+    @Test
+    fun `a phone going by commands sends where Firebase reaches it once an exchange goes through, and once only`() = runBlocking {
+        val phone = phone()
+        phone.replica.registered("cMadeUpFid000000000aaa")
+        phone.wire.cut = true
+        assertFalse(phone.replica.upload())
+        // The pull alone fails: the route for the id would take it, and isn't asked.
+        phone.wire.cut = false
+        phone.wire.pullFails = true
+        assertFalse(phone.replica.upload())
+        assertEquals(emptyList(), phone.wire.pushIds)
+        phone.wire.pullFails = false
+        assertTrue(phone.replica.upload())
+        phone.replica.upload()
+        assertEquals(listOf("cMadeUpFid000000000aaa"), phone.wire.pushIds)
     }
 
     @Test
