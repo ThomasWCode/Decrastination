@@ -285,8 +285,11 @@ class ServerGraph(
     /**
      * [batch], a phone's stores as they are, kept whole: all of them, each with its history, as one revision. One of a
      * version newer than this build reads isn't kept, and is said. The server's copies are read again, for what it computes.
+     * Null, and nothing kept, once the server takes commands: asked here, under the lock the switch takes, as a seed that passed
+     * the route's look before the switch and waited for the lock would put the phone's older copy over what's applied since.
      */
-    suspend fun seed(batch: SeedBatch, device: String): SeedAnswer = writing.withLock {
+    suspend fun seed(batch: SeedBatch, device: String): SeedAnswer? = writing.withLock {
+        if (mode == COMMANDS) return@withLock null
         serverClock.setZone(batch.zone)
         val refused = mutableListOf<String>()
         val written = mutableListOf<String>()

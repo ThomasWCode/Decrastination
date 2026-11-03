@@ -100,7 +100,8 @@ class SyncHarnessTest {
             if (url.endsWith("/api/stores/seed")) {
                 seeds++
                 if (graph.mode == ServerGraph.COMMANDS) return HttpResponse(409, "{}")
-                return HttpResponse(200, json.encodeToString(SeedAnswer.serializer(), runBlocking { graph.seed(json.decodeFromString(SeedBatch.serializer(), body), device) }))
+                val answer = runBlocking { graph.seed(json.decodeFromString(SeedBatch.serializer(), body), device) } ?: return HttpResponse(409, "{}")
+                return HttpResponse(200, json.encodeToString(SeedAnswer.serializer(), answer))
             }
             if (url.endsWith("/api/devices/push")) {
                 pushIds += json.decodeFromString(PushId.serializer(), body).fid

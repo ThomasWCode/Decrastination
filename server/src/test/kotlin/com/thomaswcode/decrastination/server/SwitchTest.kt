@@ -94,6 +94,16 @@ class SwitchTest {
     }
 
     @Test
+    fun `a seed that waited out the switch is turned away under its lock, and takes nothing over what's applied since`() = runBlocking {
+        val older = everything()
+        graph.switchOver(SwitchSeed("switch-1", everything()), "phone")
+        graph.applier.apply(CommandBatch(listOf(Command("c-1", System.currentTimeMillis(), SaveOwnTask("s-maths", OwnTask(title = "Maths"))))), "phone")
+        // Past the route's look before the switch, it reaches the lock after: the server's in commands mode by then.
+        assertEquals(null, graph.seed(older, "phone"))
+        assertEquals(setOf("Maths"), serverTitles)
+    }
+
+    @Test
     fun `a store this server can't read stops the switch, and the server goes on mirroring`() = runBlocking {
         val seed = everything().let { it.copy(stores = it.stores.map { s -> if (s.name == "tasks.json") s.copy(version = s.version + 1) else s }) }
         assertIs<ServerGraph.Switched.Refused>(graph.switchOver(SwitchSeed("switch-1", seed), "phone"))

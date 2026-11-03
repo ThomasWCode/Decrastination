@@ -112,6 +112,9 @@ private fun isJpeg(bytes: ByteArray) = bytes.size > 3 && bytes[0] == 0xFF.toByte
 private const val SESSION = "__Host-session"
 private const val OAUTH = "__Host-oauth"
 
+/** What a seed's told once the server's gone over. */
+private const val TAKES_COMMANDS = "The server takes commands now"
+
 /** The same cookies under a plain name, over plain HTTP on a PC, where the browser refuses a `__Host-` one. */
 private fun cookie(web: Web, name: String) = if (web.secure) name else name.removePrefix("__Host-")
 
@@ -298,8 +301,9 @@ private fun Route.signedInRoutes(web: Web) {
     }
     post("/stores/seed") {
         val phone = call.client as? Client.Phone ?: return@post call.respond(HttpStatusCode.Forbidden, Problem("Only a phone seeds"))
-        if (graph.mode == ServerGraph.COMMANDS) return@post call.respond(HttpStatusCode.Conflict, Problem("The server takes commands now"))
-        call.respond(graph.seed(call.receive<SeedBatch>(), phone.id))
+        if (graph.mode == ServerGraph.COMMANDS) return@post call.respond(HttpStatusCode.Conflict, Problem(TAKES_COMMANDS))
+        // Asked again as it's kept: the switch may have been made while this waited for its body or its turn.
+        graph.seed(call.receive<SeedBatch>(), phone.id)?.let { call.respond(it) } ?: call.respond(HttpStatusCode.Conflict, Problem(TAKES_COMMANDS))
     }
     // The phone's last whole seed, the switch made in its transaction (D-141); its answer said again for the same id, in either mode.
     post("/stores/switch") {
