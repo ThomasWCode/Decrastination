@@ -47,6 +47,7 @@ class ReplicaWorker(context: Context, params: WorkerParameters) : CoroutineWorke
         private const val SOON = "replica-soon"
         private const val NOW = "replica-now"
         private const val TOLD = "replica-told"
+        private const val AGAIN = "replica-again"
         private const val KEY_REVISION = "revision"
         private const val NOT_TOLD = -1L
         private const val COALESCE_S = 60L
@@ -63,6 +64,15 @@ class ReplicaWorker(context: Context, params: WorkerParameters) : CoroutineWorke
         fun now(context: Context) {
             val request = OneTimeWorkRequestBuilder<ReplicaWorker>().setConstraints(online).setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST).build()
             WorkManager.getInstance(context).enqueueUniqueWork(NOW, ExistingWorkPolicy.KEEP, request)
+        }
+
+        /**
+         * As soon as it can go, after any send on its way: what's new since that one began, which it may have gone past, goes too.
+         * Firebase's id, given at a start, while that start's own send is under way.
+         */
+        fun again(context: Context) {
+            val request = OneTimeWorkRequestBuilder<ReplicaWorker>().setConstraints(online).setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST).build()
+            WorkManager.getInstance(context).enqueueUniqueWork(AGAIN, ExistingWorkPolicy.APPEND_OR_REPLACE, request)
         }
 
         /**

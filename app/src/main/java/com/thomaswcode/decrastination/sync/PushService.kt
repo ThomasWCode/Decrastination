@@ -20,7 +20,8 @@ class PushService : FirebaseMessagingService() {
     override fun onRegistered(installationId: String) {
         val replica = AppGraph.get(applicationContext).replica
         runBlocking { replica.registered(installationId) }
-        if (replica.paired) ReplicaWorker.now(applicationContext)
+        // Not `now`, which a send already on its way would take the place of: it may be past sending the id.
+        if (replica.paired) ReplicaWorker.again(applicationContext)
     }
 
     /** The server's said it's changed: what's there is pulled by work of its own, as this has only seconds. */

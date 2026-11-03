@@ -43,6 +43,9 @@ class ReplicaTest {
         /** What happens on the phone while a send is on its way, once. */
         var meanwhile: (() -> Unit)? = null
 
+        /** What happens on the phone while the id's on its way, once. */
+        var duringPush: (() -> Unit)? = null
+
         /** Where Firebase reaches the phone, each as it was sent, and what's answered to one. */
         val pushIds = mutableListOf<String>()
         var pushAnswer = 204
@@ -53,6 +56,7 @@ class ReplicaTest {
             if (url.endsWith("/claim")) return HttpResponse(200, """{"id":"device-1","token":"secret-token"}""")
             if (url.endsWith("/api/devices/push")) {
                 pushIds += Json.decodeFromString(PushId.serializer(), body).fid
+                duringPush?.also { duringPush = null }?.invoke()
                 return HttpResponse(pushAnswer, "")
             }
             if (url.endsWith("/api/devices/push/test")) return HttpResponse(200, Json.encodeToString(PushTried.serializer(), PushTried(true)))
@@ -331,6 +335,17 @@ class ReplicaTest {
         paired()
         replica.upload()
         assertEquals(3, server.pushIds.size, "and to one made over the last, unpaired or not")
+    }
+
+    @Test
+    fun `an id whose answer comes after a new pairing is made is sent again to that pairing`() = runBlocking {
+        paired()
+        replica.registered("cMadeUpFid000000000aaa")
+        // Paired again while the id's on its way, under the old token.
+        server.duringPush = { runBlocking { assertNull(replica.pair("654321", "phone")) } }
+        replica.upload()
+        replica.upload()
+        assertEquals(listOf("cMadeUpFid000000000aaa", "cMadeUpFid000000000aaa"), server.pushIds)
     }
 
     @Test

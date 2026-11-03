@@ -48,9 +48,17 @@ class Replica(
     @Volatile
     private var archiveSent = NOT_SENT
 
-    /** The id Firebase reaches this phone by, as this process last had the server take it: sent once a process, so a server that's lost it hears it again. */
+    /** Each pairing's count in this process, so an id sent under one is never taken as sent to the next. */
     @Volatile
-    private var pushSent: String? = null
+    private var pairings = 0
+
+    /**
+     * The id Firebase reaches this phone by, as this process last had the server take it, and under which pairing: sent once a
+     * process, so a server that's lost it hears it again, and once a pairing. A send under a pairing since let go of, its answer
+     * heard after the new one's made, is then no answer for the new one, without any lock that [pair] would wait on.
+     */
+    @Volatile
+    private var pushSent: Pair<Int, String>? = null
 
     val state: StateFlow<SyncState> get() = sync.state
 
@@ -70,7 +78,7 @@ class Replica(
         val token = JSON.decodeFromString(DeviceToken.serializer(), answer.body)
         stores.secrets.put(Secret.DeviceToken, token.token)
         sync.update { it.copy(deviceId = token.id, sent = emptyMap(), lastError = null, refused = emptyList()) }
-        pushSent = null
+        pairings++
         return null
     }
 
@@ -151,7 +159,8 @@ class Replica(
      */
     private suspend fun sendPushId() {
         val fid = sync.value.pushId ?: return
-        if (fid == pushSent) return
+        val pairing = pairings
+        if (pushSent == pairing to fid) return
         val token = stores.secrets[Secret.DeviceToken] ?: return
         val headers = mapOf("Content-Type" to "application/json", "Authorization" to "Bearer $token", Protocol.HEADER to Protocol.VERSION.toString())
         val answer = try {
@@ -160,7 +169,7 @@ class Replica(
             Log.w(Log.TAG, "Sending where Firebase reaches this phone failed: ${failed::class.simpleName}")
             return
         }
-        if (answer.ok) pushSent = fid
+        if (answer.ok) pushSent = pairing to fid
     }
 
     /** Whether this process has been through an exchange: what it found waiting at its start has been looked at. */
