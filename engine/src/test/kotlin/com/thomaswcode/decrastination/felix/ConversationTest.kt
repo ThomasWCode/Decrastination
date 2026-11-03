@@ -366,6 +366,8 @@ class ConversationTest {
     @Test
     fun `once the server says what he says, nothing's asked of Claude here, nor written in his name by the app's own work`() = runBlocking {
         felix.byServer = true
+        // An answer at hand, so a call made after all is seen, not waited on for ever.
+        felix.server.enqueue(MockResponse().setResponseCode(400))
         // Your words wait for the server's answer, which comes as it's pulled; the Try again too is the server's.
         assertTrue(conversation.ask("Plan my evening"))
         conversation.answerChat(retry = true)
@@ -390,6 +392,8 @@ class ConversationTest {
     @Test
     fun `once the server reads your instructions, one written here waits for it, nothing asked of Claude here`() = runBlocking {
         felix.byServer = true
+        // An answer at hand, so a call made after all is seen, not waited on for ever.
+        felix.server.enqueue(MockResponse().setResponseCode(400))
         val id = felix.instructions.addInstruction("Maths on Friday", About())
         felix.instructions.readInstructions(interactive = true)
         felix.settle()
@@ -401,6 +405,19 @@ class ConversationTest {
         felix.instructions.readInstructions(interactive = true)
         felix.settle()
         assertEquals(1, felix.server.requestCount)
+    }
+
+    @Test
+    fun `how work went, asked where a sync's after-work runs, is the same question on the phone and the server, by its id`() = runBlocking {
+        val ask = AssessLater("teams:sheet", "Forces worksheet", now - 3_600_000L)
+        FelixHarness().use { server ->
+            for (side in listOf(felix, server)) {
+                side.stores.settings.update { it.copy(aiEnabled = false) }
+                side.conversation.askHowItWent(listOf(ask))
+            }
+            fun asked(side: FelixHarness) = side.stores.chat.value.messages.single { it.kind == MessageKind.Completions }.id
+            assertEquals(asked(server), asked(felix))
+        }
     }
 
     @Test

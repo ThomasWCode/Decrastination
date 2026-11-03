@@ -417,9 +417,13 @@ class Conversation(
     private fun asked(ask: AssessLater): Boolean =
         chat.value.messages.any { m -> m.kind == MessageKind.Completions && m.asks.any { it.taskId == ask.taskId && it.doneAt == ask.doneAt } }
 
-    /** How [ask]'s work went, as his message in the app's words: the three answers its replies, each kept on it ([Looks.answered]). */
+    /**
+     * How [ask]'s work went, as his message in the app's words: the three answers its replies, each kept on it ([Looks.answered]).
+     * Its id is the completion's own, as a reminder's is: asked where a sync's after-work runs outside the command it came of, as
+     * on the phone once it sends commands, it's the server's question too, so an answer to it is the server's to keep.
+     */
     private fun howItWent(ask: AssessLater) = ChatMessage(
-        Ids.next(), Speaker.Felix, FelixWords.howItWent(ask.title), clock.now(), About(taskId = ask.taskId, taskTitle = ask.title),
+        "howitwent-${ask.taskId}-${ask.doneAt ?: 0}", Speaker.Felix, FelixWords.howItWent(ask.title), clock.now(), About(taskId = ask.taskId, taskTitle = ask.title),
         kind = MessageKind.Completions, byApp = true, asks = listOf(ask), suggestedReplies = FelixWords.HOW_IT_WENT_REPLIES,
     )
 
