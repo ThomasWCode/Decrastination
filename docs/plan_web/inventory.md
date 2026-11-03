@@ -27,7 +27,7 @@ All built in `data/Stores.kt`, written whole and atomically by `data/JsonStore.k
 | `gmail-writes.json` | `GmailWriteStore` | 1 | the journal of Gmail unstar and archive writes and their undo receipts | sync/GmailFinishes | **server** from stage 3, with the Gmail sync |
 | `secrets.bin` | `SecretStore` | — | AES-256-GCM under an AndroidKeyStore key: Power Planner login, Gmail app password, Anthropic key, TOTP secret | — | **phone** keeps the TOTP secret and gains the device token; the Power Planner and Gmail credentials and the Anthropic key move to the server in stage 3 (`architecture.md` §Secrets) |
 
-New in the plan: on the phone `outbox.json` (commands not yet accepted) and `sync.json` (the last revision taken, the device's id); on the server the tables in `data-and-sync.md` §The database.
+New in the plan: on the phone `outbox.json` (commands not yet accepted) and `sync.json` (the last revision taken, the device's id, and from stage 8 the id Firebase reaches it by); on the server the tables in `data-and-sync.md` §The database.
 
 ## Features and screens
 

@@ -11,7 +11,7 @@ SQLite, one file, `/opt/decrastination/data/decrastination.db`, in WAL mode (Lit
 | `stores` | `name` PK, `version`, `revision`, `json`, `updated_at` | the current text of every store, by its file's name: `tasks.json`, `settings.json`, `session.json`, `chat.json`, `chat-archive-2026-10.json`, … exactly the JSON the phone's files hold |
 | `store_history` | `revision`, `name`, `version`, `json`, `cause`, `at` | every past text of every store, one row a write; `cause` is the command's id. Trimmed to 90 days of history and never fewer than the last 20 rows a store |
 | `commands` | `id` PK, `device`, `protocol`, `payload`, `received_at`, `at`, `outcome`, `why`, `revision` | every command received, for 90 days, with how it went: applied, dropped or refused, and why |
-| `devices` | `id`, `name`, `token_hash`, `created_at`, `last_seen_at`, `revoked_at` | the phone's token(s) |
+| `devices` | `id`, `name`, `token_hash`, `created_at`, `last_seen_at`, `revoked_at`, `fid` | the phone's token(s), and from stage 8 each phone's Firebase Installation ID, where it's told of a change |
 | `sessions` | `id`, `created_at`, `expires_at`, `last_seen_at` | the website's sign-ins |
 | `pairing_codes` | `code_hash`, `expires_at` | the six-digit codes, five minutes each |
 | `credentials` | `name` PK, `ciphertext`, `updated_at` | one row, the sealed `secrets.bin`: Power Planner, Gmail and the TOTP secret, under `MASTER_KEY` |
@@ -28,7 +28,7 @@ Why a table of JSON documents and not a table a type: the stores are already the
 
 One global counter in `meta`. Each committed command bumps it once, and every store the command changed takes that revision. A client holds the last revision it took; `GET /api/state?since=R` returns every store with a revision above R, whole. `GET /api/events` is a server-sent event stream of new revision numbers: a client that hears one pulls `state`. The website keeps the stream open; the phone pulls at its sync and, from stage 8, when a push message says to.
 
-A store is sent whole, not as a diff. `tasks.json` was 590 KB at 3.2.0 and is smaller since finished tasks were trimmed; gzip (Caddy's `encode`) takes it to a fraction. On the phone a pull on mobile data is a few hundred kilobytes at most, at a 15-minute cadence. Delta sync is not in this plan; if the sizes grow, it would be the first thing to add.
+A store is sent whole, not as a diff. `tasks.json` was 590 KB at 3.2.0 and is smaller since finished tasks were trimmed; gzip (Caddy's `encode`) takes it to a fraction. On the phone a pull on mobile data is a few hundred kilobytes at most, at a 15-minute cadence, and from stage 8 as a push says, only of the stores changed since the last. Delta sync is not in this plan; if the sizes grow, it would be the first thing to add.
 
 ## Commands
 

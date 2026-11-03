@@ -61,6 +61,7 @@ A Ktor application (3.6.x, on Netty) on a JRE 21, built as a fat JAR and copied 
 | `GET /views/chat?earlier=&reach=` | the chat, with as much of the archive as it asks for: counted in messages, as the phone reads it on scroll-back, or as far as a quote's message |
 | `POST /photos/tasks` | a photo for the photo-to-tasks path (stage 4) |
 | `GET /backup`, `POST /backup/import`, `POST /backup/copy` | the Backup-format file out and in, and a reset's copy back; a reset itself is a command (stage 7) |
+| `POST /devices/push`, `POST /devices/push/test` (phone) | where Firebase reaches the phone, its installation id, and the phone told now to see it can be (stage 8) |
 | `POST /push/subscription`, `/push/channels`, `/push/forget` | a browser asking to be told with its tab closed (stage 9) |
 | `GET /health`, `GET /version` | for Caddy, the heartbeat and the clients (the protocol version and each store's version) |
 

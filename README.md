@@ -25,7 +25,7 @@ Same toolchain as the [Teams Assignments widget](https://github.com/ThomasWCode/
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Install over the app with `-r`, never uninstalling it, and keep a backup first ([development.md](docs/development.md#the-phone)).
+Install over the app with `-r`, never uninstalling it, and keep a backup first ([development.md](docs/development.md#the-phone)). A build for the phone is made with the Firebase project's `app/google-services.json`, which is kept out of git (D-145): without it the app builds all the same, and hears of the server's changes at its 15-minute sync.
 
 Every prompt and schema Claude is sent has a golden copy in `engine/src/test/resources/prompts/`, but the web search's prompt, which `FelixInputsDocTest` holds in [`docs/spec/felix-inputs.md`](docs/spec/felix-inputs.md); the tests fail on any difference, with its diff. When a change is meant, write them again and commit them with it; where a reading's prompt or the profile changed, raise `ReadingPrompts.VERSION` too (a test asks for it), so the readings made by the old ones are made again:
 

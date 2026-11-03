@@ -22,6 +22,7 @@ Only what the server doesn't hold goes. Each answer says what it holds, every st
 - Within a minute of any change to a store the server keeps: a run of changes is one send (`ReplicaWorker.soon`).
 - As the app comes to the front (`ReplicaWorker.now`).
 - At the end of each 15-minute sync.
+- When the server says it's changed, through Firebase (§Told at once): once it applies commands, or when the phone asks to be told.
 
 Each send is WorkManager work, with a network constraint, as Android 15 cuts an app's network seconds after it leaves the screen.
 
