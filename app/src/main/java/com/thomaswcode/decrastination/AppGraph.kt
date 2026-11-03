@@ -236,7 +236,7 @@ class AppGraph private constructor(context: Context) : Owners {
                 sync.eventAsked(key)
             }
         },
-        settleEvent = { key -> if (sendsCommands()) commands.send(SettleEvent(key)) else conversation.settleEvent(key) },
+        settleEvent = { key -> settleEvent(key) },
         replan = { planning.watcher.poke() },
         noteSource = { source, note -> if (sendsCommands()) commands.send(NoteSource(source, note)) else syncer.note(source, note) },
     )
@@ -317,7 +317,8 @@ class AppGraph private constructor(context: Context) : Owners {
         // A slot moved by hand in the calendar: what only this phone sees, as a command once the two keep in step by them.
         addOwnChange = { id, text, about, change -> if (sendsCommands()) commands.send(AddOwnChange(id, text, about, change)) else instructions.addOwnChange(id, text, about, change) },
         replan = { planning.watcher.poke() },
-        settleEvent = { conversation.settleEvent(it) },
+        // An answer here (the Day's event sheet, his question's chips): his questions on it settled on the server too.
+        settleEvent = { key -> settleEvent(key) },
         reread = {
             sync.refreshCalendar()
             briefing.replanToday()
@@ -467,6 +468,12 @@ class AppGraph private constructor(context: Context) : Owners {
 
     /** An event asked about, on record as asked here, where the calendar's read ([Sync.eventAsked]). */
     override suspend fun eventAsked(key: String) = sync.eventAsked(key)
+
+    /**
+     * His questions about the events named [key] settled, an answer or an instruction of yours having answered them: as a command
+     * once the phone sends them, so the server's copies of them settle too and a pull doesn't bring them back unanswered.
+     */
+    private suspend fun settleEvent(key: String) = if (sendsCommands()) commands.send(SettleEvent(key)) else conversation.settleEvent(key)
 
     /** Protection ([Protection]): settings changes, waiting once armed if they loosen blocking; the parent code; the device admin. */
     override val protection = Protection(settings, stores.protection, stores.device, secrets, clock, scope, adminActive = { Watchdog.isAdminActive(app) }, byServer = sendsCommands) {
