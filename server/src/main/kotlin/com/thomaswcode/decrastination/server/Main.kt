@@ -107,7 +107,7 @@ fun main(args: Array<String>) {
     // A test's are made here, so none is in the repository, and what it sends goes nowhere.
     val pusher = (if (testing) VapidKeys.generate() else pushKeys())?.let { WebPushSender("https://${domain.ifEmpty { "localhost" }}", it) }
     val sender = if (testing) Pushes.Sender { _, _ -> true } else pusher
-    val graph = ServerGraph(db, dataDir, MasterKeyCipher(if (testing) Base64.getEncoder().encodeToString(ByteArray(32)) else env("MASTER_KEY")), version, claudeKey = System.getenv("ANTHROPIC_API_KEY")?.takeIf { it.isNotBlank() }, claudeEndpoint = standIn, heartbeatUrl = System.getenv("HEARTBEAT_URL")?.takeIf { it.isNotBlank() }, nightly = nightlyFolder(), pushSender = sender, pushKey = pusher?.applicationKey, phoneSender = if (testing) null else phoneSender())
+    val graph = ServerGraph(db, dataDir, MasterKeyCipher(if (testing) Base64.getEncoder().encodeToString(ByteArray(32)) else env("MASTER_KEY")), version, claudeKey = System.getenv("ANTHROPIC_API_KEY")?.takeIf { it.isNotBlank() }, claudeEndpoint = standIn, heartbeatUrl = System.getenv("HEARTBEAT_URL")?.takeIf { it.isNotBlank() }, nightly = nightlyFolder(), pushSender = sender, pushKey = pusher?.applicationKey, phoneSender = if (testing) null else phoneSender(), streamMetrics = System.getenv("LITESTREAM_METRICS")?.takeIf { it.isNotBlank() && !testing })
     val github: GitHub = if (testing) {
         object : GitHub {
             override fun authorizeUrl(state: String, challenge: String) = "/"

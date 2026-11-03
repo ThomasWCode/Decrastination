@@ -61,6 +61,18 @@ class ServerJobs(
         }
     }
 
+    /**
+     * Each job [runs] names, its last run put on record at that moment, nothing of it done, where none's on record since: until the
+     * switch the phone ran them itself, so the next comes at its time as if they'd run here.
+     */
+    fun ranAt(runs: Map<String, Long>) {
+        for (job in jobs) {
+            val at = runs[job.name] ?: continue
+            val key = "job:${job.name}"
+            if ((db.meta(key)?.toLongOrNull() ?: Long.MIN_VALUE) < at) db.setMeta(key, at.toString())
+        }
+    }
+
     /** The loop, on threads that can wait: a job's writes wait for an open command, and the default pool is as small as the box. */
     fun start(scope: CoroutineScope): Job = scope.launch(Dispatchers.IO) {
         while (isActive) {

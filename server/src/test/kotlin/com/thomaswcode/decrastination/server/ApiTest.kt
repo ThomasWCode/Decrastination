@@ -556,7 +556,7 @@ class ApiTest {
     }
 
     @Test
-    fun `a backup's taken in by the website alone, not while mirroring, and not past what Import reads`() = server {
+    fun `a backup's taken in from the website or a phone, not while mirroring, and not past what Import reads`() = server {
         val cookie = signIn()
         val phone = paired()
         val website: HttpRequestBuilder.() -> Unit = {
@@ -571,17 +571,18 @@ class ApiTest {
         val made = plain().get("/api/backup") { header(HttpHeaders.Cookie, cookie) }.bodyAsText().toByteArray()
         assertEquals(HttpStatusCode.Conflict, taken(made, website).status)
         graph.commandsForATest()
-        assertEquals(
-            HttpStatusCode.Forbidden,
-            taken(made) {
-                bearerAuth(phone.token)
-                header(Protocol.HEADER, Protocol.VERSION.toString())
-            }.status,
-        )
         assertEquals(HttpStatusCode.PayloadTooLarge, taken(ByteArray(Backups.MAX_BYTES + 1), website).status)
         val answer = taken(made, website)
         assertEquals(HttpStatusCode.OK, answer.status)
         assertTrue("Restored the settings" in answer.bodyAsText())
+        // The phone's Import goes here too once it's sending commands: one on the phone alone would go at its next pull.
+        val fromPhone = taken(made) {
+            bearerAuth(phone.token)
+            header(Protocol.HEADER, Protocol.VERSION.toString())
+        }
+        assertEquals(HttpStatusCode.OK, fromPhone.status)
+        assertTrue("Restored the settings" in fromPhone.bodyAsText())
+        assertEquals(HttpStatusCode.Unauthorized, taken(made) {}.status, "but nobody else's")
     }
 
     @Test

@@ -199,7 +199,8 @@ class Replica(
      */
     private suspend fun backToMirroring(): Boolean {
         stores.outbox.update { it.copy(commands = emptyList()) }
-        sync.update { it.copy(mode = SyncState.MIRROR, revision = 0, sent = emptyMap(), lastError = null) }
+        // The let-gos acted on are another history's: a restored server's revisions start again below them.
+        sync.update { it.copy(mode = SyncState.MIRROR, revision = 0, sent = emptyMap(), lastError = null, letGoSeen = 0) }
         archiveSent = NOT_SENT
         return true
     }
@@ -252,10 +253,14 @@ class Replica(
                     val text = store.json.toString()
                     if (ChatArchiveStore.isMonth(store.name)) stores.chatArchive.adopt(store.name, store.version, text) else here.getValue(store.name).adopt(store.version, text)
                 }
+                // What a clear or a reset made elsewhere took isn't kept here in a copy either (D-94): those not yet acted on, as a
+                // pull of everything says them all, and a copy made here since one is what a migration that fails is put right from.
+                stores.letGoOfCopiesOf(pulled.letGo.filterValues { it > sync.value.letGoSeen }.keys)
             }
             // A command made since this began: its turn first, and this pull's asked for again after it.
             if (commands == null) adopt() else if (!commands.replacing(adopt)) return true
-            sync.update { it.copy(revision = pulled.revision, lastSyncAt = clock.now(), lastError = null, refused = emptyList()) }
+            val seen = pulled.letGo.values.maxOrNull() ?: 0
+            sync.update { it.copy(revision = pulled.revision, lastSyncAt = clock.now(), lastError = null, refused = emptyList(), letGoSeen = maxOf(it.letGoSeen, seen)) }
             return true
         } catch (failed: IOException) {
             Log.w(Log.TAG, "Keeping in step with the server failed: ${failed::class.simpleName}")

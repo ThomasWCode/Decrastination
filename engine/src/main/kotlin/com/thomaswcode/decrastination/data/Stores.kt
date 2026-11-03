@@ -110,7 +110,7 @@ class Stores(
     val calendar = store("calendar.json", CalendarState.serializer(), ::CalendarState, migrations = listOf(RuntimeSplit.CALENDAR))
 
     /** This phone's pairing with the server, and what's been sent it. */
-    val sync = store("sync.json", SyncState.serializer(), ::SyncState, migrations = listOf(SyncState.V2, SyncState.V3))
+    val sync = store("sync.json", SyncState.serializer(), ::SyncState, migrations = listOf(SyncState.V2, SyncState.V3, SyncState.V4))
 
     /** The commands the server hasn't answered yet: none till the two keep in step by commands (docs/spec/sync.md). */
     val outbox = store("outbox.json", OutboxState.serializer(), ::OutboxState)
@@ -165,6 +165,11 @@ class Stores(
     suspend fun letGoOfCopies(what: Reset) {
         val files = all.filter { kept -> kept.clears.any { what == it || what == Reset.Everything } }.mapTo(HashSet()) { it.file }
         json.filter { it.name in files }.forEach { it.letGoOfCopies() }
+    }
+
+    /** The copies kept of the stores [names] let go (D-94): what a clear or a reset made elsewhere took, as a pull says it. */
+    suspend fun letGoOfCopiesOf(names: Collection<String>) {
+        json.filter { it.name in names }.forEach { it.letGoOfCopies() }
     }
 
     /** The stores the server keeps a copy of ([MIRRORED]), as they are. */

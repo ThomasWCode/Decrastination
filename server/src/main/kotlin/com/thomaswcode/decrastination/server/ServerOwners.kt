@@ -128,10 +128,15 @@ class ServerOwners(
     settled: suspend (suspend () -> String) -> String,
     /** His notification, new, for the browsers that asked. */
     private val told: (Outbox.Notice) -> Unit = {},
+    /** No command open: what a command sets off that reaches Claude waits here, so one rolled back finds nothing to ask. */
+    private val afterCommands: suspend () -> Unit = {},
 ) : Owners {
     override val tasks: JsonStore<TaskState> = stores.tasks
 
-    /** What can't be done here left out, but what's left to be asked for afresh: work of its own, as a call mustn't hold up a job's turn. */
+    /**
+     * What can't be done here left out, but what's left to be asked for afresh: work of its own, as a call mustn't hold up a job's turn,
+     * at once, as the phone's workers do it.
+     */
     val ports: FelixPorts = object : FelixPorts by NoDevice {
         override fun review() = reviewSoon()
 
@@ -139,13 +144,22 @@ class ServerOwners(
             if (notice.alert) told(notice)
         }
 
-        override fun remindLater() {
-            scope.launch {
-                try {
-                    looks.remindNow()
-                } catch (failed: IOException) {
-                    Log.w(Log.TAG, "Asking Felix for a reminder's words failed: ${failed::class.simpleName}")
-                }
+        override fun remindLater() = later("Asking Felix for a reminder's words") { looks.remindNow() }
+
+        override fun readAgain() = later("Reading a task again") { readings.enrichNow() }
+
+        override fun answerLater() = later("Asking Claude") { conversation.answerChat() }
+
+        override fun readLater() = later("Reading an instruction") { instructions.readInstructions(interactive = true) }
+    }
+
+    /** [work], which reaches Claude, on its own time: never inside a command or a job's turn, which a call would hold up. */
+    private fun later(what: String, work: suspend () -> Unit) {
+        scope.launch {
+            try {
+                work()
+            } catch (failed: IOException) {
+                Log.w(Log.TAG, "$what failed: ${failed::class.simpleName}")
             }
         }
     }
@@ -166,6 +180,7 @@ class ServerOwners(
         addInstruction = { text, about, answer, question -> instructions.addInstruction(text, about, answer, question) },
         assess = { taskId, doneAt, answer -> learning.recordAssessment(taskId, doneAt, answer) },
         applyProposal = { messageId, proposalId -> conversation.applyProposal(messageId, proposalId) },
+        settled = afterCommands,
     )
 
     override val conversation: Conversation = Conversation(
@@ -188,16 +203,19 @@ class ServerOwners(
         calendarTime = calendarTime,
         answered = { record, words -> looks.answered(record, words) },
         draftReminders = { now -> looks.draftReminders(now) },
+        settled = afterCommands,
     )
 
     override val instructions: Instructions = Instructions(
         stores.instructions, stores.tasks, stores.settings, stores.session, stores.school, stores.chat, clock, scope, gateway, focus, planning,
         calendarTime = calendarTime,
         profile = { conversation.profile() },
-        reread = {},
+        // Today's record made again, as the phone's is; the calendar's the phone's to read, and it says what it reads.
+        reread = { briefing.replanToday() },
         redraw = {},
         answerRead = { instruction, answers, changed -> looks.answerRead(instruction, answers, changed) },
         question = { looks.questionFor(it) },
+        settled = afterCommands,
     )
 
     override val ownTasks: OwnTasks = OwnTasks(stores.tasks, stores.instructions, stores.chat, clock, scope) { settleCompletions() }
@@ -225,7 +243,7 @@ class ServerOwners(
         layInstructions = { instructions.layInstructions() },
         layTaskOverrides = { instructions.layTaskOverrides() },
         schedule = {},
-        reread = {},
+        reread = { briefing.replanToday() },
         cancelFelix = {},
         eventAnswers = eventAnswers,
         answersBack = answersBack,
@@ -240,6 +258,7 @@ class ServerOwners(
         profile = { conversation.profile() },
         queueQuestion = { taskId, question, now -> looks.queueQuestion(taskId, question, now) },
         readDecks = {},
+        settled = afterCommands,
     )
 
     /** A photo of homework read into tasks of your own: the browser's shrunk it already. */
@@ -280,11 +299,12 @@ class ServerOwners(
         syncer.addAfterEverySync { instructions.layTaskOverrides() }
         syncer.addAfterEverySync { ownTasks.pruneOwn() }
         syncer.addAfterEverySync { ownTasks.rollWeeks() }
-        syncer.addAfterEverySync { answerWhatWaits() }
+        // What reaches Claude on its own time: a read the phone sent, as a command, is merged inside it.
+        syncer.addAfterEverySync { later("Answering what waits") { answerWhatWaits() } }
         syncer.addAfterEverySync {
             val on = gateway.available()
             val off = gateway.claudeKey() == null
-            if (stores.tasks.value.tasks.any { Enrichments.jobFor(it, GmailThreads::textRead) != null && Enrichments.stale(it, on, RuleEnricher.BY, ReadingPrompts.VERSION, off) }) readings.enrichNow()
+            if (stores.tasks.value.tasks.any { Enrichments.jobFor(it, GmailThreads::textRead) != null && Enrichments.stale(it, on, RuleEnricher.BY, ReadingPrompts.VERSION, off) }) later("Reading the tasks") { readings.enrichNow() }
         }
     }
 

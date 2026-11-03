@@ -1,8 +1,12 @@
 package com.thomaswcode.decrastination.server
 
 import com.thomaswcode.decrastination.data.StoreBackend
+import com.thomaswcode.decrastination.data.Stores
 import com.thomaswcode.decrastination.sync.Protocol
 import java.sql.Connection
+import kotlinx.serialization.builtins.MapSerializer
+import kotlinx.serialization.builtins.serializer
+import kotlinx.serialization.json.Json
 
 /**
  * The stores as rows (docs/plan_web/data-and-sync.md §The store backend): each store's current text in `stores`, and
@@ -127,9 +131,27 @@ class SqliteBackend(private val db: Database, private val clock: () -> Long = Sy
                 KEPT_WORDS.filterKeys(of).values.forEach { kinds ->
                     c.prepareStatement("UPDATE commands SET payload = '{}' WHERE json_extract(payload, '$.action.type') IN ($kinds)").use { it.executeUpdate() }
                 }
+                // Said to a phone at its next pull, which lets go of its own copies of them too: any store the two share, one this
+                // server's never written among them, as the phone's copies are its own migrations'.
+                val gone = (names + names() + Stores.MIRRORED).distinct().filter(of)
+                if (gone.isNotEmpty()) {
+                    val revision = db.revision()
+                    val record = letGo(c) + gone.associateWith { revision }
+                    c.prepareStatement("INSERT INTO meta(key, value) VALUES(?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").use { q ->
+                        q.setString(1, LET_GO)
+                        q.setString(2, Json.encodeToString(LET_GO_RECORD, record))
+                        q.executeUpdate()
+                    }
+                }
             }
         }
     }
+
+    /** The stores whose copies were let go after revision [since], each by the revision that did it, read on [c], as a pull says them. */
+    fun letGoSince(c: Connection, since: Long): Map<String, Long> = letGo(c).filterValues { it > since }
+
+    /** Each store whose copies were let go, and the revision that did it. */
+    private fun letGo(c: Connection): Map<String, Long> = c.single("SELECT value FROM meta WHERE key = ?", LET_GO)?.let { Json.decodeFromString(LET_GO_RECORD, it) }.orEmpty()
 
     /** Nothing to do: `store_history` is trimmed by its own rule ([trimHistory]). */
     override fun letGoOfOldShapes(before: Long, of: (String) -> Boolean) = Unit
@@ -185,6 +207,10 @@ class SqliteBackend(private val db: Database, private val clock: () -> Long = Sy
 
         /** What [Database.writing] calls a change to no one store. */
         private const val COPIES = ""
+
+        /** Where the stores whose copies were let go are kept ([letGoSince]). */
+        private const val LET_GO = "let-go"
+        private val LET_GO_RECORD = MapSerializer(String.serializer(), Long.serializer())
 
         /** The commands that hold your words, by the store they went to. */
         private val KEPT_WORDS = mapOf("chat.json" to "'SendMessage', 'ReplyFromNotification', 'RateMessage'", "log.json" to "'RecordCheckIn'")

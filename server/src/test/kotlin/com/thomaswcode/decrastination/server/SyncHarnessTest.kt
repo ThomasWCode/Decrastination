@@ -29,6 +29,8 @@ import com.thomaswcode.decrastination.sync.protocol.CommandBatch
 import com.thomaswcode.decrastination.sync.protocol.DeleteOwnTask
 import com.thomaswcode.decrastination.sync.protocol.UndoKeep
 import com.thomaswcode.decrastination.sync.protocol.FinishOwnTask
+import com.thomaswcode.decrastination.sync.protocol.ResetData
+import com.thomaswcode.decrastination.data.Reset
 import com.thomaswcode.decrastination.sync.protocol.Outcome
 import com.thomaswcode.decrastination.sync.protocol.SaveOwnTask
 import com.thomaswcode.decrastination.tasks.TasksHarness
@@ -46,6 +48,8 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.builtins.MapSerializer
+import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.buildJsonObject
@@ -97,7 +101,8 @@ class SyncHarnessTest {
             if (url.endsWith("/api/stores/seed")) {
                 seeds++
                 if (graph.mode == ServerGraph.COMMANDS) return HttpResponse(409, "{}")
-                return HttpResponse(200, json.encodeToString(SeedAnswer.serializer(), runBlocking { graph.seed(json.decodeFromString(SeedBatch.serializer(), body), device) }))
+                val answer = runBlocking { graph.seed(json.decodeFromString(SeedBatch.serializer(), body), device) } ?: return HttpResponse(409, "{}")
+                return HttpResponse(200, json.encodeToString(SeedAnswer.serializer(), answer))
             }
             if (url.endsWith("/api/devices/push")) {
                 pushIds += json.decodeFromString(PushId.serializer(), body).fid
@@ -129,6 +134,7 @@ class SyncHarnessTest {
             val body = buildJsonObject {
                 put("revision", state.revision)
                 put("mode", graph.mode)
+                put("letGo", json.encodeToJsonElement(MapSerializer(String.serializer(), Long.serializer()), state.letGo))
                 put("stores", json.encodeToJsonElement(ListSerializer(JsonElement.serializer()), state.stores.map { row ->
                     buildJsonObject {
                         put("name", row.name)
@@ -199,10 +205,12 @@ class SyncHarnessTest {
         phone.h.commands.act(own("Essay"))
         assertTrue(phone.replica.upload())
         phone.h.commands.act(own("Maths"))
+        phone.h.stores.sync.update { it.copy(letGoSeen = 40) }
         mirroring()
         assertTrue(phone.replica.upload(), "its command's turned away, and it goes back")
         assertEquals(SyncState.MIRROR, phone.h.stores.sync.value.mode)
         assertEquals(0, phone.waiting, "it's in the stores, and goes with them")
+        assertEquals(0, phone.h.stores.sync.value.letGoSeen, "a restored server's revisions start again below the let-gos acted on")
         assertEquals(setOf("Essay", "Maths"), phone.titles, "nothing's taken from here")
         assertTrue(phone.replica.upload())
         assertEquals(setOf("Essay", "Maths"), serverTitles)
@@ -417,6 +425,28 @@ class SyncHarnessTest {
         assertTrue(two.replica.upload())
         assertEquals(setOf("Essay", "Maths"), two.titles)
         assertEquals(1, two.h.stores.instructions.value.instructions.size)
+    }
+
+    @Test
+    fun `a reset made on the server takes this phone's copies of what it cleared at its next pull, and leaves the rest`() = runBlocking {
+        val phone = phone()
+        phone.h.commands.act(own("Essay"))
+        assertTrue(phone.replica.upload())
+        // Copies a migration kept here, beside the stores (D-94).
+        val chatCopy = File(phone.h.dir, "chat.json.v5").apply { writeText("{}") }
+        val tasksCopy = File(phone.h.dir, "tasks.json.v9").apply { writeText("{}") }
+        val before = db.currentRevision()
+        assertEquals(Outcome.APPLIED, graph.applier.apply(CommandBatch(listOf(Command("reset-1", phone.h.clock.now(), ResetData(Reset.Chat)))), Client.WEBSITE).single().state)
+        assertTrue("chat.json" in graph.state(before).letGo, "said to a pull from before it")
+        assertEquals(emptyMap(), graph.state(db.currentRevision()).letGo, "and not to one from after")
+        assertTrue(phone.replica.upload())
+        assertFalse(chatCopy.exists(), "what the reset cleared isn't kept in a copy here either")
+        assertTrue(tasksCopy.exists(), "what it didn't clear keeps its copy")
+        // A copy made here since, by a migration say, then a pull of everything, which says every let-go there's been: kept.
+        val newer = File(phone.h.dir, "chat.json.v6").apply { writeText("{}") }
+        phone.replica.pullEverything()
+        assertTrue(phone.replica.upload())
+        assertTrue(newer.exists(), "a let-go acted on already isn't acted on again")
     }
 
     @Test

@@ -42,13 +42,26 @@ data class SeedBatch(
 @Serializable
 data class SeedAnswer(val revision: Long, val refused: List<String> = emptyList(), val server: String = "", val holds: Map<String, String> = emptyMap())
 
+/**
+ * The phone's last whole seed (D-141): the server goes over to commands in the transaction that takes it, and keeps its answer
+ * under [id], so an answer lost on the way is said again, not asked for by a pull. With it, when the phone last ran each of the
+ * jobs at a set time that are the server's from then ([ran], by the server's names: `morning`, `check-in`, `review`), so none
+ * is run again for a day the phone's had it.
+ */
+@Serializable
+data class SwitchSeed(val id: String, val seed: SeedBatch, val ran: Map<String, Long> = emptyMap())
+
 /** A store as a pull brings it: its text as JSON. */
 @Serializable
 data class PulledStore(val name: String, val version: Int, val revision: Long, val json: JsonElement)
 
-/** Every store above the revision asked for, the revision they're as of, and the server's mode: a restore can take it back to mirroring. */
+/**
+ * Every store above the revision asked for, the revision they're as of, and the server's mode: a restore can take it back to
+ * mirroring. With them, the stores whose copies a clear or a reset let go of since ([letGo], D-94), each by the revision that let
+ * them go, so the phone lets go of its own, once.
+ */
 @Serializable
-data class PulledState(val revision: Long, val stores: List<PulledStore>, val mode: String? = null)
+data class PulledState(val revision: Long, val stores: List<PulledStore>, val mode: String? = null, val letGo: Map<String, Long> = emptyMap())
 
 /** What a client can ask of the server with no sign-in: its version, the protocol and each store's version. */
 @Serializable

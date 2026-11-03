@@ -39,6 +39,8 @@ class Readings(
     private val queueQuestion: suspend (taskId: String, question: String?, now: Long) -> Unit,
     /** Anki read again now, its decks' sections or deadline changed by a reading (`SyncWorker.syncNow`). */
     private val readDecks: () -> Unit,
+    /** Waits till no command's open, on the server, where one can be rolled back: a reading it set off then reads what stands. */
+    private val settled: suspend () -> Unit = {},
 ) {
     /** The rules' enrichment: always there, and the fallback for the model. */
     private val rules = RuleEnricher()
@@ -57,9 +59,11 @@ class Readings(
      * the rest, and stand in for a call that fails (the model is then left alone for the run) or
      * that the model declines (recorded as the model's, so it isn't asked again). With [force], [only]
      * is read again by the model whatever it was read by (AC-06), its reading kept unless the model
-     * gives one; whether it did. [byModel] false, the rules alone, whatever's on.
+     * gives one; whether it did. [byModel] false, the rules alone, whatever's on. Set off by a command, it waits for that to close
+     * ([settled]); never called inside one, which it would wait for.
      */
     suspend fun enrichNow(byModel: Boolean = true, only: String? = null, force: Boolean = false): Boolean {
+        settled()
         // Not while it rests after a failed call (no network, a bad key), nor with no room under the
         // cap: then what only the rules have seen isn't due for it.
         var enricher: Enricher? = gateway.client(ModelEffort.Job.Email).takeIf { byModel }

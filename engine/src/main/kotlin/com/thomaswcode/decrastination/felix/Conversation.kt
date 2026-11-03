@@ -135,6 +135,8 @@ class Conversation(
      * [com.thomaswcode.decrastination.sync.Sync.requestTeamsSync]): why it didn't start, or null where it did.
      */
     private val requestTeamsSync: suspend () -> String? = { null },
+    /** Waits till no command's open, on the server, where one can be rolled back: a call it set off then finds nothing to ask. */
+    private val settled: suspend () -> Unit = {},
 ) {
     /**
      * What the chat changes through those who own it: your own tasks,
@@ -711,9 +713,15 @@ class Conversation(
     /**
      * Claude's answer to your message waiting for one: a call made as the enrichment's are, under the
      * cap and resting after a failure. While Claude can't be asked, your message says why, and it's
-     * answered once it can be (the chat opened again, *Try again*, or Claude back from its rest).
+     * answered once it can be (the chat opened again, *Try again*, or Claude back from its rest). Set off by a command, it waits
+     * for that to close ([settled]), so a message rolled back with it isn't paid for; never called inside one, which it would wait for.
      */
-    suspend fun answerChat(retry: Boolean = false): Unit = answering.withLock {
+    suspend fun answerChat(retry: Boolean = false) {
+        settled()
+        answeringChat(retry)
+    }
+
+    private suspend fun answeringChat(retry: Boolean): Unit = answering.withLock {
         val waiting = chat.value.unanswered ?: return@withLock
         // Answered with nothing usable, it waits for your Try again ([retry]): never asked by itself.
         if (waiting.stuck && !retry) return@withLock
