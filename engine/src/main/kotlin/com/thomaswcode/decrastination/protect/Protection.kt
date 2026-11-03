@@ -37,6 +37,11 @@ class Protection(
     private val scope: CoroutineScope,
     /** Whether the device admin is on (`Watchdog.isAdminActive`). */
     private val adminActive: () -> Boolean,
+    /**
+     * Whether a loosening's wait is the server's to count and end (W-23), the phone keeping in step by commands: the phone shows
+     * what waits and applies none itself, online or off, so the two can't disagree on when one's due.
+     */
+    private val byServer: () -> Boolean = { false },
     /** The device admin given up, so uninstalling is allowed again. */
     private val removeAdmin: () -> Unit,
 ) {
@@ -95,14 +100,14 @@ class Protection(
      * when a change falls due, unless [force]d.
      */
     suspend fun applyDueChanges(force: Boolean = false) {
-        if (protection.value.pending.isEmpty()) return
+        if (protection.value.pending.isEmpty() || byServer()) return
         changing.withLock { applyDue(force) }
     }
 
-    /** [applyDueChanges], with [changing] held. */
+    /** [applyDueChanges], with [changing] held: by a change of the settings too, but never where the wait's the server's to count. */
     private suspend fun applyDue(force: Boolean) {
         val state = protection.value
-        if (state.pending.isEmpty()) return
+        if (state.pending.isEmpty() || byServer()) return
         val uptime = clock.uptime()
         val elapsed = SettingsChanges.counting(state.pending, state.uptimeMark, uptime, force, settings.value) ?: return
         val outcome = SettingsChanges.applyDue(settings.value, state.pending, clock.now(), elapsed)

@@ -91,6 +91,8 @@ class Instructions(
     private val question: (Instruction) -> String? = { null },
     /** Waits till no command's open, on the server, where one can be rolled back: a read it set off then finds nothing to read. */
     private val settled: suspend () -> Unit = {},
+    /** Whether the server reads the instructions, the phone keeping in step by commands (D-142): nothing's asked of Claude here then. */
+    private val byServer: () -> Boolean = { false },
 ) {
     /** Your instructions as they are now. */
     val value: InstructionState get() = instructions.value
@@ -213,6 +215,7 @@ class Instructions(
      * that to close ([settled]); never called inside one, which it would wait for.
      */
     suspend fun readInstructions(interactive: Boolean = false) {
+        if (byServer()) return
         settled()
         reading(interactive)
     }

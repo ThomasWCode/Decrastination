@@ -29,6 +29,7 @@ import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -65,7 +66,9 @@ class ReadingsTest {
     /** Claude's key, while there is one. */
     @Volatile private var key: String? = null
     private val gateway = ModelGateway(settings, { key }, model, tasks, clock, NoAlerts, scope) {}.also { it.endpoint = server.url("").toString().trimEnd('/') }
-    private val readings = Readings(tasks, model, clock, scope, gateway, profile = { Profile.Block.NONE }, queueQuestion = { _, _, _ -> }, readDecks = {})
+    /** Whether the server reads the tasks, the phone keeping in step by commands. */
+    @Volatile private var byServer = false
+    private val readings = Readings(tasks, model, clock, scope, gateway, profile = { Profile.Block.NONE }, queueQuestion = { _, _, _ -> }, readDecks = {}, byServer = { byServer })
 
     private val essay = TaskItem(
         id = "teams:essay", source = Source.Teams, sourceId = "essay", title = "Essay", dueAt = Fixtures.at("2026-10-23T09:00"), kind = Kind.Homework,
@@ -88,6 +91,17 @@ class ReadingsTest {
         assertEquals(RuleEnricher.BY, task().enrichment?.by)
         assertEquals(Readings.ReadAgain.NotNow, readings.readAgain(essay.id))
         assertEquals(0, server.requestCount)
+    }
+
+    @Test
+    fun `once the server reads the tasks, none is read here, by Claude or by the rules`() = runBlocking {
+        byServer = true
+        tasks.update { it.copy(tasks = listOf(essay)) }
+        assertFalse(readings.enrichNow())
+        assertNull(task().enrichment)
+        byServer = false
+        readings.enrichNow()
+        assertEquals(RuleEnricher.BY, task().enrichment?.by)
     }
 
     @Test

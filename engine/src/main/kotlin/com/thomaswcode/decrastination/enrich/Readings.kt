@@ -41,6 +41,8 @@ class Readings(
     private val readDecks: () -> Unit,
     /** Waits till no command's open, on the server, where one can be rolled back: a reading it set off then reads what stands. */
     private val settled: suspend () -> Unit = {},
+    /** Whether the server reads the tasks, the phone keeping in step by commands (D-142): neither Claude's reading nor the rules' made here then. */
+    private val byServer: () -> Boolean = { false },
 ) {
     /** The rules' enrichment: always there, and the fallback for the model. */
     private val rules = RuleEnricher()
@@ -63,6 +65,7 @@ class Readings(
      * ([settled]); never called inside one, which it would wait for.
      */
     suspend fun enrichNow(byModel: Boolean = true, only: String? = null, force: Boolean = false): Boolean {
+        if (byServer()) return false
         settled()
         // Not while it rests after a failed call (no network, a bad key), nor with no room under the
         // cap: then what only the rules have seen isn't due for it.

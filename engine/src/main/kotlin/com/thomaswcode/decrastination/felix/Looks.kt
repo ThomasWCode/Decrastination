@@ -96,6 +96,11 @@ class Looks(
     private val applyProposal: suspend (messageId: String, proposalId: String) -> Unit,
     /** Waits till no command's open, on the server, where one can be rolled back: what a call's for then stands. */
     private val settled: suspend () -> Unit = {},
+    /**
+     * Whether the server writes Felix's looks, mornings and reminders' words, the phone keeping in step by commands (D-142): none
+     * written here then, and nothing asked of Claude. A reminder whose words are written still comes here at its time ([sweepReminders]).
+     */
+    private val byServer: () -> Boolean = { false },
 ) {
     /** One look at a time: a check while one writes is covered by it. */
     private val writing = Mutex()
@@ -111,6 +116,7 @@ class Looks(
      * then sets his next look. Writing already (a draft), he looks again in a minute.
      */
     suspend fun check(now: Long = clock.now()) {
+        if (byServer()) return
         if (!writing.tryLock()) {
             ports.armLook(now + BUSY_RETRY_MS)
             return
@@ -252,6 +258,7 @@ class Looks(
      * are. One whose call is held or fails, or comes back with none, goes in your words. Not while a command's open ([settled]).
      */
     suspend fun remindNow(now: Long = clock.now()) {
+        if (byServer()) return
         settled()
         // Begun: a sweep from now on that finds one still to ask for queues the next run.
         remindQueued.set(false)
@@ -307,7 +314,12 @@ class Looks(
      * off or resting, no answer within [MORNING_MS], or an empty one. It sets no check: the day's slots
      * do that.
      */
-    suspend fun morning(now: Long = clock.now()): Boolean = writing.withLock {
+    suspend fun morning(now: Long = clock.now()): Boolean {
+        if (byServer()) return false
+        return writingMorning(now)
+    }
+
+    private suspend fun writingMorning(now: Long): Boolean = writing.withLock {
         val plan = planning.plan(now = now)
         if (plan.todaySlots.none { it.kind == SlotKind.Work }) return@withLock false
         val caller = gateway.client(ModelEffort.Job.Felix)?.let { FelixCaller(it) } ?: return@withLock false
@@ -669,7 +681,7 @@ class Looks(
      * of them when it's time to with a grace longer than that ([FelixRules.next]).
      */
     suspend fun draftAhead(plan: Plan, now: Long = clock.now()) {
-        if (!writing.tryLock()) return
+        if (byServer() || !writing.tryLock()) return
         try {
             draft(plan, now)
             writeReminders(plan, now)
@@ -684,6 +696,7 @@ class Looks(
      * it waits for that to close ([settled]), so a reminder rolled back with it isn't written for.
      */
     suspend fun draftReminders(now: Long = clock.now()) {
+        if (byServer()) return
         settled()
         writeReminders(planning.plan(now = now), now)
     }

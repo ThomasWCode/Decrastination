@@ -142,6 +142,7 @@ Undone on the Reviews page, one that loosens the blocker waits as yours do.
 
 A waiting change is a `PendingChange` in `protection.json`, listed under *Waiting* with when it applies.
 - Its wait is counted on the uptime clock (`DeviceClock.uptime`, `SettingsChanges.applyDue`), which setting the date can't move; hours the phone is off don't count.
+- Once the phone sends commands, the wait's the server's to count and end, by its own clock (W-23; its `slots` job): the phone shows what waits and applies none itself, at its half-minute's count or by a change of the settings, online or off, so the two can't disagree on when one's due (`Protection`'s `byServer`, 5.14.0).
 - *Cancel*, or setting it back, drops it at once; a parent code applies it at once (`Protection.applyWithCode`), the code carried by the one command (`ApplyChangeNow`), so a client can't ask for the change without it.
 - One that no longer loosens (a setting that no longer waits, a removal added back) applies at the next count.
 

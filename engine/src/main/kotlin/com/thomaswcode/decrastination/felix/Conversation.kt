@@ -137,6 +137,11 @@ class Conversation(
     private val requestTeamsSync: suspend () -> String? = { null },
     /** Waits till no command's open, on the server, where one can be rolled back: a call it set off then finds nothing to ask. */
     private val settled: suspend () -> Unit = {},
+    /**
+     * Whether the server writes what Felix says by himself, the phone keeping in step by commands (D-142): then nothing's asked of
+     * Claude here, nor written in his name by the app's own work, which the server does, its words reaching the phone as it pulls.
+     */
+    private val byServer: () -> Boolean = { false },
 ) {
     /**
      * What the chat changes through those who own it: your own tasks,
@@ -210,6 +215,7 @@ class Conversation(
      * The reminder to open the form, where his notifications can't be shown.
      */
     suspend fun remindCheckIn() {
+        if (byServer()) return
         if (askCheckIn()) return
         ports.remindForm()
     }
@@ -381,7 +387,7 @@ class Conversation(
      * off, asked now, a message each in the app's words, the three answers its replies.
      */
     suspend fun askHowItWent(asks: List<AssessLater>) {
-        if (asks.isEmpty()) return
+        if (asks.isEmpty() || byServer()) return
         if (gateway.claudeKey() != null) {
             chat.update { s -> s.copy(felix = s.felix.copy(assessLater = (s.felix.assessLater + asks).distinctBy { a -> a.taskId to a.doneAt }.takeLast(MAX_ASKS))) }
             return
@@ -393,7 +399,7 @@ class Conversation(
 
     /** Those kept for his evening question asked now, a message each, as Claude is off: kept while it was on. */
     suspend fun askKept() {
-        if (gateway.claudeKey() != null) return
+        if (gateway.claudeKey() != null || byServer()) return
         val kept = chat.value.felix.assessLater
         if (kept.isEmpty()) return
         // Each let go of in the same write that asks it: a stop between leaves the rest kept, to be asked.
@@ -656,7 +662,7 @@ class Conversation(
      * asked doesn't end it; one over, or its task gone, is let go first, whatever a later read finds.
      */
     suspend fun afterSync(now: Long = clock.now()) {
-        if (watching.isEmpty()) return
+        if (watching.isEmpty() || byServer()) return
         val byId = tasks.value.tasks.associateBy { it.id }
         for ((id, watch) in watching.entries.toList()) {
             val task = byId[id]
@@ -717,6 +723,7 @@ class Conversation(
      * for that to close ([settled]), so a message rolled back with it isn't paid for; never called inside one, which it would wait for.
      */
     suspend fun answerChat(retry: Boolean = false) {
+        if (byServer()) return
         settled()
         answeringChat(retry)
     }

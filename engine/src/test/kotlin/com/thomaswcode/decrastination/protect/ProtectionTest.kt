@@ -112,6 +112,24 @@ class ProtectionTest {
     }
 
     @Test
+    fun `once the server counts a loosening's wait, none is applied here, its hours gone by or not`() = runBlocking {
+        var byServer = true
+        val counted = Protection(settings, protectionState, device, secrets, clock, scope, adminActive = { admin }, byServer = { byServer }) {}
+        arm()
+        counted.changeSettings { it.copy(freeAllowanceMin = 90) }
+        uptimeOn(25 * 3_600_000L)
+        counted.applyDueChanges(force = true)
+        // Nor by another change of the settings, which counts what's waiting first.
+        counted.changeSettings { it.copy(photoFromMin = 10) }
+        assertEquals(60, settings.value.freeAllowanceMin)
+        assertEquals(0L, counted.pending.single().waitedMs, "nor counted here")
+        // Mirroring, the phone's to apply.
+        byServer = false
+        counted.applyDueChanges(force = true)
+        assertEquals(90, settings.value.freeAllowanceMin)
+    }
+
+    @Test
     fun `a waiting change cancelled goes, and what it would loosen stays`() = runBlocking {
         arm()
         protection.changeSettings { it.copy(workMinPerFreeMin = 2) }

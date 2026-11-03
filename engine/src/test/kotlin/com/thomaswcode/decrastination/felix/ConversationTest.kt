@@ -36,6 +36,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import okhttp3.mockwebserver.MockResponse
 import com.thomaswcode.decrastination.core.WindowKind
 import com.thomaswcode.decrastination.data.SlotOutcome
 import com.thomaswcode.decrastination.data.SlotRecord
@@ -360,6 +361,46 @@ class ConversationTest {
         assertTrue(stores.chat.value.felix.assessLater.isEmpty())
         assertTrue(conversation.ask("Harder", replyTo = question.id))
         assertEquals(listOf(Triple("teams:sheet", ask.doneAt!!, "harder")), felix.assessed)
+    }
+
+    @Test
+    fun `once the server says what he says, nothing's asked of Claude here, nor written in his name by the app's own work`() = runBlocking {
+        felix.byServer = true
+        // Your words wait for the server's answer, which comes as it's pulled; the Try again too is the server's.
+        assertTrue(conversation.ask("Plan my evening"))
+        conversation.answerChat(retry = true)
+        felix.settle()
+        assertEquals(0, felix.server.requestCount)
+        assertNotNull(stores.chat.value.unanswered)
+        // The check-in's reminder, how work went, and what was kept for his evening question: the server's.
+        conversation.remindCheckIn()
+        conversation.askHowItWent(listOf(AssessLater("teams:sheet", "Forces worksheet", now - 3_600_000L)))
+        stores.settings.update { it.copy(aiEnabled = false) }
+        stores.chat.update { it.copy(felix = it.felix.copy(assessLater = listOf(AssessLater("teams:essay", "Essay", now - 3_600_000L)))) }
+        conversation.askKept()
+        assertTrue(his().isEmpty())
+        assertEquals(0, felix.ports.forms)
+        assertEquals(listOf("teams:essay"), stores.chat.value.felix.assessLater.map { it.taskId })
+        // Mirroring again, each is made here as ever.
+        felix.byServer = false
+        conversation.askKept()
+        assertEquals(1, his().size)
+    }
+
+    @Test
+    fun `once the server reads your instructions, one written here waits for it, nothing asked of Claude here`() = runBlocking {
+        felix.byServer = true
+        val id = felix.instructions.addInstruction("Maths on Friday", About())
+        felix.instructions.readInstructions(interactive = true)
+        felix.settle()
+        assertEquals(0, felix.server.requestCount)
+        assertEquals(InstructionStatus.Reading, stores.instructions.value.instructions.single { it.id == id }.state)
+        // Mirroring, it's read here: asked of the stand-in, which refuses it, so it isn't asked again.
+        felix.byServer = false
+        felix.server.enqueue(MockResponse().setResponseCode(400))
+        felix.instructions.readInstructions(interactive = true)
+        felix.settle()
+        assertEquals(1, felix.server.requestCount)
     }
 
     @Test

@@ -78,6 +78,9 @@ class LearningTest {
     /** Run part-way through a review, for a test to hold one there. */
     @Volatile private var midReview: suspend () -> Unit = {}
 
+    /** Whether the server makes the week's review, the phone keeping in step by commands. */
+    @Volatile private var byServer = false
+
     private val learning = Learning(
         stores.log, stores.learning, stores.settings, stores.memory, stores.chat, stores.instructions, clock, gateway, focus, protection,
         resets = { 0 },
@@ -89,6 +92,7 @@ class LearningTest {
         },
         reviewed = { told += it },
         summaryReady = { offered += it },
+        byServer = { byServer },
     )
 
     private val week = Daily.checkInWeek(clock.now(), LONDON, stores.settings.value.checkInMin)
@@ -120,6 +124,17 @@ class LearningTest {
         assertTrue(stores.log.value.weeks.any { it.week == week }, "the week's totals kept")
         // Had its review: the evening's, if due, makes no second.
         learning.review(ifDue = true)
+        assertEquals(1, stores.log.value.reviews.size)
+    }
+
+    @Test
+    fun `once the server makes the week's review, none's made here, its review reaching the phone as it pulls`() = runBlocking {
+        byServer = true
+        learning.review(ifDue = false)
+        assertTrue(stores.log.value.reviews.isEmpty())
+        assertTrue(told.isEmpty())
+        byServer = false
+        learning.review(ifDue = false)
         assertEquals(1, stores.log.value.reviews.size)
     }
 
