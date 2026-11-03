@@ -9,6 +9,8 @@ build/
 
 # Local configuration
 local.properties
+# The Firebase project's file (D-145): kept here, out of a public repository's scans; without it a build has no instant sync.
+/app/google-services.json
 .idea/
 *.iml
 .DS_Store
