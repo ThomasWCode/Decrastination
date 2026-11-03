@@ -86,7 +86,7 @@ A heartbeat to healthchecks.io every minute from the server's scheduler, in eith
 - Every `/api` route behind the session or a device token except health, version and sign-in; sign-in and claiming rate-limited.
 - The database file holds credentials only encrypted (`MASTER_KEY`), and device tokens only hashed.
 - R2 bucket private; its keys scoped to that bucket.
-- The Firebase project's service account key is in `.env` (`FCM_SERVICE_ACCOUNT`), the server's alone: it signs only for Cloud Messaging's scope, and a message says only a revision.
+- The Firebase project's service account key is in `.env` (`FCM_SERVICE_ACCOUNT`), the server's alone. It's the console's default key, of its `firebase-adminsdk` account, which holds Firebase's admin roles over the whole project: the server asks only for Cloud Messaging's scope, but a leaked key could ask for more. The project holds nothing but this app's registration, so that's little today; a key of an account made for this, with only the Firebase Cloud Messaging API Admin role, would narrow it to what's used. A message says only a revision.
 - The repository is public: the server's code, the compose file and the Caddyfile are world-readable, as they should be; nothing in them is a secret.
 
 ## Cost
