@@ -1,6 +1,6 @@
 # The website: Decrastination at decrastination.thomaswhite.me
 
-Planned 31 Oct 2026, from ten questions answered that day ([decisions.md](decisions.md)). Built to 5.9.0: stages 0 to 7 and 9, dormant till the switch, the last release (D-141), with stage 8 waiting on a Firebase project; how each built part works now is in `docs/spec/` ([server.md](../spec/server.md), [website.md](../spec/website.md), [sync.md](../spec/sync.md)). The folder is the plan's record, as `docs/plan_v4/` was the 4.x plan's: this file is the outline, [architecture.md](architecture.md) the shape the code takes, [data-and-sync.md](data-and-sync.md) how the state moves and is kept, [hosting.md](hosting.md) where it runs and what that costs (with the evidence read for it), [stages.md](stages.md) the steps in order with their estimates, [decisions.md](decisions.md) the choices made and the questions they answered, and [inventory.md](inventory.md) what the phone app holds and does today and where each piece goes.
+Planned 31 Oct 2026, from ten questions answered that day ([decisions.md](decisions.md)). Built to 5.10.0: stages 0 to 7 and 9, and stage 8's server half, dormant till the switch, the last release (D-141), with stage 8's phone half to come; how each built part works now is in `docs/spec/` ([server.md](../spec/server.md), [website.md](../spec/website.md), [sync.md](../spec/sync.md)). The folder is the plan's record, as `docs/plan_v4/` was the 4.x plan's: this file is the outline, [architecture.md](architecture.md) the shape the code takes, [data-and-sync.md](data-and-sync.md) how the state moves and is kept, [hosting.md](hosting.md) where it runs and what that costs (with the evidence read for it), [stages.md](stages.md) the steps in order with their estimates, [decisions.md](decisions.md) the choices made and the questions they answered, and [inventory.md](inventory.md) what the phone app holds and does today and where each piece goes.
 
 ## Why
 
@@ -43,7 +43,7 @@ In the most technically feasible order (the owner's word on 31 Oct: the website 
 | 5 | Felix on the website: the chat as its home, replies, cards, ratings; Conversation, looks and reminders on the server | 5.5.0 |
 | 6 | The Day grid with drag, and the timer, on the website | 5.6.0 |
 | 7 | This week, Reviews, Stats, Backup and Reset, Setup on the website | 5.7.0, 5.8.0 |
-| 8 | Optional: the phone told at once of the server's changes (Firebase Cloud Messaging) | not built: it needs a Firebase project |
+| 8 | Optional: the phone told at once of the server's changes (Firebase Cloud Messaging) | 5.10.0, the server's half; 5.11.0, the phone's, to come |
 | 9 | Optional: Web Push for Felix's messages, slot starts and the timer (W-9) | 5.9.0 |
 | Last | The switch: the phone goes over to commands, and what's dormant wakes (D-141). The box it needs has been up, mirroring, since 1 Nov 2026 | to come |
 

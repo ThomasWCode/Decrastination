@@ -139,7 +139,7 @@ Credentials are **re-entered on the website**, never uploaded from the phone (W-
 
 ## Notifications
 
-The phone stays the notifier throughout. The website shows notices in the page from stage 5 (the tab's title count, a bell, the chat's unread marker). Web Push is built, for a browser that asks for it (stage 9, W-9). The phone learns of the server's changes at its next sync, every 15 minutes or on the app's opening; stage 8, optional and not built, would add Firebase Cloud Messaging so a data message wakes the sync at once (W-18).
+The phone stays the notifier throughout. The website shows notices in the page from stage 5 (the tab's title count, a bell, the chat's unread marker). Web Push is built, for a browser that asks for it (stage 9, W-9). The phone learns of the server's changes at its next sync, every 15 minutes or on the app's opening; stage 8 adds Firebase Cloud Messaging, so a data message wakes the phone's exchange at once (W-18): the server's half is built (5.10.0), dormant till the switch, and the phone's is to come (5.11.0).
 
 ## What `ArchitectureTest` comes to hold
 
