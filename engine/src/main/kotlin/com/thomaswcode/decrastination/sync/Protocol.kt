@@ -69,3 +69,11 @@ data class DeviceLine(val id: String, val name: String, val createdAt: Long, val
 /** The code the website shows, to type into the phone. */
 @Serializable
 data class PairingCode(val code: String, val expiresAt: Long)
+
+/** This phone's Firebase Installation ID: where Firebase Cloud Messaging reaches it, to tell it of a change it didn't make (W-18). */
+@Serializable
+data class PushId(val fid: String)
+
+/** What came of a push the server was asked to send this phone at once: whether Firebase took it, and if not, why. */
+@Serializable
+data class PushTried(val sent: Boolean, val why: String? = null)

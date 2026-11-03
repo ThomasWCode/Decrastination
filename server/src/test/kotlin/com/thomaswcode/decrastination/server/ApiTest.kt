@@ -12,6 +12,7 @@ import com.thomaswcode.decrastination.ports.Log
 import com.thomaswcode.decrastination.sync.DeviceToken
 import com.thomaswcode.decrastination.sync.PairingCode
 import com.thomaswcode.decrastination.sync.Protocol
+import com.thomaswcode.decrastination.sync.PushTried
 import com.thomaswcode.decrastination.sync.SeedAnswer
 import com.thomaswcode.decrastination.sync.SeedBatch
 import com.thomaswcode.decrastination.sync.ServerVersion
@@ -81,7 +82,10 @@ class ApiTest {
     }
 
     private val db = Database(":memory:")
-    private val graph = ServerGraph(db, Files.createTempDirectory("api").toFile(), Plain, "test")
+
+    /** Firebase as these tests have it: what it took, by id. */
+    private val firebase: MutableList<Pair<String, Long>> = Collections.synchronizedList(mutableListOf())
+    private val graph = ServerGraph(db, Files.createTempDirectory("api").toFile(), Plain, "test", phoneSender = { fid, revision -> firebase.add(fid to revision) })
     private val github = FakeGitHub(ALLOWED)
     private val web = Web(graph, github, Sessions(db, ALLOWED), secure = false)
 
@@ -190,6 +194,29 @@ class ApiTest {
         }
         assertEquals(HttpStatusCode.Forbidden, plain().get("/api/devices") { asPhone() }.status)
         assertEquals(HttpStatusCode.Forbidden, plain().delete("/api/devices/${phone.id}") { asPhone() }.status)
+    }
+
+    @Test
+    fun `a phone keeps where Firebase reaches it, which the website can't, and what isn't a token is refused`() = server {
+        val phone = paired()
+        fun HttpRequestBuilder.asPhone(body: String) {
+            bearerAuth(phone.token)
+            header(Protocol.HEADER, Protocol.VERSION.toString())
+            contentType(ContentType.Application.Json)
+            setBody(body)
+        }
+        assertEquals(HttpStatusCode.NoContent, plain().post("/api/devices/push") { asPhone("""{"fid":"cMadeUpFid000000000aaa"}""") }.status)
+        assertEquals(HttpStatusCode.BadRequest, plain().post("/api/devices/push") { asPhone("""{"fid":"not one"}""") }.status)
+        val website = plain().post("/api/devices/push") {
+            header(HttpHeaders.Cookie, signIn())
+            header("X-Requested-With", "test")
+            contentType(ContentType.Application.Json)
+            setBody("""{"fid":"dMadeUpFid000000000bbb"}""")
+        }
+        assertEquals(HttpStatusCode.Forbidden, website.status)
+        val tried = plain().post("/api/devices/push/test") { asPhone("") }
+        assertEquals(PushTried(true), json.decodeFromString<PushTried>(tried.bodyAsText()))
+        assertEquals(listOf("cMadeUpFid000000000aaa" to db.currentRevision()), firebase.toList(), "the phone's kept, the website's not")
     }
 
     @Test

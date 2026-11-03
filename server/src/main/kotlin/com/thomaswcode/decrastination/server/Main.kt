@@ -64,6 +64,20 @@ private fun pushKeys(): VapidKeys? {
     return VapidKeys.create(public, private)
 }
 
+/**
+ * How a phone's told at once (W-18), if its service account is set: `FCM_SERVICE_ACCOUNT`, the key file Firebase's console
+ * gives, in base64. One that can't be read is said, and the server runs without, as the phone's own sync still brings it all.
+ */
+private fun phoneSender(): FcmSender? {
+    val given = System.getenv("FCM_SERVICE_ACCOUNT")?.takeIf(String::isNotBlank) ?: return null
+    return try {
+        FcmSender(ServiceAccount.read(Base64.getMimeDecoder().decode(given).decodeToString()))
+    } catch (failed: Exception) {
+        Log.w(Log.TAG, "FCM_SERVICE_ACCOUNT can't be read, so no phone's told at once: ${failed::class.simpleName}")
+        null
+    }
+}
+
 private fun env(name: String): String = System.getenv(name)?.takeIf { it.isNotBlank() } ?: run {
     System.err.println("Set $name")
     exitProcess(1)
@@ -93,7 +107,7 @@ fun main(args: Array<String>) {
     // A test's are made here, so none is in the repository, and what it sends goes nowhere.
     val pusher = (if (testing) VapidKeys.generate() else pushKeys())?.let { WebPushSender("https://${domain.ifEmpty { "localhost" }}", it) }
     val sender = if (testing) Pushes.Sender { _, _ -> true } else pusher
-    val graph = ServerGraph(db, dataDir, MasterKeyCipher(if (testing) Base64.getEncoder().encodeToString(ByteArray(32)) else env("MASTER_KEY")), version, claudeKey = System.getenv("ANTHROPIC_API_KEY")?.takeIf { it.isNotBlank() }, claudeEndpoint = standIn, heartbeatUrl = System.getenv("HEARTBEAT_URL")?.takeIf { it.isNotBlank() }, nightly = nightlyFolder(), pushSender = sender, pushKey = pusher?.applicationKey)
+    val graph = ServerGraph(db, dataDir, MasterKeyCipher(if (testing) Base64.getEncoder().encodeToString(ByteArray(32)) else env("MASTER_KEY")), version, claudeKey = System.getenv("ANTHROPIC_API_KEY")?.takeIf { it.isNotBlank() }, claudeEndpoint = standIn, heartbeatUrl = System.getenv("HEARTBEAT_URL")?.takeIf { it.isNotBlank() }, nightly = nightlyFolder(), pushSender = sender, pushKey = pusher?.applicationKey, phoneSender = if (testing) null else phoneSender())
     val github: GitHub = if (testing) {
         object : GitHub {
             override fun authorizeUrl(state: String, challenge: String) = "/"

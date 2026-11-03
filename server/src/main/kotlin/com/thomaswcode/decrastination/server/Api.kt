@@ -4,6 +4,7 @@ import com.thomaswcode.decrastination.data.Backups
 import com.thomaswcode.decrastination.ports.Log
 import com.thomaswcode.decrastination.sync.DeviceClaim
 import com.thomaswcode.decrastination.sync.Protocol
+import com.thomaswcode.decrastination.sync.PushId
 import com.thomaswcode.decrastination.sync.SeedBatch
 import com.thomaswcode.decrastination.sync.protocol.CommandBatch
 import com.thomaswcode.decrastination.ui.BackupPage
@@ -266,6 +267,17 @@ private fun Route.signedInRoutes(web: Web) {
         if (call.client !is Client.Website) return@delete call.respond(HttpStatusCode.Forbidden, Problem("A device is revoked from the website"))
         graph.devices.revoke(call.parameters["id"].orEmpty())
         call.respond(HttpStatusCode.NoContent)
+    }
+    // Where Firebase reaches this phone (W-18): kept in either mode, so it's there when the server applies commands.
+    post("/devices/push") {
+        val phone = call.client as? Client.Phone ?: return@post call.respond(HttpStatusCode.Forbidden, Problem("Only a phone is told through Firebase"))
+        if (!graph.phones.keep(phone.id, call.receive<PushId>().fid)) return@post call.respond(HttpStatusCode.BadRequest, Problem("That isn't a Firebase Installation ID"))
+        call.respond(HttpStatusCode.NoContent)
+    }
+    // This phone told now, whatever the mode: how it finds out it can be told at once.
+    post("/devices/push/test") {
+        val phone = call.client as? Client.Phone ?: return@post call.respond(HttpStatusCode.Forbidden, Problem("Only a phone is told through Firebase"))
+        call.respond(graph.phones.test(phone.id, graph.db.currentRevision()))
     }
 
     get("/state") {

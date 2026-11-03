@@ -172,7 +172,7 @@ The estimates are hours of sessions, from the durations measured over the 4.x re
 
 ## Stage 8 (optional): the phone told at once
 
-**As built.** Not built: it needs a Firebase project, which is the owner's to make, and it only matters from the switch on, as till then the phone's the one writing.
+**As built.** In two releases, the numbers having moved on, so the phone's half is tried against the real box before it's merged: CI publishes the server's image only from `main`. 5.10.0, the server's half, dormant while it mirrors, as the rest is till the switch (W-25): each phone's Firebase Installation ID kept with its device, and each change told to the phones that didn't make it, a run of them one message saying only the revision, through Cloud Messaging's HTTP v1 API under the box's service account, its token signed for on the box rather than through Google's library; and a route that tells the asking phone now, whatever the mode. Firebase had since made the registration token deprecated (its guide of 28 Oct 2026), so a phone's reached by its installation id, not the token the work below names. `google-services.json` is kept out of git (W-27), not committed as the work below has it. 5.11.0, the phone's half: to come.
 
 **Goal.** A change on the server reaches the phone in seconds, not at the next 15-minute sync. Release 5.7.0.
 
