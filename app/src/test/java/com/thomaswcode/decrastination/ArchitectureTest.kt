@@ -143,13 +143,14 @@ class ArchitectureTest {
 
         /**
          * The files that update each store (§The rules, 2: its owner, first). Where there's more than one,
-         * each writes its own part of it: the tasks' sources (Sync), readings, your values and own tasks
+         * each writes its own part of it: the tasks' sources (Syncer), readings, your values and own tasks
          * laid on them, ticks and kept pieces (Focus), photos, and Felix's acts; the chat's cards from an
          * instruction or a task of your own; the half-minute state from the plan and the alarms; the
-         * runtime's counts, daily runs and findings, which have no owner of their own.
+         * runtime's counts, daily runs and findings, which have no owner of their own. The watchdog's
+         * findings go on record through Focus, as the server keeps them too (D-147).
          */
         val WRITERS: Map<String, Set<String>> = mapOf(
-            "tasks" to setOf("sync/Sync.kt", "sync/Syncer.kt", "enrich/Readings.kt", "tasks/Instructions.kt", "tasks/OwnTasks.kt", "block/Focus.kt", "block/Photos.kt", "felix/Conversation.kt", "felix/Looks.kt"),
+            "tasks" to setOf("sync/Syncer.kt", "enrich/Readings.kt", "tasks/Instructions.kt", "tasks/OwnTasks.kt", "block/Focus.kt", "block/Photos.kt", "felix/Conversation.kt", "felix/Looks.kt"),
             "settings" to setOf("protect/Protection.kt"),
             "runtime" to setOf("notify/Notifier.kt", "AppGraph.kt", "block/FocusService.kt", "learn/Briefing.kt", "learn/DailyAlarms.kt"),
             "session" to setOf("block/Focus.kt", "block/Slots.kt", "plan/Planning.kt", "tasks/Instructions.kt"),
@@ -158,7 +159,7 @@ class ArchitectureTest {
             "model" to setOf("enrich/ModelGateway.kt", "plan/Ahead.kt"),
             "anki" to setOf("block/AnkiWatch.kt"),
             "learning" to setOf("learn/Learning.kt", "block/AnkiWatch.kt", "AppGraph.kt"),
-            "log" to setOf("learn/Learning.kt", "learn/Briefing.kt", "block/Focus.kt", "protect/Watchdog.kt"),
+            "log" to setOf("learn/Learning.kt", "learn/Briefing.kt", "block/Focus.kt"),
             "instructions" to setOf("tasks/Instructions.kt", "felix/Conversation.kt"),
             "chat" to setOf("felix/Conversation.kt", "felix/Looks.kt", "felix/Outbox.kt", "tasks/Instructions.kt", "tasks/OwnTasks.kt"),
             "school" to setOf("tasks/Instructions.kt", "felix/Conversation.kt"),
