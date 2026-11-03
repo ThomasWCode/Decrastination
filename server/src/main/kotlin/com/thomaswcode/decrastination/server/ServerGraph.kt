@@ -880,4 +880,4 @@ object Archives {
 data class StoreRow(val name: String, val version: Int, val revision: Long, val text: String)
 
 /** The stores above a revision, the newest revision there is, and the stores whose copies were let go since. */
-data class StateAnswer(val revision: Long, val stores: List<StoreRow>, val letGo: List<String> = emptyList())
+data class StateAnswer(val revision: Long, val stores: List<StoreRow>, val letGo: Map<String, Long> = emptyMap())

@@ -147,8 +147,8 @@ class SqliteBackend(private val db: Database, private val clock: () -> Long = Sy
         }
     }
 
-    /** The stores whose copies were let go after revision [since], read on [c], as a pull says them. */
-    fun letGoSince(c: Connection, since: Long): List<String> = letGo(c).filterValues { it > since }.keys.sorted()
+    /** The stores whose copies were let go after revision [since], each by the revision that did it, read on [c], as a pull says them. */
+    fun letGoSince(c: Connection, since: Long): Map<String, Long> = letGo(c).filterValues { it > since }
 
     /** Each store whose copies were let go, and the revision that did it. */
     private fun letGo(c: Connection): Map<String, Long> = c.single("SELECT value FROM meta WHERE key = ?", LET_GO)?.let { Json.decodeFromString(LET_GO_RECORD, it) }.orEmpty()

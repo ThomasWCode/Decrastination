@@ -101,7 +101,7 @@ private data class ParentCode(val secret: String? = null)
 private data class Credentials(val held: Set<String>)
 
 @Serializable
-private data class StateOut(val revision: Long, val stores: List<StoreOut>, val mode: String, val letGo: List<String> = emptyList())
+private data class StateOut(val revision: Long, val stores: List<StoreOut>, val mode: String, val letGo: Map<String, Long> = emptyMap())
 
 /** More than a page shrunk to what's sent ever comes to. */
 private const val MAX_PHOTO_BYTES = 4 * 1024 * 1024L

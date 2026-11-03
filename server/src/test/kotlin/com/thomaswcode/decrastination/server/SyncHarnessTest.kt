@@ -48,6 +48,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.builtins.MapSerializer
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
@@ -133,7 +134,7 @@ class SyncHarnessTest {
             val body = buildJsonObject {
                 put("revision", state.revision)
                 put("mode", graph.mode)
-                put("letGo", json.encodeToJsonElement(ListSerializer(String.serializer()), state.letGo))
+                put("letGo", json.encodeToJsonElement(MapSerializer(String.serializer(), Long.serializer()), state.letGo))
                 put("stores", json.encodeToJsonElement(ListSerializer(JsonElement.serializer()), state.stores.map { row ->
                     buildJsonObject {
                         put("name", row.name)
@@ -435,10 +436,15 @@ class SyncHarnessTest {
         val before = db.currentRevision()
         assertEquals(Outcome.APPLIED, graph.applier.apply(CommandBatch(listOf(Command("reset-1", phone.h.clock.now(), ResetData(Reset.Chat)))), Client.WEBSITE).single().state)
         assertTrue("chat.json" in graph.state(before).letGo, "said to a pull from before it")
-        assertEquals(emptyList(), graph.state(db.currentRevision()).letGo, "and not to one from after")
+        assertEquals(emptyMap(), graph.state(db.currentRevision()).letGo, "and not to one from after")
         assertTrue(phone.replica.upload())
         assertFalse(chatCopy.exists(), "what the reset cleared isn't kept in a copy here either")
         assertTrue(tasksCopy.exists(), "what it didn't clear keeps its copy")
+        // A copy made here since, by a migration say, then a pull of everything, which says every let-go there's been: kept.
+        val newer = File(phone.h.dir, "chat.json.v6").apply { writeText("{}") }
+        phone.replica.pullEverything()
+        assertTrue(phone.replica.upload())
+        assertTrue(newer.exists(), "a let-go acted on already isn't acted on again")
     }
 
     @Test

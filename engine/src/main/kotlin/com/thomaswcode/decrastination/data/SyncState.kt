@@ -27,8 +27,13 @@ data class SyncState(
     val dropped: List<String> = emptyList(),
     /** This phone's Firebase Installation ID, as Firebase last registered it: where the server tells it of a change at once (W-18). */
     val pushId: String? = null,
+    /**
+     * The newest of the server's let-gos acted on here (D-94), by its revision: a pull of everything says them all, and those
+     * already acted on aren't again, as the copies made here since are what a migration that fails is put right from.
+     */
+    val letGoSeen: Long = 0,
     /** The shape this is in ([Migration]): raised with each change of it, a migration bringing older files to it. */
-    val version: Int = 3,
+    val version: Int = 4,
 ) {
     companion object {
         const val DEFAULT_SERVER = "https://decrastination.thomaswhite.me"
@@ -40,5 +45,8 @@ data class SyncState(
 
         /** The id 5.11.0 adds, with its default: nothing to bring across. */
         val V3 = Migration(2) { it }
+
+        /** The let-gos acted on, 5.12.0's, from none: nothing to bring across. */
+        val V4 = Migration(3) { it }
     }
 }

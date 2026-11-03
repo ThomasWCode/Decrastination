@@ -55,10 +55,11 @@ data class PulledStore(val name: String, val version: Int, val revision: Long, v
 
 /**
  * Every store above the revision asked for, the revision they're as of, and the server's mode: a restore can take it back to
- * mirroring. With them, the stores whose copies a clear or a reset let go of since ([letGo], D-94), so the phone lets go of its own.
+ * mirroring. With them, the stores whose copies a clear or a reset let go of since ([letGo], D-94), each by the revision that let
+ * them go, so the phone lets go of its own, once.
  */
 @Serializable
-data class PulledState(val revision: Long, val stores: List<PulledStore>, val mode: String? = null, val letGo: List<String> = emptyList())
+data class PulledState(val revision: Long, val stores: List<PulledStore>, val mode: String? = null, val letGo: Map<String, Long> = emptyMap())
 
 /** What a client can ask of the server with no sign-in: its version, the protocol and each store's version. */
 @Serializable
