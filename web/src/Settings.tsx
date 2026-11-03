@@ -307,7 +307,7 @@ function Remembered({ view }: { view: SettingsView }) {
 }
 
 /** Sign-ins, entered here and kept sealed on the server (W-19): it says which it holds, never what they are. */
-function Credentials({ groups }: { groups: CredentialGroup[] }) {
+function Credentials({ groups, mirroring }: { groups: CredentialGroup[]; mirroring: boolean }) {
   const [typed, setTyped] = useState<Record<string, string>>({});
   // What it says it holds, from its answer: a sign-in is in no store, so no revision says it's changed.
   const [held, setHeld] = useState<string[] | null>(null);
@@ -350,6 +350,7 @@ function Credentials({ groups }: { groups: CredentialGroup[] }) {
           ))}
         </fieldset>
       ))}
+      {mirroring ? <p className="note long">These can be set here already: they're the server's own, kept for when it reads Power Planner and Gmail itself, from the switch. Till then the phone reads them with its own.</p> : null}
       <button className="button" disabled={Object.keys(given).length === 0}>
         Save sign-ins
       </button>
@@ -475,7 +476,7 @@ export function SettingsPageView() {
           {page.key === "school" ? <School view={view} /> : null}
           {page.fields.length > 0 ? <Fields key={page.key} page={page} canChange={view.canChange} /> : null}
           {page.key === "felix" ? <Remembered view={view} /> : null}
-          {page.key === "sources" && view.canChange ? <Credentials groups={view.credentials} /> : null}
+          {page.key === "sources" ? <Credentials groups={view.credentials} mirroring={!view.canChange} /> : null}
           {page.key === "claude" ? <Calls view={view} /> : null}
           {page.key === "notifications" && view.push ? <BrowserPush push={view.push} /> : null}
         </div>
