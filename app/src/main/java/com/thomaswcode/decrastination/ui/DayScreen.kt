@@ -1,6 +1,7 @@
 package com.thomaswcode.decrastination.ui
 
 import android.app.Activity
+import android.content.Intent
 import android.content.res.Configuration
 import android.os.SystemClock
 import androidx.compose.animation.core.animate
@@ -161,6 +162,8 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
     val school by graph.school.state.collectAsStateWithLifecycle()
     val instructions by graph.instructions.state.collectAsStateWithLifecycle()
     val calendar by graph.sync.calendarState.collectAsStateWithLifecycle()
+    val sync by graph.replica.state.collectAsStateWithLifecycle()
+    val outbox by graph.stores.outbox.state.collectAsStateWithLifecycle()
     // The day moves with the clock as well as the data: slots begin and end, the evening runs out.
     val now by produceState(graph.clock.now()) {
         while (true) {
@@ -367,6 +370,15 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
         val tall = maxHeight
         Column(if (landscape) Modifier.fillMaxSize().verticalScroll(page) else Modifier.fillMaxSize().clipToBounds()) {
             Column(Modifier.onSizeChanged { aboveCard = it.height }) {
+                // Out of step with the server for long, once the phone sends commands: what's here may not be what's there.
+                SetupPage.syncLine(sync, outbox.commands.firstOrNull()?.at, graph.replica.paired, now, zone)?.let { line ->
+                    Text(
+                        line,
+                        Modifier.fillMaxWidth().clickable { activity.startActivity(Intent(activity, SetupActivity::class.java)) }.padding(horizontal = 16.dp, vertical = 8.dp),
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
                 Hint(graph, "day", "Day is when: today's slots as they come, and the week's days above. Work is what: every task, on the next tab.")
                 Hint(graph, "day-drag", "Hold a piece to move it: drag it to a time, or onto a day above.")
                 WeekStrip(plan, day, drag, tasks.tasks.associateBy { it.id }, graph.clock.now(), zone) { chosen = it.toString() }

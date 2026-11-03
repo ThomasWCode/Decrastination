@@ -23,14 +23,18 @@ fun SetupMark(graph: AppGraph, activity: Activity) {
     val device by graph.stores.device.state.collectAsStateWithLifecycle()
     val settings by graph.settings.state.collectAsStateWithLifecycle()
     val gmail by graph.gmailFinishes.state.collectAsStateWithLifecycle()
+    val sync by graph.replica.state.collectAsStateWithLifecycle()
+    val outbox by graph.stores.outbox.state.collectAsStateWithLifecycle()
     // What Setup would show in red, as a mark that opens it (UI-18): a source failing, Claude's key,
-    // protection, a file unreadable, a write to Gmail given up; and, the first run, no source read yet.
+    // protection, a file unreadable, a write to Gmail given up, the server out of step for long (the Day's line); and, the first
+    // run, no source read yet.
     val attention = SetupPage.attention(
         tasks,
         gmailGivenUp = GmailWrites.givenUp(gmail.writes).isNotEmpty(),
         keyProblem = model.aiUsage.keyProblem != null && settings.aiEnabled && settings.aiKeyActive,
         watchdog = device.watchdog.problems.isNotEmpty(),
         unreadable = runtime.unreadable.isNotEmpty(),
+        adrift = SetupPage.syncLine(sync, outbox.commands.firstOrNull()?.at, graph.replica.paired, graph.clock.now(), graph.clock.zone()) != null,
     )
     if (attention) {
         IconButton(onClick = { activity.startActivity(Intent(activity, SetupActivity::class.java)) }) {
