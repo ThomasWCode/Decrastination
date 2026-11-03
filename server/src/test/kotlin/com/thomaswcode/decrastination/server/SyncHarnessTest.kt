@@ -15,12 +15,14 @@ import com.thomaswcode.decrastination.data.CalendarRead
 import com.thomaswcode.decrastination.data.SyncState
 import com.thomaswcode.decrastination.net.Http
 import com.thomaswcode.decrastination.net.HttpResponse
+import com.thomaswcode.decrastination.sync.ParentCode
 import com.thomaswcode.decrastination.sync.Protocol
 import com.thomaswcode.decrastination.sync.PushId
 import com.thomaswcode.decrastination.sync.Replica
 import com.thomaswcode.decrastination.sync.SeedAnswer
 import com.thomaswcode.decrastination.sync.SeedBatch
 import com.thomaswcode.decrastination.sync.ServerVersion
+import com.thomaswcode.decrastination.sync.protocol.Action
 import com.thomaswcode.decrastination.sync.protocol.AddNote
 import com.thomaswcode.decrastination.sync.protocol.AddOwnChange
 import com.thomaswcode.decrastination.sync.protocol.ClearChat
@@ -53,6 +55,7 @@ import com.thomaswcode.decrastination.sync.protocol.RecordProtection
 import com.thomaswcode.decrastination.sync.protocol.Outcome
 import com.thomaswcode.decrastination.sync.protocol.SaveOwnTask
 import com.thomaswcode.decrastination.tasks.TasksHarness
+import com.thomaswcode.decrastination.views.Asked
 import java.io.File
 import java.io.IOException
 import java.nio.file.Files
@@ -102,6 +105,15 @@ class SyncHarnessTest {
         /** Where Firebase reaches the phone, each as it was sent. */
         val pushIds = mutableListOf<String>()
 
+        /** The parent code's secrets, each as it was taken; null for none. */
+        val parentCodes = mutableListOf<String?>()
+
+        /** The parent code's route answering with a failure. */
+        var parentFails = false
+
+        /** The times the server was asked to try your words again. */
+        var triedAgain = 0
+
         /** Pulls answered with a failure, every other route as it would. */
         var pullFails = false
 
@@ -126,6 +138,23 @@ class SyncHarnessTest {
             if (url.endsWith("/api/devices/push")) {
                 pushIds += json.decodeFromString(PushId.serializer(), body).fid
                 return HttpResponse(204, "")
+            }
+            if (url.endsWith("/api/parent-code")) {
+                if (parentFails) return HttpResponse(500, "{}")
+                val secret = json.decodeFromString(ParentCode.serializer(), body).secret
+                parentCodes += secret
+                runBlocking { graph.setParentCode(secret) }
+                return HttpResponse(204, "")
+            }
+            if (url.endsWith("/api/chat/try-again")) {
+                if (graph.mode != ServerGraph.COMMANDS) return HttpResponse(409, "{}")
+                triedAgain++
+                graph.tryAgain()
+                return HttpResponse(204, "")
+            }
+            if (url.endsWith("/api/backup/import")) {
+                if (graph.mode != ServerGraph.COMMANDS) return HttpResponse(409, "{}")
+                return HttpResponse(200, json.encodeToString(Asked.serializer(), Asked(true, runBlocking { graph.importBackup(body, device) })))
             }
             check(url.endsWith("/api/commands")) { url }
             headers[Protocol.ZONE_HEADER]?.let(graph.serverClock::setZone)
@@ -170,7 +199,10 @@ class SyncHarnessTest {
     private inner class Phone(name: String) {
         val wire = Wire(name)
         val h = TasksHarness()
-        val replica = Replica(h.stores, wire, h.clock, "test", { CalendarRead() }, h.commands)
+
+        /** The chat's messages each pull brought, new to it. */
+        val heard = mutableListOf<List<ChatMessage>>()
+        val replica = Replica(h.stores, wire, h.clock, "test", { CalendarRead() }, h.commands) { heard += it }
 
         init {
             runBlocking {
@@ -633,5 +665,108 @@ class SyncHarnessTest {
         assertFalse(phone.replica.upload())
         assertEquals("The server is ahead of this app: install the latest", phone.h.stores.sync.value.lastError)
         assertEquals(setOf("Essay"), phone.titles)
+    }
+
+    /** [action] applied on the server as the website's: what the phone didn't make. */
+    private suspend fun onTheWebsite(id: String, action: Action) =
+        assertEquals(Outcome.APPLIED, graph.applier.apply(CommandBatch(listOf(Command(id, System.currentTimeMillis(), action))), Client.WEBSITE).single().state)
+
+    @Test
+    fun `what Felix says on the server is heard on the phone as it's pulled, only what's new to it`() = runBlocking {
+        val phone = phone()
+        assertTrue(phone.replica.upload())
+        onTheWebsite("q-1", AskAboutEvent("first", "A first event", "Monday", System.currentTimeMillis(), listOf("Busy", "Free")))
+        assertTrue(phone.replica.upload())
+        assertEquals(listOf("A first event"), phone.heard.last().map { it.about.eventTitle })
+        onTheWebsite("q-2", AskAboutEvent("second", "A second event", "Tuesday", System.currentTimeMillis(), listOf("Busy", "Free")))
+        assertTrue(phone.replica.upload())
+        assertEquals(listOf("A second event"), phone.heard.last().map { it.about.eventTitle }, "the first isn't new to it now")
+        val heard = phone.heard.size
+        assertTrue(phone.replica.upload())
+        assertEquals(heard, phone.heard.size, "a pull that brings no chat hears nothing")
+    }
+
+    @Test
+    fun `a change held up is let go only at your word, said, and the pull after is of everything, taking out what it did here`() = runBlocking {
+        val phone = phone()
+        phone.h.commands.act(own("Essay"))
+        assertTrue(phone.replica.upload())
+        phone.wire.cut = true
+        phone.h.commands.act(own("Maths"))
+        assertFalse(phone.replica.upload())
+        val held = phone.h.stores.outbox.value.commands.single()
+        assertFalse(phone.replica.letGo("not-one-of-them"))
+        assertTrue(phone.replica.letGo(held.id))
+        assertEquals(0, phone.waiting)
+        assertEquals(0, phone.h.stores.sync.value.revision, "the next pull's of everything")
+        val line = phone.h.stores.sync.value.dropped.single()
+        assertTrue(line.startsWith("Save own task, ") && line.endsWith(": Let go at your word"), line)
+        phone.wire.cut = false
+        assertTrue(phone.replica.upload())
+        assertEquals(setOf("Essay"), serverTitles)
+        assertEquals(setOf("Essay"), phone.titles, "what it did here went with the pull")
+    }
+
+    @Test
+    fun `a backup imported on the phone is taken in on the server, after what was waiting, and comes back with the pull of everything`() = runBlocking {
+        val phone = phone()
+        phone.h.commands.act(own("Essay"))
+        assertTrue(phone.replica.upload())
+        val backup = assertNotNull(graph.backup())
+        phone.h.commands.act(DeleteOwnTask("own:s-Essay"))
+        assertTrue(phone.replica.upload())
+        // A change still waiting goes first.
+        phone.h.commands.act(own("Maths"))
+        val asked = phone.replica.importOnServer(backup)
+        assertTrue(assertNotNull(asked.said).startsWith("Restored"), asked.said)
+        assertEquals(0, phone.waiting)
+        assertEquals(setOf("Essay", "Maths"), serverTitles)
+        assertEquals(0, phone.h.stores.sync.value.revision)
+        assertTrue(phone.replica.upload())
+        assertEquals(setOf("Essay", "Maths"), phone.titles)
+        // Mirroring, it's refused, and nothing's said to be restored.
+        mirroring()
+        assertFalse(phone.replica.importOnServer(backup).done)
+    }
+
+    @Test
+    fun `the chat's Try again on a phone sending commands is the server's to make`() = runBlocking {
+        val phone = phone()
+        assertTrue(phone.replica.askAgainOnServer())
+        assertEquals(1, phone.wire.triedAgain)
+        phone.wire.cut = true
+        assertFalse(phone.replica.askAgainOnServer())
+    }
+
+    @Test
+    fun `the parent code reaches the server once the phone sends commands, again only as it changes, and none takes it away`() = runBlocking {
+        val phone = phone()
+        // Mirroring, nothing's sent.
+        phone.h.stores.sync.update { it.copy(mode = SyncState.MIRROR) }
+        mirroring()
+        phone.h.stores.secrets.put(Secret.TotpSecret, "ABCDEFGHIJKLMNOP")
+        phone.replica.upload()
+        assertEquals(emptyList(), phone.wire.parentCodes)
+        // Going by commands, it goes after the exchange, once.
+        db.setMeta("mode", ServerGraph.COMMANDS)
+        graph.modeForATest(ServerGraph.COMMANDS)
+        phone.h.stores.sync.update { it.copy(mode = SyncState.COMMANDS) }
+        assertTrue(phone.replica.upload())
+        assertTrue(phone.replica.upload())
+        assertEquals(listOf<String?>("ABCDEFGHIJKLMNOP"), phone.wire.parentCodes)
+        assertEquals("ABCDEFGHIJKLMNOP", graph.stores.secrets[Secret.TotpSecret])
+        // One that doesn't go is tried again after the next.
+        phone.h.stores.secrets.put(Secret.TotpSecret, "QRSTUVWXYZ234567")
+        phone.wire.parentFails = true
+        assertTrue(phone.replica.upload())
+        phone.wire.parentFails = false
+        assertTrue(phone.replica.upload())
+        assertEquals("QRSTUVWXYZ234567", graph.stores.secrets[Secret.TotpSecret])
+        // None: taken away there too.
+        phone.h.stores.secrets.put(Secret.TotpSecret, null)
+        assertTrue(phone.replica.upload())
+        assertEquals(null, graph.stores.secrets[Secret.TotpSecret])
+        assertEquals(SyncState.NO_CODE, phone.h.stores.sync.value.parentCodeSent)
+        assertEquals(listOf("ABCDEFGHIJKLMNOP", "QRSTUVWXYZ234567", null), phone.wire.parentCodes)
     }
 }

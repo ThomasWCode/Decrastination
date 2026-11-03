@@ -44,6 +44,7 @@ import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.data.Backups
 import com.thomaswcode.decrastination.data.Secret
+import com.thomaswcode.decrastination.data.SyncState
 import com.thomaswcode.decrastination.enrich.AiUsage
 import com.thomaswcode.decrastination.enrich.EnrichWorker
 import com.thomaswcode.decrastination.enrich.ModelAlerts
@@ -52,6 +53,7 @@ import com.thomaswcode.decrastination.protect.ProtectionActivity
 import com.thomaswcode.decrastination.sources.anki.AnkiProvider
 import com.thomaswcode.decrastination.sync.ReplicaWorker
 import com.thomaswcode.decrastination.sync.SyncWorker
+import com.thomaswcode.decrastination.sync.protocol.Command
 import com.thomaswcode.decrastination.core.GmailWrites
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -143,7 +145,7 @@ fun SetupScreen(graph: AppGraph, activity: Activity, parts: Set<SetupPart> = Set
                     val input = requireNotNull(activity.contentResolver.openInputStream(uri)) { "no file to read" }
                     input.use { Backups.read(it) }
                 }
-                if (bytes == null) BackupPage.TOO_BIG else graph.backups.importBackup(bytes.decodeToString())
+                if (bytes == null) BackupPage.TOO_BIG else graph.importBackup(bytes.decodeToString())
             }.getOrElse { "Couldn't read it: ${it.message}" }
         }
     }
@@ -293,6 +295,33 @@ private fun WebsiteItem(graph: AppGraph) {
         },
         action = if (paired) "Unpair" to { graph.scope.launch { graph.replica.forget() } } else "Pair" to { pairing = true },
     )
+    // The oldest change waiting, once it's held up the rest for hours (the Day says so too): let go only at your word, its words first.
+    val outbox by graph.stores.outbox.state.collectAsStateWithLifecycle()
+    val held = outbox.commands.firstOrNull()?.takeIf { paired && sync.mode == SyncState.COMMANDS && now - it.at >= SetupPage.HELD_MS }
+    var lettingGo by remember { mutableStateOf<Command?>(null) }
+    if (held != null) {
+        SetupItem(
+            title = "A change waiting to reach the server",
+            done = false,
+            detail = "${graph.replica.named(held)}, and what's after it, since. " + (sync.lastError?.let { "The last try: $it. " } ?: "") +
+                "Let it go only if it can't go: it isn't done on the server, and what it did here goes at the next pull.",
+            action = "Let it go" to { lettingGo = held },
+        )
+    }
+    lettingGo?.let { command ->
+        AlertDialog(
+            onDismissRequest = { lettingGo = null },
+            title = { Text("Let this change go?") },
+            text = { Text("${graph.replica.named(command)}. It isn't done on the server, and what it did on this phone goes at the next pull. What's after it is sent.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    lettingGo = null
+                    graph.scope.launch { if (graph.replica.letGo(command.id)) ReplicaWorker.now(graph.app) }
+                }) { Text("Let it go") }
+            },
+            dismissButton = { TextButton(onClick = { lettingGo = null }) { Text("Keep it") } },
+        )
+    }
     if (sync.dropped.isNotEmpty()) {
         SetupItem(
             title = "Changes the server didn't apply",

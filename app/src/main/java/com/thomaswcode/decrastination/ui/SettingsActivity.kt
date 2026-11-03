@@ -624,7 +624,7 @@ private fun ResetPage(graph: AppGraph) {
             confirmButton = {
                 TextButton(onClick = {
                     asking = null
-                    scope.launch { said = graph.backups.reset(r) }
+                    scope.launch { said = graph.reset(r) }
                 }) { Text("Reset") }
             },
             dismissButton = { TextButton(onClick = { asking = null }) { Text("Keep it") } },
@@ -664,7 +664,7 @@ private fun NightlyBackup(graph: AppGraph, last: Long?, now: Long) {
             copies.forEach { name ->
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(name, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-                    TextButton(onClick = { scope.launch { said = graph.backups.restoreResetCopy(name) } }) { Text("Restore") }
+                    TextButton(onClick = { scope.launch { said = graph.restoreResetCopy(name) } }) { Text("Restore") }
                 }
             }
             said?.let { Note(it) }

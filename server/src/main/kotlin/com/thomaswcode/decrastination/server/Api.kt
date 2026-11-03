@@ -3,6 +3,7 @@ package com.thomaswcode.decrastination.server
 import com.thomaswcode.decrastination.data.Backups
 import com.thomaswcode.decrastination.ports.Log
 import com.thomaswcode.decrastination.sync.DeviceClaim
+import com.thomaswcode.decrastination.sync.ParentCode
 import com.thomaswcode.decrastination.sync.Protocol
 import com.thomaswcode.decrastination.sync.PushId
 import com.thomaswcode.decrastination.sync.SeedBatch
@@ -91,10 +92,6 @@ private data class Me(val signedIn: Boolean)
 
 @Serializable
 private data class StoreOut(val name: String, val version: Int, val revision: Long, val json: JsonElement)
-
-/** The parent code's secret from the phone, or none: it's been taken away. */
-@Serializable
-private data class ParentCode(val secret: String? = null)
 
 /** Which credentials the server holds, by name: never a value. */
 @Serializable
