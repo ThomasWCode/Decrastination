@@ -15,6 +15,7 @@ import java.time.Duration
 import java.util.Base64
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -57,6 +58,10 @@ class PhonePushes(
     private val makers = mutableSetOf<String>()
     private var newest = 0L
     private var waiting = false
+
+    /** The run of changes on its way to being told, if there is one: what a test waits on, rather than the clock. */
+    @Volatile
+    internal var sending: Job? = null
 
     /** [fid] kept as where Firebase reaches [device]: false, and nothing kept, if it isn't the shape of one. */
     fun keep(device: String, fid: String): Boolean {
@@ -101,7 +106,7 @@ class PhonePushes(
             if (waiting) return
             waiting = true
         }
-        scope.launch(Dispatchers.IO) {
+        sending = scope.launch(Dispatchers.IO) {
             delay(waitMs)
             val (made, at) = synchronized(lock) {
                 waiting = false
@@ -125,21 +130,27 @@ class PhonePushes(
         tell(device, fid, revision)
     }
 
-    /** [revision] to [device], at [fid]. One Firebase no longer knows is let go; a failure's only logged, by kind, as an id is as good as an address. */
+    /**
+     * [revision] to [device], at [fid]. One Firebase no longer knows is let go; a failure's only logged, by kind, as an id is as good
+     * as an address. Letting go is outside what's said of Firebase: it answered, and a fault of the database's is the database's.
+     */
     private fun tell(device: String, fid: String, revision: Long): PushTried {
         val sender = sender ?: return PushTried(false, NOT_SET_UP)
-        return try {
-            if (sender.send(fid, revision)) {
-                PushTried(true)
-            } else {
-                forget(device, fid)
-                PushTried(false, GONE)
-            }
+        val known = try {
+            sender.send(fid, revision)
         } catch (failed: Exception) {
             val status = (failed as? FcmSender.Refused)?.status
             Log.w(Log.TAG, "Telling a phone failed: ${failed::class.simpleName}${status?.let { " ($it)" }.orEmpty()}")
-            PushTried(false, "Firebase didn't take it: ${status ?: failed::class.simpleName}")
+            return PushTried(false, "Firebase didn't take it: ${status ?: failed::class.simpleName}")
         }
+        if (known) return PushTried(true)
+        try {
+            forget(device, fid)
+        } catch (failed: Exception) {
+            // Kept, then: it's told again next time, and let go of then.
+            Log.w(Log.TAG, "Letting go of an id Firebase no longer knows failed: ${failed::class.simpleName}")
+        }
+        return PushTried(false, GONE)
     }
 
     companion object {

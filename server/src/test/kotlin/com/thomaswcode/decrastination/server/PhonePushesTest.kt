@@ -29,7 +29,7 @@ import kotlin.test.assertTrue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.Json
@@ -75,6 +75,7 @@ class PhonePushesTest {
 
     @AfterTest
     fun cleanUp() {
+        scope.cancel()
         db.close()
         dir.deleteRecursively()
     }
@@ -89,9 +90,9 @@ class PhonePushesTest {
         }
     }
 
-    /** What reached each id, once the wait and its sends are surely over. */
+    /** What reached each id, once the run on its way, if there's one, has gone: none waited on is none sent. */
     private suspend fun settled(): List<Pair<String, Long>> {
-        delay(WAIT_MS * 6)
+        phones.sending?.join()
         return firebase.taken.toList()
     }
 
@@ -202,6 +203,16 @@ class PhonePushesTest {
     }
 
     @Test
+    fun `the database failing as an id's let go is said as the database's, not as Firebase's`() = runBlocking<Unit> {
+        val mine = phone("This phone")
+        phones.keep(mine, "cMineFid00000000000000")
+        firebase.gone += "cMineFid00000000000000"
+        // Firebase answers that it doesn't know the id; then the database can't write.
+        firebase.meanwhile = { db.transaction { c -> c.createStatement().use { it.execute("ALTER TABLE devices RENAME COLUMN fid TO broken") } } }
+        assertEquals(PushTried(false, PhonePushes.GONE), phones.test(mine, 1))
+    }
+
+    @Test
     fun `a devices table from before takes the column once, its phones kept`() {
         val file = File(dir, "old.db")
         DriverManager.getConnection("jdbc:sqlite:${file.path}").use { c ->
@@ -231,11 +242,11 @@ class PhonePushesTest {
         graph.phones.keep(other, "cOtherFid0000000000000")
         val at = System.currentTimeMillis()
         graph.applier.apply(CommandBatch(listOf(Command("one", at, SaveOwnTask("s-Essay", OwnTask(title = "Essay"))))), mine)
-        assertEquals(listOf("cOtherFid0000000000000"), told(), "not the phone that made it")
+        assertEquals(listOf("cOtherFid0000000000000"), told(graph), "not the phone that made it")
         graph.applier.apply(CommandBatch(listOf(Command("two", at, SaveOwnTask("s-Maths", OwnTask(title = "Maths"))))), Client.WEBSITE)
-        assertEquals(setOf("cMineFid00000000000000", "cOtherFid0000000000000"), told().toSet())
+        assertEquals(setOf("cMineFid00000000000000", "cOtherFid0000000000000"), told(graph).toSet())
         graph.stores.tasks.update { state -> state.copy(tasks = state.tasks.map { it.copy(detail = "A job's") }) }
-        assertEquals(setOf("cMineFid00000000000000", "cOtherFid0000000000000"), told().toSet(), "a job's write is the server's own")
+        assertEquals(setOf("cMineFid00000000000000", "cOtherFid0000000000000"), told(graph).toSet(), "a job's write is the server's own")
         assertTrue(firebase.taken.all { (_, revision) -> revision <= db.currentRevision() })
     }
 
@@ -247,17 +258,14 @@ class PhonePushesTest {
         // A write from outside a seed's transaction, so the backend tells of it as a job's.
         graph.backend.keep("tasks.json", 1, """{"tasks":[]}""")
         assertTrue(db.currentRevision() > 0)
-        delay(PhonePushes.WAIT_MS + 500)
+        assertNull(graph.phones.sending, "nothing set on its way")
         assertEquals(emptyList(), firebase.taken.toList())
     }
 
-    /** The ids told since the last asked, once the server's wait has gone by. */
-    private suspend fun told(): List<String> {
+    /** The ids [graph] told since the last asked, once its run has gone: it waits its three seconds, as the server's does. */
+    private suspend fun told(graph: ServerGraph): List<String> {
         val before = firebase.taken.size
-        withTimeout(PhonePushes.WAIT_MS * 3) {
-            while (firebase.taken.size == before) delay(20)
-        }
-        delay(WAIT_MS * 6)
+        withTimeout(PhonePushes.WAIT_MS * 3) { graph.phones.sending?.join() }
         return firebase.taken.drop(before).map { it.first }
     }
 
