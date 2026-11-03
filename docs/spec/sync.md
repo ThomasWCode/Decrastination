@@ -63,7 +63,7 @@ What only the phone can know (W-24; `sync/protocol/Observations.kt`, 5.13.0), se
 
 | Command | What the phone saw | Its owner |
 |---|---|---|
-| `ObserveSources` | Teams and Anki as read, one command a sync; a read the same as the last sent as its status alone, so the record doesn't fill with copies; a failed read's reason. Power Planner and Gmail aren't read on the phone: the server reads them (`Source.SERVERS`) | `Syncer.observe`, then what follows a sync |
+| `ObserveSources` | Teams and Anki as read, one command a source, Teams' applied before Anki's is read (its homework decks come from Teams' assignments); a read the same as the last sent (once its command's on record) as its status alone, so the record doesn't fill with copies; a failed read's reason. Power Planner and Gmail aren't read on the phone: the server reads them (`Source.SERVERS`) | `Syncer.observe`, then what follows a sync |
 | `NoteSource` | the Teams widget refusing to sync, where its status shows it | `Syncer.note` |
 | `ObserveCalendar` | the calendar as read, and your answers about its events, as they change: the server plans by it and can't read it, and its plan is made again with it | the server keeps it (`calendar-read.json`) |
 | `AskAboutEvent`, `SettleEvent` | an event the rules can't judge, as this phone's calendar and what it's asked decide (`calendar.json`) | `Conversation` |

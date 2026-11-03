@@ -18,7 +18,7 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class SourceObserved(val source: Source, val startedAt: Long, val read: SourceRead? = null, val failed: String? = null)
 
-/** Teams and Anki as this phone read them, one command a sync, merged as a read here is ([com.thomaswcode.decrastination.sync.Syncer.observe]). */
+/** Teams or Anki as this phone read it, one command a source, merged as a read here is ([com.thomaswcode.decrastination.sync.Syncer.observe]). */
 @Serializable
 @SerialName("ObserveSources")
 data class ObserveSources(val reads: List<SourceObserved>) : Action, Answers<SyncReport> {

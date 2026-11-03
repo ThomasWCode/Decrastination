@@ -70,7 +70,7 @@ class Syncer(
     private val ankiRates: () -> Map<Long, Double> = { emptyMap() },
     /**
      * Whether what's read here goes to the server as what's seen (W-24), once the two keep in step by commands: Teams and Anki,
-     * which only this phone can read, sent as one command a sync ([observed]), and what the server reads itself left to it.
+     * which only this phone can read, sent as one command a source ([observed]), and what the server reads itself left to it.
      */
     private val observing: () -> Boolean = { false },
     /** What was read, as a command: applied here through [observe], as on the server. */
@@ -113,21 +113,26 @@ class Syncer(
     }
 
     /**
-     * What this phone alone can read, read and sent to the server as what's seen, one command a sync, applied here as there
-     * ([observe]); what the server reads itself (Power Planner, Gmail) isn't read here. A read the same as the last sent goes as
-     * its status alone, so the server's record doesn't fill with copies of it.
+     * What this phone alone can read, read and sent to the server as what's seen, one command a source, each applied here as there
+     * ([observe]) before the next is read, as Anki's read is made from the homework Teams' brought; what the server reads itself
+     * (Power Planner, Gmail) isn't read here. A read the same as the last sent goes as its status alone, so the server's record
+     * doesn't fill with copies of it: as last sent once its command's on record, and not before, so a sync stopped part-way sends
+     * it whole the next time.
      */
     private suspend fun sent(only: Set<Source>?): SyncReport {
-        val seen = sources.filter { (only == null || it.source in only) && it.source !in Source.SERVERS }.map { source ->
-            when (val read = read(source)) {
-                is Read.Failed -> SourceObserved(source.source, read.startedAt, failed = read.why)
-                is Read.Done -> {
-                    val hash = Protocol.hash(JSON.encodeToString(SourceRead.serializer(), read.read))
-                    SourceObserved(source.source, read.startedAt, read.read.takeUnless { lastSent[source.source] == hash }).also { lastSent[source.source] = hash }
+        var report = SyncReport()
+        for (source in sources) {
+            if ((only != null && source.source !in only) || source.source in Source.SERVERS) continue
+            val (seen, hash) = when (val read = read(source)) {
+                is Read.Failed -> SourceObserved(source.source, read.startedAt, failed = read.why) to null
+                is Read.Done -> Protocol.hash(JSON.encodeToString(SourceRead.serializer(), read.read)).let { hash ->
+                    SourceObserved(source.source, read.startedAt, read.read.takeUnless { lastSent[source.source] == hash }) to hash
                 }
             }
+            report += observed(listOf(seen))
+            if (hash != null) lastSent[source.source] = hash
         }
-        return if (seen.isEmpty()) SyncReport() else observed(seen)
+        return report
     }
 
     /**
