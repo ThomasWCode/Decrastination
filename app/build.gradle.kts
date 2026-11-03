@@ -4,6 +4,10 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
+// The Firebase project's file is kept out of git (D-145): a build without it, CI's and a fresh clone's, has Firebase set up
+// nowhere, and hears of the server's changes at its 15-minute sync.
+if (file("google-services.json").exists()) apply(plugin = libs.plugins.google.services.get().pluginId)
+
 android {
     namespace = "com.thomaswcode.decrastination"
     compileSdk = 36
@@ -12,8 +16,8 @@ android {
         applicationId = "com.thomaswcode.decrastination"
         minSdk = 26
         targetSdk = 36
-        versionCode = 115
-        versionName = "5.10.0"
+        versionCode = 116
+        versionName = "5.11.0"
     }
 
     signingConfigs {
@@ -95,6 +99,9 @@ dependencies {
     implementation(libs.anthropic.java)
     // Every Jackson module the SDK brings at one patched version (gradle/libs.versions.toml).
     implementation(platform(libs.jackson.bom))
+    // The server's word of a change this phone didn't make (stage 8, W-18).
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.messaging)
 
     testImplementation(testFixtures(project(":core")))
     testImplementation(testFixtures(project(":engine")))
