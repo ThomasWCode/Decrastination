@@ -94,6 +94,8 @@ class Looks(
     private val assess: suspend (taskId: String, doneAt: Long, answer: String) -> Unit,
     /** A change of his under a message of his made at once, as the chat's are ([Conversation.applyProposal]). */
     private val applyProposal: suspend (messageId: String, proposalId: String) -> Unit,
+    /** Waits till no command's open, on the server, where one can be rolled back: what a call's for then stands. */
+    private val settled: suspend () -> Unit = {},
 ) {
     /** One look at a time: a check while one writes is covered by it. */
     private val writing = Mutex()
@@ -247,9 +249,10 @@ class Looks(
      * to this, as work of its own: `ReminderWorker`): his asked for each as of its moment, outside the sweep's lock,
      * so a sweep from an alarm or a plan never waits on a call; kept on the reminder as asked for that moment, words
      * or none, unless it changed meanwhile (a cancel, a move, a snooze); then the sweep, which sends them as they now
-     * are. One whose call is held or fails, or comes back with none, goes in your words.
+     * are. One whose call is held or fails, or comes back with none, goes in your words. Not while a command's open ([settled]).
      */
     suspend fun remindNow(now: Long = clock.now()) {
+        settled()
         // Begun: a sweep from now on that finds one still to ask for queues the next run.
         remindQueued.set(false)
         reminding.withLock {
@@ -677,9 +680,13 @@ class Looks(
 
     /**
      * His words for the reminders due within [FelixRules.AHEAD_MS]: at once after one's set,
-     * moved or brought back, so one due inside the window has them without waiting for a plan or a look.
+     * moved or brought back, so one due inside the window has them without waiting for a plan or a look. Set off by a command,
+     * it waits for that to close ([settled]), so a reminder rolled back with it isn't written for.
      */
-    suspend fun draftReminders(now: Long = clock.now()) = writeReminders(planning.plan(now = now), now)
+    suspend fun draftReminders(now: Long = clock.now()) {
+        settled()
+        writeReminders(planning.plan(now = now), now)
+    }
 
     /** Held while his words for reminders are written, so each is asked for once. */
     private val drafting = Mutex()

@@ -89,6 +89,8 @@ class Instructions(
     private val answerRead: suspend (Instruction, Boolean, Boolean) -> Unit = { _, _, _ -> },
     /** His question, as he put it, that a reply of yours ([Instruction.answer]) answers: shown to its reading. */
     private val question: (Instruction) -> String? = { null },
+    /** Waits till no command's open, on the server, where one can be rolled back: a read it set off then finds nothing to read. */
+    private val settled: suspend () -> Unit = {},
 ) {
     /** Your instructions as they are now. */
     val value: InstructionState get() = instructions.value
@@ -207,9 +209,15 @@ class Instructions(
 
     /**
      * Reads the instructions waiting for Claude, one call each, as the enrichment's calls are made:
-     * under the cap, and resting after a failure. While Claude can't be asked, each says why.
+     * under the cap, and resting after a failure. While Claude can't be asked, each says why. Set off by a command, it waits for
+     * that to close ([settled]); never called inside one, which it would wait for.
      */
-    suspend fun readInstructions(interactive: Boolean = false) = readingInstructions.withLock {
+    suspend fun readInstructions(interactive: Boolean = false) {
+        settled()
+        reading(interactive)
+    }
+
+    private suspend fun reading(interactive: Boolean) = readingInstructions.withLock {
         while (true) {
             val next = instructions.value.instructions.firstOrNull { it.state == InstructionStatus.Reading } ?: return@withLock
             val waiting = run call@{
