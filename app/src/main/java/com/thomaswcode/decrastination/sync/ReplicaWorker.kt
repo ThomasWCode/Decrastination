@@ -10,6 +10,7 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.OutOfQuotaPolicy
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
+import androidx.work.workDataOf
 import androidx.core.app.NotificationCompat
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.R
@@ -20,12 +21,14 @@ import java.util.concurrent.TimeUnit
 
 /**
  * Sends the stores to the server ([Replica]): as work of its own, as Android 15 cuts an app's network seconds after it leaves
- * the screen. Within a minute of a change, so a run of changes is one send ([soon]), and at once as the app comes to the
- * front ([now]); the 15-minute sync sends too.
+ * the screen. Within a minute of a change, so a run of changes is one send ([soon]), at once as the app comes to the front
+ * ([now]), and at once when the server says it's changed ([told]); the 15-minute sync sends too.
  */
 class ReplicaWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
-        AppGraph.get(applicationContext).replica.upload()
+        val replica = AppGraph.get(applicationContext).replica
+        val told = inputData.getLong(KEY_REVISION, NOT_TOLD)
+        if (told == NOT_TOLD) replica.upload() else replica.told(told)
         return Result.success()
     }
 
@@ -43,6 +46,10 @@ class ReplicaWorker(context: Context, params: WorkerParameters) : CoroutineWorke
     companion object {
         private const val SOON = "replica-soon"
         private const val NOW = "replica-now"
+        private const val TOLD = "replica-told"
+        private const val AGAIN = "replica-again"
+        private const val KEY_REVISION = "revision"
+        private const val NOT_TOLD = -1L
         private const val COALESCE_S = 60L
 
         private val online = Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
@@ -57,6 +64,25 @@ class ReplicaWorker(context: Context, params: WorkerParameters) : CoroutineWorke
         fun now(context: Context) {
             val request = OneTimeWorkRequestBuilder<ReplicaWorker>().setConstraints(online).setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST).build()
             WorkManager.getInstance(context).enqueueUniqueWork(NOW, ExistingWorkPolicy.KEEP, request)
+        }
+
+        /**
+         * As soon as it can go, after any send on its way: what's new since that one began, which it may have gone past, goes too.
+         * Firebase's id, given at a start, while that start's own send is under way.
+         */
+        fun again(context: Context) {
+            val request = OneTimeWorkRequestBuilder<ReplicaWorker>().setConstraints(online).setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST).build()
+            WorkManager.getInstance(context).enqueueUniqueWork(AGAIN, ExistingWorkPolicy.APPEND_OR_REPLACE, request)
+        }
+
+        /**
+         * The server's said it's changed, at [revision] (W-18): as soon as it can go, and after any exchange on its way, which may
+         * have pulled before the change, so it isn't kept to that one. Expedited, as a high-priority message lets a job start at once.
+         */
+        fun told(context: Context, revision: Long) {
+            val request = OneTimeWorkRequestBuilder<ReplicaWorker>().setConstraints(online).setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
+                .setInputData(workDataOf(KEY_REVISION to revision)).build()
+            WorkManager.getInstance(context).enqueueUniqueWork(TOLD, ExistingWorkPolicy.APPEND_OR_REPLACE, request)
         }
     }
 }

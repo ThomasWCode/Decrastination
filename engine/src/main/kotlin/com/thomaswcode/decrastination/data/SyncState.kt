@@ -25,8 +25,10 @@ data class SyncState(
     val revision: Long = 0,
     /** What the server couldn't apply, and why, newest last, the last few. */
     val dropped: List<String> = emptyList(),
+    /** This phone's Firebase Installation ID, as Firebase last registered it: where the server tells it of a change at once (W-18). */
+    val pushId: String? = null,
     /** The shape this is in ([Migration]): raised with each change of it, a migration bringing older files to it. */
-    val version: Int = 2,
+    val version: Int = 3,
 ) {
     companion object {
         const val DEFAULT_SERVER = "https://decrastination.thomaswhite.me"
@@ -35,5 +37,8 @@ data class SyncState(
 
         /** The three fields 5.2.0 adds, each with its default: nothing to bring across. */
         val V2 = Migration(1) { it }
+
+        /** The id 5.11.0 adds, with its default: nothing to bring across. */
+        val V3 = Migration(2) { it }
     }
 }

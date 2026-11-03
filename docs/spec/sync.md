@@ -25,6 +25,14 @@ Only what the server doesn't hold goes. Each answer says what it holds, every st
 
 Each send is WorkManager work, with a network constraint, as Android 15 cuts an app's network seconds after it leaves the screen.
 
+## Told at once
+
+Stage 8 (W-18; 5.11.0, the server's half in 5.10.0, [server.md](server.md) §Devices): the server tells this phone of a change it didn't make, through Firebase Cloud Messaging, and the phone pulls it in seconds rather than at its next 15-minute sync. Only in a build made with the Firebase project's file (D-145): one without it hears at its sync, as before. Dormant till the switch, as the server tells nothing while it mirrors, but a phone that asks.
+
+- **Its id.** Firebase registers this phone by its installation id (`sync/PushService.kt`, `onRegistered`), as it does at a start now and then and whenever the id changes; the manifest asks for that (`firebase_messaging_installation_id_enabled`), as Firebase now calls the registration token deprecated. It's kept in `sync.json` (`SyncState.pushId`, version 3) and sent (`POST /api/devices/push`) with the first upload of each process that goes through, and once a pairing, and when it changes, by a send after any on its way (`ReplicaWorker.again`), as one under way may be past it, so a server restored without it hears it again at the next start. One the server doesn't take goes at the next upload, and says nothing on Setup. Unpairing keeps it, as it's this phone's, and pairing again sends it.
+- **The word.** The server's message says only a revision. What's done with it is work of its own (`ReplicaWorker.told`): expedited, as a high-priority message lets a job start at once, and after any exchange on its way, which may have pulled before the change. It exchanges, unless what it said is here already with nothing waiting to go, as a phone that made the change pulled it in the same exchange (`Replica.told`).
+- **From a PC.** `sync-push-test` uploads, the id with it, then asks the server to tell this phone now, and logs what came of it; the message is logged as it's heard ("The server says it's at revision …"); `sync-state` says whether an id is held.
+
 ## When it doesn't work
 
 Nothing's lost: what wasn't accepted stays unsent, and goes next time. Setup says why, in `SyncState.lastError`:
@@ -98,4 +106,4 @@ A command's moment is the server's where a client's clock would decide something
 
 ## Testing
 
-`ReplicaTest`, on temporary stores and a stand-in server; `SyncHarnessTest` in `:server`, a real applier over a real database and two phones on stores of their own, a wire between them that can be cut or lose an answer; `CommandApplierTest`. From a PC, on the phone (`adb reverse`, then these debug commands): `sync-server` with `url`, a test server's address (`http://127.0.0.1:<port>`, the one address `res/xml/network_security.xml` allows in plain HTTP), `sync-pair` with `code`, `sync-send` and `sync-state`.
+`ReplicaTest`, on temporary stores and a stand-in server, the id Firebase reaches the phone by among it; `SyncHarnessTest` in `:server`, a real applier over a real database and two phones on stores of their own, a wire between them that can be cut or lose an answer; `CommandApplierTest`. From a PC, on the phone (`adb reverse`, then these debug commands): `sync-server` with `url`, a test server's address (`http://127.0.0.1:<port>`, the one address `res/xml/network_security.xml` allows in plain HTTP), `sync-pair` with `code`, `sync-send`, `sync-state` and `sync-push-test`.

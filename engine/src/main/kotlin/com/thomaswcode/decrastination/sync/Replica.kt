@@ -48,6 +48,18 @@ class Replica(
     @Volatile
     private var archiveSent = NOT_SENT
 
+    /** Each pairing's count in this process, so an id sent under one is never taken as sent to the next. */
+    @Volatile
+    private var pairings = 0
+
+    /**
+     * The id Firebase reaches this phone by, as this process last had the server take it, and under which pairing: sent once a
+     * process, so a server that's lost it hears it again, and once a pairing. A send under a pairing since let go of, its answer
+     * heard after the new one's made, is then no answer for the new one, without any lock that [pair] would wait on.
+     */
+    @Volatile
+    private var pushSent: Pair<Int, String>? = null
+
     val state: StateFlow<SyncState> get() = sync.state
 
     /** Whether this phone is paired. */
@@ -66,14 +78,46 @@ class Replica(
         val token = JSON.decodeFromString(DeviceToken.serializer(), answer.body)
         stores.secrets.put(Secret.DeviceToken, token.token)
         sync.update { it.copy(deviceId = token.id, sent = emptyMap(), lastError = null, refused = emptyList()) }
+        pairings++
         return null
     }
 
-    /** This phone paired no more: its token let go. Nothing else changes, and pairing again sends everything. */
+    /**
+     * This phone paired no more: its token let go. Nothing else changes, and pairing again sends everything, the id Firebase
+     * reaches it by among it, which is this phone's and stays.
+     */
     suspend fun forget() {
         stores.secrets.put(Secret.DeviceToken, null)
-        sync.update { SyncState(server = it.server) }
+        sync.update { SyncState(server = it.server, pushId = it.pushId) }
         archiveSent = NOT_SENT
+    }
+
+    /** Firebase has registered this phone as [fid] (W-18): kept, and sent with the next upload that goes through. */
+    suspend fun registered(fid: String) {
+        if (sync.value.pushId != fid) sync.update { it.copy(pushId = fid) }
+    }
+
+    /**
+     * The server's word that it's changed, at [revision]: an exchange, unless what it said is here already and nothing's waiting
+     * to go, as a phone that made the change pulled it in the same exchange. While mirroring, an upload as any other.
+     */
+    suspend fun told(revision: Long): Boolean {
+        val state = sync.value
+        if (state.mode == SyncState.COMMANDS && revision <= state.revision && stores.outbox.value.commands.isEmpty()) return true
+        return upload()
+    }
+
+    /** The server asked to tell this phone through Firebase now, whatever its mode: what came of it, null if it isn't paired. */
+    suspend fun testPush(): PushTried? {
+        val token = stores.secrets[Secret.DeviceToken] ?: return null
+        val headers = mapOf("Content-Type" to "application/json", "Authorization" to "Bearer $token", Protocol.HEADER to Protocol.VERSION.toString())
+        return try {
+            val answer = http.post("${sync.value.server}/api/devices/push/test", headers, "")
+            if (answer.ok) JSON.decodeFromString(PushTried.serializer(), answer.body) else PushTried(false, problem(answer.code))
+        } catch (failed: IOException) {
+            Log.w(Log.TAG, "Asking to be told failed: ${failed::class.simpleName}")
+            PushTried(false, "The server can't be reached")
+        }
     }
 
     /** The next pull to be of everything: what's here may hold what the server's run of a command won't change. */
@@ -91,9 +135,12 @@ class Replica(
         sync.update { it.copy(server = url.trimEnd('/')) }
     }
 
-    /** What the server doesn't hold, sent. Whether it took it: a failure's kept for Setup, and tried again next time. */
+    /**
+     * What the server doesn't hold, sent. Whether it took it: a failure's kept for Setup, and tried again next time. Once it's gone
+     * through, where Firebase reaches this phone, if the server's yet to take it ([sendPushId]).
+     */
     suspend fun upload(): Boolean = sending.withLock {
-        if (sync.value.mode == SyncState.COMMANDS) return@withLock exchange()
+        if (sync.value.mode == SyncState.COMMANDS) return@withLock exchange().also { if (it) sendPushId() }
         // Again where a send leaves something behind: the server holds less than it should (it's been restored, say), or a store
         // changed while it went, which work already running can't be asked for a second time.
         var sent = send()
@@ -102,7 +149,27 @@ class Replica(
             sent = send()
             rounds++
         }
-        sent != Sent.Failed
+        (sent != Sent.Failed).also { if (it) sendPushId() }
+    }
+
+    /**
+     * The id Firebase reaches this phone by, to the server: once a process, so a server restored without it hears it again, and
+     * at once when Firebase gives a new one. One that doesn't go is tried at the next upload, and says nothing on Setup: the phone
+     * still hears at its own sync.
+     */
+    private suspend fun sendPushId() {
+        val fid = sync.value.pushId ?: return
+        val pairing = pairings
+        if (pushSent == pairing to fid) return
+        val token = stores.secrets[Secret.DeviceToken] ?: return
+        val headers = mapOf("Content-Type" to "application/json", "Authorization" to "Bearer $token", Protocol.HEADER to Protocol.VERSION.toString())
+        val answer = try {
+            http.post("${sync.value.server}/api/devices/push", headers, JSON.encodeToString(PushId.serializer(), PushId(fid)))
+        } catch (failed: IOException) {
+            Log.w(Log.TAG, "Sending where Firebase reaches this phone failed: ${failed::class.simpleName}")
+            return
+        }
+        if (answer.ok) pushSent = pairing to fid
     }
 
     /** Whether this process has been through an exchange: what it found waiting at its start has been looked at. */

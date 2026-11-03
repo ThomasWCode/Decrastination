@@ -168,6 +168,17 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/photo_paths" />
         </provider>
+        <!-- Firebase reaches this phone by its installation id, the registration token being deprecated (W-18). -->
+        <meta-data
+            android:name="firebase_messaging_installation_id_enabled"
+            android:value="true" />
+        <service
+            android:name=".sync.PushService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
         <receiver
             android:name=".learn.DailyReceiver"
             android:exported="false" />
