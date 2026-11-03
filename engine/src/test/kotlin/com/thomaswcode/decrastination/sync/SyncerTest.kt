@@ -262,6 +262,36 @@ class SyncerTest {
     }
 
     @Test
+    fun `keeping in step by commands, what follows a sync follows once its commands have closed, once a sync, as on the server it's inside`() = runTest {
+        val teams = FakeSource(Source.Teams) { items("essay") }
+        val anki = FakeSource(Source.Anki) { SourceRead(emptyList()) }
+        var inCommand = false
+        lateinit var syncer: Syncer
+        // Applied here as the command is, through the same syncer, the gate held meanwhile.
+        syncer = Syncer(tasks, settings, listOf(teams, anki), clock, readContext = StandardTestDispatcher(testScheduler), observing = { true }, observed = { reads ->
+            inCommand = true
+            try {
+                syncer.observe(reads)
+            } finally {
+                inCommand = false
+            }
+        })
+        val after = mutableListOf<Boolean>()
+        var added = 0
+        syncer.addAfterEverySync { after += inCommand }
+        syncer.addListener { added += it.added.size }
+        syncer.sync()
+        assertEquals(listOf(false), after, "once, outside its commands")
+        assertEquals(1, added)
+        // On the server, the command's applied with what follows inside it.
+        val server = syncer(emptyList())
+        var followed = 0
+        server.addAfterEverySync { followed++ }
+        server.observe(listOf(SourceObserved(Source.Teams, clock.time, items("essay", "poster"))))
+        assertEquals(1, followed)
+    }
+
+    @Test
     fun `a read the same again goes whole where a note's taken its own's place, and puts its own back`() = runTest {
         val teams = FakeSource(Source.Teams) { items("essay") }
         val seen = mutableListOf<List<SourceObserved>>()

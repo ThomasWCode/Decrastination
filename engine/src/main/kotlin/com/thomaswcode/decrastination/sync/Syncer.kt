@@ -135,12 +135,17 @@ class Syncer(
             report += observed(listOf(seen))
             if (hash != null) lastSent[source.source] = hash
         }
+        // What follows a sync, once its commands have closed, as while mirroring once it's read: some of it waits on what can wait
+        // for the command gate (an instruction's read, laying your changes), so inside one it could wait for ever.
+        after(report)
         return report
     }
 
     /**
      * What a phone read and sent ([ObserveSources]), merged as a read here is, the same on the server and on the phone that read
-     * it; then what follows a sync. A source read the same as before has only its status, as its tasks are as that read left them.
+     * it; then, on the server, what follows a sync, inside the command as its Claude work goes on its own time; on the phone that
+     * read it, that follows once the sync's commands have closed ([sent]). A source read the same as before has only its status, as
+     * its tasks are as that read left them.
      */
     suspend fun observe(seen: List<SourceObserved>): SyncReport {
         var report = SyncReport()
@@ -151,7 +156,7 @@ class Syncer(
                 else -> readAgain(one.source, one.startedAt)
             }
         }
-        after(report)
+        if (!observing()) after(report)
         return report
     }
 
