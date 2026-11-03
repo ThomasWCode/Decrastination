@@ -22,6 +22,7 @@ import com.thomaswcode.decrastination.sources.ReadContext
 import com.thomaswcode.decrastination.sources.SourceRead
 import com.thomaswcode.decrastination.sources.TaskSource
 import com.thomaswcode.decrastination.sources.gmail.GmailThreads
+import com.thomaswcode.decrastination.sync.protocol.SourceObserved
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
@@ -224,5 +225,51 @@ class SyncerTest {
         syncer.sync()
         assertEquals(listOf("teams:b"), tasks.value.unrewarded.map { it.id })
         assertEquals(Status.Done, tasks.value.tasks.first { it.id == "teams:b" }.status)
+    }
+
+    /** A phone keeping in step by commands: what it reads goes as what's seen ([seen]), merged here only as that's applied. */
+    private fun TestScope.observing(sources: List<TaskSource>, seen: MutableList<List<SourceObserved>>) =
+        Syncer(tasks, settings, sources, clock, readContext = StandardTestDispatcher(testScheduler), observing = { true }, observed = { reads -> seen += reads; SyncReport() })
+
+    @Test
+    fun `keeping in step by commands, what only the phone can read goes as one command a sync, and what the server reads isn't read`() = runTest {
+        val teams = FakeSource(Source.Teams) { items("essay") }
+        val planner = FakeSource(Source.PowerPlanner) { items("worksheet") }
+        val anki = FakeSource(Source.Anki) { error("AnkiDroid isn't there") }
+        val seen = mutableListOf<List<SourceObserved>>()
+        observing(listOf(teams, planner, anki), seen).sync()
+        val sent = seen.single()
+        assertEquals(listOf(Source.Teams, Source.Anki), sent.map { it.source })
+        assertEquals(listOf("essay"), sent[0].read?.items?.map { it.sourceId })
+        assertEquals("AnkiDroid isn't there", sent[1].failed)
+        assertTrue(planner.seen.isEmpty(), "Power Planner's the server's to read")
+        assertTrue(tasks.value.tasks.isEmpty(), "nothing's merged till it's applied, here as on the server")
+    }
+
+    @Test
+    fun `a read the same as the last sent goes as its status alone, and a changed one whole`() = runTest {
+        val teams = FakeSource(Source.Teams) { items("essay") }
+        val seen = mutableListOf<List<SourceObserved>>()
+        val syncer = observing(listOf(teams), seen)
+        syncer.sync()
+        syncer.sync()
+        assertEquals(null, seen[1].single().read, "the same again")
+        teams.answer = { items("essay", "poster") }
+        syncer.sync()
+        assertEquals(listOf("essay", "poster"), seen[2].single().read?.items?.map { it.sourceId })
+    }
+
+    @Test
+    fun `what's seen and sent is merged as a read here is, and one read the same again keeps its tasks and says when it was read`() = runTest {
+        val syncer = syncer(emptyList())
+        syncer.observe(listOf(SourceObserved(Source.Teams, clock.time, items("essay"))))
+        assertEquals(listOf("teams:essay"), tasks.value.tasks.map { it.id })
+        clock.time += 60_000
+        syncer.observe(listOf(SourceObserved(Source.Teams, clock.time)))
+        assertEquals(listOf("teams:essay"), tasks.value.tasks.map { it.id }, "not taken as a read that lists nothing")
+        assertEquals(clock.time, tasks.value.status(Source.Teams).lastSuccessAt)
+        syncer.observe(listOf(SourceObserved(Source.Teams, clock.time, failed = "no answer")))
+        assertEquals("no answer", tasks.value.status(Source.Teams).error)
+        assertEquals(listOf("teams:essay"), tasks.value.tasks.map { it.id })
     }
 }

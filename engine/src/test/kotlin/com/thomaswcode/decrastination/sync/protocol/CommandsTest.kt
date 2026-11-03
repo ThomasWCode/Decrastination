@@ -8,7 +8,12 @@ import com.thomaswcode.decrastination.core.Change
 import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.FixedClock
 import com.thomaswcode.decrastination.core.Fact
+import com.thomaswcode.decrastination.core.Fetched
 import com.thomaswcode.decrastination.core.Given
+import com.thomaswcode.decrastination.core.Kind
+import com.thomaswcode.decrastination.core.Source
+import com.thomaswcode.decrastination.core.SubStep
+import com.thomaswcode.decrastination.core.TaskPhoto
 import com.thomaswcode.decrastination.core.HalfDay
 import com.thomaswcode.decrastination.core.Ids
 import com.thomaswcode.decrastination.core.NoSchool
@@ -26,10 +31,13 @@ import com.thomaswcode.decrastination.data.Stores
 import com.thomaswcode.decrastination.data.WeeklyReview
 import com.thomaswcode.decrastination.felix.Conversation
 import com.thomaswcode.decrastination.felix.Looks
+import com.thomaswcode.decrastination.learn.AnkiReading
 import com.thomaswcode.decrastination.learn.CheckIn
+import com.thomaswcode.decrastination.learn.DeckCount
 import com.thomaswcode.decrastination.learn.Learning
 import com.thomaswcode.decrastination.learn.ReviewInput
 import com.thomaswcode.decrastination.protect.Protection
+import com.thomaswcode.decrastination.sources.SourceRead
 import com.thomaswcode.decrastination.sync.Syncer
 import com.thomaswcode.decrastination.tasks.Instructions
 import com.thomaswcode.decrastination.tasks.OwnTasks
@@ -75,6 +83,10 @@ class CommandsTest {
         Remember(listOf(Given(text = "a rule", kind = Given.RULE))), DeleteRule(Rule("a rule", 5L)), DeleteFact(Fact("topic", "a fact", 5L)), AddNote("t", "a note"), DeleteNote("n"),
         ChangeSettings(mapOf("boxMin" to JsonPrimitive(30))), UseParentCode("123456", 9L), ApplyChangeNow("c", "123456"), CancelChange("c"),
         RecordCheckIn(CheckIn("2026-W44", 5L, 3, "", "", "", ""), 5L), ForgetCalibration("k"), ResetData(Reset.Chat), UndoReviewChange(5L, "boxMin"), UndoTidy(5L),
+        ObserveSources(listOf(SourceObserved(Source.Teams, 5L, SourceRead(listOf(Fetched("a", "an essay", Kind.Homework, subSteps = listOf(SubStep("plan", 10)))), dataAsOf = 4L, note = "a note")), SourceObserved(Source.Anki, 5L, failed = "no answer"), SourceObserved(Source.Teams, 6L))),
+        NoteSource(Source.Teams, "a note"), ObserveCalendar(CalendarRead(answers = mapOf("an event" to "busy"))), AskAboutEvent("k", "an event", "Monday", 5L, listOf("busy", "free")), SettleEvent("k"),
+        AnkiCame(5L, AnkiReading(5L, mapOf(1L to DeckCount(1, 2, 3)), entering = true)), AnkiWent(6L), AnkiReset, RecordBlock("an app", "a reason"), SpendFreeTime("2026-11-03", 30_000L), TimerOver,
+        RecordProtection(listOf("a problem"), repaired = true), AttachPhoto("t", TaskPhoto("photos/t.jpg", "abcd", 5L)),
     )
 
     @Test
