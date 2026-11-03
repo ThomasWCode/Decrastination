@@ -262,6 +262,22 @@ class SyncerTest {
     }
 
     @Test
+    fun `a read the same again goes whole where a note's taken its own's place, and puts its own back`() = runTest {
+        val teams = FakeSource(Source.Teams) { items("essay") }
+        val seen = mutableListOf<List<SourceObserved>>()
+        lateinit var syncer: Syncer
+        syncer = Syncer(tasks, settings, listOf(teams), clock, readContext = StandardTestDispatcher(testScheduler), observing = { true }, observed = { reads -> seen += reads; syncer.observe(reads) })
+        syncer.sync()
+        // The widget refused a sync since: said where its status shows.
+        syncer.note(Source.Teams, "The Teams widget's sync service is off")
+        syncer.sync()
+        assertEquals(listOf("essay"), seen[1].single().read?.items?.map { it.sourceId }, "whole, as its status alone would keep the note")
+        assertNull(tasks.value.status(Source.Teams).note)
+        syncer.sync()
+        assertNull(seen[2].single().read, "its status alone again, nothing in its place")
+    }
+
+    @Test
     fun `a read whose command never went, the sync stopped first, is sent whole the next time`() = runTest {
         val teams = FakeSource(Source.Teams) { items("essay") }
         val seen = mutableListOf<List<SourceObserved>>()

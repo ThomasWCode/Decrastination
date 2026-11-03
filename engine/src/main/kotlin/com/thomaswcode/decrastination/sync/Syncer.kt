@@ -117,7 +117,7 @@ class Syncer(
      * ([observe]) before the next is read, as Anki's read is made from the homework Teams' brought; what the server reads itself
      * (Power Planner, Gmail) isn't read here. A read the same as the last sent goes as its status alone, so the server's record
      * doesn't fill with copies of it: as last sent once its command's on record, and not before, so a sync stopped part-way sends
-     * it whole the next time.
+     * it whole the next time; and whole where a note's taken the place of its own since.
      */
     private suspend fun sent(only: Set<Source>?): SyncReport {
         var report = SyncReport()
@@ -126,7 +126,10 @@ class Syncer(
             val (seen, hash) = when (val read = read(source)) {
                 is Read.Failed -> SourceObserved(source.source, read.startedAt, failed = read.why) to null
                 is Read.Done -> Protocol.hash(JSON.encodeToString(SourceRead.serializer(), read.read)).let { hash ->
-                    SourceObserved(source.source, read.startedAt, read.read.takeUnless { lastSent[source.source] == hash }) to hash
+                    // Whole where a note's been put where its status shows since (the Teams widget refusing to sync): a read's own
+                    // takes its place, and the status alone would keep it.
+                    val same = lastSent[source.source] == hash && tasks.value.status(source.source).note == read.read.note
+                    SourceObserved(source.source, read.startedAt, read.read.takeUnless { same }) to hash
                 }
             }
             report += observed(listOf(seen))
