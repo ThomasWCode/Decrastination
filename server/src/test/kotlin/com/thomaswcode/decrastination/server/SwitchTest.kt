@@ -20,8 +20,8 @@ import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
-import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
@@ -113,13 +113,18 @@ class SwitchTest {
     }
 
     @Test
-    fun `what the phone ran today of the jobs at a set time isn't run again at the switch, and the rest run at once`() = runBlocking {
-        // Its mornings at midnight, as its seeds have said: today's has gone by, so the phone's said it.
-        phone.stores.settings.update { it.copy(briefingWeekdayMin = 0, briefingWeekendMin = 0) }
-        graph.seed(everything(), "phone")
+    fun `when the phone last ran the jobs at a set time is on record as their last runs, whatever their settings, and nothing else`() = runBlocking {
+        val morning = System.currentTimeMillis() - 3_600_000
+        graph.switchOver(SwitchSeed("switch-1", everything(), ran = mapOf("morning" to morning, "sources" to morning)), "phone")
+        assertEquals(morning.toString(), db.meta("job:morning"), "today's morning is the phone's, run as it says")
+        assertFalse(graph.morningDue(morning, System.currentTimeMillis()), "so it isn't run again today")
+        assertEquals(null, db.meta("job:sources"), "and only the phone's own are taken: what runs every quarter of an hour runs at its first turn")
+    }
+
+    @Test
+    fun `with no runs said, none is on record`() = runBlocking {
         graph.switchOver(SwitchSeed("switch-1", everything()), "phone")
-        assertNotNull(db.meta("job:morning"), "today's morning is on record as run")
-        assertEquals(null, db.meta("job:sources"), "what runs every quarter of an hour runs at its first turn")
+        assertEquals(null, db.meta("job:morning"))
     }
 
     @Test

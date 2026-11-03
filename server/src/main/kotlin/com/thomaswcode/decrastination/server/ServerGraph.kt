@@ -343,9 +343,9 @@ class ServerGraph(
                 backend.keep(store.name, store.version, store.text)
                 written += store.name
             }
-            // What the phone ran today of the jobs at a set time on record as run with the mode, so a stop straight after can't have
-            // it run again; by the settings as the phone last sent them, as what this seed holds is read only once it's kept.
-            jobs.ranByThePhone(PHONES_TODAY, clock.now())
+            // When the phone last ran the jobs at a set time, as it says, on record as their last runs here, with the mode, so a stop
+            // straight after can't have one run again, and the next comes at its time as if this server had run them all along.
+            jobs.ranAt(asked.ran.filterKeys { it in PHONES_TODAY })
             db.setMeta(MODE, COMMANDS)
             SeedAnswer(db.currentRevision(), emptyList(), version, backend.hashes()).also { answer ->
                 db.setMeta(SWITCHED, switchJson.encodeToString(SwitchRecord.serializer(), SwitchRecord(asked.id, answer)))
@@ -847,7 +847,7 @@ class ServerGraph(
         /** Where the switch's answer is kept, under its seed's id. */
         private const val SWITCHED = "switch"
 
-        /** The jobs at a set time the phone ran itself until the switch: today's isn't run again here. */
+        /** The jobs at a set time the phone ran itself until the switch, whose last runs it sends with its final seed. */
         private val PHONES_TODAY = setOf("morning", "check-in", "review")
 
         private val switchJson = Json { encodeDefaults = true; ignoreUnknownKeys = true }

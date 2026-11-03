@@ -44,10 +44,12 @@ data class SeedAnswer(val revision: Long, val refused: List<String> = emptyList(
 
 /**
  * The phone's last whole seed (D-141): the server goes over to commands in the transaction that takes it, and keeps its answer
- * under [id], so an answer lost on the way is said again, not asked for by a pull.
+ * under [id], so an answer lost on the way is said again, not asked for by a pull. With it, when the phone last ran each of the
+ * jobs at a set time that are the server's from then ([ran], by the server's names: `morning`, `check-in`, `review`), so none
+ * is run again for a day the phone's had it.
  */
 @Serializable
-data class SwitchSeed(val id: String, val seed: SeedBatch)
+data class SwitchSeed(val id: String, val seed: SeedBatch, val ran: Map<String, Long> = emptyMap())
 
 /** A store as a pull brings it: its text as JSON. */
 @Serializable

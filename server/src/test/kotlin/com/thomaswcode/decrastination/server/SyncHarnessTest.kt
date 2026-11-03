@@ -205,10 +205,12 @@ class SyncHarnessTest {
         phone.h.commands.act(own("Essay"))
         assertTrue(phone.replica.upload())
         phone.h.commands.act(own("Maths"))
+        phone.h.stores.sync.update { it.copy(letGoSeen = 40) }
         mirroring()
         assertTrue(phone.replica.upload(), "its command's turned away, and it goes back")
         assertEquals(SyncState.MIRROR, phone.h.stores.sync.value.mode)
         assertEquals(0, phone.waiting, "it's in the stores, and goes with them")
+        assertEquals(0, phone.h.stores.sync.value.letGoSeen, "a restored server's revisions start again below the let-gos acted on")
         assertEquals(setOf("Essay", "Maths"), phone.titles, "nothing's taken from here")
         assertTrue(phone.replica.upload())
         assertEquals(setOf("Essay", "Maths"), serverTitles)

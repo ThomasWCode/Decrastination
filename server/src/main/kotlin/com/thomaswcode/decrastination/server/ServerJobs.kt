@@ -62,13 +62,14 @@ class ServerJobs(
     }
 
     /**
-     * What's due now of the jobs [names], put on record as run at [now], nothing of it done: until the switch the phone ran them
-     * itself, so today's has been said already, and the next comes at its time.
+     * Each job [runs] names, its last run put on record at that moment, nothing of it done, where none's on record since: until the
+     * switch the phone ran them itself, so the next comes at its time as if they'd run here.
      */
-    fun ranByThePhone(names: Set<String>, now: Long) {
+    fun ranAt(runs: Map<String, Long>) {
         for (job in jobs) {
+            val at = runs[job.name] ?: continue
             val key = "job:${job.name}"
-            if (job.name in names && job.due(db.meta(key)?.toLongOrNull(), now)) db.setMeta(key, now.toString())
+            if ((db.meta(key)?.toLongOrNull() ?: Long.MIN_VALUE) < at) db.setMeta(key, at.toString())
         }
     }
 

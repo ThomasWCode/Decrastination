@@ -199,7 +199,8 @@ class Replica(
      */
     private suspend fun backToMirroring(): Boolean {
         stores.outbox.update { it.copy(commands = emptyList()) }
-        sync.update { it.copy(mode = SyncState.MIRROR, revision = 0, sent = emptyMap(), lastError = null) }
+        // The let-gos acted on are another history's: a restored server's revisions start again below them.
+        sync.update { it.copy(mode = SyncState.MIRROR, revision = 0, sent = emptyMap(), lastError = null, letGoSeen = 0) }
         archiveSent = NOT_SENT
         return true
     }
