@@ -81,7 +81,10 @@ class Sync(
     private val forgetPlan: () -> Unit,
     /** The calendar watched for changes, once it may be read ([com.thomaswcode.decrastination.calendar.CalendarWriter.watchCalendar]). */
     private val watchCalendar: () -> Unit,
-    /** An event the rules can't judge asked about in Felix's name ([com.thomaswcode.decrastination.felix.Conversation.askAboutEvent]). */
+    /**
+     * An event the rules can't judge asked about in Felix's name ([com.thomaswcode.decrastination.felix.Conversation.askAboutEvent]),
+     * and put on record as asked once its question is ([eventAsked]).
+     */
     private val askAboutEvent: suspend (key: String, title: String, day: String, start: Long, answers: List<String>) -> Unit,
     /** His questions about the events named a key settled ([com.thomaswcode.decrastination.felix.Conversation.settleEvent]). */
     private val settleEvent: suspend (String) -> Unit,
@@ -155,26 +158,39 @@ class Sync(
     /** Held while the calendar's read and judged: refreshes at once (a start, a sync, the calendar changing) can't ask an event twice. */
     private val refreshing = Mutex()
 
-    /** The events being asked about, by key, from their read till they're on record as asked: under [refreshing]. */
+    /** The events being asked about, by key, from their read till they're on record as asked ([eventAsked]): under [refreshing]. */
     private val asking = HashSet<String>()
 
     /**
      * Reads the calendar, judges it for the planner, and asks about what it can't judge. What's said in Felix's name of it is said
      * once the calendar's let go, as it goes as a command once the phone sends them, and a command being applied can be waiting to
      * read the calendar again meanwhile (a source read's after-work does): asked for under the lock, it would wait on that command.
-     * An event's on record as asked once its question is, so one not asked, stopped first, is asked the next time.
+     * An event's on record as asked once its question is ([eventAsked]), so one not asked, stopped first, is asked the next time.
      */
     suspend fun refreshCalendar() {
         val (settled, toAsk) = refreshing.withLock { reading() }
+        var asked = 0
         try {
             settled.forEach { settleEvent(it) }
             toAsk.forEach { event ->
                 ask(event, clock.zone())
-                calendar.update { it.copy(eventsAsked = it.eventsAsked + EventJudge.key(event)) }
+                asked++
             }
         } finally {
-            if (toAsk.isNotEmpty()) withContext(NonCancellable) { refreshing.withLock { asking -= toAsk.map(EventJudge::key).toSet() } }
+            // Those not asked, failed or stopped first, are asked the next time; those asked stay marked till they're on record.
+            val left = toAsk.drop(asked).map(EventJudge::key)
+            if (left.isNotEmpty()) withContext(NonCancellable) { refreshing.withLock { asking -= left.toSet() } }
         }
+    }
+
+    /**
+     * [key], an event asked about, on record as asked once its question is: by its asking, at once while mirroring, and once the
+     * phone sends commands as its command's applied here ([com.thomaswcode.decrastination.sync.protocol.AskAboutEvent]), which,
+     * made inside another's, is once that's closed: so a stop before leaves it to be asked again, never marked and not asked.
+     */
+    suspend fun eventAsked(key: String) = refreshing.withLock {
+        calendar.update { it.copy(eventsAsked = it.eventsAsked + key) }
+        asking -= key
     }
 
     /** The calendar read and judged: what of your instructions settles his questions, and what's to be asked, then being asked. */

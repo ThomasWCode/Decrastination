@@ -221,7 +221,15 @@ class AppGraph private constructor(context: Context) : Owners {
         forgetPlan = { focus.forgetPlan() },
         watchCalendar = { calendarWriter.watchCalendar() },
         // What this phone's calendar and what it's asked decide, as a command once the two keep in step by them (W-24).
-        askAboutEvent = { key, title, day, start, answers -> if (sendsCommands()) commands.send(AskAboutEvent(key, title, day, start, answers)) else conversation.askAboutEvent(key, title, day, start, answers) },
+        // On record as asked once asked: here at once, or as its command's applied here ([eventAsked]).
+        askAboutEvent = { key, title, day, start, answers ->
+            if (sendsCommands()) {
+                commands.send(AskAboutEvent(key, title, day, start, answers))
+            } else {
+                conversation.askAboutEvent(key, title, day, start, answers)
+                sync.eventAsked(key)
+            }
+        },
         settleEvent = { key -> if (sendsCommands()) commands.send(SettleEvent(key)) else conversation.settleEvent(key) },
         replan = { planning.watcher.poke() },
         noteSource = { source, note -> if (sendsCommands()) commands.send(NoteSource(source, note)) else syncer.note(source, note) },
@@ -440,6 +448,9 @@ class AppGraph private constructor(context: Context) : Owners {
 
     /** The calendar's this phone's, read here: nothing to keep of what it sent. */
     override suspend fun calendarSeen(read: CalendarRead) = Unit
+
+    /** An event asked about, on record as asked here, where the calendar's read ([Sync.eventAsked]). */
+    override suspend fun eventAsked(key: String) = sync.eventAsked(key)
 
     /** Protection ([Protection]): settings changes, waiting once armed if they loosen blocking; the parent code; the device admin. */
     override val protection = Protection(settings, stores.protection, stores.device, secrets, clock, scope, adminActive = { Watchdog.isAdminActive(app) }) {

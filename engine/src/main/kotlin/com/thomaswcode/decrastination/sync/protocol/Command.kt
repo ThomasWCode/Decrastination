@@ -112,6 +112,9 @@ interface Owners {
 
     /** The calendar as the phone last read it ([ObserveCalendar]): kept where it's planned by from it, the server; nothing on the phone, whose it is. */
     suspend fun calendarSeen(read: CalendarRead)
+
+    /** An event asked about ([AskAboutEvent]), on record as asked where the calendar's read, the phone ([com.thomaswcode.decrastination.sync.Sync.eventAsked]); nothing on the server. */
+    suspend fun eventAsked(key: String)
 }
 
 /**

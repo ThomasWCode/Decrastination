@@ -39,11 +39,17 @@ data class ObserveCalendar(val read: CalendarRead) : Action, Answers<Unit> {
     override suspend fun run(owners: Owners) = owners.calendarSeen(read)
 }
 
-/** An event the rules can't judge, asked about in Felix's name, as this phone's calendar and what it's asked decide. */
+/**
+ * An event the rules can't judge, asked about in Felix's name, as this phone's calendar and what it's asked decide; on the phone, on
+ * record as asked as its question is ([Owners.eventAsked]).
+ */
 @Serializable
 @SerialName("AskAboutEvent")
 data class AskAboutEvent(val key: String, val title: String, val day: String, val start: Long, val answers: List<String>) : Action, Answers<Unit> {
-    override suspend fun run(owners: Owners) = owners.conversation.askAboutEvent(key, title, day, start, answers)
+    override suspend fun run(owners: Owners) {
+        owners.conversation.askAboutEvent(key, title, day, start, answers)
+        owners.eventAsked(key)
+    }
 }
 
 /** His questions about the events named [key] settled, an instruction of yours having answered them. */

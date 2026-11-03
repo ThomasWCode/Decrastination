@@ -279,6 +279,9 @@ class ServerOwners(
 
     override suspend fun calendarSeen(read: CalendarRead) = seenCalendar(read)
 
+    /** What's been asked of the calendar is the phone's to keep, where it's read (`calendar.json`): the server holds no record of it. */
+    override suspend fun eventAsked(key: String) = Unit
+
     /** Today's slots as they pass. */
     val slots: Slots = Slots(stores.session, stores.settings, stores.tasks, stores.school, clock, planning, focus)
 

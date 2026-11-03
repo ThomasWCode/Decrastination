@@ -30,6 +30,7 @@ import com.thomaswcode.decrastination.data.SecretCipher
 import com.thomaswcode.decrastination.data.Stores
 import com.thomaswcode.decrastination.data.WeeklyReview
 import com.thomaswcode.decrastination.felix.Conversation
+import com.thomaswcode.decrastination.felix.FelixHarness
 import com.thomaswcode.decrastination.felix.Looks
 import com.thomaswcode.decrastination.learn.AnkiReading
 import com.thomaswcode.decrastination.learn.CheckIn
@@ -178,12 +179,44 @@ class CommandsTest {
                 override val photos: Photos get() = error("not here")
 
                 override suspend fun calendarSeen(read: CalendarRead) = error("not here")
+
+                override suspend fun eventAsked(key: String) = error("not here")
             }
             val commands = Commands(owners, clock)
             (1..30).map { i -> async(Dispatchers.Default) { commands.changeSettings { it.copy(hintsSeen = it.hintsSeen + "hint $i") } } }.awaitAll()
             assertEquals(30, stores.settings.value.hintsSeen.size)
         } finally {
             dir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `an event's question applied on the phone is asked in the chat, and put on record as asked there as it is`() = runBlocking {
+        FelixHarness().use { h ->
+            val recorded = mutableListOf<String>()
+            val owners = object : Owners {
+                override val tasks = h.stores.tasks
+                override val ownTasks: OwnTasks get() = error("not here")
+                override val instructions: Instructions get() = error("not here")
+                override val focus: Focus get() = error("not here")
+                override val conversation = h.conversation
+                override val looks: Looks get() = error("not here")
+                override val protection: Protection get() = error("not here")
+                override val learning: Learning get() = error("not here")
+                override val backups: BackupService get() = error("not here")
+                override val sources: Syncer get() = error("not here")
+                override val ankiWatch: AnkiWatch get() = error("not here")
+                override val photos: Photos get() = error("not here")
+
+                override suspend fun calendarSeen(read: CalendarRead) = error("not here")
+
+                override suspend fun eventAsked(key: String) {
+                    assertTrue(h.stores.chat.value.messages.any { it.about.eventKey == key }, "on record once its question is")
+                    recorded += key
+                }
+            }
+            Commands(owners, h.clock).act(AskAboutEvent("an event", "An event", "Monday", h.clock.now(), listOf("All of it", "None")))
+            assertEquals(listOf("an event"), recorded)
         }
     }
 
