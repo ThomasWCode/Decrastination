@@ -23,6 +23,7 @@ import com.thomaswcode.decrastination.plan.Planning
 import com.thomaswcode.decrastination.protect.Protection
 import com.thomaswcode.decrastination.sync.protocol.Commands
 import com.thomaswcode.decrastination.sync.protocol.Owners
+import java.io.File
 import java.nio.file.Files
 import java.util.Collections
 import java.util.concurrent.TimeUnit
@@ -47,7 +48,8 @@ import okhttp3.mockwebserver.MockWebServer
  * a finish's completions) and what's handed to Felix are counted.
  */
 class TasksHarness(start: String = "2026-10-19T16:00", private val claude: Boolean = false) : AutoCloseable, Owners {
-    private val dir = Files.createTempDirectory("tasks").toFile()
+    /** The stores' folder, where a test puts what a phone's files hold beside them. */
+    val dir: File = Files.createTempDirectory("tasks").toFile()
     val clock = FixedClock(Fixtures.at(start), LONDON)
 
     /** What the owners read, as `AppGraph`'s do: a command's own moment while one's applied. */

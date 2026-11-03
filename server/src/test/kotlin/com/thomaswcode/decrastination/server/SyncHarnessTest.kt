@@ -29,6 +29,8 @@ import com.thomaswcode.decrastination.sync.protocol.CommandBatch
 import com.thomaswcode.decrastination.sync.protocol.DeleteOwnTask
 import com.thomaswcode.decrastination.sync.protocol.UndoKeep
 import com.thomaswcode.decrastination.sync.protocol.FinishOwnTask
+import com.thomaswcode.decrastination.sync.protocol.ResetData
+import com.thomaswcode.decrastination.data.Reset
 import com.thomaswcode.decrastination.sync.protocol.Outcome
 import com.thomaswcode.decrastination.sync.protocol.SaveOwnTask
 import com.thomaswcode.decrastination.tasks.TasksHarness
@@ -46,6 +48,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.buildJsonObject
@@ -129,6 +132,7 @@ class SyncHarnessTest {
             val body = buildJsonObject {
                 put("revision", state.revision)
                 put("mode", graph.mode)
+                put("letGo", json.encodeToJsonElement(ListSerializer(String.serializer()), state.letGo))
                 put("stores", json.encodeToJsonElement(ListSerializer(JsonElement.serializer()), state.stores.map { row ->
                     buildJsonObject {
                         put("name", row.name)
@@ -417,6 +421,23 @@ class SyncHarnessTest {
         assertTrue(two.replica.upload())
         assertEquals(setOf("Essay", "Maths"), two.titles)
         assertEquals(1, two.h.stores.instructions.value.instructions.size)
+    }
+
+    @Test
+    fun `a reset made on the server takes this phone's copies of what it cleared at its next pull, and leaves the rest`() = runBlocking {
+        val phone = phone()
+        phone.h.commands.act(own("Essay"))
+        assertTrue(phone.replica.upload())
+        // Copies a migration kept here, beside the stores (D-94).
+        val chatCopy = File(phone.h.dir, "chat.json.v5").apply { writeText("{}") }
+        val tasksCopy = File(phone.h.dir, "tasks.json.v9").apply { writeText("{}") }
+        val before = db.currentRevision()
+        assertEquals(Outcome.APPLIED, graph.applier.apply(CommandBatch(listOf(Command("reset-1", phone.h.clock.now(), ResetData(Reset.Chat)))), Client.WEBSITE).single().state)
+        assertTrue("chat.json" in graph.state(before).letGo, "said to a pull from before it")
+        assertEquals(emptyList(), graph.state(db.currentRevision()).letGo, "and not to one from after")
+        assertTrue(phone.replica.upload())
+        assertFalse(chatCopy.exists(), "what the reset cleared isn't kept in a copy here either")
+        assertTrue(tasksCopy.exists(), "what it didn't clear keeps its copy")
     }
 
     @Test

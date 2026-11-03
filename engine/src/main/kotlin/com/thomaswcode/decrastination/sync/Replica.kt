@@ -252,6 +252,8 @@ class Replica(
                     val text = store.json.toString()
                     if (ChatArchiveStore.isMonth(store.name)) stores.chatArchive.adopt(store.name, store.version, text) else here.getValue(store.name).adopt(store.version, text)
                 }
+                // What a clear or a reset made elsewhere took isn't kept here in a copy either (D-94).
+                stores.letGoOfCopiesOf(pulled.letGo)
             }
             // A command made since this began: its turn first, and this pull's asked for again after it.
             if (commands == null) adopt() else if (!commands.replacing(adopt)) return true

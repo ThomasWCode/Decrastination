@@ -61,6 +61,17 @@ class ServerJobs(
         }
     }
 
+    /**
+     * What's due now of the jobs [names], put on record as run at [now], nothing of it done: until the switch the phone ran them
+     * itself, so today's has been said already, and the next comes at its time.
+     */
+    fun ranByThePhone(names: Set<String>, now: Long) {
+        for (job in jobs) {
+            val key = "job:${job.name}"
+            if (job.name in names && job.due(db.meta(key)?.toLongOrNull(), now)) db.setMeta(key, now.toString())
+        }
+    }
+
     /** The loop, on threads that can wait: a job's writes wait for an open command, and the default pool is as small as the box. */
     fun start(scope: CoroutineScope): Job = scope.launch(Dispatchers.IO) {
         while (isActive) {

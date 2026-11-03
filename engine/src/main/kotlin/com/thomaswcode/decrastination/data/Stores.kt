@@ -167,6 +167,11 @@ class Stores(
         json.filter { it.name in files }.forEach { it.letGoOfCopies() }
     }
 
+    /** The copies kept of the stores [names] let go (D-94): what a clear or a reset made elsewhere took, as a pull says it. */
+    suspend fun letGoOfCopiesOf(names: Collection<String>) {
+        json.filter { it.name in names }.forEach { it.letGoOfCopies() }
+    }
+
     /** The stores the server keeps a copy of ([MIRRORED]), as they are. */
     val mirrored: List<JsonStore<*>> get() = json.filter { it.name in MIRRORED }
 

@@ -25,6 +25,8 @@ services:
       B2_KEY_ID: ${B2_KEY_ID:-}
       B2_APPLICATION_KEY: ${B2_APPLICATION_KEY:-}
       B2_BUCKET: ${B2_BUCKET:-}
+      # Litestream's metrics, read with each heartbeat: the heartbeat fails while it's uploaded nothing for a while.
+      LITESTREAM_METRICS: http://litestream:9090/metrics
     expose:
       - "8080"
     volumes:

@@ -42,13 +42,23 @@ data class SeedBatch(
 @Serializable
 data class SeedAnswer(val revision: Long, val refused: List<String> = emptyList(), val server: String = "", val holds: Map<String, String> = emptyMap())
 
+/**
+ * The phone's last whole seed (D-141): the server goes over to commands in the transaction that takes it, and keeps its answer
+ * under [id], so an answer lost on the way is said again, not asked for by a pull.
+ */
+@Serializable
+data class SwitchSeed(val id: String, val seed: SeedBatch)
+
 /** A store as a pull brings it: its text as JSON. */
 @Serializable
 data class PulledStore(val name: String, val version: Int, val revision: Long, val json: JsonElement)
 
-/** Every store above the revision asked for, the revision they're as of, and the server's mode: a restore can take it back to mirroring. */
+/**
+ * Every store above the revision asked for, the revision they're as of, and the server's mode: a restore can take it back to
+ * mirroring. With them, the stores whose copies a clear or a reset let go of since ([letGo], D-94), so the phone lets go of its own.
+ */
 @Serializable
-data class PulledState(val revision: Long, val stores: List<PulledStore>, val mode: String? = null)
+data class PulledState(val revision: Long, val stores: List<PulledStore>, val mode: String? = null, val letGo: List<String> = emptyList())
 
 /** What a client can ask of the server with no sign-in: its version, the protocol and each store's version. */
 @Serializable

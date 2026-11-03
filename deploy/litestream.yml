@@ -1,6 +1,9 @@
 # Streams the server's database to a private R2 bucket, continuously (docs/plan_web/hosting.md §Litestream).
 # ${...} is read from the container's environment. A snapshot a day, kept 30 days, so `restore -timestamp`
-# reaches a month back.
+# reaches a month back. Its metrics on the compose network alone, where the server reads whether it's still
+# uploading (docs/spec/server.md §Deployment); no port is published for them.
+addr: ":9090"
+
 snapshot:
   interval: 24h
   retention: 720h

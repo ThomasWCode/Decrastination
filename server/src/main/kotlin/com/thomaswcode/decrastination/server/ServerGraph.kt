@@ -37,6 +37,7 @@ import com.thomaswcode.decrastination.sync.Protocol
 import com.thomaswcode.decrastination.sync.SeedAnswer
 import com.thomaswcode.decrastination.sync.SeedBatch
 import com.thomaswcode.decrastination.sync.ServerVersion
+import com.thomaswcode.decrastination.sync.SwitchSeed
 import com.thomaswcode.decrastination.sync.protocol.Action
 import com.thomaswcode.decrastination.sync.protocol.Command
 import com.thomaswcode.decrastination.sync.protocol.CommandBatch
@@ -91,7 +92,9 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.job
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -100,6 +103,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
 
 /** The server's clock: its own time, in the zone the phone last said, as a day is the owner's wherever they are. */
 class ServerClock(private val db: Database) : WallClock {
@@ -158,6 +163,8 @@ class ServerGraph(
     private val pushKey: String? = null,
     /** How a phone's told at once (W-18), with the box's service account, if it's set. */
     phoneSender: PhonePushes.Sender? = null,
+    /** Where Litestream says what it's uploaded, if it's watched. */
+    streamMetrics: String? = null,
 ) {
     /** The clock the phone's zone is told to. */
     val serverClock = ServerClock(db)
@@ -165,8 +172,12 @@ class ServerGraph(
     /** What the owners read: a command's own moment while one's applied. */
     val clock: WallClock = ReplayClock(serverClock)
 
-    /** Whether the server is taking the phone's stores whole, or commands: read once, at a start, so everything that hangs on it goes together. */
-    var mode: String = db.meta("mode") ?: MIRROR
+    /**
+     * Whether the server is taking the phone's stores whole, or commands: read once, at a start, so everything that hangs on it goes
+     * together, and set once more by the switch ([switchOver]), which does what a start in commands mode does.
+     */
+    @Volatile
+    var mode: String = db.meta(MODE) ?: MIRROR
         private set
 
     val backend = SqliteBackend(db).apply { writable = mode != MIRROR }
@@ -228,6 +239,7 @@ class ServerGraph(
         answersBack = { backed -> calendarRead.update { it.copy(answers = backed + it.answers) } },
         settled = { read -> db.betweenCommands(read) },
         told = { notice -> pushFelix(notice) },
+        afterCommands = { db.betweenCommands {} },
     )
 
     /** Whether a nightly file has somewhere to go. */
@@ -298,6 +310,63 @@ class ServerGraph(
         SeedAnswer(revision, refused, version, backend.hashes())
     }
 
+    /** What came of a phone's last whole seed: gone over, its answer what the phone goes over with; or not, and why. */
+    sealed interface Switched {
+        data class Over(val answer: SeedAnswer) : Switched
+
+        data class Refused(val why: String) : Switched
+    }
+
+    /**
+     * The phone's last whole seed ([SwitchSeed], D-141): every store it holds kept, as [seed] keeps them, and the server gone over to
+     * commands in the same transaction, the answer kept there under the seed's id. Asked again with that id, in either mode, the
+     * answer's said again and nothing's applied: an answer lost on the way needs no pull. Gone over here at once ([goneOver]), as a
+     * start in commands mode would go. Not with a store this build can't read: the phone can't go over to a server behind it.
+     */
+    suspend fun switchOver(asked: SwitchSeed, device: String): Switched = writing.withLock {
+        switchedUnder(asked.id)?.let { return@withLock Switched.Over(it) }
+        if (mode == COMMANDS) return@withLock Switched.Refused("The server takes commands already")
+        val newer = asked.seed.stores.filter { store ->
+            val known = if (Archives.isMonth(store.name)) stores.chatArchive.version else versions[store.name]
+            known == null || store.version > known
+        }
+        if (newer.isNotEmpty()) return@withLock Switched.Refused("The server can't read this app's ${newer.joinToString { it.name }}: deploy it first")
+        serverClock.setZone(asked.seed.zone)
+        backend.cause = "switch:$device"
+        val written = mutableListOf<String>()
+        val answer = db.transaction {
+            for (store in asked.seed.stores) {
+                if (backend.read(store.name) == store.text) continue
+                backend.keep(store.name, store.version, store.text)
+                written += store.name
+            }
+            db.setMeta(MODE, COMMANDS)
+            SeedAnswer(db.currentRevision(), emptyList(), version, backend.hashes()).also { answer ->
+                db.setMeta(SWITCHED, switchJson.encodeToString(SwitchRecord.serializer(), SwitchRecord(asked.id, answer)))
+            }
+        }
+        written.forEach { byName[it]?.reload() }
+        if (written.any(Archives::isMonth)) stores.chatArchive.forget()
+        goneOver()
+        if (written.isNotEmpty()) _revisions.tryEmit(answer.revision)
+        Switched.Over(answer)
+    }
+
+    /** The answer the switch was made with, if it was made under [id]. */
+    private fun switchedUnder(id: String): SeedAnswer? = db.meta(SWITCHED)?.let { switchJson.decodeFromString(SwitchRecord.serializer(), it) }?.takeIf { it.id == id }?.answer
+
+    /**
+     * What a start in commands mode does, done now (D-141): what the phone ran today of the jobs at a set time not run again here,
+     * the owners' writes kept, the mode said, and what watches the stores begun. The jobs' loop runs what's due from its next turn.
+     */
+    private fun goneOver() {
+        jobs.ranByThePhone(PHONES_TODAY, clock.now())
+        backend.writable = true
+        mode = COMMANDS
+        owners.start()
+        planning.watcher.start()
+    }
+
     /** What moves a piece, its rules the phone's: it decides, and [ask] applies. */
     internal val moves = Moves(stores.tasks, owners.instructions, commands, planning, clock, scope)
 
@@ -317,6 +386,8 @@ class ServerGraph(
             ServerJob.every("slots", MINUTE_MS) {
                 owners.slots.sweep()
                 owners.protection.applyDueChanges()
+                // A day with nothing to do's free time (BL-07), as the phone gives it at its ticks: the phone's own would go at its next pull.
+                owners.focus.grantAllowanceIfDue()
             },
             ServerJob.every("looks", MINUTE_MS) {
                 owners.looks.check()
@@ -334,15 +405,28 @@ class ServerGraph(
         ),
     )
 
+    /** Whether Litestream's still carrying the database off the box. */
+    private val stream = StreamWatch(http, streamMetrics)
+
+    /** Whether it was, at the last beat: a change is said once. */
+    @Volatile
+    private var streamGoing = true
+
     /**
      * The minute's heartbeat, only from a box that can still write: one whose disk is full answers its health check and does nothing
      * else, with what's waiting on it held up unseen. A brief fault costs a beat or two, which the check's grace allows for. It's in
      * the jobs' own loop in either mode, so a job that never returns stops it too, and it runs while mirroring as a stopped box is worth
-     * hearing of from the day it goes up, not from the switch.
+     * hearing of from the day it goes up, not from the switch. With Litestream stopped, it says it failed, so the check's owner hears
+     * of that too: R2's copy is what a box that's gone comes back from.
      */
-    internal fun heartbeat() {
-        db.setMeta(BEAT, clock.now().toString())
-        heartbeatUrl?.let { http.get(it, emptyMap()) }
+    internal fun heartbeat(now: Long = clock.now()) {
+        db.setMeta(BEAT, now.toString())
+        val going = stream.going(now)
+        if (going != streamGoing) {
+            streamGoing = going
+            if (going) Log.i(Log.TAG, "Litestream is uploading again") else Log.w(Log.TAG, "Litestream has uploaded nothing for ${StreamWatch.STOPPED_MS / MINUTE_MS} minutes")
+        }
+        heartbeatUrl?.let { http.get(if (going) it else "${it.trimEnd('/')}/fail", emptyMap()) }
     }
 
     /**
@@ -387,13 +471,16 @@ class ServerGraph(
 
     /** The mode set at once, for a test: what a restart does. */
     internal fun modeForATest(set: String) {
-        db.setMeta("mode", set)
+        db.setMeta(MODE, set)
         mode = set
         backend.writable = set != MIRROR
     }
 
     /** Commands from now on, for the browser tests' server, which starts in mirror mode to be seeded. */
     fun commandsForATest() = modeForATest(COMMANDS)
+
+    /** What it's set going stopped and finished, for a test, before its database is closed under it. */
+    internal suspend fun stopForATest() = scope.coroutineContext.job.cancelAndJoin()
 
     /** What runs by itself: the jobs, and, once the server applies commands, what watches the stores and the plan made again. */
     fun start(scope: CoroutineScope) {
@@ -474,7 +561,10 @@ class ServerGraph(
         stores.chatArchive.forget()
     }
 
-    /** Every store above revision [since], whole, with the revision they're as of: both read together, so a cursor can't pass a commit it hasn't seen. */
+    /**
+     * Every store above revision [since], whole, with the revision they're as of, and the stores whose copies were let go since:
+     * all read together, so a cursor can't pass a commit it hasn't seen.
+     */
     fun state(since: Long): StateAnswer = db.read { c ->
         val texts = c.prepareStatement("SELECT name, version, revision, json FROM stores WHERE revision > ? ORDER BY name").use { q ->
             q.setLong(1, since)
@@ -483,7 +573,7 @@ class ServerGraph(
             }
         }
         val revision = c.prepareStatement("SELECT value FROM meta WHERE key = 'revision'").use { q -> q.executeQuery().use { r -> if (r.next()) r.getString(1).toLong() else 0L } }
-        StateAnswer(revision, texts)
+        StateAnswer(revision, texts, backend.letGoSince(c, since))
     }
 
     /** The history let go of as its rule says: older than [SqliteBackend.HISTORY_MS], but each store's last few. */
@@ -648,8 +738,8 @@ class ServerGraph(
     /** What a backup's called today. */
     fun backupName(): String = BackupNames.nightlyName(Instant.ofEpochMilli(clock.now()).atZone(clock.zone()).toLocalDate().toString())
 
-    /** The backup [text] taken in as the phone's Import takes it, but whole: all of it or none, one revision, no command between. What came of it, in words. */
-    suspend fun importBackup(text: String): String = applier.alone("import", Client.WEBSITE, NOT_RESTORED) { owners.backups.importBackup(text) }
+    /** The backup [text] taken in as the phone's Import takes it, but whole: all of it or none, one revision, no command between, [by] who sent it. What came of it, in words. */
+    suspend fun importBackup(text: String, by: String = Client.WEBSITE): String = applier.alone("import", by, NOT_RESTORED) { owners.backups.importBackup(text) }
 
     /** The reset's copy [name] taken in the same way. */
     suspend fun restoreCopy(name: String): String = applier.alone("import", Client.WEBSITE, NOT_RESTORED) { owners.backups.restoreResetCopy(name) }
@@ -747,6 +837,15 @@ class ServerGraph(
         /** What the website can set: the sources' sign-ins, entered there (W-19). Claude's key is the box's, and the parent code's the phone's. */
         private val CREDENTIALS = setOf(Secret.PowerPlannerUsername, Secret.PowerPlannerPassword, Secret.GmailAddress, Secret.GmailAppPassword)
         private const val MIRROR = "mirror"
+        private const val MODE = "mode"
+
+        /** Where the switch's answer is kept, under its seed's id. */
+        private const val SWITCHED = "switch"
+
+        /** The jobs at a set time the phone ran itself until the switch: today's isn't run again here. */
+        private val PHONES_TODAY = setOf("morning", "check-in", "review")
+
+        private val switchJson = Json { encodeDefaults = true; ignoreUnknownKeys = true }
         private const val TIDY_EVERY_MS = 24 * 3_600_000L
     }
 
@@ -761,6 +860,10 @@ class ServerGraph(
     }
 }
 
+/** The switch as it was made: the final seed's id, and what it was answered. */
+@Serializable
+private data class SwitchRecord(val id: String, val answer: SeedAnswer)
+
 /** A month's store of the chat's archive, by its name. */
 object Archives {
     private val MONTH = Regex("""chat-archive-\+?\d{4,}-\d{2}\.json""")
@@ -771,5 +874,5 @@ object Archives {
 /** A store's row. */
 data class StoreRow(val name: String, val version: Int, val revision: Long, val text: String)
 
-/** The stores above a revision, and the newest revision there is. */
-data class StateAnswer(val revision: Long, val stores: List<StoreRow>)
+/** The stores above a revision, the newest revision there is, and the stores whose copies were let go since. */
+data class StateAnswer(val revision: Long, val stores: List<StoreRow>, val letGo: List<String> = emptyList())
