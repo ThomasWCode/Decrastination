@@ -162,7 +162,7 @@ It's tried again at each write till it works (the permission back, the provider 
 `EventJudge.time` gives the planner what each takes:
 - busy: its time (`Planner.Input.busy`); all day, all of each of its days;
 - a few hours: 180 minutes of its day at no set time (`dayLoads`; all day, each of its days; timed, its first);
-- to ask, starting within the week: asked once, as Felix's message in the chat, its chips *All of it*, *A few hours* and *None* (in quiet hours it waits for the morning to be in his notification); it takes all its time till you answer (all day, all of each of its days), so the plan counts on no time it may not have (D-44);
+- to ask, starting within the week: asked once (on record as asked once its message is, so one a stop cut off is asked the next time, and asked once the calendar's let go, as it goes as a command once the phone sends them), as Felix's message in the chat, its chips *All of it*, *A few hours* and *None* (in quiet hours it waits for the morning to be in his notification); it takes all its time till you answer (all day, all of each of its days), so the plan counts on no time it may not have (D-44);
 - to ask, further off: a few hours of its day (of each, all day) meanwhile, so the spread before it leaves it room.
 
 Your answer holds for every event of that name (`CalendarState.eventAnswers`, kept by `CalendarWriter.answer`); the plan, and today's record of it, are made again with it.

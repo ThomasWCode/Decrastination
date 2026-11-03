@@ -18,6 +18,7 @@ import java.time.ZoneId
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -151,14 +152,36 @@ class Sync(
     /** The calendar as last read, for the server, which can't read it: your answers about its events with it. */
     fun calendarRead(): CalendarRead = calendarTime.let { CalendarRead(it.events, calendar.value.eventAnswers, it.read?.first ?: 0, it.read?.second ?: 0) }
 
-    /** Held while the calendar's read and its questions asked: refreshes at once (a start, a sync, the calendar changing) can't ask an event twice. */
+    /** Held while the calendar's read and judged: refreshes at once (a start, a sync, the calendar changing) can't ask an event twice. */
     private val refreshing = Mutex()
 
-    /** Reads the calendar, judges it for the planner, and asks about what it can't judge. */
-    suspend fun refreshCalendar(): Unit = refreshing.withLock {
+    /** The events being asked about, by key, from their read till they're on record as asked: under [refreshing]. */
+    private val asking = HashSet<String>()
+
+    /**
+     * Reads the calendar, judges it for the planner, and asks about what it can't judge. What's said in Felix's name of it is said
+     * once the calendar's let go, as it goes as a command once the phone sends them, and a command being applied can be waiting to
+     * read the calendar again meanwhile (a source read's after-work does): asked for under the lock, it would wait on that command.
+     * An event's on record as asked once its question is, so one not asked, stopped first, is asked the next time.
+     */
+    suspend fun refreshCalendar() {
+        val (settled, toAsk) = refreshing.withLock { reading() }
+        try {
+            settled.forEach { settleEvent(it) }
+            toAsk.forEach { event ->
+                ask(event, clock.zone())
+                calendar.update { it.copy(eventsAsked = it.eventsAsked + EventJudge.key(event)) }
+            }
+        } finally {
+            if (toAsk.isNotEmpty()) withContext(NonCancellable) { refreshing.withLock { asking -= toAsk.map(EventJudge::key).toSet() } }
+        }
+    }
+
+    /** The calendar read and judged: what of your instructions settles his questions, and what's to be asked, then being asked. */
+    private suspend fun reading(): Pair<Collection<String>, List<CalendarEvent>> {
         if (!ports.calendarAllowed()) {
             calendarTime = EventJudge.Time(emptyList(), emptyMap(), emptyList())
-            return@withLock
+            return NOTHING_SAID
         }
         watchCalendar()
         val now = clock.now()
@@ -173,22 +196,19 @@ class Sync(
             // Not read this time: the events last read, judged again with the answers as they are
             // now, so an instruction applied or taken back counts all the same.
             calendarTime = EventJudge.time(calendarTime.events, calendar.value.eventAnswers + yours, clock.zone(), askUntil = now + CalendarTime.ASK_AHEAD_MS).copy(read = calendarTime.read)
-            return@withLock
+            return NOTHING_SAID
         }
-        yours.keys.forEach { settleEvent(it) }
         // Not counted as asked: taken back, the instruction leaves it to be asked again.
         if (calendar.value.eventsAsked.any { it in yours }) calendar.update { it.copy(eventsAsked = it.eventsAsked - yours.keys) }
         val answers = calendar.value.eventAnswers + yours
         val time = EventJudge.time(events, answers, clock.zone(), askUntil = now + CalendarTime.ASK_AHEAD_MS).copy(read = (now - CalendarTime.DAY_MS) to CalendarTime.readUntil(now, clock.zone()))
         calendarTime = time
         // In the chat at once, whatever the hour: his notification leaves them out in quiet hours, till
-        // the morning (NotifyRules.waitsForMorning).
-        val toAsk = CalendarTime.questions(time.toAsk, calendar.value.eventsAsked, now)
-        if (toAsk.isNotEmpty()) {
-            toAsk.forEach { ask(it, clock.zone()) }
-            calendar.update { it.copy(eventsAsked = it.eventsAsked + toAsk.map(EventJudge::key)) }
-        }
+        // the morning (NotifyRules.waitsForMorning). Those being asked already aren't asked again.
+        val toAsk = CalendarTime.questions(time.toAsk, calendar.value.eventsAsked + asking, now)
+        asking += toAsk.map(EventJudge::key)
         runCatching { ports.redraw() }
+        return yours.keys to toAsk
     }
 
     /** [event] asked about as Felix's message, one a name: its three answers his chips, one of them kept for every event of its name. */
@@ -227,6 +247,9 @@ class Sync(
     companion object {
         /** [requestTeamsSync]'s answer when the widget is syncing already: as good as one started. */
         const val TEAMS_BUSY = "The Teams widget is already syncing"
+
+        /** A read with nothing to say of it in his name. */
+        private val NOTHING_SAID: Pair<Collection<String>, List<CalendarEvent>> = emptyList<String>() to emptyList()
 
         /** The widget sends a change for each step of a sync; read once they've stopped. */
         private const val TEAMS_QUIET_MS = 5_000L

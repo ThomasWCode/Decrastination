@@ -37,15 +37,21 @@ import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeout
 
 /**
  * What the app reads, through the Sync service on temporary stores (docs/plan_v4/architecture.md §The rules): a sync
@@ -76,11 +82,18 @@ class SyncTest {
     private val teams = FakeSource(Source.Teams) { SourceRead(listOf(Fetched("essay", "Essay", Kind.Homework))) }
     private val gmail = FakeSource(Source.Gmail) { throw IOException("No network") }
 
+    /** What asking an event waits for first, or how it fails: nothing, by default. */
+    @Volatile
+    private var beforeAsk: suspend (String) -> Unit = {}
+
     private val sync = Sync(
         settings, calendar, instructions, clock, scope, Syncer(tasks, settings, listOf(teams, gmail), clock), ports,
         forgetPlan = { forgot.incrementAndGet() },
         watchCalendar = { watched.incrementAndGet() },
-        askAboutEvent = { key, _, _, _, _ -> asked += key },
+        askAboutEvent = { key, _, _, _, _ ->
+            beforeAsk(key)
+            asked += key
+        },
         settleEvent = {},
         replan = {},
     )
@@ -145,6 +158,41 @@ class SyncTest {
         ports.allowed = false
         sync.refreshCalendar()
         assertEquals(emptyList(), sync.calendarTime.busy)
+    }
+
+    @Test
+    fun `an event's asked about once the calendar's let go, so a read inside a command that asking waits for isn't stuck behind it`() = runBlocking {
+        val openDay = CalendarEvent(2, "Open day", utc("2026-10-24"), utc("2026-10-25"), allDay = true)
+        ports.events = listOf(openDay)
+        // The gate a command holds while it's applied: asking goes as a command once the phone sends them, so waits for it.
+        val gate = Mutex()
+        val waiting = CompletableDeferred<Unit>()
+        beforeAsk = {
+            waiting.complete(Unit)
+            gate.withLock {}
+        }
+        gate.lock()
+        val first = launch(Dispatchers.Default) { sync.refreshCalendar() }
+        waiting.await()
+        // The command holding it reads the calendar again (a sync's after-work does): it isn't stuck, nor asks again.
+        withTimeout(5_000) { sync.refreshCalendar() }
+        gate.unlock()
+        first.join()
+        assertEquals(listOf(EventJudge.key(openDay)), asked)
+        assertEquals(setOf(EventJudge.key(openDay)), calendar.value.eventsAsked)
+    }
+
+    @Test
+    fun `an event whose question was never asked, its asking failed, isn't on record as asked, so it's asked the next time`() = runBlocking {
+        val openDay = CalendarEvent(2, "Open day", utc("2026-10-24"), utc("2026-10-25"), allDay = true)
+        ports.events = listOf(openDay)
+        beforeAsk = { throw IOException("The chat couldn't be written") }
+        assertFailsWith<IOException> { sync.refreshCalendar() }
+        assertEquals(emptySet(), calendar.value.eventsAsked)
+        beforeAsk = {}
+        sync.refreshCalendar()
+        assertEquals(listOf(EventJudge.key(openDay)), asked)
+        assertEquals(setOf(EventJudge.key(openDay)), calendar.value.eventsAsked)
     }
 
     @Test
