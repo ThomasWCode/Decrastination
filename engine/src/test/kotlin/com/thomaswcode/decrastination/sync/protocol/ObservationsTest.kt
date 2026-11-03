@@ -74,6 +74,19 @@ class ObservationsTest {
     }
 
     @Test
+    fun `a command made once another closes that fails takes neither that one's place nor those after it`() = runBlocking {
+        sendingCommands()
+        h.sources.addAfterEverySync {
+            // No conversation here: it throws as it's applied.
+            h.commands.send(AskAboutEvent("an event", "An event", "Monday", h.clock.now(), listOf("Busy", "Free")))
+            h.commands.send(NoteSource(Source.Teams, "after the read"))
+        }
+        withTimeout(5_000) { h.commands.act(ObserveSources(listOf(SourceObserved(Source.Teams, h.clock.now(), SourceRead(emptyList()))))) }
+        assertEquals(listOf("ObserveSources", "AskAboutEvent", "NoteSource"), h.stores.outbox.value.commands.map { it.action::class.simpleName })
+        assertEquals("after the read", h.stores.tasks.value.status(Source.Teams).note)
+    }
+
+    @Test
     fun `while mirroring, what's seen is applied here alone, as before`() = runBlocking {
         earned()
         h.commands.send(SpendFreeTime(today.toString(), 30_000))
