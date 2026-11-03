@@ -143,6 +143,13 @@ class TasksHarness(start: String = "2026-10-19T16:00", private val claude: Boole
         calendars += read
     }
 
+    /** The events put on record as asked here, in order. */
+    val eventsAsked: MutableList<String> = Collections.synchronizedList(mutableListOf())
+
+    override suspend fun eventAsked(key: String) {
+        eventsAsked += key
+    }
+
     /** A screen's changes, as `AppGraph`'s: only the owners here have any. */
     val commands = Commands(this, owners, stores.outbox, queuing = { stores.sync.value.mode == SyncState.COMMANDS }, unfinished = { stores.sync.update { it.copy(revision = 0) } })
 

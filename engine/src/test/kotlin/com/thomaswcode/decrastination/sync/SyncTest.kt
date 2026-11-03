@@ -86,13 +86,18 @@ class SyncTest {
     @Volatile
     private var beforeAsk: suspend (String) -> Unit = {}
 
-    private val sync = Sync(
+    /** Whether asking puts the event on record as asked at once, as while mirroring; not where its command waits for another's to close. */
+    @Volatile
+    private var recordsAsked = true
+
+    private val sync: Sync = Sync(
         settings, calendar, instructions, clock, scope, Syncer(tasks, settings, listOf(teams, gmail), clock), ports,
         forgetPlan = { forgot.incrementAndGet() },
         watchCalendar = { watched.incrementAndGet() },
         askAboutEvent = { key, _, _, _, _ ->
             beforeAsk(key)
             asked += key
+            if (recordsAsked) sync.eventAsked(key)
         },
         settleEvent = {},
         replan = {},
@@ -180,6 +185,22 @@ class SyncTest {
         first.join()
         assertEquals(listOf(EventJudge.key(openDay)), asked)
         assertEquals(setOf(EventJudge.key(openDay)), calendar.value.eventsAsked)
+    }
+
+    @Test
+    fun `an event whose question waits for another command to close isn't on record as asked till it's made, nor asked again meanwhile`() = runBlocking {
+        val openDay = CalendarEvent(2, "Open day", utc("2026-10-24"), utc("2026-10-25"), allDay = true)
+        ports.events = listOf(openDay)
+        recordsAsked = false
+        sync.refreshCalendar()
+        assertEquals(emptySet(), calendar.value.eventsAsked, "a stop now leaves it to be asked again")
+        sync.refreshCalendar()
+        assertEquals(listOf(EventJudge.key(openDay)), asked, "not asked twice meanwhile")
+        // Its command made, as the other's closed: on record.
+        sync.eventAsked(EventJudge.key(openDay))
+        assertEquals(setOf(EventJudge.key(openDay)), calendar.value.eventsAsked)
+        sync.refreshCalendar()
+        assertEquals(1, asked.size)
     }
 
     @Test
