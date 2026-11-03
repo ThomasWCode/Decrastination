@@ -289,6 +289,36 @@ class OutboxTest {
     }
 
     @Test
+    fun `what a pull brings of his sounds for the newest not heard here, once, and what's sounded here or yours doesn't`() = runBlocking {
+        val now = clock.now()
+        // His, said here: it sounded, and the server's copy of it, pulled, doesn't again.
+        outbox.send(his("here"))
+        assertTrue(ports.showing!!.alert)
+        outbox.heard(now, listOf(his("here")))
+        assertFalse(ports.showing!!.alert)
+        // His, said on the server: in the chat as the pull left it, it sounds, once.
+        val there = listOf(his("there-1", now - 60_000), his("there-2", now))
+        chat.update { s -> s.copy(messages = s.messages + there) }
+        outbox.heard(now, there)
+        assertTrue(ports.showing!!.alert)
+        assertEquals("there-2", ports.showing!!.lines.last().id)
+        // Heard once for both: neither sounds again.
+        outbox.heard(now, there)
+        assertFalse(ports.showing!!.alert)
+        outbox.heard(now, there.take(1))
+        assertFalse(ports.showing!!.alert)
+        // Yours, written on the website: nothing sounds.
+        val yours = ChatMessage("yours", Speaker.You, "From the website", now)
+        chat.update { s -> s.copy(messages = s.messages + yours) }
+        outbox.heard(now, listOf(yours))
+        assertFalse(ports.showing?.alert ?: false)
+        // Read elsewhere: his notification made again from the chat, without it.
+        chat.update { s -> s.copy(readAt = now) }
+        outbox.heard(now, emptyList())
+        assertNull(ports.showing)
+    }
+
+    @Test
     fun `clearing the chat empties its archive too, and keeps his state`() = runBlocking {
         chat.update { ChatState(listOf(his("a")), felix = FelixState(nextCheckAt = 42)) }
         archive.update { ChatArchive(listOf(his("z", 1))) }

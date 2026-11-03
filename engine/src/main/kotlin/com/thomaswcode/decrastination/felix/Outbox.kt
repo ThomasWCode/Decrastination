@@ -15,6 +15,7 @@ import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.notify.Channels
 import com.thomaswcode.decrastination.notify.Notices
 import com.thomaswcode.decrastination.notify.NotifyRules
+import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -42,8 +43,25 @@ class Outbox(
      * then the window moved, and his notification made again, sounding for it where [alert] and it's in it.
      */
     suspend fun send(message: ChatMessage, alert: Boolean = true, state: (FelixState) -> FelixState = { it }) {
+        // Sounded for here: the server's copy of it, pulled, doesn't sound again ([heard]). Before the write, which a pull's listener hears.
+        if (alert && message.text.isNotBlank()) sounded += message.id
         chat.update { s -> s.copy(messages = s.messages.filterNot { it.id == message.id } + message, felix = state(s.felix)) }
         delivered(message.id.takeIf { alert && message.text.isNotBlank() })
+    }
+
+    /** His messages this process has had his notification sound for. */
+    private val sounded: MutableSet<String> = ConcurrentHashMap.newKeySet()
+
+    /**
+     * [fresh], what a pull brought into the chat (once the phone sends commands, his words are the server's): his notification made
+     * again from the chat, sounding for the newest of his among them that hasn't sounded here, so what he says there is heard on the
+     * phone as what he says here is; with nothing new of his, made again as it is, as what's been read elsewhere goes from it.
+     */
+    fun heard(now: Long, fresh: List<ChatMessage>) {
+        val his = fresh.filter { it.from != Speaker.You && it.text.isNotBlank() && it.id !in sounded }
+        // One sound for them all, as his notification holds them all: for the newest.
+        sounded += his.map { it.id }
+        notify(now, his.maxByOrNull { it.at }?.id)
     }
 
     /** After a message is written to the chat: the window moved, and his notification made again, sounding for [alertFor] where it's in it. */
