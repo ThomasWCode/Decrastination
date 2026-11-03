@@ -363,6 +363,19 @@ class ConversationTest {
     }
 
     @Test
+    fun `how work went, asked where a sync's after-work runs, is the same question on the phone and the server, by its id`() = runBlocking {
+        val ask = AssessLater("teams:sheet", "Forces worksheet", now - 3_600_000L)
+        FelixHarness().use { server ->
+            for (side in listOf(felix, server)) {
+                side.stores.settings.update { it.copy(aiEnabled = false) }
+                side.conversation.askHowItWent(listOf(ask))
+            }
+            fun asked(side: FelixHarness) = side.stores.chat.value.messages.single { it.kind == MessageKind.Completions }.id
+            assertEquals(asked(server), asked(felix))
+        }
+    }
+
+    @Test
     fun `how work went, handed over again after a stop, is asked once`() = runBlocking {
         val ask = AssessLater("teams:sheet", "Forces worksheet", now - 3_600_000L)
         // Kept with Claude on; then, Claude off, the completions handed over again (twice) and the kept ones asked.

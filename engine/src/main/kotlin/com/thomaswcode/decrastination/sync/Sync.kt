@@ -22,6 +22,7 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
@@ -115,6 +116,15 @@ class Sync(
     val calendarState = MutableStateFlow(calendarTime)
 
     /**
+     * Whether [calendarTime] says what the calendar holds: once it's been read in this process, or can't be read at all (no
+     * permission, so nothing in it's to be planned by); not the nothing it starts from, nor a first read that failed. The server
+     * plans by it once the phone sends commands, so only this is sent as what's seen, and what it last had stands meanwhile.
+     */
+    val calendarKnown: StateFlow<Boolean> get() = known
+
+    private val known = MutableStateFlow(false)
+
+    /**
      * Reads every source now, as a job (it keeps its network after the screen that asked has
      * gone). With [teams], it first asks the Teams widget to sync Teams itself, which takes over
      * the screen for a minute, so only on a tap (Q21); what that finds comes back through the
@@ -197,6 +207,7 @@ class Sync(
     private suspend fun reading(): Pair<Collection<String>, List<CalendarEvent>> {
         if (!ports.calendarAllowed()) {
             calendarTime = EventJudge.Time(emptyList(), emptyMap(), emptyList())
+            known.value = true
             return NOTHING_SAID
         }
         watchCalendar()
@@ -219,6 +230,7 @@ class Sync(
         val answers = calendar.value.eventAnswers + yours
         val time = EventJudge.time(events, answers, clock.zone(), askUntil = now + CalendarTime.ASK_AHEAD_MS).copy(read = (now - CalendarTime.DAY_MS) to CalendarTime.readUntil(now, clock.zone()))
         calendarTime = time
+        known.value = true
         // In the chat at once, whatever the hour: his notification leaves them out in quiet hours, till
         // the morning (NotifyRules.waitsForMorning). Those being asked already aren't asked again.
         val toAsk = CalendarTime.questions(time.toAsk, calendar.value.eventsAsked + asking, now)

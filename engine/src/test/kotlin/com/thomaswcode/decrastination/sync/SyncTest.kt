@@ -38,6 +38,7 @@ import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.CompletableDeferred
@@ -163,6 +164,21 @@ class SyncTest {
         ports.allowed = false
         sync.refreshCalendar()
         assertEquals(emptyList(), sync.calendarTime.busy)
+    }
+
+    @Test
+    fun `the calendar's known once read, or once it can't be read at all, and not from the nothing a start has or a first read that failed`() = runBlocking {
+        assertFalse(sync.calendarKnown.value, "a start's nothing isn't what the calendar holds")
+        ports.failing = true
+        sync.refreshCalendar()
+        assertFalse(sync.calendarKnown.value, "nor a first read that failed")
+        ports.failing = false
+        sync.refreshCalendar()
+        assertTrue(sync.calendarKnown.value)
+        // No permission: nothing in it's to be planned by, said as known.
+        val other = Sync(settings, calendar, instructions, clock, scope, Syncer(tasks, settings, emptyList(), clock), Ports().apply { allowed = false }, {}, {}, { _, _, _, _, _ -> }, {}, {})
+        other.refreshCalendar()
+        assertTrue(other.calendarKnown.value)
     }
 
     @Test
