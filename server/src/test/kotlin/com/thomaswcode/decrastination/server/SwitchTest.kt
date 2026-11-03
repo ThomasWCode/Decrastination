@@ -114,8 +114,9 @@ class SwitchTest {
 
     @Test
     fun `what the phone ran today of the jobs at a set time isn't run again at the switch, and the rest run at once`() = runBlocking {
-        // Its mornings at midnight: today's has gone by, so the phone's said it.
+        // Its mornings at midnight, as its seeds have said: today's has gone by, so the phone's said it.
         phone.stores.settings.update { it.copy(briefingWeekdayMin = 0, briefingWeekendMin = 0) }
+        graph.seed(everything(), "phone")
         graph.switchOver(SwitchSeed("switch-1", everything()), "phone")
         assertNotNull(db.meta("job:morning"), "today's morning is on record as run")
         assertEquals(null, db.meta("job:sources"), "what runs every quarter of an hour runs at its first turn")

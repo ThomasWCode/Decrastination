@@ -343,6 +343,9 @@ class ServerGraph(
                 backend.keep(store.name, store.version, store.text)
                 written += store.name
             }
+            // What the phone ran today of the jobs at a set time on record as run with the mode, so a stop straight after can't have
+            // it run again; by the settings as the phone last sent them, as what this seed holds is read only once it's kept.
+            jobs.ranByThePhone(PHONES_TODAY, clock.now())
             db.setMeta(MODE, COMMANDS)
             SeedAnswer(db.currentRevision(), emptyList(), version, backend.hashes()).also { answer ->
                 db.setMeta(SWITCHED, switchJson.encodeToString(SwitchRecord.serializer(), SwitchRecord(asked.id, answer)))
@@ -359,11 +362,10 @@ class ServerGraph(
     private fun switchedUnder(id: String): SeedAnswer? = db.meta(SWITCHED)?.let { switchJson.decodeFromString(SwitchRecord.serializer(), it) }?.takeIf { it.id == id }?.answer
 
     /**
-     * What a start in commands mode does, done now (D-141): what the phone ran today of the jobs at a set time not run again here,
-     * the owners' writes kept, the mode said, and what watches the stores begun. The jobs' loop runs what's due from its next turn.
+     * What a start in commands mode does, done now (D-141): the owners' writes kept, the mode said, and what watches the stores
+     * begun. The jobs' loop runs what's due from its next turn.
      */
     private fun goneOver() {
-        jobs.ranByThePhone(PHONES_TODAY, clock.now())
         backend.writable = true
         mode = COMMANDS
         owners.start()
