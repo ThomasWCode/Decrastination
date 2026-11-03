@@ -242,7 +242,7 @@ class ServerBackupTest {
         val inside = CompletableDeferred<Unit>()
         val letGo = CompletableDeferred<Unit>()
         val command = async(Dispatchers.IO) {
-            graph.applier.alone("test", Unit) {
+            graph.applier.alone("test", Client.WEBSITE, Unit) {
                 graph.stores.memory.update { it.copy(rules = listOf(Rule("A made-up rule", 1L))) }
                 inside.complete(Unit)
                 letGo.await()

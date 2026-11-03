@@ -63,6 +63,9 @@ class Database(path: String) : AutoCloseable {
             // Added, as a table from before hasn't got it: what a browser's told goes with the session that asked ([Pushes]).
             val columns = s.executeQuery("PRAGMA table_info(push_subscriptions)").use { r -> buildList { while (r.next()) add(r.getString("name")) } }
             if ("session" !in columns) s.execute("ALTER TABLE push_subscriptions ADD COLUMN session TEXT REFERENCES sessions(id) ON DELETE CASCADE")
+            // Added likewise: where Firebase reaches a phone ([PhonePushes]), with the device, so a phone revoked is told nothing.
+            val device = s.executeQuery("PRAGMA table_info(devices)").use { r -> buildList { while (r.next()) add(r.getString("name")) } }
+            if ("fid" !in device) s.execute("ALTER TABLE devices ADD COLUMN fid TEXT")
         }
         connection.autoCommit = true
         if (reader !== connection) {

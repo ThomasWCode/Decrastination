@@ -234,7 +234,7 @@ class CommandApplierTest {
     fun `nor does what's too wide for a command`() = onOneThread {
         val inside = CompletableDeferred<Unit>()
         val command = launch {
-            graph.applier.alone("test", Unit) {
+            graph.applier.alone("test", Client.WEBSITE, Unit) {
                 inside.complete(Unit)
                 delay(200)
                 graph.stores.memory.update { it.copy(rules = listOf(Rule("A made-up rule", 1L))) }
@@ -255,7 +255,7 @@ class CommandApplierTest {
         val inside = CompletableDeferred<Unit>()
         val letGo = CompletableDeferred<Unit>()
         val command = launch(Dispatchers.IO) {
-            graph.applier.alone("test", Unit) {
+            graph.applier.alone("test", Client.WEBSITE, Unit) {
                 inside.complete(Unit)
                 letGo.await()
             }
@@ -270,7 +270,7 @@ class CommandApplierTest {
     @Test
     fun `what's too wide for a command is all of it or none, as one is`() = runBlocking {
         val before = db.currentRevision()
-        val answer = graph.applier.alone("test", "It didn't go") {
+        val answer = graph.applier.alone("test", Client.WEBSITE, "It didn't go") {
             graph.stores.memory.update { it.copy(rules = listOf(Rule("A made-up rule", 1L))) }
             graph.stores.runtime.update { it.copy(lastBackupAt = 5L) }
             graph.calendarRead.update { it.copy(answers = mapOf("Made up" to "busy")) }
@@ -281,7 +281,7 @@ class CommandApplierTest {
         assertNull(graph.stores.runtime.value.lastBackupAt, "a store that isn't mirrored as much as one that is")
         assertTrue(graph.calendarRead.value.answers.isEmpty())
         assertEquals(before, db.currentRevision(), "nor on record")
-        assertEquals("It went", graph.applier.alone("test", "It didn't go") { "It went" })
+        assertEquals("It went", graph.applier.alone("test", Client.WEBSITE, "It didn't go") { "It went" })
     }
 
     @Test
@@ -426,7 +426,7 @@ class CommandApplierTest {
     private fun passing(lock: () -> Connection?) = CommandApplier(db, graph.backend, Commands(graph.owners, graph.clock), graph.owners, graph.clock, reload = {
         lock()?.letGo()
         graph.stores.tasks.reload()
-    }) {}
+    }) { _, _ -> }
 
     private fun rowsOf(state: String) = db.read { c ->
         c.prepareStatement("SELECT COUNT(*) FROM commands WHERE outcome = ?").use { q ->
@@ -458,7 +458,7 @@ class CommandApplierTest {
             lock?.letGo()
             lock = null
             graph.stores.tasks.reload()
-        }) {
+        }) { _, _ ->
             if (!taken) lock = locked()
             taken = true
         }
@@ -480,7 +480,7 @@ class CommandApplierTest {
         val owners = object : Owners by graph.owners {
             override val ownTasks get() = if (broken) error("A made-up bug") else graph.owners.ownTasks
         }
-        val applier = CommandApplier(db, graph.backend, Commands(owners, graph.clock), owners, graph.clock, reload = { graph.stores.tasks.reload() }) {}
+        val applier = CommandApplier(db, graph.backend, Commands(owners, graph.clock), owners, graph.clock, reload = { graph.stores.tasks.reload() }) { _, _ -> }
         val batch = CommandBatch(listOf(Command("one", at, own("Essay")), Command("two", at, own("Maths"))))
         assertFailsWith<IllegalStateException> { applier.apply(batch, "phone") }
         assertEquals(0, rows(), "nothing that says it's been dealt with")
@@ -541,7 +541,7 @@ class CommandApplierTest {
                 CoroutineScope(Dispatchers.IO).async { graph.stores.tasks.update { state -> state.copy(tasks = state.tasks.map { it.copy(detail = "A job's") }) } }.await()
             }
         }
-        val applier = CommandApplier(db, graph.backend, Commands(graph.owners, graph.clock), graph.owners, graph.clock, reload) { heard += it }
+        val applier = CommandApplier(db, graph.backend, Commands(graph.owners, graph.clock), graph.owners, graph.clock, reload) { revision, _ -> heard += revision }
         val before = db.currentRevision()
         assertFailsWith<SQLException> { applier.apply(CommandBatch(listOf(Command("two", at, FinishOwnTask("own:s-Essay")))), "phone") }
         assertTrue(db.currentRevision() > before, "the job's write took one")

@@ -156,6 +156,8 @@ class ServerGraph(
     pushSender: Pushes.Sender? = null,
     /** The public one of those keys, as a browser asks for it. */
     private val pushKey: String? = null,
+    /** How a phone's told at once (W-18), with the box's service account, if it's set. */
+    phoneSender: PhonePushes.Sender? = null,
 ) {
     /** The clock the phone's zone is told to. */
     val serverClock = ServerClock(db)
@@ -186,6 +188,9 @@ class ServerGraph(
     /** The browsers told with their tabs closed. */
     val pushes = Pushes(db, scope, pushSender)
 
+    /** The phones told at once of a change they didn't make, once the server applies commands. */
+    val phones = PhonePushes(db, scope, phoneSender, telling = { mode == COMMANDS })
+
     private val gateway = ModelGateway(stores.settings, { claudeKey }, stores.model, stores.tasks, clock, NoAlerts, scope, keyInUse = { true }) {}.apply { endpoint = claudeEndpoint }
 
     val planning: Planning = Planning(
@@ -205,7 +210,10 @@ class ServerGraph(
     )
 
     init {
-        backend.written = { _revisions.tryEmit(it) }
+        backend.written = { revision ->
+            _revisions.tryEmit(revision)
+            phones.changed(revision, PhonePushes.SERVER)
+        }
     }
 
     /** The owners: what they do is what a command asks, a job, and what [start] has watch the stores. */
@@ -229,7 +237,7 @@ class ServerGraph(
 
     private val _revisions = MutableSharedFlow<Long>(extraBufferCapacity = 16)
 
-    /** Each revision as it's committed, for the website's event stream. */
+    /** Each revision as it's committed, for the website's event stream: a phone's told through [phones]. */
     val revisions: SharedFlow<Long> = _revisions.asSharedFlow()
 
     /** Held while a batch is written and the stores read again: one at a time. */
@@ -297,7 +305,10 @@ class ServerGraph(
     private val pieceSays = PieceSays(owners.focus, stores.log, stores.settings, stores.learning, planning, clock)
 
     /** Commands applied as they arrive, one at a time. */
-    val applier = CommandApplier(db, backend, commands, owners, clock, reload = { reloadAll() }, committed = { _revisions.tryEmit(it) })
+    val applier = CommandApplier(db, backend, commands, owners, clock, reload = { reloadAll() }) { revision, by ->
+        _revisions.tryEmit(revision)
+        phones.changed(revision, by)
+    }
 
     /** Each minute, what's due, once the server applies commands, and the heartbeat from the start (docs/spec/server.md §Jobs). */
     val jobs = ServerJobs(
@@ -638,10 +649,10 @@ class ServerGraph(
     fun backupName(): String = BackupNames.nightlyName(Instant.ofEpochMilli(clock.now()).atZone(clock.zone()).toLocalDate().toString())
 
     /** The backup [text] taken in as the phone's Import takes it, but whole: all of it or none, one revision, no command between. What came of it, in words. */
-    suspend fun importBackup(text: String): String = applier.alone("import", NOT_RESTORED) { owners.backups.importBackup(text) }
+    suspend fun importBackup(text: String): String = applier.alone("import", Client.WEBSITE, NOT_RESTORED) { owners.backups.importBackup(text) }
 
     /** The reset's copy [name] taken in the same way. */
-    suspend fun restoreCopy(name: String): String = applier.alone("import", NOT_RESTORED) { owners.backups.restoreResetCopy(name) }
+    suspend fun restoreCopy(name: String): String = applier.alone("import", Client.WEBSITE, NOT_RESTORED) { owners.backups.restoreResetCopy(name) }
 
     /** Setup for the website. */
     fun setup(): SetupView {

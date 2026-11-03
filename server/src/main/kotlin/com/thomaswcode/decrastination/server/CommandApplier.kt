@@ -28,8 +28,8 @@ class CommandApplier(
     private val clock: WallClock,
     /** Every store read again from what's committed: a failed command's changes are gone from the database, not from memory. */
     private val reload: suspend () -> Unit,
-    /** A new revision, committed. */
-    private val committed: (Long) -> Unit,
+    /** A new revision, committed, and who made it: a phone's id, or the website's. */
+    private val committed: (revision: Long, by: String) -> Unit,
 ) {
     private val json = Json { encodeDefaults = true }
 
@@ -43,10 +43,10 @@ class CommandApplier(
 
     /**
      * [block], a change too wide for a command (a backup taken in, whose file doesn't belong on record), held as a command is: all
-     * of it or none, one at a time, one revision, on threads of its own, and finished whether or not the client stays. [failed]
-     * is what's answered if it fails, with nothing of it kept.
+     * of it or none, one at a time, one revision, on threads of its own, and finished whether or not the client stays, [by] the
+     * one who asked. [failed] is what's answered if it fails, with nothing of it kept.
      */
-    suspend fun <T> alone(cause: String, failed: T, block: suspend () -> T): T = withContext(NonCancellable + Dispatchers.IO) {
+    suspend fun <T> alone(cause: String, by: String, failed: T, block: suspend () -> T): T = withContext(NonCancellable + Dispatchers.IO) {
         var before = 0L
         val answer = db.commandOr(reload, { error ->
             Log.w(Log.TAG, "$cause failed: ${error::class.simpleName} at ${error.stackTrace.firstOrNull { it.className.startsWith("com.thomaswcode") }}")
@@ -57,7 +57,7 @@ class CommandApplier(
             block()
         }
         val now = db.currentRevision()
-        if (now > before) committed(now)
+        if (now > before) committed(now, by)
         answer
     }
 
@@ -91,7 +91,7 @@ class CommandApplier(
         }
         // What's committed, not what it's on record at: putting a failed one right can take a revision too.
         val now = db.currentRevision()
-        if (now > before) committed(now)
+        if (now > before) committed(now, device)
         return outcome.getOrThrow()
     }
 
