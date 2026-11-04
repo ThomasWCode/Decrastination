@@ -29,6 +29,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.block.Credit
 import com.thomaswcode.decrastination.block.PhotoChecks
+import com.thomaswcode.decrastination.block.Photos
 import com.thomaswcode.decrastination.block.TimerAlarms
 import com.thomaswcode.decrastination.core.Chunk
 import com.thomaswcode.decrastination.core.EarnsBy
@@ -76,7 +77,7 @@ private val PIECE = Saver<PhotoPiece?, ArrayList<String?>>(
 @Composable
 fun rememberPhotoCheck(graph: AppGraph, activity: Activity, plan: Plan, say: (taskId: String, text: String) -> Unit): PhotoCheck {
     val settings by graph.settings.state.collectAsStateWithLifecycle()
-    val checkable = remember(settings.aiEnabled, settings.aiKeyActive) { graph.gateway.claudeKey() != null }
+    val checkable = remember(settings.aiEnabled, settings.aiKeyActive) { graph.claudeAskable() }
     val dir = remember { File(activity.cacheDir, "photos").also { it.mkdirs() } }
     fun page(n: Int) = File(dir, "check-$n.jpg")
     fun uriOf(file: File) = FileProvider.getUriForFile(activity, "${activity.packageName}.photos", file)
@@ -99,7 +100,7 @@ fun rememberPhotoCheck(graph: AppGraph, activity: Activity, plan: Plan, say: (ta
         val piece = plan.chunksOf(wanted.taskId).firstOrNull { it.stepIndex == wanted.stepIndex && it.step == wanted.step && it.sitting?.after == wanted.after }
         if (piece == null || !checkable) {
             pages.forEach { it.delete() }
-            if (piece == null) say(wanted.taskId, "That piece has changed since the photo was taken (done, or planned again), so it wasn't checked.")
+            if (piece == null) say(wanted.taskId, Photos.PIECE_CHANGED)
             return
         }
         say(piece.taskId, if (pages.size == 1) "Checking the photo…" else "Checking the ${pages.size} pages…")

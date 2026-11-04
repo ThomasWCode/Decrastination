@@ -3,6 +3,7 @@ package com.thomaswcode.decrastination.server
 import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
 import com.thomaswcode.decrastination.core.OwnTask
+import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.data.SecretCipher
 import com.thomaswcode.decrastination.sync.DeviceClaim
 import com.thomaswcode.decrastination.sync.PushTried
@@ -63,6 +64,14 @@ class PhonePushesTest {
             taken += fid to revision
             return fid !in gone
         }
+
+        /** Each ask to read, by the id it went to. */
+        val reads: MutableList<Pair<String, List<String>>> = Collections.synchronizedList(mutableListOf())
+
+        override fun read(fid: String, sources: List<String>): Boolean {
+            reads += fid to sources
+            return fid !in gone
+        }
     }
 
     private val dir: File = Files.createTempDirectory("phones").toFile()
@@ -94,6 +103,27 @@ class PhonePushesTest {
     private suspend fun settled(): List<Pair<String, Long>> {
         phones.sending?.join()
         return firebase.taken.toList()
+    }
+
+    @Test
+    fun `asked to read a phone's sources, each paired phone is asked, once the server applies commands, and one gone let go`() = runBlocking<Unit> {
+        val one = phone("This phone")
+        val two = phone("Another")
+        phones.keep(one, "cPhoneFidOne000000000a")
+        phones.keep(two, "cPhoneFidTwo000000000b")
+        telling = false
+        phones.askToRead(setOf(Source.Teams))
+        phones.asking?.join()
+        assertEquals(emptyList(), firebase.reads.toList(), "not while it mirrors")
+        telling = true
+        phones.askToRead(setOf(Source.Teams, Source.Anki))
+        phones.asking?.join()
+        assertEquals(setOf("cPhoneFidOne000000000a" to listOf("Anki", "Teams"), "cPhoneFidTwo000000000b" to listOf("Anki", "Teams")), firebase.reads.toSet())
+        firebase.gone += "cPhoneFidTwo000000000b"
+        phones.askToRead(setOf(Source.Teams))
+        phones.asking?.join()
+        assertEquals(null, fidOf(two))
+        assertEquals("cPhoneFidOne000000000a", fidOf(one))
     }
 
     @Test
@@ -361,6 +391,17 @@ class PhonePushesTest {
             assertEquals(
                 Json.parseToJsonElement("""{"message":{"fid":"cPhoneFid0000000000000","data":{"revision":"12"},"android":{"priority":"HIGH","collapse_key":"state","ttl":"3600s"}}}"""),
                 body,
+            )
+        }
+    }
+
+    @Test
+    fun `an ask to read the phone's sources names them alone, at high priority, apart from the revision's, for a quarter-hour`() {
+        Google(keys).use { google ->
+            assertTrue(sender(google).read("cPhoneFid0000000000000", listOf("Anki", "Teams")))
+            assertEquals(
+                Json.parseToJsonElement("""{"message":{"fid":"cPhoneFid0000000000000","data":{"read":"Anki,Teams"},"android":{"priority":"HIGH","collapse_key":"read","ttl":"900s"}}}"""),
+                google.sends.single().second,
             )
         }
     }

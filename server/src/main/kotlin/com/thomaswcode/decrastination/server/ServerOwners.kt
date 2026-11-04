@@ -13,6 +13,7 @@ import com.thomaswcode.decrastination.core.SchoolDays
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
+import com.thomaswcode.decrastination.core.TaskPhoto
 import com.thomaswcode.decrastination.core.WallClock
 import com.thomaswcode.decrastination.data.BackupService
 import com.thomaswcode.decrastination.data.CalendarRead
@@ -118,7 +119,7 @@ class ServerOwners(
     private val gateway: ModelGateway,
     private val planning: Planning,
     private val calendarTime: () -> EventJudge.Time,
-    /** Where a task's photo would be kept: read here, a photo of homework is kept nowhere. */
+    /** Where a task's photo is kept, as the phone sent it, by its hash (D-148): read here, a photo of homework is kept nowhere. */
     photosFolder: File,
     /** Where the nightly file goes, if it's set up. */
     nightly: BackupService.Folder?,
@@ -140,6 +141,8 @@ class ServerOwners(
     private val seenCalendar: suspend (CalendarRead) -> Unit = {},
     /** [block] with no command open, so what it writes is committed as it returns, a write made while one's open waiting for it. */
     private val committed: suspend (suspend () -> Boolean) -> Boolean = { it() },
+    /** What only a phone reads (Teams, AnkiDroid) read now by each paired phone, through Firebase ([PhonePushes.askToRead]). */
+    private val askPhoneToRead: (Set<Source>) -> Unit = {},
 ) : Owners {
     override val tasks: JsonStore<TaskState> = stores.tasks
 
@@ -172,6 +175,27 @@ class ServerOwners(
                 Log.w(Log.TAG, "$what failed: ${failed::class.simpleName}")
             }
         }
+    }
+
+    /**
+     * [sources] read now, as Felix's `sync` act asks (G2): what this server reads, read here on its own time; what only a phone reads,
+     * asked of each paired phone (D-142).
+     */
+    internal fun readNow(sources: Set<Source>) {
+        val here = sources.filterTo(HashSet()) { it in Source.SERVERS }
+        if (here.isNotEmpty()) later("Reading ${here.joinToString { it.label }}") { syncer.sync(here) }
+        askPhoneToRead(sources - here)
+    }
+
+    /**
+     * [taskId] read again by Claude as it is now (AC-06), a phone's *Read again* once it sends commands, as Claude's the server's then
+     * (D-142): on its own time, as a reading can take minutes, its reading reaching the phone as it's pulled. Whether Claude can be
+     * asked now: nothing's sent where it can't.
+     */
+    fun readAgainSoon(taskId: String): Boolean {
+        if (gateway.claudeKey() == null || !gateway.available()) return false
+        later("Reading a task again") { readings.readAgain(taskId) }
+        return true
     }
 
     private val chatOutbox = Outbox(stores.chat, stores.chatArchive, stores.settings, FelixOnly, ports, chatOnScreen = { false }, chatSeen = { true }, clock)
@@ -216,6 +240,8 @@ class ServerOwners(
         calendarTime = calendarTime,
         answered = { record, words -> looks.answered(record, words) },
         draftReminders = { now -> looks.draftReminders(now) },
+        requestSync = { sources -> readNow(sources) },
+        teamsOnPhone = { true },
         settled = afterCommands,
     )
 
@@ -266,16 +292,20 @@ class ServerOwners(
     )
 
     /** The tasks' readings, by Claude while it can be asked, by the rules otherwise. */
+    /** Where a task's photo is kept here: the copy the phone sent ahead of the command that keeps it, by its hash (D-148). */
+    private val photoFile: (TaskPhoto) -> File = { File(photosFolder, "${it.hash}.jpg") }
+
     val readings: Readings = Readings(
         stores.tasks, stores.model, clock, scope, gateway,
         profile = { conversation.profile() },
         queueQuestion = { taskId, question, now -> looks.queueQuestion(taskId, question, now) },
         readDecks = {},
         settled = afterCommands,
+        photoFile = photoFile,
     )
 
     /** A photo of homework read into tasks of your own: the browser's shrunk it already. A task's photo, the phone's, kept with it by name. */
-    override val photos: Photos = Photos(stores.tasks, stores.settings, stores.chat, clock, scope, gateway, focus, photosFolder, shrink = { null }, profile = { conversation.profile() }, read = {})
+    override val photos: Photos = Photos(stores.tasks, stores.settings, stores.chat, clock, scope, gateway, focus, photosFolder, shrink = { null }, profile = { conversation.profile() }, fileOf = photoFile, read = {})
 
     /** Time in AnkiDroid as work, as the phone saw it and sent it (`AnkiCame`, `AnkiWent`): its decks read there, and nothing to read here. */
     override val ankiWatch: AnkiWatch = AnkiWatch(

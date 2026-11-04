@@ -105,8 +105,12 @@ class FelixHarness(
         draftReminders = { now -> looks.draftReminders(now) },
         requestSync = { synced += it },
         requestTeamsSync = { teamsSyncs++; teamsRefusal },
+        teamsOnPhone = { teamsOnPhone },
         byServer = { byServer },
     )
+
+    /** Teams read on the phone, as the server's Conversation has it. */
+    var teamsOnPhone = false
 
     /** How often the Teams widget was asked to sync (D-11), and why it didn't start, as the test says. */
     var teamsSyncs = 0

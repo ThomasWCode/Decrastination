@@ -43,6 +43,7 @@ import com.thomaswcode.decrastination.sources.gmail.GmailWriter
 import com.thomaswcode.decrastination.sync.GmailFinishes
 import com.thomaswcode.decrastination.sync.protocol.FinishGmail
 import com.thomaswcode.decrastination.core.TaskPhoto
+import com.thomaswcode.decrastination.block.Photos
 import com.thomaswcode.decrastination.learn.AnkiReading
 import com.thomaswcode.decrastination.learn.DeckCount
 import com.thomaswcode.decrastination.sources.ReadContext
@@ -139,6 +140,20 @@ class SyncHarnessTest {
         /** Pulls answered with a failure, every other route as it would. */
         var pullFails = false
 
+        /** The tasks' photos' and the commands' requests, in the order they came. */
+        val routes = mutableListOf<String>()
+
+        /** The tasks' photos' route answering with a failure. */
+        var photosFail = false
+
+        override fun postBytes(url: String, headers: Map<String, String>, body: ByteArray): HttpResponse {
+            if (cut) throw IOException("cut")
+            check(url.contains("/api/task-photos/")) { url }
+            routes += "task-photos"
+            if (photosFail) return HttpResponse(500, "{}")
+            return if (graph.keepTaskPhoto(url.substringAfterLast('/'), body)) HttpResponse(204, "") else HttpResponse(400, "{}")
+        }
+
         /** What the server's routes answer a request that throws. */
         private fun failing(request: () -> HttpResponse): HttpResponse = try {
             request()
@@ -179,6 +194,7 @@ class SyncHarnessTest {
                 return HttpResponse(200, json.encodeToString(Asked.serializer(), Asked(true, runBlocking { graph.importBackup(body, device) })))
             }
             check(url.endsWith("/api/commands")) { url }
+            routes += "commands"
             headers[Protocol.ZONE_HEADER]?.let(graph.serverClock::setZone)
             if (graph.mode != ServerGraph.COMMANDS) return HttpResponse(409, "{}")
             val batch = json.decodeFromString(CommandBatch.serializer(), body)
@@ -575,6 +591,35 @@ class SyncHarnessTest {
         assertEquals(listOf(listOf("a problem")), graph.stores.log.value.protection.map { it.problems })
         assertEquals("The Teams widget's sync service is off", graph.stores.tasks.value.status(Source.Teams).note)
         assertEquals("abcd", graph.stores.tasks.value.tasks.single { it.title == "Essay" }.photo?.hash)
+    }
+
+    @Test
+    fun `a task's photo reaches the box ahead of the command that keeps it, by its hash, and one that can't go holds the commands back`() = runBlocking {
+        val phone = phone()
+        phone.h.commands.act(own("Essay"))
+        assertTrue(phone.replica.upload())
+        val jpeg = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 7)
+        val file = File(dir, "a-phone-photo.jpg").apply { writeBytes(jpeg) }
+        val photo = TaskPhoto(file.path, Photos.hashOf(jpeg), phone.h.clock.now())
+        phone.h.commands.send(AttachPhoto("own:s-Essay", photo))
+        phone.wire.routes.clear()
+        assertTrue(phone.replica.upload())
+        assertEquals(listOf("task-photos", "commands"), phone.wire.routes)
+        assertTrue(File(dir, "photos/${photo.hash}.jpg").readBytes().contentEquals(jpeg), "kept on the box by its hash")
+        assertEquals(photo, graph.stores.tasks.value.tasks.single { it.id == "own:s-Essay" }.photo)
+        // One that can't go holds the commands back, said; the next try sends both.
+        phone.wire.photosFail = true
+        phone.h.commands.send(AttachPhoto("own:s-Essay", photo))
+        assertFalse(phone.replica.upload())
+        assertEquals(1, phone.waiting)
+        assertEquals("A task's photo couldn't be sent", phone.h.stores.sync.value.lastError)
+        // Another photo in its file here since: that one's no more, so it isn't sent, and the command goes.
+        phone.wire.photosFail = false
+        file.writeBytes(byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 8))
+        phone.wire.routes.clear()
+        assertTrue(phone.replica.upload())
+        assertEquals(listOf("commands"), phone.wire.routes)
+        assertEquals(0, phone.waiting)
     }
 
     @Test

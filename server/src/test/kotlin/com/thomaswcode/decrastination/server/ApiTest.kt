@@ -1,9 +1,13 @@
 package com.thomaswcode.decrastination.server
 
 import com.thomaswcode.decrastination.Fixtures
+import com.thomaswcode.decrastination.block.Photos
 import com.thomaswcode.decrastination.core.ChatMessage
+import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.OwnTask
+import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Speaker
+import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.data.Backups
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.Secret
@@ -20,7 +24,10 @@ import com.thomaswcode.decrastination.sync.StoreText
 import com.thomaswcode.decrastination.sync.protocol.Command
 import com.thomaswcode.decrastination.sync.protocol.CommandBatch
 import com.thomaswcode.decrastination.sync.protocol.SaveOwnTask
+import com.thomaswcode.decrastination.views.Asked
 import com.thomaswcode.decrastination.views.DayView
+import com.thomaswcode.decrastination.views.PhotoCheckAsk
+import com.thomaswcode.decrastination.views.PhotoChecked
 import com.thomaswcode.decrastination.views.SettingsView
 import com.thomaswcode.decrastination.views.TaskView
 import com.thomaswcode.decrastination.views.WorkView
@@ -47,8 +54,10 @@ import io.ktor.server.routing.routing
 import io.ktor.server.testing.ApplicationTestBuilder
 import io.ktor.server.testing.testApplication
 import io.ktor.util.cio.ChannelWriteException
+import java.io.File
 import java.io.IOException
 import java.nio.file.Files
+import java.util.Base64
 import java.util.Collections
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -85,7 +94,17 @@ class ApiTest {
 
     /** Firebase as these tests have it: what it took, by id. */
     private val firebase: MutableList<Pair<String, Long>> = Collections.synchronizedList(mutableListOf())
-    private val graph = ServerGraph(db, Files.createTempDirectory("api").toFile(), Plain, "test", phoneSender = { fid, revision -> firebase.add(fid to revision) })
+    private val dataDir = Files.createTempDirectory("api").toFile()
+    /** Each ask to read a phone's sources, by where it went. */
+    private val reads: MutableList<Pair<String, List<String>>> = Collections.synchronizedList(mutableListOf())
+    private val graph = ServerGraph(
+        db, dataDir, Plain, "test",
+        phoneSender = object : PhonePushes.Sender {
+            override fun send(fid: String, revision: Long) = firebase.add(fid to revision)
+
+            override fun read(fid: String, sources: List<String>) = reads.add(fid to sources)
+        },
+    )
     private val github = FakeGitHub(ALLOWED)
     private val web = Web(graph, github, Sessions(db, ALLOWED), secure = false)
 
@@ -481,6 +500,93 @@ class ApiTest {
         assertEquals(HttpStatusCode.OK, upload(jpeg, website).status, "it's read, with no key saying so")
         // A phone's too, once it sends commands, as Claude's the server's to ask then (D-142).
         assertEquals(HttpStatusCode.OK, upload(jpeg, byPhone).status)
+    }
+
+    @Test
+    fun `a photo check is a phone's sending commands, its pages JPEGs, its piece the one the server plans by its key`() = server {
+        val cookie = signIn()
+        val phone = paired()
+        suspend fun check(ask: PhotoCheckAsk, signed: HttpRequestBuilder.() -> Unit) = plain().post("/api/photos/check") {
+            signed()
+            contentType(ContentType.Application.Json)
+            setBody(json.encodeToString(PhotoCheckAsk.serializer(), ask))
+        }
+        val byPhone: HttpRequestBuilder.() -> Unit = {
+            bearerAuth(phone.token)
+            header(Protocol.HEADER, Protocol.VERSION.toString())
+        }
+        val website: HttpRequestBuilder.() -> Unit = {
+            header(HttpHeaders.Cookie, cookie)
+            header("X-Requested-With", "test")
+        }
+        val page = Base64.getEncoder().encodeToString(byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 0))
+        fun ask(key: String, pages: List<String> = listOf(page)) = PhotoCheckAsk("own:s-Essay", key, 1L, pages)
+        assertEquals(HttpStatusCode.Conflict, check(ask("k"), byPhone).status, "not while mirroring")
+        graph.commandsForATest()
+        assertEquals(HttpStatusCode.Forbidden, check(ask("k"), website).status)
+        assertEquals(HttpStatusCode.UnsupportedMediaType, check(ask("k", listOf(Base64.getEncoder().encodeToString("not a photo".toByteArray()))), byPhone).status)
+        assertEquals(HttpStatusCode.UnsupportedMediaType, check(ask("k", List(4) { page }), byPhone).status, "past its most pages")
+        // A piece this server doesn't plan, its task planned or not: said as the phone says it.
+        assertEquals(Photos.PIECE_CHANGED, json.decodeFromString(PhotoChecked.serializer(), check(ask("own:s-Essay#0"), byPhone).bodyAsText()).said)
+        graph.stores.tasks.update { it.copy(tasks = listOf(TaskItem(id = "own:s-Essay", source = Source.Own, sourceId = "s-Essay", title = "A made-up essay", dueAt = null, kind = Kind.Homework, firstSeenAt = 1, lastSeenAt = 1))) }
+        assertEquals(Photos.PIECE_CHANGED, json.decodeFromString(PhotoChecked.serializer(), check(ask("own:s-Essay#99"), byPhone).bodyAsText()).said)
+        // One it does, checked here: with no key on this box, it says so.
+        val key = graph.planning.plan().chunksOf("own:s-Essay").first().key
+        assertEquals("Claude is off: the timer or the source will have to do.", json.decodeFromString(PhotoChecked.serializer(), check(ask(key), byPhone).bodyAsText()).said)
+    }
+
+    @Test
+    fun `a task's photo is a phone's, kept here by its hash, only where the hash is the photo's`() = server {
+        val cookie = signIn()
+        val phone = paired()
+        suspend fun send(hash: String, bytes: ByteArray, signed: HttpRequestBuilder.() -> Unit) = plain().post("/api/task-photos/$hash") {
+            signed()
+            contentType(ContentType.Image.JPEG)
+            setBody(bytes)
+        }
+        val byPhone: HttpRequestBuilder.() -> Unit = {
+            bearerAuth(phone.token)
+            header(Protocol.HEADER, Protocol.VERSION.toString())
+        }
+        val jpeg = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 1, 2, 3)
+        val hash = Photos.hashOf(jpeg)
+        assertEquals(HttpStatusCode.Forbidden, send(hash, jpeg) { header(HttpHeaders.Cookie, cookie); header("X-Requested-With", "test") }.status)
+        assertEquals(HttpStatusCode.BadRequest, send("NOT-A-HASH", jpeg, byPhone).status)
+        assertEquals(HttpStatusCode.UnsupportedMediaType, send(Photos.hashOf("not a photo".toByteArray()), "not a photo".toByteArray(), byPhone).status)
+        assertEquals(HttpStatusCode.BadRequest, send("0123456789abcdef", jpeg, byPhone).status, "not the photo its hash names")
+        assertFalse(File(dataDir, "photos/0123456789abcdef.jpg").exists())
+        assertEquals(HttpStatusCode.NoContent, send(hash, jpeg, byPhone).status)
+        assertTrue(File(dataDir, "photos/$hash.jpg").readBytes().contentEquals(jpeg))
+    }
+
+    @Test
+    fun `Read again is begun by the server for a phone sending commands, saying where it can't be`() = server {
+        val phone = paired()
+        suspend fun again(id: String) = plain().post("/api/tasks/$id/read-again") {
+            bearerAuth(phone.token)
+            header(Protocol.HEADER, Protocol.VERSION.toString())
+        }
+        assertEquals(HttpStatusCode.Conflict, again("own:s-Essay").status)
+        graph.commandsForATest()
+        assertEquals(Asked(false, "That task had gone"), json.decodeFromString(Asked.serializer(), again("own:s-Essay").bodyAsText()))
+        graph.stores.tasks.update { it.copy(tasks = listOf(TaskItem(id = "own:s-Essay", source = Source.Own, sourceId = "s-Essay", title = "A made-up essay", dueAt = null, kind = Kind.Homework, firstSeenAt = 1, lastSeenAt = 1))) }
+        // With no key on this box, nothing's sent, and it says so.
+        assertEquals(Asked(false, "Claude can't be asked now: try again later"), json.decodeFromString(Asked.serializer(), again("own:s-Essay").bodyAsText()))
+    }
+
+    @Test
+    fun `Felix's sync act on the server reads here what this reads, and asks the phone for what only it reads`() = server {
+        val phone = paired()
+        plain().post("/api/devices/push") {
+            bearerAuth(phone.token)
+            header(Protocol.HEADER, Protocol.VERSION.toString())
+            contentType(ContentType.Application.Json)
+            setBody("""{"fid":"cMadeUpFid000000000aaa"}""")
+        }
+        graph.commandsForATest()
+        graph.owners.readNow(setOf(Source.Teams, Source.Anki, Source.Gmail))
+        graph.phones.asking?.join()
+        assertEquals(listOf("cMadeUpFid000000000aaa" to listOf("Anki", "Teams")), reads.toList())
     }
 
     @Test

@@ -291,6 +291,17 @@ class GapsTest {
     }
 
     @Test
+    fun `asked to check Teams on the server, it's the phone's to read, and its widget's sync the phone's to start`() = runBlocking {
+        stores.tasks.update { it.copy(tasks = listOf(sheet)) }
+        felix.teamsOnPhone = true
+        conversation.chatInFront = true
+        val his = asked("I've handed it in, check Teams", answer("Reading Teams.", listOf(sync("Teams", sheet.id))))
+        assertEquals(listOf(setOf(Source.Teams)), felix.synced.toList())
+        assertEquals(0, felix.teamsSyncs, "not started from here, whatever chat's on screen")
+        assertEquals(FelixWords.TEAMS_ON_PHONE, his.acts.single().line)
+    }
+
+    @Test
     fun `asked to check a source, it's read now, said with no Undo, and his note says how the task he was asked about changed`() = runBlocking {
         stores.tasks.update { it.copy(tasks = listOf(sheet)) }
         val his = asked("I've handed it in, check Teams", answer("Reading Teams.", listOf(sync("Teams", sheet.id))))

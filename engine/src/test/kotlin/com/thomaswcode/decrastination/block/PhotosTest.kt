@@ -10,6 +10,7 @@ import com.thomaswcode.decrastination.core.Planner
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
+import com.thomaswcode.decrastination.core.TaskPhoto
 import com.thomaswcode.decrastination.core.Why
 import com.thomaswcode.decrastination.data.ActivityLog
 import com.thomaswcode.decrastination.data.ChatMigration
@@ -120,6 +121,37 @@ class PhotosTest {
         assertTrue(sent.single().contentEquals(jpeg))
         // Not the server's to read (mirroring): Claude's asked here, and it's off.
         assertEquals(null to "Claude is off: add it with New task.", photos.readPhotoTasks(jpeg))
+    }
+
+    @Test
+    fun `a photo check's pages are the server's to check where it checks them, sent as taken, and theirs go whatever happens`() = runBlocking {
+        val asked = mutableListOf<Triple<List<String>, String, Long>>()
+        val byServer = Photos(
+            tasks, settings, chat, clock, scope, gateway, focus, folder, shrink = { it.readBytes() }, profile = { Profile.Block.NONE },
+            checkByServer = { jpegs, piece, takenAt -> asked += Triple(jpegs.map { it.decodeToString() }, piece.key, takenAt); "Done: every question answered" },
+        ) { read += it }
+        val two = pages("page-1.jpg", "page-2.jpg")
+        assertEquals("Done: every question answered", byServer.check(two, piece(Kind.Homework), takenAt = 5L))
+        assertEquals(Triple(listOf("not an image", "not an image"), piece(Kind.Homework).key, 5L), asked.single())
+        assertTrue(two.none { it.exists() })
+        // What isn't written homework isn't sent.
+        assertEquals("Only written homework can be checked from a photo.", byServer.check(pages("revision.jpg"), piece(Kind.Revision)))
+        assertEquals(1, asked.size)
+        // The server's own check, of pages as they came: what isn't written homework isn't checked there either; Claude off says so.
+        assertEquals("Only written homework can be checked from a photo.", photos.checkJpegs(listOf(byteArrayOf(1)), piece(Kind.Revision), 5L))
+        assertEquals("Claude is off: the timer or the source will have to do.", photos.checkJpegs(listOf(byteArrayOf(1)), piece(Kind.Homework), 5L))
+    }
+
+    @Test
+    fun `on the server a task's photo is kept by its hash, and swept by it`() = runBlocking {
+        val byHash = Photos(tasks, settings, chat, clock, scope, gateway, focus, folder, shrink = { null }, profile = { Profile.Block.NONE }, fileOf = { File(folder, "${it.hash}.jpg") }) { read += it }
+        folder.mkdirs()
+        val held = File(folder, "0123456789abcdef.jpg").apply { writeBytes(byteArrayOf(1)) }
+        val stray = File(folder, "fedcba9876543210.jpg").apply { writeBytes(byteArrayOf(2)) }
+        tasks.update { it.copy(tasks = listOf(essay.copy(photo = TaskPhoto("/the/phone's/path/teams_essay.jpg", "0123456789abcdef", 1L)))) }
+        byHash.sweepPhotos()
+        assertTrue(held.exists(), "held by its hash, whatever the phone's path")
+        assertFalse(stray.exists())
     }
 
     @Test

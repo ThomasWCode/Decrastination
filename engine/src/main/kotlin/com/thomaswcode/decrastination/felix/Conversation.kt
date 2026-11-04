@@ -135,6 +135,11 @@ class Conversation(
      * [com.thomaswcode.decrastination.sync.Sync.requestTeamsSync]): why it didn't start, or null where it did.
      */
     private val requestTeamsSync: suspend () -> String? = { null },
+    /**
+     * Teams read on the phone, not here, as on the server (D-142): the phone's to read, and its widget's own sync the phone's to start,
+     * where its chat's on screen, as this can't tell.
+     */
+    private val teamsOnPhone: () -> Boolean = { false },
     /** Waits till no command's open, on the server, where one can be rolled back: a call it set off then finds nothing to ask. */
     private val settled: suspend () -> Unit = {},
     /**
@@ -1084,6 +1089,7 @@ class Conversation(
                     Act(
                         when {
                             source != Source.Teams -> FelixWords.reading(source.label)
+                            teamsOnPhone() -> FelixWords.TEAMS_ON_PHONE
                             !chatInFront -> FelixWords.readingWidget("the chat wasn't on screen to start its sync")
                             else -> requestTeamsSync()?.let { why -> FelixWords.readingWidget("its sync didn't start (${why.replaceFirstChar(Char::lowercase)})") } ?: FelixWords.TEAMS_SYNCING
                         },

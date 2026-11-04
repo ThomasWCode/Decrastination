@@ -15,9 +15,11 @@ import com.thomaswcode.decrastination.net.Http
 import com.thomaswcode.decrastination.net.HttpResponse
 import com.thomaswcode.decrastination.views.Asked
 import com.thomaswcode.decrastination.views.OwnTaskEdit
+import com.thomaswcode.decrastination.views.PhotoCheckAsk
 import com.thomaswcode.decrastination.views.PhotoRead
 import java.io.IOException
 import java.nio.file.Files
+import java.util.Base64
 import java.util.Collections
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -64,6 +66,14 @@ class ReplicaTest {
         val photos = mutableListOf<ByteArray>()
         var photoAnswer = HttpResponse(200, """{"tasks":[]}""")
 
+        /** The photo checks it's been sent, and what it answers one. */
+        val checks = mutableListOf<PhotoCheckAsk>()
+        var checkAnswer = HttpResponse(200, """{"said":"Done: every question answered"}""")
+
+        /** Where each Read again was asked, and what it answers. */
+        val readAgains = mutableListOf<String>()
+        var readAgainAnswer = HttpResponse(200, """{"done":true,"said":"Asked of the server: its new reading comes as it's pulled"}""")
+
         override fun post(url: String, headers: Map<String, String>, body: String): HttpResponse {
             this.headers += headers
             threads += Thread.currentThread()
@@ -71,6 +81,14 @@ class ReplicaTest {
             if (url.endsWith("/claim")) return HttpResponse(200, """{"id":"device-1","token":"secret-token"}""")
             if (url.endsWith("/api/backup/import")) return HttpResponse(200, Json.encodeToString(Asked.serializer(), Asked(true, "Restored.")))
             if (url.endsWith("/api/chat/try-again")) return HttpResponse(204, "")
+            if (url.endsWith("/api/photos/check")) {
+                checks += Json.decodeFromString(PhotoCheckAsk.serializer(), body)
+                return checkAnswer
+            }
+            if (url.endsWith("/read-again")) {
+                readAgains += url.substringAfter("/api/")
+                return readAgainAnswer
+            }
             if (url.endsWith("/api/devices/push")) {
                 pushIds += Json.decodeFromString(PushId.serializer(), body).fid
                 duringPush?.also { duringPush = null }?.invoke()
@@ -436,6 +454,37 @@ class ReplicaTest {
         assertEquals(null to "The photo couldn't be read (the server said no, 502).", replica.readPhotoOnServer(jpeg))
         server.failure = { throw IOException("offline") }
         assertEquals(null to "The photo couldn't be read (the server can't be reached).", replica.readPhotoOnServer(jpeg))
+    }
+
+    @Test
+    fun `a photo check's pages go to the server on the photo's wire, in base64, what came of it said in its words`() = runBlocking {
+        val slow = Server()
+        val checking = Replica(stores, server, clock, "5.0.0", calendar = { read }, photoHttp = slow)
+        val jpeg = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 2)
+        assertEquals("The check didn't go through (this phone isn't paired).", checking.checkPhotoOnServer("teams:sheet", "teams:sheet#0", 5L, listOf(jpeg)))
+        paired()
+        assertEquals("Done: every question answered", checking.checkPhotoOnServer("teams:sheet", "teams:sheet#0", 5L, listOf(jpeg, jpeg)))
+        val ask = slow.checks.single()
+        assertEquals(Triple("teams:sheet", "teams:sheet#0", 5L), Triple(ask.taskId, ask.key, ask.takenAt))
+        assertEquals(2, ask.pages.size)
+        assertTrue(ask.pages.all { Base64.getDecoder().decode(it).contentEquals(jpeg) })
+        assertEquals(emptyList(), server.checks, "not on the usual wire")
+        slow.checkAnswer = HttpResponse(409, """{"error":"A photo is being checked already"}""")
+        assertEquals("The check didn't go through (a photo is being checked already).", checking.checkPhotoOnServer("teams:sheet", "teams:sheet#0", 5L, listOf(jpeg)))
+        slow.failure = { throw IOException("offline") }
+        assertEquals("The check didn't go through (the server can't be reached).", checking.checkPhotoOnServer("teams:sheet", "teams:sheet#0", 5L, listOf(jpeg)))
+    }
+
+    @Test
+    fun `Read again on a phone sending commands asks the server, its task in the path, saying what came of it`() = runBlocking {
+        assertEquals("The server couldn't be asked: this phone isn't paired.", replica.readAgainOnServer("teams:sheet"))
+        paired()
+        assertEquals("Asked of the server: its new reading comes as it's pulled", replica.readAgainOnServer("teams:a sheet"))
+        assertEquals(listOf("tasks/teams%3Aa%20sheet/read-again"), server.readAgains)
+        server.readAgainAnswer = HttpResponse(409, """{"error":"The server is mirroring the phone"}""")
+        assertEquals("The server couldn't be asked: the server is mirroring the phone.", replica.readAgainOnServer("teams:sheet"))
+        server.failure = { throw IOException("offline") }
+        assertEquals("The server couldn't be reached: try again later.", replica.readAgainOnServer("teams:sheet"))
     }
 
     @Test

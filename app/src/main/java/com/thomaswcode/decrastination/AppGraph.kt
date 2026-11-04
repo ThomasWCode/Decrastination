@@ -158,6 +158,12 @@ class AppGraph private constructor(context: Context) : Owners {
      */
     val gateway = ModelGateway(settings, { secrets[Secret.AnthropicApiKey].takeUnless { sendsCommands() } }, stores.model, tasks, clock, AndroidModelAlerts(app), scope) { EnrichWorker.retryAfter(app, it) }
 
+    /**
+     * Whether Claude can be asked of what a screen offers (a photo checked, a task read again): here by its key, or, once the phone
+     * sends commands, by the server, which holds its own (D-142) and says itself where it can't be.
+     */
+    fun claudeAskable(): Boolean = gateway.claudeKey() != null || (sendsCommands() && settings.value.aiEnabled)
+
     /** Your chat with Felix: what you said, his answers, and what became of his cards. */
     val chat = stores.chat
 
@@ -495,6 +501,8 @@ class AppGraph private constructor(context: Context) : Owners {
         keeping = { taskId, photo -> if (sendsCommands()) commands.send(AttachPhoto(taskId, photo)) else photos.keep(taskId, photo) },
         // A photo of homework read by the server once the phone sends commands, as Claude's the server's then (D-142).
         readByServer = { jpeg -> if (sendsCommands()) replica.readPhotoOnServer(jpeg) else null },
+        // A photo check likewise (D-148), its piece found there by its key.
+        checkByServer = { jpegs, piece, takenAt -> if (sendsCommands()) replica.checkPhotoOnServer(piece.taskId, piece.key, takenAt, jpegs) else null },
     )
 
     /** The calendar's this phone's, read here: nothing to keep of what it sent. */
@@ -732,6 +740,19 @@ class AppGraph private constructor(context: Context) : Owners {
 
     /** [what] reset (LR-08): here while mirroring; a command once the phone sends them, as the server's copy is what a pull brings. */
     suspend fun reset(what: Reset): String = if (sendsCommands()) commands.act(ResetData(what)) else backups.reset(what)
+
+    /**
+     * [taskId] read again by Claude as it is now (AC-06, the sheet's *Read again with Claude*): here, or by the server once the phone
+     * sends commands (D-142), its reading coming as it's pulled. What came of it, in words.
+     */
+    suspend fun readAgain(taskId: String): String {
+        if (sendsCommands()) return replica.readAgainOnServer(taskId)
+        return when (readings.readAgain(taskId)) {
+            Readings.ReadAgain.Read -> "Read again by Claude"
+            Readings.ReadAgain.NotNow -> "Claude can't be asked now: try again later"
+            Readings.ReadAgain.NoReading -> "No new reading came back: the one there stands"
+        }
+    }
 
     /**
      * Your words waiting for Felix, asked of him again (the chat's Try again): by the server once the phone sends commands (D-142).

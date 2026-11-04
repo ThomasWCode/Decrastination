@@ -53,6 +53,14 @@ data class WorkView(
 @Serializable
 data class PhotoRead(val tasks: List<OwnTaskEdit>, val leftOut: List<String> = emptyList(), val question: String? = null, val why: String? = null)
 
+/** A piece's pages to check (AI-16), from a phone sending commands (D-148): its task and key, when its first page was taken, each page a JPEG in base64. */
+@Serializable
+data class PhotoCheckAsk(val taskId: String, val key: String, val takenAt: Long, val pages: List<String>)
+
+/** What a photo check came to, in its words. */
+@Serializable
+data class PhotoChecked(val said: String)
+
 /** The form for a task of your own: its kinds and limits, so the page holds none of them (D-137). */
 @Serializable
 data class OwnTaskFormView(val kinds: List<KindChoice>, val maxTitle: Int, val maxClass: Int, val maxNotes: Int, val maxSteps: Int, val defaultMinutes: Int)
