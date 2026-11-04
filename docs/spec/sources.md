@@ -90,7 +90,7 @@ Anki is read again at once when AnkiDroid leaves the screen (NF-03, `block/AnkiW
 
 ## Gmail
 
-Your starred emails, over IMAP with a Google app password (`sources/gmail/`): `imap.gmail.com:993`, TLS, the host checked against its certificate. The address and app password are in the encrypted secrets file.
+Your starred emails, over IMAP with a Google app password (`sources/gmail/`): `imap.gmail.com:993`, TLS, the host checked against its certificate in the handshake, on the phone and on the server alike (`GmailConnection`). The address and app password are in the encrypted secrets file.
 
 - **Read, but for one write.** `ImapClient` (`Imap.kt`) sends only `LOGIN`, `LIST`, `EXAMINE`, `UID SEARCH`, `UID FETCH` (bodies with `BODY.PEEK`) and `LOGOUT`: a read marks nothing read, moves or sends nothing. Each command is logged at debug level, the login left out. The one write, an email finished here, is `ImapWriter`'s (below).
 - **Starred only** (DX-03, `StarredConversations.list`). All Mail is found by its special use (`\All`, else a name ending `/All Mail`), examined, and searched for `FLAGGED`, Gmail's star.
