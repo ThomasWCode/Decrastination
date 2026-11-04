@@ -1,9 +1,11 @@
 package com.thomaswcode.decrastination.felix
 
 import com.thomaswcode.decrastination.Fixtures
+import com.thomaswcode.decrastination.core.Act
 import com.thomaswcode.decrastination.core.ChatAction
 import com.thomaswcode.decrastination.core.ChatActs
 import com.thomaswcode.decrastination.core.ChatMessage
+import com.thomaswcode.decrastination.core.ChatSummary
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.MessageKind
 import com.thomaswcode.decrastination.core.OwnTask
@@ -299,6 +301,20 @@ class GapsTest {
         assertEquals(listOf(setOf(Source.Teams)), felix.synced.toList())
         assertEquals(0, felix.teamsSyncs, "not started from here, whatever chat's on screen")
         assertEquals(FelixWords.TEAMS_ON_PHONE, his.acts.single().line)
+    }
+
+    @Test
+    fun `asked to check a source on the server with no phone to reach, it's said not made, not asked`() = runBlocking {
+        stores.tasks.update { it.copy(tasks = listOf(sheet)) }
+        felix.teamsOnPhone = true
+        felix.syncAsked = false
+        val his = asked("I've handed it in, check Teams", answer("Reading Teams.", listOf(sync("Teams", sheet.id))))
+        assertEquals(listOf(setOf(Source.Teams)), felix.synced.toList())
+        assertEquals("Not made: asking the phone to read Teams: it couldn't be reached, so it reads it at its own sync.", his.acts.single().line)
+        assertTrue(his.acts.single().problem)
+        val anki = asked("check Anki", answer("Reading Anki.", listOf(sync("Anki", ""))))
+        assertEquals(Act.NOT_MADE + FelixWords.notAsked("Anki"), anki.acts.single().line)
+        assertEquals("1 not made", ChatSummary.line(anki).wrong)
     }
 
     @Test

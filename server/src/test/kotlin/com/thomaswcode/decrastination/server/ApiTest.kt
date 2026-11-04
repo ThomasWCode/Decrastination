@@ -553,7 +553,7 @@ class ApiTest {
         val jpeg = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 1, 2, 3)
         val hash = Photos.hashOf(jpeg)
         assertEquals(HttpStatusCode.Forbidden, send(hash, jpeg) { header(HttpHeaders.Cookie, cookie); header("X-Requested-With", "test") }.status)
-        assertEquals(HttpStatusCode.BadRequest, send("NOT-A-HASH", jpeg, byPhone).status)
+        assertEquals(HttpStatusCode.BadRequest, send("NOT-A-HASH", "not a photo".toByteArray(), byPhone).status, "by its hash's shape, before what's sent is looked at")
         assertEquals(HttpStatusCode.UnsupportedMediaType, send(Photos.hashOf("not a photo".toByteArray()), "not a photo".toByteArray(), byPhone).status)
         assertEquals(HttpStatusCode.BadRequest, send("a1b2c3d4e5f60718", jpeg, byPhone).status, "not the photo its hash names")
         assertFalse(File(dataDir, "photos/a1b2c3d4e5f60718.jpg").exists())
@@ -579,14 +579,17 @@ class ApiTest {
     @Test
     fun `Felix's sync act on the server reads here what this reads, and asks the phone for what only it reads`() = server {
         val phone = paired()
+        graph.commandsForATest()
+        // No phone's Firebase id held yet: what's read here is all the same, and what only the phone reads isn't asked.
+        assertTrue(graph.owners.readNow(setOf(Source.Gmail)))
+        assertFalse(graph.owners.readNow(setOf(Source.Teams, Source.Gmail)))
         plain().post("/api/devices/push") {
             bearerAuth(phone.token)
             header(Protocol.HEADER, Protocol.VERSION.toString())
             contentType(ContentType.Application.Json)
             setBody("""{"fid":"cMadeUpFid000000000aaa"}""")
         }
-        graph.commandsForATest()
-        graph.owners.readNow(setOf(Source.Teams, Source.Anki, Source.Gmail))
+        assertTrue(graph.owners.readNow(setOf(Source.Teams, Source.Anki, Source.Gmail)))
         graph.phones.asking?.join()
         assertEquals(listOf("cMadeUpFid000000000aaa" to listOf("Anki", "Teams")), reads.toList())
     }

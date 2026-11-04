@@ -120,6 +120,19 @@ class AfterCommandsTest {
     }
 
     @Test
+    fun `a task's photo whose hash isn't one's shape names no file here, so nothing outside the photos is read`() = runBlocking {
+        val jpeg = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 7, 7, 7)
+        File(dir, "outside.jpg").writeBytes(jpeg)
+        val photo = TaskPhoto("/the/phone's/own/files/photos/teams_sheet.jpg", "../outside", 1L)
+        graph.stores.tasks.update {
+            it.copy(tasks = listOf(TaskItem(id = "teams:sheet", source = Source.Teams, sourceId = "sheet", title = "A made-up worksheet", dueAt = null, kind = Kind.Homework, firstSeenAt = 1, lastSeenAt = 1, photo = photo)))
+        }
+        graph.readAgain("teams:sheet")
+        reachesClaude()
+        assertTrue(sent.none { Base64.getEncoder().encodeToString(jpeg) in it }, "the task read without it")
+    }
+
+    @Test
     fun `a message sent in a command that's rolled back is never asked of Claude`() = runBlocking {
         rolledBack { graph.owners.conversation.ask("Plan my evening", id = "m-1") }
         assertEquals(0, asked.get())

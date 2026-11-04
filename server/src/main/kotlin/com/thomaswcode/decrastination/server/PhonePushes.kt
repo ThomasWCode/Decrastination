@@ -134,19 +134,21 @@ class PhonePushes(
     /**
      * [sources], which only a phone reads (Teams, AnkiDroid), read now by each paired phone, as Felix's `sync` act asks once the server
      * says what he says (D-142): a message of its own, so it and a revision's never take each other's place. Only once the server
-     * applies commands; a failure's only logged, as the phone reads them at its own sync all the same.
+     * applies commands; a failure's only logged, as the phone reads them at its own sync all the same. Whether any phone could be
+     * asked: none where Firebase isn't set up here or no phone's id is held.
      */
-    fun askToRead(sources: Set<Source>) {
-        val sender = sender ?: return
-        if (sources.isEmpty() || !telling()) return
+    fun askToRead(sources: Set<Source>): Boolean {
+        val sender = sender ?: return false
+        if (sources.isEmpty() || !telling()) return false
+        val reached = try {
+            fids()
+        } catch (failed: Exception) {
+            Log.w(Log.TAG, "Reading which phones to ask failed: ${failed::class.simpleName}")
+            return false
+        }
+        if (reached.isEmpty()) return false
         val names = sources.map { it.name }.sorted()
         asking = scope.launch(Dispatchers.IO) {
-            val reached = try {
-                fids()
-            } catch (failed: Exception) {
-                Log.w(Log.TAG, "Reading which phones to ask failed: ${failed::class.simpleName}")
-                emptyMap()
-            }
             for ((device, fid) in reached) {
                 try {
                     if (!sender.read(fid, names)) forget(device, fid)
@@ -155,6 +157,7 @@ class PhonePushes(
                 }
             }
         }
+        return true
     }
 
     /** [device] told now, whatever the mode: how a phone finds out it can be told at once. What came of it. */

@@ -112,18 +112,31 @@ class PhonePushesTest {
         phones.keep(one, "cPhoneFidOne000000000a")
         phones.keep(two, "cPhoneFidTwo000000000b")
         telling = false
-        phones.askToRead(setOf(Source.Teams))
+        assertFalse(phones.askToRead(setOf(Source.Teams)))
         phones.asking?.join()
         assertEquals(emptyList(), firebase.reads.toList(), "not while it mirrors")
         telling = true
-        phones.askToRead(setOf(Source.Teams, Source.Anki))
+        assertTrue(phones.askToRead(setOf(Source.Teams, Source.Anki)))
         phones.asking?.join()
         assertEquals(setOf("cPhoneFidOne000000000a" to listOf("Anki", "Teams"), "cPhoneFidTwo000000000b" to listOf("Anki", "Teams")), firebase.reads.toSet())
         firebase.gone += "cPhoneFidTwo000000000b"
-        phones.askToRead(setOf(Source.Teams))
+        assertTrue(phones.askToRead(setOf(Source.Teams)))
         phones.asking?.join()
         assertEquals(null, fidOf(two))
         assertEquals("cPhoneFidOne000000000a", fidOf(one))
+    }
+
+    @Test
+    fun `whether a phone could be asked to read is said, none with Firebase not set up here or with no phone's id held`() = runBlocking<Unit> {
+        val one = phone("This phone")
+        assertFalse(phones.askToRead(setOf(Source.Teams)), "no phone's id held")
+        assertNull(phones.asking, "nothing on its way")
+        phones.keep(one, "cPhoneFidOne000000000a")
+        assertFalse(PhonePushes(db, scope, null, telling = { true }).askToRead(setOf(Source.Teams)), "Firebase not set up here")
+        assertFalse(phones.askToRead(emptySet()), "nothing to read")
+        assertTrue(phones.askToRead(setOf(Source.Anki)))
+        phones.asking?.join()
+        assertEquals(listOf("cPhoneFidOne000000000a" to listOf("Anki")), firebase.reads.toList())
     }
 
     @Test

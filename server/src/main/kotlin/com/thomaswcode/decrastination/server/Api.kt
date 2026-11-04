@@ -1,5 +1,6 @@
 package com.thomaswcode.decrastination.server
 
+import com.thomaswcode.decrastination.block.Photos
 import com.thomaswcode.decrastination.data.Backups
 import com.thomaswcode.decrastination.enrich.PhotoChecker
 import com.thomaswcode.decrastination.ports.Log
@@ -105,9 +106,6 @@ private data class StateOut(val revision: Long, val stores: List<StoreOut>, val 
 
 /** More than a page shrunk to what's sent ever comes to. */
 private const val MAX_PHOTO_BYTES = 4 * 1024 * 1024L
-
-/** A task's photo's name here ([com.thomaswcode.decrastination.block.Photos.hashOf]): nothing else reaches the folder. */
-private val PHOTO_HASH = Regex("[0-9a-f]{16}")
 
 /** A photo check's most pages, each in base64, a third bigger, with room for the rest of it. */
 private const val MAX_CHECK_BYTES = MAX_PHOTO_BYTES * PhotoChecker.MAX_PAGES * 4 / 3 + 64 * 1024
@@ -428,7 +426,7 @@ private fun Route.signedInRoutes(web: Web) {
     post("/task-photos/{hash}") {
         if (call.client !is Client.Phone) return@post call.respond(HttpStatusCode.Forbidden, Problem("A task's photo comes from the phone"))
         val hash = call.parameters["hash"].orEmpty()
-        if (!PHOTO_HASH.matches(hash)) return@post call.respond(HttpStatusCode.BadRequest, Problem("That isn't a photo's hash"))
+        if (!Photos.HASH.matches(hash)) return@post call.respond(HttpStatusCode.BadRequest, Problem("That isn't a photo's hash"))
         val length = call.request.contentLength()
         if (length == null || length > MAX_PHOTO_BYTES) return@post call.respond(HttpStatusCode.PayloadTooLarge, Problem("That photo's too big"))
         val jpeg = call.receive<ByteArray>()

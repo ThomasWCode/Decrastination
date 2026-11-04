@@ -202,5 +202,8 @@ class Photos(
 
         /** A task's photo's fingerprint ([TaskPhoto.hash]): SHA-256's first 8 bytes, in hex, the name the server keeps its copy by. */
         fun hashOf(jpeg: ByteArray): String = MessageDigest.getInstance("SHA-256").digest(jpeg).take(8).joinToString("") { "%02x".format(it) }
+
+        /** A [hashOf]'s shape: nothing else names a file on the server. */
+        val HASH = Regex("[0-9a-f]{16}")
     }
 }
