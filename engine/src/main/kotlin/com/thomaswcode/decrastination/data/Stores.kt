@@ -155,7 +155,7 @@ class Stores(
         Kept("calendar.json", backup = "your answers about events (what this phone wrote to its calendars means nothing to another's)"),
         Kept("sync.json", backup = null, why = "this phone's pairing with the server, and what it's sent"),
         Kept("outbox.json", backup = null, why = "commands on their way to the server: a restored phone starts from what it's restored to"),
-        Kept("gmail-writes.json", backup = "the receipts of writes made to Gmail, while their Undo can stand (a write still to make is this phone's)"),
+        Kept("gmail-writes.json", backup = "the receipts of writes made to Gmail, while their Undo can stand (a write still to make is this hour's)"),
     )
 
     /**
