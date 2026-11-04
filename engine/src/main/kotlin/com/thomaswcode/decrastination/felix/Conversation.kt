@@ -215,7 +215,6 @@ class Conversation(
      * The reminder to open the form, where his notifications can't be shown.
      */
     suspend fun remindCheckIn() {
-        if (byServer()) return
         if (askCheckIn()) return
         ports.remindForm()
     }
@@ -232,6 +231,9 @@ class Conversation(
         if (log.value.checkIns.any { it.weekOf == week }) return true
         // In quiet hours the form's reminder goes instead, held as the routine ones are till the morning.
         if (BlockPolicy.isQuiet(now, clock.zone(), settings.value)) return false
+        // Once the server says what he says his question's its own (D-142), reaching this phone as it's pulled: whether
+        // his notification can show it is still this phone's to say, so the form's reminder goes from here where it can't.
+        if (byServer()) return notices.shown(Channels.FELIX)
         chat.update { s -> s.copy(messages = s.messages.map { if (it.from == Speaker.Felix && it.kind == MessageKind.CheckIn && it.answeredAt == null) it.copy(answeredAt = now) else it }) }
         askNext(CheckInDraft(week), now)
         return notices.shown(Channels.FELIX)
