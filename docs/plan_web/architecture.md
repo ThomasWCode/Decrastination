@@ -82,8 +82,8 @@ The owner's word (31 Oct): the phone works offline to an extent. The extent:
 - **Writes**: a task added or finished, a slot moved, the timer started, a setting changed, a check-in answered: applied locally through the owner and queued in the outbox. A message to Felix is queued too, and answered when the network is back, as a message sent with no key is today.
 - **The plan**: the phone's planner runs over the replica when it changes while offline, so DO NOW and the blocker follow a task finished; those slots are **provisional** and the calendar is never written from them (W-15, 5.14.0: the calendar's written from what the server's confirmed). Once the outbox has drained and the server's slots have arrived, they replace the provisional ones.
 - **Felix and the syncs** need a connection, as they do today.
-- After seven days without a sync, the Day shows a line saying so, and after hours for a change of the phone's held up in the outbox, with a way out on Setup (5.14.0, `SetupPage.syncLine`).
-- What's waited hours in the outbox gets the same line sooner, whatever's holding it, a fault on the server, a bug in a release, one command that can't go through, or the server gone: nothing's pulled while anything waits, so Felix's answers stop too, and a line on Setup isn't enough for that. The age of the oldest command is all it takes to know. Not built either, for the same reason.
+- After seven days without a sync, the Day shows a line saying so (5.14.0, `SetupPage.syncLine`).
+- What's waited hours in the outbox gets the same line sooner, whatever's holding it, a fault on the server, a bug in a release, one command that can't go through, or the server gone: nothing's pulled while anything waits, so Felix's answers stop too, and a line on Setup isn't enough for that. The age of the oldest command is all it takes to know. Built with it (5.14.0, `SetupPage.HELD_MS`), with a way out on Setup: the oldest change let go at your word, its words shown first.
 
 ## The website
 
