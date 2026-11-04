@@ -1,6 +1,6 @@
 # Architecture: the shape the code takes
 
-What the repository looks like once the plan is built, and the rules that keep it so. `docs/plan_v4/architecture.md` describes the app as it is today; this file says what changes and what doesn't. Stages 0 to 7 and 9 are built, dormant till the switch (D-141), and what's below is put right where they were built otherwise; what the switch still has to do is said where it comes up. How each part works now is in `docs/spec/`.
+What the repository looks like once the plan is built, and the rules that keep it so. `docs/plan_v4/architecture.md` describes the app as it is today; this file says what changes and what doesn't. Stages 0 to 9 are built, and the switch (D-141) was made on 4 Nov 2026; what's below is put right where they were built otherwise. How each part works now is in `docs/spec/`.
 
 ## The shape
 
@@ -55,7 +55,7 @@ A Ktor application (3.6.x, on Netty) on a JRE 21, built as a fat JAR and copied 
 | `GET /state?since={revision}` | every store whose revision is above the one given, whole (`data-and-sync.md` §Revisions) |
 | `GET /events` | a server-sent event stream of revision numbers; a client pulls `state` when one arrives |
 | `POST /commands` | a batch of commands, applied in order through the owners; one outcome each |
-| `POST /observations` | a batch of the phone's device-born facts, applied the same way: with the switch, not built |
+| `POST /observations` | not built: the phone's device-born facts go as commands of their own, through `POST /commands` (5.13.0, [sync.md](../spec/sync.md) §Observations) |
 | `POST /stores/seed` | the phone's one write till the switch: a whole store, while the server is in mirror mode |
 | `GET /views/day?date=`, `GET /views/work`, `GET /views/task/{id}`, … | the screens' models, computed on the server by the same Kotlin the phone's screens use (§The website) |
 | `GET /views/chat?earlier=&reach=` | the chat, with as much of the archive as it asks for: counted in messages, as the phone reads it on scroll-back, or as far as a quote's message |
@@ -80,9 +80,9 @@ The owner's word (31 Oct): the phone works offline to an extent. The extent:
 - **Reads**: every screen, the widget and the block screen read the replica, as they read the files today.
 - **The blocker, the timer and the alarms** run from the replica: blocking never needs the network.
 - **Writes**: a task added or finished, a slot moved, the timer started, a setting changed, a check-in answered: applied locally through the owner and queued in the outbox. A message to Felix is queued too, and answered when the network is back, as a message sent with no key is today.
-- **The plan**: the phone's planner runs over the replica when it changes while offline, so DO NOW and the blocker follow a task finished; those slots are **provisional** and the calendar is never written from them (W-15): not built, it comes with the switch. Once the outbox has drained and the server's slots have arrived, they replace the provisional ones.
+- **The plan**: the phone's planner runs over the replica when it changes while offline, so DO NOW and the blocker follow a task finished; those slots are **provisional** and the calendar is never written from them (W-15, 5.14.0: the calendar's written from what the server's confirmed). Once the outbox has drained and the server's slots have arrived, they replace the provisional ones.
 - **Felix and the syncs** need a connection, as they do today.
-- After seven days without a sync, the Day shows a line saying so: not built, it comes with the switch.
+- After seven days without a sync, the Day shows a line saying so, and after hours for a change of the phone's held up in the outbox, with a way out on Setup (5.14.0, `SetupPage.syncLine`).
 - What's waited hours in the outbox gets the same line sooner, whatever's holding it, a fault on the server, a bug in a release, one command that can't go through, or the server gone: nothing's pulled while anything waits, so Felix's answers stop too, and a line on Setup isn't enough for that. The age of the oldest command is all it takes to know. Not built either, for the same reason.
 
 ## The website
