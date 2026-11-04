@@ -288,7 +288,25 @@ class BackupService(
         answersBack(backup.eventAnswers)
         // Read with the restored answers, and today's record made again, as an answer given here does.
         scope.launch { reread() }
-        return "Restored the settings, ${backup.log.completions.size} completions and ${backup.log.slots.size} slots, what the app had learned, and your calendar answers.$waits$told"
+        return "$RESTORED the settings, ${backup.log.completions.size} completions and ${backup.log.slots.size} slots, what the app had learned, and your calendar answers.$waits$told"
+    }
+
+    /**
+     * The calendar answers of [text], a backup the server has imported once the phone sends commands: this phone's to keep, as only
+     * it reads the calendar, so no pull brings them. Your answers here win over the backup's, as in [importBackup].
+     */
+    suspend fun answersOf(text: String) {
+        val backup = Backups.decode(text, stores.shapes) ?: return
+        if (Backups.problem(backup) != null) return
+        answersBack(backup.eventAnswers)
+        scope.launch { reread() }
+    }
+
+    /** A reset's copy, [name], one of [resetCopies], as Import reads it, or, where it isn't there or is too big, why not. */
+    suspend fun resetCopy(name: String): Pair<String?, String?> {
+        if (name !in resetCopies()) return null to "That copy isn't there."
+        val bytes = withContext(Dispatchers.IO) { File(copies, name).inputStream().use { Backups.read(it) } } ?: return null to "That copy is too big to be a backup."
+        return bytes.decodeToString() to null
     }
 
     /**
@@ -410,13 +428,15 @@ class BackupService(
 
     /** [name], one of [resetCopies], restored as Import restores a backup. What happened, in words. */
     suspend fun restoreResetCopy(name: String): String {
-        if (name !in resetCopies()) return "That copy isn't there."
-        val bytes = withContext(Dispatchers.IO) { File(copies, name).inputStream().use { Backups.read(it) } } ?: return "That copy is too big to be a backup."
-        return importBackup(bytes.decodeToString())
+        val (text, why) = resetCopy(name)
+        return if (text == null) why.orEmpty() else importBackup(text)
     }
 
     companion object {
         /** How [reset] starts what it says when it hasn't. */
         const val NOTHING_RESET = "Nothing was reset"
+
+        /** How [importBackup] starts what it says when it's restored a backup. */
+        const val RESTORED = "Restored"
     }
 }

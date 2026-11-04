@@ -28,6 +28,8 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -114,6 +116,46 @@ class BackupServiceTest {
         settle()
         assertEquals(full.stores.calendar.value.eventAnswers, back)
         assertTrue(empty.stores.calendar.value.eventAnswers.isEmpty())
+    }
+
+    @Test
+    fun `a backup the server took in leaves its calendar answers to this phone, and nothing else is touched here`() = runTest {
+        val full = Phone(full = true)
+        val empty = Phone(full = false)
+        var rereads = 0
+        val service = BackupService(
+            empty.stores, clock, scope, empty.folder, File(empty.dir, "backups"), "test",
+            changeSettings = { change -> empty.stores.replace(empty.stores.settings, change) }, applying = Mutex(),
+            layInstructions = {}, layTaskOverrides = {}, schedule = {}, reread = { rereads++ }, cancelFelix = {},
+        )
+        val tasks = empty.stores.tasks.value
+        val text = full.service.exportBackup()
+        service.answersOf(text)
+        settle()
+        assertEquals(full.stores.calendar.value.eventAnswers, empty.stores.calendar.value.eventAnswers)
+        assertEquals(tasks, empty.stores.tasks.value)
+        assertEquals(1, rereads, "read with them, as an answer given here is")
+        // What isn't a backup takes nothing.
+        service.answersOf("{}")
+        settle()
+        assertEquals(1, rereads)
+    }
+
+    @Test
+    fun `a reset's copy is read as Import reads it, or why not is said`() = runTest {
+        val phone = Phone(full = true)
+        val sent = mutableListOf<String>()
+        val service = BackupService(
+            phone.stores, clock, scope, phone.folder, File(phone.dir, "backups"), "test",
+            changeSettings = { change -> phone.stores.replace(phone.stores.settings, change) }, applying = Mutex(),
+            layInstructions = {}, layTaskOverrides = {}, schedule = {}, reread = {}, cancelFelix = {},
+            sendCopy = { name, _ -> sent += name },
+        )
+        service.reset(Reset.Calibration)
+        val (text, why) = service.resetCopy(sent.single())
+        assertNull(why)
+        assertTrue(assertNotNull(text).contains("\"calibration\""))
+        assertEquals(null to "That copy isn't there.", service.resetCopy("reset-none.json"))
     }
 
     /** What's launched on the service's scope (the calendar read again after a restore): waited for. */

@@ -2,25 +2,35 @@ package com.thomaswcode.decrastination.sync
 
 import com.thomaswcode.decrastination.core.WallClock
 import com.thomaswcode.decrastination.core.ChatArchive
+import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.data.CalendarRead
 import com.thomaswcode.decrastination.data.ChatArchiveStore
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.Secret
 import com.thomaswcode.decrastination.data.Stores
 import com.thomaswcode.decrastination.data.SyncState
+import com.thomaswcode.decrastination.enrich.ModelEffort
+import com.thomaswcode.decrastination.enrich.PhotoTasks
 import com.thomaswcode.decrastination.net.Http
 import com.thomaswcode.decrastination.ports.Log
 import com.thomaswcode.decrastination.sync.protocol.Command
 import com.thomaswcode.decrastination.ui.Format
+import com.thomaswcode.decrastination.views.Asked
+import com.thomaswcode.decrastination.views.PhotoRead
 import java.io.IOException
 import com.thomaswcode.decrastination.sync.protocol.CommandBatch
 import com.thomaswcode.decrastination.sync.protocol.Commands
 import com.thomaswcode.decrastination.sync.protocol.Outcome
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 
 /**
  * The phone and the server (docs/spec/sync.md). This phone pairs with a code the website shows, and sends what the server
@@ -38,6 +48,10 @@ class Replica(
     private val calendar: () -> CalendarRead,
     /** Where a pull goes through: no command applied half-way, and none waiting, as what a command made is already in the stores. */
     private val commands: Commands? = null,
+    /** Where a photo's reading goes: its answer waits on Claude's call on the server, so this waits [PHOTO_WAIT_MS] for it. */
+    private val photoHttp: Http = http,
+    /** The chat's messages a pull brought, none of them here before: Felix's, said on the server, heard here as his notification. */
+    private val heard: (List<ChatMessage>) -> Unit = {},
 ) {
     private val sync: JsonStore<SyncState> = stores.sync
 
@@ -77,7 +91,7 @@ class Replica(
         if (!answer.ok) return if (answer.code == 403) "That code isn't right, or it's run out" else "The server said no (${answer.code})"
         val token = JSON.decodeFromString(DeviceToken.serializer(), answer.body)
         stores.secrets.put(Secret.DeviceToken, token.token)
-        sync.update { it.copy(deviceId = token.id, sent = emptyMap(), lastError = null, refused = emptyList()) }
+        sync.update { it.copy(deviceId = token.id, sent = emptyMap(), lastError = null, refused = emptyList(), parentCodeSent = null) }
         pairings++
         return null
     }
@@ -140,7 +154,17 @@ class Replica(
      * through, where Firebase reaches this phone, if the server's yet to take it ([sendPushId]).
      */
     suspend fun upload(): Boolean = sending.withLock {
-        if (sync.value.mode == SyncState.COMMANDS) return@withLock exchange().also { if (it) sendPushId() }
+        if (sync.value.mode == SyncState.COMMANDS) {
+            // A new parent code ahead of the commands, so one made with it isn't checked against the one before; after them too, where
+            // the server's mode couldn't be told first.
+            sendParentCode(ahead = true)
+            return@withLock exchange().also {
+                if (it) {
+                    sendPushId()
+                    sendParentCode()
+                }
+            }
+        }
         // Again where a send leaves something behind: the server holds less than it should (it's been restored, say), or a store
         // changed while it went, which work already running can't be asked for a second time.
         var sent = send()
@@ -172,6 +196,30 @@ class Replica(
         if (answer.ok) pushSent = pairing to fid
     }
 
+    /**
+     * The parent code's secret, to the server, once the two keep in step by commands, as it checks a code typed on the website as the
+     * phone does (W-23): where the one here differs from what the server last took, by its hash, so a new one, or none, goes before
+     * the next exchange's commands ([ahead], the server's mode asked first) or after it, and one that didn't go is tried at the next.
+     * Never while mirroring, so nothing leaves the phone early. Said nowhere when it fails: the phone checks its own codes all the same.
+     */
+    private suspend fun sendParentCode(ahead: Boolean = false) {
+        if (sync.value.mode != SyncState.COMMANDS) return
+        val secret = stores.secrets[Secret.TotpSecret]
+        val held = secret?.let(Protocol::hash) ?: SyncState.NO_CODE
+        if (sync.value.parentCodeSent == held) return
+        val token = stores.secrets[Secret.DeviceToken] ?: return
+        val headers = mapOf("Content-Type" to "application/json", "Authorization" to "Bearer $token", Protocol.HEADER to Protocol.VERSION.toString())
+        // Before an exchange has said the server still applies commands: one gone back to mirroring is told nothing.
+        if (ahead && serverMode(headers) != SyncState.COMMANDS) return
+        val answer = try {
+            http.post("${sync.value.server}/api/parent-code", headers, JSON.encodeToString(ParentCode.serializer(), ParentCode(secret)))
+        } catch (failed: IOException) {
+            Log.w(Log.TAG, "Sending the parent code failed: ${failed::class.simpleName}")
+            return
+        }
+        if (answer.ok) sync.update { it.copy(parentCodeSent = held) }
+    }
+
     /** Whether this process has been through an exchange: what it found waiting at its start has been looked at. */
     private var started = false
 
@@ -199,8 +247,9 @@ class Replica(
      */
     private suspend fun backToMirroring(): Boolean {
         stores.outbox.update { it.copy(commands = emptyList()) }
-        // The let-gos acted on are another history's: a restored server's revisions start again below them.
-        sync.update { it.copy(mode = SyncState.MIRROR, revision = 0, sent = emptyMap(), lastError = null, letGoSeen = 0) }
+        // The let-gos acted on are another history's: a restored server's revisions start again below them. And a restored server
+        // may not hold the parent code it last took.
+        sync.update { it.copy(mode = SyncState.MIRROR, revision = 0, sent = emptyMap(), lastError = null, letGoSeen = 0, parentCodeSent = null) }
         archiveSent = NOT_SENT
         return true
     }
@@ -249,17 +298,22 @@ class Replica(
                 sync.update { it.copy(refused = newer, lastError = "The server is ahead of this app: install the latest") }
                 return false
             }
+            // The chat's messages new to it, read in the same turn as it's taken, so none made here meanwhile is counted.
+            var fresh: List<ChatMessage>? = null
             val adopt: suspend () -> Unit = {
+                val before = stores.chat.value.messages.mapTo(HashSet()) { it.id }
                 for (store in taken) {
                     val text = store.json.toString()
                     if (ChatArchiveStore.isMonth(store.name)) stores.chatArchive.adopt(store.name, store.version, text) else here.getValue(store.name).adopt(store.version, text)
                 }
+                if (taken.any { it.name == stores.chat.name }) fresh = stores.chat.value.messages.filter { it.id !in before }
                 // What a clear or a reset made elsewhere took isn't kept here in a copy either (D-94): those not yet acted on, as a
                 // pull of everything says them all, and a copy made here since one is what a migration that fails is put right from.
                 stores.letGoOfCopiesOf(pulled.letGo.filterValues { it > sync.value.letGoSeen }.keys)
             }
             // A command made since this began: its turn first, and this pull's asked for again after it.
             if (commands == null) adopt() else if (!commands.replacing(adopt)) return true
+            fresh?.let { runCatching { heard(it) }.onFailure { e -> Log.w(Log.TAG, "Hearing the chat failed: ${e::class.simpleName}") } }
             val seen = pulled.letGo.values.maxOrNull() ?: 0
             sync.update { it.copy(revision = pulled.revision, lastSyncAt = clock.now(), lastError = null, refused = emptyList(), letGoSeen = maxOf(it.letGoSeen, seen)) }
             return true
@@ -270,13 +324,94 @@ class Replica(
     }
 
     /** What's said of a command the server dropped: which it was and when, as a reason alone can't say what's to be done again. */
-    private fun droppedLine(command: Command?, why: String): String {
-        val which = command?.let { made ->
-            val name = made.action::class.simpleName.orEmpty().replace(WORD, " $0").trim().lowercase().replaceFirstChar(Char::uppercase)
-            "$name, ${Format.at(made.at, clock.now(), clock.zone())}"
-        }
-        return listOfNotNull(which, why).joinToString(": ")
+    private fun droppedLine(command: Command?, why: String): String = listOfNotNull(command?.let(::named), why).joinToString(": ")
+
+    /** Which [command] is and when it was made, in words: "Spend free time, today 14:05". */
+    fun named(command: Command): String {
+        val name = command.action::class.simpleName.orEmpty().replace(WORD, " $0").trim().lowercase().replaceFirstChar(Char::uppercase)
+        return "$name, ${Format.at(command.at, clock.now(), clock.zone())}"
     }
+
+    /**
+     * [id], the oldest change waiting, let go at your word: Setup's way out of a queue a change holds up that a release can't mend
+     * soon. With no exchange under way, it's said among those the server didn't apply, and leaves the outbox, and the next pull is
+     * of everything, so what it did here goes, as for one the server dropped. Whether it was still waiting.
+     */
+    suspend fun letGo(id: String): Boolean = sending.withLock {
+        val command = stores.outbox.value.commands.firstOrNull { it.id == id } ?: return@withLock false
+        // Said first, as a dropped one is: a process stopped between the two hears it again.
+        sync.update { it.copy(dropped = (it.dropped + droppedLine(command, "Let go at your word")).takeLast(DROPPED_KEPT), revision = 0) }
+        stores.outbox.update { state -> state.copy(commands = state.commands.filterNot { it.id == id }) }
+        true
+    }
+
+    /**
+     * [text], a backup, imported on the server, once the two keep in step by commands: an Import here alone would go at the next
+     * pull. What's waiting goes first, so the backup's taken in after the changes made before it, and the next pull is of
+     * everything, as the import changed stores the server hasn't said since. What the server said of it, or why nothing was. Off
+     * the thread it's asked from, a screen's being the main one, which may make no call over the network.
+     */
+    suspend fun importOnServer(text: String): Asked = withContext(Dispatchers.IO) {
+        sending.withLock {
+            val token = stores.secrets[Secret.DeviceToken] ?: return@withLock Asked(false, "Nothing was restored: this phone isn't paired.")
+            if (stores.outbox.value.commands.isNotEmpty() && (!exchange() || stores.outbox.value.commands.isNotEmpty())) {
+                return@withLock Asked(false, "Nothing was restored: what's changed here hasn't reached the server yet (Setup says why).")
+            }
+            val headers = mapOf("Content-Type" to "application/octet-stream", "Authorization" to "Bearer $token", Protocol.HEADER to Protocol.VERSION.toString())
+            val answer = try {
+                http.post("${sync.value.server}/api/backup/import", headers, text)
+            } catch (failed: IOException) {
+                Log.w(Log.TAG, "Importing on the server failed: ${failed::class.simpleName}")
+                return@withLock Asked(false, "Nothing was restored: the server can't be reached.")
+            }
+            if (!answer.ok) return@withLock Asked(false, "Nothing was restored: the server said no (${answer.code}).")
+            sync.update { it.copy(revision = 0) }
+            JSON.decodeFromString(Asked.serializer(), answer.body)
+        }
+    }
+
+    /**
+     * Your words waiting for Felix asked of him again, by the server, once the two keep in step by commands: Claude's the server's
+     * to ask then (D-142). What's waiting goes first, your words perhaps among it; his answer comes as the server's changes do.
+     * Whether the server heard. Off the thread it's asked from, as [importOnServer] is.
+     */
+    suspend fun askAgainOnServer(): Boolean = withContext(Dispatchers.IO) {
+        sending.withLock {
+            val token = stores.secrets[Secret.DeviceToken] ?: return@withLock false
+            if (stores.outbox.value.commands.isNotEmpty() && !exchange()) return@withLock false
+            val headers = mapOf("Content-Type" to "application/json", "Authorization" to "Bearer $token", Protocol.HEADER to Protocol.VERSION.toString())
+            try {
+                http.post("${sync.value.server}/api/chat/try-again", headers, "").ok
+            } catch (failed: IOException) {
+                Log.w(Log.TAG, "Asking the server to try again failed: ${failed::class.simpleName}")
+                false
+            }
+        }
+    }
+
+    /**
+     * [jpeg], a photo of homework, read into tasks by the server, once the two keep in step by commands: Claude's the server's to ask
+     * then (D-142). What it read, or why not. Off the thread it's asked from, as [importOnServer] is.
+     */
+    suspend fun readPhotoOnServer(jpeg: ByteArray): Pair<PhotoTasks.Reading?, String?> = withContext(Dispatchers.IO) {
+        val token = stores.secrets[Secret.DeviceToken] ?: return@withContext null to "The photo couldn't be read (this phone isn't paired)."
+        val headers = mapOf("Content-Type" to "image/jpeg", "Authorization" to "Bearer $token", Protocol.HEADER to Protocol.VERSION.toString())
+        val answer = try {
+            photoHttp.postBytes("${sync.value.server}/api/photos/tasks", headers, jpeg)
+        } catch (failed: IOException) {
+            Log.w(Log.TAG, "Reading a photo on the server failed: ${failed::class.simpleName}")
+            return@withContext null to "The photo couldn't be read (the server can't be reached)."
+        }
+        // In the server's words where it gave them, as one refusal can mean more than one thing: it's mirroring, or reading another.
+        if (!answer.ok) return@withContext null to "The photo couldn't be read (${said(answer.body)?.replaceFirstChar { it.lowercase() } ?: "the server said no, ${answer.code}"})."
+        val read = JSON.decodeFromString(PhotoRead.serializer(), answer.body)
+        // As the server's reader answered: why it read nothing, or what it read, perhaps no task at all, which the sheet says.
+        read.why?.let { return@withContext null to it }
+        PhotoTasks.Reading(read.tasks.map { it.task }, read.leftOut, read.question) to null
+    }
+
+    /** The error a refusal's body names, or null where it names none. */
+    private fun said(body: String): String? = runCatching { JSON.parseToJsonElement(body).jsonObject["error"]?.jsonPrimitive?.contentOrNull }.getOrNull()
 
     /** Every store changed on the server since [revision], or null, said, if it wouldn't answer. */
     private suspend fun pull(server: String, headers: Map<String, String>, revision: Long): PulledState? {
@@ -327,7 +462,7 @@ class Replica(
             return Sent.Failed
         }
         val seed = JSON.decodeFromString(SeedAnswer.serializer(), answer.body)
-        sync.update { it.copy(sent = seed.holds, lastSyncAt = clock.now(), lastError = null, serverVersion = seed.server.ifEmpty { null }, refused = seed.refused) }
+        sync.update { it.copy(sent = seed.holds, lastSyncAt = clock.now(), lastError = null, serverVersion = seed.server.ifEmpty { null }, refused = seed.refused, seedRevision = seed.revision) }
         val refused = seed.refused.toSet()
         val inStep = seed.holds - refused == (holds + hashes) - refused
         // The months aren't read while the archive stands still: they're read again where one's still to be taken, or the server's lost one.
@@ -368,5 +503,8 @@ class Replica(
         private const val ROUNDS = 3
 
         private val EMPTY_MONTH = JSON.encodeToString(ChatArchive.serializer(), ChatArchive())
+
+        /** How long a photo's reading is waited for: as long as Claude's call on the server may take, and a minute over. */
+        val PHOTO_WAIT_MS: Int = ModelEffort.timeout(ModelEffort.Job.PhotoToTask).plusMinutes(1).toMillis().toInt()
     }
 }

@@ -42,6 +42,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
+import okhttp3.mockwebserver.QueueDispatcher
 
 /**
  * Felix's service on temporary stores (docs/plan_v4/architecture.md §The rules), for the flows' tests: the real stores,
@@ -79,6 +80,9 @@ class FelixHarness(
 
     /** His channel shown, as Android says. */
     @Volatile var shown = true
+
+    /** Whether the server writes what he says by himself and asks Claude, the phone keeping in step by commands (D-142). */
+    @Volatile var byServer = false
     val focus: Focus = Focus(stores.tasks, stores.settings, stores.session, stores.learning, stores.protection, stores.log, clock) { state, s, now -> planning.plan(state, s, now) }
     val planning: Planning = Planning(
         stores.tasks, stores.settings, stores.session, stores.learning, stores.model, stores.log, stores.instructions, stores.school, clock, scope, gateway,
@@ -90,7 +94,8 @@ class FelixHarness(
         draftAhead = { _, _ -> },
         onFailure = { throw it },
     )
-    private val notices = Shown()
+    /** Android's notifications, as the morning's briefing posts what the night held back to them. */
+    val notices: Notices = Shown()
     val outbox = Outbox(stores.chat, stores.chatArchive, stores.settings, notices, ports, { chatOnScreen }, { chatSeen }, clock)
     val conversation: Conversation = Conversation(
         stores.tasks, stores.settings, stores.learning, stores.log, stores.instructions, stores.chat, stores.school, stores.memory, stores.felix,
@@ -100,6 +105,7 @@ class FelixHarness(
         draftReminders = { now -> looks.draftReminders(now) },
         requestSync = { synced += it },
         requestTeamsSync = { teamsSyncs++; teamsRefusal },
+        byServer = { byServer },
     )
 
     /** How often the Teams widget was asked to sync (D-11), and why it didn't start, as the test says. */
@@ -116,6 +122,7 @@ class FelixHarness(
         addInstruction = { text, about, answer, question -> if (readInstructions) instructions.addInstruction(text, about, answer, question) else owners.instruction(text, about, answer) },
         assess = { taskId, doneAt, answer -> assessed += Triple(taskId, doneAt, answer) },
         applyProposal = { messageId, proposalId -> conversation.applyProposal(messageId, proposalId) },
+        byServer = { byServer },
     )
 
     /**
@@ -130,6 +137,7 @@ class FelixHarness(
         redraw = {},
         answerRead = { instruction, answers, changed -> looks.answerRead(instruction, answers, changed) },
         question = { looks.questionFor(it) },
+        byServer = { byServer },
     )
 
     /** [key]'s piece kept as Day's Done keeps it ([Focus.keepSlot]), with [extraMin] more and a [photo]. */
@@ -144,6 +152,11 @@ class FelixHarness(
     init {
         // Claude on, with its key in use: his calls go to the stand-in.
         runBlocking { stores.settings.update { it.copy(aiEnabled = true, aiKeyActive = true) } }
+    }
+
+    /** A call nothing's queued for answered at once with a failure, not waited on for ever: for a test that shows none's made. */
+    fun failFast() {
+        (server.dispatcher as QueueDispatcher).setFailFast(true)
     }
 
     /** Claude's next answer from the stand-in: a message whose text is [text], the JSON a reader parses, sent [delayMs] late. */

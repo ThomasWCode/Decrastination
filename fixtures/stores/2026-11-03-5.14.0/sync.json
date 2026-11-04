@@ -1,0 +1,24 @@
+{
+    "server": "https://example.org",
+    "deviceId": "device-1",
+    "sent": {
+        "tasks.json": "0a1b2c3d",
+        "settings.json": "4e5f6071"
+    },
+    "lastSyncAt": 1793000000000,
+    "lastError": "The server can't be reached",
+    "serverVersion": "5.0.0",
+    "refused": [
+        "memory.json"
+    ],
+    "mode": "commands",
+    "revision": 12,
+    "dropped": [
+        "That task had gone"
+    ],
+    "pushId": "cMadeUpFid000000000aaa",
+    "letGoSeen": 7,
+    "parentCodeSent": "0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c4b5a69788796a5b4c3d2e1f0",
+    "seedRevision": 11,
+    "version": 5
+}

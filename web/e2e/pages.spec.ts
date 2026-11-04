@@ -193,6 +193,20 @@ test("mirroring the phone, a task's sheet is there to read, with nothing to pres
   await expect(sheet.getByLabel("A note on it")).toBeHidden();
 });
 
+test("mirroring the phone, the server's own sign-ins can be set already, for the switch", async ({ page }) => {
+  await page.goto("/settings");
+  await expect(page.getByText("Read only for now: change these on the phone.")).toBeVisible();
+  await page.getByRole("navigation", { name: "Settings" }).getByRole("button", { name: /^Sources/ }).click();
+  const form = page.getByRole("form", { name: "Sign-ins" });
+  await expect(form.getByText(/the server's own, kept for when it reads Power Planner and Gmail itself/)).toBeVisible();
+  const username = form.getByLabel("Username");
+  await username.fill("a made-up name");
+  await form.getByRole("button", { name: "Save sign-ins" }).click();
+  await expect(username).toHaveValue("");
+  await expect(username).toHaveAttribute("placeholder", "Held");
+  await expect(page.getByText("a made-up name")).toBeHidden();
+});
+
 test("the Phone page gives a code and lists what's paired", async ({ page }) => {
   await page.goto("/phone");
   await expect(page.getByText("Test phone")).toBeVisible();

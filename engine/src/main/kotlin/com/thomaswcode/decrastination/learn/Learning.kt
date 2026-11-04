@@ -65,6 +65,8 @@ class Learning(
     private val summaryReady: suspend (String) -> Unit,
     /** The tasks as they stand, read for how the week's weekly work went (D-124). */
     private val tasks: () -> List<TaskItem> = { emptyList() },
+    /** Whether the server makes the week's review, the phone keeping in step by commands (D-142). */
+    private val byServer: () -> Boolean = { false },
 ) {
     /** Held through a review, whoever started it: what's said to have had one is only known at its end, and each is a paid call. */
     private val reviewing = Mutex()
@@ -78,7 +80,11 @@ class Learning(
      * until nor a task are tidied once they're past 70 % of the room the rest leave them (AI-21, [MemoryTidy.due]).
      * One at a time: a second waits, and then finds the week has had it.
      */
-    suspend fun review(ifDue: Boolean) = reviewing.withLock { makeReview(ifDue) }
+    suspend fun review(ifDue: Boolean) {
+        // The server's, the phone keeping in step by commands (D-142): its review reaches the phone as it pulls.
+        if (byServer()) return
+        reviewing.withLock { makeReview(ifDue) }
+    }
 
     private suspend fun makeReview(ifDue: Boolean) {
         val now = clock.now()

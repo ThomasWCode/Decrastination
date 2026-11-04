@@ -3,6 +3,7 @@ package com.thomaswcode.decrastination.server
 import com.thomaswcode.decrastination.data.Backups
 import com.thomaswcode.decrastination.ports.Log
 import com.thomaswcode.decrastination.sync.DeviceClaim
+import com.thomaswcode.decrastination.sync.ParentCode
 import com.thomaswcode.decrastination.sync.Protocol
 import com.thomaswcode.decrastination.sync.PushId
 import com.thomaswcode.decrastination.sync.SeedBatch
@@ -91,10 +92,6 @@ private data class Me(val signedIn: Boolean)
 
 @Serializable
 private data class StoreOut(val name: String, val version: Int, val revision: Long, val json: JsonElement)
-
-/** The parent code's secret from the phone, or none: it's been taken away. */
-@Serializable
-private data class ParentCode(val secret: String? = null)
 
 /** Which credentials the server holds, by name: never a value. */
 @Serializable
@@ -408,8 +405,8 @@ private fun Route.signedInRoutes(web: Web) {
         if (graph.mode != ServerGraph.COMMANDS) return@post call.respond(HttpStatusCode.Conflict, Problem("The server is mirroring the phone"))
         call.respond(Asked(true, graph.restoreCopy(call.receive<CopyAsk>().name)))
     }
+    // The website's, and a phone's once it sends commands, as Claude's the server's to ask then (D-142).
     post("/photos/tasks") {
-        if (call.client !is Client.Website) return@post call.respond(HttpStatusCode.Forbidden, Problem("A photo's read from the website"))
         if (graph.mode != ServerGraph.COMMANDS) return@post call.respond(HttpStatusCode.Conflict, Problem("The server is mirroring the phone"))
         // By what it says it is first, so nothing that size is read: nothing in front of this limits a body.
         val length = call.request.contentLength()

@@ -97,6 +97,27 @@ class LooksTest {
     }
 
     @Test
+    fun `once the server says what he says, a look, his morning and his reminders' words are written there, none here`() = runBlocking {
+        underWay()
+        felix.byServer = true
+        felix.failFast()
+        felix.answers("""{"texts":["Ten minutes in: started the worksheet?"],"send":1,"replies":["Yes","Not yet"],"nextCheckMin":15,"memories":[]}""")
+        felix.looks.check()
+        assertFalse(felix.looks.morning())
+        felix.looks.remindNow()
+        felix.looks.draftReminders()
+        felix.looks.draftAhead(felix.planning.plan())
+        felix.settle()
+        assertEquals(0, felix.server.requestCount)
+        assertTrue(stores.chat.value.messages.isEmpty())
+        assertTrue(felix.ports.looks.isEmpty())
+        // Mirroring, the same look writes here.
+        felix.byServer = false
+        felix.looks.check()
+        assertEquals(1, stores.chat.value.messages.size)
+    }
+
+    @Test
     fun `his words for the next slot are asked for once, one that came back with none not paid for again at each look`() = runBlocking {
         underWay()
         // Five minutes before its message's moment (its start and his grace, the slot kept where it was laid): his words

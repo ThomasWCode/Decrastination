@@ -37,6 +37,16 @@ class Protection(
     private val scope: CoroutineScope,
     /** Whether the device admin is on (`Watchdog.isAdminActive`). */
     private val adminActive: () -> Boolean,
+    /**
+     * Whether a loosening's wait is the server's to count and end (W-23), the phone keeping in step by commands: the phone shows
+     * what waits and applies none itself, online or off, so the two can't disagree on when one's due.
+     */
+    private val byServer: () -> Boolean = { false },
+    /**
+     * A new parent code's lock begun ([freshLock]), or, once the two keep in step by commands, sent as one, so the server's lock is
+     * begun afresh with it: its own here would go at the next pull.
+     */
+    private val locking: (suspend (step: Long) -> Unit)? = null,
     /** The device admin given up, so uninstalling is allowed again. */
     private val removeAdmin: () -> Unit,
 ) {
@@ -99,10 +109,10 @@ class Protection(
         changing.withLock { applyDue(force) }
     }
 
-    /** [applyDueChanges], with [changing] held. */
+    /** [applyDueChanges], with [changing] held: by a change of the settings too, but never where the wait's the server's to count. */
     private suspend fun applyDue(force: Boolean) {
         val state = protection.value
-        if (state.pending.isEmpty()) return
+        if (state.pending.isEmpty() || byServer()) return
         val uptime = clock.uptime()
         val elapsed = SettingsChanges.counting(state.pending, state.uptimeMark, uptime, force, settings.value) ?: return
         val outcome = SettingsChanges.applyDue(settings.value, state.pending, clock.now(), elapsed)
@@ -167,6 +177,12 @@ class Protection(
      */
     suspend fun newParentCode(secret: ByteArray, step: Long) {
         secrets.put(Secret.TotpSecret, Totp.base32(secret))
+        val send = locking
+        if (send != null) send(step) else freshLock(step)
+    }
+
+    /** The parent codes' lock begun afresh, for a new secret, the code checked at [step] used up ([com.thomaswcode.decrastination.sync.protocol.ParentCodeSet]). */
+    suspend fun freshLock(step: Long) {
         protection.update { it.copy(codeLock = CodeLock(lastUsedStep = step)) }
     }
 

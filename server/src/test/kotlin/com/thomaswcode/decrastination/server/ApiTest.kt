@@ -456,7 +456,7 @@ class ApiTest {
     }
 
     @Test
-    fun `a photo's for the website, of a size, a JPEG, and not while mirroring`() = server {
+    fun `a photo's read for the website or a phone, of a size, a JPEG, and not while mirroring`() = server {
         val cookie = signIn()
         val phone = paired()
         suspend fun upload(bytes: ByteArray, signed: HttpRequestBuilder.() -> Unit) = plain().post("/api/photos/tasks") {
@@ -468,19 +468,19 @@ class ApiTest {
             header(HttpHeaders.Cookie, cookie)
             header("X-Requested-With", "test")
         }
+        val byPhone: HttpRequestBuilder.() -> Unit = {
+            bearerAuth(phone.token)
+            header(Protocol.HEADER, Protocol.VERSION.toString())
+        }
         val jpeg = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 0)
         assertEquals(HttpStatusCode.Conflict, upload(jpeg, website).status)
+        assertEquals(HttpStatusCode.Conflict, upload(jpeg, byPhone).status)
         graph.commandsForATest()
-        assertEquals(
-            HttpStatusCode.Forbidden,
-            upload(jpeg) {
-                bearerAuth(phone.token)
-                header(Protocol.HEADER, Protocol.VERSION.toString())
-            }.status,
-        )
         assertEquals(HttpStatusCode.UnsupportedMediaType, upload("not a photo".toByteArray(), website).status)
         assertEquals(HttpStatusCode.PayloadTooLarge, upload(ByteArray(4 * 1024 * 1024 + 1), website).status)
         assertEquals(HttpStatusCode.OK, upload(jpeg, website).status, "it's read, with no key saying so")
+        // A phone's too, once it sends commands, as Claude's the server's to ask then (D-142).
+        assertEquals(HttpStatusCode.OK, upload(jpeg, byPhone).status)
     }
 
     @Test

@@ -137,6 +137,11 @@ class Conversation(
     private val requestTeamsSync: suspend () -> String? = { null },
     /** Waits till no command's open, on the server, where one can be rolled back: a call it set off then finds nothing to ask. */
     private val settled: suspend () -> Unit = {},
+    /**
+     * Whether the server writes what Felix says by himself, the phone keeping in step by commands (D-142): then nothing's asked of
+     * Claude here, nor written in his name by the app's own work, which the server does, its words reaching the phone as it pulls.
+     */
+    private val byServer: () -> Boolean = { false },
 ) {
     /**
      * What the chat changes through those who own it: your own tasks,
@@ -226,6 +231,9 @@ class Conversation(
         if (log.value.checkIns.any { it.weekOf == week }) return true
         // In quiet hours the form's reminder goes instead, held as the routine ones are till the morning.
         if (BlockPolicy.isQuiet(now, clock.zone(), settings.value)) return false
+        // Once the server says what he says his question's its own (D-142), reaching this phone as it's pulled: whether
+        // his notification can show it is still this phone's to say, so the form's reminder goes from here where it can't.
+        if (byServer()) return notices.shown(Channels.FELIX)
         chat.update { s -> s.copy(messages = s.messages.map { if (it.from == Speaker.Felix && it.kind == MessageKind.CheckIn && it.answeredAt == null) it.copy(answeredAt = now) else it }) }
         askNext(CheckInDraft(week), now)
         return notices.shown(Channels.FELIX)
@@ -381,7 +389,7 @@ class Conversation(
      * off, asked now, a message each in the app's words, the three answers its replies.
      */
     suspend fun askHowItWent(asks: List<AssessLater>) {
-        if (asks.isEmpty()) return
+        if (asks.isEmpty() || byServer()) return
         if (gateway.claudeKey() != null) {
             chat.update { s -> s.copy(felix = s.felix.copy(assessLater = (s.felix.assessLater + asks).distinctBy { a -> a.taskId to a.doneAt }.takeLast(MAX_ASKS))) }
             return
@@ -393,7 +401,7 @@ class Conversation(
 
     /** Those kept for his evening question asked now, a message each, as Claude is off: kept while it was on. */
     suspend fun askKept() {
-        if (gateway.claudeKey() != null) return
+        if (gateway.claudeKey() != null || byServer()) return
         val kept = chat.value.felix.assessLater
         if (kept.isEmpty()) return
         // Each let go of in the same write that asks it: a stop between leaves the rest kept, to be asked.
@@ -660,7 +668,7 @@ class Conversation(
      * asked doesn't end it; one over, or its task gone, is let go first, whatever a later read finds.
      */
     suspend fun afterSync(now: Long = clock.now()) {
-        if (watching.isEmpty()) return
+        if (watching.isEmpty() || byServer()) return
         val byId = tasks.value.tasks.associateBy { it.id }
         for ((id, watch) in watching.entries.toList()) {
             val task = byId[id]
@@ -721,6 +729,7 @@ class Conversation(
      * for that to close ([settled]), so a message rolled back with it isn't paid for; never called inside one, which it would wait for.
      */
     suspend fun answerChat(retry: Boolean = false) {
+        if (byServer()) return
         settled()
         answeringChat(retry)
     }

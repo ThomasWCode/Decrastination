@@ -33,6 +33,7 @@ import com.thomaswcode.decrastination.data.CalendarRead
 import com.thomaswcode.decrastination.data.DeviceClock
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.KeystoreCipher
+import com.thomaswcode.decrastination.data.Reset
 import com.thomaswcode.decrastination.data.Secret
 import com.thomaswcode.decrastination.data.Stores
 import com.thomaswcode.decrastination.data.SyncState
@@ -86,8 +87,10 @@ import com.thomaswcode.decrastination.sync.protocol.NoteSource
 import com.thomaswcode.decrastination.sync.protocol.ObserveCalendar
 import com.thomaswcode.decrastination.sync.protocol.ObserveSources
 import com.thomaswcode.decrastination.sync.protocol.Owners
+import com.thomaswcode.decrastination.sync.protocol.ParentCodeSet
 import com.thomaswcode.decrastination.sync.protocol.RecordBlock
 import com.thomaswcode.decrastination.sync.protocol.RecordProtection
+import com.thomaswcode.decrastination.sync.protocol.ResetData
 import com.thomaswcode.decrastination.sync.protocol.SettleEvent
 import com.thomaswcode.decrastination.sync.protocol.SpendFreeTime
 import com.thomaswcode.decrastination.sync.protocol.TimerOver
@@ -135,11 +138,21 @@ class AppGraph private constructor(context: Context) : Owners {
     val runtime = stores.runtime
     val log = stores.log
 
+    /**
+     * Whether a change goes to the server as a command (D-140), the two keeping in step by commands: what only this phone can know
+     * goes as one too (W-24), as a pull takes the server's stores whole, and what the server runs isn't run here. Till then the
+     * stores carry it all, whole.
+     */
+    val sendsCommands: () -> Boolean = { stores.sync.value.mode == SyncState.COMMANDS }
+
     /** Every notification the app posts, held and counted by the rules (LR-07): the one place they're posted ([NoticeId] names them). */
     val notifier = Notifier(AndroidTray(app), runtime, settings, clock, scope)
 
-    /** Every call to Claude, its holds and its record, and its alerts ([ModelGateway]). */
-    val gateway = ModelGateway(settings, { secrets[Secret.AnthropicApiKey] }, stores.model, tasks, clock, AndroidModelAlerts(app), scope) { EnrichWorker.retryAfter(app, it) }
+    /**
+     * Every call to Claude, its holds and its record, and its alerts ([ModelGateway]). None from here once the phone sends commands,
+     * whatever asks: Claude's the server's then (D-142), one place, one cap, one record.
+     */
+    val gateway = ModelGateway(settings, { secrets[Secret.AnthropicApiKey].takeUnless { sendsCommands() } }, stores.model, tasks, clock, AndroidModelAlerts(app), scope) { EnrichWorker.retryAfter(app, it) }
 
     /** Your chat with Felix: what you said, his answers, and what became of his cards. */
     val chat = stores.chat
@@ -186,12 +199,6 @@ class AppGraph private constructor(context: Context) : Owners {
 
     /** Takes [seen] off Setup's list of files found unreadable. */
     suspend fun forgetUnreadable(seen: JsonStore.Unreadable) = runtime.update { it.seenUnreadable(seen) }
-
-    /**
-     * Whether a change goes to the server as a command (D-140), the two keeping in step by commands: what only this phone can know
-     * goes as one too (W-24), as a pull takes the server's stores whole. Till then the stores carry it, whole.
-     */
-    private val sendsCommands: () -> Boolean = { stores.sync.value.mode == SyncState.COMMANDS }
 
     private val syncer = Syncer(
         tasks = tasks,
@@ -260,7 +267,9 @@ class AppGraph private constructor(context: Context) : Owners {
                 armReminder(made, after = if (asking) clock.now() + SlotAlarms.REMINDER_RETRY_MS else null)
             },
             // The calendar once plans have been quiet a while ([CalendarWriter.planned]).
-            { made -> calendarWriter.planned(made) },
+            // Only from slots the server's confirmed (W-15): with a change of the phone's still to reach it, this plan is the phone's
+            // alone, so the calendar waits; it's written once that's gone and the plan's made again.
+            { made -> if (!sendsCommands() || stores.outbox.value.commands.isEmpty()) calendarWriter.planned(made) },
             { _ -> WidgetUpdater.update(app) },
         ),
         profile = { conversation.profile(it) },
@@ -288,8 +297,9 @@ class AppGraph private constructor(context: Context) : Owners {
         tasks, settings, stores.session, stores.learning, stores.protection, log, clock,
         onOwnTaskDone = { ownTasks.finishOwnTask(it) },
         // An email's work all done by a keep or a tick is finished in Gmail; taken back, so is its finish, once its work isn't all done.
-        onWorked = { runCatching { gmailFinishes.finish(it, explicit = false) }.onFailure { e -> Log.w(TAG, "Finishing an email in Gmail failed", e) } },
-        onUnworked = { runCatching { gmailFinishes.unworked(it) }.onFailure { e -> Log.w(TAG, "Taking back an email's finish failed", e) } },
+        // The server's, once the phone sends commands: it holds the sign-in and the journal then. What's journaled here before still goes.
+        onWorked = { if (!sendsCommands()) runCatching { gmailFinishes.finish(it, explicit = false) }.onFailure { e -> Log.w(TAG, "Finishing an email in Gmail failed", e) } },
+        onUnworked = { if (!sendsCommands()) runCatching { gmailFinishes.unworked(it) }.onFailure { e -> Log.w(TAG, "Taking back an email's finish failed", e) } },
         // A school day by the school calendar (BL-02): a day off blocks from the weekend's time.
         schoolDay = { SchoolDays.kindOf(it, school.value) == DayKind.Weekday },
         forceActiveUntil = { stores.device.value.forceActiveUntil },
@@ -349,6 +359,7 @@ class AppGraph private constructor(context: Context) : Owners {
         addInstruction = { text, about, answer, question -> instructions.addInstruction(text, about, answer, question) },
         assess = { taskId, doneAt, answer -> learning.recordAssessment(taskId, doneAt, answer) },
         applyProposal = { messageId, proposalId -> conversation.applyProposal(messageId, proposalId) },
+        byServer = sendsCommands,
     )
 
     /**
@@ -370,8 +381,8 @@ class AppGraph private constructor(context: Context) : Owners {
                 calendarWriter.answer(key, answer)
             }
             override suspend fun recordCheckIn(checkIn: CheckIn, now: Long): Boolean = learning.recordCheckIn(checkIn, now)
-            override suspend fun finishGmail(taskId: String): GmailFinishes.Finish = gmailFinishes.finish(taskId, explicit = true)
-            override suspend fun unfinishGmail(taskId: String, writeId: String?): Boolean = gmailFinishes.unfinish(taskId, writeId)
+            override suspend fun finishGmail(taskId: String): GmailFinishes.Finish = if (sendsCommands()) GmailFinishes.Finish.Off else gmailFinishes.finish(taskId, explicit = true)
+            override suspend fun unfinishGmail(taskId: String, writeId: String?): Boolean = !sendsCommands() && gmailFinishes.unfinish(taskId, writeId)
             override fun gmailWriteOf(taskId: String): String? = gmailFinishes.latestFinish(taskId)
         },
         calendarTime = { sync.calendarTime },
@@ -379,10 +390,11 @@ class AppGraph private constructor(context: Context) : Owners {
         draftReminders = { now -> looks.draftReminders(now) },
         requestSync = { sources -> sync.syncNow(sources) },
         requestTeamsSync = { sync.requestTeamsSync() },
+        byServer = sendsCommands,
     )
 
     /** The morning: the day's record, what the night held back, and his message on the day ([Briefing]). */
-    val briefing: Briefing = Briefing(planning, log, runtime, school, clock, notifier, { sync.refreshCalendar() }, looks, conversation)
+    val briefing: Briefing = Briefing(planning, log, runtime, school, clock, notifier, { sync.refreshCalendar() }, looks, conversation, byServer = sendsCommands)
 
     /**
      * Your instructions ([Instructions]): written and read by Claude, or quick changes of yours; applied,
@@ -399,6 +411,7 @@ class AppGraph private constructor(context: Context) : Owners {
         redraw = { WidgetUpdater.update(app) },
         answerRead = { instruction, answers, changed -> looks.answerRead(instruction, answers, changed) },
         question = { looks.questionFor(it) },
+        byServer = sendsCommands,
     )
 
     /** Where a screen's changes go (D-140): each a command, applied through its owner. */
@@ -427,8 +440,14 @@ class AppGraph private constructor(context: Context) : Owners {
     /** Your own tasks ([OwnTasks]): kept, finished, opened again, deleted, and trimmed to their record once long done. */
     override val ownTasks: OwnTasks = OwnTasks(tasks, stores.instructions, chat, clock, scope) { settleCompletions() }
 
-    /** The phone and the server ([Replica]): this phone paired, and what's changed sent. */
-    val replica: Replica = Replica(stores, UrlConnectionHttp(), clock, BuildConfig.VERSION_NAME, calendar = { sync.calendarRead() }, commands)
+    /**
+     * The phone and the server ([Replica]): this phone paired, and what's changed sent. What Felix said on the server, pulled, is
+     * heard as his notification, as what he says here is ([Outbox.heard]).
+     */
+    val replica: Replica = Replica(
+        stores, UrlConnectionHttp(), clock, BuildConfig.VERSION_NAME, calendar = { sync.calendarRead() }, commands,
+        photoHttp = UrlConnectionHttp(readTimeoutMs = Replica.PHOTO_WAIT_MS),
+    ) { fresh -> outbox.heard(clock.now(), fresh) }
 
     /** The tasks' readings ([Readings]): by Claude while it can be asked, by the rules otherwise; one read again on asking. */
     val readings: Readings = Readings(
@@ -436,6 +455,7 @@ class AppGraph private constructor(context: Context) : Owners {
         profile = { conversation.profile() },
         queueQuestion = { taskId, question, now -> looks.queueQuestion(taskId, question, now) },
         readDecks = { SyncWorker.syncNow(app, setOf(Source.Anki)) },
+        byServer = sendsCommands,
     )
 
     /** Photos ([Photos]): of a task's work, of homework to make tasks from, and of written work checked. */
@@ -445,6 +465,8 @@ class AppGraph private constructor(context: Context) : Owners {
         read = { taskId -> readings.enrichNow(only = taskId) },
         // Kept with its task as a command once the two keep in step by them, or a pull would take it away, and the file with it.
         keeping = { taskId, photo -> if (sendsCommands()) commands.send(AttachPhoto(taskId, photo)) else photos.keep(taskId, photo) },
+        // A photo of homework read by the server once the phone sends commands, as Claude's the server's then (D-142).
+        readByServer = { jpeg -> if (sendsCommands()) replica.readPhotoOnServer(jpeg) else null },
     )
 
     /** The calendar's this phone's, read here: nothing to keep of what it sent. */
@@ -460,7 +482,11 @@ class AppGraph private constructor(context: Context) : Owners {
     private suspend fun settleEvent(key: String) = if (sendsCommands()) commands.send(SettleEvent(key)) else conversation.settleEvent(key)
 
     /** Protection ([Protection]): settings changes, waiting once armed if they loosen blocking; the parent code; the device admin. */
-    override val protection = Protection(settings, stores.protection, stores.device, secrets, clock, scope, adminActive = { Watchdog.isAdminActive(app) }) {
+    override val protection: Protection = Protection(
+        settings, stores.protection, stores.device, secrets, clock, scope, adminActive = { Watchdog.isAdminActive(app) }, byServer = sendsCommands,
+        // A new parent code's lock a command once the phone sends them, as the server's lock is what a pull brings.
+        locking = { step -> if (sendsCommands()) commands.send(ParentCodeSet(step)) else protection.freshLock(step) },
+    ) {
         app.getSystemService(DevicePolicyManager::class.java)?.removeActiveAdmin(Watchdog.admin(app))
     }
 
@@ -476,6 +502,7 @@ class AppGraph private constructor(context: Context) : Owners {
         reviewed = { line -> conversation.reviewed(line) },
         summaryReady = { week -> conversation.summaryReady(week) },
         tasks = { tasks.value.tasks },
+        byServer = sendsCommands,
     )
 
     init {
@@ -593,8 +620,27 @@ class AppGraph private constructor(context: Context) : Owners {
             }
         }
         // Anything the server keeps a copy of changed, the calendar as read and the chat's archive among it: sent within the minute, by work that keeps its network.
+        // Not once the phone sends commands, whose stores change as it pulls: what's to go then is its outbox's.
         scope.launch {
-            merge(stores.mirrored.map { it.state.drop(1) }.merge(), sync.calendarState.drop(1), stores.chatArchive.changes.drop(1)).collect { if (replica.paired) ReplicaWorker.soon(app) }
+            merge(stores.mirrored.map { it.state.drop(1) }.merge(), sync.calendarState.drop(1), stores.chatArchive.changes.drop(1)).collect { if (replica.paired && !sendsCommands()) ReplicaWorker.soon(app) }
+        }
+        // A change made here sent at once, once the phone sends commands, so the website has it in about a second; the half-minute
+        // spends of free time within the minute, merged meanwhile (W-24). The outbox empty again: the plan made again, so the
+        // calendar's written from what the server's confirmed (W-15).
+        scope.launch {
+            var before = stores.outbox.value.commands
+            stores.outbox.state.drop(1).collect { state ->
+                val now = state.commands
+                val added = now.filter { command -> before.none { it.id == command.id } }
+                val emptied = before.isNotEmpty() && now.isEmpty()
+                before = now
+                if (!sendsCommands() || !replica.paired) return@collect
+                when {
+                    added.any { it.action !is SpendFreeTime } -> ReplicaWorker.again(app)
+                    added.isNotEmpty() -> ReplicaWorker.soon(app)
+                }
+                if (emptied) planning.watcher.poke()
+            }
         }
         // The calendar as read, which the server plans by and can't read, sent as it changes once the two keep in step by commands
         // (W-24): a seed carried it before. The same as last sent isn't sent again; nor the nothing a start has before its first read,
@@ -632,6 +678,43 @@ class AppGraph private constructor(context: Context) : Owners {
         focus.rewardCompletions { completed ->
             runCatching { conversation.askHowItWent(Assessment.asks(completed, log.value)) }.onFailure { Log.w(TAG, "Couldn't ask how the work went", it) }
         }
+    }
+
+    /**
+     * [text], a backup, restored (Import, a reset's copy): here while mirroring; on the server once the phone sends commands, as an
+     * Import here alone would go at the next pull, then pulled whole, its calendar answers kept here, as only this phone reads the
+     * calendar. What came of it, in words.
+     */
+    suspend fun importBackup(text: String): String {
+        if (!sendsCommands()) return backups.importBackup(text)
+        val asked = replica.importOnServer(text)
+        if (asked.said?.startsWith(BackupService.RESTORED) == true) {
+            backups.answersOf(text)
+            ReplicaWorker.now(app)
+        }
+        return asked.said ?: BackupService.RESTORED
+    }
+
+    /** [name], a reset's copy kept in the app's own files, restored as [importBackup] restores a backup. */
+    suspend fun restoreResetCopy(name: String): String {
+        if (!sendsCommands()) return backups.restoreResetCopy(name)
+        val (text, why) = backups.resetCopy(name)
+        return if (text == null) why.orEmpty() else importBackup(text)
+    }
+
+    /** [what] reset (LR-08): here while mirroring; a command once the phone sends them, as the server's copy is what a pull brings. */
+    suspend fun reset(what: Reset): String = if (sendsCommands()) commands.act(ResetData(what)) else backups.reset(what)
+
+    /**
+     * Your words waiting for Felix, asked of him again (the chat's Try again): by the server once the phone sends commands (D-142).
+     * Why the server couldn't be asked, or null: asked here, his answer, or why there's none, is in the chat.
+     */
+    suspend fun tryAgain(): String? {
+        if (!sendsCommands()) {
+            conversation.answerChat(retry = true)
+            return null
+        }
+        return if (replica.askAgainOnServer()) null else "The server couldn't be reached: try again in a moment."
     }
 
     /** Backups and resets ([BackupService]): made when first asked for, as it takes the instructions' lock. */

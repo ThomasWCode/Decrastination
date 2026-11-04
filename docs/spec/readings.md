@@ -150,7 +150,7 @@ It runs again once Claude can be asked again (its rest over, `EnrichWorker.retry
 - The photo goes first in the item, Claude told it's the work itself, to estimate and split from, saying in `reason` what it saw (`ReadingPrompts.photo`). Such a reading is `fromPhoto`, and the sheet says "From your photo".
 - Photos no task holds are let go when the app starts (`Photos.sweepPhotos`), but for one a chat delete can still undo.
 - `Readings` and `Photos` are built like `Focus` (their stores, the clock, the gateway and small callbacks); `ReadingsTest` and `PhotosTest` drive them on temporary stores, Claude's API a stand-in.
-- A photo of homework, taken in Work, is read into tasks of your own instead (NF-01, `PhotoTasks`, `PhotoTaskReader`), at most six from one photo (any past them said under *Left out*), each checked in the form (sources.md) and kept with the photo; or *Attach to an existing task instead* makes it the photo of a task Claude reads, read again with it.
+- A photo of homework, taken in Work, is read into tasks of your own instead (NF-01, `PhotoTasks`, `PhotoTaskReader`; by the server once the phone sends commands, sync.md §Asked of the server), at most six from one photo (any past them said under *Left out*), each checked in the form (sources.md) and kept with the photo; or *Attach to an existing task instead* makes it the photo of a task Claude reads, read again with it.
 
 ## The request
 

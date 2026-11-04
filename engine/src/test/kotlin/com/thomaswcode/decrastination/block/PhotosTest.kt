@@ -39,6 +39,7 @@ import com.thomaswcode.decrastination.data.ZoomMigration
 import com.thomaswcode.decrastination.data.TasksMigration
 import com.thomaswcode.decrastination.enrich.KeyProblem
 import com.thomaswcode.decrastination.enrich.ModelGateway
+import com.thomaswcode.decrastination.enrich.PhotoTasks
 import com.thomaswcode.decrastination.enrich.Profile
 import java.io.File
 import java.nio.file.Files
@@ -107,6 +108,18 @@ class PhotosTest {
         // Another in its place: one photo a task.
         photos.attachPhoto(essay.id, "another made-up photo".toByteArray())
         assertEquals(1, folder.listFiles()!!.size)
+    }
+
+    @Test
+    fun `a photo of homework is read by the server where it reads them, and here where it doesn't`() = runBlocking {
+        val sent = mutableListOf<ByteArray>()
+        val reading = PhotoTasks.Reading(emptyList(), listOf("a worksheet"))
+        val byServer = Photos(tasks, settings, chat, clock, scope, gateway, focus, folder, shrink = { null }, profile = { Profile.Block.NONE }, readByServer = { sent += it; reading to null }) { read += it }
+        val jpeg = "made-up photo bytes".toByteArray()
+        assertEquals(reading to null, byServer.readPhotoTasks(jpeg))
+        assertTrue(sent.single().contentEquals(jpeg))
+        // Not the server's to read (mirroring): Claude's asked here, and it's off.
+        assertEquals(null to "Claude is off: add it with New task.", photos.readPhotoTasks(jpeg))
     }
 
     @Test

@@ -31,6 +31,8 @@ class Briefing(
     private val readCalendar: suspend () -> Unit,
     private val looks: Looks,
     private val conversation: Conversation,
+    /** Whether the server says the morning in Felix's name, the phone keeping in step by commands (D-142): the rest is the phone's still. */
+    private val byServer: () -> Boolean = { false },
 ) {
     /**
      * Today's record made again ([Days.replan]) after an answer about an event changed the plan.
@@ -62,6 +64,8 @@ class Briefing(
             log.copy(days = finished.filterNot { it.date == today.date } + today).trimmed(now)
         }
         runtime.update { it.copy(teamsAuto = it.teamsAuto.copy(morningUntil = now + MORNING_OFFER_MS)) }
+        // His morning, the server's to say: it reaches the chat here as it's pulled, and his notification with it.
+        if (byServer()) return
         val (title, lines) = summary(plan)
         // Felix's sentence or two on the day in place of the list (LR-04); without it, the list
         // in his name, in the app's words: every morning is in the chat.

@@ -87,6 +87,10 @@ data class PairingCode(val code: String, val expiresAt: Long)
 @Serializable
 data class PushId(val fid: String)
 
+/** The parent code's secret from the phone, or none: it's been taken away. */
+@Serializable
+data class ParentCode(val secret: String? = null)
+
 /** What came of a push the server was asked to send this phone at once: whether Firebase took it, and if not, why. */
 @Serializable
 data class PushTried(val sent: Boolean, val why: String? = null)

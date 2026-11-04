@@ -6,6 +6,7 @@ import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.data.CallRecord
 import com.thomaswcode.decrastination.data.SourceStatus
+import com.thomaswcode.decrastination.data.SyncState
 import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.enrich.AiUsage
 import com.thomaswcode.decrastination.enrich.KeyProblem
@@ -78,9 +79,31 @@ object SetupPage {
     }
 
     /** What Setup would show in red, as a mark that opens it: a source failing, what else is passed in; and, the first run, no source read yet. */
-    fun attention(tasks: TaskState, gmailGivenUp: Boolean, keyProblem: Boolean, watchdog: Boolean, unreadable: Boolean): Boolean =
-        Source.SYNCED.any { tasks.status(it).error != null } || gmailGivenUp || keyProblem || watchdog || unreadable ||
+    fun attention(tasks: TaskState, gmailGivenUp: Boolean, keyProblem: Boolean, watchdog: Boolean, unreadable: Boolean, adrift: Boolean = false): Boolean =
+        Source.SYNCED.any { tasks.status(it).error != null } || gmailGivenUp || keyProblem || watchdog || unreadable || adrift ||
             Source.SYNCED.all { tasks.status(it).lastSuccessAt == null && tasks.status(it).error == null }
+
+    /** How long a change waits to reach the server before the Day says so: a fault, a release's bug, a command nothing can apply, the server gone. */
+    const val HELD_MS = 3 * 60 * 60_000L
+
+    /** How long with no exchange before the Day says so. */
+    const val ADRIFT_MS = 7 * 24 * 60 * 60_000L
+
+    /**
+     * The Day's line on keeping in step, once the phone sends commands: the oldest change waiting, from [oldestWaiting], [HELD_MS]
+     * or more, as it holds up what's after it and every pull (Setup lets it go); else a week with no exchange, what's changed on the
+     * website not here. Null while mirroring, unpaired, or in step.
+     */
+    fun syncLine(sync: SyncState, oldestWaiting: Long?, paired: Boolean, now: Long, zone: ZoneId): String? {
+        if (!paired || sync.mode != SyncState.COMMANDS) return null
+        if (oldestWaiting != null && now - oldestWaiting >= HELD_MS) {
+            return "A change made here ${Format.at(oldestWaiting, now, zone)} hasn't reached the server, and what's after it waits too: Setup says why."
+        }
+        val last = sync.lastSyncAt ?: return null
+        return if (now - last >= ADRIFT_MS) "Not in step with the server for ${(now - last) / DAY_MS} days: what's changed on the website isn't here. Setup says why." else null
+    }
+
+    private const val DAY_MS = 24 * 60 * 60_000L
 
     /** A call to Claude on one line. */
     fun callLine(call: CallRecord, zone: ZoneId): String =

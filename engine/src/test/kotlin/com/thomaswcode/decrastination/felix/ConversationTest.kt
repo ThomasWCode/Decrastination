@@ -36,10 +36,14 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import okhttp3.mockwebserver.MockResponse
+import com.thomaswcode.decrastination.core.Window
 import com.thomaswcode.decrastination.core.WindowKind
 import com.thomaswcode.decrastination.data.SlotOutcome
 import com.thomaswcode.decrastination.data.SlotRecord
 import com.thomaswcode.decrastination.learn.CalendarTime
+import com.thomaswcode.decrastination.learn.CheckIn
+import com.thomaswcode.decrastination.learn.Daily
 import com.thomaswcode.decrastination.sync.GmailFinishes
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
@@ -360,6 +364,72 @@ class ConversationTest {
         assertTrue(stores.chat.value.felix.assessLater.isEmpty())
         assertTrue(conversation.ask("Harder", replyTo = question.id))
         assertEquals(listOf(Triple("teams:sheet", ask.doneAt!!, "harder")), felix.assessed)
+    }
+
+    @Test
+    fun `once the server says what he says, nothing's asked of Claude here, nor written in his name by the app's own work`() = runBlocking {
+        felix.byServer = true
+        felix.failFast()
+        // Your words wait for the server's answer, which comes as it's pulled; the Try again too is the server's.
+        assertTrue(conversation.ask("Plan my evening"))
+        conversation.answerChat(retry = true)
+        felix.settle()
+        assertEquals(0, felix.server.requestCount)
+        assertNotNull(stores.chat.value.unanswered)
+        // The check-in's reminder, how work went (not kept for his evening question either), and what was kept for it: the server's.
+        conversation.remindCheckIn()
+        conversation.askHowItWent(listOf(AssessLater("teams:sheet", "Forces worksheet", now - 3_600_000L)))
+        assertEquals(emptyList(), stores.chat.value.felix.assessLater)
+        stores.settings.update { it.copy(aiEnabled = false) }
+        stores.chat.update { it.copy(felix = it.felix.copy(assessLater = listOf(AssessLater("teams:essay", "Essay", now - 3_600_000L)))) }
+        conversation.askKept()
+        assertTrue(his().isEmpty())
+        assertEquals(0, felix.ports.forms)
+        assertEquals(listOf("teams:essay"), stores.chat.value.felix.assessLater.map { it.taskId })
+        // Mirroring again, each is made here as ever.
+        felix.byServer = false
+        conversation.askKept()
+        assertEquals(1, his().size)
+    }
+
+    @Test
+    fun `once the server asks the check-in, the form's reminder is still this phone's where his notification can't show it`() = runBlocking {
+        felix.byServer = true
+        felix.failFast()
+        // His notifications off: nothing's asked here, and the form's reminder goes from here.
+        felix.shown = false
+        conversation.remindCheckIn()
+        assertTrue(his().isEmpty())
+        assertEquals(1, felix.ports.forms)
+        // In quiet hours, when the server asks nothing, it goes from here too, his notifications on.
+        felix.shown = true
+        stores.settings.update { it.copy(quietHours = Window(16 * 60, 17 * 60)) }
+        conversation.remindCheckIn()
+        assertEquals(2, felix.ports.forms)
+        // The week's check-in kept (on the website, say, and pulled): no reminder, his notifications off or not.
+        felix.shown = false
+        stores.settings.update { it.copy(quietHours = Window(0, 0)) }
+        stores.log.update { it.copy(checkIns = listOf(CheckIn(Daily.checkInWeek(now, Fixtures.LONDON, stores.settings.value.checkInMin), now, 4, "", "", "", ""))) }
+        conversation.remindCheckIn()
+        assertEquals(2, felix.ports.forms)
+        assertTrue(his().isEmpty())
+    }
+
+    @Test
+    fun `once the server reads your instructions, one written here waits for it, nothing asked of Claude here`() = runBlocking {
+        felix.byServer = true
+        felix.failFast()
+        val id = felix.instructions.addInstruction("Maths on Friday", About())
+        felix.instructions.readInstructions(interactive = true)
+        felix.settle()
+        assertEquals(0, felix.server.requestCount)
+        assertEquals(InstructionStatus.Reading, stores.instructions.value.instructions.single { it.id == id }.state)
+        // Mirroring, it's read here: asked of the stand-in, which refuses it, so it isn't asked again.
+        felix.byServer = false
+        felix.server.enqueue(MockResponse().setResponseCode(400))
+        felix.instructions.readInstructions(interactive = true)
+        felix.settle()
+        assertEquals(1, felix.server.requestCount)
     }
 
     @Test

@@ -112,6 +112,24 @@ class ProtectionTest {
     }
 
     @Test
+    fun `once the server counts a loosening's wait, none is applied here, its hours gone by or not`() = runBlocking {
+        var byServer = true
+        val counted = Protection(settings, protectionState, device, secrets, clock, scope, adminActive = { admin }, byServer = { byServer }) {}
+        arm()
+        counted.changeSettings { it.copy(freeAllowanceMin = 90) }
+        uptimeOn(25 * 3_600_000L)
+        counted.applyDueChanges(force = true)
+        // Nor by another change of the settings, which counts what's waiting first.
+        counted.changeSettings { it.copy(photoFromMin = 10) }
+        assertEquals(60, settings.value.freeAllowanceMin)
+        assertEquals(0L, counted.pending.single().waitedMs, "nor counted here")
+        // Mirroring, the phone's to apply.
+        byServer = false
+        counted.applyDueChanges(force = true)
+        assertEquals(90, settings.value.freeAllowanceMin)
+    }
+
+    @Test
     fun `a waiting change cancelled goes, and what it would loosen stays`() = runBlocking {
         arm()
         protection.changeSettings { it.copy(workMinPerFreeMin = 2) }
@@ -173,6 +191,21 @@ class ProtectionTest {
         assertNull(protection.useParentCode(code()))
         protection.noParentCode()
         assertNull(secrets[Secret.TotpSecret])
+    }
+
+    @Test
+    fun `once a new code's lock is sent as a command, the secret's kept here and the lock left to the command`() = runBlocking {
+        val sent = mutableListOf<Long>()
+        val sending = Protection(settings, protectionState, device, secrets, clock, scope, adminActive = { admin }, locking = { sent += it }) {}
+        protectionState.update { it.copy(codeLock = CodeLock(lastUsedStep = 3, lockedUntil = Long.MAX_VALUE)) }
+        val step = Totp.step(clock.now())
+        sending.newParentCode(secret, step)
+        assertEquals(Totp.base32(secret), secrets[Secret.TotpSecret])
+        assertEquals(listOf(step), sent)
+        assertEquals(CodeLock(lastUsedStep = 3, lockedUntil = Long.MAX_VALUE), protectionState.value.codeLock, "as the command, applied, will make it")
+        // The command's own: the lock begun afresh.
+        sending.freshLock(step)
+        assertEquals(CodeLock(lastUsedStep = step), protectionState.value.codeLock)
     }
 
     @Test
