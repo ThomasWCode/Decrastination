@@ -100,7 +100,7 @@ class Protection(
      * when a change falls due, unless [force]d.
      */
     suspend fun applyDueChanges(force: Boolean = false) {
-        if (protection.value.pending.isEmpty() || byServer()) return
+        if (protection.value.pending.isEmpty()) return
         changing.withLock { applyDue(force) }
     }
 

@@ -142,6 +142,8 @@ class ReplicaTest {
         stores.settings.update { it.copy(boxMin = it.boxMin + 5) }
         replica.upload()
         assertEquals(listOf("settings.json"), server.seeds[2].stores.map { it.name })
+        // The revision each answer gave, kept from the last: what a server restored from before it is told by (W-26).
+        assertEquals(3L, stores.sync.value.seedRevision)
     }
 
     @Test

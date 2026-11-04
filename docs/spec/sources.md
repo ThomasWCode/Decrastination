@@ -156,7 +156,7 @@ Made in the app, not read from anywhere (Q28): `Source.Own` ("Yours"), keyed `ow
 
 - **When.** `sync/SyncWorker.kt` reads every source every 15 minutes (WorkManager's shortest period), with no network constraint, and at once when asked (`SyncWorker.syncNow`, all sources or some).
 - A sync of all or some sources also runs on a refresh (the main screen's ↻, on any tab, and the widget's), when the Teams widget's list changes, when AnkiDroid leaves the screen, when Anki's settings change, when a reading changes an assignment's sections or the date of one that names some, when Felix reads a source for you from the chat (G2), and from Setup.
-- *Check it's done* on a piece reads just its task's source and says whether it agrees (`ui/PieceActions.kt`).
+- *Check it's done* on a piece reads just its task's source and says whether it agrees (`ui/PieceActions.kt`); once the phone sends commands, a Power Planner or Gmail task's says the server reads it itself, every quarter hour, as the phone no longer does.
 - **How** (`sync/Syncer.kt`, which the app reaches through `sync/Sync.kt`): one sync at a time; the sources in turn, Anki last, as its deck tasks come from the others' homework; each read on its own, waited for at most 90 s.
 - **A failed source fails only itself.** Its error is kept in its `SourceStatus` with the time of the attempt; its tasks stay as they are, and the other sources carry on.
 - A read that overruns is cancelled and left to wind down, and no other read of that source starts beside it (BUG-P2-020).

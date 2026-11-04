@@ -37,6 +37,11 @@ data class SyncState(
      * here differs, once the two keep in step by commands (W-23), and never before. Null: none sent yet.
      */
     val parentCodeSent: String? = null,
+    /**
+     * The revision the server answered the last seed at: a first pull from a server behind it, one restored from before what this
+     * phone last sent, is refused (W-26), as what's here is all that's left of what it's lost. 0: none answered yet.
+     */
+    val seedRevision: Long = 0,
     /** The shape this is in ([Migration]): raised with each change of it, a migration bringing older files to it. */
     val version: Int = 5,
 ) {
@@ -54,7 +59,7 @@ data class SyncState(
         /** The let-gos acted on, 5.12.0's, from none: nothing to bring across. */
         val V4 = Migration(3) { it }
 
-        /** The parent code as the server last took it, 5.14.0's, from none sent: nothing to bring across. */
+        /** The parent code as the server last took it, and the last seed's revision, 5.14.0's, from none: nothing to bring across. */
         val V5 = Migration(4) { it }
 
         /** [parentCodeSent] where the server's been told there's no parent code. */
