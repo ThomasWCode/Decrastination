@@ -9,6 +9,7 @@ import com.thomaswcode.decrastination.data.CalendarRead
 import com.thomaswcode.decrastination.data.SecretCipher
 import com.thomaswcode.decrastination.data.Secret
 import com.thomaswcode.decrastination.data.Stores
+import com.thomaswcode.decrastination.enrich.ModelEffort
 import com.thomaswcode.decrastination.enrich.PhotoTasks
 import com.thomaswcode.decrastination.net.Http
 import com.thomaswcode.decrastination.net.HttpResponse
@@ -435,5 +436,16 @@ class ReplicaTest {
         assertEquals(null to "The photo couldn't be read (the server said no, 502).", replica.readPhotoOnServer(jpeg))
         server.failure = { throw IOException("offline") }
         assertEquals(null to "The photo couldn't be read (the server can't be reached).", replica.readPhotoOnServer(jpeg))
+    }
+
+    @Test
+    fun `a photo's reading goes by a wire of its own, which waits out Claude's call on the server`() = runBlocking {
+        val slow = Server()
+        val reading = Replica(stores, server, clock, "5.0.0", calendar = { read }, photoHttp = slow)
+        paired()
+        reading.readPhotoOnServer(byteArrayOf(1))
+        assertEquals(1, slow.photos.size)
+        assertEquals(emptyList(), server.photos)
+        assertTrue(Replica.PHOTO_WAIT_MS > ModelEffort.timeout(ModelEffort.Job.PhotoToTask).toMillis(), "longer than the call may take")
     }
 }

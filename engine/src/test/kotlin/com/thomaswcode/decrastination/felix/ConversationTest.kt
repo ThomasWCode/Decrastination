@@ -37,10 +37,13 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import okhttp3.mockwebserver.MockResponse
+import com.thomaswcode.decrastination.core.Window
 import com.thomaswcode.decrastination.core.WindowKind
 import com.thomaswcode.decrastination.data.SlotOutcome
 import com.thomaswcode.decrastination.data.SlotRecord
 import com.thomaswcode.decrastination.learn.CalendarTime
+import com.thomaswcode.decrastination.learn.CheckIn
+import com.thomaswcode.decrastination.learn.Daily
 import com.thomaswcode.decrastination.sync.GmailFinishes
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
@@ -387,6 +390,29 @@ class ConversationTest {
         felix.byServer = false
         conversation.askKept()
         assertEquals(1, his().size)
+    }
+
+    @Test
+    fun `once the server asks the check-in, the form's reminder is still this phone's where his notification can't show it`() = runBlocking {
+        felix.byServer = true
+        felix.failFast()
+        // His notifications off: nothing's asked here, and the form's reminder goes from here.
+        felix.shown = false
+        conversation.remindCheckIn()
+        assertTrue(his().isEmpty())
+        assertEquals(1, felix.ports.forms)
+        // In quiet hours, when the server asks nothing, it goes from here too, his notifications on.
+        felix.shown = true
+        stores.settings.update { it.copy(quietHours = Window(16 * 60, 17 * 60)) }
+        conversation.remindCheckIn()
+        assertEquals(2, felix.ports.forms)
+        // The week's check-in kept (on the website, say, and pulled): no reminder, his notifications off or not.
+        felix.shown = false
+        stores.settings.update { it.copy(quietHours = Window(0, 0)) }
+        stores.log.update { it.copy(checkIns = listOf(CheckIn(Daily.checkInWeek(now, Fixtures.LONDON, stores.settings.value.checkInMin), now, 4, "", "", "", ""))) }
+        conversation.remindCheckIn()
+        assertEquals(2, felix.ports.forms)
+        assertTrue(his().isEmpty())
     }
 
     @Test
