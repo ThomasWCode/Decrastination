@@ -37,6 +37,7 @@ import com.thomaswcode.decrastination.core.Planner
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.data.PieceTimer
+import com.thomaswcode.decrastination.data.SyncState
 import com.thomaswcode.decrastination.enrich.PhotoChecker
 import com.thomaswcode.decrastination.sync.protocol.FinishOwnTask
 import com.thomaswcode.decrastination.sync.protocol.KeepSlot
@@ -187,6 +188,11 @@ internal suspend fun allDone(graph: AppGraph, taskId: String, say: (String) -> U
 
 /** [task] asked of its source (a sync of that source alone). [say] gives that it's asking, then what it says. */
 internal suspend fun checkDone(graph: AppGraph, task: TaskItem, say: (String) -> Unit) {
+    // The server's to read once the phone sends commands (D-133), every quarter hour: nothing's read here to say of it.
+    if (graph.stores.sync.value.mode == SyncState.COMMANDS && task.source in Source.SERVERS) {
+        say("The server reads ${task.source.label} itself, every quarter hour: it's checked then.")
+        return
+    }
     say("Asking ${task.source.label}…")
     graph.sync.sync(setOf(task.source))
     val still = graph.tasks.value.tasks.firstOrNull { it.id == task.id }?.isOpen == true

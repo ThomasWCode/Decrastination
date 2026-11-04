@@ -15,6 +15,7 @@ import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.felix.Conversation
 import com.thomaswcode.decrastination.felix.Looks
 import com.thomaswcode.decrastination.learn.Learning
+import com.thomaswcode.decrastination.ports.Log
 import com.thomaswcode.decrastination.protect.Protection
 import com.thomaswcode.decrastination.protect.SettingsChanges
 import com.thomaswcode.decrastination.sync.Syncer
@@ -188,7 +189,12 @@ class Commands(
             }
         } finally {
             // What it set off to make, made, whatever came of it: what a read found is found all the same.
-            withContext(NonCancellable) { after.after.forEach { send(it) } }
+            // Each on its own, so one that fails neither takes this one's place nor stops those after it.
+            withContext(NonCancellable) {
+                after.after.forEach { made ->
+                    runCatching { send(made) }.onFailure { Log.w(Log.TAG, "Making ${made::class.simpleName} once another closed failed: ${it::class.simpleName}") }
+                }
+            }
         }
     }
 
