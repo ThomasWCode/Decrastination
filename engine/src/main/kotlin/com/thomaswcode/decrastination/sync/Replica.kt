@@ -9,20 +9,27 @@ import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.Secret
 import com.thomaswcode.decrastination.data.Stores
 import com.thomaswcode.decrastination.data.SyncState
+import com.thomaswcode.decrastination.enrich.PhotoTasks
 import com.thomaswcode.decrastination.net.Http
 import com.thomaswcode.decrastination.ports.Log
 import com.thomaswcode.decrastination.sync.protocol.Command
 import com.thomaswcode.decrastination.ui.Format
 import com.thomaswcode.decrastination.views.Asked
+import com.thomaswcode.decrastination.views.PhotoRead
 import java.io.IOException
 import com.thomaswcode.decrastination.sync.protocol.CommandBatch
 import com.thomaswcode.decrastination.sync.protocol.Commands
 import com.thomaswcode.decrastination.sync.protocol.Outcome
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 
 /**
  * The phone and the server (docs/spec/sync.md). This phone pairs with a code the website shows, and sends what the server
@@ -333,41 +340,70 @@ class Replica(
     /**
      * [text], a backup, imported on the server, once the two keep in step by commands: an Import here alone would go at the next
      * pull. What's waiting goes first, so the backup's taken in after the changes made before it, and the next pull is of
-     * everything, as the import changed stores the server hasn't said since. What the server said of it, or why nothing was.
+     * everything, as the import changed stores the server hasn't said since. What the server said of it, or why nothing was. Off
+     * the thread it's asked from, a screen's being the main one, which may make no call over the network.
      */
-    suspend fun importOnServer(text: String): Asked = sending.withLock {
-        val token = stores.secrets[Secret.DeviceToken] ?: return@withLock Asked(false, "Nothing was restored: this phone isn't paired.")
-        if (stores.outbox.value.commands.isNotEmpty() && (!exchange() || stores.outbox.value.commands.isNotEmpty())) {
-            return@withLock Asked(false, "Nothing was restored: what's changed here hasn't reached the server yet (Setup says why).")
+    suspend fun importOnServer(text: String): Asked = withContext(Dispatchers.IO) {
+        sending.withLock {
+            val token = stores.secrets[Secret.DeviceToken] ?: return@withLock Asked(false, "Nothing was restored: this phone isn't paired.")
+            if (stores.outbox.value.commands.isNotEmpty() && (!exchange() || stores.outbox.value.commands.isNotEmpty())) {
+                return@withLock Asked(false, "Nothing was restored: what's changed here hasn't reached the server yet (Setup says why).")
+            }
+            val headers = mapOf("Content-Type" to "application/octet-stream", "Authorization" to "Bearer $token", Protocol.HEADER to Protocol.VERSION.toString())
+            val answer = try {
+                http.post("${sync.value.server}/api/backup/import", headers, text)
+            } catch (failed: IOException) {
+                Log.w(Log.TAG, "Importing on the server failed: ${failed::class.simpleName}")
+                return@withLock Asked(false, "Nothing was restored: the server can't be reached.")
+            }
+            if (!answer.ok) return@withLock Asked(false, "Nothing was restored: the server said no (${answer.code}).")
+            sync.update { it.copy(revision = 0) }
+            JSON.decodeFromString(Asked.serializer(), answer.body)
         }
-        val headers = mapOf("Content-Type" to "application/octet-stream", "Authorization" to "Bearer $token", Protocol.HEADER to Protocol.VERSION.toString())
-        val answer = try {
-            http.post("${sync.value.server}/api/backup/import", headers, text)
-        } catch (failed: IOException) {
-            Log.w(Log.TAG, "Importing on the server failed: ${failed::class.simpleName}")
-            return@withLock Asked(false, "Nothing was restored: the server can't be reached.")
-        }
-        if (!answer.ok) return@withLock Asked(false, "Nothing was restored: the server said no (${answer.code}).")
-        sync.update { it.copy(revision = 0) }
-        JSON.decodeFromString(Asked.serializer(), answer.body)
     }
 
     /**
      * Your words waiting for Felix asked of him again, by the server, once the two keep in step by commands: Claude's the server's
      * to ask then (D-142). What's waiting goes first, your words perhaps among it; his answer comes as the server's changes do.
-     * Whether the server heard.
+     * Whether the server heard. Off the thread it's asked from, as [importOnServer] is.
      */
-    suspend fun askAgainOnServer(): Boolean = sending.withLock {
-        val token = stores.secrets[Secret.DeviceToken] ?: return@withLock false
-        if (stores.outbox.value.commands.isNotEmpty() && !exchange()) return@withLock false
-        val headers = mapOf("Content-Type" to "application/json", "Authorization" to "Bearer $token", Protocol.HEADER to Protocol.VERSION.toString())
-        try {
-            http.post("${sync.value.server}/api/chat/try-again", headers, "").ok
-        } catch (failed: IOException) {
-            Log.w(Log.TAG, "Asking the server to try again failed: ${failed::class.simpleName}")
-            false
+    suspend fun askAgainOnServer(): Boolean = withContext(Dispatchers.IO) {
+        sending.withLock {
+            val token = stores.secrets[Secret.DeviceToken] ?: return@withLock false
+            if (stores.outbox.value.commands.isNotEmpty() && !exchange()) return@withLock false
+            val headers = mapOf("Content-Type" to "application/json", "Authorization" to "Bearer $token", Protocol.HEADER to Protocol.VERSION.toString())
+            try {
+                http.post("${sync.value.server}/api/chat/try-again", headers, "").ok
+            } catch (failed: IOException) {
+                Log.w(Log.TAG, "Asking the server to try again failed: ${failed::class.simpleName}")
+                false
+            }
         }
     }
+
+    /**
+     * [jpeg], a photo of homework, read into tasks by the server, once the two keep in step by commands: Claude's the server's to ask
+     * then (D-142). What it read, or why not. Off the thread it's asked from, as [importOnServer] is.
+     */
+    suspend fun readPhotoOnServer(jpeg: ByteArray): Pair<PhotoTasks.Reading?, String?> = withContext(Dispatchers.IO) {
+        val token = stores.secrets[Secret.DeviceToken] ?: return@withContext null to "The photo couldn't be read (this phone isn't paired)."
+        val headers = mapOf("Content-Type" to "image/jpeg", "Authorization" to "Bearer $token", Protocol.HEADER to Protocol.VERSION.toString())
+        val answer = try {
+            http.postBytes("${sync.value.server}/api/photos/tasks", headers, jpeg)
+        } catch (failed: IOException) {
+            Log.w(Log.TAG, "Reading a photo on the server failed: ${failed::class.simpleName}")
+            return@withContext null to "The photo couldn't be read (the server can't be reached)."
+        }
+        // In the server's words where it gave them, as one refusal can mean more than one thing: it's mirroring, or reading another.
+        if (!answer.ok) return@withContext null to "The photo couldn't be read (${said(answer.body)?.replaceFirstChar { it.lowercase() } ?: "the server said no, ${answer.code}"})."
+        val read = JSON.decodeFromString(PhotoRead.serializer(), answer.body)
+        // As the server's reader answered: why it read nothing, or what it read, perhaps no task at all, which the sheet says.
+        read.why?.let { return@withContext null to it }
+        PhotoTasks.Reading(read.tasks.map { it.task }, read.leftOut, read.question) to null
+    }
+
+    /** The error a refusal's body names, or null where it names none. */
+    private fun said(body: String): String? = runCatching { JSON.parseToJsonElement(body).jsonObject["error"]?.jsonPrimitive?.contentOrNull }.getOrNull()
 
     /** Every store changed on the server since [revision], or null, said, if it wouldn't answer. */
     private suspend fun pull(server: String, headers: Map<String, String>, revision: Long): PulledState? {

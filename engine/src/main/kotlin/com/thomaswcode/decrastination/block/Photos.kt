@@ -52,6 +52,11 @@ class Photos(
     private val profile: () -> Profile.Block,
     /** A photo kept with its task ([keep]), or, once the two keep in step by commands, sent as one, its file this phone's. */
     private val keeping: (suspend (taskId: String, photo: TaskPhoto) -> Unit)? = null,
+    /**
+     * A photo of homework read by the server, once the two keep in step by commands, as Claude's the server's to ask then (D-142):
+     * what it read, or why not; null while this phone asks Claude itself.
+     */
+    private val readByServer: suspend (ByteArray) -> Pair<PhotoTasks.Reading?, String?>? = { null },
     /** [taskId] read again with its photo, where it's one the model reads ([com.thomaswcode.decrastination.enrich.Readings.enrichNow]). */
     private val read: suspend (taskId: String) -> Unit,
 ) {
@@ -79,6 +84,7 @@ class Photos(
 
     /** [jpeg] read into tasks of your own to check (NF-01): the reading, or why there's none. */
     suspend fun readPhotoTasks(jpeg: ByteArray): Pair<PhotoTasks.Reading?, String?> {
+        readByServer(jpeg)?.let { return it }
         val reader = gateway.client(ModelEffort.Job.PhotoToTask)?.let { PhotoTaskReader(it, profile = profile()) } ?: return null to "Claude is off: add it with New task."
         val now = clock.now()
         return when (val called = gateway.call(interactive = true, record = ModelCalls.OnRecord(ModelEffort.Job.PhotoToTask, "a photo of homework") { r: PhotoTaskReader.Result -> r.usage to ModelCalls.outcome(r.refused, r.reading == null) }, cost = { r: PhotoTaskReader.Result -> r.costUsd to r.refused }) { reader.read(jpeg, now, clock.zone()) }) {

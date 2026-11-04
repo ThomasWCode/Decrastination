@@ -405,8 +405,8 @@ private fun Route.signedInRoutes(web: Web) {
         if (graph.mode != ServerGraph.COMMANDS) return@post call.respond(HttpStatusCode.Conflict, Problem("The server is mirroring the phone"))
         call.respond(Asked(true, graph.restoreCopy(call.receive<CopyAsk>().name)))
     }
+    // The website's, and a phone's once it sends commands, as Claude's the server's to ask then (D-142).
     post("/photos/tasks") {
-        if (call.client !is Client.Website) return@post call.respond(HttpStatusCode.Forbidden, Problem("A photo's read from the website"))
         if (graph.mode != ServerGraph.COMMANDS) return@post call.respond(HttpStatusCode.Conflict, Problem("The server is mirroring the phone"))
         // By what it says it is first, so nothing that size is read: nothing in front of this limits a body.
         val length = call.request.contentLength()

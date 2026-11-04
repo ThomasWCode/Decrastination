@@ -3,15 +3,21 @@ package com.thomaswcode.decrastination.sync
 import com.thomaswcode.decrastination.core.ChatArchive
 import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.core.FixedClock
+import com.thomaswcode.decrastination.core.OwnTask
 import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.data.CalendarRead
 import com.thomaswcode.decrastination.data.SecretCipher
 import com.thomaswcode.decrastination.data.Secret
 import com.thomaswcode.decrastination.data.Stores
+import com.thomaswcode.decrastination.enrich.PhotoTasks
 import com.thomaswcode.decrastination.net.Http
 import com.thomaswcode.decrastination.net.HttpResponse
+import com.thomaswcode.decrastination.views.Asked
+import com.thomaswcode.decrastination.views.OwnTaskEdit
+import com.thomaswcode.decrastination.views.PhotoRead
 import java.io.IOException
 import java.nio.file.Files
+import java.util.Collections
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -50,10 +56,20 @@ class ReplicaTest {
         val pushIds = mutableListOf<String>()
         var pushAnswer = 204
 
+        /** The thread each request was made on. */
+        val threads: MutableList<Thread> = Collections.synchronizedList(mutableListOf())
+
+        /** The photos of homework it's been sent, and what it answers one. */
+        val photos = mutableListOf<ByteArray>()
+        var photoAnswer = HttpResponse(200, """{"tasks":[]}""")
+
         override fun post(url: String, headers: Map<String, String>, body: String): HttpResponse {
             this.headers += headers
+            threads += Thread.currentThread()
             failure?.let { return it(url) }
             if (url.endsWith("/claim")) return HttpResponse(200, """{"id":"device-1","token":"secret-token"}""")
+            if (url.endsWith("/api/backup/import")) return HttpResponse(200, Json.encodeToString(Asked.serializer(), Asked(true, "Restored.")))
+            if (url.endsWith("/api/chat/try-again")) return HttpResponse(204, "")
             if (url.endsWith("/api/devices/push")) {
                 pushIds += Json.decodeFromString(PushId.serializer(), body).fid
                 duringPush?.also { duringPush = null }?.invoke()
@@ -68,6 +84,15 @@ class ReplicaTest {
             taken.forEach { held[it.name] = it.text }
             val answer = SeedAnswer(seeds.size.toLong(), batch.stores.map { it.name }.filter { it in refusing }, version, held.mapValues { Protocol.hash(it.value) })
             return HttpResponse(200, Json.encodeToString(SeedAnswer.serializer(), answer))
+        }
+
+        override fun postBytes(url: String, headers: Map<String, String>, body: ByteArray): HttpResponse {
+            this.headers += headers
+            threads += Thread.currentThread()
+            failure?.let { return it(url) }
+            check(url.endsWith("/api/photos/tasks")) { url }
+            photos += body
+            return photoAnswer
         }
     }
 
@@ -369,5 +394,46 @@ class ReplicaTest {
         // A revision it holds, as far as its pulls go: while mirroring it has none, and sends all the same.
         assertTrue(replica.told(0))
         assertEquals(before + 1, server.seeds.size)
+    }
+
+    @Test
+    fun `an import, a Try again and a photo's reading asked of the server go off the thread that asks, a screen's being the main one`() = runBlocking {
+        paired()
+        val asking = Thread.currentThread()
+        server.threads.clear()
+        assertTrue(replica.importOnServer("{}").done)
+        assertTrue(replica.askAgainOnServer())
+        replica.readPhotoOnServer(byteArrayOf(1))
+        assertEquals(3, server.threads.size)
+        assertTrue(server.threads.none { it == asking }, "none on the thread that asked")
+    }
+
+    @Test
+    fun `a photo of homework is read by the server, its reading or its reason as the server's reader gave them, and a refusal in its words`() = runBlocking {
+        val jpeg = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 0)
+        assertEquals(null to "The photo couldn't be read (this phone isn't paired).", replica.readPhotoOnServer(jpeg))
+        assertEquals(emptyList(), server.photos, "nothing's sent unpaired")
+        paired()
+        val task = OwnTask("Worksheet", notes = "Questions 1 to 6", minutes = 40)
+        server.photoAnswer = HttpResponse(200, Json.encodeToString(PhotoRead.serializer(), PhotoRead(listOf(OwnTaskEdit("s-1", task)), listOf("a diagram"), "Which week?")))
+        assertEquals(PhotoTasks.Reading(listOf(task), listOf("a diagram"), "Which week?") to null, replica.readPhotoOnServer(jpeg))
+        assertTrue(server.photos.single().contentEquals(jpeg), "the photo as it was taken")
+        val headers = server.headers.last()
+        assertEquals("Bearer secret-token", headers["Authorization"])
+        assertEquals("image/jpeg", headers["Content-Type"])
+        assertEquals(Protocol.VERSION.toString(), headers[Protocol.HEADER])
+        // Read, and no task in it: the reading, for the sheet to say so, with what was left out.
+        server.photoAnswer = HttpResponse(200, """{"tasks":[],"leftOut":["a worksheet"]}""")
+        assertEquals(PhotoTasks.Reading(emptyList(), listOf("a worksheet")) to null, replica.readPhotoOnServer(jpeg))
+        // Not read, and why, as the server's reader said it.
+        server.photoAnswer = HttpResponse(200, """{"tasks":[],"why":"Claude is off: add it with New task."}""")
+        assertEquals(null to "Claude is off: add it with New task.", replica.readPhotoOnServer(jpeg))
+        // Refused: in the server's words, or by its code where it gave none.
+        server.photoAnswer = HttpResponse(409, """{"error":"A photo is being read already"}""")
+        assertEquals(null to "The photo couldn't be read (a photo is being read already).", replica.readPhotoOnServer(jpeg))
+        server.photoAnswer = HttpResponse(502, "<html>Bad gateway</html>")
+        assertEquals(null to "The photo couldn't be read (the server said no, 502).", replica.readPhotoOnServer(jpeg))
+        server.failure = { throw IOException("offline") }
+        assertEquals(null to "The photo couldn't be read (the server can't be reached).", replica.readPhotoOnServer(jpeg))
     }
 }
