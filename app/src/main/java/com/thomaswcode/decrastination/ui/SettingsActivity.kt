@@ -664,7 +664,7 @@ private fun NightlyBackup(graph: AppGraph, last: Long?, now: Long) {
             copies.forEach { name ->
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(name, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-                    TextButton(onClick = { scope.launch { said = graph.restoreResetCopy(name) } }) { Text("Restore") }
+                    TextButton(onClick = { scope.launch { said = runCatching { graph.restoreResetCopy(name) }.getOrElse { "Couldn't restore it: ${it.message}" } } }) { Text("Restore") }
                 }
             }
             said?.let { Note(it) }

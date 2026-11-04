@@ -461,6 +461,8 @@ class AppGraph private constructor(context: Context) : Owners {
         read = { taskId -> readings.enrichNow(only = taskId) },
         // Kept with its task as a command once the two keep in step by them, or a pull would take it away, and the file with it.
         keeping = { taskId, photo -> if (sendsCommands()) commands.send(AttachPhoto(taskId, photo)) else photos.keep(taskId, photo) },
+        // A photo of homework read by the server once the phone sends commands, as Claude's the server's then (D-142).
+        readByServer = { jpeg -> if (sendsCommands()) replica.readPhotoOnServer(jpeg) else null },
     )
 
     /** The calendar's this phone's, read here: nothing to keep of what it sent. */

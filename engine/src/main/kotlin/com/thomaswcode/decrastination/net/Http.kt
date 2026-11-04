@@ -11,6 +11,9 @@ fun interface Http {
 
     /** As [post], with nothing sent. */
     fun get(url: String, headers: Map<String, String>): HttpResponse = post(url, headers, "")
+
+    /** As [post], its body bytes as they are, not text: a photo's. Only where it's made to. */
+    fun postBytes(url: String, headers: Map<String, String>, body: ByteArray): HttpResponse = throw UnsupportedOperationException("This Http sends text alone")
 }
 
 data class HttpResponse(val code: Int, val body: String) {
@@ -22,7 +25,9 @@ class UrlConnectionHttp(
     private val connectTimeoutMs: Int = 20_000,
     private val readTimeoutMs: Int = 60_000,
 ) : Http {
-    override fun post(url: String, headers: Map<String, String>, body: String): HttpResponse {
+    override fun post(url: String, headers: Map<String, String>, body: String): HttpResponse = postBytes(url, headers, body.encodeToByteArray())
+
+    override fun postBytes(url: String, headers: Map<String, String>, body: ByteArray): HttpResponse {
         val connection = URL(url).openConnection() as HttpURLConnection
         try {
             connection.requestMethod = "POST"
@@ -30,7 +35,7 @@ class UrlConnectionHttp(
             connection.readTimeout = readTimeoutMs
             connection.doOutput = true
             headers.forEach { (name, value) -> connection.setRequestProperty(name, value) }
-            connection.outputStream.use { it.write(body.encodeToByteArray()) }
+            connection.outputStream.use { it.write(body) }
             val code = connection.responseCode
             val stream = if (code in 200..299) connection.inputStream else connection.errorStream
             val text = stream?.use { it.readBytes().decodeToString() }.orEmpty()
