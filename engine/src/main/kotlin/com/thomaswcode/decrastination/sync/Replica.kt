@@ -418,7 +418,7 @@ class Replica(
             return Sent.Failed
         }
         val seed = JSON.decodeFromString(SeedAnswer.serializer(), answer.body)
-        sync.update { it.copy(sent = seed.holds, lastSyncAt = clock.now(), lastError = null, serverVersion = seed.server.ifEmpty { null }, refused = seed.refused) }
+        sync.update { it.copy(sent = seed.holds, lastSyncAt = clock.now(), lastError = null, serverVersion = seed.server.ifEmpty { null }, refused = seed.refused, seedRevision = seed.revision) }
         val refused = seed.refused.toSet()
         val inStep = seed.holds - refused == (holds + hashes) - refused
         // The months aren't read while the archive stands still: they're read again where one's still to be taken, or the server's lost one.
