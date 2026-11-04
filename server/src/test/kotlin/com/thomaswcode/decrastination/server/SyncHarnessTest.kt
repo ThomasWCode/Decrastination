@@ -166,6 +166,9 @@ class SyncHarnessTest {
         /** What happens on the phone while its pull is on its way, once. */
         var duringPull: (() -> Unit)? = null
 
+        /** Where each pull began, by the revision it asked for what's changed since. */
+        val sinces = mutableListOf<Long>()
+
         /** The switch's seeds it's carried, answers to lose after the server's taken one, and a refusal to give in its place. */
         var switches = 0
         var losesSwitchAnswers = 0
@@ -236,6 +239,7 @@ class SyncHarnessTest {
             duringPull?.also { duringPull = null }?.invoke()
             headers[Protocol.ZONE_HEADER]?.let(graph.serverClock::setZone)
             val since = url.substringAfter("since=").toLong()
+            sinces += since
             val state = graph.state(since)
             val body = buildJsonObject {
                 put("revision", state.revision)
@@ -935,7 +939,8 @@ class SyncHarnessTest {
         assertEquals(1 to ServerGraph.COMMANDS, backups to graph.mode)
         val sync = phone.h.stores.sync.value
         assertEquals(SyncState.COMMANDS to null, sync.mode to sync.switching)
-        assertTrue(sync.revision > 0 && sync.revision == sync.seedRevision, "at the answer's revision, no pull of everything")
+        assertTrue(sync.revision > 0 && sync.revision == sync.seedRevision, "at the answer's revision")
+        assertEquals(sync.seedRevision, phone.wire.sinces.last(), "the pull after it of what's changed since, not of everything")
         assertEquals(setOf("Essay"), serverTitles)
         // What's made after it is a command, sent.
         phone.h.commands.act(own("Maths"))
@@ -1006,8 +1011,9 @@ class SyncHarnessTest {
         assertTrue(phone.replica.upload())
         assertFalse(phone.replica.upload())
         assertTrue(phone.h.stores.sync.value.lastError.orEmpty().startsWith("The server is behind what this phone last sent"))
-        // As it was, nothing changed here: taken, and the server's change with it.
-        phone.h.stores.sync.update { it.copy(seedRevision = 0) }
+        // As it was, nothing changed here: taken, and the server's change with it. A store whose seed's answer was lost (its hash
+        // here not the one on record) is no change lost either, where the server has it as it is here.
+        phone.h.stores.sync.update { it.copy(seedRevision = 0, sent = it.sent + ("settings.json" to "a hash from before")) }
         assertTrue(phone.replica.upload())
         assertFalse(phone.h.stores.sync.value.firstPull)
         assertEquals(setOf("Essay, moved on"), phone.titles)
