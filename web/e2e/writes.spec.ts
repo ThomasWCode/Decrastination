@@ -1,5 +1,6 @@
 import { createHmac } from "node:crypto";
 import { expect, test, type Browser, type Locator, type Page } from "@playwright/test";
+import { ZONE } from "./global-setup";
 
 // What the website changes, against a server in commands mode with a database of its own (playwright.config.ts): the tests share
 // it, so each makes what it needs, under a name of its own.
@@ -202,8 +203,10 @@ test("all of a task moves to a day, said in the phone's words", async ({ page })
 });
 
 test("a piece's time that's gone is refused, saying why", async ({ page }) => {
-  // A piece at 00:00 has gone once its 45 minutes and the slot's grace of 10 have: before 00:56 no time today has, by the browser's clock.
-  const minutes = await page.evaluate(() => new Date().getHours() * 60 + new Date().getMinutes());
+  // A piece at 00:00 has gone once its 45 minutes and the slot's grace of 10 have: before 00:56 no time today has, by the server's
+  // day, in the zone it's seeded with, not the machine's.
+  const parts = new Intl.DateTimeFormat("en-GB", { timeZone: ZONE, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(new Date());
+  const minutes = Number(parts.find((part) => part.type === "hour")?.value) * 60 + Number(parts.find((part) => part.type === "minute")?.value);
   test.skip(minutes < 56, "No time today has gone yet");
   await newTask(page, "Learn the quotes");
   const sheet = await sheetOf(page, "Learn the quotes");

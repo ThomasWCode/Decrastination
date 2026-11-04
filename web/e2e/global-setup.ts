@@ -6,6 +6,9 @@ const STORES = ["tasks.json", "settings.json", "session.json", "log.json", "inst
 
 const HOUR = 3_600_000;
 
+/** The zone the servers are seeded with, as the phone says it: their day is the owner's, whatever the machine's zone. */
+export const ZONE = "Europe/London";
+
 /**
  * A made-up chat, about now: what's new, what waits, what he looked up and his cards, over the month the archive holds. All of it's
  * made up here, as the fixtures' times would be weeks old.
@@ -82,7 +85,7 @@ async function seeded(server: string, sessionFile: string, commands: boolean) {
   const stores = [...given.filter((store) => store !== tasks), { ...tasks, text: JSON.stringify(held) }, ...chatFrom(readFileSync(join(shape, "chat.json"), "utf-8"), now)];
   const seeded = await api.post("/api/stores/seed", {
     headers: { Authorization: `Bearer ${token}`, "X-Protocol": "1" },
-    data: { zone: "Europe/London", build: "e2e", stores },
+    data: { zone: ZONE, build: "e2e", stores },
   });
   if (!seeded.ok()) throw new Error(`Seeding failed: ${seeded.status()}`);
   const answer = await seeded.json();
