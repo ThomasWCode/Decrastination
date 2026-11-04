@@ -51,10 +51,15 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 
 /**
@@ -121,6 +126,24 @@ class PhotosTest {
         assertTrue(sent.single().contentEquals(jpeg))
         // Not the server's to read (mirroring): Claude's asked here, and it's off.
         assertEquals(null to "Claude is off: add it with New task.", photos.readPhotoTasks(jpeg))
+    }
+
+    @Test
+    fun `a photo check begun as the switch holds the checks waits for it, and is then the server's, nothing checked here`() = runBlocking {
+        var server = false
+        val switching = Photos(
+            tasks, settings, chat, clock, scope, gateway, focus, folder, shrink = { it.readBytes() }, profile = { Profile.Block.NONE },
+            checkByServer = { _, _, _ -> "Done: every question answered".takeIf { server } },
+        ) { read += it }
+        val held = CompletableDeferred<Unit>()
+        val quiet = launch(start = CoroutineStart.UNDISPATCHED) { switching.quiet { held.await(); server = true } }
+        val checked = async { switching.check(pages("page-1.jpg"), piece(Kind.Homework), takenAt = 5L) }
+        // As far as it gets while the switch holds the checks: not made here, nor done.
+        delay(500)
+        assertFalse(checked.isCompleted, "it waits for the switch")
+        held.complete(Unit)
+        quiet.join()
+        assertEquals("Done: every question answered", checked.await())
     }
 
     @Test

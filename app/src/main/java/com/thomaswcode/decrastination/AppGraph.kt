@@ -18,6 +18,7 @@ import com.thomaswcode.decrastination.core.DayKind
 import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.InstructionStatus
+import com.thomaswcode.decrastination.core.MessageKind
 import com.thomaswcode.decrastination.core.Notes
 import com.thomaswcode.decrastination.core.OwnTask
 import com.thomaswcode.decrastination.core.Plan
@@ -53,6 +54,7 @@ import com.thomaswcode.decrastination.learn.Assessment
 import com.thomaswcode.decrastination.learn.Briefing
 import com.thomaswcode.decrastination.learn.Calibrator
 import com.thomaswcode.decrastination.learn.CheckIn
+import com.thomaswcode.decrastination.learn.Daily
 import com.thomaswcode.decrastination.learn.DailyAlarms
 import com.thomaswcode.decrastination.learn.Learning
 import com.thomaswcode.decrastination.net.UrlConnectionHttp
@@ -72,6 +74,7 @@ import com.thomaswcode.decrastination.sources.teams.TeamsSource
 import com.thomaswcode.decrastination.sync.AndroidSyncPorts
 import com.thomaswcode.decrastination.sync.AndroidGmailPorts
 import com.thomaswcode.decrastination.sync.GmailFinishes
+import com.thomaswcode.decrastination.sync.GmailWriteWorker
 import com.thomaswcode.decrastination.sync.Replica
 import com.thomaswcode.decrastination.sync.ReplicaWorker
 import com.thomaswcode.decrastination.sync.Sync
@@ -108,6 +111,7 @@ import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
@@ -117,6 +121,8 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * The app's singletons. The sync, the focus service, the widget and the screens all run in the
@@ -237,19 +243,12 @@ class AppGraph private constructor(context: Context) : Owners {
         settings, stores.calendar, stores.instructions, clock, scope, syncer, AndroidSyncPorts(app),
         forgetPlan = { focus.forgetPlan() },
         watchCalendar = { calendarWriter.watchCalendar() },
-        // What this phone's calendar and what it's asked decide, as a command once the two keep in step by them (W-24).
-        // On record as asked once asked: here at once, or as its command's applied here ([eventAsked]).
-        askAboutEvent = { key, title, day, start, answers ->
-            if (sendsCommands()) {
-                commands.send(AskAboutEvent(key, title, day, start, answers))
-            } else {
-                conversation.askAboutEvent(key, title, day, start, answers)
-                sync.eventAsked(key)
-            }
-        },
+        // What this phone's calendar and what it's asked decide, as a command (W-24), mirroring or not, so the switch waits for one
+        // under way. On record as asked once asked, as its command's applied here ([eventAsked]).
+        askAboutEvent = { key, title, day, start, answers -> commands.send(AskAboutEvent(key, title, day, start, answers)) },
         settleEvent = { key -> settleEvent(key) },
         replan = { planning.watcher.poke() },
-        noteSource = { source, note -> if (sendsCommands()) commands.send(NoteSource(source, note)) else syncer.note(source, note) },
+        noteSource = { source, note -> commands.send(NoteSource(source, note)) },
     )
 
     /**
@@ -300,6 +299,8 @@ class AppGraph private constructor(context: Context) : Owners {
         clock = clock,
         ports = AndroidGmailPorts(app, notifier, clock) { sources -> sync.syncNow(sources) },
         readAt = { tasks.value.status(Source.Gmail).lastSuccessStartedAt },
+        // The server's to write once the phone sends commands (5.15.0): looked at as each run of writes begins, under its lock.
+        writesHere = { !sendsCommands() },
     )
 
     override val gmail: GmailFinishes get() = gmailFinishes
@@ -311,18 +312,21 @@ class AppGraph private constructor(context: Context) : Owners {
      */
     fun gmailWrites(): Boolean = !sendsCommands()
 
-    /** [taskId], a starred email, finished at your word (a task's sheet): a command once the phone sends them ([FinishGmail]). */
-    suspend fun finishGmail(taskId: String): GmailFinishes.Finish = if (sendsCommands()) commands.act(FinishGmail(taskId)) else gmailFinishes.finish(taskId, explicit = true)
+    /**
+     * [taskId], a starred email, finished at your word (a task's sheet): a command ([FinishGmail]), mirroring or not, so the switch
+     * waits for one under way and makes one begun meanwhile after it, queued, as each of these is.
+     */
+    suspend fun finishGmail(taskId: String): GmailFinishes.Finish = commands.act(FinishGmail(taskId))
 
-    /** [taskId]'s finish taken back (its sheet's Undo): a command once the phone sends them ([UnfinishGmail]). */
-    suspend fun unfinishGmail(taskId: String): Boolean = if (sendsCommands()) commands.act(UnfinishGmail(taskId)) else gmailFinishes.unfinish(taskId)
+    /** [taskId]'s finish taken back (its sheet's Undo): a command ([UnfinishGmail]), likewise. */
+    suspend fun unfinishGmail(taskId: String): Boolean = commands.act(UnfinishGmail(taskId))
 
-    /** [taskId]'s write given up, sorted (its sheet's It's sorted): a command once the phone sends them ([SortGmail]). */
-    suspend fun sortGmail(taskId: String) = if (sendsCommands()) commands.act(SortGmail(taskId)) else gmailFinishes.sorted(taskId)
+    /** [taskId]'s write given up, sorted (its sheet's It's sorted): a command ([SortGmail]), likewise. */
+    suspend fun sortGmail(taskId: String) = commands.act(SortGmail(taskId))
 
-    /** The very first finish's OK given, or refused: a command once the phone sends them ([ConfirmGmail]). */
+    /** The very first finish's OK given, or refused: a command ([ConfirmGmail]), likewise. */
     suspend fun confirmGmail(confirmed: Boolean) {
-        if (sendsCommands()) commands.act(ConfirmGmail(confirmed)) else if (confirmed) gmailFinishes.confirm() else gmailFinishes.refuse()
+        commands.act(ConfirmGmail(confirmed))
     }
 
     /** The blocker's state and decisions (block/Focus.kt). */
@@ -337,8 +341,9 @@ class AppGraph private constructor(context: Context) : Owners {
         // A school day by the school calendar (BL-02): a day off blocks from the weekend's time.
         schoolDay = { SchoolDays.kindOf(it, school.value) == DayKind.Weekday },
         forceActiveUntil = { stores.device.value.forceActiveUntil },
-        // Free time spent, sent once the two keep in step by commands, merged with the one before till it goes (W-24).
-        saveSpend = { ms, day -> if (sendsCommands()) commands.send(SpendFreeTime(day.toString(), ms)) else focus.spend(ms, day) },
+        // Free time spent, as a command, mirroring or not, so the switch waits for one under way; once the two keep in step by
+        // commands, merged with the one before till it goes (W-24).
+        saveSpend = { ms, day -> commands.send(SpendFreeTime(day.toString(), ms)) },
     ) { state, s, now -> planning.plan(state, s, now) }
 
     /**
@@ -349,8 +354,8 @@ class AppGraph private constructor(context: Context) : Owners {
     val calendarWriter = CalendarWriter(
         tasks, settings, stores.model, stores.calendar, clock, scope, SlotCalendar(app),
         sayRefused = { move, zone, why -> SlotCalendar.sayRefused(app, move, zone, why) },
-        // A slot moved by hand in the calendar: what only this phone sees, as a command once the two keep in step by them.
-        addOwnChange = { id, text, about, change -> if (sendsCommands()) commands.send(AddOwnChange(id, text, about, change)) else instructions.addOwnChange(id, text, about, change) },
+        // A slot moved by hand in the calendar: what only this phone sees, as a command, mirroring or not, so the switch waits for one.
+        addOwnChange = { id, text, about, change -> commands.send(AddOwnChange(id, text, about, change)) },
         replan = { planning.watcher.poke() },
         // An answer here (the Day's event sheet, his question's chips): his questions on it settled on the server too.
         settleEvent = { key -> settleEvent(key) },
@@ -454,16 +459,14 @@ class AppGraph private constructor(context: Context) : Owners {
     /** [action] applied as a command, its answer the owner's. */
     suspend fun <R, A> act(action: A): R where A : Action, A : Answers<R> = commands.act(action)
 
-    /** A block as the blocker saw it, on record: sent as a command once the two keep in step by them (W-24). */
-    suspend fun recordBlock(target: Focus.Target, reason: BlockPolicy.Reason) =
-        if (sendsCommands()) commands.send(RecordBlock(target.name, reason.name)) else focus.recordBlock(target, reason)
+    /** A block as the blocker saw it, on record: as a command (W-24), mirroring or not, so the switch waits for one under way. */
+    suspend fun recordBlock(target: Focus.Target, reason: BlockPolicy.Reason) = commands.send(RecordBlock(target.name, reason.name))
 
-    /** The timer's zero reached and not yet told: told, and sent as a command once the two keep in step by them. Whether it was. */
-    suspend fun timerOver(now: Long): Boolean = if (sendsCommands()) commands.act(TimerOver) else focus.timerOver(now)
+    /** The timer's zero reached and not yet told: told, as a command, likewise, at its moment. Whether it was. */
+    suspend fun timerOver(): Boolean = commands.act(TimerOver)
 
-    /** Protection as the watchdog found it, on record, sent likewise. */
-    suspend fun recordProtection(problems: List<String>, repaired: Boolean) =
-        if (sendsCommands()) commands.send(RecordProtection(problems, repaired)) else focus.recordProtection(problems, repaired)
+    /** Protection as the watchdog found it, on record, likewise. */
+    suspend fun recordProtection(problems: List<String>, repaired: Boolean) = commands.send(RecordProtection(problems, repaired))
 
     /** A piece moved by hand ([Moves]). */
     val moves: Moves = Moves(tasks, instructions, commands, planning, clock, scope)
@@ -481,6 +484,9 @@ class AppGraph private constructor(context: Context) : Owners {
     val replica: Replica = Replica(
         stores, UrlConnectionHttp(), clock, BuildConfig.VERSION_NAME, calendar = { sync.calendarRead() }, commands,
         photoHttp = UrlConnectionHttp(readTimeoutMs = Replica.PHOTO_WAIT_MS),
+        seedFile = File(app.filesDir, "switch-seed.json"),
+        // Mirroring again, at a retry of the switch or at your word: Gmail's writes are this phone's again, and any waiting goes.
+        mirroringAgain = { gmailFinishes.rearm() },
     ) { fresh -> outbox.heard(clock.now(), fresh) }
 
     /** The tasks' readings ([Readings]): by Claude while it can be asked, by the rules otherwise; one read again on asking. */
@@ -497,8 +503,9 @@ class AppGraph private constructor(context: Context) : Owners {
         tasks, settings, chat, clock, scope, gateway, focus, File(app.filesDir, "photos"), PhotoChecks::shrink,
         profile = { conversation.profile() },
         read = { taskId -> readings.enrichNow(only = taskId) },
-        // Kept with its task as a command once the two keep in step by them, or a pull would take it away, and the file with it.
-        keeping = { taskId, photo -> if (sendsCommands()) commands.send(AttachPhoto(taskId, photo)) else photos.keep(taskId, photo) },
+        // Kept with its task as a command, mirroring or not, so the switch waits for one under way; once the two keep in step by
+        // commands, a pull would otherwise take it away, and the file with it.
+        keeping = { taskId, photo -> commands.send(AttachPhoto(taskId, photo)) },
         // A photo of homework read by the server once the phone sends commands, as Claude's the server's then (D-142).
         readByServer = { jpeg -> if (sendsCommands()) replica.readPhotoOnServer(jpeg) else null },
         // A photo check likewise (D-148), its piece found there by its key.
@@ -512,16 +519,18 @@ class AppGraph private constructor(context: Context) : Owners {
     override suspend fun eventAsked(key: String) = sync.eventAsked(key)
 
     /**
-     * His questions about the events named [key] settled, an answer or an instruction of yours having answered them: as a command
-     * once the phone sends them, so the server's copies of them settle too and a pull doesn't bring them back unanswered.
+     * His questions about the events named [key] settled, an answer or an instruction of yours having answered them: as a command,
+     * mirroring or not, so the switch waits for one under way, and once the phone sends them the server's copies of them settle too
+     * and a pull doesn't bring them back unanswered.
      */
-    private suspend fun settleEvent(key: String) = if (sendsCommands()) commands.send(SettleEvent(key)) else conversation.settleEvent(key)
+    private suspend fun settleEvent(key: String) = commands.send(SettleEvent(key))
 
     /** Protection ([Protection]): settings changes, waiting once armed if they loosen blocking; the parent code; the device admin. */
     override val protection: Protection = Protection(
         settings, stores.protection, stores.device, secrets, clock, scope, adminActive = { Watchdog.isAdminActive(app) }, byServer = sendsCommands,
-        // A new parent code's lock a command once the phone sends them, as the server's lock is what a pull brings.
-        locking = { step -> if (sendsCommands()) commands.send(ParentCodeSet(step)) else protection.freshLock(step) },
+        // A new parent code's lock a command, mirroring or not, so the switch waits for one under way, as the server's lock is what
+        // a pull brings once the phone sends them.
+        locking = { step -> commands.send(ParentCodeSet(step)) },
     ) {
         app.getSystemService(DevicePolicyManager::class.java)?.removeActiveAdmin(Watchdog.admin(app))
     }
@@ -719,10 +728,11 @@ class AppGraph private constructor(context: Context) : Owners {
     /**
      * [text], a backup, restored (Import, a reset's copy): here while mirroring; on the server once the phone sends commands, as an
      * Import here alone would go at the next pull, then pulled whole, its calendar answers kept here, as only this phone reads the
-     * calendar. What came of it, in words.
+     * calendar. What came of it, in words. Here, with no switch under way, as it holds the sources' lock while it reads the stores
+     * ([switchOver]), and this writes them all.
      */
     suspend fun importBackup(text: String): String {
-        if (!sendsCommands()) return backups.importBackup(text)
+        syncer.quiet { if (sendsCommands()) null else backups.importBackup(text) }?.let { return it }
         val asked = replica.importOnServer(text)
         if (asked.said?.startsWith(BackupService.RESTORED) == true) {
             backups.answersOf(text)
@@ -733,13 +743,63 @@ class AppGraph private constructor(context: Context) : Owners {
 
     /** [name], a reset's copy kept in the app's own files, restored as [importBackup] restores a backup. */
     suspend fun restoreResetCopy(name: String): String {
-        if (!sendsCommands()) return backups.restoreResetCopy(name)
+        syncer.quiet { if (sendsCommands()) null else backups.restoreResetCopy(name) }?.let { return it }
         val (text, why) = backups.resetCopy(name)
         return if (text == null) why.orEmpty() else importBackup(text)
     }
 
-    /** [what] reset (LR-08): here while mirroring; a command once the phone sends them, as the server's copy is what a pull brings. */
-    suspend fun reset(what: Reset): String = if (sendsCommands()) commands.act(ResetData(what)) else backups.reset(what)
+    /**
+     * [what] reset (LR-08): a command, mirroring or not, so the switch waits for one under way; once the phone sends them, the
+     * server's too, as its copy is what a pull brings.
+     */
+    suspend fun reset(what: Reset): String = commands.act(ResetData(what))
+
+    /**
+     * The switch to commands (D-141), at your word, from a PC (`sync-switch`): Gmail's worker stopped and waited for first, so no
+     * write's half made as the stores are read; then [Replica.switchOver], a backup of this phone's saved before anything goes (W-26),
+     * with when this phone last ran each job at a set time that's the server's from then ([Daily.ranBeforeSwitch]). What came of it,
+     * in words.
+     */
+    suspend fun switchOver(): String {
+        GmailWriteWorker.stop(app)
+        // With no write to Gmail, no read of a source, no answer of the chat's, no review, no task's or instruction's reading and no
+        // photo check under way, nor any begun, as each writes the stores unqueued while mirroring: those that waited go as commands,
+        // or are the server's, once the switch is made. In that order, as a read's own work answers the chat and reads the instructions
+        // inside it. A minute at most for one under way to finish; the switch, once begun, is made whole, however long it takes, so what
+        // it says is what it did. The jobs' last runs are read inside, so a morning or a review just made is among them.
+        var why: String? = "Nothing switched: a write to Gmail, a read of a source, an answer, the review, a reading or a photo check didn't finish within a minute; try again"
+        withTimeoutOrNull(60_000) {
+            gmailFinishes.quiet {
+                syncer.quiet {
+                    conversation.quiet {
+                        learning.quiet {
+                            readings.quiet {
+                                instructions.quiet {
+                                    photos.quiet {
+                                        withContext(NonCancellable) {
+                                            val runtime = runtime.value
+                                            val morningAt = chat.value.messages.lastOrNull { it.kind == MessageKind.Morning }?.at
+                                            val ran = Daily.ranBeforeSwitch(runtime.dailyRanAt, runtime.dailyRetries, morningAt, log.value.reviews.maxOfOrNull { it.at })
+                                            why = replica.switchOver(backup = { backups.switchCopy() }, ran = ran)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        // Mirroring still: Gmail's writes are this phone's again.
+        if (!sendsCommands()) gmailFinishes.rearm()
+        return why ?: "Switched: this phone keeps in step by commands"
+    }
+
+    /**
+     * A first pull refused (W-26) taken all the same, at your word (Setup, `sync-take-servers-copy`), a copy of everything here saved
+     * first, as a reset's is, to go back to ([Replica.takeServersCopy]). Whether it's taken.
+     */
+    suspend fun takeServersCopy(): Boolean = replica.takeServersCopy(backup = { backups.switchCopy() })
 
     /**
      * [taskId] read again by Claude as it is now (AC-06, the sheet's *Read again with Claude*): here, or by the server once the phone

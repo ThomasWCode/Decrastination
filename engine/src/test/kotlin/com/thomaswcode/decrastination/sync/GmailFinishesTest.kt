@@ -26,6 +26,9 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
 
 /**
@@ -121,6 +124,47 @@ class GmailFinishesTest {
         gmailRead = clock.time + 1
         clock.time += 2
         assertEquals(GmailFinishes.Finish.Going, finishes.finish(email.id, explicit = true))
+    }
+
+    @Test
+    fun `a write due isn't made where it's not this side's, as a phone's once it sends commands, looked at under the writes' lock`() = runBlocking {
+        var here = true
+        val switching = GmailFinishes(writes, { settings }, { tasks[it] }, { 1.0 }, clock, ports, readAt = { gmailRead }, writesHere = { here }) { "w${++ids}" }
+        val gmail = FakeGmail()
+        assertEquals(GmailFinishes.Finish.Going, switching.finish(email.id, explicit = false))
+        clock.time += GmailWrites.GRACE_MS
+        // Gone over while a run waited for the lock: it finds the writes aren't its to make, and makes none.
+        val ran = switching.quiet {
+            here = false
+            "the switch"
+        }
+        assertEquals("the switch", ran)
+        assertFalse(switching.write(gmail))
+        assertTrue(gmail.stored.isEmpty())
+        assertEquals(null, switching.value.single().doneAt)
+    }
+
+    @Test
+    fun `the switch's quiet waits for a write under way, and reads the journal with it whole`() = runBlocking {
+        val gmail = FakeGmail()
+        assertEquals(GmailFinishes.Finish.Going, finishes.finish(email.id, explicit = false))
+        clock.time += GmailWrites.GRACE_MS
+        // A write held part way, as one under way with Gmail is.
+        val held = CompletableDeferred<Unit>()
+        val slow = object : GmailWriter {
+            override suspend fun <T> open(block: suspend (GmailWriter.Session) -> T): T {
+                held.await()
+                return gmail.open(block)
+            }
+        }
+        val writing = async(start = CoroutineStart.UNDISPATCHED) { finishes.write(slow) }
+        var journal: List<GmailWrite>? = null
+        val quiet = async(start = CoroutineStart.UNDISPATCHED) { finishes.quiet { journal = finishes.value } }
+        assertNull(journal, "not while a write's under way")
+        held.complete(Unit)
+        quiet.await()
+        assertFalse(writing.await())
+        assertEquals(clock.time, journal?.single()?.doneAt, "read once the write was made")
     }
 
     @Test

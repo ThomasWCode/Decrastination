@@ -26,6 +26,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 /**
@@ -145,6 +147,15 @@ class Photos(
         photos.listFiles()?.filter { it.name !in held && it.lastModified() < keptBefore }?.forEach { it.delete() }
     }
 
+    /** Held while a photo check's asked and its piece ticked off here: the switch holds it too ([quiet]). */
+    private val checking = Mutex()
+
+    /**
+     * [block] with no photo check under way here, and none begun till it's done: the switch reads the stores whole meanwhile
+     * (D-141), with the piece a check under way ticks off, and one that waited for it is the server's to check.
+     */
+    suspend fun <T> quiet(block: suspend () -> T): T = checking.withLock { block() }
+
     /**
      * Checks [pages], the photos of [piece]'s work (AI-17), against it and its task (AI-16), records
      * the cost, and says how it went. The photos are deleted, whatever happens.
@@ -163,8 +174,8 @@ class Photos(
         } finally {
             withContext(NonCancellable + Dispatchers.IO) { pages.forEach { it.delete() } }
         }
-        checkByServer(jpegs, piece, takenAt)?.let { return it }
-        return checkJpegs(jpegs, piece, takenAt)
+        // The server's to check once the phone sends commands, looked at under the lock the switch holds.
+        return checking.withLock { checkByServer(jpegs, piece, takenAt) ?: checkJpegs(jpegs, piece, takenAt) }
     }
 
     /**

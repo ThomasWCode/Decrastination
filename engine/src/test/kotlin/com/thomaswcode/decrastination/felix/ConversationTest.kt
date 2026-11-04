@@ -45,8 +45,12 @@ import com.thomaswcode.decrastination.learn.CalendarTime
 import com.thomaswcode.decrastination.learn.CheckIn
 import com.thomaswcode.decrastination.learn.Daily
 import com.thomaswcode.decrastination.sync.GmailFinishes
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.joinAll
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import java.time.Instant
@@ -393,6 +397,22 @@ class ConversationTest {
     }
 
     @Test
+    fun `an answer that waited for the switch's quiet finds it the server's to make, and asks nothing`() = runBlocking<Unit> {
+        felix.failFast()
+        // The switch holds the answers' lock as it reads the stores: your words sent meanwhile wait for their answer, which the
+        // message sets going and which is asked again here, and the switch is made.
+        val held = CompletableDeferred<Unit>()
+        val quiet = launch(start = CoroutineStart.UNDISPATCHED) { conversation.quiet { held.await(); felix.byServer = true } }
+        assertTrue(conversation.ask("Plan my evening"))
+        val answer = launch(start = CoroutineStart.UNDISPATCHED) { conversation.answerChat() }
+        held.complete(Unit)
+        joinAll(quiet, answer)
+        felix.settle()
+        assertEquals(0, felix.server.requestCount, "nothing asked of Claude here")
+        assertNotNull(stores.chat.value.unanswered, "the server's to answer, as it finds it unanswered")
+    }
+
+    @Test
     fun `once the server asks the check-in, the form's reminder is still this phone's where his notification can't show it`() = runBlocking {
         felix.byServer = true
         felix.failFast()
@@ -430,6 +450,22 @@ class ConversationTest {
         felix.instructions.readInstructions(interactive = true)
         felix.settle()
         assertEquals(1, felix.server.requestCount)
+    }
+
+    @Test
+    fun `an instruction's reading that waited for the switch's quiet finds it the server's, nothing asked of Claude here`() = runBlocking {
+        felix.failFast()
+        // The switch holds the instructions' reading lock as it reads the stores: one written meanwhile waits to be read, and the
+        // switch is made.
+        val held = CompletableDeferred<Unit>()
+        val quiet = launch(start = CoroutineStart.UNDISPATCHED) { felix.instructions.quiet { held.await(); felix.byServer = true } }
+        val id = felix.instructions.addInstruction("Maths on Friday", About())
+        val reading = launch(start = CoroutineStart.UNDISPATCHED) { felix.instructions.readInstructions(interactive = true) }
+        held.complete(Unit)
+        joinAll(quiet, reading)
+        felix.settle()
+        assertEquals(0, felix.server.requestCount)
+        assertEquals(InstructionStatus.Reading, stores.instructions.value.instructions.single { it.id == id }.state, "the server's to read")
     }
 
     @Test

@@ -458,6 +458,12 @@ class Conversation(
     /** Held while the chat is answered, so each message is answered once. */
     private val answering = Mutex()
 
+    /**
+     * [block] with no answer of the chat's under way, and none begun till it's done: the switch reads the stores whole meanwhile
+     * (D-141), with what an answer under way writes in them, and one that waited for it finds it the server's to make.
+     */
+    suspend fun <T> quiet(block: suspend () -> T): T = answering.withLock { block() }
+
     private val sentAt = MutableStateFlow<Long?>(null)
 
     /** When the chat's call in flight was sent (AC-08), for its "thinking… 12 s"; null with none. */
@@ -741,6 +747,8 @@ class Conversation(
     }
 
     private suspend fun answeringChat(retry: Boolean): Unit = answering.withLock {
+        // The server's to answer once the phone sends commands, looked at again here as the switch holds this lock ([quiet]).
+        if (byServer()) return@withLock
         val waiting = chat.value.unanswered ?: return@withLock
         // Answered with nothing usable, it waits for your Try again ([retry]): never asked by itself.
         if (waiting.stuck && !retry) return@withLock

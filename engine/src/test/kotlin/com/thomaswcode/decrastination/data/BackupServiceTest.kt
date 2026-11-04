@@ -84,6 +84,27 @@ class BackupServiceTest {
     }
 
     @Test
+    fun `the switch's copy is saved as a reset's is, listed with them, newest first, and read as Import reads it`() = runTest {
+        val phone = Phone(full = true)
+        val service = BackupService(
+            phone.stores, clock, scope, phone.folder, File(phone.dir, "backups"), "test",
+            changeSettings = { change -> phone.stores.replace(phone.stores.settings, change) }, applying = Mutex(),
+            layInstructions = {}, layTaskOverrides = {}, schedule = {}, reread = {}, cancelFelix = {},
+            restoredFrom = "the Backup page",
+            sendCopy = { _, _ -> },
+        )
+        service.reset(Reset.Calibration)
+        clock.time += 60_000
+        assertTrue(service.switchCopy())
+        val copies = service.resetCopies()
+        assertEquals(2, copies.size)
+        assertTrue(copies.first().startsWith("switch-"), "the newer first: $copies")
+        val (text, why) = service.resetCopy(copies.first())
+        assertNull(why)
+        assertNotNull(text)
+    }
+
+    @Test
     fun `where a copy's sent on, a reset keeps it here first and says where it's restored from`() = runTest {
         val phone = Phone(full = true)
         val sent = mutableListOf<String>()

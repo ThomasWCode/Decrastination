@@ -117,6 +117,14 @@ class ArchitectureTest {
     }
 
     @Test
+    fun `AppGraph makes each change that has a command through the commands, mirroring or not`() {
+        // So the switch's drain holds every one made while mirroring (D-141): one made round its command could land after the last
+        // seed is read, and never reach the server.
+        val round = Regex("""if \(sendsCommands\(\)\) commands\.""").findAll(sources.getValue("AppGraph.kt")).count()
+        assertTrue(round == 0, "AppGraph makes $round change(s) round their command while mirroring")
+    }
+
+    @Test
     fun `only the backup service replaces a store whole`() {
         // Stores.replace goes round a store's owner: for a backup restored or a reset, and nothing else.
         val replaces = Regex("""\bstores\.replace\(""")

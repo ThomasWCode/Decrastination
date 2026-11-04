@@ -659,7 +659,7 @@ private fun NightlyBackup(graph: AppGraph, last: Long?, now: Long) {
             BackupPage.fit(leftOut, tooBig, refused)?.let { Note(it) }
         }
         if (copies.isNotEmpty()) {
-            Section("Copies saved before a reset")
+            Section("Copies saved before a reset or the switch")
             Note("Kept in the app's own files, as Documents couldn't be written then; the file picker can't reach them, so they're restored from here.")
             copies.forEach { name ->
                 Row(verticalAlignment = Alignment.CenterVertically) {

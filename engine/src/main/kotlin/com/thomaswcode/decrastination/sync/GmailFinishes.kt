@@ -18,6 +18,8 @@ import java.net.SocketTimeoutException
 import java.net.UnknownHostException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
  * Finishing a starred email here (docs/spec/sources.md §Gmail, D-7 as amended): the write to Gmail journaled
@@ -38,6 +40,8 @@ class GmailFinishes(
     private val ports: Ports,
     /** When the last Gmail read that worked began: a finish made before it, its task open after it, was starred again. */
     private val readAt: () -> Long? = { null },
+    /** Whether the writes are this side's to make: the phone's while it mirrors, the server's once it sends commands. */
+    private val writesHere: () -> Boolean = { true },
     /**
      * [keep], the journal's record of what a conversation holds before it's changed, made to stand before Gmail is: as it's made
      * here, where a store's written as it changes; on the server between its commands, as a write made while one's open waits for it.
@@ -83,6 +87,15 @@ class GmailFinishes(
 
     /** The journal as it is, for the screens. */
     val state: StateFlow<GmailWriteStore> get() = writes.state
+
+    /** Held while writes are made ([write]): the switch holds it too, so it reads the journal with none half made. */
+    private val writing = Mutex()
+
+    /**
+     * [block] with no write to Gmail under way, and none begun till it's done: the switch reads the journal whole meanwhile (D-141),
+     * and a write that waited for it finds, by [writesHere], whether it's still this side's to make.
+     */
+    suspend fun <T> quiet(block: suspend () -> T): T = writing.withLock { block() }
 
     val value: List<GmailWrite> get() = writes.value.writes
 
@@ -202,7 +215,9 @@ class GmailFinishes(
      * waits its backoff in the journal ([GmailWrites.failed]) while the rest go on. Then the worker's next run set for
      * the next to go (a grace still running, a failed try's wait). Whether a try failed, to be tried again.
      */
-    suspend fun write(writer: GmailWriter): Boolean {
+    suspend fun write(writer: GmailWriter): Boolean = writing.withLock {
+        // Not this side's to write (the phone's once it sends commands, the server's then): nothing written, and none to try again.
+        if (!writesHere()) return@withLock false
         // Switched off meanwhile: a finish not yet started isn't.
         if (!settings().gmailFinishes) switchedOff()
         var again = false
@@ -226,7 +241,7 @@ class GmailFinishes(
             }
         }
         GmailWrites.wake(value)?.let(ports::schedule)
-        return again
+        again
     }
 
     /**

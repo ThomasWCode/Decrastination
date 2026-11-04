@@ -187,6 +187,11 @@ class CommandActivity : Activity() {
                 ReplicaWorker.now(this)
                 Log.i(TAG, "Sending asked for; last error ${graph.replica.state.value.lastError}")
             }
+            // The switch to commands (D-141), at the owner's word, with them there: what came of it logged.
+            "sync-switch" -> Log.i(TAG, "The switch: ${graph.switchOver()}")
+            // A first pull refused (W-26): the server's copy taken all the same, or back to mirroring once the server is.
+            "sync-take-servers-copy" -> Log.i(TAG, if (graph.takeServersCopy()) "A copy saved, and the server's copy is taken at the next sync" else "Nothing taken: a copy of what's here couldn't be saved first")
+            "sync-mirror-again" -> graph.replica.mirrorAgain().also { Log.i(TAG, "Mirroring again: everything's sent at the next sync") }
             "sync-state" -> graph.replica.state.value.let { Log.i(TAG, "The server: ${it.server}; paired ${graph.replica.paired}, last sent ${it.lastSyncAt}, ${it.sent.size} stores, error ${it.lastError}, refused ${it.refused}, Firebase's id held ${it.pushId != null}") }
             // Firebase's part, from a PC: what's waiting sent, Firebase's id with it, then the server asked to tell this phone now. The message is logged as it's heard.
             "sync-push-test" -> {

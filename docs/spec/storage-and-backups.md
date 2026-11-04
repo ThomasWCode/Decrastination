@@ -33,7 +33,7 @@ Under the app's `files/` folder:
 | `protection.json` | `ProtectionState`, Protection's: waiting changes, an override's end, the code lock, the uptime mark; version 2 (`data/ProtectionSplit.kt`, 4.13.0) |
 | `device.json` | `DeviceState`, what's only true of this phone: the device admin's arming, the watchdog's findings, blocking forced on; never in a backup, cleared by no reset |
 | `outbox.json` | `OutboxState`: the commands the server hasn't answered yet; empty till the two keep in step by commands; never in a backup, cleared by no reset (5.2.0) |
-| `sync.json` | `SyncState`, the replica's: the server's address, this phone's id there, each store's hash as last accepted, the last send and what went wrong, and the id Firebase reaches it by (5.11.0); never in a backup, cleared by no reset (5.0.0) |
+| `sync.json` | `SyncState`, the replica's: the server's address, this phone's id there, each store's hash as last accepted, the last send and what went wrong, and the id Firebase reaches it by (5.11.0); the switch's seed under way and a first pull to be checked (version 6, 6.0.0, the seed itself in `switch-seed.json` beside the stores till it's answered, sync.md §The exchange); never in a backup, cleared by no reset (5.0.0) |
 | `model.json` | `ModelState`, the gateway's: Claude's month and last 100 calls, the readings the API refused, the alerts already given, micro-plans |
 | `anki.json` | `AnkiState`, the Anki watch's (`block/AnkiWatch.kt`): AnkiDroid's readings, since when it's been in front, and the day's minutes in it by deck |
 | `learning.json` | `LearningState`: the calibration ([learning.md](learning.md)) |
@@ -51,7 +51,8 @@ Under the app's `files/` folder:
 Beside them:
 - `photos/`: a photo of the work for a task, one a task, let go once no task holds it (AI-23);
 - `crashes/`: the last three crashes (`data/Crashes.kt`, AR-06), the newest in Settings → Claude;
-- `backups/`: a reset's copy, where `Documents` can't be written;
+- `backups/`: a reset's copy, or the switch's (`switch-<date>-<time>.json`, 6.0.0, W-26), where `Documents` can't be written;
+- `switch-seed.json`: the switch's last seed, every store whole, from going over till the server's answer, sent again the same till then;
 - `<name>.unreadable-<when>`: copies of files that couldn't be read (below);
 - `<name>.v<n>`: the file a migration came from, kept a week (above), a month of the chat's archive's among them (`chat-archive-<yyyy-MM>.json.v<n>`);
 - the debug commands' files: `credentials.import` (only until it's imported), `ai-prompts.json`, `chat-context.txt` and `chat-turns.txt`.

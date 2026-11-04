@@ -25,7 +25,10 @@ import com.thomaswcode.decrastination.views.PhotoRead
 import java.io.File
 import java.io.IOException
 import java.net.URLEncoder
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.util.Base64
+import java.util.UUID
 import com.thomaswcode.decrastination.sync.protocol.CommandBatch
 import com.thomaswcode.decrastination.sync.protocol.Commands
 import com.thomaswcode.decrastination.sync.protocol.Outcome
@@ -58,6 +61,10 @@ class Replica(
     private val commands: Commands? = null,
     /** Where a photo's reading goes: its answer waits on Claude's call on the server, so this waits [PHOTO_WAIT_MS] for it. */
     private val photoHttp: Http = http,
+    /** Where the switch's seed is kept till it's answered ([switchOver]), so it goes again the same whatever stops this process. */
+    private val seedFile: File? = null,
+    /** This phone mirroring again, however it came back to it ([backToMirroring]): what's its own again then, set going. */
+    private val mirroringAgain: () -> Unit = {},
     /** The chat's messages a pull brought, none of them here before: Felix's, said on the server, heard here as his notification. */
     private val heard: (List<ChatMessage>) -> Unit = {},
 ) {
@@ -163,6 +170,8 @@ class Replica(
      */
     suspend fun upload(): Boolean = sending.withLock {
         if (sync.value.mode == SyncState.COMMANDS) {
+            // The switch's seed first, where its answer's still to come (D-141): nothing else goes till the server's taken it.
+            if (sync.value.switching != null && !switchAgain()) return@withLock false
             // A new parent code ahead of the commands, so one made with it isn't checked against the one before; after them too, where
             // the server's mode couldn't be told first.
             sendParentCode(ahead = true)
@@ -245,8 +254,27 @@ class Replica(
     /** Whether the server says it now applies commands: this phone then keeps in step that way, at its next upload. */
     private suspend fun switched(headers: Map<String, String>): Boolean {
         if (serverMode(headers) != SyncState.COMMANDS) return false
-        sync.update { it.copy(mode = SyncState.COMMANDS, sent = emptyMap(), lastError = null) }
+        // What was last sent kept, as the first pull's checked against it (W-26): a store changed here since is one the server never took.
+        sync.update { it.copy(mode = SyncState.COMMANDS, firstPull = true, lastError = null) }
         return true
+    }
+
+    /**
+     * Why [pulled], a first pull ([SyncState.firstPull]), is refused (W-26), or null where it's taken: a server behind this phone's last
+     * seed, restored from before it; or a store here that's neither as this phone last sent it nor as the server has it now, a change
+     * the server never took, which a pull taking stores whole would lose. Refused, nothing's taken, and Setup says what's next.
+     */
+    private fun firstPullRefused(pulled: PulledState): String? {
+        if (pulled.revision < sync.value.seedRevision) return "The server is behind what this phone last sent (restored from before it?): nothing's taken from it. See its restore steps."
+        // Only those a pull takes: the calendar as read is this phone's, and never taken from the server; the archive's months are,
+        // and one changes here too (a rating of a message in it).
+        val here = stores.mirrored.associate { it.name to it.text() } + stores.chatArchive.texts().associate { it.name to it.text }
+        val lost = pulled.stores.filter { store ->
+            val text = here[store.name] ?: return@filter false
+            Protocol.hash(text) != sync.value.sent[store.name] && runCatching { JSON.parseToJsonElement(text) }.getOrNull() != store.json
+        }
+        if (lost.isEmpty()) return null
+        return "A first pull would lose what's changed here in ${lost.joinToString { it.name }}: nothing's taken. See Setup for the ways on."
     }
 
     /**
@@ -259,6 +287,7 @@ class Replica(
         // may not hold the parent code it last took.
         sync.update { it.copy(mode = SyncState.MIRROR, revision = 0, sent = emptyMap(), lastError = null, letGoSeen = 0, parentCodeSent = null) }
         archiveSent = NOT_SENT
+        mirroringAgain()
         return true
     }
 
@@ -272,6 +301,9 @@ class Replica(
      * what it's lost.
      */
     private suspend fun exchange(): Boolean {
+        // The switch's seed first, where its answer's still to come (D-141), whichever way this was asked for: no command goes ahead
+        // of it, and none made with a parent code ahead of the code ([sendSwitch] sends that first).
+        if (sync.value.switching != null && !switchAgain()) return false
         val token = stores.secrets[Secret.DeviceToken] ?: return false
         val headers = mapOf("Content-Type" to "application/json", "Authorization" to "Bearer $token", Protocol.HEADER to Protocol.VERSION.toString(), Protocol.ZONE_HEADER to clock.zone().id)
         val server = sync.value.server
@@ -304,6 +336,7 @@ class Replica(
             val pulled = pull(server, headers, sync.value.revision) ?: return false
             if (pulled.mode == SyncState.MIRROR) return backToMirroring()
             if (pulled.revision < sync.value.revision) return failed(GONE_BACK)
+            if (sync.value.firstPull) firstPullRefused(pulled)?.let { why -> return failed(why) }
             val here = stores.mirrored.associateBy { it.name }
             val taken = pulled.stores.filter { it.name in here || ChatArchiveStore.isMonth(it.name) }
             val newer = taken.filter { (here[it.name]?.version ?: stores.chatArchive.version) < it.version }.map { it.name }
@@ -328,7 +361,7 @@ class Replica(
             if (commands == null) adopt() else if (!commands.replacing(adopt)) return true
             fresh?.let { runCatching { heard(it) }.onFailure { e -> Log.w(Log.TAG, "Hearing the chat failed: ${e::class.simpleName}") } }
             val seen = pulled.letGo.values.maxOrNull() ?: 0
-            sync.update { it.copy(revision = pulled.revision, lastSyncAt = clock.now(), lastError = null, refused = emptyList(), letGoSeen = maxOf(it.letGoSeen, seen)) }
+            sync.update { it.copy(revision = pulled.revision, lastSyncAt = clock.now(), lastError = null, refused = emptyList(), letGoSeen = maxOf(it.letGoSeen, seen), firstPull = false) }
             return true
         } catch (failed: IOException) {
             Log.w(Log.TAG, "Keeping in step with the server failed: ${failed::class.simpleName}")
@@ -352,6 +385,146 @@ class Replica(
     fun named(command: Command): String {
         val name = command.action::class.simpleName.orEmpty().replace(WORD, " $0").trim().lowercase().replaceFirstChar(Char::uppercase)
         return "$name, ${Format.at(command.at, clock.now(), clock.zone())}"
+    }
+
+    /**
+     * The switch to commands (D-141), at your word. This phone in step with the server first, and the server mirroring; a backup of
+     * its own written ([backup], W-26); then, with no command half made, it goes over, and every store's sent whole as the last seed
+     * ([SwitchSeed]), with when it last ran the jobs that are the server's from then ([ran]). The seed's kept in [seedFile] till it's
+     * answered, so it goes again the same, under its id, whatever stops this process: the server says its answer again. What's made
+     * meanwhile is a command, sent once the seed's answered. Why it wasn't made, or null where it was, or is under way.
+     */
+    suspend fun switchOver(backup: suspend () -> Boolean, ran: Map<String, Long>): String? = sending.withLock {
+        val commands = commands ?: return@withLock "Nothing here keeps in step by commands"
+        val file = seedFile ?: return@withLock "Nowhere to keep the switch's seed"
+        val token = stores.secrets[Secret.DeviceToken] ?: return@withLock "This phone isn't paired"
+        if (sync.value.mode != SyncState.MIRROR) return@withLock "This phone keeps in step by commands already"
+        if (send() != Sent.InStep) return@withLock "Not in step with the server yet: ${(sync.value.lastError ?: "a store's still to be taken").replaceFirstChar { it.lowercase() }}"
+        val headers = mapOf("Content-Type" to "application/json", "Authorization" to "Bearer $token", Protocol.HEADER to Protocol.VERSION.toString())
+        if (serverMode(headers) != SyncState.MIRROR) return@withLock "The server doesn't say it's mirroring"
+        // The tasks' photos on the box first, as the server reads a task with its photo from then (D-148): one attached while
+        // mirroring has no command to take it there. The server keeps one a day ahead of any task's holding it. One attached as
+        // these go is sent with the seed ([sendSwitch]).
+        val photosSent = HashSet<String>()
+        for (photo in stores.tasks.value.tasks.mapNotNull { it.photo }) {
+            val sent = try {
+                sendTaskPhoto(sync.value.server, headers, photo)
+            } catch (failed: IOException) {
+                false
+            }
+            if (!sent) return@withLock "Nothing switched: a task's photo couldn't be sent first"
+            photosSent += photo.hash
+        }
+        if (!backup()) return@withLock "Nothing switched: a backup couldn't be saved first"
+        val id = UUID.randomUUID().toString()
+        val seed = commands.switching(
+            over = { sync.update { it.copy(mode = SyncState.COMMANDS, switching = id, revision = 0, lastError = null) } },
+            read = {
+                SwitchSeed(id, SeedBatch(clock.zone().id, build, texts(months())), ran).also { seed ->
+                    // Whole or not at all, as a seed half written would go again half.
+                    val part = File(file.path + ".part")
+                    part.writeText(JSON.encodeToString(SwitchSeed.serializer(), seed))
+                    Files.move(part.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+                }
+            },
+        )
+        sendSwitch(seed, headers, photosSent)
+    }
+
+    /**
+     * A first pull refused (W-26) taken all the same, at your word, once a copy of everything here is saved to go back to ([backup]),
+     * as a phone that found the server gone over without its switch saved none: the next exchange takes the server's stores whole.
+     * Also how a phone installed afresh takes the server's copy. Whether it's taken: not where the copy couldn't be saved, which
+     * Setup then says.
+     */
+    suspend fun takeServersCopy(backup: suspend () -> Boolean): Boolean = sending.withLock {
+        if (!backup()) {
+            sync.update { it.copy(lastError = "Not taken: a copy of what's here couldn't be saved first, so nothing here can go yet.") }
+            return@withLock false
+        }
+        sync.update { it.copy(firstPull = false, lastError = null) }
+        true
+    }
+
+    /**
+     * Back to mirroring at your word, the other way on from a first pull refused (W-26), once the server's back to mirroring by its
+     * restore steps (docs/spec/server.md): what's here is sent whole from the next upload, so the switch can be made again.
+     */
+    suspend fun mirrorAgain() = sending.withLock {
+        backToMirroring()
+        Unit
+    }
+
+    /**
+     * The switch's seed sent again, where its answer's still to come: whether the server's taken it, so the rest can go. Its file
+     * gone (a process stopped before it was written, so it was never sent), it's mirroring again, as before the switch.
+     */
+    private suspend fun switchAgain(): Boolean {
+        val token = stores.secrets[Secret.DeviceToken] ?: return false
+        val headers = mapOf("Content-Type" to "application/json", "Authorization" to "Bearer $token", Protocol.HEADER to Protocol.VERSION.toString())
+        val seed = runCatching { JSON.decodeFromString(SwitchSeed.serializer(), seedFile!!.readText()) }.getOrNull()?.takeIf { it.id == sync.value.switching }
+        if (seed == null) {
+            backToMirroring()
+            sync.update { it.copy(switching = null) }
+            return false
+        }
+        return sendSwitch(seed, headers) == null
+    }
+
+    /**
+     * [seed], the switch's, to the server, and its answer taken: this phone then at the answer's revision, as what the server holds is
+     * what was sent, and what's been made since goes. Refused by a server still mirroring (it can't read a store of this build's:
+     * deploy it first), it's mirroring again, nothing lost, as what was made since is in the stores, sent whole next time; by one
+     * gone over already, the next pull's a first one, checked (W-26). The tasks' photos not yet on the box ([photosSent] are) go
+     * first: one attached as the switch began is in the seed, and its command's never made. Why it isn't made, or null where it is.
+     */
+    private suspend fun sendSwitch(seed: SwitchSeed, headers: Map<String, String>, photosSent: Set<String> = emptySet()): String? {
+        for (photo in stores.tasks.value.tasks.mapNotNull { it.photo }.filter { it.hash !in photosSent }) {
+            val sent = try {
+                sendTaskPhoto(sync.value.server, headers, photo)
+            } catch (failed: IOException) {
+                false
+            }
+            if (!sent) {
+                failed("The switch's seed is waiting: a task's photo couldn't be sent ahead of it")
+                return "Under way: a task's photo couldn't be sent ahead of the seed, so the switch goes at the next sync"
+            }
+        }
+        val answer = try {
+            http.post("${sync.value.server}/api/stores/switch", headers, JSON.encodeToString(SwitchSeed.serializer(), seed))
+        } catch (failed: IOException) {
+            Log.w(Log.TAG, "Sending the switch failed: ${failed::class.simpleName}")
+            failed("The switch's seed is waiting: the server can't be reached")
+            return "Under way: the server can't be reached, so it goes at the next sync"
+        }
+        if (answer.code == 409) {
+            val why = said(answer.body)?.replaceFirstChar { it.lowercase() } ?: "the server refused it"
+            if (serverMode(headers) == SyncState.COMMANDS) {
+                sync.update { it.copy(switching = null, firstPull = true, lastError = null) }
+            } else {
+                backToMirroring()
+                sync.update { it.copy(switching = null, lastError = "Not switched: $why") }
+            }
+            seedFile?.delete()
+            return "Not switched: $why"
+        }
+        if (!answer.ok) {
+            failed(problem(answer.code))
+            return "Under way: the server said no (${answer.code}), so it goes again at the next sync"
+        }
+        val taken = JSON.decodeFromString(SeedAnswer.serializer(), answer.body)
+        sync.update {
+            it.copy(
+                revision = taken.revision, letGoSeen = taken.revision, sent = taken.holds, seedRevision = taken.revision, switching = null,
+                lastSyncAt = clock.now(), serverVersion = taken.server.ifEmpty { null }, lastError = null, refused = taken.refused,
+            )
+        }
+        seedFile?.delete()
+        // The parent code first, as a command made with it may wait (it's never in a seed); then what's been made since, sent, and what
+        // the server's made since pulled.
+        sendParentCode(ahead = true)
+        exchange()
+        return null
     }
 
     /**

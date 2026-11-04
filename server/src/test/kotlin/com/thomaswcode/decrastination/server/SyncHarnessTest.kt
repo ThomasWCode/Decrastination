@@ -21,6 +21,7 @@ import com.thomaswcode.decrastination.sync.PushId
 import com.thomaswcode.decrastination.sync.Replica
 import com.thomaswcode.decrastination.sync.SeedAnswer
 import com.thomaswcode.decrastination.sync.SeedBatch
+import com.thomaswcode.decrastination.sync.SwitchSeed
 import com.thomaswcode.decrastination.sync.ServerVersion
 import com.thomaswcode.decrastination.sync.protocol.Action
 import com.thomaswcode.decrastination.sync.protocol.AddNote
@@ -82,6 +83,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.builtins.ListSerializer
@@ -168,8 +170,30 @@ class SyncHarnessTest {
         /** What happens on the phone while its pull is on its way, once. */
         var duringPull: (() -> Unit)? = null
 
+        /** Where each pull began, by the revision it asked for what's changed since. */
+        val sinces = mutableListOf<Long>()
+
+        /** The switch's seeds it's carried, answers to lose after the server's taken one, and a refusal to give in its place. */
+        var switches = 0
+        var losesSwitchAnswers = 0
+        var refusesSwitch: String? = null
+
         override fun post(url: String, headers: Map<String, String>, body: String): HttpResponse {
             if (cut) throw IOException("cut")
+            if (url.endsWith("/api/stores/switch")) {
+                switches++
+                routes += "switch"
+                refusesSwitch?.let { return HttpResponse(409, json.encodeToString(MapSerializer(String.serializer(), String.serializer()), mapOf("error" to it))) }
+                val switched = runBlocking { graph.switchOver(json.decodeFromString(SwitchSeed.serializer(), body), device) }
+                if (losesSwitchAnswers > 0) {
+                    losesSwitchAnswers--
+                    throw IOException("lost")
+                }
+                return when (switched) {
+                    is ServerGraph.Switched.Over -> HttpResponse(200, json.encodeToString(SeedAnswer.serializer(), switched.answer))
+                    is ServerGraph.Switched.Refused -> HttpResponse(409, json.encodeToString(MapSerializer(String.serializer(), String.serializer()), mapOf("error" to switched.why)))
+                }
+            }
             if (url.endsWith("/api/stores/seed")) {
                 seeds++
                 if (graph.mode == ServerGraph.COMMANDS) return HttpResponse(409, "{}")
@@ -231,6 +255,7 @@ class SyncHarnessTest {
             duringPull?.also { duringPull = null }?.invoke()
             headers[Protocol.ZONE_HEADER]?.let(graph.serverClock::setZone)
             val since = url.substringAfter("since=").toLong()
+            sinces += since
             val state = graph.state(since)
             val body = buildJsonObject {
                 put("revision", state.revision)
@@ -255,7 +280,12 @@ class SyncHarnessTest {
 
         /** The chat's messages each pull brought, new to it. */
         val heard = mutableListOf<List<ChatMessage>>()
-        val replica = Replica(h.stores, wire, h.clock, "test", { CalendarRead() }, h.commands) { heard += it }
+        /** The calendar as this phone reads it. */
+        var calendar = CalendarRead()
+
+        /** How often it's gone back to mirroring, its own work set going again each time. */
+        var mirroringAgain = 0
+        val replica = Replica(h.stores, wire, h.clock, "test", { calendar }, h.commands, seedFile = File(dir, "$name-switch-seed.json"), mirroringAgain = { mirroringAgain++ }) { heard += it }
 
         init {
             runBlocking {
@@ -927,5 +957,200 @@ class SyncHarnessTest {
         assertTrue(phone.replica.upload())
         assertEquals("QRSTUVWXYZ234567", graph.stores.secrets[Secret.TotpSecret])
         assertEquals(CodeLock(lastUsedStep = step), graph.stores.protection.value.codeLock, "the new code taken, the old one's lock gone")
+    }
+
+    /** A phone mirroring a mirroring server, as before the switch, with [title] seeded there. */
+    private suspend fun mirroringWith(title: String): Phone {
+        val phone = phone()
+        mirroring()
+        phone.h.stores.sync.update { it.copy(mode = SyncState.MIRROR) }
+        phone.h.commands.act(own(title))
+        assertTrue(phone.replica.upload())
+        return phone
+    }
+
+    @Test
+    fun `the switch saves a backup first, sends every store whole, and the phone goes over at its answer's revision, what's made after it a command`() = runBlocking {
+        val phone = mirroringWith("Essay")
+        var backups = 0
+        assertNull(phone.replica.switchOver(backup = { backups++; true }, ran = mapOf("morning" to 5L)))
+        assertEquals(1 to ServerGraph.COMMANDS, backups to graph.mode)
+        val sync = phone.h.stores.sync.value
+        assertEquals(SyncState.COMMANDS to null, sync.mode to sync.switching)
+        assertTrue(sync.revision > 0 && sync.revision == sync.seedRevision, "at the answer's revision")
+        assertEquals(sync.seedRevision, phone.wire.sinces.last(), "the pull after it of what's changed since, not of everything")
+        assertEquals(setOf("Essay"), serverTitles)
+        // What's made after it is a command, sent.
+        phone.h.commands.act(own("Maths"))
+        assertEquals(1, phone.waiting)
+        assertTrue(phone.replica.upload())
+        assertEquals(setOf("Essay", "Maths"), serverTitles)
+        // Not again: this phone keeps in step by commands already.
+        assertEquals("This phone keeps in step by commands already", phone.replica.switchOver({ true }, emptyMap()))
+    }
+
+    @Test
+    fun `a switch whose answer's lost goes again the same, its answer said again, and what's made meanwhile waits for it`() = runBlocking {
+        val phone = mirroringWith("Essay")
+        phone.wire.losesSwitchAnswers = 1
+        assertEquals("Under way: the server can't be reached, so it goes at the next sync", phone.replica.switchOver({ true }, emptyMap()))
+        assertEquals(ServerGraph.COMMANDS, graph.mode, "taken there")
+        assertNotNull(phone.h.stores.sync.value.switching)
+        phone.h.commands.act(own("Maths"))
+        assertTrue(phone.replica.upload())
+        assertEquals(2, phone.wire.switches)
+        assertNull(phone.h.stores.sync.value.switching)
+        assertEquals(setOf("Essay", "Maths"), serverTitles)
+    }
+
+    @Test
+    fun `a backup that can't be saved, or a server that can't take the switch, leaves the phone mirroring, nothing lost`() = runBlocking {
+        val phone = mirroringWith("Essay")
+        phone.wire.cut = true
+        assertEquals("Not in step with the server yet: the server can't be reached", phone.replica.switchOver({ true }, emptyMap()))
+        phone.wire.cut = false
+        assertEquals("Nothing switched: a backup couldn't be saved first", phone.replica.switchOver({ false }, emptyMap()))
+        assertEquals(SyncState.MIRROR to 0, phone.h.stores.sync.value.mode to phone.wire.switches)
+        phone.wire.refusesSwitch = "The server can't read this app's tasks.json: deploy it first"
+        assertEquals("Not switched: the server can't read this app's tasks.json: deploy it first", phone.replica.switchOver({ true }, emptyMap()))
+        assertEquals(SyncState.MIRROR to null, phone.h.stores.sync.value.mode to phone.h.stores.sync.value.switching)
+        assertEquals(1, phone.mirroringAgain, "its own work set going again, Gmail's writes among it")
+        // Made after the refusal, mirroring: in the stores, and sent with the next seed.
+        phone.h.commands.act(own("Maths"))
+        assertTrue(phone.replica.upload())
+        assertEquals(setOf("Essay", "Maths"), serverTitles)
+    }
+
+    @Test
+    fun `a first pull that would lose a change the server never took is refused, nothing taken, till the server's copy is taken at your word`() = runBlocking {
+        val phone = mirroringWith("Essay")
+        // The server goes over without this phone's switch (a restore, say), and a change made here meanwhile never reaches it.
+        graph.commandsForATest()
+        phone.h.commands.act(own("Maths"))
+        assertTrue(phone.replica.upload())
+        assertTrue(phone.h.stores.sync.value.firstPull)
+        assertFalse(phone.replica.upload())
+        assertEquals(setOf("Essay", "Maths"), phone.titles, "nothing taken")
+        val why = phone.h.stores.sync.value.lastError.orEmpty()
+        assertTrue(why.startsWith("A first pull would lose what's changed here in") && "tasks.json" in why, why)
+        // A copy of what's here saved first, as none was at a switch this phone never made: one that can't be takes nothing.
+        assertFalse(phone.replica.takeServersCopy { false })
+        assertTrue(phone.h.stores.sync.value.firstPull)
+        assertTrue(phone.h.stores.sync.value.lastError.orEmpty().startsWith("Not taken: a copy of what's here couldn't be saved first"))
+        assertFalse(phone.replica.upload())
+        assertEquals(setOf("Essay", "Maths"), phone.titles, "nothing taken")
+        var copied = false
+        assertTrue(phone.replica.takeServersCopy { copied = true; true })
+        assertTrue(copied)
+        assertTrue(phone.replica.upload())
+        assertEquals(setOf("Essay"), phone.titles)
+        assertFalse(phone.h.stores.sync.value.firstPull)
+    }
+
+    @Test
+    fun `a first pull that would lose a change here in an archived month, a rating say, is refused as one in any store would be`() = runBlocking {
+        val phone = mirroringWith("Essay")
+        val month = "chat-archive-2026-10.json"
+        val words = ChatArchive(listOf(ChatMessage("a", Speaker.Felix, "words", 1_792_000_000_000L)))
+        phone.h.stores.chatArchive.adopt(month, words.version, JsonStore.json.encodeToString(ChatArchive.serializer(), words))
+        assertTrue(phone.replica.upload())
+        // The server goes over without this phone's switch, its month changed there meanwhile, and a change here never reaches it.
+        graph.commandsForATest()
+        val theirs = words.copy(messages = words.messages.map { it.copy(answeredAt = 7L) })
+        graph.backend.keep(month, words.version, JsonStore.json.encodeToString(ChatArchive.serializer(), theirs))
+        phone.h.stores.chatArchive.change("a") { it.copy(answeredAt = 5L) }
+        assertTrue(phone.replica.upload())
+        assertTrue(phone.h.stores.sync.value.firstPull)
+        assertFalse(phone.replica.upload())
+        val why = phone.h.stores.sync.value.lastError.orEmpty()
+        assertTrue(month in why, why)
+        val here = phone.h.stores.chatArchive.texts().single { it.name == month }.text
+        assertEquals(5L, JsonStore.json.decodeFromString(ChatArchive.serializer(), here).messages.single().answeredAt, "nothing taken")
+    }
+
+    @Test
+    fun `a first pull with nothing changed here is taken, the server's own changes with it, and one from a server behind this phone's last seed is refused`() = runBlocking {
+        val phone = mirroringWith("Essay")
+        graph.commandsForATest()
+        // The server's moved on since (its own work): what's here is as last sent, so that's no change of this phone's.
+        graph.stores.tasks.update { s -> s.copy(tasks = s.tasks.map { it.copy(title = "Essay, moved on") }) }
+        // Behind: its revisions below what this phone's last seed was answered at.
+        phone.h.stores.sync.update { it.copy(seedRevision = 1_000_000) }
+        assertTrue(phone.replica.upload())
+        assertFalse(phone.replica.upload())
+        assertTrue(phone.h.stores.sync.value.lastError.orEmpty().startsWith("The server is behind what this phone last sent"))
+        // As it was, nothing changed here: taken, and the server's change with it. A store whose seed's answer was lost (its hash
+        // here not the one on record) is no change lost either, where the server has it as it is here.
+        phone.h.stores.sync.update { it.copy(seedRevision = 0, sent = it.sent + ("settings.json" to "a hash from before")) }
+        // Nor is the calendar as read since: it's this phone's, which a pull never takes.
+        phone.calendar = CalendarRead(answers = mapOf("an event" to "yes"))
+        assertTrue(phone.replica.upload())
+        assertFalse(phone.h.stores.sync.value.firstPull)
+        assertEquals(setOf("Essay, moved on"), phone.titles)
+    }
+
+    @Test
+    fun `the tasks' photos go to the box before the switch, as one attached while mirroring has no command to take it, and one that can't go stops it`() = runBlocking {
+        val phone = mirroringWith("Essay")
+        val jpeg = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 5)
+        val file = File(dir, "a-photo-from-before.jpg").apply { writeBytes(jpeg) }
+        val photo = TaskPhoto(file.path, Photos.hashOf(jpeg), phone.h.clock.now())
+        phone.h.stores.tasks.update { s -> s.copy(tasks = s.tasks.map { it.copy(photo = photo) }) }
+        phone.wire.photosFail = true
+        assertEquals("Nothing switched: a task's photo couldn't be sent first", phone.replica.switchOver({ true }, emptyMap()))
+        assertEquals(SyncState.MIRROR, phone.h.stores.sync.value.mode)
+        phone.wire.photosFail = false
+        assertNull(phone.replica.switchOver({ true }, emptyMap()))
+        assertTrue(File(dir, "photos/${photo.hash}.jpg").readBytes().contentEquals(jpeg), "on the box by its hash")
+    }
+
+    @Test
+    fun `a photo attached as the switch's photos go is sent ahead of the seed that holds it, the switch waiting for it if it can't go`() = runBlocking {
+        val phone = mirroringWith("Essay")
+        val jpeg = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 6)
+        val file = File(dir, "a-photo-taken-meanwhile.jpg").apply { writeBytes(jpeg) }
+        val photo = TaskPhoto(file.path, Photos.hashOf(jpeg), phone.h.clock.now())
+        // Attached once the photos had gone, as the backup's saved: in the seed, and no command ever takes it to the box.
+        val attached: suspend () -> Boolean = {
+            phone.h.stores.tasks.update { s -> s.copy(tasks = s.tasks.map { it.copy(photo = photo) }) }
+            phone.wire.photosFail = true
+            true
+        }
+        assertEquals("Under way: a task's photo couldn't be sent ahead of the seed, so the switch goes at the next sync", phone.replica.switchOver(attached, emptyMap()))
+        assertEquals(0, phone.wire.switches, "the seed not sent without it")
+        phone.wire.photosFail = false
+        assertTrue(phone.replica.upload())
+        assertNull(phone.h.stores.sync.value.switching)
+        assertTrue(File(dir, "photos/${photo.hash}.jpg").readBytes().contentEquals(jpeg), "on the box ahead of the seed")
+        assertEquals(photo.hash, graph.stores.tasks.value.tasks.single().photo?.hash)
+    }
+
+    @Test
+    fun `after a switch whose answer was lost, a Read again sends the seed first, so no command goes ahead of it`() = runBlocking {
+        val phone = mirroringWith("Essay")
+        phone.wire.losesSwitchAnswers = 1
+        assertEquals("Under way: the server can't be reached, so it goes at the next sync", phone.replica.switchOver({ true }, emptyMap()))
+        // Made while the answer's still to come: a command, waiting, which the Read again's exchange would send.
+        phone.h.commands.act(own("Maths"))
+        phone.wire.routes.clear()
+        assertEquals("Claude can't be asked now: try again later", phone.replica.readAgainOnServer("own:s-Maths"))
+        assertEquals(listOf("switch", "commands", "read-again"), phone.wire.routes.filter { it != "task-photos" })
+        assertNull(phone.h.stores.sync.value.switching)
+        assertEquals(setOf("Essay", "Maths"), serverTitles)
+    }
+
+    @Test
+    fun `after a switch whose answer was lost, the parent code reaches the server ahead of a command made with it`() = runBlocking {
+        val phone = mirroringWith("Essay")
+        phone.h.stores.secrets.put(Secret.TotpSecret, "QRSTUVWXYZ234567")
+        phone.wire.losesSwitchAnswers = 1
+        assertEquals("Under way: the server can't be reached, so it goes at the next sync", phone.replica.switchOver({ true }, emptyMap()))
+        // A code used while the answer's still to come: a command, waiting.
+        val now = phone.h.clock.now()
+        val code = Totp.code(Totp.fromBase32("QRSTUVWXYZ234567"), Totp.step(now))
+        phone.h.stores.outbox.update { it.copy(commands = it.commands + Command("c-use", now, UseParentCode(code))) }
+        assertTrue(phone.replica.upload())
+        assertEquals("QRSTUVWXYZ234567", graph.stores.secrets[Secret.TotpSecret])
+        assertEquals(CodeLock(lastUsedStep = Totp.step(now)), graph.stores.protection.value.codeLock, "the code taken, not counted wrong")
     }
 }

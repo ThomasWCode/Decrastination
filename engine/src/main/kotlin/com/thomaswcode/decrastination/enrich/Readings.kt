@@ -59,6 +59,12 @@ class Readings(
     private val readingOne = Mutex()
 
     /**
+     * [block] with no task's reading under way, and none begun till it's done: the switch reads the stores whole meanwhile (D-141),
+     * with what a reading under way lays, and a run that waited for it finds the readings the server's.
+     */
+    suspend fun <T> quiet(block: suspend () -> T): T = readingOne.withLock { block() }
+
+    /**
      * Enriches every task that's new or changed since it was last enriched, and, while the model is
      * on, those only the rules have seen; soonest due first. The model does it while it's on and
      * the month's spend leaves room under the cap, at most [MAX_MODEL_CALLS] a run; the rules do
@@ -90,6 +96,8 @@ class Readings(
             // Never read first, then the oldest prompts' readings (AC-06), soonest due first.
             .sortedWith(compareBy(Enrichments.NEED) { it.first })
         for ((snapshot, _) in candidates) readingOne.withLock {
+            // The server's once the phone sends commands, looked at again as each is taken, as the switch holds this lock ([quiet]).
+            if (byServer()) break
             // Read afresh, once no other run is reading one: a sync since the run began may have closed or changed it,
             // and another run may have read it meanwhile.
             val task = tasks.value.tasks.firstOrNull { it.id == snapshot.id } ?: continue
