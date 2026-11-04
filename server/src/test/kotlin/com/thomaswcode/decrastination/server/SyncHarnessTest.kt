@@ -59,7 +59,11 @@ import com.thomaswcode.decrastination.sync.protocol.ObserveSources
 import com.thomaswcode.decrastination.sync.protocol.RecordBlock
 import com.thomaswcode.decrastination.sync.protocol.RecordProtection
 import com.thomaswcode.decrastination.sync.protocol.Outcome
+import com.thomaswcode.decrastination.sync.protocol.ParentCodeSet
 import com.thomaswcode.decrastination.sync.protocol.SaveOwnTask
+import com.thomaswcode.decrastination.sync.protocol.UseParentCode
+import com.thomaswcode.decrastination.protect.CodeLock
+import com.thomaswcode.decrastination.protect.Totp
 import com.thomaswcode.decrastination.tasks.TasksHarness
 import com.thomaswcode.decrastination.views.Asked
 import java.io.File
@@ -766,7 +770,7 @@ class SyncHarnessTest {
         assertEquals(SyncState.MIRROR, phone.h.stores.sync.value.mode)
         phone.replica.upload()
         assertEquals(emptyList(), phone.wire.parentCodes)
-        // Going by commands, it goes after the exchange, once.
+        // Going by commands, it goes ahead of the exchange, once.
         db.setMeta("mode", ServerGraph.COMMANDS)
         graph.modeForATest(ServerGraph.COMMANDS)
         phone.h.stores.sync.update { it.copy(mode = SyncState.COMMANDS) }
@@ -828,5 +832,23 @@ class SyncHarnessTest {
         assertEquals(listOf(receipt), graph.stores.gmailWrites.value.writes, "nothing journaled there")
         // The journal hasn't changed there, so only a pull of everything puts the phone's right: the refusal asks for one.
         assertEquals(listOf(receipt), phone.h.stores.gmailWrites.value.writes)
+    }
+
+    @Test
+    fun `a new parent code reaches the server ahead of the commands made with it, its lock begun afresh there`() = runBlocking {
+        val phone = phone()
+        phone.h.stores.secrets.put(Secret.TotpSecret, "ABCDEFGHIJKLMNOP")
+        assertTrue(phone.replica.upload())
+        // The old code locked there by wrong tries.
+        graph.stores.protection.update { it.copy(codeLock = CodeLock(lastUsedStep = 7, lockedUntil = Long.MAX_VALUE)) }
+        // A new one set here and used at once: its lock begun and a code from it, both commands, waiting together.
+        val now = phone.h.clock.now()
+        val step = Totp.step(now)
+        phone.h.stores.secrets.put(Secret.TotpSecret, "QRSTUVWXYZ234567")
+        val code = Totp.code(Totp.fromBase32("QRSTUVWXYZ234567"), step)
+        phone.h.stores.outbox.update { it.copy(commands = listOf(Command("c-set", now, ParentCodeSet(step - 1)), Command("c-use", now, UseParentCode(code)))) }
+        assertTrue(phone.replica.upload())
+        assertEquals("QRSTUVWXYZ234567", graph.stores.secrets[Secret.TotpSecret])
+        assertEquals(CodeLock(lastUsedStep = step), graph.stores.protection.value.codeLock, "the new code taken, the old one's lock gone")
     }
 }

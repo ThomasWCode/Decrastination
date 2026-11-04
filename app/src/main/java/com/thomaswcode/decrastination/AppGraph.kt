@@ -91,6 +91,7 @@ import com.thomaswcode.decrastination.sync.protocol.NoteSource
 import com.thomaswcode.decrastination.sync.protocol.ObserveCalendar
 import com.thomaswcode.decrastination.sync.protocol.ObserveSources
 import com.thomaswcode.decrastination.sync.protocol.Owners
+import com.thomaswcode.decrastination.sync.protocol.ParentCodeSet
 import com.thomaswcode.decrastination.sync.protocol.RecordBlock
 import com.thomaswcode.decrastination.sync.protocol.RecordProtection
 import com.thomaswcode.decrastination.sync.protocol.ResetData
@@ -509,7 +510,11 @@ class AppGraph private constructor(context: Context) : Owners {
     private suspend fun settleEvent(key: String) = if (sendsCommands()) commands.send(SettleEvent(key)) else conversation.settleEvent(key)
 
     /** Protection ([Protection]): settings changes, waiting once armed if they loosen blocking; the parent code; the device admin. */
-    override val protection = Protection(settings, stores.protection, stores.device, secrets, clock, scope, adminActive = { Watchdog.isAdminActive(app) }, byServer = sendsCommands) {
+    override val protection: Protection = Protection(
+        settings, stores.protection, stores.device, secrets, clock, scope, adminActive = { Watchdog.isAdminActive(app) }, byServer = sendsCommands,
+        // A new parent code's lock a command once the phone sends them, as the server's lock is what a pull brings.
+        locking = { step -> if (sendsCommands()) commands.send(ParentCodeSet(step)) else protection.freshLock(step) },
+    ) {
         app.getSystemService(DevicePolicyManager::class.java)?.removeActiveAdmin(Watchdog.admin(app))
     }
 
@@ -728,9 +733,16 @@ class AppGraph private constructor(context: Context) : Owners {
     /** [what] reset (LR-08): here while mirroring; a command once the phone sends them, as the server's copy is what a pull brings. */
     suspend fun reset(what: Reset): String = if (sendsCommands()) commands.act(ResetData(what)) else backups.reset(what)
 
-    /** Your words waiting for Felix, asked of him again (the chat's Try again): by the server once the phone sends commands (D-142). */
-    suspend fun tryAgain() {
-        if (sendsCommands()) replica.askAgainOnServer() else conversation.answerChat(retry = true)
+    /**
+     * Your words waiting for Felix, asked of him again (the chat's Try again): by the server once the phone sends commands (D-142).
+     * Why the server couldn't be asked, or null: asked here, his answer, or why there's none, is in the chat.
+     */
+    suspend fun tryAgain(): String? {
+        if (!sendsCommands()) {
+            conversation.answerChat(retry = true)
+            return null
+        }
+        return if (replica.askAgainOnServer()) null else "The server couldn't be reached: try again in a moment."
     }
 
     /** Backups and resets ([BackupService]): made when first asked for, as it takes the instructions' lock. */

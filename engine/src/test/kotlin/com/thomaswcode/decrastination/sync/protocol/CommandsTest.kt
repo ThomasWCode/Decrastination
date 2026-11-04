@@ -83,7 +83,7 @@ class CommandsTest {
         SendMessage("hello", About(taskId = "t"), "m", "r", false), ReplyFromNotification("hello", "m"), WithdrawQuestion("m"), CancelAnswer, MarkAnswered(listOf("m")), UnmarkAnswered(Conversation.Marked(setOf("m"), 5L)),
         RateMessage("m", true, "good", "this one"), ReadChat(5L), ClearChat, ApplyProposal("m", "p", OwnTask(title = "t")), UndoProposal("m", "p"), DiscardProposal("m", "p", false), UndoAct("m", 1), UndoMemory("m", 1), EndCheckInFlow,
         Remember(listOf(Given(text = "a rule", kind = Given.RULE))), DeleteRule(Rule("a rule", 5L)), DeleteFact(Fact("topic", "a fact", 5L)), AddNote("t", "a note"), DeleteNote("n"),
-        ChangeSettings(mapOf("boxMin" to JsonPrimitive(30))), UseParentCode("123456", 9L), ApplyChangeNow("c", "123456"), CancelChange("c"),
+        ChangeSettings(mapOf("boxMin" to JsonPrimitive(30))), ParentCodeSet(9L), UseParentCode("123456", 9L), ApplyChangeNow("c", "123456"), CancelChange("c"),
         RecordCheckIn(CheckIn("2026-W44", 5L, 3, "", "", "", ""), 5L), ForgetCalibration("k"), ResetData(Reset.Chat), UndoReviewChange(5L, "boxMin"), UndoTidy(5L),
         ObserveSources(listOf(SourceObserved(Source.Teams, 5L, SourceRead(listOf(Fetched("a", "an essay", Kind.Homework, subSteps = listOf(SubStep("plan", 10)))), dataAsOf = 4L, note = "a note")), SourceObserved(Source.Anki, 5L, failed = "no answer"), SourceObserved(Source.Teams, 6L))),
         NoteSource(Source.Teams, "a note"), ObserveCalendar(CalendarRead(answers = mapOf("an event" to "busy"))), AskAboutEvent("k", "an event", "Monday", 5L, listOf("busy", "free")), SettleEvent("k"),

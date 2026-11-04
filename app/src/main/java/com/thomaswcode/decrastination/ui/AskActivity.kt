@@ -1119,10 +1119,13 @@ private fun Yours(graph: AppGraph, message: ChatMessage, quote: ChatMessage?, na
         val note = message.note
         if (message.answeredAt == null && note != null) {
             Text(note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 6.dp))
+            // Why the server couldn't be asked, once the phone sends commands, as nothing in the chat changes then to say so.
+            var unasked by remember(message.id) { mutableStateOf<String?>(null) }
             Row {
-                TextButton(onClick = { graph.scope.launch { graph.tryAgain() } }) { Text("Try again") }
+                TextButton(onClick = { graph.scope.launch { graph.tryAgain().let { why -> withContext(Dispatchers.Main) { unasked = why } } } }) { Text("Try again") }
                 TextButton(onClick = { scope.launch { graph.act(WithdrawQuestion(message.id)) } }) { Text("Take back") }
             }
+            unasked?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
         }
     }
 }
