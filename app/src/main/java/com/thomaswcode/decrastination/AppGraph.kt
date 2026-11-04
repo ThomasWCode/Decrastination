@@ -53,6 +53,7 @@ import com.thomaswcode.decrastination.learn.Assessment
 import com.thomaswcode.decrastination.learn.Briefing
 import com.thomaswcode.decrastination.learn.Calibrator
 import com.thomaswcode.decrastination.learn.CheckIn
+import com.thomaswcode.decrastination.learn.Daily
 import com.thomaswcode.decrastination.learn.DailyAlarms
 import com.thomaswcode.decrastination.learn.Learning
 import com.thomaswcode.decrastination.net.UrlConnectionHttp
@@ -72,6 +73,7 @@ import com.thomaswcode.decrastination.sources.teams.TeamsSource
 import com.thomaswcode.decrastination.sync.AndroidSyncPorts
 import com.thomaswcode.decrastination.sync.AndroidGmailPorts
 import com.thomaswcode.decrastination.sync.GmailFinishes
+import com.thomaswcode.decrastination.sync.GmailWriteWorker
 import com.thomaswcode.decrastination.sync.Replica
 import com.thomaswcode.decrastination.sync.ReplicaWorker
 import com.thomaswcode.decrastination.sync.Sync
@@ -481,6 +483,7 @@ class AppGraph private constructor(context: Context) : Owners {
     val replica: Replica = Replica(
         stores, UrlConnectionHttp(), clock, BuildConfig.VERSION_NAME, calendar = { sync.calendarRead() }, commands,
         photoHttp = UrlConnectionHttp(readTimeoutMs = Replica.PHOTO_WAIT_MS),
+        seedFile = File(app.filesDir, "switch-seed.json"),
     ) { fresh -> outbox.heard(clock.now(), fresh) }
 
     /** The tasks' readings ([Readings]): by Claude while it can be asked, by the rules otherwise; one read again on asking. */
@@ -745,6 +748,22 @@ class AppGraph private constructor(context: Context) : Owners {
      * [taskId] read again by Claude as it is now (AC-06, the sheet's *Read again with Claude*): here, or by the server once the phone
      * sends commands (D-142), its reading coming as it's pulled. What came of it, in words.
      */
+    /**
+     * The switch to commands (D-141), at your word, from a PC (`sync-switch`): Gmail's worker stopped and waited for first, so no
+     * write's half made as the stores are read; then [Replica.switchOver], a backup of this phone's saved before anything goes (W-26),
+     * with when this phone last ran each job at a set time that's the server's from then, but one with a try still to come, which the
+     * server then runs. What came of it, in words.
+     */
+    suspend fun switchOver(): String {
+        GmailWriteWorker.stop(app)
+        val runtime = runtime.value
+        val ran = SWITCHED_JOBS.mapNotNull { (action, job) -> runtime.dailyRanAt[action]?.takeIf { action !in runtime.dailyRetries }?.let { job to it } }.toMap()
+        val why = replica.switchOver(backup = { backups.switchCopy() }, ran = ran)
+        // Mirroring still: Gmail's writes are this phone's again.
+        if (!sendsCommands()) gmailFinishes.rearm()
+        return why ?: "Switched: this phone keeps in step by commands"
+    }
+
     suspend fun readAgain(taskId: String): String {
         if (sendsCommands()) return replica.readAgainOnServer(taskId)
         return when (readings.readAgain(taskId)) {
@@ -788,6 +807,9 @@ class AppGraph private constructor(context: Context) : Owners {
 
     companion object {
         const val TAG = "Decrastination"
+
+        /** The jobs at a set time that are the server's once the phone sends commands, by the server's names for them. */
+        private val SWITCHED_JOBS = mapOf(Daily.ACTION_BRIEFING to "morning", Daily.ACTION_CHECK_IN to "check-in", Daily.ACTION_REVIEW to "review")
 
         private const val WIDGET_DEBOUNCE_MS = 1_000L
 

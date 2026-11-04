@@ -42,8 +42,18 @@ data class SyncState(
      * phone last sent, is refused (W-26), as what's here is all that's left of what it's lost. 0: none answered yet.
      */
     val seedRevision: Long = 0,
+    /**
+     * The switch's seed under way (D-141), by its id, while its answer's to come: sent again, the same, before anything else, as the
+     * server keeps its answer under that id. Null once it's answered, or with none made.
+     */
+    val switching: String? = null,
+    /**
+     * Whether the next pull is a first one, the server found gone over to commands without this phone's switch (W-26): refused where
+     * it would cost a change the server never took, or come from a server behind this phone's last seed.
+     */
+    val firstPull: Boolean = false,
     /** The shape this is in ([Migration]): raised with each change of it, a migration bringing older files to it. */
-    val version: Int = 5,
+    val version: Int = 6,
 ) {
     companion object {
         const val DEFAULT_SERVER = "https://decrastination.thomaswhite.me"
@@ -61,6 +71,9 @@ data class SyncState(
 
         /** The parent code as the server last took it, and the last seed's revision, 5.14.0's, from none: nothing to bring across. */
         val V5 = Migration(4) { it }
+
+        /** The switch's seed under way and a first pull to be checked, 6.0.0's, from none: nothing to bring across. */
+        val V6 = Migration(5) { it }
 
         /** [parentCodeSent] where the server's been told there's no parent code. */
         const val NO_CODE = "none"

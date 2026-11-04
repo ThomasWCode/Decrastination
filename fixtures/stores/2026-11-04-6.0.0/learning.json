@@ -1,0 +1,35 @@
+{
+  "calibration": {
+    "yields": {
+      "Weekday": 0.8,
+      "Weekend": 0.6
+    },
+    "yieldDays": {
+      "Weekday": 9,
+      "Weekend": 8
+    },
+    "multipliers": {
+      "Homework|": 1.2,
+      "Homework|12X/Hi1": 1.4
+    },
+    "marginDays": {
+      "Homework": 2
+    },
+    "timed": {
+      "Homework|": 12,
+      "Homework|12X/Hi1": 4
+    },
+    "counted": true,
+    "ankiSecondsPerCard": {
+      "1700000000001": 9.5
+    },
+    "ankiStretches": {
+      "1700000000001": 3
+    },
+    "forgotten": {
+      "Revision|": 1791630000000
+    },
+    "learnFrom": 1788217200000
+  },
+  "version": 1
+}

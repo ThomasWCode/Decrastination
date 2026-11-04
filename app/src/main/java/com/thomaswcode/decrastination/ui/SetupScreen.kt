@@ -322,6 +322,35 @@ private fun WebsiteItem(graph: AppGraph) {
             dismissButton = { TextButton(onClick = { lettingGo = null }) { Text("Keep it") } },
         )
     }
+    // A first pull refused (W-26): the server's copy taken at your word, the copy saved before the switch there to go back to; or
+    // this phone back to mirroring, once the server is by its restore steps, so the switch can be made again.
+    var takingServers by remember { mutableStateOf(false) }
+    if (paired && sync.mode == SyncState.COMMANDS && sync.firstPull && sync.lastError != null) {
+        SetupItem(
+            title = "The server's copy, not taken",
+            done = false,
+            detail = "${sync.lastError} Take it only if what's here can go: the copy saved before the switch keeps it. Or put the server back to mirroring by its restore steps, then this phone.",
+            action = "Take the server's copy" to { takingServers = true },
+        )
+        TextButton(onClick = { graph.scope.launch { graph.replica.mirrorAgain(); ReplicaWorker.now(graph.app) } }) { Text("Back to mirroring") }
+    }
+    if (takingServers) {
+        AlertDialog(
+            onDismissRequest = { takingServers = false },
+            title = { Text("Take the server's copy?") },
+            text = { Text("What's changed on this phone since it last reached the server goes. The copy saved before the switch keeps it.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    takingServers = false
+                    graph.scope.launch {
+                        graph.replica.takeServersCopy()
+                        ReplicaWorker.now(graph.app)
+                    }
+                }) { Text("Take it") }
+            },
+            dismissButton = { TextButton(onClick = { takingServers = false }) { Text("Keep this phone's") } },
+        )
+    }
     if (sync.dropped.isNotEmpty()) {
         SetupItem(
             title = "Changes the server didn't apply",

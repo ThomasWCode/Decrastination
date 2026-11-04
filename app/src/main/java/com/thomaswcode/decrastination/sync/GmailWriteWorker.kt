@@ -11,6 +11,7 @@ import androidx.work.CoroutineWorker
 import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.thomaswcode.decrastination.AppGraph
@@ -25,6 +26,10 @@ import com.thomaswcode.decrastination.sources.gmail.ImapGmailWriter
 import com.thomaswcode.decrastination.ui.MainActivity
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * The writes to Gmail a finished email makes ([GmailFinishes.write]), as WorkManager work (it outlives the
@@ -66,6 +71,18 @@ class GmailWriteWorker(context: Context, params: WorkerParameters) : CoroutineWo
                 .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, BACKOFF_MIN, TimeUnit.MINUTES)
                 .build()
             WorkManager.getInstance(context).enqueueUniqueWork(NAME, policy, request)
+        }
+
+        /**
+         * The worker stopped, and one running waited for, at most half a minute: the switch reads the stores whole with no write half
+         * made, as the server takes the journal over from that read (D-141).
+         */
+        suspend fun stop(context: Context) {
+            val work = WorkManager.getInstance(context)
+            work.cancelUniqueWork(NAME)
+            withTimeoutOrNull(30_000) {
+                while (withContext(Dispatchers.IO) { work.getWorkInfosForUniqueWork(NAME).get() }.any { it.state == WorkInfo.State.RUNNING }) delay(200)
+            }
         }
     }
 }

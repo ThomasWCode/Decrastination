@@ -404,6 +404,20 @@ class BackupService(
         "${what.title}: reset. A copy of everything from before is in ${saved.where}${if (saved.own) ", which $restoredFrom can restore" else ""}.$archived"
     }
 
+    /**
+     * A copy of everything before the switch (W-26), made, checked and saved as a reset's is, so what this phone held is there to go
+     * back to whatever the server's copy turns out to be: in Documents, or the app's own files, where Settings → Backup restores it.
+     * The chat's earlier messages it can't hold are kept whole beside it. Whether it was saved.
+     */
+    suspend fun switchCopy(): Boolean = withContext(NonCancellable) {
+        val stamp = Instant.ofEpochMilli(clock.now()).atZone(clock.zone()).format(DateTimeFormatter.ofPattern("yyyy-MM-dd-HHmmss", Locale.UK))
+        val (whole, fitted) = withContext(Dispatchers.IO) { backupOf(every = true).let { it to Backups.fitted(it, backupCap) } }
+        val (text, leftOut) = fitted
+        if (tooBig(text) || unrestorable(text) != null) return@withContext false
+        if (keep("switch-$stamp.json", text) == null) return@withContext false
+        leftOut == 0 || keep("chat-archive-$stamp.json", JsonStore.json.encodeToString(ChatArchive.serializer(), whole.archive)) != null
+    }
+
     /** Where [keep] put a file, in words: in Documents, or in the app's own files ([own]), which the file picker can't reach. */
     private data class Kept(val where: String, val own: Boolean)
 
@@ -422,9 +436,12 @@ class BackupService(
         }
     }.getOrNull()
 
-    /** A reset's copies kept in the app's own files (LR-08), where Documents couldn't be written then: their names, newest first. */
+    /**
+     * A reset's copies kept in the app's own files (LR-08), where Documents couldn't be written then, and the switch's ([switchCopy]):
+     * their names, newest first.
+     */
     fun resetCopies(): List<String> =
-        copies.listFiles { f -> f.isFile && f.name.startsWith("reset-") && f.name.endsWith(".json") }.orEmpty().map { it.name }.sortedDescending()
+        copies.listFiles { f -> f.isFile && (f.name.startsWith("reset-") || f.name.startsWith("switch-")) && f.name.endsWith(".json") }.orEmpty().map { it.name }.sortedByDescending { it.substringAfter('-') }
 
     /** [name], one of [resetCopies], restored as Import restores a backup. What happened, in words. */
     suspend fun restoreResetCopy(name: String): String {

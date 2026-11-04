@@ -23,11 +23,13 @@ import com.thomaswcode.decrastination.sync.Syncer
 import com.thomaswcode.decrastination.tasks.Instructions
 import com.thomaswcode.decrastination.tasks.OwnTasks
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.coroutines.AbstractCoroutineContextElement
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.asContextElement
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -175,7 +177,15 @@ class Commands(
 
     private suspend fun <R> made(action: Action, run: suspend () -> R): R {
         val command = Command(Ids.next(), clock.now(), action)
-        if (outbox == null || !queuing()) return replaying(command) { run() }
+        if (outbox == null || !queuing()) {
+            // Counted while it runs, as it takes no gate: the switch waits for none to be under way ([switching]).
+            running.incrementAndGet()
+            try {
+                return replaying(command) { run() }
+            } finally {
+                running.decrementAndGet()
+            }
+        }
         check(coroutineContext[Applying] == null) { "${action::class.simpleName} made inside another command, whose gate it would wait for" }
         val after = Applying()
         try {
@@ -224,6 +234,21 @@ class Commands(
         if (outbox?.value?.commands?.isNotEmpty() == true) return@withLock false
         replace()
         true
+    }
+
+    /** The commands under way that took no gate, made while this phone mirrored: a switch waits for them ([switching]). */
+    private val running = AtomicInteger()
+
+    /**
+     * The switch (D-141), [over] and then [read] with no command half made. Under the gate, those running unqueued, as mirroring
+     * makes them, are let finish first, as nothing they make waits for the gate yet; then [over] goes over to commands, so each command
+     * from then waits for the gate and is queued; then [read] reads the stores whole, so the seed holds every change made before it
+     * and none after. Not waiting after [over]: one finishing then could make one that waits for the gate, which this holds.
+     */
+    suspend fun <T> switching(over: suspend () -> Unit, read: suspend () -> T): T = gate.withLock {
+        while (running.get() > 0) delay(10)
+        over()
+        read()
     }
 
     /** [block] reading [command]'s moment, and drawing its ids from its own. */
