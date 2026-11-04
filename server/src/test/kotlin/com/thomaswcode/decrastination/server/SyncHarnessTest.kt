@@ -182,6 +182,7 @@ class SyncHarnessTest {
             if (cut) throw IOException("cut")
             if (url.endsWith("/api/stores/switch")) {
                 switches++
+                routes += "switch"
                 refusesSwitch?.let { return HttpResponse(409, json.encodeToString(MapSerializer(String.serializer(), String.serializer()), mapOf("error" to it))) }
                 val switched = runBlocking { graph.switchOver(json.decodeFromString(SwitchSeed.serializer(), body), device) }
                 if (losesSwitchAnswers > 0) {
@@ -281,7 +282,10 @@ class SyncHarnessTest {
         val heard = mutableListOf<List<ChatMessage>>()
         /** The calendar as this phone reads it. */
         var calendar = CalendarRead()
-        val replica = Replica(h.stores, wire, h.clock, "test", { calendar }, h.commands, seedFile = File(dir, "$name-switch-seed.json")) { heard += it }
+
+        /** How often it's gone back to mirroring, its own work set going again each time. */
+        var mirroringAgain = 0
+        val replica = Replica(h.stores, wire, h.clock, "test", { calendar }, h.commands, seedFile = File(dir, "$name-switch-seed.json"), mirroringAgain = { mirroringAgain++ }) { heard += it }
 
         init {
             runBlocking {
@@ -1010,6 +1014,7 @@ class SyncHarnessTest {
         phone.wire.refusesSwitch = "The server can't read this app's tasks.json: deploy it first"
         assertEquals("Not switched: the server can't read this app's tasks.json: deploy it first", phone.replica.switchOver({ true }, emptyMap()))
         assertEquals(SyncState.MIRROR to null, phone.h.stores.sync.value.mode to phone.h.stores.sync.value.switching)
+        assertEquals(1, phone.mirroringAgain, "its own work set going again, Gmail's writes among it")
         // Made after the refusal, mirroring: in the stores, and sent with the next seed.
         phone.h.commands.act(own("Maths"))
         assertTrue(phone.replica.upload())
@@ -1118,6 +1123,20 @@ class SyncHarnessTest {
         assertNull(phone.h.stores.sync.value.switching)
         assertTrue(File(dir, "photos/${photo.hash}.jpg").readBytes().contentEquals(jpeg), "on the box ahead of the seed")
         assertEquals(photo.hash, graph.stores.tasks.value.tasks.single().photo?.hash)
+    }
+
+    @Test
+    fun `after a switch whose answer was lost, a Read again sends the seed first, so no command goes ahead of it`() = runBlocking {
+        val phone = mirroringWith("Essay")
+        phone.wire.losesSwitchAnswers = 1
+        assertEquals("Under way: the server can't be reached, so it goes at the next sync", phone.replica.switchOver({ true }, emptyMap()))
+        // Made while the answer's still to come: a command, waiting, which the Read again's exchange would send.
+        phone.h.commands.act(own("Maths"))
+        phone.wire.routes.clear()
+        assertEquals("Claude can't be asked now: try again later", phone.replica.readAgainOnServer("own:s-Maths"))
+        assertEquals(listOf("switch", "commands", "read-again"), phone.wire.routes.filter { it != "task-photos" })
+        assertNull(phone.h.stores.sync.value.switching)
+        assertEquals(setOf("Essay", "Maths"), serverTitles)
     }
 
     @Test

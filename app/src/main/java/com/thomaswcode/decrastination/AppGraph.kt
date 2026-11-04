@@ -485,6 +485,8 @@ class AppGraph private constructor(context: Context) : Owners {
         stores, UrlConnectionHttp(), clock, BuildConfig.VERSION_NAME, calendar = { sync.calendarRead() }, commands,
         photoHttp = UrlConnectionHttp(readTimeoutMs = Replica.PHOTO_WAIT_MS),
         seedFile = File(app.filesDir, "switch-seed.json"),
+        // Mirroring again, at a retry of the switch or at your word: Gmail's writes are this phone's again, and any waiting goes.
+        mirroringAgain = { gmailFinishes.rearm() },
     ) { fresh -> outbox.heard(clock.now(), fresh) }
 
     /** The tasks' readings ([Readings]): by Claude while it can be asked, by the rules otherwise; one read again on asking. */

@@ -63,6 +63,8 @@ class Replica(
     private val photoHttp: Http = http,
     /** Where the switch's seed is kept till it's answered ([switchOver]), so it goes again the same whatever stops this process. */
     private val seedFile: File? = null,
+    /** This phone mirroring again, however it came back to it ([backToMirroring]): what's its own again then, set going. */
+    private val mirroringAgain: () -> Unit = {},
     /** The chat's messages a pull brought, none of them here before: Felix's, said on the server, heard here as his notification. */
     private val heard: (List<ChatMessage>) -> Unit = {},
 ) {
@@ -285,6 +287,7 @@ class Replica(
         // may not hold the parent code it last took.
         sync.update { it.copy(mode = SyncState.MIRROR, revision = 0, sent = emptyMap(), lastError = null, letGoSeen = 0, parentCodeSent = null) }
         archiveSent = NOT_SENT
+        mirroringAgain()
         return true
     }
 
@@ -298,6 +301,9 @@ class Replica(
      * what it's lost.
      */
     private suspend fun exchange(): Boolean {
+        // The switch's seed first, where its answer's still to come (D-141), whichever way this was asked for: no command goes ahead
+        // of it, and none made with a parent code ahead of the code ([sendSwitch] sends that first).
+        if (sync.value.switching != null && !switchAgain()) return false
         val token = stores.secrets[Secret.DeviceToken] ?: return false
         val headers = mapOf("Content-Type" to "application/json", "Authorization" to "Bearer $token", Protocol.HEADER to Protocol.VERSION.toString(), Protocol.ZONE_HEADER to clock.zone().id)
         val server = sync.value.server
