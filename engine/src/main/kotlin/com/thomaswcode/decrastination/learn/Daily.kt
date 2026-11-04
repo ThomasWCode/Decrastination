@@ -77,6 +77,18 @@ object Daily {
     }
 
     /**
+     * When this phone last ran each job at a set time that's the server's from the switch (D-141), by the server's names: the morning
+     * and the check-in's reminder as their alarm noted them ([ranAt]), as it runs them there and then, but one with a try still to come
+     * ([retries]), which the server then runs; the review by the last one made ([reviewedAt]), as its alarm only queues it, so one
+     * still queued at the switch is the server's to make.
+     */
+    fun ranBeforeSwitch(ranAt: Map<String, Long>, retries: Map<String, DailyRetry>, reviewedAt: Long?): Map<String, Long> = listOfNotNull(
+        ranAt[ACTION_BRIEFING]?.takeIf { ACTION_BRIEFING !in retries }?.let { "morning" to it },
+        ranAt[ACTION_CHECK_IN]?.takeIf { ACTION_CHECK_IN !in retries }?.let { "check-in" to it },
+        reviewedAt?.let { "review" to it },
+    ).toMap()
+
+    /**
      * Where to look for an alarm's next time from: a little before [now], so an alarm Android is
      * still to deliver (inexact ones get ten minutes) keeps its time; after it last ran ([ranAt]);
      * and, if that was today, after today: one that ran today stands for today, even with its

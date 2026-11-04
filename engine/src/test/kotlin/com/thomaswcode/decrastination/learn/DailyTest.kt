@@ -70,6 +70,21 @@ class DailyTest {
     }
 
     @Test
+    fun `the jobs the switch hands the server go by what's done, the review by the last one made, as its alarm only queues it`() {
+        val morning = Fixtures.at("2026-11-02T07:00")
+        val checkIn = Fixtures.at("2026-11-01T18:00")
+        val ranAt = mapOf(Daily.ACTION_BRIEFING to morning, Daily.ACTION_CHECK_IN to checkIn, Daily.ACTION_REVIEW to Fixtures.at("2026-11-01T19:30"))
+        // The review's alarm went, its job still queued: the review last made a week before is what's said.
+        val lastWeek = Fixtures.at("2026-10-25T19:31")
+        assertEquals(mapOf("morning" to morning, "check-in" to checkIn, "review" to lastWeek), Daily.ranBeforeSwitch(ranAt, emptyMap(), lastWeek))
+        // One with a try to come isn't said, so the server runs it; and with no review ever made, none's said.
+        val retrying = mapOf(Daily.ACTION_BRIEFING to DailyRetry(morning + 600_000L, 1))
+        assertEquals(mapOf("check-in" to checkIn), Daily.ranBeforeSwitch(ranAt, retrying, null))
+        val retryingCheckIn = mapOf(Daily.ACTION_CHECK_IN to DailyRetry(checkIn + 600_000L, 1))
+        assertEquals(mapOf("morning" to morning), Daily.ranBeforeSwitch(ranAt, retryingCheckIn, null))
+    }
+
+    @Test
     fun `a late check-in's review is found on the Monday after, not moved a week`() {
         // Check-in at 23:30, review at 01:00: at 00:30 on Monday the alarm is still tonight's.
         assertEquals(Fixtures.at("2026-10-12T01:00"), Daily.nextSunday(Fixtures.at("2026-10-12T00:30"), LONDON, 23 * 60 + 30 + Daily.REVIEW_AFTER_MIN))

@@ -74,7 +74,7 @@ object TimerAlarms {
         val graph = AppGraph.get(context)
         val now = graph.clock.now()
         // Its zero gone by and not yet told: told now, once; said only while it's timely, not hours on (a boot).
-        graph.focus.timer?.let { t -> if (t.running && !t.told && t.endsAt <= now && graph.timerOver(now) && timely(t, now)) over(context, t) }
+        graph.focus.timer?.let { t -> if (t.running && !t.told && t.endsAt <= now && graph.timerOver() && timely(t, now)) over(context, t) }
         val timer = graph.focus.timer
         val alarms = context.getSystemService(AlarmManager::class.java)
         alarms?.cancel(alarm(context, ACTION_END))

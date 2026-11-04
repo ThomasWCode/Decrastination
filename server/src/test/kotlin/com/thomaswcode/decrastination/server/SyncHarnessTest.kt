@@ -1028,7 +1028,15 @@ class SyncHarnessTest {
         assertEquals(setOf("Essay", "Maths"), phone.titles, "nothing taken")
         val why = phone.h.stores.sync.value.lastError.orEmpty()
         assertTrue(why.startsWith("A first pull would lose what's changed here in") && "tasks.json" in why, why)
-        phone.replica.takeServersCopy()
+        // A copy of what's here saved first, as none was at a switch this phone never made: one that can't be takes nothing.
+        assertFalse(phone.replica.takeServersCopy { false })
+        assertTrue(phone.h.stores.sync.value.firstPull)
+        assertTrue(phone.h.stores.sync.value.lastError.orEmpty().startsWith("Not taken: a copy of what's here couldn't be saved first"))
+        assertFalse(phone.replica.upload())
+        assertEquals(setOf("Essay", "Maths"), phone.titles, "nothing taken")
+        var copied = false
+        assertTrue(phone.replica.takeServersCopy { copied = true; true })
+        assertTrue(copied)
         assertTrue(phone.replica.upload())
         assertEquals(setOf("Essay"), phone.titles)
         assertFalse(phone.h.stores.sync.value.firstPull)
@@ -1068,6 +1076,27 @@ class SyncHarnessTest {
         phone.wire.photosFail = false
         assertNull(phone.replica.switchOver({ true }, emptyMap()))
         assertTrue(File(dir, "photos/${photo.hash}.jpg").readBytes().contentEquals(jpeg), "on the box by its hash")
+    }
+
+    @Test
+    fun `a photo attached as the switch's photos go is sent ahead of the seed that holds it, the switch waiting for it if it can't go`() = runBlocking {
+        val phone = mirroringWith("Essay")
+        val jpeg = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 6)
+        val file = File(dir, "a-photo-taken-meanwhile.jpg").apply { writeBytes(jpeg) }
+        val photo = TaskPhoto(file.path, Photos.hashOf(jpeg), phone.h.clock.now())
+        // Attached once the photos had gone, as the backup's saved: in the seed, and no command ever takes it to the box.
+        val attached: suspend () -> Boolean = {
+            phone.h.stores.tasks.update { s -> s.copy(tasks = s.tasks.map { it.copy(photo = photo) }) }
+            phone.wire.photosFail = true
+            true
+        }
+        assertEquals("Under way: a task's photo couldn't be sent ahead of the seed, so the switch goes at the next sync", phone.replica.switchOver(attached, emptyMap()))
+        assertEquals(0, phone.wire.switches, "the seed not sent without it")
+        phone.wire.photosFail = false
+        assertTrue(phone.replica.upload())
+        assertNull(phone.h.stores.sync.value.switching)
+        assertTrue(File(dir, "photos/${photo.hash}.jpg").readBytes().contentEquals(jpeg), "on the box ahead of the seed")
+        assertEquals(photo.hash, graph.stores.tasks.value.tasks.single().photo?.hash)
     }
 
     @Test

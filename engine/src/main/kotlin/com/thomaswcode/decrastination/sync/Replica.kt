@@ -396,7 +396,9 @@ class Replica(
         val headers = mapOf("Content-Type" to "application/json", "Authorization" to "Bearer $token", Protocol.HEADER to Protocol.VERSION.toString())
         if (serverMode(headers) != SyncState.MIRROR) return@withLock "The server doesn't say it's mirroring"
         // The tasks' photos on the box first, as the server reads a task with its photo from then (D-148): one attached while
-        // mirroring has no command to take it there. The server keeps one a day ahead of any task's holding it.
+        // mirroring has no command to take it there. The server keeps one a day ahead of any task's holding it. One attached as
+        // these go is sent with the seed ([sendSwitch]).
+        val photosSent = HashSet<String>()
         for (photo in stores.tasks.value.tasks.mapNotNull { it.photo }) {
             val sent = try {
                 sendTaskPhoto(sync.value.server, headers, photo)
@@ -404,6 +406,7 @@ class Replica(
                 false
             }
             if (!sent) return@withLock "Nothing switched: a task's photo couldn't be sent first"
+            photosSent += photo.hash
         }
         if (!backup()) return@withLock "Nothing switched: a backup couldn't be saved first"
         val id = UUID.randomUUID().toString()
@@ -418,15 +421,22 @@ class Replica(
                 }
             },
         )
-        sendSwitch(seed, headers)
+        sendSwitch(seed, headers, photosSent)
     }
 
     /**
-     * A first pull refused (W-26) taken all the same, at your word, the backup written before the switch to go back to: the next
-     * exchange takes the server's stores whole. Also how a phone installed afresh takes the server's copy.
+     * A first pull refused (W-26) taken all the same, at your word, once a copy of everything here is saved to go back to ([backup]),
+     * as a phone that found the server gone over without its switch saved none: the next exchange takes the server's stores whole.
+     * Also how a phone installed afresh takes the server's copy. Whether it's taken: not where the copy couldn't be saved, which
+     * Setup then says.
      */
-    suspend fun takeServersCopy() = sending.withLock {
+    suspend fun takeServersCopy(backup: suspend () -> Boolean): Boolean = sending.withLock {
+        if (!backup()) {
+            sync.update { it.copy(lastError = "Not taken: a copy of what's here couldn't be saved first, so nothing here can go yet.") }
+            return@withLock false
+        }
         sync.update { it.copy(firstPull = false, lastError = null) }
+        true
     }
 
     /**
@@ -458,9 +468,21 @@ class Replica(
      * [seed], the switch's, to the server, and its answer taken: this phone then at the answer's revision, as what the server holds is
      * what was sent, and what's been made since goes. Refused by a server still mirroring (it can't read a store of this build's:
      * deploy it first), it's mirroring again, nothing lost, as what was made since is in the stores, sent whole next time; by one
-     * gone over already, the next pull's a first one, checked (W-26). Why it isn't made, or null where it is.
+     * gone over already, the next pull's a first one, checked (W-26). The tasks' photos not yet on the box ([photosSent] are) go
+     * first: one attached as the switch began is in the seed, and its command's never made. Why it isn't made, or null where it is.
      */
-    private suspend fun sendSwitch(seed: SwitchSeed, headers: Map<String, String>): String? {
+    private suspend fun sendSwitch(seed: SwitchSeed, headers: Map<String, String>, photosSent: Set<String> = emptySet()): String? {
+        for (photo in stores.tasks.value.tasks.mapNotNull { it.photo }.filter { it.hash !in photosSent }) {
+            val sent = try {
+                sendTaskPhoto(sync.value.server, headers, photo)
+            } catch (failed: IOException) {
+                false
+            }
+            if (!sent) {
+                failed("The switch's seed is waiting: a task's photo couldn't be sent ahead of it")
+                return "Under way: a task's photo couldn't be sent ahead of the seed, so the switch goes at the next sync"
+            }
+        }
         val answer = try {
             http.post("${sync.value.server}/api/stores/switch", headers, JSON.encodeToString(SwitchSeed.serializer(), seed))
         } catch (failed: IOException) {
