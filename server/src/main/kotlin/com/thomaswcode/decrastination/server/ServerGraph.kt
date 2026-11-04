@@ -672,12 +672,13 @@ class ServerGraph(
 
     /**
      * [jpeg], a task's photo, kept by its [hash] for the server's reading of its task (D-148), written whole under a name of its own
-     * first, so a reading never finds half of one. Whether it was: not where the hash isn't the photo's.
+     * first, so a reading never finds half of one, and in the photos' folder, so the sweep takes one a crash leaves. Whether it was:
+     * not where the hash isn't the photo's.
      */
     fun keepTaskPhoto(hash: String, jpeg: ByteArray): Boolean {
         if (Photos.hashOf(jpeg) != hash) return false
         taskPhotos.mkdirs()
-        val part = File.createTempFile("photo", ".part", taskPhotos.parentFile)
+        val part = File.createTempFile("photo", ".part", taskPhotos)
         try {
             part.writeBytes(jpeg)
             Files.move(part.toPath(), File(taskPhotos, "$hash.jpg").toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)

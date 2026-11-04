@@ -141,8 +141,8 @@ class ServerOwners(
     private val seenCalendar: suspend (CalendarRead) -> Unit = {},
     /** [block] with no command open, so what it writes is committed as it returns, a write made while one's open waiting for it. */
     private val committed: suspend (suspend () -> Boolean) -> Boolean = { it() },
-    /** What only a phone reads (Teams, AnkiDroid) read now by each paired phone, through Firebase ([PhonePushes.askToRead]). */
-    private val askPhoneToRead: (Set<Source>) -> Unit = {},
+    /** What only a phone reads (Teams, AnkiDroid) read now by each paired phone, through Firebase ([PhonePushes.askToRead]): whether any could be asked. */
+    private val askPhoneToRead: (Set<Source>) -> Boolean = { false },
 ) : Owners {
     override val tasks: JsonStore<TaskState> = stores.tasks
 
@@ -179,12 +179,13 @@ class ServerOwners(
 
     /**
      * [sources] read now, as Felix's `sync` act asks (G2): what this server reads, read here on its own time; what only a phone reads,
-     * asked of each paired phone (D-142).
+     * asked of each paired phone (D-142). Whether they all were: what only a phone reads isn't where no phone can be asked.
      */
-    internal fun readNow(sources: Set<Source>) {
+    internal fun readNow(sources: Set<Source>): Boolean {
         val here = sources.filterTo(HashSet()) { it in Source.SERVERS }
         if (here.isNotEmpty()) later("Reading ${here.joinToString { it.label }}") { syncer.sync(here) }
-        askPhoneToRead(sources - here)
+        val phones = sources - here
+        return phones.isEmpty() || askPhoneToRead(phones)
     }
 
     /**
@@ -291,10 +292,13 @@ class ServerOwners(
         sendCopy = { name, text -> nightly?.let { folder -> scope.launch(Dispatchers.IO) { folder.write(name, text) } } },
     )
 
-    /** The tasks' readings, by Claude while it can be asked, by the rules otherwise. */
-    /** Where a task's photo is kept here: the copy the phone sent ahead of the command that keeps it, by its hash (D-148). */
-    private val photoFile: (TaskPhoto) -> File = { File(photosFolder, "${it.hash}.jpg") }
+    /**
+     * Where a task's photo is kept here: the copy the phone sent ahead of the command that keeps it, by its hash (D-148); a name no
+     * photo has where the hash isn't one's shape, as it names a file.
+     */
+    private val photoFile: (TaskPhoto) -> File = { File(photosFolder, "${it.hash.takeIf(Photos.HASH::matches) ?: "-"}.jpg") }
 
+    /** The tasks' readings, by Claude while it can be asked, by the rules otherwise. */
     val readings: Readings = Readings(
         stores.tasks, stores.model, clock, scope, gateway,
         profile = { conversation.profile() },

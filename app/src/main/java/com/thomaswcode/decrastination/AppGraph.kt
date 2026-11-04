@@ -422,7 +422,7 @@ class AppGraph private constructor(context: Context) : Owners {
         calendarTime = { sync.calendarTime },
         answered = { record, words -> looks.answered(record, words) },
         draftReminders = { now -> looks.draftReminders(now) },
-        requestSync = { sources -> sync.syncNow(sources) },
+        requestSync = { sources -> sync.syncNow(sources); true },
         requestTeamsSync = { sync.requestTeamsSync() },
         byServer = sendsCommands,
     )
