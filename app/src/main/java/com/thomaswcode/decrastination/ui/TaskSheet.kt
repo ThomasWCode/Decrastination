@@ -248,7 +248,7 @@ fun TaskSheet(
                 invite?.let { i -> OutlinedButton(onClick = { message = addToCalendar(activity, i, task.title, zone) }) { Text("Add to calendar") } }
                 // A starred email finished by your word: unstarred and archived in Gmail, after the grace.
                 if (task.source == Source.Gmail && task.isOpen && graph.settings.value.gmailFinishes && GmailWrites.state(gmail.writes, task.id) !in FINISHING) {
-                    OutlinedButton(onClick = { scope.launch { said = finishSaid(graph.gmailFinishes.finish(task.id, explicit = true)) } }) { Text("Finish: unstar and archive") }
+                    OutlinedButton(onClick = { scope.launch { said = finishSaid(graph.finishGmail(task.id)) } }) { Text("Finish: unstar and archive") }
                 }
                 // Written work: a photo shows it done, once Claude is on (Q16).
                 if (next != null && photo != null && photo.available && next.photoCheckable) {

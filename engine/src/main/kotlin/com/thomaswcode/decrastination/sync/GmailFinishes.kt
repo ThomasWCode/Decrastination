@@ -38,6 +38,11 @@ class GmailFinishes(
     private val ports: Ports,
     /** When the last Gmail read that worked began: a finish made before it, its task open after it, was starred again. */
     private val readAt: () -> Long? = { null },
+    /**
+     * [keep], the journal's record of what a conversation holds before it's changed, made to stand before Gmail is: as it's made
+     * here, where a store's written as it changes; on the server between its commands, as a write made while one's open waits for it.
+     */
+    private val beforeChanging: suspend (keep: suspend () -> Boolean) -> Boolean = { it() },
     private val newId: () -> String = { Ids.next() },
 ) {
     /** What Android does for it. */
@@ -250,7 +255,7 @@ class GmailFinishes(
                 // nothing changes.
                 val flagged = (write.flagged.orEmpty() + messages.filter { it.starred }.map { it.id }).distinct()
                 val inbox = (write.inbox.orEmpty() + messages.filter { it.inbox }.map { it.id }).distinct()
-                if (!kept(write.id) { it.copy(flagged = flagged, inbox = inbox) }) return@open false
+                if (!beforeChanging { kept(write.id) { it.copy(flagged = flagged, inbox = inbox) } }) return@open false
                 // Each command on what still needs it: one a try before made isn't made twice, and one come since is.
                 val uids = messages.associate { it.id to it.uid }
                 val starred = messages.filter { it.starred }.mapTo(HashSet()) { it.id }

@@ -155,7 +155,7 @@ class Stores(
         Kept("calendar.json", backup = "your answers about events (what this phone wrote to its calendars means nothing to another's)"),
         Kept("sync.json", backup = null, why = "this phone's pairing with the server, and what it's sent"),
         Kept("outbox.json", backup = null, why = "commands on their way to the server: a restored phone starts from what it's restored to"),
-        Kept("gmail-writes.json", backup = "the receipts of writes made to Gmail, while their Undo can stand (a write still to make is this phone's)"),
+        Kept("gmail-writes.json", backup = "the receipts of writes made to Gmail, while their Undo can stand (a write still to make is this hour's)"),
     )
 
     /**
@@ -230,9 +230,11 @@ class Stores(
 
         /**
          * What the server holds a copy of (docs/plan_web/inventory.md §Stores), the chat's archive's months among them: not
-         * `runtime.json`, `device.json` and `calendar.json`, which are this phone's, nor the sync's own, nor the Gmail journal yet.
+         * `runtime.json`, `device.json` and `calendar.json`, which are this phone's, nor the sync's own. The Gmail journal from
+         * 5.15.0, as its writes are the server's once the phone sends commands: sent while mirroring, its writes still to come
+         * among it, so the server takes them over at the switch.
          */
-        val MIRRORED: Set<String> = setOf("tasks.json", "settings.json", "session.json", "protection.json", "model.json", "anki.json", "learning.json", "log.json", "instructions.json", "chat.json", "school.json", "memory.json", "felix.json")
+        val MIRRORED: Set<String> = setOf("tasks.json", "settings.json", "session.json", "protection.json", "model.json", "anki.json", "learning.json", "log.json", "instructions.json", "chat.json", "school.json", "memory.json", "felix.json", "gmail-writes.json")
 
         /** How long the file an older shape came from is kept after its migration. */
         const val OLD_SHAPE_KEPT_MS = 7 * 24 * 3_600_000L

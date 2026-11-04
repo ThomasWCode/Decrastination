@@ -34,8 +34,14 @@ import com.thomaswcode.decrastination.sync.protocol.FinishOwnTask
 import com.thomaswcode.decrastination.sync.protocol.ResetData
 import com.thomaswcode.decrastination.data.Reset
 import com.thomaswcode.decrastination.core.Fetched
+import com.thomaswcode.decrastination.core.GmailWrite
+import com.thomaswcode.decrastination.core.GmailWrites
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Source
+import com.thomaswcode.decrastination.core.TaskItem
+import com.thomaswcode.decrastination.sources.gmail.GmailWriter
+import com.thomaswcode.decrastination.sync.GmailFinishes
+import com.thomaswcode.decrastination.sync.protocol.FinishGmail
 import com.thomaswcode.decrastination.core.TaskPhoto
 import com.thomaswcode.decrastination.learn.AnkiReading
 import com.thomaswcode.decrastination.learn.DeckCount
@@ -94,7 +100,19 @@ class SyncHarnessTest {
 
     private val dir: File = Files.createTempDirectory("harness").toFile()
     private val db = Database(File(dir, "test.db").path).apply { setMeta("mode", ServerGraph.COMMANDS) }
-    private val graph = ServerGraph(db, dir, Plain, "test")
+    /** What the server's Gmail was asked to change, in order: one message, starred, in the inbox. */
+    private val gmailStored = mutableListOf<GmailWriter.Change>()
+    private val gmail = object : GmailWriter {
+        override suspend fun <T> open(block: suspend (GmailWriter.Session) -> T): T = block(object : GmailWriter.Session {
+            override fun thread(threadId: String): List<Long> = listOf(11L)
+            override fun messages(uids: List<Long>): List<GmailWriter.Message> = listOf(GmailWriter.Message(11, "101", starred = true, inbox = true))
+            override fun store(uids: List<Long>, change: GmailWriter.Change): List<Long> {
+                gmailStored += change
+                return emptyList()
+            }
+        })
+    }
+    private val graph = ServerGraph(db, dir, Plain, "test", gmailWriter = { gmail })
     private val json = Json { encodeDefaults = true; ignoreUnknownKeys = true }
 
     /** The wire to the server: cut, or losing an answer after the server's acted on what it was sent. */
@@ -773,6 +791,47 @@ class SyncHarnessTest {
         assertEquals(null, graph.stores.secrets[Secret.TotpSecret])
         assertEquals(SyncState.NO_CODE, phone.h.stores.sync.value.parentCodeSent)
         assertEquals(listOf("ABCDEFGHIJKLMNOP", "QRSTUVWXYZ234567", null), phone.wire.parentCodes)
+    }
+
+    @Test
+    fun `an email finished on a phone sending commands is journaled the same on both, and written to Gmail by the server alone`() = runBlocking {
+        val phone = phone()
+        val email = TaskItem(id = "gmail:t1", source = Source.Gmail, sourceId = "t1", title = "A made-up email", dueAt = null, kind = Kind.Admin, firstSeenAt = 1, lastSeenAt = 1)
+        for (stores in listOf(graph.stores, phone.h.stores)) {
+            stores.tasks.update { it.copy(tasks = listOf(email)) }
+            stores.settings.update { it.copy(gmailFinishes = true, hintsSeen = it.hintsSeen + GmailWrites.OK_HINT) }
+        }
+        assertEquals(GmailFinishes.Finish.Going, phone.h.commands.act(FinishGmail(email.id)))
+        assertTrue(phone.replica.upload())
+        assertEquals(phone.h.stores.gmailWrites.value.writes.map { it.id }, graph.stores.gmailWrites.value.writes.map { it.id }, "the one write, by its command's id")
+        // Made the day the phone made it, so past its grace: the server writes it, and the phone has it made at its next pull.
+        graph.gmailDue()
+        assertEquals(listOf(GmailWriter.Change.Unstar, GmailWriter.Change.Archive), gmailStored)
+        assertTrue(phone.replica.upload())
+        assertEquals(GmailWrites.State.Made, GmailWrites.state(phone.h.stores.gmailWrites.value.writes, email.id))
+    }
+
+    @Test
+    fun `a finish the server can't make, its email gone there meanwhile, is refused, and the phone takes the journal as it stands`() = runBlocking {
+        val phone = phone()
+        val email = TaskItem(id = "gmail:t1", source = Source.Gmail, sourceId = "t1", title = "A made-up email", dueAt = null, kind = Kind.Admin, firstSeenAt = 1, lastSeenAt = 1)
+        // An earlier finish's receipt on both, as the journal's kept there from the phone's seeds.
+        val receipt = GmailWrite("w-0", "gmail:t0", "An older made-up email", "t0", phone.h.clock.now() - 60_000, doneAt = phone.h.clock.now() - 30_000)
+        for (stores in listOf(graph.stores, phone.h.stores)) {
+            stores.tasks.update { it.copy(tasks = listOf(email)) }
+            stores.settings.update { it.copy(gmailFinishes = true, hintsSeen = it.hintsSeen + GmailWrites.OK_HINT) }
+            stores.gmailWrites.update { it.copy(writes = listOf(receipt)) }
+        }
+        assertTrue(phone.replica.upload())
+        // Offline, it's finished here; meanwhile the server's own read finds the email gone (unstarred by hand, say).
+        phone.wire.cut = true
+        assertEquals(GmailFinishes.Finish.Going, phone.h.commands.act(FinishGmail(email.id)))
+        graph.stores.tasks.update { it.copy(tasks = emptyList()) }
+        phone.wire.cut = false
+        assertTrue(phone.replica.upload())
+        assertEquals(listOf(receipt), graph.stores.gmailWrites.value.writes, "nothing journaled there")
+        // The journal hasn't changed there, so only a pull of everything puts the phone's right: the refusal asks for one.
+        assertEquals(listOf(receipt), phone.h.stores.gmailWrites.value.writes)
     }
 
     @Test

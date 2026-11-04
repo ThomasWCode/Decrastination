@@ -1,5 +1,6 @@
 package com.thomaswcode.decrastination.server
 
+import com.thomaswcode.decrastination.core.GmailWrites
 import com.thomaswcode.decrastination.core.Ids
 import com.thomaswcode.decrastination.core.Notes
 import com.thomaswcode.decrastination.core.Plan
@@ -33,6 +34,8 @@ import com.thomaswcode.decrastination.net.UrlConnectionHttp
 import com.thomaswcode.decrastination.plan.Planning
 import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.ports.Log
+import com.thomaswcode.decrastination.sources.gmail.GmailWriter
+import com.thomaswcode.decrastination.sources.gmail.ImapGmailWriter
 import com.thomaswcode.decrastination.sync.Protocol
 import com.thomaswcode.decrastination.sync.SeedAnswer
 import com.thomaswcode.decrastination.sync.SeedBatch
@@ -164,6 +167,8 @@ class ServerGraph(
     phoneSender: PhonePushes.Sender? = null,
     /** Where Litestream says what it's uploaded, if it's watched. */
     streamMetrics: String? = null,
+    /** What makes the journal's writes to Gmail, by the sign-ins held here: IMAP's, but for a test's stand-in. */
+    private val gmailWriter: (SecretStore) -> GmailWriter = { ImapGmailWriter(it) },
 ) {
     /** The clock the phone's zone is told to. */
     val serverClock = ServerClock(db)
@@ -242,6 +247,7 @@ class ServerGraph(
         afterCommands = { db.betweenCommands {} },
         // The phone's calendar as read: its events, and your answers about them, which only the phone can take.
         seenCalendar = { read -> calendarRead.update { read } },
+        committed = { block -> db.betweenCommands(block) },
     )
 
     /** Whether a nightly file has somewhere to go. */
@@ -401,6 +407,7 @@ class ServerGraph(
                 owners.looks.sweepReminders()
             },
             ServerJob.every("pushes", MINUTE_MS) { pushDue() },
+            ServerJob.every("gmail", MINUTE_MS) { gmailDue() },
             ServerJob.every("sources", SOURCES_EVERY_MS) { owners.syncer.sync(setOf(Source.PowerPlanner, Source.Gmail)) },
             ServerJob("morning", due = { last, now -> morningDue(last, now) }) {
                 morning({ owners.conversation.forgetExpired() }, { owners.ownTasks.rollWeeks() }, { owners.briefing.run() }, { owners.conversation.pruneFelix() })
@@ -444,6 +451,22 @@ class ServerGraph(
         val newest = stores.chat.value.messages.lastOrNull { it.id == notice.replyTo } ?: return
         val told = PushMessage(notice.name, Pushes.words(Outbox.lines(newest).joinToString("\n") { it.text }), "/", Pushes.FELIX)
         db.afterCommit { pushes.push(Pushes.FELIX, told) }
+    }
+
+    /**
+     * The writes to Gmail due now (D-106), made by the server's own sign-in: the journal sets the next itself as it goes. A run that
+     * fails outside a write's tries (the journal unread or unwritten) leaves the time as it was, to be tried after the job's wait.
+     */
+    internal suspend fun gmailDue() {
+        val due = owners.gmailDueAt ?: return
+        if (due > clock.now()) return
+        owners.gmailDueAt = null
+        try {
+            owners.gmailFinishes.write(gmailWriter(stores.secrets))
+        } catch (failed: Exception) {
+            if (owners.gmailDueAt == null) owners.gmailDueAt = due
+            throw failed
+        }
     }
 
     /**
@@ -670,6 +693,7 @@ class ServerGraph(
             chat, read, shown, older = shown == 0 && archive.recent(1).isNotEmpty(), quotes, stores.tasks.value, settings, stores.memory.value, stores.felix.value, stores.instructions.value,
             owners.conversation.keptAt(now), owners.conversation.answeringSince.value, claudeOn,
             owners.focus.today(now), now, clock.zone(), writable,
+            finishing = GmailWrites.standing(stores.gmailWrites.value.writes),
         )
     }
 
@@ -756,7 +780,8 @@ class ServerGraph(
         val now = clock.now()
         val zone = clock.zone()
         val usage = stores.model.value.aiUsage.forMonth(AiUsage.monthOf(now, zone))
-        return SetupViews.of(stores.tasks.value, unreadable(), stores::holds, stores.settings.value, usage, credentials(), claudeKey != null, now, zone, mode == COMMANDS)
+        val givenUp = if (mode == COMMANDS) GmailWrites.givenUp(stores.gmailWrites.value.writes) else emptyList()
+        return SetupViews.of(stores.tasks.value, unreadable(), stores::holds, stores.settings.value, usage, credentials(), claudeKey != null, now, zone, mode == COMMANDS, givenUp)
     }
 
     /** What couldn't be read at this start: the calendar's copy is a store of the server's own, beside the rest. */
@@ -766,7 +791,9 @@ class ServerGraph(
     fun notices(): NoticesView {
         val settings = stores.settings.value
         val keyProblem = stores.model.value.aiUsage.keyProblem != null && settings.aiEnabled && settings.aiKeyActive
-        return NoticesView(Outbox.unreadOf(stores.chat.value).size, SetupPage.attention(stores.tasks.value, gmailGivenUp = false, keyProblem = keyProblem, watchdog = false, unreadable = unreadable().isNotEmpty()))
+        // Gmail's writes given up are this server's to say once it makes them.
+        val gmailGivenUp = mode == COMMANDS && GmailWrites.givenUp(stores.gmailWrites.value.writes).isNotEmpty()
+        return NoticesView(Outbox.unreadOf(stores.chat.value).size, SetupPage.attention(stores.tasks.value, gmailGivenUp = gmailGivenUp, keyProblem = keyProblem, watchdog = false, unreadable = unreadable().isNotEmpty()))
     }
 
     /** Task [id]'s sheet, if there's such a task. */

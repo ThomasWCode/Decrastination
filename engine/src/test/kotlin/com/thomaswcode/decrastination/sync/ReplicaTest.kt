@@ -152,7 +152,9 @@ class ReplicaTest {
         paired()
         replica.upload()
         val names = server.seeds.single().stores.map { it.name }
-        for (own in listOf("runtime.json", "device.json", "calendar.json", "sync.json", "gmail-writes.json", "secrets.bin")) assertFalse(own in names, own)
+        for (own in listOf("runtime.json", "device.json", "calendar.json", "sync.json", "secrets.bin")) assertFalse(own in names, own)
+        // Gmail's journal is the server's to carry on from 5.15.0, its writes still to come among it.
+        assertTrue("gmail-writes.json" in names)
     }
 
     @Test

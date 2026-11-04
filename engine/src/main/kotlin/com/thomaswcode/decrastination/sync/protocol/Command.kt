@@ -18,6 +18,7 @@ import com.thomaswcode.decrastination.learn.Learning
 import com.thomaswcode.decrastination.ports.Log
 import com.thomaswcode.decrastination.protect.Protection
 import com.thomaswcode.decrastination.protect.SettingsChanges
+import com.thomaswcode.decrastination.sync.GmailFinishes
 import com.thomaswcode.decrastination.sync.Syncer
 import com.thomaswcode.decrastination.tasks.Instructions
 import com.thomaswcode.decrastination.tasks.OwnTasks
@@ -110,6 +111,12 @@ interface Owners {
     val ankiWatch: AnkiWatch
 
     val photos: Photos
+
+    /**
+     * Emails finished in Gmail, their journal and its Undos ([FinishGmail]): journaled on both sides, written to Gmail where the sign-in
+     * and the writes are, the phone's while mirroring, the server's once the phone sends commands.
+     */
+    val gmail: GmailFinishes
 
     /** The calendar as the phone last read it ([ObserveCalendar]): kept where it's planned by from it, the server; nothing on the phone, whose it is. */
     suspend fun calendarSeen(read: CalendarRead)

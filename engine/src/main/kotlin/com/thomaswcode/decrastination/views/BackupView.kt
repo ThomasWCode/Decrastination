@@ -1,5 +1,6 @@
 package com.thomaswcode.decrastination.views
 
+import com.thomaswcode.decrastination.core.GmailWrite
 import com.thomaswcode.decrastination.core.Instruction
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.Source
@@ -77,14 +78,15 @@ object SetupViews {
     /**
      * As things stand at [now]. While the phone writes, the sign-ins and the key in use are its own, which aren't here to see, so
      * each goes by how its source reads ([writable] false). Once this server reads them, by [held] and [keyHeld]. Teams and AnkiDroid are the phone's either way.
+     * Gmail's writes given up ([givenUp]) are this server's once it makes them.
      */
-    fun of(tasks: TaskState, unreadable: List<JsonStore.Unreadable>, holds: (String) -> Boolean, settings: Settings, usage: AiUsage, held: Set<String>, keyHeld: Boolean, now: Long, zone: ZoneId, writable: Boolean) = SetupView(
+    fun of(tasks: TaskState, unreadable: List<JsonStore.Unreadable>, holds: (String) -> Boolean, settings: Settings, usage: AiUsage, held: Set<String>, keyHeld: Boolean, now: Long, zone: ZoneId, writable: Boolean, givenUp: List<GmailWrite> = emptyList()) = SetupView(
         saved = unreadable.map { found -> SetupLine("Found unreadable ${Format.at(found.at, now, zone)}", false, if (found.file == SECRETS) SECRETS_LOST else found.says(holds)) },
         sources = listOf(
             SetupPage.teams(tasks.status(Source.Teams)),
             SetupPage.powerPlanner(tasks.status(Source.PowerPlanner), !writable || Secret.PowerPlannerPassword.name in held),
             SetupPage.anki(tasks.status(Source.Anki), allowed = true),
-            SetupPage.gmail(tasks.status(Source.Gmail), !writable || Secret.GmailAppPassword.name in held, settings.gmailFinishes, givenUp = emptyList()),
+            SetupPage.gmail(tasks.status(Source.Gmail), !writable || Secret.GmailAppPassword.name in held, settings.gmailFinishes, givenUp),
         ).map(::line),
         claude = line(SetupPage.claude(!writable || keyHeld, settings, usage, onBox = writable)),
     )

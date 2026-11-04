@@ -39,6 +39,7 @@ import com.thomaswcode.decrastination.learn.Learning
 import com.thomaswcode.decrastination.learn.ReviewInput
 import com.thomaswcode.decrastination.protect.Protection
 import com.thomaswcode.decrastination.sources.SourceRead
+import com.thomaswcode.decrastination.sync.GmailFinishes
 import com.thomaswcode.decrastination.sync.Syncer
 import com.thomaswcode.decrastination.tasks.Instructions
 import com.thomaswcode.decrastination.tasks.OwnTasks
@@ -88,6 +89,7 @@ class CommandsTest {
         NoteSource(Source.Teams, "a note"), ObserveCalendar(CalendarRead(answers = mapOf("an event" to "busy"))), AskAboutEvent("k", "an event", "Monday", 5L, listOf("busy", "free")), SettleEvent("k"),
         AnkiCame(5L, AnkiReading(5L, mapOf(1L to DeckCount(1, 2, 3)), entering = true)), AnkiWent(6L), AnkiReset, RecordBlock("an app", "a reason"), SpendFreeTime("2026-11-03", 30_000L), TimerOver,
         RecordProtection(listOf("a problem"), repaired = true), AttachPhoto("t", TaskPhoto("photos/t.jpg", "abcd", 5L)),
+        FinishGmail("t"), UnfinishGmail("t", "w"), SortGmail("t"), ConfirmGmail(confirmed = false),
     )
 
     @Test
@@ -177,6 +179,7 @@ class CommandsTest {
                 override val sources: Syncer get() = error("not here")
                 override val ankiWatch: AnkiWatch get() = error("not here")
                 override val photos: Photos get() = error("not here")
+                override val gmail: GmailFinishes get() = error("not here")
 
                 override suspend fun calendarSeen(read: CalendarRead) = error("not here")
 
@@ -207,6 +210,7 @@ class CommandsTest {
                 override val sources: Syncer get() = error("not here")
                 override val ankiWatch: AnkiWatch get() = error("not here")
                 override val photos: Photos get() = error("not here")
+                override val gmail: GmailFinishes get() = error("not here")
 
                 override suspend fun calendarSeen(read: CalendarRead) = error("not here")
 

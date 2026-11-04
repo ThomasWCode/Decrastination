@@ -36,6 +36,8 @@ import kotlinx.coroutines.CancellationException
 class GmailWriteWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
         val graph = AppGraph.get(applicationContext)
+        // The server's to write, by its own sign-in, once the phone sends commands: this phone's journal is the server's copy then.
+        if (!graph.gmailWrites()) return Result.success()
         return try {
             // A try that fails waits in the journal, and the write sets the worker's next run itself.
             graph.gmailFinishes.write(ImapGmailWriter(graph.stores.secrets))

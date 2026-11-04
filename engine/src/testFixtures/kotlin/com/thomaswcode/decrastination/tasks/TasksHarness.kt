@@ -6,6 +6,7 @@ import com.thomaswcode.decrastination.block.AnkiWatch
 import com.thomaswcode.decrastination.block.Focus
 import com.thomaswcode.decrastination.block.Photos
 import com.thomaswcode.decrastination.core.FixedClock
+import com.thomaswcode.decrastination.core.GmailWrite
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.ReplayClock
 import com.thomaswcode.decrastination.core.Source
@@ -24,6 +25,7 @@ import com.thomaswcode.decrastination.learn.EventJudge
 import com.thomaswcode.decrastination.learn.Learning
 import com.thomaswcode.decrastination.plan.Planning
 import com.thomaswcode.decrastination.protect.Protection
+import com.thomaswcode.decrastination.sync.GmailFinishes
 import com.thomaswcode.decrastination.sync.Syncer
 import com.thomaswcode.decrastination.sync.protocol.Commands
 import com.thomaswcode.decrastination.sync.protocol.Owners
@@ -135,6 +137,32 @@ class TasksHarness(start: String = "2026-10-19T16:00", private val claude: Boole
     )
 
     override val photos: Photos = Photos(stores.tasks, stores.settings, stores.chat, owners, scope, gateway, focus, File(dir, "photos"), shrink = { null }, profile = { Profile.Block.NONE }, read = {})
+
+    /** When the journal last asked for its writes to be made, in order: nothing's written here. */
+    val gmailWakes: MutableList<Long> = Collections.synchronizedList(mutableListOf())
+
+    override val gmail: GmailFinishes = GmailFinishes(
+        stores.gmailWrites,
+        settings = { stores.settings.value },
+        task = { id -> planning.asPlanned().firstOrNull { it.id == id } },
+        multiplier = { stores.learning.value.calibration.multiplierFor(it) },
+        clock = owners,
+        ports = object : GmailFinishes.Ports {
+            override fun schedule(at: Long) {
+                gmailWakes += at
+            }
+
+            override fun ensureScheduled(at: Long) {
+                gmailWakes += at
+            }
+
+            override fun syncGmail() = Unit
+
+            override fun gaveUp(write: GmailWrite, words: String) = Unit
+
+            override fun sorted(write: GmailWrite) = Unit
+        },
+    )
 
     /** The calendars as a phone sent them, in order. */
     val calendars: MutableList<CalendarRead> = Collections.synchronizedList(mutableListOf())
