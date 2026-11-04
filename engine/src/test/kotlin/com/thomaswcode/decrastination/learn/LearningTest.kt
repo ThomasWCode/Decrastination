@@ -32,6 +32,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
@@ -136,6 +137,18 @@ class LearningTest {
         byServer = false
         learning.review(ifDue = false)
         assertEquals(1, stores.log.value.reviews.size)
+    }
+
+    @Test
+    fun `a review that waited for the switch's quiet finds it the server's and makes none`() = runBlocking {
+        val held = CompletableDeferred<Unit>()
+        // The switch holds the review's lock as it reads the stores; a review begun meanwhile waits, and the switch is made.
+        val quiet = launch(start = CoroutineStart.UNDISPATCHED) { learning.quiet { held.await(); byServer = true } }
+        val review = launch(start = CoroutineStart.UNDISPATCHED) { learning.review(ifDue = false) }
+        held.complete(Unit)
+        joinAll(quiet, review)
+        assertTrue(stores.log.value.reviews.isEmpty(), "none made here: it's the server's")
+        assertTrue(told.isEmpty())
     }
 
     @Test

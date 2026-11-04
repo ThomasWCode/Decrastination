@@ -754,19 +754,33 @@ class AppGraph private constructor(context: Context) : Owners {
     /**
      * The switch to commands (D-141), at your word, from a PC (`sync-switch`): Gmail's worker stopped and waited for first, so no
      * write's half made as the stores are read; then [Replica.switchOver], a backup of this phone's saved before anything goes (W-26),
-     * with when this phone last ran each job at a set time that's the server's from then, but one with a try still to come, which the
-     * server then runs. What came of it, in words.
+     * with when this phone last ran each job at a set time that's the server's from then ([Daily.ranBeforeSwitch]). What came of it,
+     * in words.
      */
     suspend fun switchOver(): String {
         GmailWriteWorker.stop(app)
-        val runtime = runtime.value
-        val ran = Daily.ranBeforeSwitch(runtime.dailyRanAt, runtime.dailyRetries, log.value.reviews.maxOfOrNull { it.at })
-        // With no write to Gmail and no read of a source under way, nor any begun, as each writes the stores unqueued while mirroring:
-        // those that waited go as commands once the switch is made. A minute at most for one under way to finish; the switch, once
-        // begun, is made whole, however long it takes, so what it says is what it did.
-        var why: String? = "Nothing switched: a write to Gmail or a read of a source didn't finish within a minute; try again"
+        // With no write to Gmail, no read of a source, no answer of the chat's, no review and no photo check under way, nor any begun,
+        // as each writes the stores unqueued while mirroring: those that waited go as commands, or are the server's, once the switch
+        // is made. In that order, as a read's own work answers the chat inside it. A minute at most for one under way to finish; the
+        // switch, once begun, is made whole, however long it takes, so what it says is what it did. The jobs' last runs are read
+        // inside, so a review just made is among them.
+        var why: String? = "Nothing switched: a write to Gmail, a read of a source, an answer, the review or a photo check didn't finish within a minute; try again"
         withTimeoutOrNull(60_000) {
-            gmailFinishes.quiet { syncer.quiet { withContext(NonCancellable) { why = replica.switchOver(backup = { backups.switchCopy() }, ran = ran) } } }
+            gmailFinishes.quiet {
+                syncer.quiet {
+                    conversation.quiet {
+                        learning.quiet {
+                            photos.quiet {
+                                withContext(NonCancellable) {
+                                    val runtime = runtime.value
+                                    val ran = Daily.ranBeforeSwitch(runtime.dailyRanAt, runtime.dailyRetries, log.value.reviews.maxOfOrNull { it.at })
+                                    why = replica.switchOver(backup = { backups.switchCopy() }, ran = ran)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
         // Mirroring still: Gmail's writes are this phone's again.
         if (!sendsCommands()) gmailFinishes.rearm()

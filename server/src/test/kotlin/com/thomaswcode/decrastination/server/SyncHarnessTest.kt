@@ -1043,6 +1043,27 @@ class SyncHarnessTest {
     }
 
     @Test
+    fun `a first pull that would lose a change here in an archived month, a rating say, is refused as one in any store would be`() = runBlocking {
+        val phone = mirroringWith("Essay")
+        val month = "chat-archive-2026-10.json"
+        val words = ChatArchive(listOf(ChatMessage("a", Speaker.Felix, "words", 1_792_000_000_000L)))
+        phone.h.stores.chatArchive.adopt(month, words.version, JsonStore.json.encodeToString(ChatArchive.serializer(), words))
+        assertTrue(phone.replica.upload())
+        // The server goes over without this phone's switch, its month changed there meanwhile, and a change here never reaches it.
+        graph.commandsForATest()
+        val theirs = words.copy(messages = words.messages.map { it.copy(answeredAt = 7L) })
+        graph.backend.keep(month, words.version, JsonStore.json.encodeToString(ChatArchive.serializer(), theirs))
+        phone.h.stores.chatArchive.change("a") { it.copy(answeredAt = 5L) }
+        assertTrue(phone.replica.upload())
+        assertTrue(phone.h.stores.sync.value.firstPull)
+        assertFalse(phone.replica.upload())
+        val why = phone.h.stores.sync.value.lastError.orEmpty()
+        assertTrue(month in why, why)
+        val here = phone.h.stores.chatArchive.texts().single { it.name == month }.text
+        assertEquals(5L, JsonStore.json.decodeFromString(ChatArchive.serializer(), here).messages.single().answeredAt, "nothing taken")
+    }
+
+    @Test
     fun `a first pull with nothing changed here is taken, the server's own changes with it, and one from a server behind this phone's last seed is refused`() = runBlocking {
         val phone = mirroringWith("Essay")
         graph.commandsForATest()

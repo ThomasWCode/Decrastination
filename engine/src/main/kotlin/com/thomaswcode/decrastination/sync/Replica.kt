@@ -264,8 +264,9 @@ class Replica(
      */
     private fun firstPullRefused(pulled: PulledState): String? {
         if (pulled.revision < sync.value.seedRevision) return "The server is behind what this phone last sent (restored from before it?): nothing's taken from it. See its restore steps."
-        // Only those a pull takes: the calendar as read is this phone's, and never taken from the server.
-        val here = stores.mirrored.associate { it.name to it.text() }
+        // Only those a pull takes: the calendar as read is this phone's, and never taken from the server; the archive's months are,
+        // and one changes here too (a rating of a message in it).
+        val here = stores.mirrored.associate { it.name to it.text() } + stores.chatArchive.texts().associate { it.name to it.text }
         val lost = pulled.stores.filter { store ->
             val text = here[store.name] ?: return@filter false
             Protocol.hash(text) != sync.value.sent[store.name] && runCatching { JSON.parseToJsonElement(text) }.getOrNull() != store.json

@@ -81,10 +81,17 @@ class Learning(
      * One at a time: a second waits, and then finds the week has had it.
      */
     suspend fun review(ifDue: Boolean) {
-        // The server's, the phone keeping in step by commands (D-142): its review reaches the phone as it pulls.
+        // The server's, the phone keeping in step by commands (D-142): its review reaches the phone as it pulls. Looked at again
+        // under the lock, as the switch holds it ([quiet]), and one that waited for it finds the server's making it.
         if (byServer()) return
-        reviewing.withLock { makeReview(ifDue) }
+        reviewing.withLock { if (!byServer()) makeReview(ifDue) }
     }
+
+    /**
+     * [block] with no review under way, and none begun till it's done: the switch reads the stores whole meanwhile (D-141), with
+     * what a review under way writes in them, and one that waited for it finds it the server's to make.
+     */
+    suspend fun <T> quiet(block: suspend () -> T): T = reviewing.withLock { block() }
 
     private suspend fun makeReview(ifDue: Boolean) {
         val now = clock.now()
