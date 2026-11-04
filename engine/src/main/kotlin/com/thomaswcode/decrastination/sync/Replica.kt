@@ -391,7 +391,7 @@ class Replica(
         val file = seedFile ?: return@withLock "Nowhere to keep the switch's seed"
         val token = stores.secrets[Secret.DeviceToken] ?: return@withLock "This phone isn't paired"
         if (sync.value.mode != SyncState.MIRROR) return@withLock "This phone keeps in step by commands already"
-        if (send() != Sent.InStep) return@withLock "Not in step with the server yet: ${sync.value.lastError ?: "a store's still to be taken"}"
+        if (send() != Sent.InStep) return@withLock "Not in step with the server yet: ${(sync.value.lastError ?: "a store's still to be taken").replaceFirstChar { it.lowercase() }}"
         val headers = mapOf("Content-Type" to "application/json", "Authorization" to "Bearer $token", Protocol.HEADER to Protocol.VERSION.toString())
         if (serverMode(headers) != SyncState.MIRROR) return@withLock "The server doesn't say it's mirroring"
         if (!backup()) return@withLock "Nothing switched: a backup couldn't be saved first"

@@ -963,6 +963,9 @@ class SyncHarnessTest {
     @Test
     fun `a backup that can't be saved, or a server that can't take the switch, leaves the phone mirroring, nothing lost`() = runBlocking {
         val phone = mirroringWith("Essay")
+        phone.wire.cut = true
+        assertEquals("Not in step with the server yet: the server can't be reached", phone.replica.switchOver({ true }, emptyMap()))
+        phone.wire.cut = false
         assertEquals("Nothing switched: a backup couldn't be saved first", phone.replica.switchOver({ false }, emptyMap()))
         assertEquals(SyncState.MIRROR to 0, phone.h.stores.sync.value.mode to phone.wire.switches)
         phone.wire.refusesSwitch = "The server can't read this app's tasks.json: deploy it first"
@@ -993,18 +996,20 @@ class SyncHarnessTest {
     }
 
     @Test
-    fun `a first pull with nothing changed here is taken, and one from a server behind this phone's last seed is refused`() = runBlocking {
+    fun `a first pull with nothing changed here is taken, the server's own changes with it, and one from a server behind this phone's last seed is refused`() = runBlocking {
         val phone = mirroringWith("Essay")
         graph.commandsForATest()
+        // The server's moved on since (its own work): what's here is as last sent, so that's no change of this phone's.
+        graph.stores.tasks.update { s -> s.copy(tasks = s.tasks.map { it.copy(title = "Essay, moved on") }) }
         // Behind: its revisions below what this phone's last seed was answered at.
         phone.h.stores.sync.update { it.copy(seedRevision = 1_000_000) }
         assertTrue(phone.replica.upload())
         assertFalse(phone.replica.upload())
         assertTrue(phone.h.stores.sync.value.lastError.orEmpty().startsWith("The server is behind what this phone last sent"))
-        // As it was, nothing changed here: taken.
+        // As it was, nothing changed here: taken, and the server's change with it.
         phone.h.stores.sync.update { it.copy(seedRevision = 0) }
         assertTrue(phone.replica.upload())
         assertFalse(phone.h.stores.sync.value.firstPull)
-        assertEquals(setOf("Essay"), phone.titles)
+        assertEquals(setOf("Essay, moved on"), phone.titles)
     }
 }
