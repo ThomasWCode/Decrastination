@@ -16,7 +16,6 @@ import java.net.Socket
 import java.net.SocketTimeoutException
 import java.time.ZoneId
 import java.util.Locale
-import javax.net.ssl.HttpsURLConnection
 import javax.net.ssl.SSLSocket
 import javax.net.ssl.SSLSocketFactory
 import kotlinx.coroutines.Dispatchers
@@ -293,20 +292,26 @@ internal object GmailConnection {
     const val TIMEOUT_MS = 30_000
 
     /**
-     * TLS to Gmail, with the host name checked against its certificate. Closed on any failure before
-     * it's handed over, the TLS layer and the socket under it (BUG-P2-021): the caller's `use` only
-     * begins once it is.
+     * TLS to Gmail, with the host name checked against its certificate in the handshake (endpoint
+     * identification), before a byte of the login goes: Android's TLS checks it there by the phone's
+     * default host name verifier, and a JVM's by its own. That default verifier isn't asked again
+     * after the handshake, as on the server's JVM it refuses every name: it's only there for
+     * `HttpsURLConnection` to ask about one that's already failed. Closed on any failure before it's
+     * handed over, the TLS layer and the socket under it (BUG-P2-021): the caller's `use` only begins
+     * once it is.
      */
-    fun open(): SSLSocket {
+    fun open(): SSLSocket = open(InetSocketAddress(HOST, PORT), HOST, SSLSocketFactory.getDefault() as SSLSocketFactory)
+
+    /** [open], to [address] as [name], trusting what [factory] trusts: how a test's own server stands in for Gmail's. */
+    fun open(address: InetSocketAddress, name: String, factory: SSLSocketFactory): SSLSocket {
         val plain = Socket()
         var socket: SSLSocket? = null
         try {
-            plain.connect(InetSocketAddress(HOST, PORT), TIMEOUT_MS)
-            socket = (SSLSocketFactory.getDefault() as SSLSocketFactory).createSocket(plain, HOST, PORT, true) as SSLSocket
+            plain.connect(address, TIMEOUT_MS)
+            socket = factory.createSocket(plain, name, address.port, true) as SSLSocket
             socket.soTimeout = TIMEOUT_MS
             socket.sslParameters = socket.sslParameters.apply { endpointIdentificationAlgorithm = "HTTPS" }
             socket.startHandshake()
-            if (!HttpsURLConnection.getDefaultHostnameVerifier().verify(HOST, socket.session)) throw IOException("Gmail's certificate doesn't match $HOST")
             return socket
         } catch (e: Throwable) {
             runCatching { socket?.close() }
