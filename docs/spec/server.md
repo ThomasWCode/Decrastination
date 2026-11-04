@@ -44,7 +44,7 @@ Everything is under `/api`, on the same origin as the website. Open: `GET /healt
 | `POST /backup/copy` | the website | a reset's copy, by its name, taken in the same way; a 409 in mirror mode |
 | `POST /photos/tasks` | the website, or a phone (D-148) | a JPEG of homework read into tasks to check, one at a time; a 409 in mirror mode, or with another being read |
 | `POST /photos/check` | a phone (D-148) | a piece's pages (at most three JPEGs, in base64) checked against it (AI-16), the piece found by its key in this server's plan, ticked off here if it's done; one at a time; a 409 in mirror mode, or with another being checked |
-| `POST /task-photos/{hash}` | a phone (D-148) | a task's photo, sent ahead of the command that keeps it, kept in the data folder's `photos/` by its hash (SHA-256's first 8 bytes), refused where the hash isn't the photo's; the photos no task holds swept at each start and daily |
+| `POST /task-photos/{hash}` | a phone (D-148) | a task's photo, sent ahead of the command that keeps it, kept in the data folder's `photos/` by its hash (SHA-256's first 8 bytes), refused where the hash isn't the photo's; the photos no task holds swept at each start and daily, but those come within the day, as a photo's command can come after it |
 | `POST /push/subscription` | the website | a browser asking to be told of what it names; a 409 in mirror mode or with no keys on the box, a 400 at an address that isn't one of the browsers' push services |
 | `POST /push/channels`, `POST /push/forget` | the website | what a browser's asked for, and its stopping |
 | `GET /credentials`, `POST /credentials` | the website | which sign-ins are held, and setting them: never their values back |

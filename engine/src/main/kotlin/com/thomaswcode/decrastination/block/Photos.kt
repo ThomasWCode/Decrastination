@@ -129,8 +129,11 @@ class Photos(
         }
     }
 
-    /** The photos no task holds any more let go (AI-23): a task done and gone takes its photo with it. */
-    fun sweepPhotos() {
+    /**
+     * The photos no task holds any more let go (AI-23): a task done and gone takes its photo with it. On the server, none kept since
+     * [keptBefore] goes, as a phone's photo comes ahead of the command that keeps it, which may come later (D-148).
+     */
+    fun sweepPhotos(keptBefore: Long = Long.MAX_VALUE) {
         // A task the chat deleted keeps its photo while its Undo can bring it back: no other act's, nor one made again since.
         val messages = chat.value.messages
         val undoable = messages.flatMap { m ->
@@ -139,7 +142,7 @@ class Photos(
         }
         // By name, as where a photo's kept is the phone's path here and its hash on the server.
         val held = (tasks.value.tasks.mapNotNull { it.photo } + undoable).mapTo(HashSet()) { fileOf(it).name }
-        photos.listFiles()?.filter { it.name !in held }?.forEach { it.delete() }
+        photos.listFiles()?.filter { it.name !in held && it.lastModified() < keptBefore }?.forEach { it.delete() }
     }
 
     /**
