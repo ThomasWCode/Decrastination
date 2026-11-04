@@ -122,7 +122,7 @@ class ArchitectureTest {
         // through `graph.act`, as the screens' are, or is made inside `whileMirroring`, refused once the phone sends commands.
         val text = sources.getValue("debug/CommandActivity.kt")
         val mirroring = blocks(text, "whileMirroring(")
-        assertTrue(mirroring.size >= 9, "found ${mirroring.size} whileMirroring blocks")
+        assertTrue(mirroring.size >= 8, "found ${mirroring.size} whileMirroring blocks")
         assertTrue("graph.act(" in text, "the debug commands make no action")
         val changes = HELD_UPDATE.findAll(text) + DIRECT.findAll(text) + DEBUG_DIRECT.findAll(text)
         val stray = changes.filter { change -> mirroring.none { change.range.first in it } }
@@ -169,13 +169,22 @@ class ArchitectureTest {
         /** The owners' changes the debug commands call that have no action: an instruction written, a task's traces forgotten, the memory tidied, a message sent round the chat's box. */
         val DEBUG_DIRECT = Regex("""\.(addInstruction|forgetAsks|tidyMemory)\(|conversation\.send\(""")
 
-        /** Where each call of [opener] in [text] has its trailing block: from that block's `{` to the `}` closing it. */
-        fun blocks(text: String, opener: String): List<IntRange> = Regex(Regex.escape(opener)).findAll(text).map { call ->
-            val start = text.indexOf(") {", call.range.last) + 2
-            var depth = 0
+        /**
+         * Where each call of [opener] (ending with its `(`) in [text] has its trailing block, from that block's `{` to the `}`
+         * closing it: past the call's own `)`, matched however its arguments run, and its declaration's body left out.
+         */
+        fun blocks(text: String, opener: String): List<IntRange> = Regex("""(?<!fun )""" + Regex.escape(opener)).findAll(text).mapNotNull { call ->
+            var depth = 1
+            var after = call.range.last + 1
+            while (after < text.length && depth > 0) {
+                if (text[after] == '(') depth++ else if (text[after] == ')') depth--
+                after++
+            }
+            val start = text.indexOf('{', after).takeIf { it >= 0 && text.substring(after, it).isBlank() } ?: return@mapNotNull null
+            var braces = 0
             var end = start
             while (end < text.length) {
-                if (text[end] == '{') depth++ else if (text[end] == '}' && --depth == 0) break
+                if (text[end] == '{') braces++ else if (text[end] == '}' && --braces == 0) break
                 end++
             }
             start..end

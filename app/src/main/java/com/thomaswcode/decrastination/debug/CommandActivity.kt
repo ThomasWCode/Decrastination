@@ -459,17 +459,25 @@ class CommandActivity : Activity() {
                 // is: a question of his answered as one, not a turn of the chat (a reading's read by Claude, a call), logged as what follows it.
                 // Sent as the chat's box sends it: once the phone sends commands, the server answers, and the answer comes as it's pulled.
                 val text = intent.getStringExtra("text")
+                val id = Ids.next()
                 if (text.isNullOrBlank()) {
                     Log.w(TAG, "chat-ask needs --es text <words>")
-                } else if (!graph.act(SendMessage(text, id = Ids.next(), replyTo = intent.getStringExtra("replyTo")))) {
-                    Log.w(TAG, "chat-ask: not kept, so not sent")
-                } else if (graph.sendsCommands()) {
-                    Log.i(TAG, "chat-ask: sent; the server answers it, and the answer comes as this phone pulls")
                 } else {
-                    // Waits its turn behind the answer ask started, or answers it itself; taken as an answer, what followed it.
-                    graph.conversation.answerChat()
-                    val last = graph.chat.value.messages.last()
-                    Log.i(TAG, "chat-ask: ${last.from}: ${last.text}${last.note?.let { " [$it]" }.orEmpty()}; ${last.proposals.size} cards")
+                    graph.act(SendMessage(text, id = id, replyTo = intent.getStringExtra("replyTo")))
+                    when (afterAsk(graph.sendsCommands(), graph.chat.value.unanswered?.id, id)) {
+                        AfterAsk.ByServer -> Log.i(TAG, "chat-ask: sent; the server answers it, and the answer comes as this phone pulls")
+                        AfterAsk.TakenAsAnswer -> {
+                            // Taken as an answer: what followed it, no answer of his waited for.
+                            val last = graph.chat.value.messages.last()
+                            Log.i(TAG, "chat-ask: taken as an answer; then ${last.from}: ${last.text}")
+                        }
+                        AfterAsk.AnswerHere -> {
+                            // Waits its turn behind the answer ask started, or answers it itself.
+                            graph.conversation.answerChat()
+                            val last = graph.chat.value.messages.last()
+                            Log.i(TAG, "chat-ask: ${last.from}: ${last.text}${last.note?.let { " [$it]" }.orEmpty()}; ${last.proposals.size} cards")
+                        }
+                    }
                 }
             }
             "chat-clear" -> graph.act(ClearChat).also { Log.i(TAG, "Chat cleared") }
@@ -750,3 +758,17 @@ internal suspend fun whileMirroring(sendsCommands: Boolean, refused: String?, ch
 
 /** Why [command] isn't made once this phone sends commands, and what to use [instead]. */
 internal fun alone(command: String, instead: String) = "$command: not while this phone keeps in step by commands, as it would change this phone alone: $instead"
+
+/** What follows a `chat-ask`'s message, kept: the server's answer to come, an answer taken as one (with no call), or his answer here. */
+internal enum class AfterAsk { ByServer, TakenAsAnswer, AnswerHere }
+
+/**
+ * What follows message [id], kept: the server answers it once the phone sends commands; else his answer here only while it's
+ * your newest still waiting ([unanswered]), as one taken as an answer comes answered, and an answer asked for then would be an
+ * older message's, a call that wasn't this one's.
+ */
+internal fun afterAsk(sendsCommands: Boolean, unanswered: String?, id: String): AfterAsk = when {
+    sendsCommands -> AfterAsk.ByServer
+    unanswered != id -> AfterAsk.TakenAsAnswer
+    else -> AfterAsk.AnswerHere
+}
