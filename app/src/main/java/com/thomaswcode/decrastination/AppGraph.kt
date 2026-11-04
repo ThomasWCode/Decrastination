@@ -119,6 +119,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * The app's singletons. The sync, the focus service, the widget and the screens all run in the
@@ -302,6 +303,8 @@ class AppGraph private constructor(context: Context) : Owners {
         clock = clock,
         ports = AndroidGmailPorts(app, notifier, clock) { sources -> sync.syncNow(sources) },
         readAt = { tasks.value.status(Source.Gmail).lastSuccessStartedAt },
+        // The server's to write once the phone sends commands (5.15.0): looked at as each run of writes begins, under its lock.
+        writesHere = { !sendsCommands() },
     )
 
     override val gmail: GmailFinishes get() = gmailFinishes
@@ -758,7 +761,11 @@ class AppGraph private constructor(context: Context) : Owners {
         GmailWriteWorker.stop(app)
         val runtime = runtime.value
         val ran = SWITCHED_JOBS.mapNotNull { (action, job) -> runtime.dailyRanAt[action]?.takeIf { action !in runtime.dailyRetries }?.let { job to it } }.toMap()
-        val why = replica.switchOver(backup = { backups.switchCopy() }, ran = ran)
+        // With no write to Gmail and no read of a source under way, nor any begun, as each writes the stores unqueued while mirroring:
+        // those that waited go as commands once the switch is made. A minute at most for one under way to finish.
+        val why = withTimeoutOrNull(60_000) {
+            gmailFinishes.quiet { syncer.quiet { replica.switchOver(backup = { backups.switchCopy() }, ran = ran) } }
+        } ?: "Nothing switched: a write to Gmail or a read of a source didn't finish within a minute; try again"
         // Mirroring still: Gmail's writes are this phone's again.
         if (!sendsCommands()) gmailFinishes.rearm()
         return why ?: "Switched: this phone keeps in step by commands"

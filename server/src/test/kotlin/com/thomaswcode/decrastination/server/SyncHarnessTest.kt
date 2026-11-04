@@ -279,7 +279,9 @@ class SyncHarnessTest {
 
         /** The chat's messages each pull brought, new to it. */
         val heard = mutableListOf<List<ChatMessage>>()
-        val replica = Replica(h.stores, wire, h.clock, "test", { CalendarRead() }, h.commands, seedFile = File(dir, "$name-switch-seed.json")) { heard += it }
+        /** The calendar as this phone reads it. */
+        var calendar = CalendarRead()
+        val replica = Replica(h.stores, wire, h.clock, "test", { calendar }, h.commands, seedFile = File(dir, "$name-switch-seed.json")) { heard += it }
 
         init {
             runBlocking {
@@ -1046,8 +1048,40 @@ class SyncHarnessTest {
         // As it was, nothing changed here: taken, and the server's change with it. A store whose seed's answer was lost (its hash
         // here not the one on record) is no change lost either, where the server has it as it is here.
         phone.h.stores.sync.update { it.copy(seedRevision = 0, sent = it.sent + ("settings.json" to "a hash from before")) }
+        // Nor is the calendar as read since: it's this phone's, which a pull never takes.
+        phone.calendar = CalendarRead(answers = mapOf("an event" to "yes"))
         assertTrue(phone.replica.upload())
         assertFalse(phone.h.stores.sync.value.firstPull)
         assertEquals(setOf("Essay, moved on"), phone.titles)
+    }
+
+    @Test
+    fun `the tasks' photos go to the box before the switch, as one attached while mirroring has no command to take it, and one that can't go stops it`() = runBlocking {
+        val phone = mirroringWith("Essay")
+        val jpeg = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 5)
+        val file = File(dir, "a-photo-from-before.jpg").apply { writeBytes(jpeg) }
+        val photo = TaskPhoto(file.path, Photos.hashOf(jpeg), phone.h.clock.now())
+        phone.h.stores.tasks.update { s -> s.copy(tasks = s.tasks.map { it.copy(photo = photo) }) }
+        phone.wire.photosFail = true
+        assertEquals("Nothing switched: a task's photo couldn't be sent first", phone.replica.switchOver({ true }, emptyMap()))
+        assertEquals(SyncState.MIRROR, phone.h.stores.sync.value.mode)
+        phone.wire.photosFail = false
+        assertNull(phone.replica.switchOver({ true }, emptyMap()))
+        assertTrue(File(dir, "photos/${photo.hash}.jpg").readBytes().contentEquals(jpeg), "on the box by its hash")
+    }
+
+    @Test
+    fun `after a switch whose answer was lost, the parent code reaches the server ahead of a command made with it`() = runBlocking {
+        val phone = mirroringWith("Essay")
+        phone.h.stores.secrets.put(Secret.TotpSecret, "QRSTUVWXYZ234567")
+        phone.wire.losesSwitchAnswers = 1
+        assertEquals("Under way: the server can't be reached, so it goes at the next sync", phone.replica.switchOver({ true }, emptyMap()))
+        // A code used while the answer's still to come: a command, waiting.
+        val now = phone.h.clock.now()
+        val code = Totp.code(Totp.fromBase32("QRSTUVWXYZ234567"), Totp.step(now))
+        phone.h.stores.outbox.update { it.copy(commands = it.commands + Command("c-use", now, UseParentCode(code))) }
+        assertTrue(phone.replica.upload())
+        assertEquals("QRSTUVWXYZ234567", graph.stores.secrets[Secret.TotpSecret])
+        assertEquals(CodeLock(lastUsedStep = Totp.step(now)), graph.stores.protection.value.codeLock, "the code taken, not counted wrong")
     }
 }

@@ -98,6 +98,12 @@ class Syncer(
         afterEvery += listener
     }
 
+    /**
+     * [block] with no read under way, and none begun till it's done: the switch reads the stores whole meanwhile (D-141), and a read
+     * that waited for it looks again at how the two keep in step, so it's sent as a command once they do.
+     */
+    suspend fun <T> quiet(block: suspend () -> T): T = lock.withLock { block() }
+
     suspend fun sync(only: Set<Source>? = null): SyncReport = lock.withLock {
         if (observing()) return@withLock sent(only)
         var report = SyncReport()

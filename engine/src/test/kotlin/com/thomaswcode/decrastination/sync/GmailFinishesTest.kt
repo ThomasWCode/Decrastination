@@ -124,6 +124,24 @@ class GmailFinishesTest {
     }
 
     @Test
+    fun `a write due isn't made where it's not this side's, as a phone's once it sends commands, looked at under the writes' lock`() = runBlocking {
+        var here = true
+        val switching = GmailFinishes(writes, { settings }, { tasks[it] }, { 1.0 }, clock, ports, readAt = { gmailRead }, writesHere = { here }) { "w${++ids}" }
+        val gmail = FakeGmail()
+        assertEquals(GmailFinishes.Finish.Going, switching.finish(email.id, explicit = false))
+        clock.time += GmailWrites.GRACE_MS
+        // Gone over while a run waited for the lock: it finds the writes aren't its to make, and makes none.
+        val ran = switching.quiet {
+            here = false
+            "the switch"
+        }
+        assertEquals("the switch", ran)
+        assertFalse(switching.write(gmail))
+        assertTrue(gmail.stored.isEmpty())
+        assertEquals(null, switching.value.single().doneAt)
+    }
+
+    @Test
     fun `a write journaled when a stop came before its worker was set is set going at the next start, one set or running left be`() = runBlocking {
         writes.update { it.copy(writes = listOf(GmailWrite("w9", email.id, email.title, "t1", clock.time, notBefore = clock.time + GmailWrites.GRACE_MS))) }
         finishes.rearm()

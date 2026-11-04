@@ -264,7 +264,8 @@ class Replica(
      */
     private fun firstPullRefused(pulled: PulledState): String? {
         if (pulled.revision < sync.value.seedRevision) return "The server is behind what this phone last sent (restored from before it?): nothing's taken from it. See its restore steps."
-        val here = texts(emptyList()).associate { it.name to it.text }
+        // Only those a pull takes: the calendar as read is this phone's, and never taken from the server.
+        val here = stores.mirrored.associate { it.name to it.text() }
         val lost = pulled.stores.filter { store ->
             val text = here[store.name] ?: return@filter false
             Protocol.hash(text) != sync.value.sent[store.name] && runCatching { JSON.parseToJsonElement(text) }.getOrNull() != store.json
@@ -394,6 +395,16 @@ class Replica(
         if (send() != Sent.InStep) return@withLock "Not in step with the server yet: ${(sync.value.lastError ?: "a store's still to be taken").replaceFirstChar { it.lowercase() }}"
         val headers = mapOf("Content-Type" to "application/json", "Authorization" to "Bearer $token", Protocol.HEADER to Protocol.VERSION.toString())
         if (serverMode(headers) != SyncState.MIRROR) return@withLock "The server doesn't say it's mirroring"
+        // The tasks' photos on the box first, as the server reads a task with its photo from then (D-148): one attached while
+        // mirroring has no command to take it there. The server keeps one a day ahead of any task's holding it.
+        for (photo in stores.tasks.value.tasks.mapNotNull { it.photo }) {
+            val sent = try {
+                sendTaskPhoto(sync.value.server, headers, photo)
+            } catch (failed: IOException) {
+                false
+            }
+            if (!sent) return@withLock "Nothing switched: a task's photo couldn't be sent first"
+        }
         if (!backup()) return@withLock "Nothing switched: a backup couldn't be saved first"
         val id = UUID.randomUUID().toString()
         val seed = commands.switching(
@@ -480,7 +491,9 @@ class Replica(
             )
         }
         seedFile?.delete()
-        // What's been made since, sent, and what the server's made since pulled.
+        // The parent code first, as a command made with it may wait (it's never in a seed); then what's been made since, sent, and what
+        // the server's made since pulled.
+        sendParentCode(ahead = true)
         exchange()
         return null
     }

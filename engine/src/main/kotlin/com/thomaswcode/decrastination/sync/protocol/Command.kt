@@ -27,6 +27,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import kotlin.coroutines.AbstractCoroutineContextElement
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.coroutineContext
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.asContextElement
 import kotlinx.coroutines.delay
@@ -178,10 +179,18 @@ class Commands(
     private suspend fun <R> made(action: Action, run: suspend () -> R): R {
         val command = Command(Ids.next(), clock.now(), action)
         if (outbox == null || !queuing()) {
-            // Counted while it runs, as it takes no gate: the switch waits for none to be under way ([switching]).
+            // Counted while it runs, as it takes no gate: the switch waits for none to be under way ([switching]). Counted before the
+            // switch's drain's looked at, so none slips in between the two: begun as one drains, it waits for it, then is made as
+            // things are after it, queued perhaps. One made inside another made so is part of that one, and goes on.
             running.incrementAndGet()
+            val drain = draining?.takeIf { coroutineContext[Unqueued] == null }
+            if (drain != null) {
+                running.decrementAndGet()
+                drain.await()
+                return made(action, run)
+            }
             try {
-                return replaying(command) { run() }
+                return withContext(Unqueued()) { replaying(command) { run() } }
             } finally {
                 running.decrementAndGet()
             }
@@ -239,16 +248,32 @@ class Commands(
     /** The commands under way that took no gate, made while this phone mirrored: a switch waits for them ([switching]). */
     private val running = AtomicInteger()
 
+    /** While a switch lets those under way unqueued finish: none begins unqueued meanwhile, each waiting for this ([made]). */
+    @Volatile
+    private var draining: CompletableDeferred<Unit>? = null
+
+    /** A command being made unqueued, as mirroring makes them: one made inside it is part of it, and goes on through a drain. */
+    private class Unqueued : AbstractCoroutineContextElement(Unqueued) {
+        companion object Key : CoroutineContext.Key<Unqueued>
+    }
+
     /**
-     * The switch (D-141), [over] and then [read] with no command half made. Under the gate, those running unqueued, as mirroring
-     * makes them, are let finish first, as nothing they make waits for the gate yet; then [over] goes over to commands, so each command
-     * from then waits for the gate and is queued; then [read] reads the stores whole, so the seed holds every change made before it
-     * and none after. Not waiting after [over]: one finishing then could make one that waits for the gate, which this holds.
+     * The switch (D-141), [over] and then [read] with no command half made. Under the gate, none begins unqueued, as mirroring makes
+     * them, while those already under way finish, as nothing they make waits for the gate yet; then [over] goes over to commands, so
+     * each command from then waits for the gate and is queued; then [read] reads the stores whole, so the seed holds every change made
+     * before it and none after. Those that waited are made once it's done, as things are then.
      */
     suspend fun <T> switching(over: suspend () -> Unit, read: suspend () -> T): T = gate.withLock {
-        while (running.get() > 0) delay(10)
-        over()
-        read()
+        val drain = CompletableDeferred<Unit>()
+        draining = drain
+        try {
+            while (running.get() > 0) delay(10)
+            over()
+            read()
+        } finally {
+            draining = null
+            drain.complete(Unit)
+        }
     }
 
     /** [block] reading [command]'s moment, and drawing its ids from its own. */
