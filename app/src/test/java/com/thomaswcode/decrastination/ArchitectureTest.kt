@@ -107,13 +107,27 @@ class ArchitectureTest {
     @Test
     fun `a screen's change goes through the commands, never to an owner itself`() {
         // Each is an action (D-140), so that one change is the same on the phone and on the server. AppGraph wires the owners together,
-        // and the debug commands are a PC's.
-        val direct = Regex("""\.(saveOwnTask|finishOwnTask|reopenOwnTask|deleteOwnTask|addOwnChange|laterToday|takeBackQuick|applyInstruction|deleteInstruction|rereadInstruction|notSame|addSchoolDays|deleteSchoolDays|keepSlot|undoKeep|tickBlock|startTimer|stopTimer|replyFromNotification|withdrawQuestion|cancelAnswer|markAnswered|unmarkAnswered|clearChat|applyProposal|undoProposal|discardProposal|undoAct|undoMemory|remember|deleteRule|deleteFact|addNote|deleteNote|endCheckInFlow|noteActivity|useParentCode|applyWithCode|cancelChange|recordCheckIn|forgetCalibration|undoReviewChange|undoTidy)\(|protection\.changeSettings|conversation\.(ask|rate|read)\(""")
+        // and the debug commands are a PC's, held by the rule below.
         val app = roots.filter { it.invariantSeparatorsPath.endsWith("src/main/java") }.flatMap { root ->
             root.walkTopDown().filter { it.isFile && it.extension == "kt" }.map { it.relativeTo(root).invariantSeparatorsPath.removePrefix("com/thomaswcode/decrastination/") }.toList()
         }.toSet()
-        val stray = sources.filterKeys { it in app && it != "AppGraph.kt" && !it.startsWith("debug/") }.filterValues { direct.containsMatchIn(it) }.keys
+        val stray = sources.filterKeys { it in app && it != "AppGraph.kt" && !it.startsWith("debug/") }.filterValues { DIRECT.containsMatchIn(it) }.keys
         assertTrue(stray.isEmpty(), "A screen calls an owner's change, not a command: $stray")
+    }
+
+    @Test
+    fun `a debug command changes what the server holds through the commands, or only while mirroring`() {
+        // Once the phone sends commands (D-141), a store a debug command changes, and not by a command, is the phone's alone: the
+        // server's copy comes back at the next pull, and what was meant never happened there. So each such change is an action
+        // through `graph.act`, as the screens' are, or is made inside `whileMirroring`, refused once the phone sends commands.
+        val text = sources.getValue("debug/CommandActivity.kt")
+        val mirroring = blocks(text, "whileMirroring(")
+        assertTrue(mirroring.size >= 9, "found ${mirroring.size} whileMirroring blocks")
+        assertTrue("graph.act(" in text, "the debug commands make no action")
+        val changes = HELD_UPDATE.findAll(text) + DIRECT.findAll(text) + DEBUG_DIRECT.findAll(text)
+        val stray = changes.filter { change -> mirroring.none { change.range.first in it } }
+            .map { "line ${text.substring(0, it.range.first).count { c -> c == '\n' } + 1}: ${it.value}" }.toList()
+        assertTrue(stray.isEmpty(), "A debug command changes what the server holds round the commands, mirroring or not: $stray")
     }
 
     @Test
@@ -145,6 +159,27 @@ class ArchitectureTest {
     private companion object {
         /** An update of a store, by the name every file holds it by: `tasks.update {`, `graph.stores.model.update(`. */
         val UPDATE = Regex("""(?<![\w.])(?:graph\.(?:stores\.)?|stores\.)?(tasks|settings|runtime|session|protection|device|model|anki|learning|log|instructions|chat|school|memory|felix|calendar|sync|outbox|writes)\.update\s*[({]""")
+
+        /** An update of a store the server holds too: [UPDATE] but for the phone's own (its runtime, device, calendar, sync and outbox). */
+        val HELD_UPDATE = Regex("""(?<![\w.])(?:graph\.(?:stores\.)?|stores\.)?(tasks|settings|session|protection|model|anki|learning|log|instructions|chat|school|memory|felix|writes)\.update\s*[({]""")
+
+        /** An owner's change that has an action (D-140): made through the commands, not called. */
+        val DIRECT = Regex("""\.(saveOwnTask|finishOwnTask|reopenOwnTask|deleteOwnTask|addOwnChange|laterToday|takeBackQuick|applyInstruction|deleteInstruction|rereadInstruction|notSame|addSchoolDays|deleteSchoolDays|keepSlot|undoKeep|tickBlock|startTimer|stopTimer|replyFromNotification|withdrawQuestion|cancelAnswer|markAnswered|unmarkAnswered|clearChat|applyProposal|undoProposal|discardProposal|undoAct|undoMemory|remember|deleteRule|deleteFact|addNote|deleteNote|endCheckInFlow|noteActivity|useParentCode|applyWithCode|cancelChange|recordCheckIn|forgetCalibration|undoReviewChange|undoTidy)\(|protection\.changeSettings|conversation\.(ask|rate|read)\(""")
+
+        /** The owners' changes the debug commands call that have no action: an instruction written, a task's traces forgotten, the memory tidied, a message sent round the chat's box. */
+        val DEBUG_DIRECT = Regex("""\.(addInstruction|forgetAsks|tidyMemory)\(|conversation\.send\(""")
+
+        /** Where each call of [opener] in [text] has its trailing block: from that block's `{` to the `}` closing it. */
+        fun blocks(text: String, opener: String): List<IntRange> = Regex(Regex.escape(opener)).findAll(text).map { call ->
+            val start = text.indexOf(") {", call.range.last) + 2
+            var depth = 0
+            var end = start
+            while (end < text.length) {
+                if (text[end] == '{') depth++ else if (text[end] == '}' && --depth == 0) break
+                end++
+            }
+            start..end
+        }.toList()
 
         /** What in the app updates a store: the phone's own runtime, the graph's start, and the watchdog's findings. */
         val PHONE_WRITERS = setOf("notify/Notifier.kt", "AppGraph.kt", "block/FocusService.kt", "learn/DailyAlarms.kt", "protect/Watchdog.kt")

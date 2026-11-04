@@ -26,6 +26,7 @@ import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.Fact
 import com.thomaswcode.decrastination.core.FelixSettings
+import com.thomaswcode.decrastination.core.Ids
 import com.thomaswcode.decrastination.core.Instruction
 import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.InstructionStatus
@@ -53,18 +54,30 @@ import com.thomaswcode.decrastination.enrich.SummaryWriter
 import com.thomaswcode.decrastination.enrich.WebResearcher
 import com.thomaswcode.decrastination.felix.ChatPrompts
 import com.thomaswcode.decrastination.felix.ChatReader
-import com.thomaswcode.decrastination.felix.Conversation
 import com.thomaswcode.decrastination.felix.FelixCaller
 import com.thomaswcode.decrastination.felix.FelixPrompts
 import com.thomaswcode.decrastination.learn.Assessment
 import com.thomaswcode.decrastination.learn.Briefing
 import com.thomaswcode.decrastination.learn.CalendarReader
 import com.thomaswcode.decrastination.learn.EventJudge
+import com.thomaswcode.decrastination.protect.SettingsChanges
 import com.thomaswcode.decrastination.protect.Watchdog
 import com.thomaswcode.decrastination.sources.anki.AnkiProvider
 import com.thomaswcode.decrastination.sources.gmail.GmailThreads
 import com.thomaswcode.decrastination.sync.ReplicaWorker
 import com.thomaswcode.decrastination.sync.SyncWorker
+import com.thomaswcode.decrastination.sync.protocol.AddOwnChange
+import com.thomaswcode.decrastination.sync.protocol.ApplyProposal
+import com.thomaswcode.decrastination.sync.protocol.ChangeSettings
+import com.thomaswcode.decrastination.sync.protocol.ClearChat
+import com.thomaswcode.decrastination.sync.protocol.DeleteInstruction
+import com.thomaswcode.decrastination.sync.protocol.DeleteOwnTask
+import com.thomaswcode.decrastination.sync.protocol.FinishOwnTask
+import com.thomaswcode.decrastination.sync.protocol.ReopenOwnTask
+import com.thomaswcode.decrastination.sync.protocol.SaveOwnTask
+import com.thomaswcode.decrastination.sync.protocol.SendMessage
+import com.thomaswcode.decrastination.sync.protocol.TakeBackQuick
+import com.thomaswcode.decrastination.sync.protocol.UndoProposal
 import com.thomaswcode.decrastination.ui.OpenTaskActivity
 import com.thomaswcode.decrastination.core.GmailWrites
 import com.thomaswcode.decrastination.ui.minutesChange
@@ -133,6 +146,14 @@ import kotlinx.serialization.json.JsonPrimitive
  *   watchdog's restarts, and reviews run at other times than Sunday evening, cleared).
  * - The debug page (the menu's *Debug*, on a debug build) has a button for each command that takes
  *   nothing ([PLAIN]), which starts this activity from inside the app.
+ *
+ * A command that changes what the server holds goes through the commands, as the app's own changes do
+ * (D-140), so once the phone sends commands (D-141) the server applies it and this phone takes what came
+ * of it; `enrich-task` asks the server to read the task again then. Those with no command are made only
+ * while mirroring ([whileMirroring]), and refused once the phone sends commands, saying what to use
+ * instead: a store changed here and not by a command would be this phone's alone, and the server's copy
+ * would come back at the next pull (`instruction`, `forget-task`, `test-arm`, `test-disarm`,
+ * `memory-tidy`, and `clean-up`'s reviews and `import-credentials`' record of Claude's key).
  *
  * The manifest guards the alias with DUMP, which the adb shell holds and no ordinary app can, so
  * nothing else on the phone can reach these. The activity itself isn't exported: only the app
@@ -260,7 +281,8 @@ class CommandActivity : Activity() {
                 if (calendar == null) {
                     Log.w(TAG, "No calendar named $name to write to")
                 } else {
-                    graph.protection.changeSettings { it.copy(calendarWriteId = calendar.id) }
+                    val asked = graph.protection.asked
+                    graph.act(ChangeSettings(SettingsChanges.changed(asked, asked.copy(calendarWriteId = calendar.id))))
                     Log.i(TAG, "Writing the plan to calendar ${calendar.id} ($name)")
                 }
             }
@@ -302,9 +324,13 @@ class CommandActivity : Activity() {
                 graph.stores.device.update { it.copy(forceActiveUntil = if (minutes == 0) null else until) }
                 Log.i(TAG, "Blocking hours apply for $minutes min; verdict now ${graph.focus.verdict()}")
             }
-            // Test hooks, from a PC only: arming and disarming at once, as no screen can.
-            "test-arm" -> graph.settings.update { it.copy(armed = true) }.also { Log.i(TAG, "Armed (test)") }
-            "test-disarm" -> {
+            // Test hooks, from a PC only: arming and disarming at once, as no screen can, going round protection's waits and its
+            // parent code; so only while mirroring, as the server holds protection to them once the phone sends commands.
+            "test-arm" -> whileMirroring(graph.sendsCommands(), alone(command, ARMING_INSTEAD)) {
+                graph.settings.update { it.copy(armed = true) }
+                Log.i(TAG, "Armed (test)")
+            }
+            "test-disarm" -> whileMirroring(graph.sendsCommands(), alone(command, ARMING_INSTEAD)) {
                 graph.settings.update { it.copy(armed = false) }
                 graph.stores.protection.update { it.copy(pending = it.pending.filterNot { change -> change.field == "armed" }) }
                 Log.i(TAG, "Disarmed (test)")
@@ -316,10 +342,13 @@ class CommandActivity : Activity() {
             "clean-up" -> {
                 // After testing: this app's notifications gone, and no Teams sync left waiting.
                 graph.notifier.cancelAll()
-                // Reviews run from here (any but a Sunday evening's) were tests: dropped.
+                // Reviews run from here (any but a Sunday evening's) were tests: dropped. Once the phone sends commands they're the
+                // server's, made by its job, and none is run here.
                 val zone = graph.clock.zone()
-                graph.log.update { log ->
-                    log.copy(reviews = log.reviews.filter { r -> Instant.ofEpochMilli(r.at).atZone(zone).let { it.dayOfWeek == DayOfWeek.SUNDAY && it.hour * 60 + it.minute >= graph.settings.value.checkInMin } })
+                whileMirroring(graph.sendsCommands(), refused = null) {
+                    graph.log.update { log ->
+                        log.copy(reviews = log.reviews.filter { r -> Instant.ofEpochMilli(r.at).atZone(zone).let { it.dayOfWeek == DayOfWeek.SUNDAY && it.hour * 60 + it.minute >= graph.settings.value.checkInMin } })
+                    }
                 }
                 graph.runtime.update { it.copy(teamsAuto = TeamsAutoSync.State()) }
                 graph.stores.device.update {
@@ -355,15 +384,17 @@ class CommandActivity : Activity() {
             "setting" -> {
                 val name = intent.getStringExtra("name").orEmpty()
                 val value = intent.getStringExtra("value").orEmpty()
-                var said: String? = null
-                graph.protection.changeSettings { s -> FelixSettings.set(s, name, value)?.also { said = it.second }?.first ?: s }
-                Log.i(TAG, "setting: " + (said ?: "$name not set to $value"))
+                val asked = graph.protection.asked
+                val set = FelixSettings.set(asked, name, value)
+                if (set != null) graph.act(ChangeSettings(SettingsChanges.changed(asked, set.first)))
+                Log.i(TAG, "setting: " + (set?.second ?: "$name not set to $value"))
             }
             // Finishing emails in Gmail on or off, --ez on true|false, as Settings → Sources → Gmail's switch
             // sets it: not one of Felix's settings, so not `setting`'s.
             "gmail-finishes" -> {
                 val on = intent.getBooleanExtra("on", true)
-                graph.protection.changeSettings { it.copy(gmailFinishes = on) }
+                val asked = graph.protection.asked
+                graph.act(ChangeSettings(SettingsChanges.changed(asked, asked.copy(gmailFinishes = on))))
                 Log.i(TAG, "gmail-finishes: ${if (graph.settings.value.gmailFinishes) "on" else "off"}")
             }
             "briefing" -> graph.briefing.run().also { Log.i(TAG, "Briefing posted") }
@@ -426,22 +457,22 @@ class CommandActivity : Activity() {
                 // --es text "<words>": sent to the chat as on the phone (a paid call); Claude's reply logged.
                 // --es replyTo <message id>: a reply to that message, routed as a swipe's or his notification's
                 // is: a question of his answered as one, not a turn of the chat (a reading's read by Claude, a call), logged as what follows it.
+                // Sent as the chat's box sends it: once the phone sends commands, the server answers, and the answer comes as it's pulled.
                 val text = intent.getStringExtra("text")
-                val asked = if (text.isNullOrBlank()) Conversation.Asked.Nothing else graph.conversation.send(text, replyTo = intent.getStringExtra("replyTo"))
-                if (asked == Conversation.Asked.Nothing) {
+                if (text.isNullOrBlank()) {
                     Log.w(TAG, "chat-ask needs --es text <words>")
-                } else if (asked == Conversation.Asked.Answer) {
-                    // Taken as an answer: what followed it, no answer of his waited for.
-                    val last = graph.chat.value.messages.last()
-                    Log.i(TAG, "chat-ask: taken as an answer; then ${last.from}: ${last.text}")
+                } else if (!graph.act(SendMessage(text, id = Ids.next(), replyTo = intent.getStringExtra("replyTo")))) {
+                    Log.w(TAG, "chat-ask: not kept, so not sent")
+                } else if (graph.sendsCommands()) {
+                    Log.i(TAG, "chat-ask: sent; the server answers it, and the answer comes as this phone pulls")
                 } else {
-                    // Waits its turn behind the answer ask started, or answers it itself.
+                    // Waits its turn behind the answer ask started, or answers it itself; taken as an answer, what followed it.
                     graph.conversation.answerChat()
                     val last = graph.chat.value.messages.last()
                     Log.i(TAG, "chat-ask: ${last.from}: ${last.text}${last.note?.let { " [$it]" }.orEmpty()}; ${last.proposals.size} cards")
                 }
             }
-            "chat-clear" -> graph.conversation.clearChat().also { Log.i(TAG, "Chat cleared") }
+            "chat-clear" -> graph.act(ClearChat).also { Log.i(TAG, "Chat cleared") }
             // Felix (LR-03): his state and his last messages of his own, from the chat; a look now; or a message for a reason, whatever the rules say (a paid call).
             "felix" -> {
                 val chat = graph.chat.value
@@ -466,7 +497,7 @@ class CommandActivity : Activity() {
                 m.facts.forEach { Log.i(TAG, "memory fact: ${it.topic}: ${it.text}") }
             }
             // The weekly tidy now, due or not (a paid call), applied as Sunday's would be.
-            "memory-tidy" -> {
+            "memory-tidy" -> whileMirroring(graph.sendsCommands(), alone(command, "the server tidies what Felix keeps, with Sunday's review")) {
                 val tidy = graph.learning.tidyMemory(graph.clock.now(), force = true)
                 Log.i(TAG, tidy?.let { "memory-tidy: ${com.thomaswcode.decrastination.learn.Review.tidyLine(it)}" } ?: "memory-tidy: nothing tidied (no facts, Claude held or failed, or no room made)")
             }
@@ -478,8 +509,8 @@ class CommandActivity : Activity() {
                     Log.w(TAG, "chat-card: no card to act on")
                 } else {
                     when (intent.getStringExtra("do")) {
-                        "apply" -> graph.conversation.applyProposal(message.id, card.id)
-                        "undo" -> graph.conversation.undoProposal(message.id, card.id)
+                        "apply" -> graph.act(ApplyProposal(message.id, card.id))
+                        "undo" -> graph.act(UndoProposal(message.id, card.id))
                     }
                     val now = graph.chat.value.messages.firstOrNull { it.id == message.id }?.proposals?.firstOrNull { it.id == card.id }
                     Log.i(TAG, "chat-card ${intent.getStringExtra("do")}: ${card.lines} -> ${now?.state}")
@@ -504,25 +535,30 @@ class CommandActivity : Activity() {
             }
             "enrich-task" -> {
                 val id = intent.getStringExtra("task")
-                if (graph.tasks.value.tasks.none { it.id == id }) {
+                if (id == null || graph.tasks.value.tasks.none { it.id == id }) {
                     Log.w(TAG, "enrich-task needs --es task <id> of a task")
                 } else {
                     // Its enrichment forgotten, and the steps it gave: out of date, so this run asks for it
                     // again now, and its answer's steps aren't taken for the source's.
-                    graph.tasks.update { state -> state.copy(tasks = state.tasks.map { if (it.id == id) it.withoutEnrichment() else it }) }
-                    graph.readings.enrichNow(only = id)
-                    val task = graph.tasks.value.tasks.first { it.id == id }
-                    val e = task.enrichment
-                    Log.i(TAG, "enrich-task $id: by ${e?.by}, dropped ${e?.dropped}, ${task.subSteps.size} steps: ${task.subSteps.joinToString(" | ") { "${it.title} (${it.minutes})" }}")
+                    whileMirroring(graph.sendsCommands(), refused = null) {
+                        graph.tasks.update { state -> state.copy(tasks = state.tasks.map { if (it.id == id) it.withoutEnrichment() else it }) }
+                        graph.readings.enrichNow(only = id)
+                        val task = graph.tasks.value.tasks.first { it.id == id }
+                        val e = task.enrichment
+                        Log.i(TAG, "enrich-task $id: by ${e?.by}, dropped ${e?.dropped}, ${task.subSteps.size} steps: ${task.subSteps.joinToString(" | ") { "${it.title} (${it.minutes})" }}")
+                    }
+                    // Once the phone sends commands, the server reads it again, as the sheet's Read again asks it to: its reading comes as it's pulled.
+                    if (graph.sendsCommands()) Log.i(TAG, "enrich-task $id: ${graph.readAgain(id)}")
                 }
             }
             "instruction" -> {
                 // --es text "<words>", about --es task <id>, --es event <name>, or --es day YYYY-MM-DD (or none):
-                // written as on the phone, then read by Claude, and applied once it's read.
+                // written as on the phone, then read by Claude, and applied once it's read. No command writes one: once the phone
+                // sends commands, an instruction's written in the chat, which the server reads.
                 val text = intent.getStringExtra("text")
                 if (text.isNullOrBlank()) {
                     Log.w(TAG, "instruction needs --es text <words>")
-                } else {
+                } else whileMirroring(graph.sendsCommands(), alone(command, "write it in the chat (chat-ask), which the server reads")) {
                     val task = intent.getStringExtra("task")?.let { id -> graph.tasks.value.tasks.firstOrNull { it.id == id } }
                     val event = intent.getStringExtra("event")?.let { key -> graph.sync.calendarTime.events.firstOrNull { EventJudge.key(it) == key } }
                     val about = About(
@@ -541,7 +577,7 @@ class CommandActivity : Activity() {
                 // --es id <id>, or all: discards those not applied (a test's), as Discard does.
                 val which = intent.getStringExtra("id")
                 val ids = graph.instructions.value.instructions.filter { it.state != InstructionStatus.Applied && (which == "all" || it.id == which) }.map { it.id }
-                ids.forEach { graph.instructions.deleteInstruction(it) }
+                ids.forEach { graph.act(DeleteInstruction(it)) }
                 Log.i(TAG, "instruction-discard: ${ids.size} discarded")
             }
             "instruction-delete" -> {
@@ -551,7 +587,7 @@ class CommandActivity : Activity() {
                 if (instruction == null) {
                     Log.w(TAG, "instruction-delete needs --es id <an instruction's id>: `instructions` lists them")
                 } else {
-                    graph.instructions.deleteInstruction(instruction.id)
+                    graph.act(DeleteInstruction(instruction.id))
                     val kept = graph.instructions.value.instructions.firstOrNull { it.id == instruction.id }
                     Log.i(TAG, "instruction-delete ${instruction.id}: " + if (kept != null) "kept: ${kept.note}" else if (instruction.state == InstructionStatus.Applied) "taken back" else "discarded")
                 }
@@ -567,18 +603,18 @@ class CommandActivity : Activity() {
                     Log.w(TAG, "own-add: $problem")
                 } else {
                     val id = UUID.randomUUID().toString()
-                    graph.ownTasks.saveOwnTask(id, task)
+                    graph.act(SaveOwnTask.of(id, task))
                     Log.i(TAG, "own-add: ${TaskItem.id(Source.Own, id)}")
                 }
             }
-            "own-done" -> intent.getStringExtra("task")?.let { graph.ownTasks.finishOwnTask(it) }.also { Log.i(TAG, "own-done") }
-            "own-reopen" -> intent.getStringExtra("task")?.let { graph.ownTasks.reopenOwnTask(it) }.also { Log.i(TAG, "own-reopen") }
-            "own-delete" -> intent.getStringExtra("task")?.let { id -> graph.ownTasks.deleteOwnTask(id).also { Log.i(TAG, "own-delete: $id") } }
+            "own-done" -> intent.getStringExtra("task")?.let { graph.act(FinishOwnTask(it)) }.also { Log.i(TAG, "own-done") }
+            "own-reopen" -> intent.getStringExtra("task")?.let { graph.act(ReopenOwnTask(it)) }.also { Log.i(TAG, "own-reopen") }
+            "own-delete" -> intent.getStringExtra("task")?.let { id -> graph.act(DeleteOwnTask(id)).also { Log.i(TAG, "own-delete: $id") } }
             "forget-task" -> {
                 val id = intent.getStringExtra("task")?.takeIf { it.startsWith("own:") }
                 if (id == null) {
                     Log.w(TAG, "forget-task needs --es task own:<id>: only a task of your own, never a source's record")
-                } else {
+                } else whileMirroring(graph.sendsCommands(), alone(command, "own-delete takes the task away through the server; what else it left there is the server's")) {
                     graph.conversation.forgetAsks(id)
                     graph.log.update { log -> log.copy(completions = log.completions.filterNot { it.taskId == id }, slots = log.slots.filterNot { it.taskId == id }) }
                     graph.ownTasks.deleteOwnTask(id)
@@ -590,10 +626,10 @@ class CommandActivity : Activity() {
                 val minutes = intent.getIntExtra("minutes", -1)
                 when {
                     task == null -> Log.w(TAG, "quick-minutes needs --es task <id>")
-                    minutes == 0 -> graph.instructions.takeBackQuick(task.id, ChangeType.Minutes).also { Log.i(TAG, "quick-minutes: taken back") }
+                    minutes == 0 -> graph.act(TakeBackQuick(task.id, ChangeType.Minutes)).also { Log.i(TAG, "quick-minutes: taken back") }
                     minutes in OwnTaskRules.MINUTES -> {
                         val (change, text) = minutesChange(task, minutes)
-                        graph.instructions.addOwnChange(UUID.randomUUID().toString(), text, About(taskId = task.id, taskTitle = task.title), change)
+                        graph.act(AddOwnChange(UUID.randomUUID().toString(), text, About(taskId = task.id, taskTitle = task.title), change))
                         Log.i(TAG, "quick-minutes: ${task.title} takes $minutes min")
                     }
                     else -> Log.w(TAG, "quick-minutes needs --ei minutes 1..${OwnTaskRules.MINUTES.last} (0 takes it back)")
@@ -662,9 +698,10 @@ class CommandActivity : Activity() {
                 emptyMap()
             }
             graph.secrets.put(reset + secrets)
-            // A new Claude key, as from Setup: the last one's failure and alert aren't its.
+            // A new Claude key, as from Setup: the last one's failure and alert aren't its. Once the phone sends commands the
+            // server calls Claude with its own key, so the record of the calls, the server's, is left as it is.
             if (Secret.AnthropicApiKey in secrets) {
-                graph.stores.model.update { it.copy(aiUsage = it.aiUsage.newKey()) }
+                whileMirroring(graph.sendsCommands(), refused = null) { graph.stores.model.update { it.copy(aiUsage = it.aiUsage.newKey()) } }
                 ModelAlerts.keyFixed(this)
             }
             Log.i(TAG, "Imported ${secrets.keys.joinToString()}; ignored ${(values.keys - secrets.keys.map { it.name }.toSet()).size} unknown")
@@ -696,5 +733,20 @@ class CommandActivity : Activity() {
 
         /** The commands that take nothing: the debug page's buttons (AR-03). */
         val PLAIN = listOf("sync", "enrich", "briefing", "review", "calendar", "protection", "backup-now")
+
+        /** What arms or disarms once the server holds protection to its waits and the parent code. */
+        private const val ARMING_INSTEAD = "arm or disarm in Settings, which the server holds to its waits and the parent code"
     }
 }
+
+/**
+ * [change], a debug command's change of what the server holds made round the commands, only while this phone mirrors: once it
+ * sends commands (D-141), a store changed here and not by a command is this phone's alone, and the server's copy comes back at
+ * the next pull. Then [refused] is said instead, where there's something to say.
+ */
+internal suspend fun whileMirroring(sendsCommands: Boolean, refused: String?, change: suspend () -> Unit) {
+    if (!sendsCommands) change() else if (refused != null) Log.w(CommandActivity.TAG, refused)
+}
+
+/** Why [command] isn't made once this phone sends commands, and what to use [instead]. */
+internal fun alone(command: String, instead: String) = "$command: not while this phone keeps in step by commands, as it would change this phone alone: $instead"
