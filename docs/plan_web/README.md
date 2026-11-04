@@ -1,6 +1,6 @@
 # The website: Decrastination at decrastination.thomaswhite.me
 
-Planned 31 Oct 2026, from ten questions answered that day ([decisions.md](decisions.md)). Built to 5.11.0: stages 0 to 9, dormant till the switch, the last release (D-141); how each built part works now is in `docs/spec/` ([server.md](../spec/server.md), [website.md](../spec/website.md), [sync.md](../spec/sync.md)). The folder is the plan's record, as `docs/plan_v4/` was the 4.x plan's: this file is the outline, [architecture.md](architecture.md) the shape the code takes, [data-and-sync.md](data-and-sync.md) how the state moves and is kept, [hosting.md](hosting.md) where it runs and what that costs (with the evidence read for it), [stages.md](stages.md) the steps in order with their estimates, [decisions.md](decisions.md) the choices made and the questions they answered, and [inventory.md](inventory.md) what the phone app holds and does today and where each piece goes.
+Planned 31 Oct 2026, from ten questions answered that day ([decisions.md](decisions.md)). Built to 5.11.0: stages 0 to 9, dormant till the switch, the last release (D-141), built over 5.12.0 to 6.0.0 and made on 4 Nov 2026, with 6.0.1 after it; how each built part works now is in `docs/spec/` ([server.md](../spec/server.md), [website.md](../spec/website.md), [sync.md](../spec/sync.md)). The folder is the plan's record, as `docs/plan_v4/` was the 4.x plan's: this file is the outline, [architecture.md](architecture.md) the shape the code takes, [data-and-sync.md](data-and-sync.md) how the state moves and is kept, [hosting.md](hosting.md) where it runs and what that costs (with the evidence read for it), [stages.md](stages.md) the steps in order with their estimates, [decisions.md](decisions.md) the choices made and the questions they answered, and [inventory.md](inventory.md) what the phone app holds and does today and where each piece goes.
 
 ## Why
 
@@ -45,17 +45,19 @@ In the most technically feasible order (the owner's word on 31 Oct: the website 
 | 7 | This week, Reviews, Stats, Backup and Reset, Setup on the website | 5.7.0, 5.8.0 |
 | 8 | Optional: the phone told at once of the server's changes (Firebase Cloud Messaging) | 5.10.0, the server's half; 5.11.0, the phone's |
 | 9 | Optional: Web Push for Felix's messages, slot starts and the timer (W-9) | 5.9.0 |
-| Last | The switch: the phone goes over to commands, and what's dormant wakes (D-141). The box it needs has been up, mirroring, since 1 Nov 2026 | to come |
+| Last | The switch: the phone goes over to commands, and what's dormant wakes (D-141). The box it needs was up, mirroring, from 1 Nov 2026; the switch was made on 4 Nov 2026 | 5.12.0 to 6.0.0, then 6.0.1 |
 
 Estimated at 61 to 83 hours of sessions in all (66 to 90 with the two optional stages), from the durations measured in the 4.x releases (`stages.md` §Estimates), plus the owner's own time at the Oracle console, the DNS, the GitHub App and the phone.
 
 ## Done when
 
-- Every phone feature not bound to the device is on the website: chat, Day, Work, Stats, This week, Reviews, Settings, Backup, Reset, Setup.
-- A change made on the website is on the phone at its next sync, and one made on the phone (online) is on the website within a second.
-- The phone, with its network off, shows its plan and tasks, blocks, runs the timer, and takes a task added and a task finished; with the network back, both reach the website and the server's plan replaces the phone's.
-- A restore drill has been run: the box's database rebuilt from R2 on a clean machine and the server started from it, with the owner's state whole.
-- The server has run a month with no state lost, Claude's spend as before, and nothing paid for hosting.
+Each line with how it was shown; what's still open says when it falls due.
+
+- [x] Every phone feature not bound to the device is on the website: chat, Day, Work, Stats, This week, Reviews, Settings, Backup, Reset, Setup. *Stages 4 to 7 and 9, in use from the switch.*
+- [x] A change made on the website is on the phone at its next sync, and one made on the phone (online) is on the website within a second. *4 Nov 2026: with the phone's app in the background, each change made on the website was on the phone about 3 s later, by stage 8's push; a task added on the phone was on the server 160 ms after it was made, and on the open page within a second. A timer started on the website showed on the phone in its notification and on its piece's sheet.*
+- [x] The phone, with its network off, shows its plan and tasks, blocks, runs the timer, and takes a task added and a task finished; with the network back, both reach the website and the server's plan replaces the phone's. *4 Nov 2026, in aeroplane mode: the plan and the tasks shown, a task added, a task finished, a slot moved and the timer started, their ten commands queued and the calendar left as it was (W-15); with the network back all of it was on the server within the minute, applied in the order made, the website showed it, and the calendar was written from the server's plan. Blocking wasn't tried offline: the blocker reads the phone's own copy, which stays.*
+- [x] A restore drill has been run: the box's database rebuilt from R2 on a clean machine and the server started from it, with the owner's state whole. *1 Nov 2026, on a PC from the real bucket: 14 of 14 stores the same, in 26 s. Its other half, a nightly file into a test build's Import, waits for a run: the first nightly file went to B2 at the switch.*
+- [ ] The server has run a month with no state lost, Claude's spend as before, and nothing paid for hosting. *From the switch: due 4 Dec 2026.*
 
 ## After the plan
 
