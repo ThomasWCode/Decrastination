@@ -100,6 +100,7 @@ class LooksTest {
     fun `once the server says what he says, a look, his morning and his reminders' words are written there, none here`() = runBlocking {
         underWay()
         felix.byServer = true
+        felix.failFast()
         felix.answers("""{"texts":["Ten minutes in: started the worksheet?"],"send":1,"replies":["Yes","Not yet"],"nextCheckMin":15,"memories":[]}""")
         felix.looks.check()
         assertFalse(felix.looks.morning())

@@ -42,6 +42,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
+import okhttp3.mockwebserver.QueueDispatcher
 
 /**
  * Felix's service on temporary stores (docs/plan_v4/architecture.md §The rules), for the flows' tests: the real stores,
@@ -151,6 +152,11 @@ class FelixHarness(
     init {
         // Claude on, with its key in use: his calls go to the stand-in.
         runBlocking { stores.settings.update { it.copy(aiEnabled = true, aiKeyActive = true) } }
+    }
+
+    /** A call nothing's queued for answered at once with a failure, not waited on for ever: for a test that shows none's made. */
+    fun failFast() {
+        (server.dispatcher as QueueDispatcher).setFailFast(true)
     }
 
     /** Claude's next answer from the stand-in: a message whose text is [text], the JSON a reader parses, sent [delayMs] late. */

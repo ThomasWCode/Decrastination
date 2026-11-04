@@ -307,14 +307,20 @@ class OutboxTest {
         assertFalse(ports.showing!!.alert)
         outbox.heard(now, there.take(1))
         assertFalse(ports.showing!!.alert)
-        // Yours, written on the website: nothing sounds.
-        val yours = ChatMessage("yours", Speaker.You, "From the website", now)
+        // Yours, written on the website as a reply, so it's under his in the notification: nothing sounds.
+        val yours = ChatMessage("yours", Speaker.You, "From the website", now, replyTo = "there-2")
         chat.update { s -> s.copy(messages = s.messages + yours) }
         outbox.heard(now, listOf(yours))
         assertFalse(ports.showing?.alert ?: false)
+        // His and yours in one pull, yours the newer (written on the website after he spoke): his sounds, not yours taking its place.
+        val later = his("there-3", now + 1)
+        val yoursAfter = ChatMessage("yours-2", Speaker.You, "Another from the website", now + 2, replyTo = "there-3")
+        chat.update { s -> s.copy(messages = s.messages + later + yoursAfter) }
+        outbox.heard(now + 2, listOf(later, yoursAfter))
+        assertTrue(ports.showing!!.alert)
         // Read elsewhere: his notification made again from the chat, without it.
-        chat.update { s -> s.copy(readAt = now) }
-        outbox.heard(now, emptyList())
+        chat.update { s -> s.copy(readAt = now + 2) }
+        outbox.heard(now + 2, emptyList())
         assertNull(ports.showing)
     }
 

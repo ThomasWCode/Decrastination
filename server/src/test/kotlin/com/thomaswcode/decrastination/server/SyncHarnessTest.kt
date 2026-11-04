@@ -741,10 +741,11 @@ class SyncHarnessTest {
     @Test
     fun `the parent code reaches the server once the phone sends commands, again only as it changes, and none takes it away`() = runBlocking {
         val phone = phone()
-        // Mirroring, nothing's sent.
-        phone.h.stores.sync.update { it.copy(mode = SyncState.MIRROR) }
+        // A server gone back to mirroring, which the exchange finds: nothing's sent after it, nor at a seed.
         mirroring()
         phone.h.stores.secrets.put(Secret.TotpSecret, "ABCDEFGHIJKLMNOP")
+        assertTrue(phone.replica.upload())
+        assertEquals(SyncState.MIRROR, phone.h.stores.sync.value.mode)
         phone.replica.upload()
         assertEquals(emptyList(), phone.wire.parentCodes)
         // Going by commands, it goes after the exchange, once.

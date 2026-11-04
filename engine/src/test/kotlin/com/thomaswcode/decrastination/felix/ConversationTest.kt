@@ -366,17 +366,17 @@ class ConversationTest {
     @Test
     fun `once the server says what he says, nothing's asked of Claude here, nor written in his name by the app's own work`() = runBlocking {
         felix.byServer = true
-        // An answer at hand, so a call made after all is seen, not waited on for ever.
-        felix.server.enqueue(MockResponse().setResponseCode(400))
+        felix.failFast()
         // Your words wait for the server's answer, which comes as it's pulled; the Try again too is the server's.
         assertTrue(conversation.ask("Plan my evening"))
         conversation.answerChat(retry = true)
         felix.settle()
         assertEquals(0, felix.server.requestCount)
         assertNotNull(stores.chat.value.unanswered)
-        // The check-in's reminder, how work went, and what was kept for his evening question: the server's.
+        // The check-in's reminder, how work went (not kept for his evening question either), and what was kept for it: the server's.
         conversation.remindCheckIn()
         conversation.askHowItWent(listOf(AssessLater("teams:sheet", "Forces worksheet", now - 3_600_000L)))
+        assertEquals(emptyList(), stores.chat.value.felix.assessLater)
         stores.settings.update { it.copy(aiEnabled = false) }
         stores.chat.update { it.copy(felix = it.felix.copy(assessLater = listOf(AssessLater("teams:essay", "Essay", now - 3_600_000L)))) }
         conversation.askKept()
@@ -392,8 +392,7 @@ class ConversationTest {
     @Test
     fun `once the server reads your instructions, one written here waits for it, nothing asked of Claude here`() = runBlocking {
         felix.byServer = true
-        // An answer at hand, so a call made after all is seen, not waited on for ever.
-        felix.server.enqueue(MockResponse().setResponseCode(400))
+        felix.failFast()
         val id = felix.instructions.addInstruction("Maths on Friday", About())
         felix.instructions.readInstructions(interactive = true)
         felix.settle()
