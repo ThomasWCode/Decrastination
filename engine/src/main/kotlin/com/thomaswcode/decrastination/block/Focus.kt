@@ -24,6 +24,7 @@ import com.thomaswcode.decrastination.data.PhotoDone
 import com.thomaswcode.decrastination.data.PieceTimer
 import com.thomaswcode.decrastination.data.Rewarded
 import com.thomaswcode.decrastination.data.LearningState
+import com.thomaswcode.decrastination.data.ProtectionRecord
 import com.thomaswcode.decrastination.data.ProtectionState
 import com.thomaswcode.decrastination.data.SessionState
 import com.thomaswcode.decrastination.core.Settings
@@ -68,6 +69,8 @@ class Focus(
     private val schoolDay: (LocalDate) -> Boolean = { it.dayOfWeek.value <= 5 },
     /** Till when a PC has forced blocking on (`DeviceState.forceActiveUntil`). */
     private val forceActiveUntil: () -> Long? = { null },
+    /** Free time spent, saved ([spend]), or, once the two keep in step by commands, sent as one (W-24): null to spend it here. */
+    private val saveSpend: (suspend (ms: Long, day: LocalDate) -> Unit)? = null,
     private val planOf: (TaskState, Settings, Long) -> Plan,
 ) {
     /** What the blocker covers. */
@@ -278,16 +281,26 @@ class Focus(
         unsavedMs.addAndGet(ms)
         return scope.launch {
             try {
-                spend(ms, day)
+                val save = saveSpend
+                if (save != null) save(ms, day) else spend(ms, day)
             } finally {
                 unsavedMs.addAndGet(-ms)
             }
         }
     }
 
-    suspend fun recordBlock(target: Target, reason: BlockPolicy.Reason) {
+    suspend fun recordBlock(target: Target, reason: BlockPolicy.Reason) = recordBlock(target.name, reason.name)
+
+    /** A block of [target], for [reason], on record, as the phone saw it ([com.thomaswcode.decrastination.sync.protocol.RecordBlock]). */
+    suspend fun recordBlock(target: String, reason: String) {
         val now = clock.now()
-        log.update { it.copy(blocks = it.blocks + BlockRecord(now, target.name, reason.name)).trimmed(now) }
+        log.update { it.copy(blocks = it.blocks + BlockRecord(now, target, reason)).trimmed(now) }
+    }
+
+    /** Protection as the phone's watchdog found it: what was wrong ([problems], none once it's well), and whether it put it right. */
+    suspend fun recordProtection(problems: List<String>, repaired: Boolean) {
+        val now = clock.now()
+        log.update { it.copy(protection = it.protection + ProtectionRecord(now, problems, repaired)).trimmed(now) }
     }
 
     /**

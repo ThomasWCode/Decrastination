@@ -68,6 +68,12 @@ class AfterCommandsTest {
         dir.deleteRecursively()
     }
 
+    /**
+     * Till Claude's asked: half a minute at most, as a first call can take many seconds to go out under a whole build's load, though
+     * it takes two alone. Nothing else here asks in that time: the server's own sync is every 15 minutes.
+     */
+    private suspend fun reachesClaude() = withTimeout(30_000) { while (asked.get() == 0) delay(20) }
+
     /** [block] in a command that's rolled back, given time for whatever it set off to reach Claude before it is. */
     private suspend fun rolledBack(block: suspend () -> Unit) {
         assertFailsWith<IllegalStateException> {
@@ -98,7 +104,7 @@ class AfterCommandsTest {
     @Test
     fun `a message that stands is asked of Claude once the command's closed`() = runBlocking {
         db.command { graph.owners.conversation.ask("Plan my evening", id = "m-1") }
-        withTimeout(10_000) { while (asked.get() == 0) delay(20) }
+        reachesClaude()
     }
 
     @Test
@@ -106,16 +112,19 @@ class AfterCommandsTest {
         graph.owners.conversation.ask("Plan my evening", id = "m-1")
         // A read merged inside a command, as a phone's read sent as one will be: its after-work isn't waited for in it.
         withTimeout(10_000) { db.command { graph.owners.syncer.sync(emptySet()) } }
-        withTimeout(10_000) { while (asked.get() == 0) delay(20) }
+        reachesClaude()
     }
 
     @Test
     fun `a reply that leaves a turn of the chat is answered at once, as the phone's worker answers it`() = runBlocking {
+        // Kept while Claude's off, so it waits for its answer, with nothing asked yet.
+        graph.stores.settings.update { it.copy(aiEnabled = false) }
         graph.owners.conversation.ask("Plan my evening", id = "m-1")
-        withTimeout(10_000) { while (asked.get() == 0) delay(20) }
-        val before = asked.get()
+        delay(500)
+        assertEquals(0, asked.get())
+        graph.stores.settings.update { it.copy(aiEnabled = true) }
         graph.owners.ports.answerLater()
-        withTimeout(10_000) { while (asked.get() == before) delay(20) }
+        reachesClaude()
     }
 
     @Test

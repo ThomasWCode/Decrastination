@@ -31,6 +31,25 @@ import com.thomaswcode.decrastination.sync.protocol.UndoKeep
 import com.thomaswcode.decrastination.sync.protocol.FinishOwnTask
 import com.thomaswcode.decrastination.sync.protocol.ResetData
 import com.thomaswcode.decrastination.data.Reset
+import com.thomaswcode.decrastination.core.Fetched
+import com.thomaswcode.decrastination.core.Kind
+import com.thomaswcode.decrastination.core.Source
+import com.thomaswcode.decrastination.core.TaskPhoto
+import com.thomaswcode.decrastination.learn.AnkiReading
+import com.thomaswcode.decrastination.learn.DeckCount
+import com.thomaswcode.decrastination.sources.ReadContext
+import com.thomaswcode.decrastination.sources.SourceRead
+import com.thomaswcode.decrastination.sources.TaskSource
+import com.thomaswcode.decrastination.sync.Syncer
+import com.thomaswcode.decrastination.sync.protocol.AnkiCame
+import com.thomaswcode.decrastination.sync.protocol.AnkiWent
+import com.thomaswcode.decrastination.sync.protocol.AskAboutEvent
+import com.thomaswcode.decrastination.sync.protocol.AttachPhoto
+import com.thomaswcode.decrastination.sync.protocol.NoteSource
+import com.thomaswcode.decrastination.sync.protocol.ObserveCalendar
+import com.thomaswcode.decrastination.sync.protocol.ObserveSources
+import com.thomaswcode.decrastination.sync.protocol.RecordBlock
+import com.thomaswcode.decrastination.sync.protocol.RecordProtection
 import com.thomaswcode.decrastination.sync.protocol.Outcome
 import com.thomaswcode.decrastination.sync.protocol.SaveOwnTask
 import com.thomaswcode.decrastination.tasks.TasksHarness
@@ -425,6 +444,90 @@ class SyncHarnessTest {
         assertTrue(two.replica.upload())
         assertEquals(setOf("Essay", "Maths"), two.titles)
         assertEquals(1, two.h.stores.instructions.value.instructions.size)
+    }
+
+    /** The phone's own read of Teams, as a phone sending commands sends it: what it lists is [listed]. */
+    private fun Phone.teams(vararg listed: String): Syncer {
+        val teams = object : TaskSource {
+            override val source = Source.Teams
+
+            override suspend fun read(context: ReadContext) = SourceRead(listed.map { Fetched(it, it, Kind.Homework) })
+        }
+        return Syncer(h.stores.tasks, h.stores.settings, listOf(teams), h.clock, observing = { true }, observed = { seen -> h.commands.act(ObserveSources(seen)) })
+    }
+
+    @Test
+    fun `a Teams read on a phone sending commands is merged on the server as here, and no pull takes it back`() = runBlocking {
+        val phone = phone()
+        phone.teams("An essay").sync()
+        assertEquals(setOf("An essay"), phone.titles, "here at once, as before")
+        assertTrue(phone.replica.upload())
+        assertEquals(setOf("An essay"), serverTitles)
+        // A pull of everything: what the phone holds is the server's copy, the read in it.
+        phone.replica.pullEverything()
+        assertTrue(phone.replica.upload())
+        assertEquals(setOf("An essay"), phone.titles)
+    }
+
+    @Test
+    fun `a task gone from Teams' list is done on the server too, and a read the same again changes nothing there`() = runBlocking {
+        val phone = phone()
+        phone.teams("An essay", "A poster").sync()
+        phone.teams("An essay").sync()
+        assertTrue(phone.replica.upload())
+        val poster = graph.stores.tasks.value.tasks.single { it.title == "A poster" }
+        assertFalse(poster.isOpen, "a task missing from a read is done, as the phone's merge has it")
+        val before = graph.stores.tasks.value.tasks
+        val again = phone.teams("An essay")
+        again.sync()
+        again.sync()
+        assertTrue(phone.replica.upload())
+        assertEquals(before, graph.stores.tasks.value.tasks)
+    }
+
+    @Test
+    fun `AnkiDroid come and gone on a phone sending commands is kept on the server, from the decks as the phone read them`() = runBlocking {
+        val phone = phone()
+        val at = phone.h.clock.now()
+        phone.h.commands.send(AnkiCame(at, AnkiReading(at, mapOf(1L to DeckCount(0, 10, 0)), entering = true)))
+        assertTrue(phone.replica.upload())
+        assertEquals(at, graph.stores.anki.value.ankiFrontSince)
+        phone.h.commands.send(AnkiWent(at + 60_000, AnkiReading(at + 60_000, mapOf(1L to DeckCount(0, 5, 0)), entering = false)))
+        assertTrue(phone.replica.upload())
+        assertEquals(null, graph.stores.anki.value.ankiFrontSince)
+        assertEquals(2, graph.stores.anki.value.ankiReadings.size)
+    }
+
+    @Test
+    fun `the calendar as a phone read it is what the server plans by`() = runBlocking {
+        val phone = phone()
+        val read = CalendarRead(answers = mapOf("an event" to "busy"), from = 1L, to = 2L)
+        phone.h.commands.send(ObserveCalendar(read))
+        assertTrue(phone.replica.upload())
+        assertEquals(read, graph.calendarRead.value)
+        assertEquals(listOf(read), phone.h.calendars, "kept here by nothing but the phone's own calendar")
+    }
+
+    @Test
+    fun `what the phone's blocker, watchdog and Teams widget saw is on the server's record too`() = runBlocking {
+        val phone = phone()
+        phone.h.commands.send(RecordBlock("an app", "a reason"))
+        phone.h.commands.send(RecordProtection(listOf("a problem"), repaired = false))
+        phone.h.commands.send(NoteSource(Source.Teams, "The Teams widget's sync service is off"))
+        phone.h.commands.act(own("Essay"))
+        phone.h.commands.send(AttachPhoto("own:s-Essay", TaskPhoto("photos/own_s-Essay.jpg", "abcd", phone.h.clock.now())))
+        assertTrue(phone.replica.upload())
+        assertEquals(listOf("an app"), graph.stores.log.value.blocks.map { it.target })
+        assertEquals(listOf(listOf("a problem")), graph.stores.log.value.protection.map { it.problems })
+        assertEquals("The Teams widget's sync service is off", graph.stores.tasks.value.status(Source.Teams).note)
+        assertEquals("abcd", graph.stores.tasks.value.tasks.single { it.title == "Essay" }.photo?.hash)
+    }
+
+    @Test
+    fun `an event the phone's calendar asks about is asked in the server's chat`() = runBlocking {
+        val outcome = graph.applier.apply(CommandBatch(listOf(Command("q-1", System.currentTimeMillis(), AskAboutEvent("an event", "An event", "Monday", System.currentTimeMillis(), listOf("Busy", "Free"))))), "phone").single()
+        assertEquals(Outcome.APPLIED, outcome.state)
+        assertTrue(graph.stores.chat.value.messages.any { "An event" in it.text })
     }
 
     @Test

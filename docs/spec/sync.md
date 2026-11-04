@@ -55,7 +55,25 @@ So that the same command does the same on the phone and the server, each is appl
 - What a change to the settings carries is the fields it touched (`SettingsChanges.changed`), laid over whatever's there when it lands, so a change made elsewhere to any other field stands. `Commands.changeSettings` makes one from a change as a screen writes it.
 - `OwnTask` keeps two things only in memory, which of its steps each was and that it came from the form. `SaveOwnTask` carries them, so a renamed step keeps its tick across the wire.
 
-What isn't a command, and why: a change that's only of this phone (its pairing, the parent code's secret, its calendar's answers), one that starts a job rather than changes the state (a sync, a reading), housekeeping that runs by itself (what Felix remembers past its date let go as its page opens), and what's reached only through Claude until that moves to the server.
+What isn't a command, and why: a change that's only of this phone (its pairing, the parent code's secret, its calendar's answers), one that starts a job rather than changes the state (a sync, a reading), housekeeping that runs by itself (what Felix remembers past its date let go as its page opens), and what's reached only through Claude until that moves to the server. What a sync or the blocker finds is a command once the two keep in step by commands (§Observations).
+
+## Observations
+
+What only the phone can know (W-24; `sync/protocol/Observations.kt`, 5.13.0), sent as commands of their own kinds once the two keep in step by commands, as a pull takes the server's stores whole and would take back anything the phone wrote outside one. Each is applied on both sides through the same owner, so the phone's screens and its blocker have it at once, and the server's copy, and the website, have it too. While mirroring, none is made: the stores carry them, whole, as before.
+
+| Command | What the phone saw | Its owner |
+|---|---|---|
+| `ObserveSources` | Teams and Anki as read, one command a source, Teams' applied before Anki's is read (its homework decks come from Teams' assignments); a read the same as the last sent (once its command's on record) as its status alone, so the record doesn't fill with copies; a failed read's reason. Power Planner and Gmail aren't read on the phone: the server reads them (`Source.SERVERS`) | `Syncer.observe`, then what follows a sync: on the server inside the command, its Claude work on its own time; on the phone once the sync's commands have closed, as some of it waits on what can wait for the command gate |
+| `NoteSource` | the Teams widget refusing to sync, where its status shows it | `Syncer.note` |
+| `ObserveCalendar` | the calendar as read, and your answers about its events, as they change: the server plans by it and can't read it, and its plan is made again with it. Only once it's been read in this process, or can't be read at all (no permission): the nothing a start has before its first read, or a first read that failed, would take the server's last from it (`Sync.calendarKnown`) | the server keeps it (`calendar-read.json`) |
+| `AskAboutEvent`, `SettleEvent` | an event the rules can't judge, as this phone's calendar and what it's asked decide (`calendar.json`), on record there as asked as the command's applied (`Owners.eventAsked`, nothing on the server); his questions on one settled by an instruction, or by an answer given here (the Day's event sheet, his question's chips), so the server's copies settle too | `Conversation` |
+| `AnkiCame`, `AnkiWent`, `AnkiReset` | AnkiDroid come to the front and gone, the decks as read then: the stretch's time as work, a deck done keeping its slot | `AnkiWatch.came`, `went`: the decks are read on the phone, the rest made on both sides |
+| `RecordBlock`, `RecordProtection` | a block, a lapse of protection or its end, for the record | `Focus` |
+| `SpendFreeTime` | free time spent, a half-minute at a time: merged into the outbox's last one while that's not been sent (`Commands.sending` marks what goes), so a pull can neither give it back nor take earned time | `Focus.spend` |
+| `TimerOver` | the timer's zero, heard by its alarm: told once, not again at each pull | `Focus.timerOver` |
+| `AttachPhoto` | a photo of a task's work kept with it, the file this phone's | `Photos.keep` |
+
+A slot moved by hand in the calendar goes as `AddOwnChange`, as a screen's would. A command made while another's being applied, an event's question found by the calendar read a sync sets off, is made once that closes, as one of its own: the gate it would wait for is that one's.
 
 ## The exchange, once the server applies commands
 

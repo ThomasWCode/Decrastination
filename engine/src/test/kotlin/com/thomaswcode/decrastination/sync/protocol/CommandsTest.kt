@@ -1,12 +1,19 @@
 package com.thomaswcode.decrastination.sync.protocol
 
+import com.thomaswcode.decrastination.block.AnkiWatch
 import com.thomaswcode.decrastination.block.Focus
+import com.thomaswcode.decrastination.block.Photos
 import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.Change
 import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.FixedClock
 import com.thomaswcode.decrastination.core.Fact
+import com.thomaswcode.decrastination.core.Fetched
 import com.thomaswcode.decrastination.core.Given
+import com.thomaswcode.decrastination.core.Kind
+import com.thomaswcode.decrastination.core.Source
+import com.thomaswcode.decrastination.core.SubStep
+import com.thomaswcode.decrastination.core.TaskPhoto
 import com.thomaswcode.decrastination.core.HalfDay
 import com.thomaswcode.decrastination.core.Ids
 import com.thomaswcode.decrastination.core.NoSchool
@@ -17,16 +24,22 @@ import com.thomaswcode.decrastination.core.ReplayClock
 import com.thomaswcode.decrastination.core.Rule
 import com.thomaswcode.decrastination.core.newStepId
 import com.thomaswcode.decrastination.data.BackupService
+import com.thomaswcode.decrastination.data.CalendarRead
 import com.thomaswcode.decrastination.data.Reset
 import com.thomaswcode.decrastination.data.SecretCipher
 import com.thomaswcode.decrastination.data.Stores
 import com.thomaswcode.decrastination.data.WeeklyReview
 import com.thomaswcode.decrastination.felix.Conversation
+import com.thomaswcode.decrastination.felix.FelixHarness
 import com.thomaswcode.decrastination.felix.Looks
+import com.thomaswcode.decrastination.learn.AnkiReading
 import com.thomaswcode.decrastination.learn.CheckIn
+import com.thomaswcode.decrastination.learn.DeckCount
 import com.thomaswcode.decrastination.learn.Learning
 import com.thomaswcode.decrastination.learn.ReviewInput
 import com.thomaswcode.decrastination.protect.Protection
+import com.thomaswcode.decrastination.sources.SourceRead
+import com.thomaswcode.decrastination.sync.Syncer
 import com.thomaswcode.decrastination.tasks.Instructions
 import com.thomaswcode.decrastination.tasks.OwnTasks
 import com.thomaswcode.decrastination.tasks.TasksHarness
@@ -71,6 +84,10 @@ class CommandsTest {
         Remember(listOf(Given(text = "a rule", kind = Given.RULE))), DeleteRule(Rule("a rule", 5L)), DeleteFact(Fact("topic", "a fact", 5L)), AddNote("t", "a note"), DeleteNote("n"),
         ChangeSettings(mapOf("boxMin" to JsonPrimitive(30))), UseParentCode("123456", 9L), ApplyChangeNow("c", "123456"), CancelChange("c"),
         RecordCheckIn(CheckIn("2026-W44", 5L, 3, "", "", "", ""), 5L), ForgetCalibration("k"), ResetData(Reset.Chat), UndoReviewChange(5L, "boxMin"), UndoTidy(5L),
+        ObserveSources(listOf(SourceObserved(Source.Teams, 5L, SourceRead(listOf(Fetched("a", "an essay", Kind.Homework, subSteps = listOf(SubStep("plan", 10)))), dataAsOf = 4L, note = "a note")), SourceObserved(Source.Anki, 5L, failed = "no answer"), SourceObserved(Source.Teams, 6L))),
+        NoteSource(Source.Teams, "a note"), ObserveCalendar(CalendarRead(answers = mapOf("an event" to "busy"))), AskAboutEvent("k", "an event", "Monday", 5L, listOf("busy", "free")), SettleEvent("k"),
+        AnkiCame(5L, AnkiReading(5L, mapOf(1L to DeckCount(1, 2, 3)), entering = true)), AnkiWent(6L), AnkiReset, RecordBlock("an app", "a reason"), SpendFreeTime("2026-11-03", 30_000L), TimerOver,
+        RecordProtection(listOf("a problem"), repaired = true), AttachPhoto("t", TaskPhoto("photos/t.jpg", "abcd", 5L)),
     )
 
     @Test
@@ -157,12 +174,49 @@ class CommandsTest {
                 override val protection = made
                 override val learning: Learning get() = error("not here")
                 override val backups: BackupService get() = error("not here")
+                override val sources: Syncer get() = error("not here")
+                override val ankiWatch: AnkiWatch get() = error("not here")
+                override val photos: Photos get() = error("not here")
+
+                override suspend fun calendarSeen(read: CalendarRead) = error("not here")
+
+                override suspend fun eventAsked(key: String) = error("not here")
             }
             val commands = Commands(owners, clock)
             (1..30).map { i -> async(Dispatchers.Default) { commands.changeSettings { it.copy(hintsSeen = it.hintsSeen + "hint $i") } } }.awaitAll()
             assertEquals(30, stores.settings.value.hintsSeen.size)
         } finally {
             dir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `an event's question applied on the phone is asked in the chat, and put on record as asked there as it is`() = runBlocking {
+        FelixHarness().use { h ->
+            val recorded = mutableListOf<String>()
+            val owners = object : Owners {
+                override val tasks = h.stores.tasks
+                override val ownTasks: OwnTasks get() = error("not here")
+                override val instructions: Instructions get() = error("not here")
+                override val focus: Focus get() = error("not here")
+                override val conversation = h.conversation
+                override val looks: Looks get() = error("not here")
+                override val protection: Protection get() = error("not here")
+                override val learning: Learning get() = error("not here")
+                override val backups: BackupService get() = error("not here")
+                override val sources: Syncer get() = error("not here")
+                override val ankiWatch: AnkiWatch get() = error("not here")
+                override val photos: Photos get() = error("not here")
+
+                override suspend fun calendarSeen(read: CalendarRead) = error("not here")
+
+                override suspend fun eventAsked(key: String) {
+                    assertTrue(h.stores.chat.value.messages.any { it.about.eventKey == key }, "on record once its question is")
+                    recorded += key
+                }
+            }
+            Commands(owners, h.clock).act(AskAboutEvent("an event", "An event", "Monday", h.clock.now(), listOf("All of it", "None")))
+            assertEquals(listOf("an event"), recorded)
         }
     }
 

@@ -23,6 +23,9 @@ enum class Source(val label: String, val synced: Boolean = true) {
     companion object {
         /** The sources the app reads, each with its own status. */
         val SYNCED: List<Source> = entries.filter { it.synced }
+
+        /** Those the server reads itself once the two keep in step by commands (D-133): the phone reads the rest. */
+        val SERVERS: Set<Source> = setOf(PowerPlanner, Gmail)
     }
 }
 
@@ -390,8 +393,9 @@ data class SourceValues(val kind: Kind, val dueAt: Long? = null, val availableFr
 
 /**
  * A source's view of one task, as read by a sync. [Merge] turns these into [TaskItem]s, keeping
- * the app's own bookkeeping.
+ * the app's own bookkeeping. Sent as it was read where only the phone can read it (W-24).
  */
+@Serializable
 data class Fetched(
     val sourceId: String,
     val title: String,

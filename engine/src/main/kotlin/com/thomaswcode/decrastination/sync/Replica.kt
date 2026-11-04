@@ -218,7 +218,8 @@ class Replica(
         val token = stores.secrets[Secret.DeviceToken] ?: return false
         val headers = mapOf("Content-Type" to "application/json", "Authorization" to "Bearer $token", Protocol.HEADER to Protocol.VERSION.toString(), Protocol.ZONE_HEADER to clock.zone().id)
         val server = sync.value.server
-        val waiting = stores.outbox.value.commands
+        // Marked as they're read, so none is merged into on its way ([Commands.sending]).
+        val waiting = commands?.sending() ?: stores.outbox.value.commands
         // A stopped process may have left a command half made, or not made at all. What the server makes of it comes in the pull,
         // but not what's left of it in a store the server doesn't change: so the first pull after such a start is of everything.
         if (!started) {

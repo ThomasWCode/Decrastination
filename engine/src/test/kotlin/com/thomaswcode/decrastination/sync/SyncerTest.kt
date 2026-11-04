@@ -22,9 +22,13 @@ import com.thomaswcode.decrastination.sources.ReadContext
 import com.thomaswcode.decrastination.sources.SourceRead
 import com.thomaswcode.decrastination.sources.TaskSource
 import com.thomaswcode.decrastination.sources.gmail.GmailThreads
+import com.thomaswcode.decrastination.sync.protocol.SourceObserved
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import java.io.File
 import java.io.IOException
@@ -32,6 +36,7 @@ import java.nio.file.Files
 import java.util.concurrent.CountDownLatch
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.Dispatchers
@@ -224,5 +229,131 @@ class SyncerTest {
         syncer.sync()
         assertEquals(listOf("teams:b"), tasks.value.unrewarded.map { it.id })
         assertEquals(Status.Done, tasks.value.tasks.first { it.id == "teams:b" }.status)
+    }
+
+    /** A phone keeping in step by commands: what it reads goes as what's seen ([seen]), merged here only as that's applied. */
+    private fun TestScope.observing(sources: List<TaskSource>, seen: MutableList<List<SourceObserved>>) =
+        Syncer(tasks, settings, sources, clock, readContext = StandardTestDispatcher(testScheduler), observing = { true }, observed = { reads -> seen += reads; SyncReport() })
+
+    @Test
+    fun `keeping in step by commands, what only the phone can read goes as one command a source, and what the server reads isn't read`() = runTest {
+        val teams = FakeSource(Source.Teams) { items("essay") }
+        val planner = FakeSource(Source.PowerPlanner) { items("worksheet") }
+        val anki = FakeSource(Source.Anki) { error("AnkiDroid isn't there") }
+        val seen = mutableListOf<List<SourceObserved>>()
+        observing(listOf(teams, planner, anki), seen).sync()
+        assertEquals(listOf(Source.Teams, Source.Anki), seen.map { it.single().source })
+        assertEquals(listOf("essay"), seen[0].single().read?.items?.map { it.sourceId })
+        assertEquals("AnkiDroid isn't there", seen[1].single().failed)
+        assertTrue(planner.seen.isEmpty(), "Power Planner's the server's to read")
+        assertTrue(tasks.value.tasks.isEmpty(), "nothing's merged till it's applied, here as on the server")
+    }
+
+    @Test
+    fun `keeping in step by commands, Anki is read once Teams' command is applied, and sees the homework it just brought`() = runTest {
+        val anki = FakeSource(Source.Anki) { SourceRead(emptyList(), ankiDay = AnkiDay("2026-10-08", 12, "Textbook 1::1.2")) }
+        val teams = FakeSource(Source.Teams) { items("vocab") }
+        lateinit var syncer: Syncer
+        // Applied here as the command is, through the same syncer.
+        syncer = Syncer(tasks, settings, listOf(anki, teams), clock, readContext = StandardTestDispatcher(testScheduler), observing = { true }, observed = { reads -> syncer.observe(reads) })
+        syncer.sync()
+        assertEquals(listOf("teams:vocab"), anki.seen.single().known.map { it.id })
+        assertEquals(12L, tasks.value.ankiDay?.deckId)
+    }
+
+    @Test
+    fun `keeping in step by commands, what follows a sync follows once its commands have closed, once a sync, as on the server it's inside`() = runTest {
+        val teams = FakeSource(Source.Teams) { items("essay") }
+        val anki = FakeSource(Source.Anki) { SourceRead(emptyList()) }
+        var inCommand = false
+        lateinit var syncer: Syncer
+        // Applied here as the command is, through the same syncer, the gate held meanwhile.
+        syncer = Syncer(tasks, settings, listOf(teams, anki), clock, readContext = StandardTestDispatcher(testScheduler), observing = { true }, observed = { reads ->
+            inCommand = true
+            try {
+                syncer.observe(reads)
+            } finally {
+                inCommand = false
+            }
+        })
+        val after = mutableListOf<Boolean>()
+        var added = 0
+        syncer.addAfterEverySync { after += inCommand }
+        syncer.addListener { added += it.added.size }
+        syncer.sync()
+        assertEquals(listOf(false), after, "once, outside its commands")
+        assertEquals(1, added)
+        // On the server, the command's applied with what follows inside it.
+        val server = syncer(emptyList())
+        var followed = 0
+        server.addAfterEverySync { followed++ }
+        server.observe(listOf(SourceObserved(Source.Teams, clock.time, items("essay", "poster"))))
+        assertEquals(1, followed)
+    }
+
+    @Test
+    fun `a read the same again goes whole where a note's taken its own's place, and puts its own back`() = runTest {
+        val teams = FakeSource(Source.Teams) { items("essay") }
+        val seen = mutableListOf<List<SourceObserved>>()
+        lateinit var syncer: Syncer
+        syncer = Syncer(tasks, settings, listOf(teams), clock, readContext = StandardTestDispatcher(testScheduler), observing = { true }, observed = { reads -> seen += reads; syncer.observe(reads) })
+        syncer.sync()
+        // The widget refused a sync since: said where its status shows.
+        syncer.note(Source.Teams, "The Teams widget's sync service is off")
+        syncer.sync()
+        assertEquals(listOf("essay"), seen[1].single().read?.items?.map { it.sourceId }, "whole, as its status alone would keep the note")
+        assertNull(tasks.value.status(Source.Teams).note)
+        syncer.sync()
+        assertNull(seen[2].single().read, "its status alone again, nothing in its place")
+    }
+
+    @Test
+    fun `a read whose command never went, the sync stopped first, is sent whole the next time`() = runTest {
+        val teams = FakeSource(Source.Teams) { items("essay") }
+        val seen = mutableListOf<List<SourceObserved>>()
+        // The command waits its turn (another's being applied), and the sync's stopped meanwhile: nothing went.
+        var gate: suspend () -> Unit = { awaitCancellation() }
+        val syncer = Syncer(tasks, settings, listOf(teams), clock, readContext = StandardTestDispatcher(testScheduler), observing = { true }, observed = { reads -> gate(); seen += reads; SyncReport() })
+        val stopped = launch { syncer.sync() }
+        advanceUntilIdle()
+        stopped.cancelAndJoin()
+        gate = {}
+        syncer.sync()
+        assertEquals(listOf("essay"), seen.single().single().read?.items?.map { it.sourceId }, "sent whole, not as the same as before")
+        // Nor where its command couldn't be put on record: the same read, tried again, goes whole.
+        teams.answer = { items("essay", "poster") }
+        gate = { throw IOException("The outbox couldn't be written") }
+        assertFailsWith<IOException> { syncer.sync() }
+        gate = {}
+        syncer.sync()
+        assertEquals(listOf("essay", "poster"), seen[1].single().read?.items?.map { it.sourceId })
+    }
+
+    @Test
+    fun `a read the same as the last sent goes as its status alone, and a changed one whole`() = runTest {
+        val teams = FakeSource(Source.Teams) { items("essay") }
+        val seen = mutableListOf<List<SourceObserved>>()
+        val syncer = observing(listOf(teams), seen)
+        syncer.sync()
+        syncer.sync()
+        assertEquals(null, seen[1].single().read, "the same again")
+        teams.answer = { items("essay", "poster") }
+        syncer.sync()
+        assertEquals(listOf("essay", "poster"), seen[2].single().read?.items?.map { it.sourceId })
+    }
+
+    @Test
+    fun `what's seen and sent is merged as a read here is, and one read the same again keeps its tasks and says when it was read`() = runTest {
+        val syncer = syncer(emptyList())
+        syncer.observe(listOf(SourceObserved(Source.Teams, clock.time, items("essay"))))
+        assertEquals(listOf("teams:essay"), tasks.value.tasks.map { it.id })
+        clock.time += 60_000
+        syncer.observe(listOf(SourceObserved(Source.Teams, clock.time)))
+        assertEquals(listOf("teams:essay"), tasks.value.tasks.map { it.id }, "not taken as a read that lists nothing")
+        assertEquals(Status.Open, tasks.value.tasks.single().status, "nor done, as gone from the list")
+        assertEquals(clock.time, tasks.value.status(Source.Teams).lastSuccessAt)
+        syncer.observe(listOf(SourceObserved(Source.Teams, clock.time, failed = "no answer")))
+        assertEquals("no answer", tasks.value.status(Source.Teams).error)
+        assertEquals(listOf("teams:essay"), tasks.value.tasks.map { it.id })
     }
 }

@@ -12,7 +12,10 @@ import com.thomaswcode.decrastination.learn.AnkiReading
 import com.thomaswcode.decrastination.learn.DeckCount
 import com.thomaswcode.decrastination.plan.Planning
 import com.thomaswcode.decrastination.ports.Log
-import com.thomaswcode.decrastination.sync.Sync
+import com.thomaswcode.decrastination.sync.protocol.Action
+import com.thomaswcode.decrastination.sync.protocol.AnkiCame
+import com.thomaswcode.decrastination.sync.protocol.AnkiReset
+import com.thomaswcode.decrastination.sync.protocol.AnkiWent
 import java.time.Instant
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -27,7 +30,9 @@ import kotlinx.coroutines.withContext
  * took; the speed a card is learned per deck (DX-11); and Anki is read again at once, so the plan
  * shows what's left (the counts are the progress: a piece part done is less of it). Each coming
  * and going is decided as it's seen and handled after the one before, so leaving before the read
- * coming in is done isn't lost behind it.
+ * coming in is done isn't lost behind it. The decks are read on the phone; what's made of a reading
+ * ([came], [went]) the server makes too, once the two keep in step by commands, as what's seen goes
+ * to it as one ([com.thomaswcode.decrastination.sync.protocol.AnkiCame], W-24).
  */
 class AnkiWatch(
     private val anki: JsonStore<AnkiState>,
@@ -37,13 +42,18 @@ class AnkiWatch(
     scope: CoroutineScope,
     private val focus: Focus,
     private val planning: Planning,
-    private val sync: Sync,
+    /** Anki read again at once, so the plan shows what's left ([com.thomaswcode.decrastination.sync.Sync.sync]): nothing on the server, which can't. */
+    private val readAnki: suspend () -> Unit,
     /** AnkiDroid's package, by which it's known in front. */
     private val ankiPackage: String,
     /** Its decks as they are now; null where they can't be read. */
     private val decks: () -> List<Deck>?,
     /** Work on [taskIds] as Felix sees it (LR-03). */
     private val noteActivity: suspend (taskIds: List<String>, now: Long) -> Unit,
+    /** Whether what's seen goes to the server as a command ([send]), once the two keep in step by commands; made here alone before. */
+    private val observing: () -> Boolean = { false },
+    /** What's seen, as a command: applied here through [came], [went] and [resetStretch], as on the server. */
+    private val send: suspend (Action) -> Unit = {},
 ) {
     private sealed interface Event {
         data class Came(val at: Long) : Event
@@ -63,13 +73,33 @@ class AnkiWatch(
             for (event in events) {
                 runCatching {
                     when (event) {
-                        is Event.Came -> came(event.at)
-                        is Event.Went -> went(event.at)
-                        Event.Reset -> if (anki.value.ankiFrontSince != null) anki.update { it.copy(ankiFrontSince = null) }
+                        is Event.Came -> seenComing(event.at)
+                        is Event.Went -> seenGoing(event.at)
+                        Event.Reset -> if (observing()) send(AnkiReset) else resetStretch()
                     }
                 }.onFailure { Log.w(Log.TAG, "Reading AnkiDroid's decks failed", it) }
             }
         }
+    }
+
+    /** A stretch in AnkiDroid begun before the focus service stopped, let go ([reset]). */
+    suspend fun resetStretch() {
+        if (anki.value.ankiFrontSince != null) anki.update { it.copy(ankiFrontSince = null) }
+    }
+
+    /** AnkiDroid come to the front at [now]: its decks read, and what's made of them made here, or sent to be made on both sides. */
+    private suspend fun seenComing(now: Long) {
+        if (anki.value.ankiFrontSince != null) return
+        val reading = read(now, entering = true) ?: return
+        if (observing()) send(AnkiCame(now, reading)) else came(now, reading)
+    }
+
+    /** AnkiDroid gone at [now]: its decks read, what's made of them made or sent, and Anki read again, so the plan shows what's left. */
+    private suspend fun seenGoing(now: Long) {
+        if (anki.value.ankiFrontSince == null) return
+        val reading = read(now, entering = false)
+        if (observing()) send(AnkiWent(now, reading)) else went(now, reading)
+        readAnki()
     }
 
     /**
@@ -89,18 +119,18 @@ class AnkiWatch(
         if (isAnki != was) events.trySend(if (isAnki) Event.Came(clock.now()) else Event.Went(clock.now()))
     }
 
-    private suspend fun came(now: Long) {
-        if (anki.value.ankiFrontSince != null) return
-        val reading = read(now, entering = true) ?: return
+    /** AnkiDroid come to the front at [now], its decks as [reading] has them (none where they couldn't be read). */
+    suspend fun came(now: Long, reading: AnkiReading?) {
+        if (anki.value.ankiFrontSince != null || reading == null) return
         anki.update { it.copy(ankiFrontSince = now, ankiReadings = (it.ankiReadings + reading).takeLast(AnkiProgress.KEEP)) }
         // In AnkiDroid in a deck task's slot: work on it, as Felix sees it (LR-03). Not on every deck
         // task: it may be the deck list, or another deck; going out, the decks that moved say which.
         focus.plan(now).slotAt(now)?.chunk?.takeIf { it.source == Source.Anki }?.let { noteActivity(listOf(it.taskId), now) }
     }
 
-    private suspend fun went(now: Long) {
+    /** AnkiDroid gone from the front at [now], its decks as [reading] has them: the stretch's time as work, a deck's done keeping its slot. */
+    suspend fun went(now: Long, reading: AnkiReading?) {
         if (anki.value.ankiFrontSince == null) return
-        val reading = read(now, entering = false)
         anki.update { state -> state.copy(ankiFrontSince = null, ankiReadings = reading?.let { (state.ankiReadings + it).takeLast(AnkiProgress.KEEP) } ?: state.ankiReadings) }
         reading ?: return
         val zone = clock.zone()
@@ -139,7 +169,6 @@ class AnkiWatch(
                 )
             }
         }
-        sync.sync(setOf(Source.Anki))
     }
 
     private suspend fun read(now: Long, entering: Boolean): AnkiReading? = withContext(Dispatchers.IO) {

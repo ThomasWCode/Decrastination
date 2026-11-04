@@ -2,13 +2,16 @@ package com.thomaswcode.decrastination.tasks
 
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
+import com.thomaswcode.decrastination.block.AnkiWatch
 import com.thomaswcode.decrastination.block.Focus
+import com.thomaswcode.decrastination.block.Photos
 import com.thomaswcode.decrastination.core.FixedClock
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.ReplayClock
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.data.BackupService
+import com.thomaswcode.decrastination.data.CalendarRead
 import com.thomaswcode.decrastination.data.SecretCipher
 import com.thomaswcode.decrastination.data.Stores
 import com.thomaswcode.decrastination.data.SyncState
@@ -21,6 +24,7 @@ import com.thomaswcode.decrastination.learn.EventJudge
 import com.thomaswcode.decrastination.learn.Learning
 import com.thomaswcode.decrastination.plan.Planning
 import com.thomaswcode.decrastination.protect.Protection
+import com.thomaswcode.decrastination.sync.Syncer
 import com.thomaswcode.decrastination.sync.protocol.Commands
 import com.thomaswcode.decrastination.sync.protocol.Owners
 import java.io.File
@@ -120,6 +124,31 @@ class TasksHarness(start: String = "2026-10-19T16:00", private val claude: Boole
     override val protection: Protection get() = error("No protection here")
     override val learning: Learning get() = error("No learning here")
     override val backups: BackupService get() = error("No backups here")
+
+    /** What merges a source's read, with no source of its own: a phone's read sent here is merged by it. */
+    override val sources: Syncer = Syncer(stores.tasks, stores.settings, emptyList(), owners)
+
+    /** Time in AnkiDroid as work, its decks given by what's sent: nothing's read here. */
+    override val ankiWatch: AnkiWatch = AnkiWatch(
+        stores.anki, stores.learning, stores.tasks, owners, scope, focus, planning,
+        readAnki = {}, ankiPackage = "", decks = { null }, noteActivity = { _, _ -> },
+    )
+
+    override val photos: Photos = Photos(stores.tasks, stores.settings, stores.chat, owners, scope, gateway, focus, File(dir, "photos"), shrink = { null }, profile = { Profile.Block.NONE }, read = {})
+
+    /** The calendars as a phone sent them, in order. */
+    val calendars: MutableList<CalendarRead> = Collections.synchronizedList(mutableListOf())
+
+    override suspend fun calendarSeen(read: CalendarRead) {
+        calendars += read
+    }
+
+    /** The events put on record as asked here, in order. */
+    val eventsAsked: MutableList<String> = Collections.synchronizedList(mutableListOf())
+
+    override suspend fun eventAsked(key: String) {
+        eventsAsked += key
+    }
 
     /** A screen's changes, as `AppGraph`'s: only the owners here have any. */
     val commands = Commands(this, owners, stores.outbox, queuing = { stores.sync.value.mode == SyncState.COMMANDS }, unfinished = { stores.sync.update { it.copy(revision = 0) } })

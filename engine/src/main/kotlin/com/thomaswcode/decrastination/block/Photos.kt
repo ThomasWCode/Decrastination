@@ -50,6 +50,8 @@ class Photos(
     private val shrink: (File) -> ByteArray?,
     /** Who the student is, as each call sends it (AI-05). */
     private val profile: () -> Profile.Block,
+    /** A photo kept with its task ([keep]), or, once the two keep in step by commands, sent as one, its file this phone's. */
+    private val keeping: (suspend (taskId: String, photo: TaskPhoto) -> Unit)? = null,
     /** [taskId] read again with its photo, where it's one the model reads ([com.thomaswcode.decrastination.enrich.Readings.enrichNow]). */
     private val read: suspend (taskId: String) -> Unit,
 ) {
@@ -64,8 +66,15 @@ class Photos(
             file.writeBytes(jpeg)
         }
         val hash = MessageDigest.getInstance("SHA-256").digest(jpeg).take(8).joinToString("") { "%02x".format(it) }
-        tasks.update { s -> s.copy(tasks = s.tasks.map { if (it.id == taskId) it.copy(photo = TaskPhoto(file.path, hash, clock.now())) else it }) }
+        val photo = TaskPhoto(file.path, hash, clock.now())
+        val send = keeping
+        if (send != null) send(taskId, photo) else keep(taskId, photo)
         scope.launch { runCatching { read(taskId) }.onFailure { Log.w(Log.TAG, "Reading a task with its photo failed", it) } }
+    }
+
+    /** [photo] kept with [taskId], in place of one before ([com.thomaswcode.decrastination.sync.protocol.AttachPhoto]). */
+    suspend fun keep(taskId: String, photo: TaskPhoto) {
+        tasks.update { s -> s.copy(tasks = s.tasks.map { if (it.id == taskId) it.copy(photo = photo) else it }) }
     }
 
     /** [jpeg] read into tasks of your own to check (NF-01): the reading, or why there's none. */

@@ -7,6 +7,7 @@ import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.Timetable
 import java.time.ZoneId
+import kotlinx.serialization.Serializable
 
 /**
  * One of the four places tasks come from (docs/spec/sources.md). A read returns everything the source has
@@ -31,6 +32,8 @@ data class ReadContext(
     val ankiSecondsPerCard: Map<Long, Double> = emptyMap(),
 )
 
+/** What a source listed. Sent to the server as it was read where only the phone can read it (W-24): Teams, Anki. */
+@Serializable
 data class SourceRead(
     val items: List<Fetched>,
     /** When the source's own data was last refreshed, if that isn't now (the Teams widget's last sync). */

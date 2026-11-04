@@ -9,6 +9,7 @@ import com.thomaswcode.decrastination.core.Proposal
 import com.thomaswcode.decrastination.core.ProposalState
 import com.thomaswcode.decrastination.core.SlotKind
 import com.thomaswcode.decrastination.core.Speaker
+import com.thomaswcode.decrastination.core.Window
 import com.thomaswcode.decrastination.data.PieceTimer
 import com.thomaswcode.decrastination.data.SecretCipher
 import com.thomaswcode.decrastination.felix.Outbox
@@ -81,6 +82,11 @@ class PushesTest {
     private val graph = ServerGraph(db, dir, Plain, "test", pushSender = service, pushKey = "made-up-key")
     private val sessions = Sessions(db, 1L)
     private val session = Tokens.hash(sessions.start())
+
+    init {
+        // No quiet hours, as its clock is the real one: in them, what waits for the morning isn't told, whenever the tests run.
+        runBlocking { graph.stores.settings.update { it.copy(quietHours = Window(0, 0)) } }
+    }
 
     @AfterTest
     fun cleanUp() {

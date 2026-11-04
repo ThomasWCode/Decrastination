@@ -24,7 +24,6 @@ import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.R
 import com.thomaswcode.decrastination.block.FocusService
 import com.thomaswcode.decrastination.core.Blocklist
-import com.thomaswcode.decrastination.data.ProtectionRecord
 import com.thomaswcode.decrastination.data.WatchdogState
 import com.thomaswcode.decrastination.learn.DailyAlarms
 import com.thomaswcode.decrastination.notify.Channels
@@ -217,7 +216,7 @@ object Watchdog {
         // what it put right, even when the check ends where the last one did.
         if (repaired || problems != before.problems) {
             val recorded = if (repaired) found else problems
-            graph.log.update { it.copy(protection = it.protection + ProtectionRecord(now, recorded, repaired)).trimmed(now) }
+            graph.recordProtection(recorded, repaired)
             Log.i(TAG, "Protection: ${recorded.ifEmpty { listOf("all well") }}${if (repaired) " (repaired)" else ""}")
         }
         if (problems.isEmpty()) AppGraph.get(context).notifier.cancel(NoticeId.Protection) else alert(context, problems, armed)
