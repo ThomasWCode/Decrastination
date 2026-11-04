@@ -13,6 +13,10 @@ import kotlinx.serialization.Serializable
 @SerialName("FinishGmail")
 data class FinishGmail(val taskId: String) : Action, Answers<GmailFinishes.Finish> {
     override suspend fun run(owners: Owners): GmailFinishes.Finish = owners.gmail.finish(taskId, explicit = true)
+
+    // Nothing journaled where it's applied (its email closed or gone there meanwhile, or finishing switched off): refused, so a phone
+    // that journaled it takes the journal as it stands from its next pull, as what changed there may not be the journal.
+    override fun refused(answer: Any?) = "That email can't be finished now".takeIf { answer == GmailFinishes.Finish.Off || answer == GmailFinishes.Finish.No }
 }
 
 /** [taskId]'s finish taken back, [writeId]'s alone where it's given ([GmailFinishes.unfinish]): whether there was one. */

@@ -58,4 +58,13 @@ class GmailActionsTest {
         h.commands.act(SortGmail(email.id))
         assertTrue(h.stores.gmailWrites.value.writes.none { it.gaveUp })
     }
+
+    @Test
+    fun `a finish that journals nothing where it's applied is refused, so a phone that journaled it pulls everything`() {
+        val finish = FinishGmail(email.id)
+        assertEquals(
+            listOf(true, true, false, false, false),
+            listOf(GmailFinishes.Finish.Off, GmailFinishes.Finish.No, GmailFinishes.Finish.Awaiting, GmailFinishes.Finish.Going, GmailFinishes.Finish.Pending).map { finish.refused(it) != null },
+        )
+    }
 }

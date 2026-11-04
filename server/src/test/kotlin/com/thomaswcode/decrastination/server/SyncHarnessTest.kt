@@ -34,6 +34,7 @@ import com.thomaswcode.decrastination.sync.protocol.FinishOwnTask
 import com.thomaswcode.decrastination.sync.protocol.ResetData
 import com.thomaswcode.decrastination.data.Reset
 import com.thomaswcode.decrastination.core.Fetched
+import com.thomaswcode.decrastination.core.GmailWrite
 import com.thomaswcode.decrastination.core.GmailWrites
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Source
@@ -804,5 +805,28 @@ class SyncHarnessTest {
         assertEquals(listOf(GmailWriter.Change.Unstar, GmailWriter.Change.Archive), gmailStored)
         assertTrue(phone.replica.upload())
         assertEquals(GmailWrites.State.Made, GmailWrites.state(phone.h.stores.gmailWrites.value.writes, email.id))
+    }
+
+    @Test
+    fun `a finish the server can't make, its email gone there meanwhile, is refused, and the phone takes the journal as it stands`() = runBlocking {
+        val phone = phone()
+        val email = TaskItem(id = "gmail:t1", source = Source.Gmail, sourceId = "t1", title = "A made-up email", dueAt = null, kind = Kind.Admin, firstSeenAt = 1, lastSeenAt = 1)
+        // An earlier finish's receipt on both, as the journal's kept there from the phone's seeds.
+        val receipt = GmailWrite("w-0", "gmail:t0", "An older made-up email", "t0", phone.h.clock.now() - 60_000, doneAt = phone.h.clock.now() - 30_000)
+        for (stores in listOf(graph.stores, phone.h.stores)) {
+            stores.tasks.update { it.copy(tasks = listOf(email)) }
+            stores.settings.update { it.copy(gmailFinishes = true, hintsSeen = it.hintsSeen + GmailWrites.OK_HINT) }
+            stores.gmailWrites.update { it.copy(writes = listOf(receipt)) }
+        }
+        assertTrue(phone.replica.upload())
+        // Offline, it's finished here; meanwhile the server's own read finds the email gone (unstarred by hand, say).
+        phone.wire.cut = true
+        assertEquals(GmailFinishes.Finish.Going, phone.h.commands.act(FinishGmail(email.id)))
+        graph.stores.tasks.update { it.copy(tasks = emptyList()) }
+        phone.wire.cut = false
+        assertTrue(phone.replica.upload())
+        assertEquals(listOf(receipt), graph.stores.gmailWrites.value.writes, "nothing journaled there")
+        // The journal hasn't changed there, so only a pull of everything puts the phone's right: the refusal asks for one.
+        assertEquals(listOf(receipt), phone.h.stores.gmailWrites.value.writes)
     }
 }
