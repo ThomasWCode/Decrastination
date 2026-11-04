@@ -1,11 +1,17 @@
 package com.thomaswcode.decrastination.server
 
+import com.thomaswcode.decrastination.core.Act
+import com.thomaswcode.decrastination.core.ChatAction
+import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.core.GmailWrite
 import com.thomaswcode.decrastination.core.GmailWrites
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Source
+import com.thomaswcode.decrastination.core.Speaker
+import com.thomaswcode.decrastination.core.SubStep
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.data.SecretCipher
+import com.thomaswcode.decrastination.data.SourceStatus
 import com.thomaswcode.decrastination.sources.gmail.GmailWriter
 import com.thomaswcode.decrastination.sources.gmail.GmailWriter.Change
 import com.thomaswcode.decrastination.sync.protocol.Action
@@ -13,12 +19,15 @@ import com.thomaswcode.decrastination.sync.protocol.Command
 import com.thomaswcode.decrastination.sync.protocol.CommandBatch
 import com.thomaswcode.decrastination.sync.protocol.FinishGmail
 import com.thomaswcode.decrastination.sync.protocol.Outcome
+import com.thomaswcode.decrastination.sync.protocol.TickBlock
+import com.thomaswcode.decrastination.sync.protocol.UndoAct
 import com.thomaswcode.decrastination.sync.protocol.UnfinishGmail
 import java.io.File
 import java.nio.file.Files
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.runBlocking
@@ -96,6 +105,39 @@ class ServerGmailTest {
         graph.gmailDue()
         assertEquals(listOf(Change.Unstar, Change.Archive, Change.Star, Change.Inbox), gmail.stored)
         assertTrue(gmail.message.starred && gmail.message.inbox)
+    }
+
+    @Test
+    fun `an email's last step ticked on the server finishes it in the journal, as its work's all done`() = runBlocking {
+        ready()
+        graph.stores.tasks.update { it.copy(tasks = listOf(email.copy(subSteps = listOf(SubStep("Read it", 10))))) }
+        fromThePhone("c-1", TickBlock(email.id, 0, "Read it"), ago = 0)
+        val finish = graph.stores.gmailWrites.value.writes.single()
+        assertEquals(email.id to false, finish.taskId to finish.explicit)
+    }
+
+    @Test
+    fun `the website's chat offers the Undo of his Done on an email while its finish stands`() = runBlocking {
+        ready()
+        fromThePhone("c-1", FinishGmail(email.id), ago = 0)
+        val write = graph.stores.gmailWrites.value.writes.single().id
+        val done = Act("Done “A made-up email”", ChatAction(ChatAction.Type.Done, email.id), after = write)
+        graph.stores.chat.update { it.copy(messages = listOf(ChatMessage("m-1", Speaker.Felix, "Done.", System.currentTimeMillis(), acts = listOf(done)))) }
+        val row = graph.chat(0, null).rows.single { it.id == "m-1" }
+        assertEquals(listOf(UndoAct("m-1", 0)), row.lines.mapNotNull { it.undo })
+    }
+
+    @Test
+    fun `a write given up is said on the website's Setup and its mark, once the server makes them`() = runBlocking {
+        ready()
+        // Every source read, so the mark's for the write alone.
+        graph.stores.tasks.update { it.copy(sources = Source.SYNCED.associateWith { SourceStatus(lastSuccessAt = 1) }) }
+        assertFalse(graph.notices().setup)
+        graph.stores.gmailWrites.update {
+            it.copy(writes = listOf(GmailWrite("w-1", email.id, email.title, email.sourceId, 1, notBefore = 1, tries = 5, lastError = "no connection", doneAt = 2, gaveUp = true)))
+        }
+        assertTrue(graph.setup().sources.single { it.title.startsWith("Gmail") }.detail.contains("“A made-up email”"))
+        assertTrue(graph.notices().setup)
     }
 
     @Test
