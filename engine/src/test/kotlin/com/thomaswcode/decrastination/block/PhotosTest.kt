@@ -146,9 +146,9 @@ class PhotosTest {
     fun `on the server a task's photo is kept by its hash, and swept by it`() = runBlocking {
         val byHash = Photos(tasks, settings, chat, clock, scope, gateway, focus, folder, shrink = { null }, profile = { Profile.Block.NONE }, fileOf = { File(folder, "${it.hash}.jpg") }) { read += it }
         folder.mkdirs()
-        val held = File(folder, "0123456789abcdef.jpg").apply { writeBytes(byteArrayOf(1)) }
-        val stray = File(folder, "fedcba9876543210.jpg").apply { writeBytes(byteArrayOf(2)) }
-        tasks.update { it.copy(tasks = listOf(essay.copy(photo = TaskPhoto("/the/phone's/path/teams_essay.jpg", "0123456789abcdef", 1L)))) }
+        val held = File(folder, "a1b2c3d4e5f60718.jpg").apply { writeBytes(byteArrayOf(1)) }
+        val stray = File(folder, "f0e1d2c3b4a59687.jpg").apply { writeBytes(byteArrayOf(2)) }
+        tasks.update { it.copy(tasks = listOf(essay.copy(photo = TaskPhoto("/the/phone's/path/teams_essay.jpg", "a1b2c3d4e5f60718", 1L)))) }
         byHash.sweepPhotos()
         assertTrue(held.exists(), "held by its hash, whatever the phone's path")
         assertFalse(stray.exists())

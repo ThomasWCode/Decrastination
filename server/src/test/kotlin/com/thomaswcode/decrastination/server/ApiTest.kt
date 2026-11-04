@@ -553,8 +553,8 @@ class ApiTest {
         assertEquals(HttpStatusCode.Forbidden, send(hash, jpeg) { header(HttpHeaders.Cookie, cookie); header("X-Requested-With", "test") }.status)
         assertEquals(HttpStatusCode.BadRequest, send("NOT-A-HASH", jpeg, byPhone).status)
         assertEquals(HttpStatusCode.UnsupportedMediaType, send(Photos.hashOf("not a photo".toByteArray()), "not a photo".toByteArray(), byPhone).status)
-        assertEquals(HttpStatusCode.BadRequest, send("0123456789abcdef", jpeg, byPhone).status, "not the photo its hash names")
-        assertFalse(File(dataDir, "photos/0123456789abcdef.jpg").exists())
+        assertEquals(HttpStatusCode.BadRequest, send("a1b2c3d4e5f60718", jpeg, byPhone).status, "not the photo its hash names")
+        assertFalse(File(dataDir, "photos/a1b2c3d4e5f60718.jpg").exists())
         assertEquals(HttpStatusCode.NoContent, send(hash, jpeg, byPhone).status)
         assertTrue(File(dataDir, "photos/$hash.jpg").readBytes().contentEquals(jpeg))
     }
