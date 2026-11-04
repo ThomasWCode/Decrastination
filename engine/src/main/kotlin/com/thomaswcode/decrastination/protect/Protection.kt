@@ -42,6 +42,11 @@ class Protection(
      * what waits and applies none itself, online or off, so the two can't disagree on when one's due.
      */
     private val byServer: () -> Boolean = { false },
+    /**
+     * A new parent code's lock begun ([freshLock]), or, once the two keep in step by commands, sent as one, so the server's lock is
+     * begun afresh with it: its own here would go at the next pull.
+     */
+    private val locking: (suspend (step: Long) -> Unit)? = null,
     /** The device admin given up, so uninstalling is allowed again. */
     private val removeAdmin: () -> Unit,
 ) {
@@ -172,6 +177,12 @@ class Protection(
      */
     suspend fun newParentCode(secret: ByteArray, step: Long) {
         secrets.put(Secret.TotpSecret, Totp.base32(secret))
+        val send = locking
+        if (send != null) send(step) else freshLock(step)
+    }
+
+    /** The parent codes' lock begun afresh, for a new secret, the code checked at [step] used up ([com.thomaswcode.decrastination.sync.protocol.ParentCodeSet]). */
+    suspend fun freshLock(step: Long) {
         protection.update { it.copy(codeLock = CodeLock(lastUsedStep = step)) }
     }
 

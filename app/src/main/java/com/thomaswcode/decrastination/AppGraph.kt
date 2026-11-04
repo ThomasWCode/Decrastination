@@ -87,6 +87,7 @@ import com.thomaswcode.decrastination.sync.protocol.NoteSource
 import com.thomaswcode.decrastination.sync.protocol.ObserveCalendar
 import com.thomaswcode.decrastination.sync.protocol.ObserveSources
 import com.thomaswcode.decrastination.sync.protocol.Owners
+import com.thomaswcode.decrastination.sync.protocol.ParentCodeSet
 import com.thomaswcode.decrastination.sync.protocol.RecordBlock
 import com.thomaswcode.decrastination.sync.protocol.RecordProtection
 import com.thomaswcode.decrastination.sync.protocol.ResetData
@@ -481,7 +482,11 @@ class AppGraph private constructor(context: Context) : Owners {
     private suspend fun settleEvent(key: String) = if (sendsCommands()) commands.send(SettleEvent(key)) else conversation.settleEvent(key)
 
     /** Protection ([Protection]): settings changes, waiting once armed if they loosen blocking; the parent code; the device admin. */
-    override val protection = Protection(settings, stores.protection, stores.device, secrets, clock, scope, adminActive = { Watchdog.isAdminActive(app) }, byServer = sendsCommands) {
+    override val protection: Protection = Protection(
+        settings, stores.protection, stores.device, secrets, clock, scope, adminActive = { Watchdog.isAdminActive(app) }, byServer = sendsCommands,
+        // A new parent code's lock a command once the phone sends them, as the server's lock is what a pull brings.
+        locking = { step -> if (sendsCommands()) commands.send(ParentCodeSet(step)) else protection.freshLock(step) },
+    ) {
         app.getSystemService(DevicePolicyManager::class.java)?.removeActiveAdmin(Watchdog.admin(app))
     }
 

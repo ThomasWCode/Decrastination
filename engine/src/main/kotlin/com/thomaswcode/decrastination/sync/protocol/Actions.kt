@@ -365,6 +365,17 @@ data class ChangeSettings(val fields: Map<String, JsonElement>) : Action, Answer
     }
 }
 
+/**
+ * A new parent code set (arming's wizard): the codes' lock begun afresh, the code checked at [step] used up
+ * ([com.thomaswcode.decrastination.protect.Protection.freshLock]).
+ * The secret goes to the server on its own, before the commands ([com.thomaswcode.decrastination.sync.Replica.upload]), never in one.
+ */
+@Serializable
+@SerialName("ParentCodeSet")
+data class ParentCodeSet(val step: Long) : Action, Answers<Unit> {
+    override suspend fun run(owners: Owners) = owners.protection.freshLock(step)
+}
+
 @Serializable
 @SerialName("UseParentCode")
 data class UseParentCode(val code: String, val unblockUntil: Long? = null) : Action, Answers<String?> {

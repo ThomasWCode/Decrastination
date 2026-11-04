@@ -155,6 +155,9 @@ class Replica(
      */
     suspend fun upload(): Boolean = sending.withLock {
         if (sync.value.mode == SyncState.COMMANDS) {
+            // A new parent code ahead of the commands, so one made with it isn't checked against the one before; after them too, where
+            // the server's mode couldn't be told first.
+            sendParentCode(ahead = true)
             return@withLock exchange().also {
                 if (it) {
                     sendPushId()
@@ -195,17 +198,19 @@ class Replica(
 
     /**
      * The parent code's secret, to the server, once the two keep in step by commands, as it checks a code typed on the website as the
-     * phone does (W-23): where the one here differs from what the server last took, by its hash, so a new one, or none, goes after
-     * the next exchange, and one that didn't go is tried after the one after. Never while mirroring, so nothing leaves the phone
-     * early. Said nowhere when it fails: the phone checks its own codes all the same.
+     * phone does (W-23): where the one here differs from what the server last took, by its hash, so a new one, or none, goes before
+     * the next exchange's commands ([ahead], the server's mode asked first) or after it, and one that didn't go is tried at the next.
+     * Never while mirroring, so nothing leaves the phone early. Said nowhere when it fails: the phone checks its own codes all the same.
      */
-    private suspend fun sendParentCode() {
+    private suspend fun sendParentCode(ahead: Boolean = false) {
         if (sync.value.mode != SyncState.COMMANDS) return
         val secret = stores.secrets[Secret.TotpSecret]
         val held = secret?.let(Protocol::hash) ?: SyncState.NO_CODE
         if (sync.value.parentCodeSent == held) return
         val token = stores.secrets[Secret.DeviceToken] ?: return
         val headers = mapOf("Content-Type" to "application/json", "Authorization" to "Bearer $token", Protocol.HEADER to Protocol.VERSION.toString())
+        // Before an exchange has said the server still applies commands: one gone back to mirroring is told nothing.
+        if (ahead && serverMode(headers) != SyncState.COMMANDS) return
         val answer = try {
             http.post("${sync.value.server}/api/parent-code", headers, JSON.encodeToString(ParentCode.serializer(), ParentCode(secret)))
         } catch (failed: IOException) {

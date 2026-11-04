@@ -194,6 +194,21 @@ class ProtectionTest {
     }
 
     @Test
+    fun `once a new code's lock is sent as a command, the secret's kept here and the lock left to the command`() = runBlocking {
+        val sent = mutableListOf<Long>()
+        val sending = Protection(settings, protectionState, device, secrets, clock, scope, adminActive = { admin }, locking = { sent += it }) {}
+        protectionState.update { it.copy(codeLock = CodeLock(lastUsedStep = 3, lockedUntil = Long.MAX_VALUE)) }
+        val step = Totp.step(clock.now())
+        sending.newParentCode(secret, step)
+        assertEquals(Totp.base32(secret), secrets[Secret.TotpSecret])
+        assertEquals(listOf(step), sent)
+        assertEquals(CodeLock(lastUsedStep = 3, lockedUntil = Long.MAX_VALUE), protectionState.value.codeLock, "as the command, applied, will make it")
+        // The command's own: the lock begun afresh.
+        sending.freshLock(step)
+        assertEquals(CodeLock(lastUsedStep = step), protectionState.value.codeLock)
+    }
+
+    @Test
     fun `the weekly review's changes apply at once while armed, in place of a wait of yours on the same setting`() = runBlocking {
         arm()
         // Waiting: your looser ratio, and an app taken off the list.
