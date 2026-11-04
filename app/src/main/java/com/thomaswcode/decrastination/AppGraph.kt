@@ -18,6 +18,7 @@ import com.thomaswcode.decrastination.core.DayKind
 import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.InstructionStatus
+import com.thomaswcode.decrastination.core.MessageKind
 import com.thomaswcode.decrastination.core.Notes
 import com.thomaswcode.decrastination.core.OwnTask
 import com.thomaswcode.decrastination.core.Plan
@@ -759,22 +760,27 @@ class AppGraph private constructor(context: Context) : Owners {
      */
     suspend fun switchOver(): String {
         GmailWriteWorker.stop(app)
-        // With no write to Gmail, no read of a source, no answer of the chat's, no review and no photo check under way, nor any begun,
-        // as each writes the stores unqueued while mirroring: those that waited go as commands, or are the server's, once the switch
-        // is made. In that order, as a read's own work answers the chat inside it. A minute at most for one under way to finish; the
-        // switch, once begun, is made whole, however long it takes, so what it says is what it did. The jobs' last runs are read
-        // inside, so a review just made is among them.
-        var why: String? = "Nothing switched: a write to Gmail, a read of a source, an answer, the review or a photo check didn't finish within a minute; try again"
+        // With no write to Gmail, no read of a source, no answer of the chat's, no review, no task's or instruction's reading and no
+        // photo check under way, nor any begun, as each writes the stores unqueued while mirroring: those that waited go as commands,
+        // or are the server's, once the switch is made. In that order, as a read's own work answers the chat and reads the instructions
+        // inside it. A minute at most for one under way to finish; the switch, once begun, is made whole, however long it takes, so what
+        // it says is what it did. The jobs' last runs are read inside, so a morning or a review just made is among them.
+        var why: String? = "Nothing switched: a write to Gmail, a read of a source, an answer, the review, a reading or a photo check didn't finish within a minute; try again"
         withTimeoutOrNull(60_000) {
             gmailFinishes.quiet {
                 syncer.quiet {
                     conversation.quiet {
                         learning.quiet {
-                            photos.quiet {
-                                withContext(NonCancellable) {
-                                    val runtime = runtime.value
-                                    val ran = Daily.ranBeforeSwitch(runtime.dailyRanAt, runtime.dailyRetries, log.value.reviews.maxOfOrNull { it.at })
-                                    why = replica.switchOver(backup = { backups.switchCopy() }, ran = ran)
+                            readings.quiet {
+                                instructions.quiet {
+                                    photos.quiet {
+                                        withContext(NonCancellable) {
+                                            val runtime = runtime.value
+                                            val morningAt = chat.value.messages.lastOrNull { it.kind == MessageKind.Morning }?.at
+                                            val ran = Daily.ranBeforeSwitch(runtime.dailyRanAt, runtime.dailyRetries, morningAt, log.value.reviews.maxOfOrNull { it.at })
+                                            why = replica.switchOver(backup = { backups.switchCopy() }, ran = ran)
+                                        }
+                                    }
                                 }
                             }
                         }

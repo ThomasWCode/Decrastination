@@ -31,12 +31,15 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
@@ -102,6 +105,19 @@ class ReadingsTest {
         byServer = false
         readings.enrichNow()
         assertEquals(RuleEnricher.BY, task().enrichment?.by)
+    }
+
+    @Test
+    fun `a run that waited for the switch's quiet finds the readings the server's, and reads nothing`() = runBlocking {
+        tasks.update { it.copy(tasks = listOf(essay)) }
+        // The switch holds the readings' lock as it reads the stores; a run begun meanwhile waits, and the switch is made.
+        val held = CompletableDeferred<Unit>()
+        val quiet = launch(start = CoroutineStart.UNDISPATCHED) { readings.quiet { held.await(); byServer = true } }
+        val run = async(start = CoroutineStart.UNDISPATCHED) { readings.enrichNow() }
+        held.complete(Unit)
+        quiet.join()
+        assertFalse(run.await())
+        assertNull(task().enrichment, "not read here, by Claude or by the rules")
     }
 
     @Test

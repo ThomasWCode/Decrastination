@@ -104,6 +104,12 @@ class Instructions(
     private val readingInstructions = Mutex()
 
     /**
+     * [block] with no instruction being read, and none begun till it's done: the switch reads the stores whole meanwhile (D-141),
+     * with what a reading under way writes, and a run that waited for it finds them the server's to read.
+     */
+    suspend fun <T> quiet(block: suspend () -> T): T = readingInstructions.withLock { block() }
+
+    /**
      * His question as he put it that a reply of yours, by its instruction's id, answers ([addInstruction]): given its
      * first read, which begins as the reply's kept and may come before the chat has it. Let go once read.
      */
@@ -222,6 +228,8 @@ class Instructions(
 
     private suspend fun reading(interactive: Boolean) = readingInstructions.withLock {
         while (true) {
+            // The server's once the phone sends commands, looked at again as each is taken, as the switch holds this lock ([quiet]).
+            if (byServer()) return@withLock
             val next = instructions.value.instructions.firstOrNull { it.state == InstructionStatus.Reading } ?: return@withLock
             val waiting = run call@{
                 val reader = gateway.client(ModelEffort.Job.Instruction)?.let { InstructionReader(it, clock.zone(), profile = profile()) } ?: return@call gateway.because(ModelHold.Off)

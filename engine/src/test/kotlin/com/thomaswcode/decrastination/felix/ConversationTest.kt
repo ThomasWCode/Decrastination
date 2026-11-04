@@ -453,6 +453,22 @@ class ConversationTest {
     }
 
     @Test
+    fun `an instruction's reading that waited for the switch's quiet finds it the server's, nothing asked of Claude here`() = runBlocking {
+        felix.failFast()
+        // The switch holds the instructions' reading lock as it reads the stores: one written meanwhile waits to be read, and the
+        // switch is made.
+        val held = CompletableDeferred<Unit>()
+        val quiet = launch(start = CoroutineStart.UNDISPATCHED) { felix.instructions.quiet { held.await(); felix.byServer = true } }
+        val id = felix.instructions.addInstruction("Maths on Friday", About())
+        val reading = launch(start = CoroutineStart.UNDISPATCHED) { felix.instructions.readInstructions(interactive = true) }
+        held.complete(Unit)
+        joinAll(quiet, reading)
+        felix.settle()
+        assertEquals(0, felix.server.requestCount)
+        assertEquals(InstructionStatus.Reading, stores.instructions.value.instructions.single { it.id == id }.state, "the server's to read")
+    }
+
+    @Test
     fun `how work went, asked where a sync's after-work runs, is the same question on the phone and the server, by its id`() = runBlocking {
         val ask = AssessLater("teams:sheet", "Forces worksheet", now - 3_600_000L)
         FelixHarness().use { server ->

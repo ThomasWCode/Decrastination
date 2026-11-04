@@ -78,12 +78,13 @@ object Daily {
 
     /**
      * When this phone last ran each job at a set time that's the server's from the switch (D-141), by the server's names: the morning
-     * and the check-in's reminder as their alarm noted them ([ranAt]), as it runs them there and then, but one with a try still to come
-     * ([retries]), which the server then runs; the review by the last one made ([reviewedAt]), as its alarm only queues it, so one
-     * still queued at the switch is the server's to make.
+     * by the last morning said ([morningAt]), as its alarm notes it before it's made; the check-in's reminder as its alarm noted it
+     * ([ranAt]), made there and then, but one with a try still to come ([retries]), which the server then runs; the review by the last
+     * one made ([reviewedAt]), as its alarm only queues it. So a morning or a review under way or queued at the switch is the server's
+     * to make.
      */
-    fun ranBeforeSwitch(ranAt: Map<String, Long>, retries: Map<String, DailyRetry>, reviewedAt: Long?): Map<String, Long> = listOfNotNull(
-        ranAt[ACTION_BRIEFING]?.takeIf { ACTION_BRIEFING !in retries }?.let { "morning" to it },
+    fun ranBeforeSwitch(ranAt: Map<String, Long>, retries: Map<String, DailyRetry>, morningAt: Long?, reviewedAt: Long?): Map<String, Long> = listOfNotNull(
+        morningAt?.let { "morning" to it },
         ranAt[ACTION_CHECK_IN]?.takeIf { ACTION_CHECK_IN !in retries }?.let { "check-in" to it },
         reviewedAt?.let { "review" to it },
     ).toMap()

@@ -70,18 +70,16 @@ class DailyTest {
     }
 
     @Test
-    fun `the jobs the switch hands the server go by what's done, the review by the last one made, as its alarm only queues it`() {
+    fun `the jobs the switch hands the server go by what's done, the morning and the review by the last made, as their alarms run ahead of them`() {
         val morning = Fixtures.at("2026-11-02T07:00")
         val checkIn = Fixtures.at("2026-11-01T18:00")
-        val ranAt = mapOf(Daily.ACTION_BRIEFING to morning, Daily.ACTION_CHECK_IN to checkIn, Daily.ACTION_REVIEW to Fixtures.at("2026-11-01T19:30"))
-        // The review's alarm went, its job still queued: the review last made a week before is what's said.
+        // Today's morning and Sunday's review noted by their alarms, neither made yet: the last of each made is what's said.
+        val ranAt = mapOf(Daily.ACTION_BRIEFING to Fixtures.at("2026-11-03T07:00"), Daily.ACTION_CHECK_IN to checkIn, Daily.ACTION_REVIEW to Fixtures.at("2026-11-01T19:30"))
         val lastWeek = Fixtures.at("2026-10-25T19:31")
-        assertEquals(mapOf("morning" to morning, "check-in" to checkIn, "review" to lastWeek), Daily.ranBeforeSwitch(ranAt, emptyMap(), lastWeek))
-        // One with a try to come isn't said, so the server runs it; and with no review ever made, none's said.
-        val retrying = mapOf(Daily.ACTION_BRIEFING to DailyRetry(morning + 600_000L, 1))
-        assertEquals(mapOf("check-in" to checkIn), Daily.ranBeforeSwitch(ranAt, retrying, null))
-        val retryingCheckIn = mapOf(Daily.ACTION_CHECK_IN to DailyRetry(checkIn + 600_000L, 1))
-        assertEquals(mapOf("morning" to morning), Daily.ranBeforeSwitch(ranAt, retryingCheckIn, null))
+        assertEquals(mapOf("morning" to morning, "check-in" to checkIn, "review" to lastWeek), Daily.ranBeforeSwitch(ranAt, emptyMap(), morning, lastWeek))
+        // A check-in with a try to come isn't said, so the server runs it; with no morning or review ever made, none's said.
+        val retrying = mapOf(Daily.ACTION_CHECK_IN to DailyRetry(checkIn + 600_000L, 1))
+        assertEquals(emptyMap(), Daily.ranBeforeSwitch(ranAt, retrying, null, null))
     }
 
     @Test
