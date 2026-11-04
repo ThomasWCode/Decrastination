@@ -61,7 +61,7 @@ While it's spent, a silent notification counts it down, and a heads-up comes in 
 
 **What a kept slot earns** (BL-08). A slot kept by its tick, its photo or its source (LR-09, [slots-and-calendar.md](slots-and-calendar.md)) earns a third of its piece's minutes, by `Chunk.earnsBy`:
 - a piece under `photoFromMin` (20 minutes) earns on its tick;
-- a longer piece of written homework earns when its photo check passes, once, or on the photo itself if the photo comes first;
+- a longer piece of written homework earns when its photo check passes, once, or on the photo itself if the photo comes first; once the phone sends commands, the check is the server's (D-148, sync.md §Asked of the server), its earning pulled;
 - a longer piece no photo can check (revision, admin, a deck) earns by its source: AnkiDroid's cards counted as you leave it (NF-03), or its task confirmed done by its source the same day;
 - a longer piece of one of your own that isn't written work, weekly work's among them (D-124), earns nothing, and its **Done** says so.
 

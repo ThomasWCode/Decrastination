@@ -108,7 +108,7 @@ It runs again once Claude can be asked again (its rest over, `EnrichWorker.retry
 - Each task is looked up afresh just ahead of its call, and the reading laid only over the task as read: one that changes during the call is read in the next run. One task is read at a time, whatever's reading it (a sync's run, a rest's retry, the sheet's *Read again*, a photo's): a second run at once waits for the first's answer and finds the task read, so an unchanged task isn't paid for twice (4.3.15); *Read again* still reads it again, as asked.
 - **A call that fails** gives the task the rules' reading (one stale by the version alone keeps its own), and leaves Claude alone for the rest of the run; but a request the API won't take leaves only that task to the rules, till its content changes (`ModelState.enrichFailed`).
 - **Declined or unreadable** (a refusal, an answer cut off at the token limit, one that still can't be read once put back): the rules' reading is kept under Claude's name and these prompts, so it isn't asked for again till something changes.
-- **Read again with Claude** (the sheet, `Readings.readAgain`) reads that task at once, whatever read it. Its reading stands till the new one comes, and you're told if none did. Not while Claude is off, resting or at its cap.
+- **Read again with Claude** (the sheet, `Readings.readAgain`) reads that task at once, whatever read it. Its reading stands till the new one comes, and you're told if none did. Not while Claude is off, resting or at its cap. Once the phone sends commands the server reads it, begun there and not waited for, its reading coming as it's pulled (sync.md §Asked of the server).
 - A reading that finds new vocabulary sections, or moves a deck task's date, has Anki read again at once.
 
 ## The input hash
@@ -146,7 +146,7 @@ It runs again once Claude can be asked again (its rest over, `EnrichWorker.retry
 
 ## Photos (AI-23)
 
-- *Add a photo of the work*, on a task Claude reads, keeps one photo with it (`Photos.attachPhoto`: the app's own files, one a task, a new one replacing the last). Its hash is in the input hash, so the task is read again at once.
+- *Add a photo of the work*, on a task Claude reads, keeps one photo with it (`Photos.attachPhoto`: the app's own files, one a task, a new one replacing the last). Its hash is in the input hash, so the task is read again at once. Once the phone sends commands the server reads it, the photo sent there first and kept by its hash (D-148, sync.md §Asked of the server).
 - The photo goes first in the item, Claude told it's the work itself, to estimate and split from, saying in `reason` what it saw (`ReadingPrompts.photo`). Such a reading is `fromPhoto`, and the sheet says "From your photo".
 - Photos no task holds are let go when the app starts (`Photos.sweepPhotos`), but for one a chat delete can still undo.
 - `Readings` and `Photos` are built like `Focus` (their stores, the clock, the gateway and small callbacks); `ReadingsTest` and `PhotosTest` drive them on temporary stores, Claude's API a stand-in.

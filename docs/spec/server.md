@@ -33,6 +33,7 @@ Everything is under `/api`, on the same origin as the website. Open: `GET /healt
 | `GET /state?since=` | a client | every store above a revision, whole, and the stores whose copies a clear or a reset let go of since (`letGo`, D-94) |
 | `GET /events` | a client | the state's revision: the one it's at on connecting, then each new one, with a heartbeat every 25 seconds |
 | `GET /views/day?date=`, `GET /views/work`, `GET /views/task/{id}`, `GET /views/settings`, `GET /views/chat?earlier=&reach=`, `GET /views/notices`, `GET /views/stats?period=`, `GET /views/week`, `GET /views/reviews`, `GET /views/backup`, `GET /views/setup` | a client | the pages' view models, [website.md](website.md) |
+| `POST /tasks/{id}/read-again` | a client | the task read again by Claude here (AC-06), begun on its own time, a phone's *Read again* once it sends commands (D-142); a 409 in mirror mode |
 | `POST /tasks/{id}/ask` | the website | what's asked of a task, made the commands the phone's sheet would make; a 409 in mirror mode |
 | `POST /day/drop` | the website | a block let go on the Day, judged as the phone judges one; a 409 in mirror mode |
 | `POST /chat/try-again` | a client | your message that waits asked for again, outside any command; a 409 in mirror mode |
@@ -42,6 +43,8 @@ Everything is under `/api`, on the same origin as the website. Open: `GET /healt
 | `POST /backup/import` | the website, or a phone (D-146) | a backup taken in, all of it or none; a 409 in mirror mode, a 413 past 8 MB by what it says it is |
 | `POST /backup/copy` | the website | a reset's copy, by its name, taken in the same way; a 409 in mirror mode |
 | `POST /photos/tasks` | the website, or a phone (D-148) | a JPEG of homework read into tasks to check, one at a time; a 409 in mirror mode, or with another being read |
+| `POST /photos/check` | a phone (D-148) | a piece's pages (at most three JPEGs, in base64) checked against it (AI-16), the piece found by its key in this server's plan, ticked off here if it's done; one at a time; a 409 in mirror mode, or with another being checked |
+| `POST /task-photos/{hash}` | a phone (D-148) | a task's photo, sent ahead of the command that keeps it, kept in the data folder's `photos/` by its hash (SHA-256's first 8 bytes), refused where the hash isn't the photo's; the photos no task holds swept at each start and daily |
 | `POST /push/subscription` | the website | a browser asking to be told of what it names; a 409 in mirror mode or with no keys on the box, a 400 at an address that isn't one of the browsers' push services |
 | `POST /push/channels`, `POST /push/forget` | the website | what a browser's asked for, and its stopping |
 | `GET /credentials`, `POST /credentials` | the website | which sign-ins are held, and setting them: never their values back |
