@@ -202,6 +202,9 @@ test("all of a task moves to a day, said in the phone's words", async ({ page })
 });
 
 test("a piece's time that's gone is refused, saying why", async ({ page }) => {
+  // A piece at 00:00 has gone once its 45 minutes and the slot's grace of 10 have: before 00:56 no time today has, by the browser's clock.
+  const minutes = await page.evaluate(() => new Date().getHours() * 60 + new Date().getMinutes());
+  test.skip(minutes < 56, "No time today has gone yet");
   await newTask(page, "Learn the quotes");
   const sheet = await sheetOf(page, "Learn the quotes");
   await sheet.getByRole("button", { name: "Move" }).click();
