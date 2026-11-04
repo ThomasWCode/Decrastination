@@ -461,18 +461,19 @@ class ReplicaTest {
         val slow = Server()
         val checking = Replica(stores, server, clock, "5.0.0", calendar = { read }, photoHttp = slow)
         val jpeg = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 2)
-        assertEquals("The check didn't go through (this phone isn't paired).", checking.checkPhotoOnServer("teams:sheet", "teams:sheet#0", 5L, listOf(jpeg)))
+        assertEquals("The check didn't go through (this phone isn't paired).", checking.checkPhotoOnServer("teams:sheet", "teams:sheet#0", "Questions 1 to 6", 5L, listOf(jpeg)))
         paired()
-        assertEquals("Done: every question answered", checking.checkPhotoOnServer("teams:sheet", "teams:sheet#0", 5L, listOf(jpeg, jpeg)))
+        assertEquals("Done: every question answered", checking.checkPhotoOnServer("teams:sheet", "teams:sheet#0", "Questions 1 to 6", 5L, listOf(jpeg, jpeg)))
         val ask = slow.checks.single()
         assertEquals(Triple("teams:sheet", "teams:sheet#0", 5L), Triple(ask.taskId, ask.key, ask.takenAt))
+        assertEquals("Questions 1 to 6", ask.step)
         assertEquals(2, ask.pages.size)
         assertTrue(ask.pages.all { Base64.getDecoder().decode(it).contentEquals(jpeg) })
         assertEquals(emptyList(), server.checks, "not on the usual wire")
         slow.checkAnswer = HttpResponse(409, """{"error":"A photo is being checked already"}""")
-        assertEquals("The check didn't go through (a photo is being checked already).", checking.checkPhotoOnServer("teams:sheet", "teams:sheet#0", 5L, listOf(jpeg)))
+        assertEquals("The check didn't go through (a photo is being checked already).", checking.checkPhotoOnServer("teams:sheet", "teams:sheet#0", "Questions 1 to 6", 5L, listOf(jpeg)))
         slow.failure = { throw IOException("offline") }
-        assertEquals("The check didn't go through (the server can't be reached).", checking.checkPhotoOnServer("teams:sheet", "teams:sheet#0", 5L, listOf(jpeg)))
+        assertEquals("The check didn't go through (the server can't be reached).", checking.checkPhotoOnServer("teams:sheet", "teams:sheet#0", "Questions 1 to 6", 5L, listOf(jpeg)))
     }
 
     @Test

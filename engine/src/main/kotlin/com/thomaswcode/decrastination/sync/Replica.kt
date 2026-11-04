@@ -437,10 +437,14 @@ class Replica(
      * server's to ask then (D-148): what came of it, in its words, or why it didn't go through. On [photoHttp], as a check waits on
      * Claude's call as a photo's reading does; off the thread it's asked from, as [importOnServer] is.
      */
-    suspend fun checkPhotoOnServer(taskId: String, key: String, takenAt: Long, jpegs: List<ByteArray>): String = withContext(Dispatchers.IO) {
+    suspend fun checkPhotoOnServer(taskId: String, key: String, step: String?, takenAt: Long, jpegs: List<ByteArray>): String = withContext(Dispatchers.IO) {
         val token = stores.secrets[Secret.DeviceToken] ?: return@withContext "The check didn't go through (this phone isn't paired)."
+        // What's waiting first, as the piece may be new, or changed, in it, so the server plans it as this phone does; not held through
+        // the check, which can take minutes.
+        val flushed = sending.withLock { stores.outbox.value.commands.isEmpty() || exchange() }
+        if (!flushed) return@withContext "The check didn't go through (what's changed here hasn't reached the server yet)."
         val headers = mapOf("Content-Type" to "application/json", "Authorization" to "Bearer $token", Protocol.HEADER to Protocol.VERSION.toString())
-        val ask = PhotoCheckAsk(taskId, key, takenAt, jpegs.map { Base64.getEncoder().encodeToString(it) })
+        val ask = PhotoCheckAsk(taskId, key, takenAt, jpegs.map { Base64.getEncoder().encodeToString(it) }, step)
         val answer = try {
             photoHttp.post("${sync.value.server}/api/photos/check", headers, JSON.encodeToString(PhotoCheckAsk.serializer(), ask))
         } catch (failed: IOException) {
@@ -456,17 +460,21 @@ class Replica(
      * (D-142): begun there, its reading coming as it's pulled. What was said of it. Off the thread it's asked from, as [importOnServer] is.
      */
     suspend fun readAgainOnServer(taskId: String): String = withContext(Dispatchers.IO) {
-        val token = stores.secrets[Secret.DeviceToken] ?: return@withContext "The server couldn't be asked: this phone isn't paired."
-        val headers = mapOf("Content-Type" to "application/json", "Authorization" to "Bearer $token", Protocol.HEADER to Protocol.VERSION.toString())
-        val answer = try {
-            // As a path's segment: a space is %20 there, not a form's +.
-            http.post("${sync.value.server}/api/tasks/${URLEncoder.encode(taskId, Charsets.UTF_8).replace("+", "%20")}/read-again", headers, "")
-        } catch (failed: IOException) {
-            Log.w(Log.TAG, "Asking the server to read a task again failed: ${failed::class.simpleName}")
-            return@withContext "The server couldn't be reached: try again later."
+        sending.withLock {
+            val token = stores.secrets[Secret.DeviceToken] ?: return@withLock "The server couldn't be asked: this phone isn't paired."
+            // What's waiting first, as the task may be new, or changed, in it: the server reads it as the sheet shows it.
+            if (stores.outbox.value.commands.isNotEmpty() && !exchange()) return@withLock "The server couldn't be asked: what's changed here hasn't reached it yet (Setup says why)."
+            val headers = mapOf("Content-Type" to "application/json", "Authorization" to "Bearer $token", Protocol.HEADER to Protocol.VERSION.toString())
+            val answer = try {
+                // As a path's segment: a space is %20 there, not a form's +.
+                http.post("${sync.value.server}/api/tasks/${URLEncoder.encode(taskId, Charsets.UTF_8).replace("+", "%20")}/read-again", headers, "")
+            } catch (failed: IOException) {
+                Log.w(Log.TAG, "Asking the server to read a task again failed: ${failed::class.simpleName}")
+                return@withLock "The server couldn't be reached: try again later."
+            }
+            if (!answer.ok) return@withLock "The server couldn't be asked: ${said(answer.body)?.replaceFirstChar { it.lowercase() } ?: "it said no (${answer.code})"}."
+            JSON.decodeFromString(Asked.serializer(), answer.body).said.orEmpty()
         }
-        if (!answer.ok) return@withContext "The server couldn't be asked: ${said(answer.body)?.replaceFirstChar { it.lowercase() } ?: "it said no (${answer.code})"}."
-        JSON.decodeFromString(Asked.serializer(), answer.body).said.orEmpty()
     }
 
     /** The error a refusal's body names, or null where it names none. */

@@ -502,7 +502,7 @@ class AppGraph private constructor(context: Context) : Owners {
         // A photo of homework read by the server once the phone sends commands, as Claude's the server's then (D-142).
         readByServer = { jpeg -> if (sendsCommands()) replica.readPhotoOnServer(jpeg) else null },
         // A photo check likewise (D-148), its piece found there by its key.
-        checkByServer = { jpegs, piece, takenAt -> if (sendsCommands()) replica.checkPhotoOnServer(piece.taskId, piece.key, takenAt, jpegs) else null },
+        checkByServer = { jpegs, piece, takenAt -> if (sendsCommands()) replica.checkPhotoOnServer(piece.taskId, piece.key, piece.step, takenAt, jpegs) else null },
     )
 
     /** The calendar's this phone's, read here: nothing to keep of what it sent. */
