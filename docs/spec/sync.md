@@ -8,7 +8,7 @@ Settings → The website, or the same row on Setup. The website's Phone page sho
 
 ## What's sent
 
-`Stores.MIRRORED`, each store's whole text as its file holds it: tasks, settings, session, protection, model, anki, learning, log, instructions, chat, school, memory, felix. With them:
+`Stores.MIRRORED`, each store's whole text as its file holds it: tasks, settings, session, protection, model, anki, learning, log, instructions, chat, school, memory, felix, and from 5.15.0 Gmail's journal (`gmail-writes.json`), its writes still to come among it, so the server takes them over at the switch ([sources.md](sources.md) §Gmail). With them:
 
 - each month of the chat's archive, once one has changed, and a month that's gone sent empty, so a chat cleared here is cleared there;
 - `calendar-read.json`: the calendar as last read, and your answers about its events, which the server can't read for itself (`CalendarRead`, from `Sync.calendarRead`).

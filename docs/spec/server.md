@@ -95,6 +95,7 @@ What runs with nobody asking (`ServerJobs`), once the server applies commands (D
 | `slots` | each minute | today's slots as they pass; a loosening's wait over, counted by the server's clock (W-23); a day with nothing to do's free time (BL-07), as the phone's ticks give it, once a day |
 | `looks` | each minute | Felix's looks and your reminders |
 | `pushes` | each minute | a slot's start and a timer's zero, to the browsers that asked (W-9); a look missed is made up for five minutes at most. It only reads: that a timer's been told is the phone's to mark |
+| `gmail` | each minute | the journal's writes to Gmail that are due (D-106), by the sign-in held here (`ImapGmailWriter`), as the phone's worker made them while it mirrored (5.15.0); the journal sets the next itself, and a start sets going what it holds (`ServerOwners.gmailDueAt`) |
 | `sources` | every 15 minutes | Power Planner and Gmail read (D-133), what follows a read as on the phone, the readings |
 | `morning` | the briefing's time | the day on record, Felix's morning, what's run out let go |
 | `check-in`, `review` | Sunday's | the week's check-in asked, and its review |

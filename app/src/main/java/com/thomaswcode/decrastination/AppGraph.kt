@@ -83,6 +83,10 @@ import com.thomaswcode.decrastination.sync.protocol.Answers
 import com.thomaswcode.decrastination.sync.protocol.AskAboutEvent
 import com.thomaswcode.decrastination.sync.protocol.AttachPhoto
 import com.thomaswcode.decrastination.sync.protocol.Commands
+import com.thomaswcode.decrastination.sync.protocol.ConfirmGmail
+import com.thomaswcode.decrastination.sync.protocol.FinishGmail
+import com.thomaswcode.decrastination.sync.protocol.SortGmail
+import com.thomaswcode.decrastination.sync.protocol.UnfinishGmail
 import com.thomaswcode.decrastination.sync.protocol.NoteSource
 import com.thomaswcode.decrastination.sync.protocol.ObserveCalendar
 import com.thomaswcode.decrastination.sync.protocol.ObserveSources
@@ -291,14 +295,38 @@ class AppGraph private constructor(context: Context) : Owners {
         readAt = { tasks.value.status(Source.Gmail).lastSuccessStartedAt },
     )
 
+    override val gmail: GmailFinishes get() = gmailFinishes
+
+    /**
+     * Whether this phone makes the journal's writes to Gmail, and keeps the journal itself (settled after a read, set going again
+     * at a start, emptied of what's not started when finishing's switched off): while it mirrors. Once it sends commands, the server
+     * does, by its own sign-in (D-143), and the journal's pulled; journaled here still, inside the commands that finish an email.
+     */
+    fun gmailWrites(): Boolean = !sendsCommands()
+
+    /** [taskId], a starred email, finished at your word (a task's sheet): a command once the phone sends them ([FinishGmail]). */
+    suspend fun finishGmail(taskId: String): GmailFinishes.Finish = if (sendsCommands()) commands.act(FinishGmail(taskId)) else gmailFinishes.finish(taskId, explicit = true)
+
+    /** [taskId]'s finish taken back (its sheet's Undo): a command once the phone sends them ([UnfinishGmail]). */
+    suspend fun unfinishGmail(taskId: String): Boolean = if (sendsCommands()) commands.act(UnfinishGmail(taskId)) else gmailFinishes.unfinish(taskId)
+
+    /** [taskId]'s write given up, sorted (its sheet's It's sorted): a command once the phone sends them ([SortGmail]). */
+    suspend fun sortGmail(taskId: String) = if (sendsCommands()) commands.act(SortGmail(taskId)) else gmailFinishes.sorted(taskId)
+
+    /** The very first finish's OK given, or refused: a command once the phone sends them ([ConfirmGmail]). */
+    suspend fun confirmGmail(confirmed: Boolean) {
+        if (sendsCommands()) commands.act(ConfirmGmail(confirmed)) else if (confirmed) gmailFinishes.confirm() else gmailFinishes.refuse()
+    }
+
     /** The blocker's state and decisions (block/Focus.kt). */
     override val focus: Focus = Focus(
         tasks, settings, stores.session, stores.learning, stores.protection, log, clock,
         onOwnTaskDone = { ownTasks.finishOwnTask(it) },
         // An email's work all done by a keep or a tick is finished in Gmail; taken back, so is its finish, once its work isn't all done.
-        // The server's, once the phone sends commands: it holds the sign-in and the journal then. What's journaled here before still goes.
-        onWorked = { if (!sendsCommands()) runCatching { gmailFinishes.finish(it, explicit = false) }.onFailure { e -> Log.w(TAG, "Finishing an email in Gmail failed", e) } },
-        onUnworked = { if (!sendsCommands()) runCatching { gmailFinishes.unworked(it) }.onFailure { e -> Log.w(TAG, "Taking back an email's finish failed", e) } },
+        // Journaled here as on the server, inside the command that does the work, once the phone sends them: the journal's the same on
+        // both, and its writes to Gmail are the server's ([gmailWrites]).
+        onWorked = { runCatching { gmailFinishes.finish(it, explicit = false) }.onFailure { e -> Log.w(TAG, "Finishing an email in Gmail failed", e) } },
+        onUnworked = { runCatching { gmailFinishes.unworked(it) }.onFailure { e -> Log.w(TAG, "Taking back an email's finish failed", e) } },
         // A school day by the school calendar (BL-02): a day off blocks from the weekend's time.
         schoolDay = { SchoolDays.kindOf(it, school.value) == DayKind.Weekday },
         forceActiveUntil = { stores.device.value.forceActiveUntil },
@@ -380,8 +408,8 @@ class AppGraph private constructor(context: Context) : Owners {
                 calendarWriter.answer(key, answer)
             }
             override suspend fun recordCheckIn(checkIn: CheckIn, now: Long): Boolean = learning.recordCheckIn(checkIn, now)
-            override suspend fun finishGmail(taskId: String): GmailFinishes.Finish = if (sendsCommands()) GmailFinishes.Finish.Off else gmailFinishes.finish(taskId, explicit = true)
-            override suspend fun unfinishGmail(taskId: String, writeId: String?): Boolean = !sendsCommands() && gmailFinishes.unfinish(taskId, writeId)
+            override suspend fun finishGmail(taskId: String): GmailFinishes.Finish = gmailFinishes.finish(taskId, explicit = true)
+            override suspend fun unfinishGmail(taskId: String, writeId: String?): Boolean = gmailFinishes.unfinish(taskId, writeId)
             override fun gmailWriteOf(taskId: String): String? = gmailFinishes.latestFinish(taskId)
         },
         calendarTime = { sync.calendarTime },
@@ -523,7 +551,7 @@ class AppGraph private constructor(context: Context) : Owners {
         syncer.addAfterEverySync { ownTasks.pruneOwn() }
         syncer.addAfterEverySync { ownTasks.rollWeeks() }
         // Gmail's journal settled after each read: receipts let go once old, or once the read finds their email starred again.
-        syncer.addAfterEverySync { gmailFinishes.settle() }
+        syncer.addAfterEverySync { if (gmailWrites()) gmailFinishes.settle() }
         // A question of yours still waiting (Claude was off, resting, or the app stopped): tried again.
         syncer.addAfterEverySync { if (chat.value.unanswered != null) conversation.answerChat() }
         // One of your own whose steps are all done is finished ([OwnTasks.start]).
@@ -592,9 +620,9 @@ class AppGraph private constructor(context: Context) : Owners {
         scope.launch(Dispatchers.IO) { runCatching { stores.letGoOfOldShapes() }.onFailure { Log.w(TAG, "Letting go of old shapes failed", it) } }
         // Gmail's journal settled (receipts let go once old, or once their email's starred again), and a write due
         // set going again: a stop may have come between a finish's journal and its worker.
-        scope.launch { runCatching { gmailFinishes.settle(); gmailFinishes.rearm() }.onFailure { Log.w(TAG, "Setting Gmail's writes going again failed", it) } }
+        scope.launch { if (gmailWrites()) runCatching { gmailFinishes.settle(); gmailFinishes.rearm() }.onFailure { Log.w(TAG, "Setting Gmail's writes going again failed", it) } }
         // Finishing emails switched off, now or at any change: a finish not yet started dropped, the first's OK with it.
-        scope.launch { settings.state.map { it.gmailFinishes }.distinctUntilChanged().collect { on -> if (!on) runCatching { gmailFinishes.switchedOff() }.onFailure { e -> Log.w(TAG, "Dropping Gmail's writes failed", e) } } }
+        scope.launch { settings.state.map { it.gmailFinishes }.distinctUntilChanged().collect { on -> if (!on && gmailWrites()) runCatching { gmailFinishes.switchedOff() }.onFailure { e -> Log.w(TAG, "Dropping Gmail's writes failed", e) } } }
         // The notifications Felix's messages have taken the place of, one still showing or held from
         // before let go; then his own, made from the chat as it is.
         scope.launch {

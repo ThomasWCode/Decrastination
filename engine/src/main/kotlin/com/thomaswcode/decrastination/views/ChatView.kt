@@ -230,6 +230,8 @@ object ChatViews {
         now: Long,
         zone: ZoneId,
         writable: Boolean,
+        /** The finishes of emails standing in Gmail's journal, by id: an act's own one, its Undo the journal's (`GmailWrites.standing`). */
+        finishing: Set<String> = emptySet(),
     ): ChatView {
         val name = settings.felixName
         val byId = tasks.tasks.associateBy { it.id }
@@ -251,7 +253,7 @@ object ChatViews {
         fun lines(message: ChatMessage, live: Boolean): List<ChatDid> =
             message.memoryEdits.mapIndexed { index, edit -> ChatDid(edit.line, edit.undone, UndoMemory(message.id, index).takeIf { live && !edit.undone && Memories.undo(memory, edit) != null }) } +
                 message.acts.mapIndexed { index, act ->
-                    val can = live && !act.undone && ChatActs.canUndo(act, tasks.tasks, settings, chat.messages, felix.notes, felix.reminders, kept, messageId = message.id, now = now, dayStart = dayStart, readAt = { source -> tasks.status(source).lastSuccessAt })
+                    val can = live && !act.undone && ChatActs.canUndo(act, tasks.tasks, settings, chat.messages, felix.notes, felix.reminders, kept, messageId = message.id, now = now, dayStart = dayStart, finishing = finishing, readAt = { source -> tasks.status(source).lastSuccessAt })
                     ChatDid(act.line, act.undone, UndoAct(message.id, index).takeIf { can })
                 }
 

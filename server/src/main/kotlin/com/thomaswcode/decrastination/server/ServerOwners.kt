@@ -6,10 +6,12 @@ import com.thomaswcode.decrastination.block.Photos
 import com.thomaswcode.decrastination.block.Slots
 import com.thomaswcode.decrastination.core.DayKind
 import com.thomaswcode.decrastination.core.Enrichments
+import com.thomaswcode.decrastination.core.GmailWrite
 import com.thomaswcode.decrastination.core.InstructionStatus
 import com.thomaswcode.decrastination.core.OwnTask
 import com.thomaswcode.decrastination.core.SchoolDays
 import com.thomaswcode.decrastination.core.Settings
+import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.WallClock
 import com.thomaswcode.decrastination.data.BackupService
@@ -50,6 +52,8 @@ import java.io.File
 import java.io.IOException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 /** What a server has no notifications for: nothing's posted, and none's held back. */
@@ -173,6 +177,9 @@ class ServerOwners(
     override val focus: Focus = Focus(
         stores.tasks, stores.settings, stores.session, stores.learning, stores.protection, stores.log, clock,
         onOwnTaskDone = { ownTasks.finishOwnTask(it) },
+        // An email's work all done by a keep or a tick is finished in Gmail; taken back, so is its finish, once its work isn't all done.
+        onWorked = { runCatching { gmailFinishes.finish(it, explicit = false) }.onFailure { e -> Log.w(Log.TAG, "Finishing an email in Gmail failed: ${e::class.simpleName}") } },
+        onUnworked = { runCatching { gmailFinishes.unworked(it) }.onFailure { e -> Log.w(Log.TAG, "Taking back an email's finish failed: ${e::class.simpleName}") } },
         schoolDay = { SchoolDays.kindOf(it, stores.school.value) == DayKind.Weekday },
     ) { state, settings, now -> planning.plan(state, settings, now) }
 
@@ -200,9 +207,9 @@ class ServerOwners(
             override suspend fun changeSettings(change: (Settings) -> Settings) { protection.changeSettings(change) }
             override suspend fun answerEvent(key: String, answer: String) = Unit
             override suspend fun recordCheckIn(checkIn: CheckIn, now: Long): Boolean = learning.recordCheckIn(checkIn, now)
-            override suspend fun finishGmail(taskId: String): GmailFinishes.Finish = GmailFinishes.Finish.Off
-            override suspend fun unfinishGmail(taskId: String, writeId: String?): Boolean = false
-            override fun gmailWriteOf(taskId: String): String? = null
+            override suspend fun finishGmail(taskId: String): GmailFinishes.Finish = gmailFinishes.finish(taskId, explicit = true)
+            override suspend fun unfinishGmail(taskId: String, writeId: String?): Boolean = gmailFinishes.unfinish(taskId, writeId)
+            override fun gmailWriteOf(taskId: String): String? = gmailFinishes.latestFinish(taskId)
         },
         calendarTime = calendarTime,
         answered = { record, words -> looks.answered(record, words) },
@@ -290,6 +297,46 @@ class ServerOwners(
 
     override val sources: Syncer get() = syncer
 
+    /**
+     * When the writes to Gmail are next due ([GmailFinishes.Ports.schedule]), for the job that makes them (`ServerGraph`'s `gmail`):
+     * none, none's set. In memory, set again from the journal at the start ([start]).
+     */
+    @Volatile
+    var gmailDueAt: Long? = null
+
+    /**
+     * Emails finished in Gmail (D-7 as amended, D-106), its writes made here by the server's own sign-in (D-143) once the phone
+     * sends commands, as the phone made them while it mirrored. The journal's mirrored, so the phone's screens have it as it is.
+     */
+    val gmailFinishes: GmailFinishes = GmailFinishes(
+        stores.gmailWrites,
+        settings = { stores.settings.value },
+        task = { id -> planning.asPlanned().firstOrNull { it.id == id } },
+        multiplier = { stores.learning.value.calibration.multiplierFor(it) },
+        clock = clock,
+        ports = object : GmailFinishes.Ports {
+            override fun schedule(at: Long) {
+                gmailDueAt = at
+            }
+
+            override fun ensureScheduled(at: Long) {
+                if (gmailDueAt == null) gmailDueAt = at
+            }
+
+            override fun syncGmail() = later("Reading Gmail") { syncer.sync(setOf(Source.Gmail)) }
+
+            // Said on the website's Setup and the task's sheet, from the journal: its words aren't logged, as they name the email.
+            override fun gaveUp(write: GmailWrite, words: String) {
+                Log.w(Log.TAG, "A write to Gmail was given up")
+            }
+
+            override fun sorted(write: GmailWrite) = Unit
+        },
+        readAt = { stores.tasks.value.status(Source.Gmail).lastSuccessStartedAt },
+    )
+
+    override val gmail: GmailFinishes get() = gmailFinishes
+
     /** The sources that need no phone (D-133): read here, merged as the phone merges them. */
     val syncer: Syncer = Syncer(
         stores.tasks, stores.settings, listOf(PowerPlannerSource(PowerPlannerApi(UrlConnectionHttp()), stores.secrets), GmailSource(stores.secrets)), clock,
@@ -308,8 +355,20 @@ class ServerOwners(
         }
     }
 
-    /** What watches the stores, as `AppGraph` starts it, less what's the phone's: an own task with its steps done is finished. */
-    fun start() = ownTasks.start()
+    /**
+     * What watches the stores, as `AppGraph` starts it, less what's the phone's: an own task with its steps done is finished; Gmail's
+     * writes due set going again, from the journal; and finishing emails switched off, now or at any change, dropping a finish not
+     * yet started.
+     */
+    fun start() {
+        ownTasks.start()
+        gmailFinishes.rearm()
+        scope.launch {
+            stores.settings.state.map { it.gmailFinishes }.distinctUntilChanged().collect { on ->
+                if (!on) runCatching { gmailFinishes.switchedOff() }.onFailure { e -> Log.w(Log.TAG, "Dropping Gmail's writes failed: ${e::class.simpleName}") }
+            }
+        }
+    }
 
     init {
         // What follows a read, as `AppGraph` has it, less what's the phone's: its calendar, its notifications.
@@ -319,6 +378,8 @@ class ServerOwners(
         syncer.addAfterEverySync { instructions.layTaskOverrides() }
         syncer.addAfterEverySync { ownTasks.pruneOwn() }
         syncer.addAfterEverySync { ownTasks.rollWeeks() }
+        // Gmail's journal settled after each read: receipts let go once old, or once the read finds their email starred again.
+        syncer.addAfterEverySync { gmailFinishes.settle() }
         // What reaches Claude on its own time: a read the phone sent, as a command, is merged inside it.
         syncer.addAfterEverySync { later("Answering what waits") { answerWhatWaits() } }
         syncer.addAfterEverySync {

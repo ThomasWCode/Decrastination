@@ -31,9 +31,9 @@ internal fun GmailFinishLine(graph: AppGraph, task: TaskItem) {
     val (line, button) = when (GmailWrites.state(journal.writes, task.id)) {
         GmailWrites.State.None -> return
         GmailWrites.State.Awaiting -> "Done here: Gmail waits for your OK" to null
-        GmailWrites.State.Going -> "Done: unstarring it in Gmail" to ("Undo" to suspend { graph.gmailFinishes.unfinish(task.id) })
-        GmailWrites.State.Made -> "Unstarred and archived in Gmail" to ("Undo" to suspend { graph.gmailFinishes.unfinish(task.id) })
-        GmailWrites.State.GaveUp -> GmailWrites.failure(last) to ("It's sorted" to suspend { graph.gmailFinishes.sorted(task.id) })
+        GmailWrites.State.Going -> "Done: unstarring it in Gmail" to ("Undo" to suspend { graph.unfinishGmail(task.id) })
+        GmailWrites.State.Made -> "Unstarred and archived in Gmail" to ("Undo" to suspend { graph.unfinishGmail(task.id) })
+        GmailWrites.State.GaveUp -> GmailWrites.failure(last) to ("It's sorted" to suspend { graph.sortGmail(task.id) })
         GmailWrites.State.TakenBack -> (if (GmailWrites.pending(last)) "Taken back: starring it again in Gmail" else "Taken back: starred again in Gmail") to null
     }
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -70,7 +70,7 @@ internal fun GmailOkSheet(graph: AppGraph) {
             TextButton(onClick = {
                 scope.launch {
                     graph.commands.changeSettings { it.copy(hintsSeen = (it.hintsSeen + GmailWrites.OK_HINT).distinct().takeLast(SettingsLimits.MAX_HINTS)) }
-                    graph.gmailFinishes.confirm()
+                    graph.confirmGmail(confirmed = true)
                 }
             }) { Text("Carry on") }
         },
@@ -78,11 +78,11 @@ internal fun GmailOkSheet(graph: AppGraph) {
             Row {
                 TextButton(onClick = {
                     scope.launch {
-                        graph.gmailFinishes.refuse()
+                        graph.confirmGmail(confirmed = false)
                         graph.commands.changeSettings { it.copy(gmailFinishes = false) }
                     }
                 }) { Text("Turn this off") }
-                TextButton(onClick = { scope.launch { graph.gmailFinishes.refuse() } }) { Text("Not this time") }
+                TextButton(onClick = { scope.launch { graph.confirmGmail(confirmed = false) } }) { Text("Not this time") }
             }
         },
     )

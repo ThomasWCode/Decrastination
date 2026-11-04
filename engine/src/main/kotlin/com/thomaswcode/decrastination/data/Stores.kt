@@ -230,9 +230,11 @@ class Stores(
 
         /**
          * What the server holds a copy of (docs/plan_web/inventory.md §Stores), the chat's archive's months among them: not
-         * `runtime.json`, `device.json` and `calendar.json`, which are this phone's, nor the sync's own, nor the Gmail journal yet.
+         * `runtime.json`, `device.json` and `calendar.json`, which are this phone's, nor the sync's own. The Gmail journal from
+         * 5.15.0, as its writes are the server's once the phone sends commands: sent while mirroring, its writes still to come
+         * among it, so the server takes them over at the switch.
          */
-        val MIRRORED: Set<String> = setOf("tasks.json", "settings.json", "session.json", "protection.json", "model.json", "anki.json", "learning.json", "log.json", "instructions.json", "chat.json", "school.json", "memory.json", "felix.json")
+        val MIRRORED: Set<String> = setOf("tasks.json", "settings.json", "session.json", "protection.json", "model.json", "anki.json", "learning.json", "log.json", "instructions.json", "chat.json", "school.json", "memory.json", "felix.json", "gmail-writes.json")
 
         /** How long the file an older shape came from is kept after its migration. */
         const val OLD_SHAPE_KEPT_MS = 7 * 24 * 3_600_000L
