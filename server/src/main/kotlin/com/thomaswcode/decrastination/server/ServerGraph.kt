@@ -695,10 +695,11 @@ class ServerGraph(
      * server plans it, so one done or planned again since is said so, as the phone says it. Never in a command, as a call can take a
      * minute. Null while another's being checked.
      */
-    suspend fun checkPhoto(taskId: String, key: String, takenAt: Long, jpegs: List<ByteArray>): PhotoChecked? {
+    suspend fun checkPhoto(taskId: String, key: String, step: String?, takenAt: Long, jpegs: List<ByteArray>): PhotoChecked? {
         if (!checkingPhoto.compareAndSet(false, true)) return null
         try {
-            val piece = planning.plan().chunksOf(taskId).firstOrNull { it.key == key } ?: return PhotoChecked(Photos.PIECE_CHANGED)
+            // By its step too, as the phone finds it: a key's only the step's place, which another may have taken here since.
+            val piece = planning.plan().chunksOf(taskId).firstOrNull { it.key == key && it.step == step } ?: return PhotoChecked(Photos.PIECE_CHANGED)
             return PhotoChecked(owners.photos.checkJpegs(jpegs, piece, takenAt))
         } finally {
             checkingPhoto.set(false)

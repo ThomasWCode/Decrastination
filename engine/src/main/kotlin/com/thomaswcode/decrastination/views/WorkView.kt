@@ -53,9 +53,12 @@ data class WorkView(
 @Serializable
 data class PhotoRead(val tasks: List<OwnTaskEdit>, val leftOut: List<String> = emptyList(), val question: String? = null, val why: String? = null)
 
-/** A piece's pages to check (AI-16), from a phone sending commands (D-148): its task and key, when its first page was taken, each page a JPEG in base64. */
+/**
+ * A piece's pages to check (AI-16), from a phone sending commands (D-148): its task, key and step (as a key's only a step's place),
+ * when its first page was taken, each page a JPEG in base64.
+ */
 @Serializable
-data class PhotoCheckAsk(val taskId: String, val key: String, val takenAt: Long, val pages: List<String>)
+data class PhotoCheckAsk(val taskId: String, val key: String, val takenAt: Long, val pages: List<String>, val step: String? = null)
 
 /** What a photo check came to, in its words. */
 @Serializable

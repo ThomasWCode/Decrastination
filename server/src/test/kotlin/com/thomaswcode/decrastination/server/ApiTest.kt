@@ -520,7 +520,7 @@ class ApiTest {
             header("X-Requested-With", "test")
         }
         val page = Base64.getEncoder().encodeToString(byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 0))
-        fun ask(key: String, pages: List<String> = listOf(page)) = PhotoCheckAsk("own:s-Essay", key, 1L, pages)
+        fun ask(key: String, pages: List<String> = listOf(page), step: String? = null) = PhotoCheckAsk("own:s-Essay", key, 1L, pages, step)
         assertEquals(HttpStatusCode.Conflict, check(ask("k"), byPhone).status, "not while mirroring")
         graph.commandsForATest()
         assertEquals(HttpStatusCode.Forbidden, check(ask("k"), website).status)
@@ -531,8 +531,10 @@ class ApiTest {
         graph.stores.tasks.update { it.copy(tasks = listOf(TaskItem(id = "own:s-Essay", source = Source.Own, sourceId = "s-Essay", title = "A made-up essay", dueAt = null, kind = Kind.Homework, firstSeenAt = 1, lastSeenAt = 1))) }
         assertEquals(Photos.PIECE_CHANGED, json.decodeFromString(PhotoChecked.serializer(), check(ask("own:s-Essay#99"), byPhone).bodyAsText()).said)
         // One it does, checked here: with no key on this box, it says so.
-        val key = graph.planning.plan().chunksOf("own:s-Essay").first().key
-        assertEquals("Claude is off: the timer or the source will have to do.", json.decodeFromString(PhotoChecked.serializer(), check(ask(key), byPhone).bodyAsText()).said)
+        val piece = graph.planning.plan().chunksOf("own:s-Essay").first()
+        assertEquals("Claude is off: the timer or the source will have to do.", json.decodeFromString(PhotoChecked.serializer(), check(ask(piece.key, step = piece.step), byPhone).bodyAsText()).said)
+        // Its key, but not its step: another's in its place here since, so it isn't the one photographed.
+        assertEquals(Photos.PIECE_CHANGED, json.decodeFromString(PhotoChecked.serializer(), check(ask(piece.key, step = "A step since"), byPhone).bodyAsText()).said)
     }
 
     @Test

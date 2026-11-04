@@ -448,7 +448,7 @@ private fun Route.signedInRoutes(web: Web) {
         if (jpegs.isEmpty() || jpegs.size > PhotoChecker.MAX_PAGES || jpegs.any { it == null || !isJpeg(it) }) {
             return@post call.respond(HttpStatusCode.UnsupportedMediaType, Problem("Those aren't a check's pages"))
         }
-        graph.checkPhoto(ask.taskId, ask.key, ask.takenAt, jpegs.filterNotNull())?.let { call.respond(it) } ?: call.respond(HttpStatusCode.Conflict, Problem("A photo is being checked already"))
+        graph.checkPhoto(ask.taskId, ask.key, ask.step, ask.takenAt, jpegs.filterNotNull())?.let { call.respond(it) } ?: call.respond(HttpStatusCode.Conflict, Problem("A photo is being checked already"))
     }
     get("/views/settings") { call.respond(graph.settings()) }
     post("/parent-code") {

@@ -68,6 +68,10 @@ import com.thomaswcode.decrastination.protect.CodeLock
 import com.thomaswcode.decrastination.protect.Totp
 import com.thomaswcode.decrastination.tasks.TasksHarness
 import com.thomaswcode.decrastination.views.Asked
+import com.thomaswcode.decrastination.views.PhotoCheckAsk
+import com.thomaswcode.decrastination.views.PhotoChecked
+import java.net.URLDecoder
+import java.util.Base64
 import java.io.File
 import java.io.IOException
 import java.nio.file.Files
@@ -205,6 +209,17 @@ class SyncHarnessTest {
                 parentCodes += secret
                 runBlocking { graph.setParentCode(secret) }
                 return HttpResponse(204, "")
+            }
+            if (url.endsWith("/read-again")) {
+                routes += "read-again"
+                val id = URLDecoder.decode(url.substringAfter("/api/tasks/").substringBefore("/read-again"), Charsets.UTF_8)
+                return HttpResponse(200, json.encodeToString(Asked.serializer(), graph.readAgain(id)))
+            }
+            if (url.endsWith("/api/photos/check")) {
+                routes += "photos/check"
+                val ask = json.decodeFromString(PhotoCheckAsk.serializer(), body)
+                val checked = runBlocking { graph.checkPhoto(ask.taskId, ask.key, ask.step, ask.takenAt, ask.pages.map { Base64.getDecoder().decode(it) }) }
+                return HttpResponse(200, json.encodeToString(PhotoChecked.serializer(), checked!!))
             }
             if (url.endsWith("/api/chat/try-again")) {
                 if (graph.mode != ServerGraph.COMMANDS) return HttpResponse(409, "{}")
@@ -615,6 +630,23 @@ class SyncHarnessTest {
         assertEquals(listOf(listOf("a problem")), graph.stores.log.value.protection.map { it.problems })
         assertEquals("The Teams widget's sync service is off", graph.stores.tasks.value.status(Source.Teams).note)
         assertEquals("abcd", graph.stores.tasks.value.tasks.single { it.title == "Essay" }.photo?.hash)
+    }
+
+    @Test
+    fun `Read again and a photo check go after what's waiting, so the server has the task as this phone shows it`() = runBlocking {
+        val phone = phone()
+        // Made here and not yet sent: without what's waiting going first, the server hasn't the task.
+        phone.h.commands.act(own("Essay"))
+        phone.wire.routes.clear()
+        assertEquals("Claude can't be asked now: try again later", phone.replica.readAgainOnServer("own:s-Essay"))
+        assertEquals(listOf("commands", "read-again"), phone.wire.routes)
+        // A photo check of a task just made, likewise: its piece found there, and with no key there, said so.
+        phone.h.commands.act(own("Maths"))
+        val piece = phone.h.planning.plan().chunksOf("own:s-Maths").first()
+        phone.wire.routes.clear()
+        val jpeg = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 1)
+        assertEquals("Claude is off: the timer or the source will have to do.", phone.replica.checkPhotoOnServer(piece.taskId, piece.key, piece.step, 1L, listOf(jpeg)))
+        assertEquals(listOf("commands", "photos/check"), phone.wire.routes)
     }
 
     @Test
