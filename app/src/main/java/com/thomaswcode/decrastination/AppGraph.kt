@@ -443,7 +443,10 @@ class AppGraph private constructor(context: Context) : Owners {
      * The phone and the server ([Replica]): this phone paired, and what's changed sent. What Felix said on the server, pulled, is
      * heard as his notification, as what he says here is ([Outbox.heard]).
      */
-    val replica: Replica = Replica(stores, UrlConnectionHttp(), clock, BuildConfig.VERSION_NAME, calendar = { sync.calendarRead() }, commands) { fresh -> outbox.heard(clock.now(), fresh) }
+    val replica: Replica = Replica(
+        stores, UrlConnectionHttp(), clock, BuildConfig.VERSION_NAME, calendar = { sync.calendarRead() }, commands,
+        photoHttp = UrlConnectionHttp(readTimeoutMs = Replica.PHOTO_WAIT_MS),
+    ) { fresh -> outbox.heard(clock.now(), fresh) }
 
     /** The tasks' readings ([Readings]): by Claude while it can be asked, by the rules otherwise; one read again on asking. */
     val readings: Readings = Readings(

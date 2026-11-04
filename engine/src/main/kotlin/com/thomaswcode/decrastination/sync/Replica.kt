@@ -9,6 +9,7 @@ import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.Secret
 import com.thomaswcode.decrastination.data.Stores
 import com.thomaswcode.decrastination.data.SyncState
+import com.thomaswcode.decrastination.enrich.ModelEffort
 import com.thomaswcode.decrastination.enrich.PhotoTasks
 import com.thomaswcode.decrastination.net.Http
 import com.thomaswcode.decrastination.ports.Log
@@ -47,6 +48,8 @@ class Replica(
     private val calendar: () -> CalendarRead,
     /** Where a pull goes through: no command applied half-way, and none waiting, as what a command made is already in the stores. */
     private val commands: Commands? = null,
+    /** Where a photo's reading goes: its answer waits on Claude's call on the server, so this waits [PHOTO_WAIT_MS] for it. */
+    private val photoHttp: Http = http,
     /** The chat's messages a pull brought, none of them here before: Felix's, said on the server, heard here as his notification. */
     private val heard: (List<ChatMessage>) -> Unit = {},
 ) {
@@ -389,7 +392,7 @@ class Replica(
         val token = stores.secrets[Secret.DeviceToken] ?: return@withContext null to "The photo couldn't be read (this phone isn't paired)."
         val headers = mapOf("Content-Type" to "image/jpeg", "Authorization" to "Bearer $token", Protocol.HEADER to Protocol.VERSION.toString())
         val answer = try {
-            http.postBytes("${sync.value.server}/api/photos/tasks", headers, jpeg)
+            photoHttp.postBytes("${sync.value.server}/api/photos/tasks", headers, jpeg)
         } catch (failed: IOException) {
             Log.w(Log.TAG, "Reading a photo on the server failed: ${failed::class.simpleName}")
             return@withContext null to "The photo couldn't be read (the server can't be reached)."
@@ -495,5 +498,8 @@ class Replica(
         private const val ROUNDS = 3
 
         private val EMPTY_MONTH = JSON.encodeToString(ChatArchive.serializer(), ChatArchive())
+
+        /** How long a photo's reading is waited for: as long as Claude's call on the server may take, and a minute over. */
+        val PHOTO_WAIT_MS: Int = ModelEffort.timeout(ModelEffort.Job.PhotoToTask).plusMinutes(1).toMillis().toInt()
     }
 }
