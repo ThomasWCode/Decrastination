@@ -149,9 +149,16 @@ class PhotosTest {
         val held = File(folder, "a1b2c3d4e5f60718.jpg").apply { writeBytes(byteArrayOf(1)) }
         val stray = File(folder, "f0e1d2c3b4a59687.jpg").apply { writeBytes(byteArrayOf(2)) }
         tasks.update { it.copy(tasks = listOf(essay.copy(photo = TaskPhoto("/the/phone's/path/teams_essay.jpg", "a1b2c3d4e5f60718", 1L)))) }
-        byHash.sweepPhotos()
+        // One come since the time given is kept, held or not, as its command's to come; one before it, held by none, goes.
+        val fresh = File(folder, "0a1b2c3d4e5f6a7b.jpg").apply { writeBytes(byteArrayOf(3)) }
+        stray.setLastModified(fresh.lastModified() - 2 * 86_400_000L)
+        byHash.sweepPhotos(keptBefore = fresh.lastModified() - 86_400_000L)
         assertTrue(held.exists(), "held by its hash, whatever the phone's path")
+        assertTrue(fresh.exists(), "come within the day, its command still to come")
         assertFalse(stray.exists())
+        // As the phone sweeps: none kept for coming since.
+        byHash.sweepPhotos()
+        assertFalse(fresh.exists())
     }
 
     @Test

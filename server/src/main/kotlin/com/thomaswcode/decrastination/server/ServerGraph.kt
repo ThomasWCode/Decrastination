@@ -289,8 +289,9 @@ class ServerGraph(
                 } catch (failed: SQLException) {
                     Log.w(Log.TAG, "The history couldn't be tidied: ${failed::class.simpleName}")
                 }
-                // The tasks' photos no task holds let go, as the phone's are (D-148).
-                runCatching { owners.photos.sweepPhotos() }.onFailure { Log.w(Log.TAG, "The photos couldn't be swept: ${it::class.simpleName}") }
+                // The tasks' photos no task holds let go, as the phone's are (D-148), but a day's: a phone's photo comes ahead of the
+                // command that keeps it, which a stop between the two can hold back till its next try.
+                runCatching { owners.photos.sweepPhotos(keptBefore = clock.now() - PHOTO_GRACE_MS) }.onFailure { Log.w(Log.TAG, "The photos couldn't be swept: ${it::class.simpleName}") }
                 delay(TIDY_EVERY_MS)
             }
         }
@@ -938,6 +939,9 @@ class ServerGraph(
 
         private val switchJson = Json { encodeDefaults = true; ignoreUnknownKeys = true }
         private const val TIDY_EVERY_MS = 24 * 3_600_000L
+
+        /** How long a task's photo no task holds yet is kept: its command's to come. */
+        private const val PHOTO_GRACE_MS = 24 * 3_600_000L
     }
 
     private object NoAlerts : ModelGateway.Alerts {
