@@ -247,6 +247,7 @@ class ServerGraph(
         afterCommands = { db.betweenCommands {} },
         // The phone's calendar as read: its events, and your answers about them, which only the phone can take.
         seenCalendar = { read -> calendarRead.update { read } },
+        committed = { block -> db.betweenCommands(block) },
     )
 
     /** Whether a nightly file has somewhere to go. */

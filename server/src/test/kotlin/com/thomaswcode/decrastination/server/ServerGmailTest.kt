@@ -10,6 +10,7 @@ import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.core.SubStep
 import com.thomaswcode.decrastination.core.TaskItem
+import com.thomaswcode.decrastination.data.GmailWriteStore
 import com.thomaswcode.decrastination.data.SecretCipher
 import com.thomaswcode.decrastination.data.SourceStatus
 import com.thomaswcode.decrastination.sources.gmail.GmailWriter
@@ -24,13 +25,19 @@ import com.thomaswcode.decrastination.sync.protocol.UndoAct
 import com.thomaswcode.decrastination.sync.protocol.UnfinishGmail
 import java.io.File
 import java.nio.file.Files
+import java.util.Collections
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.Json
 
 /**
  * Emails finished in Gmail by the server once the phone sends commands (5.15.0): a finish a phone's command journals, or one the
@@ -47,12 +54,16 @@ class ServerGmailTest {
     /** Gmail, faked: one conversation of one message, starred and in the inbox; what was stored. */
     private class FakeGmail : GmailWriter {
         var message = GmailWriter.Message(11, "101", starred = true, inbox = true)
-        val stored = mutableListOf<Change>()
+        val stored: MutableList<Change> = Collections.synchronizedList(mutableListOf())
+
+        /** What's done as each change is asked, before it's made. */
+        var beforeChange: () -> Unit = {}
 
         override suspend fun <T> open(block: suspend (GmailWriter.Session) -> T): T = block(object : GmailWriter.Session {
             override fun thread(threadId: String): List<Long> = listOf(message.uid)
             override fun messages(uids: List<Long>): List<GmailWriter.Message> = listOf(message)
             override fun store(uids: List<Long>, change: Change): List<Long> {
+                beforeChange()
                 stored += change
                 message = when (change) {
                     Change.Unstar -> message.copy(starred = false)
@@ -87,6 +98,14 @@ class ServerGmailTest {
         graph.stores.settings.update { it.copy(gmailFinishes = true, hintsSeen = it.hintsSeen + GmailWrites.OK_HINT) }
     }
 
+    /** The journal as the database holds it committed: what a restart would read. */
+    private fun committedJournal(): GmailWriteStore = db.read { c ->
+        c.prepareStatement("SELECT json FROM stores WHERE name = ?").use { q ->
+            q.setString(1, "gmail-writes.json")
+            q.executeQuery().use { if (it.next()) Json { ignoreUnknownKeys = true }.decodeFromString(GmailWriteStore.serializer(), it.getString(1)) else GmailWriteStore() }
+        }
+    }
+
     /** [action] from the phone, made [ago] ms back, applied here. */
     private suspend fun fromThePhone(id: String, action: Action, ago: Long) =
         assertEquals(Outcome.APPLIED, graph.applier.apply(CommandBatch(listOf(Command(id, System.currentTimeMillis() - ago, action))), "phone").single().state)
@@ -105,6 +124,29 @@ class ServerGmailTest {
         graph.gmailDue()
         assertEquals(listOf(Change.Unstar, Change.Archive, Change.Star, Change.Inbox), gmail.stored)
         assertTrue(gmail.message.starred && gmail.message.inbox)
+    }
+
+    @Test
+    fun `what an email holds is committed before Gmail's changed, the job waiting for a command open as it begins`() = runBlocking {
+        ready()
+        fromThePhone("c-1", FinishGmail(email.id), ago = GmailWrites.GRACE_MS + 1_000)
+        // At Gmail's first change, what an Undo puts back stands in the database.
+        var first: GmailWriteStore? = null
+        gmail.beforeChange = { if (first == null) first = committedJournal() }
+        // A command open as the job begins (a click on the website, say), which a write made meanwhile would wait for.
+        val opened = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val open = launch(Dispatchers.Default) { db.command { opened.complete(Unit); release.await() } }
+        opened.await()
+        val job = launch(Dispatchers.Default) { graph.gmailDue() }
+        delay(300)
+        assertEquals(emptyList(), gmail.stored, "nothing's changed in Gmail while the command's open")
+        release.complete(Unit)
+        open.join()
+        job.join()
+        assertEquals(listOf(Change.Unstar, Change.Archive), gmail.stored)
+        val kept = assertNotNull(first).writes.single()
+        assertEquals(listOf("101") to listOf("101"), kept.flagged to kept.inbox)
     }
 
     @Test

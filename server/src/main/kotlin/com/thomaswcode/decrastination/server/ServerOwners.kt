@@ -138,6 +138,8 @@ class ServerOwners(
     private val afterCommands: suspend () -> Unit = {},
     /** The calendar as the phone last read it, kept, as the plan's made from it here (`ObserveCalendar`). */
     private val seenCalendar: suspend (CalendarRead) -> Unit = {},
+    /** [block] with no command open, so what it writes is committed as it returns, a write made while one's open waiting for it. */
+    private val committed: suspend (suspend () -> Boolean) -> Boolean = { it() },
 ) : Owners {
     override val tasks: JsonStore<TaskState> = stores.tasks
 
@@ -333,6 +335,8 @@ class ServerOwners(
             override fun sorted(write: GmailWrite) = Unit
         },
         readAt = { stores.tasks.value.status(Source.Gmail).lastSuccessStartedAt },
+        // What an email holds kept in the database before Gmail's changed: a restart then still knows what an Undo puts back.
+        beforeChanging = committed,
     )
 
     override val gmail: GmailFinishes get() = gmailFinishes
