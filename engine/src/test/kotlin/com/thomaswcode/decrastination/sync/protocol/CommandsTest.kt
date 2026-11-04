@@ -45,17 +45,21 @@ import com.thomaswcode.decrastination.tasks.Instructions
 import com.thomaswcode.decrastination.tasks.OwnTasks
 import com.thomaswcode.decrastination.tasks.TasksHarness
 import java.nio.file.Files
+import java.util.Collections
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.asContextElement
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.descriptors.elementNames
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -188,6 +192,66 @@ class CommandsTest {
             val commands = Commands(owners, clock)
             (1..30).map { i -> async(Dispatchers.Default) { commands.changeSettings { it.copy(hintsSeen = it.hintsSeen + "hint $i") } } }.awaitAll()
             assertEquals(30, stores.settings.value.hintsSeen.size)
+        } finally {
+            dir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `a command begun as the switch lets those under way finish waits for it and is queued, one made inside those going on`() = runBlocking {
+        val dir = Files.createTempDirectory("switching").toFile()
+        try {
+            val stores = Stores(dir, Plain)
+            val held = CompletableDeferred<Unit>()
+            val seen: MutableList<String> = Collections.synchronizedList(mutableListOf())
+            var queued = false
+            lateinit var commands: Commands
+            val owners = object : Owners {
+                override val tasks = stores.tasks
+                override val ownTasks: OwnTasks get() = error("not here")
+                override val instructions: Instructions get() = error("not here")
+                override val focus: Focus get() = error("not here")
+                override val conversation: Conversation get() = error("not here")
+                override val looks: Looks get() = error("not here")
+                override val protection: Protection get() = error("not here")
+                override val learning: Learning get() = error("not here")
+                override val backups: BackupService get() = error("not here")
+                override val sources: Syncer get() = error("not here")
+                override val ankiWatch: AnkiWatch get() = error("not here")
+                override val photos: Photos get() = error("not here")
+                override val gmail: GmailFinishes get() = error("not here")
+
+                // The one under way as the switch begins is held there, then makes another inside it.
+                override suspend fun calendarSeen(read: CalendarRead) {
+                    val name = read.answers.keys.single()
+                    if (name == "under way") {
+                        held.await()
+                        commands.act(ObserveCalendar(CalendarRead(answers = mapOf("inside it" to "busy"))))
+                    }
+                    seen += name
+                }
+
+                override suspend fun eventAsked(key: String) = error("not here")
+            }
+            commands = Commands(owners, FixedClock(1_000L), stores.outbox, queuing = { queued })
+            withTimeout(10_000) {
+                // Each begun at once, in turn, so each has gone as far as it can before the next begins.
+                val under = async(start = CoroutineStart.UNDISPATCHED) { commands.act(ObserveCalendar(CalendarRead(answers = mapOf("under way" to "busy")))) }
+                val switch = async(start = CoroutineStart.UNDISPATCHED) { commands.switching(over = { queued = true }, read = { seen.toList() }) }
+                val begun = async(start = CoroutineStart.UNDISPATCHED) { commands.act(ObserveCalendar(CalendarRead(answers = mapOf("begun as it drains" to "busy")))) }
+                assertEquals(emptyList(), seen.toList(), "none made unqueued as it drains")
+                held.complete(Unit)
+                assertEquals(listOf("inside it", "under way"), switch.await(), "the seed has those made before it")
+                under.await()
+                begun.await()
+                assertEquals(listOf("inside it", "under way", "begun as it drains"), seen.toList())
+                assertEquals(listOf("begun as it drains"), stores.outbox.value.commands.map { (it.action as ObserveCalendar).read.answers.keys.single() }, "queued, as made after it")
+                // Mirroring again, as after a switch refused: one made then is made unqueued, as before it.
+                queued = false
+                commands.act(ObserveCalendar(CalendarRead(answers = mapOf("mirroring again" to "busy"))))
+                assertEquals("mirroring again", seen.last())
+                assertEquals(1, stores.outbox.value.commands.size)
+            }
         } finally {
             dir.deleteRecursively()
         }

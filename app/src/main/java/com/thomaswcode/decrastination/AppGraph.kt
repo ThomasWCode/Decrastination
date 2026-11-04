@@ -110,6 +110,7 @@ import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
@@ -119,6 +120,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
@@ -748,10 +750,6 @@ class AppGraph private constructor(context: Context) : Owners {
     suspend fun reset(what: Reset): String = if (sendsCommands()) commands.act(ResetData(what)) else backups.reset(what)
 
     /**
-     * [taskId] read again by Claude as it is now (AC-06, the sheet's *Read again with Claude*): here, or by the server once the phone
-     * sends commands (D-142), its reading coming as it's pulled. What came of it, in words.
-     */
-    /**
      * The switch to commands (D-141), at your word, from a PC (`sync-switch`): Gmail's worker stopped and waited for first, so no
      * write's half made as the stores are read; then [Replica.switchOver], a backup of this phone's saved before anything goes (W-26),
      * with when this phone last ran each job at a set time that's the server's from then, but one with a try still to come, which the
@@ -762,15 +760,21 @@ class AppGraph private constructor(context: Context) : Owners {
         val runtime = runtime.value
         val ran = SWITCHED_JOBS.mapNotNull { (action, job) -> runtime.dailyRanAt[action]?.takeIf { action !in runtime.dailyRetries }?.let { job to it } }.toMap()
         // With no write to Gmail and no read of a source under way, nor any begun, as each writes the stores unqueued while mirroring:
-        // those that waited go as commands once the switch is made. A minute at most for one under way to finish.
-        val why = withTimeoutOrNull(60_000) {
-            gmailFinishes.quiet { syncer.quiet { replica.switchOver(backup = { backups.switchCopy() }, ran = ran) } }
-        } ?: "Nothing switched: a write to Gmail or a read of a source didn't finish within a minute; try again"
+        // those that waited go as commands once the switch is made. A minute at most for one under way to finish; the switch, once
+        // begun, is made whole, however long it takes, so what it says is what it did.
+        var why: String? = "Nothing switched: a write to Gmail or a read of a source didn't finish within a minute; try again"
+        withTimeoutOrNull(60_000) {
+            gmailFinishes.quiet { syncer.quiet { withContext(NonCancellable) { why = replica.switchOver(backup = { backups.switchCopy() }, ran = ran) } } }
+        }
         // Mirroring still: Gmail's writes are this phone's again.
         if (!sendsCommands()) gmailFinishes.rearm()
         return why ?: "Switched: this phone keeps in step by commands"
     }
 
+    /**
+     * [taskId] read again by Claude as it is now (AC-06, the sheet's *Read again with Claude*): here, or by the server once the phone
+     * sends commands (D-142), its reading coming as it's pulled. What came of it, in words.
+     */
     suspend fun readAgain(taskId: String): String {
         if (sendsCommands()) return replica.readAgainOnServer(taskId)
         return when (readings.readAgain(taskId)) {

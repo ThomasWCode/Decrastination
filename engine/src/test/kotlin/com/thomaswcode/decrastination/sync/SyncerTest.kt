@@ -23,12 +23,14 @@ import com.thomaswcode.decrastination.sources.SourceRead
 import com.thomaswcode.decrastination.sources.TaskSource
 import com.thomaswcode.decrastination.sources.gmail.GmailThreads
 import com.thomaswcode.decrastination.sync.protocol.SourceObserved
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import java.io.File
 import java.io.IOException
@@ -79,6 +81,24 @@ class SyncerTest {
         assertEquals("No network", tasks.value.status(Source.Gmail).error)
         assertEquals(clock.time, tasks.value.status(Source.Gmail).lastSuccessAt)
         assertNull(tasks.value.status(Source.Teams).error)
+    }
+
+    @Test
+    fun `the switch's quiet waits for a read under way, its tasks merged first, as the switch reads the stores whole`() = runTest {
+        val held = CompletableDeferred<Unit>()
+        val teams = FakeSource(Source.Teams) { held.await(); items("a") }
+        val syncer = syncer(listOf(teams))
+        val reading = launch { syncer.sync() }
+        // Only what's due now, so the read's timeout doesn't come.
+        runCurrent()
+        var seen: List<String>? = null
+        val quiet = launch { syncer.quiet { seen = tasks.value.tasks.map { it.id } } }
+        runCurrent()
+        assertNull(seen, "not while a read's under way")
+        held.complete(Unit)
+        reading.join()
+        quiet.join()
+        assertEquals(listOf("teams:a"), seen)
     }
 
     @Test
