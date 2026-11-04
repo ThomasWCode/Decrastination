@@ -51,6 +51,12 @@ object FelixWords {
     /** Teams's, with the chat on screen (D-11): its widget asked to sync it, as a tap on its refresh asks it. */
     const val TEAMS_SYNCING = "Asked Teams to read, the Teams widget syncing it now"
 
+    /** Teams's, asked of the phone by the server (D-142): its widget's sync started there only with the chat on its screen. */
+    const val TEAMS_ON_PHONE = "Asked the phone to read Teams, the Teams widget syncing it too if the chat's on its screen"
+
+    /** [source]'s, asked of the phone by the server, where no phone could be reached: a not-made line's, after its start. */
+    fun notAsked(source: String): String = "asking the phone to read $source: it couldn't be reached, so it reads it at its own sync."
+
     /** Teams's where its widget's sync wasn't started, [why]: what the widget has. */
     fun readingWidget(why: String): String = "Asked Teams to read what the Teams widget has: $why"
 

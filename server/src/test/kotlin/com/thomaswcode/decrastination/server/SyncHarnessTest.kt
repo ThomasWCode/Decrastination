@@ -43,6 +43,7 @@ import com.thomaswcode.decrastination.sources.gmail.GmailWriter
 import com.thomaswcode.decrastination.sync.GmailFinishes
 import com.thomaswcode.decrastination.sync.protocol.FinishGmail
 import com.thomaswcode.decrastination.core.TaskPhoto
+import com.thomaswcode.decrastination.block.Photos
 import com.thomaswcode.decrastination.learn.AnkiReading
 import com.thomaswcode.decrastination.learn.DeckCount
 import com.thomaswcode.decrastination.sources.ReadContext
@@ -66,6 +67,10 @@ import com.thomaswcode.decrastination.protect.CodeLock
 import com.thomaswcode.decrastination.protect.Totp
 import com.thomaswcode.decrastination.tasks.TasksHarness
 import com.thomaswcode.decrastination.views.Asked
+import com.thomaswcode.decrastination.views.PhotoCheckAsk
+import com.thomaswcode.decrastination.views.PhotoChecked
+import java.net.URLDecoder
+import java.util.Base64
 import java.io.File
 import java.io.IOException
 import java.nio.file.Files
@@ -139,6 +144,20 @@ class SyncHarnessTest {
         /** Pulls answered with a failure, every other route as it would. */
         var pullFails = false
 
+        /** The tasks' photos' and the commands' requests, in the order they came. */
+        val routes = mutableListOf<String>()
+
+        /** The tasks' photos' route answering with a failure. */
+        var photosFail = false
+
+        override fun postBytes(url: String, headers: Map<String, String>, body: ByteArray): HttpResponse {
+            if (cut) throw IOException("cut")
+            check(url.contains("/api/task-photos/")) { url }
+            routes += "task-photos"
+            if (photosFail) return HttpResponse(500, "{}")
+            return if (graph.keepTaskPhoto(url.substringAfterLast('/'), body)) HttpResponse(204, "") else HttpResponse(400, "{}")
+        }
+
         /** What the server's routes answer a request that throws. */
         private fun failing(request: () -> HttpResponse): HttpResponse = try {
             request()
@@ -168,6 +187,17 @@ class SyncHarnessTest {
                 runBlocking { graph.setParentCode(secret) }
                 return HttpResponse(204, "")
             }
+            if (url.endsWith("/read-again")) {
+                routes += "read-again"
+                val id = URLDecoder.decode(url.substringAfter("/api/tasks/").substringBefore("/read-again"), Charsets.UTF_8)
+                return HttpResponse(200, json.encodeToString(Asked.serializer(), graph.readAgain(id)))
+            }
+            if (url.endsWith("/api/photos/check")) {
+                routes += "photos/check"
+                val ask = json.decodeFromString(PhotoCheckAsk.serializer(), body)
+                val checked = runBlocking { graph.checkPhoto(ask.taskId, ask.key, ask.step, ask.takenAt, ask.pages.map { Base64.getDecoder().decode(it) }) }
+                return HttpResponse(200, json.encodeToString(PhotoChecked.serializer(), checked!!))
+            }
             if (url.endsWith("/api/chat/try-again")) {
                 if (graph.mode != ServerGraph.COMMANDS) return HttpResponse(409, "{}")
                 triedAgain++
@@ -179,6 +209,7 @@ class SyncHarnessTest {
                 return HttpResponse(200, json.encodeToString(Asked.serializer(), Asked(true, runBlocking { graph.importBackup(body, device) })))
             }
             check(url.endsWith("/api/commands")) { url }
+            routes += "commands"
             headers[Protocol.ZONE_HEADER]?.let(graph.serverClock::setZone)
             if (graph.mode != ServerGraph.COMMANDS) return HttpResponse(409, "{}")
             val batch = json.decodeFromString(CommandBatch.serializer(), body)
@@ -575,6 +606,52 @@ class SyncHarnessTest {
         assertEquals(listOf(listOf("a problem")), graph.stores.log.value.protection.map { it.problems })
         assertEquals("The Teams widget's sync service is off", graph.stores.tasks.value.status(Source.Teams).note)
         assertEquals("abcd", graph.stores.tasks.value.tasks.single { it.title == "Essay" }.photo?.hash)
+    }
+
+    @Test
+    fun `Read again and a photo check go after what's waiting, so the server has the task as this phone shows it`() = runBlocking {
+        val phone = phone()
+        // Made here and not yet sent: without what's waiting going first, the server hasn't the task.
+        phone.h.commands.act(own("Essay"))
+        phone.wire.routes.clear()
+        assertEquals("Claude can't be asked now: try again later", phone.replica.readAgainOnServer("own:s-Essay"))
+        assertEquals(listOf("commands", "read-again"), phone.wire.routes)
+        // A photo check of a task just made, likewise: its piece found there, and with no key there, said so.
+        phone.h.commands.act(own("Maths"))
+        val piece = phone.h.planning.plan().chunksOf("own:s-Maths").first()
+        phone.wire.routes.clear()
+        val jpeg = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 1)
+        assertEquals("Claude is off: the timer or the source will have to do.", phone.replica.checkPhotoOnServer(piece.taskId, piece.key, piece.step, 1L, listOf(jpeg)))
+        assertEquals(listOf("commands", "photos/check"), phone.wire.routes)
+    }
+
+    @Test
+    fun `a task's photo reaches the box ahead of the command that keeps it, by its hash, and one that can't go holds the commands back`() = runBlocking {
+        val phone = phone()
+        phone.h.commands.act(own("Essay"))
+        assertTrue(phone.replica.upload())
+        val jpeg = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 7)
+        val file = File(dir, "a-phone-photo.jpg").apply { writeBytes(jpeg) }
+        val photo = TaskPhoto(file.path, Photos.hashOf(jpeg), phone.h.clock.now())
+        phone.h.commands.send(AttachPhoto("own:s-Essay", photo))
+        phone.wire.routes.clear()
+        assertTrue(phone.replica.upload())
+        assertEquals(listOf("task-photos", "commands"), phone.wire.routes)
+        assertTrue(File(dir, "photos/${photo.hash}.jpg").readBytes().contentEquals(jpeg), "kept on the box by its hash")
+        assertEquals(photo, graph.stores.tasks.value.tasks.single { it.id == "own:s-Essay" }.photo)
+        // One that can't go holds the commands back, said; the next try sends both.
+        phone.wire.photosFail = true
+        phone.h.commands.send(AttachPhoto("own:s-Essay", photo))
+        assertFalse(phone.replica.upload())
+        assertEquals(1, phone.waiting)
+        assertEquals("A task's photo couldn't be sent", phone.h.stores.sync.value.lastError)
+        // Another photo in its file here since: that one's no more, so it isn't sent, and the command goes.
+        phone.wire.photosFail = false
+        file.writeBytes(byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 8))
+        phone.wire.routes.clear()
+        assertTrue(phone.replica.upload())
+        assertEquals(listOf("commands"), phone.wire.routes)
+        assertEquals(0, phone.waiting)
     }
 
     @Test

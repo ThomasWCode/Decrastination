@@ -15,6 +15,7 @@ import com.thomaswcode.decrastination.core.Enrichment
 import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.SubStep
 import com.thomaswcode.decrastination.core.TaskItem
+import com.thomaswcode.decrastination.core.TaskPhoto
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -36,6 +37,8 @@ class ClaudeEnricher(
     private val profile: () -> Profile.Block = { Profile.Block.NONE },
     /** The vocabulary decks' topics (DX-10), for an assignment's sections. */
     private val decks: () -> Map<String, String> = { emptyMap() },
+    /** Where a task's photo is kept (AI-23): the phone's own file, or, on the server, its copy there by its hash (D-148). */
+    private val photoFile: (TaskPhoto) -> File = { File(it.path) },
 ) : Enricher {
     override val by = model
 
@@ -92,7 +95,7 @@ class ClaudeEnricher(
     }
 
     /** [task]'s photo of its work (AI-23), from its file; none if it has none, or it can't be read. */
-    private suspend fun photoOf(task: TaskItem): ByteArray? = task.photo?.let { p -> withContext(Dispatchers.IO) { runCatching { File(p.path).readBytes() }.getOrNull() } }
+    private suspend fun photoOf(task: TaskItem): ByteArray? = task.photo?.let { p -> withContext(Dispatchers.IO) { runCatching { photoFile(p).readBytes() }.getOrNull() } }
 
     /** The item as the user's turn: with [photo], the photo first and the model told what it is. */
     private fun MessageCreateParams.Builder.item(task: TaskItem, job: Enrichments.Job, photo: ByteArray?, text: String) {

@@ -57,6 +57,13 @@ class Photos(
      * what it read, or why not; null while this phone asks Claude itself.
      */
     private val readByServer: suspend (ByteArray) -> Pair<PhotoTasks.Reading?, String?>? = { null },
+    /**
+     * The pages of a piece's work checked by the server, once the two keep in step by commands, as Claude's the server's to ask
+     * then (D-148): what it said of them, or null while this phone asks Claude itself.
+     */
+    private val checkByServer: suspend (jpegs: List<ByteArray>, piece: Chunk, takenAt: Long) -> String? = { _, _, _ -> null },
+    /** Where a task's photo is kept: its own file here, or, on the server, its copy in [photos] by its hash (D-148). */
+    private val fileOf: (TaskPhoto) -> File = { File(it.path) },
     /** [taskId] read again with its photo, where it's one the model reads ([com.thomaswcode.decrastination.enrich.Readings.enrichNow]). */
     private val read: suspend (taskId: String) -> Unit,
 ) {
@@ -70,8 +77,7 @@ class Photos(
             photos.mkdirs()
             file.writeBytes(jpeg)
         }
-        val hash = MessageDigest.getInstance("SHA-256").digest(jpeg).take(8).joinToString("") { "%02x".format(it) }
-        val photo = TaskPhoto(file.path, hash, clock.now())
+        val photo = TaskPhoto(file.path, hashOf(jpeg), clock.now())
         val send = keeping
         if (send != null) send(taskId, photo) else keep(taskId, photo)
         scope.launch { runCatching { read(taskId) }.onFailure { Log.w(Log.TAG, "Reading a task with its photo failed", it) } }
@@ -123,16 +129,20 @@ class Photos(
         }
     }
 
-    /** The photos no task holds any more let go (AI-23): a task done and gone takes its photo with it. */
-    fun sweepPhotos() {
+    /**
+     * The photos no task holds any more let go (AI-23): a task done and gone takes its photo with it. On the server, none kept since
+     * [keptBefore] goes, as a phone's photo comes ahead of the command that keeps it, which may come later (D-148).
+     */
+    fun sweepPhotos(keptBefore: Long = Long.MAX_VALUE) {
         // A task the chat deleted keeps its photo while its Undo can bring it back: no other act's, nor one made again since.
         val messages = chat.value.messages
         val undoable = messages.flatMap { m ->
             m.acts.filter { it.action?.type == ChatAction.Type.Delete && ChatActs.canUndo(it, tasks.value.tasks, settings.value, messages) }
-                .mapNotNull { it.was?.photo?.path }
+                .mapNotNull { it.was?.photo }
         }
-        val held = tasks.value.tasks.mapNotNull { it.photo?.path }.toSet() + undoable
-        photos.listFiles()?.filter { it.path !in held }?.forEach { it.delete() }
+        // By name, as where a photo's kept is the phone's path here and its hash on the server.
+        val held = (tasks.value.tasks.mapNotNull { it.photo } + undoable).mapTo(HashSet()) { fileOf(it).name }
+        photos.listFiles()?.filter { it.name !in held && it.lastModified() < keptBefore }?.forEach { it.delete() }
     }
 
     /**
@@ -153,6 +163,16 @@ class Photos(
         } finally {
             withContext(NonCancellable + Dispatchers.IO) { pages.forEach { it.delete() } }
         }
+        checkByServer(jpegs, piece, takenAt)?.let { return it }
+        return checkJpegs(jpegs, piece, takenAt)
+    }
+
+    /**
+     * [jpegs], the pages of [piece]'s work as the model's sent them, checked against it and its task (AI-16), the cost recorded, and
+     * how it went said: the server's own check of a phone's pages, and the end of this phone's ([check]).
+     */
+    suspend fun checkJpegs(jpegs: List<ByteArray>, piece: Chunk, takenAt: Long): String {
+        if (!piece.photoCheckable) return "Only written homework can be checked from a photo."
         // Its room taken with every other model call's, then sent (AC-05).
         val current = gateway.client(ModelEffort.Job.PhotoCheck)?.let { PhotoChecker(it, profile = profile()) } ?: return OFF
         val about = PhotoChecker.context(piece, tasks.value.tasks.firstOrNull { it.id == piece.taskId })
@@ -174,7 +194,16 @@ class Photos(
         return "Done: ${verdict.reason}"
     }
 
-    private companion object {
-        const val OFF = "Claude is off: the timer or the source will have to do."
+    companion object {
+        private const val OFF = "Claude is off: the timer or the source will have to do."
+
+        /** A photo check's piece not found again where it's checked: the phone's screen, or the server's plan. */
+        const val PIECE_CHANGED = "That piece has changed since the photo was taken (done, or planned again), so it wasn't checked."
+
+        /** A task's photo's fingerprint ([TaskPhoto.hash]): SHA-256's first 8 bytes, in hex, the name the server keeps its copy by. */
+        fun hashOf(jpeg: ByteArray): String = MessageDigest.getInstance("SHA-256").digest(jpeg).take(8).joinToString("") { "%02x".format(it) }
+
+        /** A [hashOf]'s shape: nothing else names a file on the server. */
+        val HASH = Regex("[0-9a-f]{16}")
     }
 }

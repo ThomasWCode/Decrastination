@@ -4,7 +4,13 @@ import com.sun.net.httpserver.HttpServer
 import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.Change
 import com.thomaswcode.decrastination.core.ChangeType
+import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.OwnTask
+import com.thomaswcode.decrastination.core.Source
+import com.thomaswcode.decrastination.core.TaskItem
+import com.thomaswcode.decrastination.core.TaskPhoto
+import com.thomaswcode.decrastination.block.Photos
+import com.thomaswcode.decrastination.views.Asked
 import com.thomaswcode.decrastination.data.SecretCipher
 import com.thomaswcode.decrastination.learn.DayChunk
 import com.thomaswcode.decrastination.learn.DayRecord
@@ -17,6 +23,8 @@ import java.io.File
 import java.net.InetSocketAddress
 import java.nio.file.Files
 import java.time.Instant
+import java.util.Base64
+import java.util.Collections
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.AfterTest
 import kotlin.test.Test
@@ -43,10 +51,12 @@ class AfterCommandsTest {
     private val dir: File = Files.createTempDirectory("after").toFile()
     private val db = Database(File(dir, "test.db").path).apply { setMeta("mode", ServerGraph.COMMANDS) }
 
-    /** Each request made of Claude, answered with a failure: whether one was made is all that's asked here. */
+    /** Each request made of Claude, answered with a failure: whether one was made is all that's asked here, and what it sent. */
     private val asked = AtomicInteger()
+    private val sent: MutableList<String> = Collections.synchronizedList(mutableListOf())
     private val claude = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
         createContext("/") { exchange ->
+            sent += exchange.requestBody.readBytes().decodeToString()
             asked.incrementAndGet()
             exchange.sendResponseHeaders(400, -1)
             exchange.close()
@@ -85,6 +95,41 @@ class AfterCommandsTest {
         }
         // What waited for it runs now.
         delay(500)
+    }
+
+    @Test
+    fun `a phone's Read again is begun here on its own time, outside any command, and reaches Claude`() = runBlocking {
+        graph.stores.tasks.update {
+            it.copy(tasks = listOf(TaskItem(id = "teams:sheet", source = Source.Teams, sourceId = "sheet", title = "A made-up worksheet", dueAt = null, kind = Kind.Homework, firstSeenAt = 1, lastSeenAt = 1)))
+        }
+        assertEquals(Asked(true, "Asked of the server: its new reading comes as it's pulled"), graph.readAgain("teams:sheet"))
+        reachesClaude()
+    }
+
+    @Test
+    fun `a task's photo is read with it here, by its hash, wherever the phone keeps it`() = runBlocking {
+        val jpeg = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 9, 9, 9)
+        assertTrue(graph.keepTaskPhoto(Photos.hashOf(jpeg), jpeg))
+        val photo = TaskPhoto("/the/phone's/own/files/photos/teams_sheet.jpg", Photos.hashOf(jpeg), 1L)
+        graph.stores.tasks.update {
+            it.copy(tasks = listOf(TaskItem(id = "teams:sheet", source = Source.Teams, sourceId = "sheet", title = "A made-up worksheet", dueAt = null, kind = Kind.Homework, firstSeenAt = 1, lastSeenAt = 1, photo = photo)))
+        }
+        graph.readAgain("teams:sheet")
+        reachesClaude()
+        assertTrue(sent.any { Base64.getEncoder().encodeToString(jpeg) in it }, "the photo sent with the task")
+    }
+
+    @Test
+    fun `a task's photo whose hash isn't one's shape names no file here, so nothing outside the photos is read`() = runBlocking {
+        val jpeg = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 7, 7, 7)
+        File(dir, "outside.jpg").writeBytes(jpeg)
+        val photo = TaskPhoto("/the/phone's/own/files/photos/teams_sheet.jpg", "../outside", 1L)
+        graph.stores.tasks.update {
+            it.copy(tasks = listOf(TaskItem(id = "teams:sheet", source = Source.Teams, sourceId = "sheet", title = "A made-up worksheet", dueAt = null, kind = Kind.Homework, firstSeenAt = 1, lastSeenAt = 1, photo = photo)))
+        }
+        graph.readAgain("teams:sheet")
+        reachesClaude()
+        assertTrue(sent.none { Base64.getEncoder().encodeToString(jpeg) in it }, "the task read without it")
     }
 
     @Test

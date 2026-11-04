@@ -1,5 +1,6 @@
 package com.thomaswcode.decrastination.server
 
+import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.ports.Log
 import com.thomaswcode.decrastination.sync.PushTried
 import java.net.URI
@@ -48,6 +49,9 @@ class PhonePushes(
     fun interface Sender {
         /** [revision] to the phone whose Firebase Installation ID is [fid]: false if Firebase no longer knows it. A failure of any other kind is thrown. */
         fun send(fid: String, revision: Long): Boolean
+
+        /** [sources] to be read now by the phone at [fid], by their names, as [send] goes. */
+        fun read(fid: String, sources: List<String>): Boolean = true
     }
 
     val on: Boolean get() = sender != null
@@ -62,6 +66,10 @@ class PhonePushes(
     /** The run of changes on its way to being told, if there is one: what a test waits on, rather than the clock. */
     @Volatile
     internal var sending: Job? = null
+
+    /** The last ask to read a phone's sources on its way, likewise. */
+    @Volatile
+    internal var asking: Job? = null
 
     /** [fid] kept as where Firebase reaches [device]: false, and nothing kept, if it isn't the shape of one. */
     fun keep(device: String, fid: String): Boolean {
@@ -121,6 +129,35 @@ class PhonePushes(
             }
             reached.filter { (device, _) -> made.any { it != device } }.forEach { (device, fid) -> tell(device, fid, at) }
         }
+    }
+
+    /**
+     * [sources], which only a phone reads (Teams, AnkiDroid), read now by each paired phone, as Felix's `sync` act asks once the server
+     * says what he says (D-142): a message of its own, so it and a revision's never take each other's place. Only once the server
+     * applies commands; a failure's only logged, as the phone reads them at its own sync all the same. Whether any phone could be
+     * asked: none where Firebase isn't set up here or no phone's id is held.
+     */
+    fun askToRead(sources: Set<Source>): Boolean {
+        val sender = sender ?: return false
+        if (sources.isEmpty() || !telling()) return false
+        val reached = try {
+            fids()
+        } catch (failed: Exception) {
+            Log.w(Log.TAG, "Reading which phones to ask failed: ${failed::class.simpleName}")
+            return false
+        }
+        if (reached.isEmpty()) return false
+        val names = sources.map { it.name }.sorted()
+        asking = scope.launch(Dispatchers.IO) {
+            for ((device, fid) in reached) {
+                try {
+                    if (!sender.read(fid, names)) forget(device, fid)
+                } catch (failed: Exception) {
+                    Log.w(Log.TAG, "Asking a phone to read failed: ${failed::class.simpleName}")
+                }
+            }
+        }
+        return true
     }
 
     /** [device] told now, whatever the mode: how a phone finds out it can be told at once. What came of it. */
@@ -212,10 +249,15 @@ class FcmSender(
     /** Google's token, and the moment it's to be signed for again. */
     private var access: Pair<String, Long>? = null
 
-    override fun send(fid: String, revision: Long): Boolean {
-        val first = post(fid, revision, bearer())
+    override fun send(fid: String, revision: Long): Boolean = deliver(fid, "revision" to revision.toString(), COLLAPSE, TTL_SECONDS)
+
+    // Not kept past a sync's quarter-hour: by then the phone's read them at its own.
+    override fun read(fid: String, sources: List<String>): Boolean = deliver(fid, "read" to sources.joinToString(","), READ_COLLAPSE, READ_TTL_SECONDS)
+
+    private fun deliver(fid: String, data: Pair<String, String>, collapse: String, ttlSeconds: Int): Boolean {
+        val first = post(fid, data, collapse, ttlSeconds, bearer())
         // A token Google's let go of before its time: a new one, once.
-        val answer = if (first.statusCode() == 401) post(fid, revision, bearer(again = true)) else first
+        val answer = if (first.statusCode() == 401) post(fid, data, collapse, ttlSeconds, bearer(again = true)) else first
         return when {
             answer.statusCode() == 200 -> true
             gone(answer) -> false
@@ -223,15 +265,15 @@ class FcmSender(
         }
     }
 
-    private fun post(fid: String, revision: Long, bearer: String): HttpResponse<String> {
+    private fun post(fid: String, data: Pair<String, String>, collapse: String, ttlSeconds: Int, bearer: String): HttpResponse<String> {
         val message = buildJsonObject {
             putJsonObject("message") {
                 put("fid", fid)
-                putJsonObject("data") { put("revision", revision.toString()) }
+                putJsonObject("data") { put(data.first, data.second) }
                 putJsonObject("android") {
                     put("priority", "HIGH")
-                    put("collapse_key", COLLAPSE)
-                    put("ttl", "${TTL_SECONDS}s")
+                    put("collapse_key", collapse)
+                    put("ttl", "${ttlSeconds}s")
                 }
             }
         }
@@ -306,6 +348,12 @@ class FcmSender(
 
         /** An hour: by then the phone's own sync has brought it. */
         const val TTL_SECONDS = 3600
+
+        /** An ask to read the phone's sources takes the place of the one before, apart from the revision's. */
+        const val READ_COLLAPSE = "read"
+
+        /** A quarter-hour: the phone's own sync reads them by then. */
+        const val READ_TTL_SECONDS = 900
 
         /** A PEM file's first and last lines. */
         private val PEM_LINE = Regex("-----[A-Z ]+-----")

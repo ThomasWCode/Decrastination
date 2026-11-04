@@ -11,6 +11,7 @@ import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.Uptime
 import com.thomaswcode.decrastination.core.WallClock
+import com.thomaswcode.decrastination.block.Photos
 import com.thomaswcode.decrastination.data.BackupNames
 import com.thomaswcode.decrastination.data.BackupService
 import com.thomaswcode.decrastination.data.CalendarRead
@@ -68,6 +69,7 @@ import com.thomaswcode.decrastination.views.DayView
 import com.thomaswcode.decrastination.views.DayViews
 import com.thomaswcode.decrastination.views.NoticesView
 import com.thomaswcode.decrastination.views.OwnTaskEdit
+import com.thomaswcode.decrastination.views.PhotoChecked
 import com.thomaswcode.decrastination.views.PhotoRead
 import com.thomaswcode.decrastination.views.ReviewsView
 import com.thomaswcode.decrastination.views.SettingsView
@@ -85,6 +87,8 @@ import com.thomaswcode.decrastination.views.WorkView
 import com.thomaswcode.decrastination.views.WorkViews
 import java.io.File
 import java.io.IOException
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.sql.SQLException
 import java.time.Instant
 import java.time.LocalDate
@@ -232,11 +236,14 @@ class ServerGraph(
         }
     }
 
+    /** Where a task's photo is kept here, by its hash, the phone sending it ahead of the command that keeps it (D-148). */
+    private val taskPhotos = File(dataDir, "photos")
+
     /** The owners: what they do is what a command asks, a job, and what [start] has watch the stores. */
     val owners: ServerOwners = ServerOwners(
         stores, clock, scope, gateway, planning,
         calendarTime = { calendarTime() },
-        photosFolder = File(dataDir, "photos"),
+        photosFolder = taskPhotos,
         nightly = nightly,
         resetCopies = File(dataDir, "reset-copies"),
         version = version,
@@ -248,6 +255,7 @@ class ServerGraph(
         // The phone's calendar as read: its events, and your answers about them, which only the phone can take.
         seenCalendar = { read -> calendarRead.update { read } },
         committed = { block -> db.betweenCommands(block) },
+        askPhoneToRead = { sources -> phones.askToRead(sources) },
     )
 
     /** Whether a nightly file has somewhere to go. */
@@ -281,6 +289,9 @@ class ServerGraph(
                 } catch (failed: SQLException) {
                     Log.w(Log.TAG, "The history couldn't be tidied: ${failed::class.simpleName}")
                 }
+                // The tasks' photos no task holds let go, as the phone's are (D-148), but a day's: a phone's photo comes ahead of the
+                // command that keeps it, which a stop between the two can hold back till its next try.
+                runCatching { owners.photos.sweepPhotos(keptBefore = clock.now() - PHOTO_GRACE_MS) }.onFailure { Log.w(Log.TAG, "The photos couldn't be swept: ${it::class.simpleName}") }
                 delay(TIDY_EVERY_MS)
             }
         }
@@ -659,6 +670,44 @@ class ServerGraph(
         }
     }
 
+    /**
+     * [jpeg], a task's photo, kept by its [hash] for the server's reading of its task (D-148), written whole under a name of its own
+     * first, so a reading never finds half of one, and in the photos' folder, so the sweep takes one a crash leaves. Whether it was:
+     * not where the hash isn't the photo's.
+     */
+    fun keepTaskPhoto(hash: String, jpeg: ByteArray): Boolean {
+        if (Photos.hashOf(jpeg) != hash) return false
+        taskPhotos.mkdirs()
+        val part = File.createTempFile("photo", ".part", taskPhotos)
+        try {
+            part.writeBytes(jpeg)
+            Files.move(part.toPath(), File(taskPhotos, "$hash.jpg").toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+        } finally {
+            part.delete()
+        }
+        return true
+    }
+
+    /** Whether a photo check's under way: one at a time, as each is a paid call. */
+    private val checkingPhoto = AtomicBoolean()
+
+    /**
+     * [jpegs], a phone's pages of [taskId]'s piece [key], checked (AI-16) here, as Claude's the server's to ask once the phone sends
+     * commands (D-148): what came of it, in its words, its piece ticked off here if it's done, the phone pulling it. The piece as this
+     * server plans it, so one done or planned again since is said so, as the phone says it. Never in a command, as a call can take a
+     * minute. Null while another's being checked.
+     */
+    suspend fun checkPhoto(taskId: String, key: String, step: String?, takenAt: Long, jpegs: List<ByteArray>): PhotoChecked? {
+        if (!checkingPhoto.compareAndSet(false, true)) return null
+        try {
+            // By its step too, as the phone finds it: a key's only the step's place, which another may have taken here since.
+            val piece = planning.plan().chunksOf(taskId).firstOrNull { it.key == key && it.step == step } ?: return PhotoChecked(Photos.PIECE_CHANGED)
+            return PhotoChecked(owners.photos.checkJpegs(jpegs, piece, takenAt))
+        } finally {
+            checkingPhoto.set(false)
+        }
+    }
+
     /** Settings as the website draws them. */
     fun settings(): SettingsView {
         val now = clock.now()
@@ -803,6 +852,16 @@ class ServerGraph(
         return TaskViews.of(task, state.tasks.associateBy { it.id }, planning.plan(), stores.settings.value, stores.instructions.value.applied, stores.felix.value.notes, clock.now(), clock.zone(), writable = mode == COMMANDS, timer = stores.session.value.timer)
     }
 
+    /**
+     * Task [id] read again by Claude (AC-06), a phone's *Read again* once it sends commands (D-142): begun here on its own time, its
+     * reading coming as it's pulled. What was said of it.
+     */
+    fun readAgain(id: String): Asked = when {
+        stores.tasks.value.tasks.none { it.id == id } -> Asked(false, GONE)
+        owners.readAgainSoon(id) -> Asked(true, "Asked of the server: its new reading comes as it's pulled")
+        else -> Asked(false, "Claude can't be asked now: try again later")
+    }
+
     /** [ask] of task [id], made the commands the phone's sheet would make, and applied as the website's. */
     suspend fun ask(id: String, ask: TaskAsk): Asked {
         val task = stores.tasks.value.tasks.firstOrNull { it.id == id } ?: return Asked(false, GONE)
@@ -881,6 +940,9 @@ class ServerGraph(
 
         private val switchJson = Json { encodeDefaults = true; ignoreUnknownKeys = true }
         private const val TIDY_EVERY_MS = 24 * 3_600_000L
+
+        /** How long a task's photo no task holds yet is kept: its command's to come. */
+        private const val PHOTO_GRACE_MS = 24 * 3_600_000L
     }
 
     private object NoAlerts : ModelGateway.Alerts {

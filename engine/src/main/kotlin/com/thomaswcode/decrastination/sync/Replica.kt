@@ -3,6 +3,8 @@ package com.thomaswcode.decrastination.sync
 import com.thomaswcode.decrastination.core.WallClock
 import com.thomaswcode.decrastination.core.ChatArchive
 import com.thomaswcode.decrastination.core.ChatMessage
+import com.thomaswcode.decrastination.core.TaskPhoto
+import com.thomaswcode.decrastination.block.Photos
 import com.thomaswcode.decrastination.data.CalendarRead
 import com.thomaswcode.decrastination.data.ChatArchiveStore
 import com.thomaswcode.decrastination.data.JsonStore
@@ -13,11 +15,17 @@ import com.thomaswcode.decrastination.enrich.ModelEffort
 import com.thomaswcode.decrastination.enrich.PhotoTasks
 import com.thomaswcode.decrastination.net.Http
 import com.thomaswcode.decrastination.ports.Log
+import com.thomaswcode.decrastination.sync.protocol.AttachPhoto
 import com.thomaswcode.decrastination.sync.protocol.Command
 import com.thomaswcode.decrastination.ui.Format
 import com.thomaswcode.decrastination.views.Asked
+import com.thomaswcode.decrastination.views.PhotoCheckAsk
+import com.thomaswcode.decrastination.views.PhotoChecked
 import com.thomaswcode.decrastination.views.PhotoRead
+import java.io.File
 import java.io.IOException
+import java.net.URLEncoder
+import java.util.Base64
 import com.thomaswcode.decrastination.sync.protocol.CommandBatch
 import com.thomaswcode.decrastination.sync.protocol.Commands
 import com.thomaswcode.decrastination.sync.protocol.Outcome
@@ -277,6 +285,11 @@ class Replica(
         }
         try {
             if (waiting.isNotEmpty()) {
+                // A task's photo on the box ahead of the command that keeps it, so the server's reading of the task has it (D-148): one
+                // that doesn't go holds the commands back till the next try.
+                for (photo in waiting.mapNotNull { (it.action as? AttachPhoto)?.photo }) {
+                    if (!sendTaskPhoto(server, headers, photo)) return failed("A task's photo couldn't be sent")
+                }
                 val answer = http.post("$server/api/commands", headers, JSON.encodeToString(CommandBatch.serializer(), CommandBatch(waiting)))
                 if (!answer.ok) return if (answer.code == 409 && serverMode(headers) == SyncState.MIRROR) backToMirroring() else failed(problem(answer.code))
                 val outcomes = JSON.decodeFromString(ListSerializer(Outcome.serializer()), answer.body)
@@ -321,6 +334,15 @@ class Replica(
             Log.w(Log.TAG, "Keeping in step with the server failed: ${failed::class.simpleName}")
             return failed("The server can't be reached")
         }
+    }
+
+    /**
+     * [photo]'s file to the server, by its hash, as a task's photo is kept there (D-148): whether it went, or needn't, its file here gone
+     * or another photo since (one task's are kept under one name here), as the command then keeps a photo that's no more.
+     */
+    private fun sendTaskPhoto(server: String, headers: Map<String, String>, photo: TaskPhoto): Boolean {
+        val jpeg = runCatching { File(photo.path).readBytes() }.getOrNull()?.takeIf { Photos.hashOf(it) == photo.hash } ?: return true
+        return http.postBytes("$server/api/task-photos/${photo.hash}", headers + ("Content-Type" to "image/jpeg"), jpeg).ok
     }
 
     /** What's said of a command the server dropped: which it was and when, as a reason alone can't say what's to be done again. */
@@ -408,6 +430,51 @@ class Replica(
         // As the server's reader answered: why it read nothing, or what it read, perhaps no task at all, which the sheet says.
         read.why?.let { return@withContext null to it }
         PhotoTasks.Reading(read.tasks.map { it.task }, read.leftOut, read.question) to null
+    }
+
+    /**
+     * [jpegs], the pages of [taskId]'s piece [key], checked by the server, once the two keep in step by commands, as Claude's the
+     * server's to ask then (D-148): what came of it, in its words, or why it didn't go through. On [photoHttp], as a check waits on
+     * Claude's call as a photo's reading does; off the thread it's asked from, as [importOnServer] is.
+     */
+    suspend fun checkPhotoOnServer(taskId: String, key: String, step: String?, takenAt: Long, jpegs: List<ByteArray>): String = withContext(Dispatchers.IO) {
+        val token = stores.secrets[Secret.DeviceToken] ?: return@withContext "The check didn't go through (this phone isn't paired)."
+        // What's waiting first, as the piece may be new, or changed, in it, so the server plans it as this phone does; not held through
+        // the check, which can take minutes.
+        val flushed = sending.withLock { stores.outbox.value.commands.isEmpty() || exchange() }
+        if (!flushed) return@withContext "The check didn't go through (what's changed here hasn't reached the server yet)."
+        val headers = mapOf("Content-Type" to "application/json", "Authorization" to "Bearer $token", Protocol.HEADER to Protocol.VERSION.toString())
+        val ask = PhotoCheckAsk(taskId, key, takenAt, jpegs.map { Base64.getEncoder().encodeToString(it) }, step)
+        val answer = try {
+            photoHttp.post("${sync.value.server}/api/photos/check", headers, JSON.encodeToString(PhotoCheckAsk.serializer(), ask))
+        } catch (failed: IOException) {
+            Log.w(Log.TAG, "Checking a photo on the server failed: ${failed::class.simpleName}")
+            return@withContext "The check didn't go through (the server can't be reached)."
+        }
+        if (!answer.ok) return@withContext "The check didn't go through (${said(answer.body)?.replaceFirstChar { it.lowercase() } ?: "the server said no, ${answer.code}"})."
+        JSON.decodeFromString(PhotoChecked.serializer(), answer.body).said
+    }
+
+    /**
+     * Task [taskId] read again by Claude on the server, once the two keep in step by commands, as Claude's the server's to ask then
+     * (D-142): begun there, its reading coming as it's pulled. What was said of it. Off the thread it's asked from, as [importOnServer] is.
+     */
+    suspend fun readAgainOnServer(taskId: String): String = withContext(Dispatchers.IO) {
+        sending.withLock {
+            val token = stores.secrets[Secret.DeviceToken] ?: return@withLock "The server couldn't be asked: this phone isn't paired."
+            // What's waiting first, as the task may be new, or changed, in it: the server reads it as the sheet shows it.
+            if (stores.outbox.value.commands.isNotEmpty() && !exchange()) return@withLock "The server couldn't be asked: what's changed here hasn't reached it yet (Setup says why)."
+            val headers = mapOf("Content-Type" to "application/json", "Authorization" to "Bearer $token", Protocol.HEADER to Protocol.VERSION.toString())
+            val answer = try {
+                // As a path's segment: a space is %20 there, not a form's +.
+                http.post("${sync.value.server}/api/tasks/${URLEncoder.encode(taskId, Charsets.UTF_8).replace("+", "%20")}/read-again", headers, "")
+            } catch (failed: IOException) {
+                Log.w(Log.TAG, "Asking the server to read a task again failed: ${failed::class.simpleName}")
+                return@withLock "The server couldn't be reached: try again later."
+            }
+            if (!answer.ok) return@withLock "The server couldn't be asked: ${said(answer.body)?.replaceFirstChar { it.lowercase() } ?: "it said no (${answer.code})"}."
+            JSON.decodeFromString(Asked.serializer(), answer.body).said.orEmpty()
+        }
     }
 
     /** The error a refusal's body names, or null where it names none. */
@@ -504,7 +571,7 @@ class Replica(
 
         private val EMPTY_MONTH = JSON.encodeToString(ChatArchive.serializer(), ChatArchive())
 
-        /** How long a photo's reading is waited for: as long as Claude's call on the server may take, and a minute over. */
-        val PHOTO_WAIT_MS: Int = ModelEffort.timeout(ModelEffort.Job.PhotoToTask).plusMinutes(1).toMillis().toInt()
+        /** How long a photo's reading, or its check, is waited for: as long as Claude's call on the server may take, and a minute over. */
+        val PHOTO_WAIT_MS: Int = maxOf(ModelEffort.timeout(ModelEffort.Job.PhotoToTask), ModelEffort.timeout(ModelEffort.Job.PhotoCheck)).plusMinutes(1).toMillis().toInt()
     }
 }

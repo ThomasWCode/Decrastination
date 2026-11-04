@@ -1,6 +1,8 @@
 package com.thomaswcode.decrastination.server
 
+import com.thomaswcode.decrastination.block.Photos
 import com.thomaswcode.decrastination.data.Backups
+import com.thomaswcode.decrastination.enrich.PhotoChecker
 import com.thomaswcode.decrastination.ports.Log
 import com.thomaswcode.decrastination.sync.DeviceClaim
 import com.thomaswcode.decrastination.sync.ParentCode
@@ -14,6 +16,7 @@ import com.thomaswcode.decrastination.views.Asked
 import com.thomaswcode.decrastination.views.CheckInAsk
 import com.thomaswcode.decrastination.views.CopyAsk
 import com.thomaswcode.decrastination.views.DayDrop
+import com.thomaswcode.decrastination.views.PhotoCheckAsk
 import com.thomaswcode.decrastination.views.TaskAsk
 import io.ktor.http.ContentType
 import io.ktor.http.Cookie
@@ -58,6 +61,7 @@ import io.ktor.sse.ServerSentEvent
 import io.ktor.util.AttributeKey
 import io.ktor.util.cio.ChannelWriteException
 import java.time.LocalDate
+import java.util.Base64
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.flow.onSubscription
@@ -102,6 +106,9 @@ private data class StateOut(val revision: Long, val stores: List<StoreOut>, val 
 
 /** More than a page shrunk to what's sent ever comes to. */
 private const val MAX_PHOTO_BYTES = 4 * 1024 * 1024L
+
+/** A photo check's most pages, each in base64, a third bigger, with room for the rest of it. */
+private const val MAX_CHECK_BYTES = MAX_PHOTO_BYTES * PhotoChecker.MAX_PAGES * 4 / 3 + 64 * 1024
 
 /** Whether [bytes] starts as a JPEG does. */
 private fun isJpeg(bytes: ByteArray) = bytes.size > 3 && bytes[0] == 0xFF.toByte() && bytes[1] == 0xD8.toByte() && bytes[2] == 0xFF.toByte()
@@ -415,6 +422,32 @@ private fun Route.signedInRoutes(web: Web) {
         if (!isJpeg(jpeg)) return@post call.respond(HttpStatusCode.UnsupportedMediaType, Problem("That isn't a JPEG"))
         graph.readPhoto(jpeg)?.let { call.respond(it) } ?: call.respond(HttpStatusCode.Conflict, Problem("A photo is being read already"))
     }
+    // A task's photo, a phone's, sent ahead of the command that keeps it, so the server's reading of the task has it (D-148).
+    post("/task-photos/{hash}") {
+        if (call.client !is Client.Phone) return@post call.respond(HttpStatusCode.Forbidden, Problem("A task's photo comes from the phone"))
+        val hash = call.parameters["hash"].orEmpty()
+        if (!Photos.HASH.matches(hash)) return@post call.respond(HttpStatusCode.BadRequest, Problem("That isn't a photo's hash"))
+        val length = call.request.contentLength()
+        if (length == null || length > MAX_PHOTO_BYTES) return@post call.respond(HttpStatusCode.PayloadTooLarge, Problem("That photo's too big"))
+        val jpeg = call.receive<ByteArray>()
+        if (!isJpeg(jpeg)) return@post call.respond(HttpStatusCode.UnsupportedMediaType, Problem("That isn't a JPEG"))
+        if (!graph.keepTaskPhoto(hash, jpeg)) return@post call.respond(HttpStatusCode.BadRequest, Problem("That photo isn't the one its hash names"))
+        call.respond(HttpStatusCode.NoContent)
+    }
+    // A phone's, once it sends commands, as Claude's the server's to ask then (D-148): the website has no photo check.
+    post("/photos/check") {
+        if (call.client !is Client.Phone) return@post call.respond(HttpStatusCode.Forbidden, Problem("A photo check is the phone's"))
+        if (graph.mode != ServerGraph.COMMANDS) return@post call.respond(HttpStatusCode.Conflict, Problem("The server is mirroring the phone"))
+        // By what it says it is first, as for a photo of homework.
+        val length = call.request.contentLength()
+        if (length == null || length > MAX_CHECK_BYTES) return@post call.respond(HttpStatusCode.PayloadTooLarge, Problem("Those photos are too big"))
+        val ask = call.receive<PhotoCheckAsk>()
+        val jpegs = ask.pages.map { runCatching { Base64.getDecoder().decode(it) }.getOrNull() }
+        if (jpegs.isEmpty() || jpegs.size > PhotoChecker.MAX_PAGES || jpegs.any { it == null || !isJpeg(it) }) {
+            return@post call.respond(HttpStatusCode.UnsupportedMediaType, Problem("Those aren't a check's pages"))
+        }
+        graph.checkPhoto(ask.taskId, ask.key, ask.step, ask.takenAt, jpegs.filterNotNull())?.let { call.respond(it) } ?: call.respond(HttpStatusCode.Conflict, Problem("A photo is being checked already"))
+    }
     get("/views/settings") { call.respond(graph.settings()) }
     post("/parent-code") {
         // The phone's, as it's the phone that makes it: never set from the website, or the code would prove nothing.
@@ -425,6 +458,11 @@ private fun Route.signedInRoutes(web: Web) {
     get("/views/task/{id}") {
         val view = graph.task(call.parameters["id"].orEmpty()) ?: return@get call.respond(HttpStatusCode.NotFound, Problem("That task isn't here"))
         call.respond(view)
+    }
+    // A phone's Read again once it sends commands, as Claude's the server's to ask then (D-142): the reading's begun, not waited for.
+    post("/tasks/{id}/read-again") {
+        if (graph.mode != ServerGraph.COMMANDS) return@post call.respond(HttpStatusCode.Conflict, Problem("The server is mirroring the phone"))
+        call.respond(graph.readAgain(call.parameters["id"].orEmpty()))
     }
     post("/tasks/{id}/ask") {
         if (call.client !is Client.Website) return@post call.respond(HttpStatusCode.Forbidden, Problem("A task is asked of from the website"))

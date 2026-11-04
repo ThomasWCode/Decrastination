@@ -5,6 +5,8 @@ import android.util.Log
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import com.thomaswcode.decrastination.AppGraph
+import com.thomaswcode.decrastination.core.Source
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 
 /**
@@ -24,8 +26,21 @@ class PushService : FirebaseMessagingService() {
         if (replica.paired) ReplicaWorker.again(applicationContext)
     }
 
-    /** The server's said it's changed: what's there is pulled by work of its own, as this has only seconds. */
+    /**
+     * The server's said it's changed: what's there is pulled by work of its own, as this has only seconds. Or it's asked for this
+     * phone's sources read now (Felix's `sync` act, D-142): read by work of its own too, and the Teams widget asked to sync where the
+     * chat's on screen, as his act asks it here (D-11).
+     */
     override fun onMessageReceived(message: RemoteMessage) {
+        message.data["read"]?.let { names ->
+            val graph = AppGraph.get(applicationContext)
+            val sources = names.split(",").mapNotNullTo(HashSet()) { name -> Source.entries.firstOrNull { it.name == name } }
+            Log.i(AppGraph.TAG, "The server asks for ${sources.size} sources read")
+            if (sources.isEmpty() || !graph.replica.paired) return
+            SyncWorker.syncNow(applicationContext, sources)
+            if (Source.Teams in sources && graph.conversation.chatInFront) graph.scope.launch { graph.sync.requestTeamsSync() }
+            return
+        }
         val revision = message.data["revision"]?.toLongOrNull() ?: return
         Log.i(AppGraph.TAG, "The server says it's at revision $revision")
         if (AppGraph.get(applicationContext).replica.paired) ReplicaWorker.told(applicationContext, revision)

@@ -3,6 +3,7 @@ package com.thomaswcode.decrastination.enrich
 import com.thomaswcode.decrastination.core.AnkiRules
 import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.TaskItem
+import com.thomaswcode.decrastination.core.TaskPhoto
 import com.thomaswcode.decrastination.core.WallClock
 import com.thomaswcode.decrastination.core.withEnrichment
 import com.thomaswcode.decrastination.data.JsonStore
@@ -10,6 +11,7 @@ import com.thomaswcode.decrastination.data.ModelState
 import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.ports.Log
 import com.thomaswcode.decrastination.sources.gmail.GmailThreads
+import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.NonCancellable
@@ -43,6 +45,8 @@ class Readings(
     private val settled: suspend () -> Unit = {},
     /** Whether the server reads the tasks, the phone keeping in step by commands (D-142): neither Claude's reading nor the rules' made here then. */
     private val byServer: () -> Boolean = { false },
+    /** Where a task's photo is kept, for Claude to read it with the task (AI-23): the phone's own file, or the server's copy (D-148). */
+    private val photoFile: (TaskPhoto) -> File = { File(it.path) },
 ) {
     /** The rules' enrichment: always there, and the fallback for the model. */
     private val rules = RuleEnricher()
@@ -70,7 +74,7 @@ class Readings(
         // Not while it rests after a failed call (no network, a bad key), nor with no room under the
         // cap: then what only the rules have seen isn't due for it.
         var enricher: Enricher? = gateway.client(ModelEffort.Job.Email).takeIf { byModel }
-            ?.let { ClaudeEnricher(it, clock.zone(), profile = { profile() }, decks = { tasks.value.deckTopics }) }?.takeIf { gateway.available() }
+            ?.let { ClaudeEnricher(it, clock.zone(), profile = { profile() }, decks = { tasks.value.deckTopics }, photoFile = photoFile) }?.takeIf { gateway.available() }
         var calls = 0
         var decksChanged = false
         // A task whose call the API wouldn't take as asked (AC-04): the rules' till it changes.

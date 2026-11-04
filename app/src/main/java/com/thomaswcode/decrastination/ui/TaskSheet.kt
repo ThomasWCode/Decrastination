@@ -61,7 +61,6 @@ import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.WeeklyRules
 import com.thomaswcode.decrastination.core.invite
-import com.thomaswcode.decrastination.enrich.Readings
 import com.thomaswcode.decrastination.enrich.RuleEnricher
 import com.thomaswcode.decrastination.sources.gmail.GmailThreads
 import com.thomaswcode.decrastination.core.GmailWrites
@@ -181,7 +180,7 @@ fun TaskSheet(
                 message = "Couldn't read the photo."
             } else {
                 graph.photos.attachPhoto(task.id, jpeg)
-                said = if (graph.gateway.claudeKey() != null) "Photo kept: Claude reads the task again with it." else "Photo kept: it's read with the task once Claude is on."
+                said = if (graph.claudeAskable()) "Photo kept: Claude reads the task again with it." else "Photo kept: it's read with the task once Claude is on."
             }
         }
     }
@@ -404,18 +403,8 @@ fun TaskSheet(
                 if (changeable && task.mine.notATask == null) OutlinedButton(onClick = { confirming = "not-a-task" }) { Text("Not a task") }
                 if (task.isOpen) AskFelixButton(activity, About(taskId = task.id, taskTitle = task.title))
                 // Claude's reading made again, as the task is now (AC-06).
-                if (task.isOpen && Enrichments.jobFor(task, GmailThreads::textRead) != null && graph.gateway.claudeKey() != null) {
-                    OutlinedButton(
-                        onClick = {
-                            scope.launch {
-                                said = when (graph.readings.readAgain(task.id)) {
-                                    Readings.ReadAgain.Read -> "Read again by Claude"
-                                    Readings.ReadAgain.NotNow -> "Claude can't be asked now: try again later"
-                                    Readings.ReadAgain.NoReading -> "No new reading came back: the one there stands"
-                                }
-                            }
-                        },
-                    ) { Text("Read again with Claude") }
+                if (task.isOpen && Enrichments.jobFor(task, GmailThreads::textRead) != null && graph.claudeAskable()) {
+                    OutlinedButton(onClick = { scope.launch { said = graph.readAgain(task.id) } }) { Text("Read again with Claude") }
                 }
                 // Its steps made by Felix (AI-19): the chat, with the ask written for you to send.
                 if (own && changeable) {

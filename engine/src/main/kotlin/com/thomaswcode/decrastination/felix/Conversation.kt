@@ -127,14 +127,20 @@ class Conversation(
     private val draftReminders: suspend (Long) -> Unit = {},
     /**
      * [Source]s read now, as a job (G2, [com.thomaswcode.decrastination.sync.Sync.syncNow]): a callback, as the Sync service
-     * calls this one (a calendar event's question), so this one mustn't call it back.
+     * calls this one (a calendar event's question), so this one mustn't call it back. Whether they could be asked: on the server,
+     * what only the phone reads isn't where no phone can be reached.
      */
-    private val requestSync: (Set<Source>) -> Unit = {},
+    private val requestSync: (Set<Source>) -> Boolean = { true },
     /**
      * The Teams widget asked to sync Teams itself, as a tap on its refresh asks it (D-11,
      * [com.thomaswcode.decrastination.sync.Sync.requestTeamsSync]): why it didn't start, or null where it did.
      */
     private val requestTeamsSync: suspend () -> String? = { null },
+    /**
+     * Teams read on the phone, not here, as on the server (D-142): the phone's to read, and its widget's own sync the phone's to start,
+     * where its chat's on screen, as this can't tell.
+     */
+    private val teamsOnPhone: () -> Boolean = { false },
     /** Waits till no command's open, on the server, where one can be rolled back: a call it set off then finds nothing to ask. */
     private val settled: suspend () -> Unit = {},
     /**
@@ -1078,12 +1084,13 @@ class Conversation(
                 ChatAction.Type.Sync -> {
                     val source = Source.entries.firstOrNull { it.name == a.setting } ?: return@mapNotNull null
                     task?.let { watching[it.id] = Watch(source, it, clock.now() + WATCH_MS) }
-                    requestSync(setOf(source))
+                    if (!requestSync(setOf(source))) return@mapNotNull Act(Act.NOT_MADE + FelixWords.notAsked(source.label), problem = true)
                     // Teams: with the chat on screen, its widget's own sync too, as a tap on its refresh asks it, which
                     // has the screen for a minute (D-11); else what the widget has, and the line says why.
                     Act(
                         when {
                             source != Source.Teams -> FelixWords.reading(source.label)
+                            teamsOnPhone() -> FelixWords.TEAMS_ON_PHONE
                             !chatInFront -> FelixWords.readingWidget("the chat wasn't on screen to start its sync")
                             else -> requestTeamsSync()?.let { why -> FelixWords.readingWidget("its sync didn't start (${why.replaceFirstChar(Char::lowercase)})") } ?: FelixWords.TEAMS_SYNCING
                         },
