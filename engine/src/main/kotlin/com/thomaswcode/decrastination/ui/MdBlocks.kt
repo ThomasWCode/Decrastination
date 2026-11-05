@@ -16,11 +16,13 @@ object MdBlocks {
 
     data class Table(val header: List<String>, val rows: List<List<String>>) : Block
 
-    private val SEPARATOR = Regex("""\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?\s*""")
+    // (?U): Unicode's spaces are spaces, as JavaScript's \s has them (a no-break space after a list's number).
+    private val SEPARATOR = Regex("""(?U)\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?\s*""")
     // Closing hashes go only after a space, so "C#" keeps its own.
-    private val HEADING = Regex("""(#{1,6})\s+(.*?)(?:\s+#+)?\s*""")
-    private val BULLET = Regex("""\s*[-*•]\s+(.*)""")
-    private val NUMBERED = Regex("""\s*(\d+)[.)]\s+(.*)""")
+    private val HEADING = Regex("""(?U)(#{1,6})\s+(.*?)(?:\s+#+)?\s*""")
+    private val BULLET = Regex("""(?U)\s*[-*•]\s+(.*)""")
+    // Its digits ASCII's alone, as JavaScript's \d is, where (?U) would take any script's.
+    private val NUMBERED = Regex("""(?U)\s*([0-9]+)[.)]\s+(.*)""")
     private val BOLD = Regex("""\*\*(.+?)\*\*""")
 
     /** A table row's cells, its outer pipes dropped. */

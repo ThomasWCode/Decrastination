@@ -8,6 +8,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -28,8 +29,10 @@ private fun inline(text: String): AnnotatedString = buildAnnotatedString {
  */
 @Composable
 fun MarkdownText(text: String, style: TextStyle, modifier: Modifier = Modifier) {
+    // Read again only when the words change, not at every recomposition of the chat's list.
+    val blocks = remember(text) { MdBlocks.parse(text) }
     Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        MdBlocks.parse(text).forEach { block ->
+        blocks.forEach { block ->
             when (block) {
                 is MdBlocks.Paragraph -> Text(inline(block.text), style = style)
                 is MdBlocks.Heading -> Text(inline(block.text), style = style, fontWeight = FontWeight.Bold)

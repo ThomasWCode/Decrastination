@@ -35,11 +35,13 @@ class ColoursTest {
     }
 
     @Test
-    fun `by night the surfaces carry no hue, so none reads as brown`() {
+    fun `by night the surfaces are greys that never lean warm, so none reads as brown`() {
         val dark = Colours.Dark
         for (surface in listOf(dark.surface, dark.surfaceVariant, dark.surfaceContainerLowest, dark.surfaceContainerLow, dark.surfaceContainer, dark.surfaceContainerHigh, dark.surfaceContainerHighest)) {
             val channels = listOf(surface.red, surface.green, surface.blue)
-            assertTrue(channels.max() - channels.min() <= 0.02f, "$surface")
+            // A cool lean of a few steps in 255 is allowed (the website's #26262B leans 5 to blue); red over blue never.
+            assertTrue(channels.max() - channels.min() <= 6 / 255f, "$surface: more than a lean")
+            assertTrue(surface.red <= surface.blue, "$surface leans warm")
         }
     }
 }
