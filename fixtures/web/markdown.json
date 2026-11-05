@@ -1,0 +1,219 @@
+{
+  "parse": [
+    {
+      "name": "the week's summary with its table",
+      "text": "They kept less than planned.\n\n| Measure | Result |\n|---|---|\n| Work kept | 45 min (1 piece) |\n| Pieces missed | 6 |\n| Days fully done | 0 of 1 |\n\nNext week starts afresh.",
+      "blocks": [
+        {
+          "kind": "p",
+          "text": "They kept less than planned."
+        },
+        {
+          "kind": "table",
+          "header": [
+            "Measure",
+            "Result"
+          ],
+          "rows": [
+            [
+              "Work kept",
+              "45 min (1 piece)"
+            ],
+            [
+              "Pieces missed",
+              "6"
+            ],
+            [
+              "Days fully done",
+              "0 of 1"
+            ]
+          ]
+        },
+        {
+          "kind": "p",
+          "text": "Next week starts afresh."
+        }
+      ]
+    },
+    {
+      "name": "a table straight after a line, its separator aligned",
+      "text": "The week:\n| a | b |\n| :--- | ---: |\n| 1 | 2 |",
+      "blocks": [
+        {
+          "kind": "p",
+          "text": "The week:"
+        },
+        {
+          "kind": "table",
+          "header": [
+            "a",
+            "b"
+          ],
+          "rows": [
+            [
+              "1",
+              "2"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "name": "outer pipes optional",
+      "text": "a | b\n--- | ---\n1 | 2",
+      "blocks": [
+        {
+          "kind": "table",
+          "header": [
+            "a",
+            "b"
+          ],
+          "rows": [
+            [
+              "1",
+              "2"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "name": "rows cut or filled to the header's width",
+      "text": "| a | b |\n|---|---|\n| 1 |\n| 1 | 2 | 3 |",
+      "blocks": [
+        {
+          "kind": "table",
+          "header": [
+            "a",
+            "b"
+          ],
+          "rows": [
+            [
+              "1",
+              ""
+            ],
+            [
+              "1",
+              "2"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a pipe without a separator under it is words",
+      "text": "either this | or that",
+      "blocks": [
+        {
+          "kind": "p",
+          "text": "either this | or that"
+        }
+      ]
+    },
+    {
+      "name": "lines kept as written, paragraphs split by a blank line",
+      "text": "one\ntwo\n\n\nthree",
+      "blocks": [
+        {
+          "kind": "p",
+          "text": "one\ntwo"
+        },
+        {
+          "kind": "p",
+          "text": "three"
+        }
+      ]
+    },
+    {
+      "name": "a list of bullets",
+      "text": "Done:\n- the essay\n* the poster\n• the cards",
+      "blocks": [
+        {
+          "kind": "p",
+          "text": "Done:"
+        },
+        {
+          "kind": "list",
+          "ordered": false,
+          "items": [
+            "the essay",
+            "the poster",
+            "the cards"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a numbered list",
+      "text": "1. plan\n2) write",
+      "blocks": [
+        {
+          "kind": "list",
+          "ordered": true,
+          "items": [
+            "plan",
+            "write"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a heading",
+      "text": "## The week\nIt went well.",
+      "blocks": [
+        {
+          "kind": "h",
+          "level": 2,
+          "text": "The week"
+        },
+        {
+          "kind": "p",
+          "text": "It went well."
+        }
+      ]
+    },
+    {
+      "name": "Windows line ends",
+      "text": "a\r\n\r\nb",
+      "blocks": [
+        {
+          "kind": "p",
+          "text": "a"
+        },
+        {
+          "kind": "p",
+          "text": "b"
+        }
+      ]
+    },
+    {
+      "name": "nothing",
+      "text": "",
+      "blocks": []
+    }
+  ],
+  "runs": [
+    {
+      "text": "plain",
+      "runs": [
+        "plain"
+      ]
+    },
+    {
+      "text": "**6** missed, **2** done",
+      "runs": [
+        "",
+        "6",
+        " missed, ",
+        "2",
+        " done"
+      ]
+    },
+    {
+      "text": "a ** b",
+      "runs": [
+        "a ** b"
+      ]
+    }
+  ]
+}
