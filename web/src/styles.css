@@ -1,35 +1,48 @@
-/* The phone's colours (app/.../ui/Colours.kt), by day and by night. */
+/* Lilac by day, on a faintly lilac paper; graphite by night, its surfaces neutral greys with no hue to turn muddy,
+   lilac only light on them. The phone's colours (app/.../ui/Colours.kt) are the same. */
 :root {
   color-scheme: light dark;
-  --paper: #fcfcfc;
-  --ink: #1a1a1a;
-  --quiet: #43474f;
-  --line: #c3c7cf;
-  --wash: #f5f7fb;
-  --band: #e9edf3;
-  --navy: #1e3a64;
-  --on-navy: #d7e3ff;
-  --accent: #1e3a64;
-  --pale: #d7e3ff;
-  --on-pale: #0b1c36;
-  --error: #ba1a1a;
+  --paper: #fbfaff;
+  --ink: #1e1b26;
+  --quiet: #544f60;
+  --line: #dcd6ea;
+  --wash: #f4f1fd;
+  --band: #e9e4f8;
+  --slab: #ebe5ff;
+  --on-slab: #3b2a73;
+  --slab-strong: #2a1a5e;
+  --slab-rule: rgb(91 63 160 / 25%);
+  --accent: #5b3fa0;
+  --button: #5b3fa0;
+  --on-button: #ffffff;
+  --pale: #cdbdff;
+  --on-pale: #1b0f40;
+  --block: #ddd3ff;
+  --on-block: #1b0f40;
+  --error: #b3261e;
   --font: "Atkinson Hyperlegible Next Variable", system-ui, sans-serif;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --paper: #121212;
+    --paper: #141416;
     --ink: #ededed;
-    --quiet: #c3c8d2;
-    --line: #42474e;
-    --wash: #17191c;
-    --band: #23272d;
-    --navy: #1e3a64;
-    --on-navy: #d7e3ff;
-    --accent: #a8c7ff;
-    --pale: #1e3a64;
-    --on-pale: #d7e3ff;
-    --error: #ffb4ab;
+    --quiet: #b9b9c0;
+    --line: #3a3a40;
+    --wash: #1b1b1e;
+    --band: #26262b;
+    --slab: #1f1f23;
+    --on-slab: #e6e6ea;
+    --slab-strong: #c9b8ff;
+    --slab-rule: rgb(255 255 255 / 14%);
+    --accent: #c9b8ff;
+    --button: #c9b8ff;
+    --on-button: #1a1a1a;
+    --pale: #c9b8ff;
+    --on-pale: #1a1a1a;
+    --block: #a898e3;
+    --on-block: #1a1a1a;
+    --error: #ff8a80;
   }
 }
 
@@ -86,8 +99,8 @@ button {
   padding: 10px 18px;
   border: 0;
   border-radius: 6px;
-  background: var(--navy);
-  color: var(--on-navy);
+  background: var(--button);
+  color: var(--on-button);
   font-weight: 600;
   text-decoration: none;
 }
@@ -127,6 +140,11 @@ button {
   grid-template-rows: auto minmax(0, 1fr);
 }
 
+.site > main {
+  min-height: 0;
+  overflow-y: auto;
+}
+
 .bar {
   display: flex;
   align-items: baseline;
@@ -156,6 +174,14 @@ button {
   flex: 1;
 }
 
+.bar nav .group-start {
+  margin-left: 20px;
+}
+
+.bar nav .group-start.last {
+  margin-left: auto;
+}
+
 .bar nav a {
   text-decoration: none;
   color: var(--quiet);
@@ -169,17 +195,17 @@ button {
   border-bottom-color: var(--accent);
 }
 
-/* The Day: the navy slab beside the grid. */
+/* The Day: the slab beside the grid, never wider than its words need. */
 .day-page {
   display: grid;
-  grid-template-columns: minmax(300px, 30%) minmax(0, 1fr);
+  grid-template-columns: minmax(300px, min(30%, 420px)) minmax(0, 1fr);
   min-height: 0;
   height: 100%;
 }
 
 .now-panel {
-  background: var(--navy);
-  color: var(--on-navy);
+  background: var(--slab);
+  color: var(--on-slab);
   padding: 32px 28px;
   display: flex;
   flex-direction: column;
@@ -188,18 +214,19 @@ button {
 }
 
 .now-panel h2 {
-  font-size: 48px;
-  line-height: 1.05;
+  font-size: 14px;
   font-weight: 700;
-  letter-spacing: -0.02em;
-  color: #fff;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--slab-strong);
 }
 
 .now-panel .piece {
-  font-size: 22px;
-  line-height: 1.25;
-  font-weight: 600;
-  color: #fff;
+  font-size: 30px;
+  line-height: 1.2;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--slab-strong);
   overflow-wrap: anywhere;
 }
 
@@ -209,13 +236,13 @@ button {
 }
 
 .now-panel .warning {
-  color: #ffdad6;
+  color: var(--error);
   font-weight: 600;
 }
 
 .now-panel section {
   margin-top: 12px;
-  border-top: 1px solid rgb(215 227 255 / 30%);
+  border-top: 1px solid var(--slab-rule);
   padding-top: 12px;
 }
 
@@ -240,7 +267,7 @@ button {
 .now-panel .fresh {
   margin-top: auto;
   padding-top: 16px;
-  color: var(--on-navy);
+  color: var(--on-slab);
   opacity: 0.75;
 }
 
@@ -408,13 +435,13 @@ button {
 }
 
 .block.piece {
-  background: var(--pale);
-  color: var(--on-pale);
+  background: var(--block);
+  color: var(--on-block);
 }
 
 .block.piece.now {
-  background: var(--navy);
-  color: var(--on-navy);
+  background: var(--button);
+  color: var(--on-button);
 }
 
 .block.piece.gone {
@@ -498,11 +525,14 @@ button {
 }
 
 .work-page h1,
-.phone-page h1 {
-  font-size: 30px;
+.phone-page h1,
+.settings-page h1,
+.stats-page h1,
+.week-page h1 {
+  font-size: 26px;
   font-weight: 700;
   letter-spacing: -0.01em;
-  color: var(--accent);
+  color: var(--ink);
 }
 
 .ways {
@@ -534,12 +564,14 @@ button {
 }
 
 .columns {
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(260px, 340px);
-  gap: 24px;
-  overflow-x: auto;
+  columns: 280px;
+  column-gap: 24px;
   padding-bottom: 8px;
+}
+
+.column {
+  break-inside: avoid;
+  margin-bottom: 24px;
 }
 
 .column h2 {
@@ -582,7 +614,6 @@ button {
 
 .task .due.overdue {
   color: var(--error);
-  font-weight: 600;
 }
 
 .task .line,
@@ -621,8 +652,8 @@ button {
 /* The Phone page. */
 .phone-page {
   padding: 24px;
-  max-width: 640px;
   display: grid;
+  grid-template-columns: minmax(0, 640px);
   gap: 28px;
   align-content: start;
 }
@@ -709,8 +740,12 @@ button {
 }
 
 .task > button.title:focus-visible {
-  outline: 2px solid var(--navy);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+
+.sheet:focus {
+  outline: none;
 }
 
 .sheet {
@@ -977,7 +1012,7 @@ button {
 .move .days button[aria-pressed="true"] {
   background: var(--pale);
   color: var(--on-pale);
-  border-color: var(--navy);
+  border-color: var(--accent);
 }
 
 .move .days button:disabled {
@@ -1024,14 +1059,11 @@ label.button {
 
 /* Settings: its pages down the side, what's on the one chosen beside them. */
 .settings-page {
-  max-width: 1100px;
-  margin: 0 auto;
-  padding: 20px 28px 48px;
+  padding: 20px max(28px, calc((100% - 1100px) / 2)) 48px;
 }
 
 .settings-page h1 {
   margin: 0 0 6px;
-  font-size: 26px;
 }
 
 .settings-page h3 {
@@ -1187,14 +1219,14 @@ label.button {
   flex: 1 0 100%;
 }
 
-.waiting {
+section.waiting {
   margin-top: 14px;
   padding: 12px 16px;
   background: var(--band);
   border-radius: 6px;
 }
 
-.waiting h2 {
+section.waiting h2 {
   margin: 0 0 6px;
   font-size: 15px;
 }
@@ -1240,6 +1272,8 @@ label.button {
 /* What a screen reader says and the page doesn't. */
 .visually-hidden {
   position: absolute;
+  top: 0;
+  left: 0;
   width: 1px;
   height: 1px;
   overflow: hidden;
@@ -1591,6 +1625,7 @@ label.button {
 
 .chat-card .button {
   justify-self: start;
+  padding: 6px 14px;
 }
 
 .chat-rate {
@@ -1696,8 +1731,8 @@ label.button {
   margin: 0 var(--gutter);
   padding: 6px 12px;
   border-radius: 8px;
-  background: var(--navy);
-  color: var(--on-navy);
+  background: var(--slab);
+  color: var(--on-slab);
 }
 
 .chat-foot .quiet {
@@ -1756,17 +1791,29 @@ label.button {
   overflow-y: auto;
   padding: 14px 18px;
   border-left: 1px solid var(--line);
-  background: var(--wash);
+  font-size: 14px;
 }
 
 .chat-changes h2 {
-  font-size: 16px;
+  font-size: 15px;
 }
 
 .chat-changes h3 {
   margin: 14px 0 6px;
   font-size: 13px;
+  font-weight: 700;
   color: var(--accent);
+}
+
+.chat-changes summary {
+  margin: 14px 0 6px;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.chat-changes summary h3 {
+  display: inline;
+  margin: 0;
 }
 
 .chat-change {
@@ -1847,7 +1894,7 @@ label.button {
   margin: 0 0 12px;
   padding: 0 0 12px;
   border-top: 0;
-  border-bottom: 1px solid rgb(215 227 255 / 30%);
+  border-bottom: 1px solid var(--slab-rule);
 }
 
 .now-panel .timer .piece {
@@ -1870,11 +1917,11 @@ label.button {
 }
 
 .now-panel .action {
-  border-color: rgb(215 227 255 / 50%);
+  border-color: var(--slab-rule);
 }
 
 .now-panel .action:hover {
-  background: rgb(215 227 255 / 15%);
+  background: var(--slab-rule);
 }
 
 .now-panel .quiet {
@@ -1894,11 +1941,6 @@ label.button {
   flex-wrap: wrap;
   align-items: center;
   gap: 8px 16px;
-}
-
-.stats-page h1,
-.week-page h1 {
-  font-size: 24px;
 }
 
 .stat-section {
@@ -2119,8 +2161,57 @@ label.button {
   margin: 0;
 }
 
-.review-summary {
+.md {
+  display: grid;
+  gap: 8px;
+}
+
+.md p {
   white-space: pre-wrap;
+}
+
+.md h3,
+.md h4 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.md ul,
+.md ol {
+  margin: 0;
+  padding-left: 22px;
+}
+
+.md ul {
+  list-style: disc;
+}
+
+.md table {
+  max-width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.md th,
+.md td {
+  padding: 4px 12px 4px 0;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+}
+
+.md th {
+  font-weight: 700;
+}
+
+.md td + td,
+.md th + th {
+  padding-left: 12px;
+}
+
+.md td {
+  overflow-wrap: anywhere;
 }
 
 /* A file input is hidden behind its label: the label shows where the keyboard is. */

@@ -5,10 +5,12 @@ self.addEventListener("install", () => self.skipWaiting());
 
 self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim()));
 
-// Every one is shown, a page in front or not: a browser can stop sending to a site whose pushes show nothing.
+// Every one is shown, a page in front or not: a browser can stop sending to a site whose pushes show nothing. The logo goes with it.
 self.addEventListener("push", (event) => {
   const message = event.data.json();
-  event.waitUntil(self.registration.showNotification(message.title, { body: message.body, tag: message.tag, data: { url: message.url } }));
+  event.waitUntil(
+    self.registration.showNotification(message.title, { body: message.body, tag: message.tag, icon: "/favicon-192.png", data: { url: message.url } }),
+  );
 });
 
 self.addEventListener("notificationclick", (event) => {

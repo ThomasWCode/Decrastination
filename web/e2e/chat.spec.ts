@@ -199,10 +199,22 @@ test("a card he made can be undone, made again, and changed from the form", asyn
   await expect(page.getByRole("button", { name: "A worksheet, changed", exact: true })).toBeVisible();
 });
 
+test("your words are shown as you wrote them, not read as Markdown as his are", async ({ page }) => {
+  await page.goto("/");
+  // Found by its stars: drawn as Markdown they'd be gone.
+  await say(page, "my **own** words, 1. as typed");
+  await expect(message(page, "my **own** words, 1. as typed").locator("strong")).toHaveCount(0);
+});
+
 test("your changes are beside the chat, and one can be taken back", async ({ page }) => {
   await page.goto("/");
   const changes = page.getByRole("complementary", { name: "Your changes" });
   await expect(changes.getByRole("heading", { name: "In use" })).toBeVisible();
+  // Folded while there's one to check, as that's what wants you.
+  await expect(changes.getByRole("heading", { name: "To check" })).toBeVisible();
+  const inUse = changes.locator("details");
+  await expect(inUse).not.toHaveAttribute("open");
+  await inUse.locator("summary").click();
   const takeBack = changes.getByRole("button", { name: "Take back" });
   const before = await takeBack.count();
   expect(before).toBeGreaterThan(0);
