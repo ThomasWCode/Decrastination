@@ -80,9 +80,9 @@ object Notify {
         return if (tap.broadcast) PendingIntent.getBroadcast(context, tap.requestCode, intent, FLAGS) else PendingIntent.getActivity(context, tap.requestCode, intent, FLAGS)
     }
 
-    /** A notification on [channel] in the app's look: its icon, and the app's blue ([com.thomaswcode.decrastination.ui.Colours.BLUE_ARGB]). */
+    /** A notification on [channel] in the app's look: its icon, and the app's lilac ([com.thomaswcode.decrastination.ui.Colours.LILAC_ARGB]). */
     fun builder(context: Context, channel: String): NotificationCompat.Builder =
-        NotificationCompat.Builder(context, channel).setSmallIcon(R.drawable.ic_focus).setColor(Colours.BLUE_ARGB)
+        NotificationCompat.Builder(context, channel).setSmallIcon(R.drawable.ic_focus).setColor(Colours.LILAC_ARGB)
 
     /** [held], held back (LR-07), made again as it was: its tap and buttons with it, or with none kept, opening the app. */
     fun rebuild(context: Context, held: HeldNotification): Notification {
