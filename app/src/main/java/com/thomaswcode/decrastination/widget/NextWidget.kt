@@ -41,6 +41,7 @@ import androidx.glance.layout.height
 import androidx.glance.layout.padding
 import androidx.glance.layout.size
 import androidx.glance.layout.width
+import androidx.glance.color.ColorProvider
 import androidx.glance.material3.ColorProviders
 import androidx.glance.semantics.contentDescription
 import androidx.glance.semantics.semantics
@@ -60,6 +61,12 @@ import com.thomaswcode.decrastination.ui.OpenTaskActivity
  * minutes, a "Then:" line, and ↻. A tap opens the task where it lives. It grows from a card
  * holding the next thing at 2×1 to that card over the rest of today's list at 4×3 and up.
  */
+/** The lilac and the red for what's on the widget's lilac card, by day and by night, in what reads there ([Colours.accentOn]). */
+private object OnCard {
+    val accent = ColorProvider(day = Colours.accentOn(Colours.Light), night = Colours.accentOn(Colours.Dark))
+    val error = ColorProvider(day = Colours.errorOn(Colours.Light), night = Colours.errorOn(Colours.Dark))
+}
+
 class NextWidget : GlanceAppWidget() {
 
     /** Exact, so the list can fill whatever height the widget is given. */
@@ -191,7 +198,7 @@ class NextWidget : GlanceAppWidget() {
                             maxLines = 1,
                             modifier = GlanceModifier.padding(top = 2.dp),
                             style = TextStyle(
-                                color = if (model.urgent) GlanceTheme.colors.error else GlanceTheme.colors.onPrimaryContainer,
+                                color = if (model.urgent) OnCard.error else GlanceTheme.colors.onPrimaryContainer,
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Medium,
                             ),
@@ -218,14 +225,14 @@ class NextWidget : GlanceAppWidget() {
                         Image(
                             ImageProvider(if (model.timing) R.drawable.ic_stop else R.drawable.ic_play),
                             contentDescription = if (model.timing) "Stop the timer" else "Start a timer",
-                            colorFilter = ColorFilter.tint(GlanceTheme.colors.primary),
+                            colorFilter = ColorFilter.tint(OnCard.accent),
                             modifier = GlanceModifier.size(24.dp).clickable(actionRunCallback<StartAction>(actionParametersOf(StartAction.KEY to key, StartAction.TASK to model.taskId.orEmpty()))),
                         )
                         Spacer(GlanceModifier.height(4.dp))
-                        Image(ImageProvider(R.drawable.ic_check), contentDescription = "Done", colorFilter = ColorFilter.tint(GlanceTheme.colors.primary), modifier = GlanceModifier.size(24.dp).clickable(tick))
+                        Image(ImageProvider(R.drawable.ic_check), contentDescription = "Done", colorFilter = ColorFilter.tint(OnCard.accent), modifier = GlanceModifier.size(24.dp).clickable(tick))
                     }
                 } else {
-                    Image(ImageProvider(R.drawable.ic_check), contentDescription = "Done", colorFilter = ColorFilter.tint(GlanceTheme.colors.primary), modifier = GlanceModifier.size(28.dp).clickable(tick))
+                    Image(ImageProvider(R.drawable.ic_check), contentDescription = "Done", colorFilter = ColorFilter.tint(OnCard.accent), modifier = GlanceModifier.size(28.dp).clickable(tick))
                 }
             }
             if (layout.refresh) {
@@ -233,7 +240,7 @@ class NextWidget : GlanceAppWidget() {
                 Image(
                     ImageProvider(R.drawable.ic_refresh),
                     contentDescription = "Sync now",
-                    colorFilter = ColorFilter.tint(GlanceTheme.colors.primary),
+                    colorFilter = ColorFilter.tint(OnCard.accent),
                     modifier = GlanceModifier.size(28.dp).clickable(actionRunCallback<RefreshAction>()),
                 )
             }

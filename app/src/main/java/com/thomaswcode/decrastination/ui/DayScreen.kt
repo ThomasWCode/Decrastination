@@ -723,10 +723,11 @@ private fun WeekStrip(plan: Plan, chosen: LocalDate, drag: DayDrag, tasks: Map<S
                     }
                     LinearProgressIndicator(
                         progress = { if (free > 0) (planned.toFloat() / free).coerceIn(0f, 1f) else if (planned > 0) 1f else 0f },
-                        color = if (over) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                        // On the chosen day's lilac card, in what reads there.
+                        color = if (date == chosen) (if (over) Colours.errorOn(MaterialTheme.colorScheme) else Colours.accentOn(MaterialTheme.colorScheme)) else if (over) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
                         modifier = Modifier.fillMaxWidth(),
                     )
-                    Text(Format.minutes(planned), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(Format.minutes(planned), style = MaterialTheme.typography.labelSmall, color = if (date == chosen) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }

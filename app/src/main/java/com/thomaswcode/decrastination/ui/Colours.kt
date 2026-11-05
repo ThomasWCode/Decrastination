@@ -1,5 +1,6 @@
 package com.thomaswcode.decrastination.ui
 
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.ui.graphics.Color
@@ -28,6 +29,21 @@ object Colours {
      */
     fun onEvent(argb: Int): Color = if (Color(argb).luminance() > 0.179f) Color.Black else Color.White
 
+    /** How far apart two colours read, as WCAG has it: 1 the same, 21 black on white. */
+    fun contrast(a: Color, b: Color): Float {
+        val hi = maxOf(a.luminance(), b.luminance())
+        val lo = minOf(a.luminance(), b.luminance())
+        return (hi + 0.05f) / (lo + 0.05f)
+    }
+
+    /** The lilac for words and marks on a lilac card ([ColorScheme.primaryContainer]): the lilac itself where it reads there (by day), the card's own words' colour where it doesn't (by night, on the light lilac). */
+    fun accentOn(scheme: ColorScheme): Color = if (contrast(scheme.primary, scheme.primaryContainer) >= 4.5f) scheme.primary else scheme.onPrimaryContainer
+
+    /** The red for words and marks on a lilac card: the scheme's own where it reads there (by day), a deep red where it doesn't (by night, as its light red is the lilac's lightness). */
+    fun errorOn(scheme: ColorScheme): Color = if (contrast(scheme.error, scheme.primaryContainer) >= 4.5f) scheme.error else DeepRed
+
+    private val DeepRed = Color(0xFF5C0F0B)
+
     /** The notifications' accent, as Android takes it: a mid lilac, read on a light shade and a dark one. */
     const val LILAC_ARGB = 0xFF8C6FE0.toInt()
 
@@ -45,13 +61,15 @@ object Colours {
         outline = Color(0xFF7A7487), outlineVariant = Color(0xFFDCD6EA),
     )
 
-    // By night the light lilac is read on graphite (about 10:1), and on the cards, your messages and the
-    // chat's button, a dim lilac grey of their own so the lilac reads on them too; the surfaces are neutral greys.
+    // By night, as the website's: the light lilac is read on graphite (about 11:1), and the cards, the Day's
+    // pieces, your messages and the chips are light lilacs under near-black words, the piece now the lightest.
+    // Neither a dim lilac grey (murky) nor a deep violet (neon): the owner, 5 Nov. What's drawn on a card in the
+    // lilac or the red takes [accentOn] and [errorOn], which read there.
     val Dark = darkColorScheme(
-        primary = LilacLight, onPrimary = Color(0xFF2A1A5E), primaryContainer = Color(0xFF3A3150), onPrimaryContainer = Color(0xFFEDE6FF),
+        primary = Color(0xFFCFC0FF), onPrimary = Color(0xFF1A1A1A), primaryContainer = Color(0xFFA898E3), onPrimaryContainer = Color(0xFF1A1A1A),
         inversePrimary = Lilac,
-        secondary = Color(0xFFCBC2DB), onSecondary = Color(0xFF332D41), secondaryContainer = Color(0xFF34313B), onSecondaryContainer = Color(0xFFE8DEF8),
-        tertiary = Color(0xFFE5B8F0), onTertiary = Color(0xFF45204F), tertiaryContainer = Color(0xFF3A3540), onTertiaryContainer = Color(0xFFF5D9FF),
+        secondary = Color(0xFFD4C8FF), onSecondary = Color(0xFF1A1A1A), secondaryContainer = Color(0xFFC2B6EE), onSecondaryContainer = Color(0xFF1A1A1A),
+        tertiary = Color(0xFFF2B8FF), onTertiary = Color(0xFF1A1A1A), tertiaryContainer = Color(0xFFD9B8F0), onTertiaryContainer = Color(0xFF1A1A1A),
         background = Night, onBackground = OffWhite, surface = Night, onSurface = OffWhite,
         surfaceVariant = Color(0xFF26262B), onSurfaceVariant = Color(0xFFB9B9C0),
         surfaceContainerLowest = Color(0xFF0E0E10), surfaceContainerLow = Color(0xFF1B1B1E), surfaceContainer = Color(0xFF1F1F23),

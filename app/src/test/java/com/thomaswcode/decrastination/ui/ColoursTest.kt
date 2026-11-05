@@ -27,11 +27,27 @@ class ColoursTest {
             assertTrue(contrast(scheme.primary, scheme.surface) >= 4.5f, "primary on surface")
             assertTrue(contrast(scheme.onPrimary, scheme.primary) >= 4.5f, "on primary")
             assertTrue(contrast(scheme.onPrimaryContainer, scheme.primaryContainer) >= 4.5f, "on primary container")
-            // The lilac's own words are written on its cards too (the widget's title, the chat's labels).
-            assertTrue(contrast(scheme.primary, scheme.primaryContainer) >= 4.5f, "primary on primary container")
             assertTrue(contrast(scheme.onSurface, scheme.surface) >= 7f, "on surface")
             assertTrue(contrast(scheme.onSurfaceVariant, scheme.surfaceVariant) >= 4.5f, "on surface variant")
         }
+    }
+
+    @Test
+    fun `by night the cards and chips are light, as the website's, not a dim colour that reads murky`() {
+        val dark = Colours.Dark
+        for (container in listOf(dark.primaryContainer, dark.secondaryContainer, dark.tertiaryContainer)) {
+            assertTrue(container.luminance() >= 0.3f, "$container is too dark")
+        }
+    }
+
+    @Test
+    fun `what's drawn on a lilac card in the lilac or the red reads there, and is the scheme's own by day`() {
+        for (scheme in listOf(Colours.Light, Colours.Dark)) {
+            assertTrue(Colours.contrast(Colours.accentOn(scheme), scheme.primaryContainer) >= 4.5f, "accent on card")
+            assertTrue(Colours.contrast(Colours.errorOn(scheme), scheme.primaryContainer) >= 4.5f, "red on card")
+        }
+        assertEquals(Colours.Light.primary, Colours.accentOn(Colours.Light))
+        assertEquals(Colours.Light.error, Colours.errorOn(Colours.Light))
     }
 
     @Test
