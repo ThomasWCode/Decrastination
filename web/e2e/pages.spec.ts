@@ -214,6 +214,19 @@ test("the Phone page gives a code and lists what's paired", async ({ page }) => 
   await expect(page.getByTestId("pairing-code")).toHaveText(/^\d{6}$/);
 });
 
+test("a task's sheet takes the keyboard as it opens, and gives it back to the task as Escape shuts it", async ({ page }) => {
+  await page.goto("/work");
+  const title = page.getByTestId("task").first().getByRole("button").first();
+  await title.focus();
+  await page.keyboard.press("Enter");
+  const sheet = page.getByTestId("task-sheet");
+  await expect(sheet.getByRole("heading").first()).toBeVisible();
+  await expect(sheet).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(sheet).toHaveCount(0);
+  await expect(title).toBeFocused();
+});
+
 // The window scrolls neither sideways nor past its end: each page scrolls inside itself, under the bar.
 for (const width of [1024, 1366]) {
   test(`no page is wider or taller than a ${width}-pixel window`, async ({ page }) => {

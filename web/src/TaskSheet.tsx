@@ -133,9 +133,16 @@ export function TaskSheet({ id, form, close }: { id: string; form: OwnTaskFormVi
   const [moving, setMoving] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  // The keyboard's taken into the sheet as it opens: it's last in the page, after all the work.
+  // The keyboard's taken into the sheet as it opens, as it's last in the page, after all the work, and given
+  // back to what opened it as it shuts, if that's still there.
   const sheet = useRef<HTMLElement>(null);
-  useEffect(() => sheet.current?.focus(), []);
+  useEffect(() => {
+    const opener = document.activeElement;
+    sheet.current?.focus();
+    return () => {
+      if (opener instanceof HTMLElement && opener.isConnected) opener.focus();
+    };
+  }, []);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
