@@ -139,7 +139,8 @@
             "the essay",
             "the poster",
             "the cards"
-          ]
+          ],
+          "start": 1
         }
       ]
     },
@@ -153,7 +154,8 @@
           "items": [
             "plan",
             "write"
-          ]
+          ],
+          "start": 1
         }
       ]
     },
@@ -190,6 +192,63 @@
       "name": "nothing",
       "text": "",
       "blocks": []
+    },
+    {
+      "name": "a numbered list after words starts at its own number",
+      "text": "First:\n1. plan\n\nThen:\n2. write\n3. check",
+      "blocks": [
+        {
+          "kind": "p",
+          "text": "First:"
+        },
+        {
+          "kind": "list",
+          "ordered": true,
+          "start": 1,
+          "items": [
+            "plan"
+          ]
+        },
+        {
+          "kind": "p",
+          "text": "Then:"
+        },
+        {
+          "kind": "list",
+          "ordered": true,
+          "start": 2,
+          "items": [
+            "write",
+            "check"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a rule under a line with a pipe is no table",
+      "text": "either this | or that\n---",
+      "blocks": [
+        {
+          "kind": "p",
+          "text": "either this | or that\n---"
+        }
+      ]
+    },
+    {
+      "name": "a heading keeps a hash of its own, its closing ones dropped",
+      "text": "## Learning C#\n### The week ##",
+      "blocks": [
+        {
+          "kind": "h",
+          "level": 2,
+          "text": "Learning C#"
+        },
+        {
+          "kind": "h",
+          "level": 3,
+          "text": "The week"
+        }
+      ]
     }
   ],
   "runs": [

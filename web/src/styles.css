@@ -2161,7 +2161,7 @@ section.waiting h2 {
   margin: 0;
 }
 
-.review-summary {
+.md {
   display: grid;
   gap: 8px;
 }
@@ -2172,6 +2172,7 @@ section.waiting h2 {
 
 .md h3,
 .md h4 {
+  margin: 0;
   font-size: 15px;
   font-weight: 700;
 }

@@ -225,7 +225,8 @@ function Message({ row, view, doing, go }: { row: ChatRow; view: ChatView; doing
         <div className="bubble" key={index}>
           {index === 0 && row.quote ? <Quoted quote={row.quote} open={doing.quoted} /> : null}
           {index === 0 && row.about ? <p className="about">{row.about}</p> : null}
-          <Markdown text={text} className="words" />
+          {/* His words as Markdown; yours as you wrote them. */}
+          {row.yours ? <p className="words">{text}</p> : <Markdown text={text} className="words" />}
         </div>
       ))}
       <p className="time">

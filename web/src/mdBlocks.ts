@@ -6,13 +6,14 @@
 export type MdBlock =
   | { kind: "p"; text: string }
   | { kind: "h"; level: number; text: string }
-  | { kind: "list"; ordered: boolean; items: string[] }
+  | { kind: "list"; ordered: boolean; start: number; items: string[] }
   | { kind: "table"; header: string[]; rows: string[][] };
 
 const SEPARATOR = /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?\s*$/;
-const HEADING = /^(#{1,6})\s+(.*?)\s*#*\s*$/;
+// Closing hashes go only after a space, so "C#" keeps its own.
+const HEADING = /^(#{1,6})\s+(.*?)(?:\s+#+)?\s*$/;
 const BULLET = /^\s*[-*•]\s+(.*)$/;
-const NUMBERED = /^\s*\d+[.)]\s+(.*)$/;
+const NUMBERED = /^\s*(\d+)[.)]\s+(.*)$/;
 
 /** A table row's cells, its outer pipes dropped. */
 function cells(line: string): string[] {
@@ -40,7 +41,8 @@ export function parse(text: string): MdBlock[] {
   let i = 0;
   while (i < lines.length) {
     const line = at(i);
-    if (line.includes("|") && i + 1 < lines.length && SEPARATOR.test(at(i + 1))) {
+    // A table's separator has a cell for each of its header's, or it's a line of words and a rule.
+    if (line.includes("|") && i + 1 < lines.length && SEPARATOR.test(at(i + 1)) && cells(at(i + 1)).length === cells(line).length) {
       endPara();
       const header = cells(line);
       const rows: string[][] = [];
@@ -64,14 +66,16 @@ export function parse(text: string): MdBlock[] {
     if (bullet || numbered) {
       endPara();
       const ordered = numbered !== null;
+      // A numbered list starts where its first number says, as words can come between its items.
+      const start = numbered ? Number(numbered[1]) : 1;
       const items: string[] = [];
       while (i < lines.length) {
         const item = ordered ? NUMBERED.exec(at(i)) : BULLET.exec(at(i));
         if (!item) break;
-        items.push(item[1] ?? "");
+        items.push((ordered ? item[2] : item[1]) ?? "");
         i++;
       }
-      blocks.push({ kind: "list", ordered, items });
+      blocks.push({ kind: "list", ordered, start, items });
       continue;
     }
     if (line.trim() === "") endPara();

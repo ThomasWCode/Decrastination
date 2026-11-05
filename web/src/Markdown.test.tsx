@@ -31,4 +31,9 @@ describe("Markdown drawn", () => {
     expect(container.querySelector("b")).toBeNull();
     expect(screen.getByText("<b>not</b> read as HTML")).toBeTruthy();
   });
+
+  it("numbers a list from where its words start it", () => {
+    const { container } = render(<Markdown text={"Then:\n2. write\n3. check"} />);
+    expect(container.querySelector("ol")?.getAttribute("start")).toBe("2");
+  });
 });
