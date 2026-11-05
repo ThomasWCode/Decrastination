@@ -45,4 +45,17 @@ class MdBlocksCasesTest {
 
     @Test
     fun `bold runs`() = cases.runs.forEach { assertEquals(it.runs, MdBlocks.runs(it.text), it.text) }
+
+    /** The JVM takes the Unicode flag (?U) and Android's regex throws on it, so a test here passes where the phone crashes. */
+    @Test
+    fun `no regex in the app's code asks for the flag Android refuses`() {
+        val flag = Regex("""\(\?[a-zA-Z]*U""")
+        val found = listOf(File("src/main"), File("../app/src/main"), File("../core/src/main")).filter(File::exists).flatMap { root ->
+            root.walk().filter { it.extension == "kt" }.flatMap { file ->
+                file.readLines().withIndex().filter { (_, line) -> !line.trimStart().startsWith("//") && !line.trimStart().startsWith("*") && flag.containsMatchIn(line) }
+                    .map { (n, _) -> "${file.name}:${n + 1}" }
+            }
+        }
+        assertEquals(emptyList(), found)
+    }
 }

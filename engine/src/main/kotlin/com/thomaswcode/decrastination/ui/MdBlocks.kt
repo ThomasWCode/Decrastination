@@ -16,13 +16,14 @@ object MdBlocks {
 
     data class Table(val header: List<String>, val rows: List<List<String>>) : Block
 
-    // (?U): Unicode's spaces are spaces, as JavaScript's \s has them (a no-break space after a list's number).
-    private val SEPARATOR = Regex("""(?U)\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?\s*""")
+    // A space as JavaScript's \s has it, Unicode's spaces with it (a no-break space after a list's number), written
+    // out: Android's regex refuses the (?U) flag that would mean it, as it's ICU's, not the JVM's.
+    private const val SP = """[\s\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF]"""
+    private val SEPARATOR = Regex("""$SP*\|?$SP*:?-{3,}:?$SP*(\|$SP*:?-{3,}:?$SP*)*\|?$SP*""")
     // Closing hashes go only after a space, so "C#" keeps its own.
-    private val HEADING = Regex("""(?U)(#{1,6})\s+(.*?)(?:\s+#+)?\s*""")
-    private val BULLET = Regex("""(?U)\s*[-*•]\s+(.*)""")
-    // Its digits ASCII's alone, as JavaScript's \d is, where (?U) would take any script's.
-    private val NUMBERED = Regex("""(?U)\s*([0-9]+)[.)]\s+(.*)""")
+    private val HEADING = Regex("""(#{1,6})$SP+(.*?)(?:$SP+#+)?$SP*""")
+    private val BULLET = Regex("""$SP*[-*•]$SP+(.*)""")
+    private val NUMBERED = Regex("""$SP*([0-9]+)[.)]$SP+(.*)""")
     private val BOLD = Regex("""\*\*(.+?)\*\*""")
 
     /** A table row's cells, its outer pipes dropped. */
