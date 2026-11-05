@@ -40,7 +40,7 @@ export function Markdown({ text, className }: { text: string; className?: string
           </table>
         ) : block.kind === "list" ? (
           block.ordered ? (
-            <ol key={i}>
+            <ol key={i} start={block.start}>
               {block.items.map((item, n) => (
                 <li key={n}>
                   <Inline text={item} />
