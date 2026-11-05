@@ -12,14 +12,15 @@ object MdBlocks {
 
     data class Heading(val level: Int, val text: String) : Block
 
-    data class Items(val ordered: Boolean, val items: List<String>) : Block
+    data class Items(val ordered: Boolean, val start: Int, val items: List<String>) : Block
 
     data class Table(val header: List<String>, val rows: List<List<String>>) : Block
 
     private val SEPARATOR = Regex("""\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?\s*""")
-    private val HEADING = Regex("""(#{1,6})\s+(.*?)\s*#*\s*""")
+    // Closing hashes go only after a space, so "C#" keeps its own.
+    private val HEADING = Regex("""(#{1,6})\s+(.*?)(?:\s+#+)?\s*""")
     private val BULLET = Regex("""\s*[-*•]\s+(.*)""")
-    private val NUMBERED = Regex("""\s*\d+[.)]\s+(.*)""")
+    private val NUMBERED = Regex("""\s*(\d+)[.)]\s+(.*)""")
     private val BOLD = Regex("""\*\*(.+?)\*\*""")
 
     /** A table row's cells, its outer pipes dropped. */
@@ -44,7 +45,8 @@ object MdBlocks {
         var i = 0
         while (i < lines.size) {
             val line = lines[i]
-            if ("|" in line && i + 1 < lines.size && SEPARATOR.matches(lines[i + 1])) {
+            // A table's separator has a cell for each of its header's, or it's a line of words and a rule.
+            if ("|" in line && i + 1 < lines.size && SEPARATOR.matches(lines[i + 1]) && cells(lines[i + 1]).size == cells(line).size) {
                 endPara()
                 val header = cells(line)
                 val rows = mutableListOf<List<String>>()
@@ -68,13 +70,15 @@ object MdBlocks {
             if (bullet != null || numbered != null) {
                 endPara()
                 val ordered = numbered != null
+                // A numbered list starts where its first number says, as words can come between its items.
+                val start = numbered?.groupValues?.get(1)?.toIntOrNull() ?: 1
                 val items = mutableListOf<String>()
                 while (i < lines.size) {
                     val item = (if (ordered) NUMBERED else BULLET).matchEntire(lines[i]) ?: break
-                    items += item.groupValues[1]
+                    items += item.groupValues[if (ordered) 2 else 1]
                     i++
                 }
-                blocks += Items(ordered, items)
+                blocks += Items(ordered, start, items)
                 continue
             }
             if (line.isBlank()) endPara() else para += line

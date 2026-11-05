@@ -15,6 +15,7 @@ class MdBlocksCasesTest {
         val text: String = "",
         val level: Int = 0,
         val ordered: Boolean = false,
+        val start: Int = 1,
         val items: List<String> = emptyList(),
         val header: List<String> = emptyList(),
         val rows: List<List<String>> = emptyList(),
@@ -22,7 +23,7 @@ class MdBlocksCasesTest {
         fun block(): MdBlocks.Block = when (kind) {
             "p" -> MdBlocks.Paragraph(text)
             "h" -> MdBlocks.Heading(level, text)
-            "list" -> MdBlocks.Items(ordered, items)
+            "list" -> MdBlocks.Items(ordered, start, items)
             "table" -> MdBlocks.Table(header, rows)
             else -> error("no kind $kind")
         }

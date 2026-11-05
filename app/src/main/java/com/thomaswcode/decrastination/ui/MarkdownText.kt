@@ -36,7 +36,7 @@ fun MarkdownText(text: String, style: TextStyle, modifier: Modifier = Modifier) 
                 is MdBlocks.Items -> Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     block.items.forEachIndexed { n, item ->
                         Row {
-                            Text(if (block.ordered) "${n + 1}." else "•", style = style, modifier = Modifier.padding(end = 8.dp))
+                            Text(if (block.ordered) "${block.start + n}." else "•", style = style, modifier = Modifier.padding(end = 8.dp))
                             Text(inline(item), style = style, modifier = Modifier.weight(1f))
                         }
                     }

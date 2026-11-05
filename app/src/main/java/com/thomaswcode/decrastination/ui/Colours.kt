@@ -45,10 +45,10 @@ object Colours {
         outline = Color(0xFF7A7487), outlineVariant = Color(0xFFDCD6EA),
     )
 
-    // By night the light lilac is read on graphite (about 10:1), and fills your messages, the cards and
-    // the chat's button under near-black words; the surfaces are neutral greys.
+    // By night the light lilac is read on graphite (about 10:1), and on the cards, your messages and the
+    // chat's button, a dim lilac grey of their own so the lilac reads on them too; the surfaces are neutral greys.
     val Dark = darkColorScheme(
-        primary = LilacLight, onPrimary = Color(0xFF2A1A5E), primaryContainer = LilacLight, onPrimaryContainer = Color(0xFF1A1A1A),
+        primary = LilacLight, onPrimary = Color(0xFF2A1A5E), primaryContainer = Color(0xFF3A3150), onPrimaryContainer = Color(0xFFEDE6FF),
         inversePrimary = Lilac,
         secondary = Color(0xFFCBC2DB), onSecondary = Color(0xFF332D41), secondaryContainer = Color(0xFF34313B), onSecondaryContainer = Color(0xFFE8DEF8),
         tertiary = Color(0xFFE5B8F0), onTertiary = Color(0xFF45204F), tertiaryContainer = Color(0xFF3A3540), onTertiaryContainer = Color(0xFFF5D9FF),

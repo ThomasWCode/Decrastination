@@ -27,6 +27,8 @@ class ColoursTest {
             assertTrue(contrast(scheme.primary, scheme.surface) >= 4.5f, "primary on surface")
             assertTrue(contrast(scheme.onPrimary, scheme.primary) >= 4.5f, "on primary")
             assertTrue(contrast(scheme.onPrimaryContainer, scheme.primaryContainer) >= 4.5f, "on primary container")
+            // The lilac's own words are written on its cards too (the widget's title, the chat's labels).
+            assertTrue(contrast(scheme.primary, scheme.primaryContainer) >= 4.5f, "primary on primary container")
             assertTrue(contrast(scheme.onSurface, scheme.surface) >= 7f, "on surface")
             assertTrue(contrast(scheme.onSurfaceVariant, scheme.surfaceVariant) >= 4.5f, "on surface variant")
         }
