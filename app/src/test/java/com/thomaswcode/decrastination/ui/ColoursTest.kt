@@ -51,6 +51,17 @@ class ColoursTest {
     }
 
     @Test
+    fun `the widget's frame is dark by night, and its heading, its words and its card read on it`() {
+        for ((scheme, frame) in listOf(Colours.Light to Colours.WidgetFrameDay, Colours.Dark to Colours.WidgetFrameNight)) {
+            assertTrue(Colours.contrast(scheme.primary, frame) >= 4.5f, "the day's count on the frame")
+            assertTrue(Colours.contrast(scheme.onSurface, frame) >= 7f, "Felix's line on the frame")
+        }
+        // By night the lilac card stands out from the frame round it, rather than sitting on a paler lilac.
+        assertTrue(Colours.WidgetFrameNight.luminance() < 0.05f, "the night frame is dark")
+        assertTrue(Colours.contrast(Colours.Dark.primaryContainer, Colours.WidgetFrameNight) >= 3f, "the card on the frame")
+    }
+
+    @Test
     fun `by night the surfaces are greys that never lean warm, so none reads as brown`() {
         val dark = Colours.Dark
         for (surface in listOf(dark.surface, dark.surfaceVariant, dark.surfaceContainerLowest, dark.surfaceContainerLow, dark.surfaceContainer, dark.surfaceContainerHigh, dark.surfaceContainerHighest)) {

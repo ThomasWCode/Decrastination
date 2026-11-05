@@ -44,6 +44,14 @@ object Colours {
 
     private val DeepRed = Color(0xFF5C0F0B)
 
+    /**
+     * The widget's frame round its card and list, by day and by night. By day Glance's own (a tone above the secondary
+     * container); by night the graphite, as Glance's, a tone above the light lilac secondary container, is paler than the
+     * card it holds and hides the lilac words on it.
+     */
+    val WidgetFrameDay = Color(0xFFF4EDFF)
+    val WidgetFrameNight = Night
+
     /** The notifications' accent, as Android takes it: a mid lilac, read on a light shade and a dark one. */
     const val LILAC_ARGB = 0xFF8C6FE0.toInt()
 
