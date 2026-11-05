@@ -203,6 +203,11 @@ test("your changes are beside the chat, and one can be taken back", async ({ pag
   await page.goto("/");
   const changes = page.getByRole("complementary", { name: "Your changes" });
   await expect(changes.getByRole("heading", { name: "In use" })).toBeVisible();
+  // Folded while there's one to check, as that's what wants you.
+  await expect(changes.getByRole("heading", { name: "To check" })).toBeVisible();
+  const inUse = changes.locator("details");
+  await expect(inUse).not.toHaveAttribute("open");
+  await inUse.locator("summary").click();
   const takeBack = changes.getByRole("button", { name: "Take back" });
   const before = await takeBack.count();
   expect(before).toBeGreaterThan(0);

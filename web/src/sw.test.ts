@@ -36,7 +36,7 @@ describe("the service worker", () => {
   it("shows what's pushed, its tag and where a tap goes with it", async () => {
     const { run, showNotification } = worker([{ focused: false }]);
     await run("push", pushed);
-    expect(showNotification).toHaveBeenCalledWith("Felix", { body: "A made-up word", tag: "felix", data: { url: "/" } });
+    expect(showNotification).toHaveBeenCalledWith("Felix", { body: "A made-up word", tag: "felix", icon: "/favicon-192.png", data: { url: "/" } });
   });
 
   it("shows it with a page in front too, as a browser can stop sending to a site whose pushes show nothing", async () => {

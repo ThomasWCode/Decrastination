@@ -30,27 +30,28 @@ function useLocation(): [URL, (to: string) => void] {
 export type Go = (to: string) => void;
 
 /** A link inside the site: the address changes, nothing reloads. */
-export function Link({ to, go, current, date, children }: { to: string; go: Go; current?: boolean; date?: string; children: ReactNode }) {
+export function Link({ to, go, current, date, className, children }: { to: string; go: Go; current?: boolean; date?: string; className?: string; children: ReactNode }) {
   const follow = (event: MouseEvent) => {
     if (event.metaKey || event.ctrlKey) return;
     event.preventDefault();
     go(to);
   };
   return (
-    <a href={to} onClick={follow} aria-current={current ? "page" : undefined} data-date={date}>
+    <a href={to} onClick={follow} aria-current={current ? "page" : undefined} data-date={date} className={className}>
       {children}
     </a>
   );
 }
 
+// In three groups, each first marked: what you do, how it's going, and the site's own, at the far end.
 const PAGES = [
   { path: "/", name: "Chat" },
   { path: "/day", name: "Day" },
   { path: "/work", name: "Work" },
-  { path: "/stats", name: "Stats" },
+  { path: "/stats", name: "Stats", group: "group-start" },
   { path: "/week", name: "This week" },
   { path: "/reviews", name: "Reviews" },
-  { path: "/settings", name: "Settings" },
+  { path: "/settings", name: "Settings", group: "group-start last" },
   { path: "/backup", name: "Backup" },
   { path: "/setup", name: "Setup" },
   { path: "/phone", name: "Phone" },
@@ -89,7 +90,7 @@ function Bar({ url, go, signOut, stillIn }: { url: URL; go: Go; signOut: () => v
       <span className="name">Decrastination</span>
       <nav aria-label="Pages">
         {PAGES.map((page) => (
-          <Link key={page.path} to={page.path} go={go} current={url.pathname === page.path}>
+          <Link key={page.path} to={page.path} go={go} current={url.pathname === page.path} className={page.group}>
             {page.name}
             {page.path === "/setup" && value?.setup ? <span className="needs-you" role="img" aria-label="needs you" /> : null}
           </Link>

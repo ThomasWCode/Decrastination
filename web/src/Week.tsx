@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
 import { api, checkIn, telling } from "./api";
 import { useLive } from "./live";
+import { Markdown } from "./Markdown";
 import type { Action, ReviewCard, ReviewLine, WeekView } from "./types";
 
 /** The week's check-in (LR-02): what's typed is held here till it's kept, and asked for again by nothing. */
@@ -100,7 +101,7 @@ function Card({ card, say, busy }: { card: ReviewCard; say: (undo: Action) => vo
       <h2>{card.week}</h2>
       <p className="note">{card.by}</p>
       {card.lines.map((line) => (
-        <p key={line}>{line}</p>
+        <Markdown key={line} text={line} />
       ))}
       {card.changes.length > 0 || card.tidy ? (
         <ul className="stat-lines">
@@ -113,14 +114,14 @@ function Card({ card, say, busy }: { card: ReviewCard; say: (undo: Action) => vo
       {summary ? (
         <>
           <p className="note">The week's summary</p>
-          <p className="review-summary">{summary}</p>
+          <Markdown text={summary} className="review-summary" />
           <div className="buttons">
             {card.mailto ? (
-              <a className="quiet" href={card.mailto}>
+              <a className="action" href={card.mailto}>
                 Send it
               </a>
             ) : null}
-            <button className="quiet" onClick={() => void navigator.clipboard.writeText(summary)}>
+            <button className="action" onClick={() => void navigator.clipboard.writeText(summary)}>
               Copy
             </button>
           </div>

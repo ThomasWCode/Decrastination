@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type Keyboar
 import { api, readTo, saying, send, tryAgain } from "./api";
 import { Link, type Go } from "./App";
 import { useLive } from "./live";
+import { Markdown } from "./Markdown";
 import { NewTask } from "./NewTask";
 import type { Action, ChangeRow, ChatButton, ChatCard, ChatChip, ChatQuote, ChatRow, ChatView, OwnTaskFormView } from "./types";
 import { Visit } from "./visit";
@@ -224,7 +225,7 @@ function Message({ row, view, doing, go }: { row: ChatRow; view: ChatView; doing
         <div className="bubble" key={index}>
           {index === 0 && row.quote ? <Quoted quote={row.quote} open={doing.quoted} /> : null}
           {index === 0 && row.about ? <p className="about">{row.about}</p> : null}
-          <p className="words">{text}</p>
+          <Markdown text={text} className="words" />
         </div>
       ))}
       <p className="time">
@@ -406,10 +407,15 @@ function Changes({ view }: { view: ChatView }) {
         </>
       ) : null}
       {view.inUse.length > 0 ? (
-        <>
-          <h3>In use</h3>
+        // Folded while there's something to check, as that's what wants you.
+        <details open={view.toCheck.length === 0}>
+          <summary>
+            <h3>
+              In use <span className="count">{view.inUse.length}</span>
+            </h3>
+          </summary>
           <ul>{view.inUse.map(change)}</ul>
-        </>
+        </details>
       ) : (
         <p className="empty">No changes in use. What you apply from the chat is listed here, and taken back here too.</p>
       )}

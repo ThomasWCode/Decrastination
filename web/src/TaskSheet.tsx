@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api, asking, saying } from "./api";
 import { useLive } from "./live";
 import { moment, NewTask } from "./NewTask";
@@ -133,6 +133,10 @@ export function TaskSheet({ id, form, close }: { id: string; form: OwnTaskFormVi
   const [moving, setMoving] = useState(false);
   const [busy, setBusy] = useState(false);
 
+  // The keyboard's taken into the sheet as it opens: it's last in the page, after all the work.
+  const sheet = useRef<HTMLElement>(null);
+  useEffect(() => sheet.current?.focus(), []);
+
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") close();
@@ -171,7 +175,7 @@ export function TaskSheet({ id, form, close }: { id: string; form: OwnTaskFormVi
   };
 
   return (
-    <aside className="sheet" aria-label={task?.title ?? "Task"} data-testid="task-sheet">
+    <aside className="sheet" aria-label={task?.title ?? "Task"} data-testid="task-sheet" ref={sheet} tabIndex={-1}>
       <button className="close" onClick={close} aria-label="Close">
         ×
       </button>

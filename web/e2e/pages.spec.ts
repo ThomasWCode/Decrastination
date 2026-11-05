@@ -214,6 +214,29 @@ test("the Phone page gives a code and lists what's paired", async ({ page }) => 
   await expect(page.getByTestId("pairing-code")).toHaveText(/^\d{6}$/);
 });
 
+// The window scrolls neither sideways nor past its end: each page scrolls inside itself, under the bar.
+for (const width of [1024, 1366]) {
+  test(`no page is wider or taller than a ${width}-pixel window`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 720 });
+    for (const path of ["/", "/day", "/work", "/stats", "/week", "/reviews", "/settings", "/backup", "/setup", "/phone"]) {
+      await page.goto(path);
+      await expect(page.locator("main")).toBeVisible();
+      await page.waitForLoadState("networkidle");
+      if (path === "/work") await page.getByRole("button", { name: "By subject" }).click();
+      const size = await page.evaluate(() => ({
+        wide: document.documentElement.scrollWidth,
+        tall: document.documentElement.scrollHeight,
+        // Nor does anything inside it: a scroll bar of its own along the bottom is one all the same.
+        sideways: Array.from(document.querySelectorAll("main *")).filter((el) => {
+          const across = getComputedStyle(el).overflowX;
+          return (across === "auto" || across === "scroll") && el.scrollWidth > el.clientWidth;
+        }).length,
+      }));
+      expect(size, path).toEqual({ wide: width, tall: 720, sideways: 0 });
+    }
+  });
+}
+
 test("signed out, the site asks you to sign in", async ({ browser }) => {
   const context = await browser.newContext({ storageState: { cookies: [], origins: [] } });
   const page = await context.newPage();
