@@ -236,7 +236,7 @@ button {
 }
 
 .now-panel .warning {
-  color: #ffdad6;
+  color: var(--error);
   font-weight: 600;
 }
 
