@@ -96,7 +96,7 @@ private fun ReviewCard(card: ReviewPage.Card, settings: Settings, onUndo: (Strin
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(card.week, style = MaterialTheme.typography.titleMedium)
             Text(card.by, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            card.lines.forEach { Text(it, style = MaterialTheme.typography.bodyMedium) }
+            card.lines.forEach { MarkdownText(it, MaterialTheme.typography.bodyMedium) }
             card.changes.forEach { change ->
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(change.text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
@@ -113,7 +113,7 @@ private fun ReviewCard(card: ReviewPage.Card, settings: Settings, onUndo: (Strin
             // The week's summary for home (NF-02), and its email.
             card.summary?.let { text ->
                 Text("The week's summary", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(text, style = MaterialTheme.typography.bodyMedium)
+                MarkdownText(text, MaterialTheme.typography.bodyMedium)
                 val context = LocalContext.current
                 card.review.week?.let { week -> TextButton(onClick = { runCatching { context.startActivity(SummaryEmail.email(settings.summaryEmail, week, text)) } }) { Text("Send it") } }
             }

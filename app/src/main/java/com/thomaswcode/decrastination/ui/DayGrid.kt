@@ -374,7 +374,7 @@ private fun PieceBlock(item: DayModel.Row.Planned, chunk: Chunk, plan: Plan, zon
             val tall = maxHeight >= 32.dp && maxWidth >= 120.dp
             Row(Modifier.fillMaxSize()) {
                 // Urgent: a red edge on its left.
-                if (chunk.urgent) Box(Modifier.width(3.dp).fillMaxHeight().background(MaterialTheme.colorScheme.error))
+                if (chunk.urgent) Box(Modifier.width(3.dp).fillMaxHeight().background(Colours.errorOn(MaterialTheme.colorScheme)))
                 Column(Modifier.weight(1f).padding(horizontal = 6.dp, vertical = 2.dp).clipToBounds()) {
                     Text(fit(chunk.label), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, color = content, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     Text(times, style = MaterialTheme.typography.labelSmall, color = content, maxLines = 1)

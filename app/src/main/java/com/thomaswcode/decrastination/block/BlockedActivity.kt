@@ -44,6 +44,7 @@ import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.Chunk
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.ui.AppTheme
+import com.thomaswcode.decrastination.ui.Colours
 import com.thomaswcode.decrastination.ui.FelixFab
 import com.thomaswcode.decrastination.ui.Format
 import com.thomaswcode.decrastination.ui.PieceActions
@@ -135,7 +136,7 @@ class BlockedActivity : ComponentActivity() {
                 Modifier.fillMaxSize().safeDrawingPadding().verticalScroll(rememberScrollState()).padding(24.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                // On the app's pale blue by day, its navy by night ([com.thomaswcode.decrastination.ui.Colours]).
+                // On the app's pale lilac by day, its light lilac by night, as the website's ([com.thomaswcode.decrastination.ui.Colours]).
                 Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = RoundedCornerShape(16.dp)) {
                     Text("Not now", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
                 }
@@ -179,7 +180,7 @@ class BlockedActivity : ComponentActivity() {
                 Text(
                     listOf(WidgetModel.badge(chunk, now, zone), Format.minutes(chunk.minutes), chunk.source.label).joinToString(" · "),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = if (chunk.overdue || chunk.behind) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onPrimaryContainer,
+                    color = if (chunk.overdue || chunk.behind) Colours.errorOn(MaterialTheme.colorScheme) else MaterialTheme.colorScheme.onPrimaryContainer,
                 )
             }
         }

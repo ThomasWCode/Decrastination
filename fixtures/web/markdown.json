@@ -249,6 +249,21 @@
           "text": "The week"
         }
       ]
+    },
+    {
+      "name": "a no-break space after a list's number is a space",
+      "text": "1. plan\n2. write",
+      "blocks": [
+        {
+          "kind": "list",
+          "ordered": true,
+          "start": 1,
+          "items": [
+            "plan",
+            "write"
+          ]
+        }
+      ]
     }
   ],
   "runs": [

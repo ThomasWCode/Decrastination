@@ -1205,14 +1205,14 @@ private fun Claudes(graph: AppGraph, screen: ChatScreenState, message: ChatMessa
             val texts = FelixAnswers.texts(message)
             texts.dropLast(1).forEach { text ->
                 Bubble(message, MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(18.dp, 18.dp, 18.dp, 4.dp), flash, onReply, onMarkAnswered = onMarkAnswered, onRate = onRate) {
-                    Text(text, style = MaterialTheme.typography.bodyLarge)
+                    MarkdownText(text, MaterialTheme.typography.bodyLarge)
                 }
                 Spacer(Modifier.height(4.dp))
             }
             Labelled(screen, message) {
                 // A tap on the bubble opens or closes what's folded, as its chevron does: a bigger place to tap.
                 Bubble(message, MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(18.dp, 18.dp, 18.dp, 4.dp), flash, onReply, onTap = { if (folds) screen.toggle(message.id) }, onMarkAnswered = onMarkAnswered, onRate = onRate) {
-                    Text(texts.last(), style = MaterialTheme.typography.bodyLarge)
+                    MarkdownText(texts.last(), MaterialTheme.typography.bodyLarge)
                     if (folds) Chevron(open, ChatSummary.problems(message) > 0, Modifier.align(Alignment.End)) { screen.toggle(message.id) }
                 }
             }
