@@ -20,7 +20,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -67,7 +66,8 @@ class CheckInActivity : ComponentActivity() {
         var energy by rememberSaveable(week) { mutableStateOf("") }
         val done = log.checkIns.any { it.weekOf == week }
 
-        Scaffold(topBar = { TopAppBar(title = { Text("This week") }) }) { padding ->
+        // A Back arrow, as every page off the menu has.
+        Scaffold(topBar = { BackBar("This week", this@CheckInActivity) }) { padding ->
             Column(Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 if (done) {
                     Text(ReviewPage.CHECK_IN_DONE, style = MaterialTheme.typography.bodyLarge)

@@ -1,5 +1,6 @@
 package com.thomaswcode.decrastination.ui
 
+import android.app.Activity
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -19,7 +20,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -48,7 +48,7 @@ class ReviewsActivity : ComponentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         val graph = AppGraph.get(this)
-        setContent { AppTheme { Reviews(graph) } }
+        setContent { AppTheme { Reviews(graph, this) } }
         // From the summary's notification (NF-02): its email opened over the page, once.
         if (savedInstanceState == null) intent.getStringExtra(EXTRA_SEND)?.let { week ->
             // The week's latest summary: Sunday's, where a midweek review wrote one before it (D-123).
@@ -66,7 +66,7 @@ class ReviewsActivity : ComponentActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun Reviews(graph: AppGraph) {
+private fun Reviews(graph: AppGraph, activity: Activity) {
     val log by graph.log.state.collectAsStateWithLifecycle()
     val settings by graph.settings.state.collectAsStateWithLifecycle()
     val memory by graph.memory.state.collectAsStateWithLifecycle()
@@ -74,7 +74,8 @@ private fun Reviews(graph: AppGraph) {
     val zone = graph.clock.zone()
     var said by remember { mutableStateOf<String?>(null) }
     val cards = ReviewPage.cards(log, settings, memory, zone)
-    Scaffold(topBar = { TopAppBar(title = { Text("Reviews") }) }) { padding ->
+    // A Back arrow, as every page off the menu has.
+    Scaffold(topBar = { BackBar("Reviews", activity) }) { padding ->
         LazyColumn(Modifier.padding(padding).fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             said?.let { item(key = "said") { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.secondary) } }
             if (cards.isEmpty()) item(key = "none") { Text(ReviewPage.NONE_YET, style = MaterialTheme.typography.bodyLarge) }
