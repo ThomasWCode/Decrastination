@@ -138,6 +138,15 @@ fun FoldingHeading(
     }
 }
 
+/**
+ * What's drawn on a card of [container], in the colours that read there ([Colours.onCard]): by night, on a light lilac card,
+ * the buttons, labels and marks Material draws in the lilac take the card's near-black.
+ */
+@Composable
+fun OnCard(container: Color, content: @Composable () -> Unit) {
+    MaterialTheme(colorScheme = Colours.onCard(MaterialTheme.colorScheme, container), content = content)
+}
+
 /** A short value set apart: a duration, a count. */
 @Composable
 fun Pill(text: String, container: Color = MaterialTheme.colorScheme.secondaryContainer, content: Color = MaterialTheme.colorScheme.onSecondaryContainer) {

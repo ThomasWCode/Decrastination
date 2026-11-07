@@ -23,14 +23,18 @@ import kotlinx.coroutines.launch
 fun Hint(graph: AppGraph, name: String, text: String) {
     val settings by graph.settings.state.collectAsStateWithLifecycle()
     if (name in settings.hintsSeen) return
+    val container = MaterialTheme.colorScheme.secondaryContainer
     Card(
         modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 12.dp),
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+        colors = CardDefaults.cardColors(containerColor = container),
     ) {
-        Column(Modifier.padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 4.dp)) {
-            Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSecondaryContainer)
-            TextButton(onClick = { graph.scope.launch { graph.commands.changeSettings { it.copy(hintsSeen = (it.hintsSeen + name).distinct().takeLast(SettingsLimits.MAX_HINTS)) } } }) { Text("Got it") }
+        // Got it in what reads on the card ([OnCard]).
+        OnCard(container) {
+            Column(Modifier.padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 4.dp)) {
+                Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSecondaryContainer)
+                TextButton(onClick = { graph.scope.launch { graph.commands.changeSettings { it.copy(hintsSeen = (it.hintsSeen + name).distinct().takeLast(SettingsLimits.MAX_HINTS)) } } }) { Text("Got it") }
+            }
         }
     }
 }

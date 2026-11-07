@@ -51,6 +51,23 @@ class ColoursTest {
     }
 
     @Test
+    fun `on a lilac card Material's buttons, labels and marks read by night, and by day the scheme is its own`() {
+        for (scheme in listOf(Colours.Light, Colours.Dark)) {
+            for (card in listOf(scheme.primaryContainer, scheme.secondaryContainer, scheme.tertiaryContainer)) {
+                val on = Colours.onCard(scheme, card)
+                assertTrue(Colours.contrast(on.primary, card) >= 4.5f, "an outlined or text button's words on $card")
+                assertTrue(Colours.contrast(on.onPrimary, on.primary) >= 4.5f, "a filled button's words on $card")
+                assertTrue(Colours.contrast(on.error, card) >= 4.5f, "the red on $card")
+                assertTrue(Colours.contrast(on.onSurfaceVariant, card) >= 4.5f, "the quieter words on $card")
+                assertTrue(Colours.contrast(on.outline, card) >= 3f, "an outlined button's rim on $card")
+            }
+        }
+        for (card in listOf(Colours.Light.primaryContainer, Colours.Light.secondaryContainer)) assertEquals(Colours.Light, Colours.onCard(Colours.Light, card))
+        // On the night's greys the lilac reads already.
+        assertEquals(Colours.Dark, Colours.onCard(Colours.Dark, Colours.Dark.surfaceContainer))
+    }
+
+    @Test
     fun `the widget's frame is dark by night, and its heading, its words and its card read on it`() {
         for ((scheme, frame) in listOf(Colours.Light to Colours.WidgetFrameDay, Colours.Dark to Colours.WidgetFrameNight)) {
             assertTrue(Colours.contrast(scheme.primary, frame) >= 4.5f, "the day's count on the frame")

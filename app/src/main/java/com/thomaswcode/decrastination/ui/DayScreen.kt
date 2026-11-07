@@ -719,7 +719,7 @@ private fun WeekStrip(plan: Plan, chosen: LocalDate, drag: DayDrag, tasks: Map<S
                 Column(Modifier.padding(horizontal = 10.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(if (date == plan.today) "Today" else date.format(SHORT_DAY), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                        if (bucket?.chunks.orEmpty().any { it.behind }) Box(Modifier.size(6.dp).clip(CircleShape).background(MaterialTheme.colorScheme.error))
+                        if (bucket?.chunks.orEmpty().any { it.behind }) Box(Modifier.size(6.dp).clip(CircleShape).background(if (date == chosen) Colours.errorOn(MaterialTheme.colorScheme) else MaterialTheme.colorScheme.error))
                     }
                     LinearProgressIndicator(
                         progress = { if (free > 0) (planned.toFloat() / free).coerceIn(0f, 1f) else if (planned > 0) 1f else 0f },

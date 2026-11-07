@@ -73,6 +73,7 @@ import com.thomaswcode.decrastination.sync.protocol.UseParentCode
 import com.thomaswcode.decrastination.ui.AppTheme
 import com.thomaswcode.decrastination.ui.Format
 import com.thomaswcode.decrastination.ui.Group
+import com.thomaswcode.decrastination.ui.OnCard
 import com.thomaswcode.decrastination.ui.SectionHeading
 import com.thomaswcode.decrastination.ui.SetupItem
 import kotlinx.coroutines.launch
@@ -149,33 +150,35 @@ fun ProtectionPanel(graph: AppGraph, activity: ComponentActivity) {
     }
 
     Column(Modifier.fillMaxWidth()) {
+        val container = if (device.watchdog.problems.isEmpty()) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.errorContainer
         Card(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = if (device.watchdog.problems.isEmpty()) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.errorContainer,
-            ),
+            colors = CardDefaults.cardColors(containerColor = container),
         ) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(if (settings.armed) "Armed" else "Not armed", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-                Text(
-                    if (settings.armed) {
-                        "Changes that loosen blocking itself wait ${settings.loosenDelayHours} hours; your work (due dates, minutes, " +
-                            "working hours, the plan) changes at once. The app's own pages in Settings are guarded, " +
-                            "and switching the focus service off puts it straight back on."
-                    } else {
-                        "Blocking works, but nothing stops it being switched off or changed. Arm it when you're ready."
-                    },
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                device.watchdog.problems.forEach { Text("• $it", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error) }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (settings.armed) {
-                        OutlinedButton(onClick = { scope.launch { graph.commands.changeSettings { it.copy(armed = false) } } }) { Text("Disarm") }
-                        if (hasParentCode) {
-                            OutlinedButton(onClick = { codeFor = CodeTarget.Unblock }) { Text("Unblock for an hour") }
+            // Disarm and Unblock in what reads on the card: by night Material's light lilac is the card's own.
+            OnCard(container) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(if (settings.armed) "Armed" else "Not armed", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        if (settings.armed) {
+                            "Changes that loosen blocking itself wait ${settings.loosenDelayHours} hours; your work (due dates, minutes, " +
+                                "working hours, the plan) changes at once. The app's own pages in Settings are guarded, " +
+                                "and switching the focus service off puts it straight back on."
+                        } else {
+                            "Blocking works, but nothing stops it being switched off or changed. Arm it when you're ready."
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    device.watchdog.problems.forEach { Text("• $it", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error) }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (settings.armed) {
+                            OutlinedButton(onClick = { scope.launch { graph.commands.changeSettings { it.copy(armed = false) } } }) { Text("Disarm") }
+                            if (hasParentCode) {
+                                OutlinedButton(onClick = { codeFor = CodeTarget.Unblock }) { Text("Unblock for an hour") }
+                            }
+                        } else {
+                            Button(onClick = { step = Step.Explain }) { Text("Arm protection") }
                         }
-                    } else {
-                        Button(onClick = { step = Step.Explain }) { Text("Arm protection") }
                     }
                 }
             }

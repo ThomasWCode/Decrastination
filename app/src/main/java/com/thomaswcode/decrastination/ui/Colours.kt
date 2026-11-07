@@ -36,13 +36,34 @@ object Colours {
         return (hi + 0.05f) / (lo + 0.05f)
     }
 
-    /** The lilac for words and marks on a lilac card ([ColorScheme.primaryContainer]): the lilac itself where it reads there (by day), the card's own words' colour where it doesn't (by night, on the light lilac). */
-    fun accentOn(scheme: ColorScheme): Color = if (contrast(scheme.primary, scheme.primaryContainer) >= 4.5f) scheme.primary else scheme.onPrimaryContainer
+    /** The lilac for words and marks on a lilac card ([container], [ColorScheme.primaryContainer] unless given): the lilac itself where it reads there (by day), the card's own words' colour where it doesn't (by night, on the light lilac). */
+    fun accentOn(scheme: ColorScheme, container: Color = scheme.primaryContainer): Color = if (contrast(scheme.primary, container) >= 4.5f) scheme.primary else scheme.onPrimaryContainer
 
-    /** The red for words and marks on a lilac card: the scheme's own where it reads there (by day), a deep red where it doesn't (by night, as its light red is the lilac's lightness). */
-    fun errorOn(scheme: ColorScheme): Color = if (contrast(scheme.error, scheme.primaryContainer) >= 4.5f) scheme.error else DeepRed
+    /** The red for words and marks on a lilac card ([container], [ColorScheme.primaryContainer] unless given): the scheme's own where it reads there (by day), a deep red where it doesn't (by night, as its light red is the lilac's lightness). */
+    fun errorOn(scheme: ColorScheme, container: Color = scheme.primaryContainer): Color = if (contrast(scheme.error, container) >= 4.5f) scheme.error else DeepRed
 
     private val DeepRed = Color(0xFF5C0F0B)
+
+    /** The grey for a card's quieter words and its outlined buttons' rims by night, on the light lilacs (over 5:1 on each). */
+    private val CardGrey = Color(0xFF2E2E33)
+
+    /**
+     * The scheme for what's drawn on a card of [container]: [scheme] itself where its lilac reads there (by day, and on the
+     * night's greys). By night, on a light lilac card, Material's buttons, labels and marks would draw in the light lilac and
+     * the light red, the card's own lightness: there the lilac is the card's near-black, a filled button near-black under light
+     * lilac words, the red [errorOn]'s, and the greys a dark one, so an outlined or a text button's words, a disabled one's, a
+     * switch's and a field's read on it.
+     */
+    fun onCard(scheme: ColorScheme, container: Color): ColorScheme {
+        if (contrast(scheme.primary, container) >= 4.5f) return scheme
+        val ink = scheme.onPrimaryContainer
+        return scheme.copy(
+            primary = ink, onPrimary = scheme.primary,
+            secondary = ink, onSecondary = scheme.primary,
+            error = errorOn(scheme, container), onError = Color.White,
+            onSurface = ink, onSurfaceVariant = CardGrey, outline = CardGrey,
+        )
+    }
 
     /**
      * The widget's frame round its card and list, by day and by night. By day Glance's own (a tone above the secondary

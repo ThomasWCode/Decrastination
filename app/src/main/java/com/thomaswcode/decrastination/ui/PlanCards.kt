@@ -142,28 +142,32 @@ internal fun NextCard(
     val next = plan.next
     val message = messageOf(next?.taskId.orEmpty(), true)
     val first = Modifier.semantics { customActions = actions }
+    val container = MaterialTheme.colorScheme.primaryContainer
     Card(
         modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 12.dp),
         shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+        colors = CardDefaults.cardColors(containerColor = container),
     ) {
-        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (next == null) {
-                Text("Nothing to do", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold, modifier = first)
-                graph.focus.rewardLine(plan)?.let { Text(it, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold) }
-                Text(empty, style = MaterialTheme.typography.bodyMedium)
+        // Its actions' outlined buttons and its timer in what reads on the card ([OnCard]).
+        OnCard(container) {
+            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (next == null) {
+                    Text("Nothing to do", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold, modifier = first)
+                    graph.focus.rewardLine(plan)?.let { Text(it, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold) }
+                    Text(empty, style = MaterialTheme.typography.bodyMedium)
+                    message?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onPrimaryContainer) }
+                    return@Column
+                }
+                Text("DO NOW", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = Colours.accentOn(MaterialTheme.colorScheme), modifier = first)
+                Text(next.label, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
+                // Its first step (AI-15), as it's written ahead.
+                graph.stores.model.value.microPlans[next.key]?.first?.takeIf { it.isNotEmpty() }?.let { Text("First: $it", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onPrimaryContainer) }
+                Badges(next, plan.now, zone)
+                graph.focus.rewardLine(plan)?.let { Text(it, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onPrimaryContainer) }
+                plan.then?.let { Text("Then: ${it.label}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onPrimaryContainer) }
+                PieceActions(graph, activity, next, plan.now, photo) { say(next.taskId, it) }
                 message?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onPrimaryContainer) }
-                return@Column
             }
-            Text("DO NOW", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = Colours.accentOn(MaterialTheme.colorScheme), modifier = first)
-            Text(next.label, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
-            // Its first step (AI-15), as it's written ahead.
-            graph.stores.model.value.microPlans[next.key]?.first?.takeIf { it.isNotEmpty() }?.let { Text("First: $it", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onPrimaryContainer) }
-            Badges(next, plan.now, zone)
-            graph.focus.rewardLine(plan)?.let { Text(it, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onPrimaryContainer) }
-            plan.then?.let { Text("Then: ${it.label}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onPrimaryContainer) }
-            PieceActions(graph, activity, next, plan.now, photo) { say(next.taskId, it) }
-            message?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onPrimaryContainer) }
         }
     }
 }
