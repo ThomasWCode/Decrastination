@@ -1314,9 +1314,10 @@ private fun Labelled(screen: ChatScreenState, message: ChatMessage, bubble: @Com
 /** A message's label (Q5: A): what he did, and in red what went wrong, in a small pill. */
 @Composable
 private fun Label(line: ChatSummary.Line, modifier: Modifier, onOpen: () -> Unit) {
-    val red = MaterialTheme.colorScheme.error
+    val container = MaterialTheme.colorScheme.secondaryContainer
+    val red = Colours.errorOn(MaterialTheme.colorScheme, container)
     val shape = RoundedCornerShape(10.dp)
-    Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = shape, modifier = modifier.clip(shape).clickable(onClick = onOpen)) {
+    Surface(color = container, shape = shape, modifier = modifier.clip(shape).clickable(onClick = onOpen)) {
         Text(
             buildAnnotatedString {
                 append(line.did)
@@ -1464,90 +1465,94 @@ private fun ProposalCard(graph: AppGraph, messageId: String, proposal: Proposal,
     val scope = rememberCoroutineScope()
     val applied = proposal.state == ProposalState.Applied
     val discarded = proposal.state == ProposalState.Discarded
+    val container = if (discarded) MaterialTheme.colorScheme.surfaceContainer else MaterialTheme.colorScheme.secondaryContainer
     Card(
         modifier = Modifier.fillMaxWidth().padding(end = 24.dp),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = if (discarded) MaterialTheme.colorScheme.surfaceContainer else MaterialTheme.colorScheme.secondaryContainer),
+        colors = CardDefaults.cardColors(containerColor = container),
     ) {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            // A task shown (AI-14): its name, and Open, to its sheet.
-            proposal.open?.let { id ->
-                val context = LocalContext.current
-                Text("Task", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-                Text(tasks[id]?.title ?: "A task no longer listed", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                if (id in tasks) {
-                    Button(onClick = {
-                        context.startActivity(
-                            Intent(context, MainActivity::class.java)
-                                .putExtra(MainActivity.EXTRA_TAB, MainActivity.TAB_TASKS)
-                                .putExtra(MainActivity.EXTRA_TASK, id)
-                                .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP),
-                        )
-                    }) { Text("Open") }
+        // Its labels and buttons in what reads on the card ([OnCard]).
+        OnCard(container) {
+            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                // A task shown (AI-14): its name, and Open, to its sheet.
+                proposal.open?.let { id ->
+                    val context = LocalContext.current
+                    Text("Task", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                    Text(tasks[id]?.title ?: "A task no longer listed", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    if (id in tasks) {
+                        Button(onClick = {
+                            context.startActivity(
+                                Intent(context, MainActivity::class.java)
+                                    .putExtra(MainActivity.EXTRA_TAB, MainActivity.TAB_TASKS)
+                                    .putExtra(MainActivity.EXTRA_TASK, id)
+                                    .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+                            )
+                        }) { Text("Open") }
+                    }
+                    return@Column
                 }
-                return@Column
-            }
-            // Added, the task as it is now (changed since with Change, or on its page); else as he gave it.
-            val task = proposal.made?.takeIf { applied }?.let { tasks[it] }?.takeIf { it.source == Source.Own }?.let(OwnTaskRules::draftOf) ?: proposal.task
-            if (task != null) {
-                Text(if (task.kind == Kind.Event) "New event of yours" else "New task of yours", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-                Text(task.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Text(taskLine(task, now, zone), style = MaterialTheme.typography.bodyMedium)
-                if (task.steps.isNotEmpty()) {
-                    task.steps.forEach { s -> Text("• " + stepLine(s.title, s.minutes, s.from, s.dueAt, s.anyOrder, now, zone), style = MaterialTheme.typography.bodySmall) }
+                // Added, the task as it is now (changed since with Change, or on its page); else as he gave it.
+                val task = proposal.made?.takeIf { applied }?.let { tasks[it] }?.takeIf { it.source == Source.Own }?.let(OwnTaskRules::draftOf) ?: proposal.task
+                if (task != null) {
+                    Text(if (task.kind == Kind.Event) "New event of yours" else "New task of yours", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                    Text(task.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Text(taskLine(task, now, zone), style = MaterialTheme.typography.bodyMedium)
+                    if (task.steps.isNotEmpty()) {
+                        task.steps.forEach { s -> Text("• " + stepLine(s.title, s.minutes, s.from, s.dueAt, s.anyOrder, now, zone), style = MaterialTheme.typography.bodySmall) }
+                    }
+                    if (task.notes.isNotBlank()) Text(task.notes, style = MaterialTheme.typography.bodySmall)
+                } else {
+                    Text("Changes", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                    // In the words it was proposed in: made, the task's estimate is the new one.
+                    val lines = proposal.lines.takeIf { it.size == proposal.changes.size } ?: proposal.changes.map { InstructionRules.describe(it, tasks, zone) }
+                    lines.forEach { Text("• $it", style = MaterialTheme.typography.bodyMedium) }
                 }
-                if (task.notes.isNotBlank()) Text(task.notes, style = MaterialTheme.typography.bodySmall)
-            } else {
-                Text("Changes", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-                // In the words it was proposed in: made, the task's estimate is the new one.
-                val lines = proposal.lines.takeIf { it.size == proposal.changes.size } ?: proposal.changes.map { InstructionRules.describe(it, tasks, zone) }
-                lines.forEach { Text("• $it", style = MaterialTheme.typography.bodyMedium) }
-            }
-            proposal.note?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
-            FlowRow(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                when {
-                    // From the archive: what became of it, with nothing to do, as only the window's are acted on.
-                    !live -> Text(
-                        when {
-                            applied -> if (proposal.task != null) "Added" else if (proposal.instant) "Done" else "Applied"
-                            discarded -> "Set aside"
-                            proposal.instant -> if (proposal.note == null) "Undone" else "Not made"
-                            else -> "Not added"
-                        },
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.align(Alignment.CenterVertically),
-                    )
-                    applied -> {
-                        Text(
+                proposal.note?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
+                FlowRow(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    when {
+                        // From the archive: what became of it, with nothing to do, as only the window's are acted on.
+                        !live -> Text(
                             when {
-                                proposal.task != null -> "Added"
-                                proposal.instant -> "Done"
-                                else -> "Applied"
+                                applied -> if (proposal.task != null) "Added" else if (proposal.instant) "Done" else "Applied"
+                                discarded -> "Set aside"
+                                proposal.instant -> if (proposal.note == null) "Undone" else "Not made"
+                                else -> "Not added"
                             },
                             style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.primary,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.align(Alignment.CenterVertically),
                         )
-                        if (proposal.made != null || proposal.before.isNotEmpty() || proposal.schoolBefore != null) TextButton(onClick = { scope.launch { graph.act(UndoProposal(messageId, proposal.id)) } }) { Text("Undo") }
-                        // A task it added is yours to change, in the form, from here too.
-                        if (proposal.task != null && proposal.made in tasks) TextButton(onClick = { onEdit(messageId, proposal.id) }) { Text("Change") }
-                    }
-                    discarded -> {
-                        Text("Set aside", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.align(Alignment.CenterVertically))
-                        TextButton(onClick = { scope.launch { graph.act(DiscardProposal(messageId, proposal.id, discarded = false)) } }) { Text("Bring back") }
-                    }
-                    // Made as it came, and since undone, or not made (its note says why): made again here.
-                    proposal.instant -> {
-                        if (proposal.note == null) Text("Undone", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.align(Alignment.CenterVertically))
-                        TextButton(onClick = { scope.launch { graph.act(ApplyProposal(messageId, proposal.id)) } }) { Text(if (proposal.note == null) "Redo" else "Try again") }
-                        if (proposal.task != null) TextButton(onClick = { onEdit(messageId, proposal.id) }) { Text("Change first") }
-                    }
-                    // From before everything was made as it came (D-60): still to add or apply.
-                    else -> {
-                        Button(onClick = { scope.launch { graph.act(ApplyProposal(messageId, proposal.id)) } }) { Text(if (task != null) "Add" else "Apply") }
-                        if (task != null) OutlinedButton(onClick = { onEdit(messageId, proposal.id) }) { Text("Change first") }
-                        TextButton(onClick = { scope.launch { graph.act(DiscardProposal(messageId, proposal.id)) } }) { Text("Set aside") }
+                        applied -> {
+                            Text(
+                                when {
+                                    proposal.task != null -> "Added"
+                                    proposal.instant -> "Done"
+                                    else -> "Applied"
+                                },
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.align(Alignment.CenterVertically),
+                            )
+                            if (proposal.made != null || proposal.before.isNotEmpty() || proposal.schoolBefore != null) TextButton(onClick = { scope.launch { graph.act(UndoProposal(messageId, proposal.id)) } }) { Text("Undo") }
+                            // A task it added is yours to change, in the form, from here too.
+                            if (proposal.task != null && proposal.made in tasks) TextButton(onClick = { onEdit(messageId, proposal.id) }) { Text("Change") }
+                        }
+                        discarded -> {
+                            Text("Set aside", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.align(Alignment.CenterVertically))
+                            TextButton(onClick = { scope.launch { graph.act(DiscardProposal(messageId, proposal.id, discarded = false)) } }) { Text("Bring back") }
+                        }
+                        // Made as it came, and since undone, or not made (its note says why): made again here.
+                        proposal.instant -> {
+                            if (proposal.note == null) Text("Undone", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.align(Alignment.CenterVertically))
+                            TextButton(onClick = { scope.launch { graph.act(ApplyProposal(messageId, proposal.id)) } }) { Text(if (proposal.note == null) "Redo" else "Try again") }
+                            if (proposal.task != null) TextButton(onClick = { onEdit(messageId, proposal.id) }) { Text("Change first") }
+                        }
+                        // From before everything was made as it came (D-60): still to add or apply.
+                        else -> {
+                            Button(onClick = { scope.launch { graph.act(ApplyProposal(messageId, proposal.id)) } }) { Text(if (task != null) "Add" else "Apply") }
+                            if (task != null) OutlinedButton(onClick = { onEdit(messageId, proposal.id) }) { Text("Change first") }
+                            TextButton(onClick = { scope.launch { graph.act(DiscardProposal(messageId, proposal.id)) } }) { Text("Set aside") }
+                        }
                     }
                 }
             }

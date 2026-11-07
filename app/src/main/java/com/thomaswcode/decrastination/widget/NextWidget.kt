@@ -67,6 +67,9 @@ private object OnCard {
     val error = ColorProvider(day = Colours.errorOn(Colours.Light), night = Colours.errorOn(Colours.Dark))
 }
 
+/** The frame round the card and the list ([Colours.WidgetFrameDay], [Colours.WidgetFrameNight]): graphite by night, as the app's background. */
+private val Frame = ColorProvider(day = Colours.WidgetFrameDay, night = Colours.WidgetFrameNight)
+
 class NextWidget : GlanceAppWidget() {
 
     /** Exact, so the list can fill whatever height the widget is given. */
@@ -126,7 +129,7 @@ class NextWidget : GlanceAppWidget() {
         }
         Column(
             GlanceModifier.fillMaxSize().appWidgetBackground().cornerRadius(20.dp)
-                .background(GlanceTheme.colors.widgetBackground).padding(8.dp),
+                .background(Frame).padding(8.dp),
         ) {
             if (layout.warning) model.warning?.let { Warning(it, app) }
             Column(GlanceModifier.fillMaxWidth().cornerRadius(16.dp).background(GlanceTheme.colors.primaryContainer).padding(horizontal = 14.dp, vertical = 12.dp)) {

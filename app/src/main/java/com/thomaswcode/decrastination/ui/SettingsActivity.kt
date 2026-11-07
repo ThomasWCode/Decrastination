@@ -20,8 +20,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -46,6 +48,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
@@ -122,6 +126,11 @@ class SettingsActivity : ComponentActivity() {
         val today = Instant.ofEpochMilli(graph.clock.now()).atZone(graph.clock.zone()).toLocalDate()
         val effect: @Composable (String) -> Unit = { field -> SettingsEffects.line(field, draft, tasksState.timetable, schoolCalendar, today)?.let { Note(it) } }
 
+        // The list's place, kept while a page is open, and each page's own from its top: one scroll for both put the list
+        // back at its top on the way back from a page, as a short page's scroll is.
+        val listPlace = rememberLazyListState()
+        val pagePlace = rememberSaveable(section, saver = LazyListState.Saver) { LazyListState() }
+
         Scaffold(
             topBar = { BackBar(PAGES.firstOrNull { it.key == section }?.title ?: "Settings", this, onBack = if (section != null) ({ section = null }) else null) },
             floatingActionButton = { FelixFab(this) },
@@ -140,7 +149,7 @@ class SettingsActivity : ComponentActivity() {
             },
         ) { padding ->
             // Room under the last row for Felix's button.
-            LazyColumn(Modifier.padding(padding).fillMaxSize(), contentPadding = PaddingValues(bottom = FELIX_ROOM)) {
+            LazyColumn(Modifier.padding(padding).fillMaxSize(), state = if (section == null) listPlace else pagePlace, contentPadding = PaddingValues(bottom = FELIX_ROOM)) {
                 when (section) {
                     // Its pages (UI-18), and what's waiting its hours, whichever page it's on.
                     null -> {
@@ -175,13 +184,15 @@ class SettingsActivity : ComponentActivity() {
                         // Each class code the sources give, and the subject it is, or the Power Planner class it is (its lessons
                         // then go with it, Lessons.groups): blank leaves it the code.
                         Note("Each class: its subject, or the Power Planner class it is, so its lessons go with it.")
+                        // The code over its field, as a window's name is over its times: a long one, as a source can give,
+                        // wraps there rather than through the field's rim, as a label of two lines does.
                         for (code in screen.classCodes(graph.tasks.value.tasks, graph.tasks.value.timetable)) {
+                            Text("$code is", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp))
                             OutlinedTextField(
                                 value = draft.classMap[code].orEmpty(),
                                 onValueChange = { subject -> screen.subject(code, subject) },
-                                label = { Text("$code is") },
                                 singleLine = true,
-                                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).semantics { contentDescription = "$code is" },
                             )
                         }
                         Note("Sent to Claude with every call, with your school days and what's remembered.")
