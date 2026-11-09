@@ -1,6 +1,7 @@
 package com.thomaswcode.decrastination.ui
 
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.luminance
 import kotlin.math.max
 import kotlin.math.min
@@ -87,5 +88,45 @@ class ColoursTest {
             assertTrue(channels.max() - channels.min() <= 6 / 255f, "$surface: more than a lean")
             assertTrue(surface.red <= surface.blue, "$surface leans warm")
         }
+    }
+
+    @Test
+    fun `on the Day a band's name and a free event's words read on the school band, by day and by night`() {
+        for (scheme in listOf(Colours.Light, Colours.Dark)) {
+            val band = Colours.schoolBand(scheme)
+            assertTrue(Colours.contrast(scheme.onSurfaceVariant, band) >= 4.5f, "a band's name on the school band")
+            assertTrue(Colours.contrast(scheme.onSurfaceVariant, scheme.surface) >= 4.5f, "a band's name on your time")
+            assertTrue(Colours.contrast(scheme.onSurface, band) >= 4.5f, "a free event's words on the school band")
+        }
+        assertEquals(Colours.Light.secondaryContainer, Colours.schoolBand(Colours.Light))
+        // By night the band is the graphite, as the website's, not a card's lilac.
+        assertTrue(Colours.schoolBand(Colours.Dark).luminance() < 0.05f, "the night's band is dark")
+    }
+
+    @Test
+    fun `on the school band the blocks stand out, by their fill or their rim`() {
+        for (scheme in listOf(Colours.Light, Colours.Dark)) {
+            val band = Colours.schoolBand(scheme)
+            // An event with no colour of its own, a slot kept and a busy time are rimmed in the outline: by day the event's
+            // lilac is the band's, and by night the slot's grey is.
+            assertTrue(Colours.contrast(scheme.outline, band) >= 3f, "the outline on the school band")
+            assertTrue(Colours.contrast(scheme.outline, scheme.surfaceVariant) >= 3f, "the outline on a slot kept")
+        }
+        // By night the cards' lilacs stand out on the graphite band by their fill alone.
+        val night = Colours.schoolBand(Colours.Dark)
+        for (fill in listOf(Colours.Dark.primaryContainer, Colours.Dark.primary, Colours.Dark.secondaryContainer, Colours.outsideStrip(Colours.Dark))) {
+            assertTrue(Colours.contrast(fill, night) >= 3f, "$fill on the night's band")
+        }
+    }
+
+    @Test
+    fun `a break outside's words read on its strip over each of the Day's backgrounds, by day and by night`() {
+        for (scheme in listOf(Colours.Light, Colours.Dark)) {
+            val strip = Colours.outsideStrip(scheme)
+            for (under in listOf(scheme.surface, scheme.surfaceContainer, Colours.schoolBand(scheme))) {
+                assertTrue(Colours.contrast(scheme.onTertiaryContainer, strip.compositeOver(under)) >= 4.5f, "Outside on $under")
+            }
+        }
+        assertEquals(0.6f, Colours.outsideStrip(Colours.Light).alpha, 0.01f)
     }
 }

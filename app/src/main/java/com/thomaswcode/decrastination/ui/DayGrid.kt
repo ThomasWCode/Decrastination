@@ -156,7 +156,7 @@ internal fun DayGrid(
     }
     val shade = MaterialTheme.colorScheme.surfaceContainer
     val surface = MaterialTheme.colorScheme.surface
-    val school = MaterialTheme.colorScheme.secondaryContainer
+    val school = Colours.schoolBand(MaterialTheme.colorScheme)
     val line = MaterialTheme.colorScheme.outlineVariant
     val primary = MaterialTheme.colorScheme.primary
     Box(
@@ -401,7 +401,7 @@ private fun OutsideBlock(item: DayModel.Row.Planned, zone: ZoneId, drag: DayDrag
     val current by rememberUpdatedState(actions)
     val movable = item.state == DayModel.State.Ahead
     Box(
-        Modifier.fillMaxSize().clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.6f))
+        Modifier.fillMaxSize().clip(RoundedCornerShape(8.dp)).background(Colours.outsideStrip(MaterialTheme.colorScheme))
             .alpha(if (drag.key == slot.key) 0.5f else 1f)
             .onGloballyPositioned { coordinates ->
                 origin = coordinates.positionInRoot()
@@ -432,16 +432,19 @@ private fun OutsideBlock(item: DayModel.Row.Planned, zone: ZoneId, drag: DayDrag
 
 /**
  * An event: in its colour (its own, else its calendar's), its words black or white, whichever reads better on it; outlined only
- * where the plan counts it free; a small "?" where the plan needs your answer about it. Tapped, its sheet.
+ * where the plan counts it free; a small "?" where the plan needs your answer about it. Tapped, its sheet. With no colour of
+ * its own it's rimmed in the outline, as by day its lilac is the school band's.
  */
 @Composable
 private fun EventBlock(event: CalendarEvent, judgement: EventJudge.Judgement, asked: Boolean, zone: ZoneId, actions: DayActions, fit: (String) -> String) {
     val colour = event.colour?.let { Color(it) } ?: MaterialTheme.colorScheme.secondaryContainer
     val words = event.colour?.let { Colours.onEvent(it) } ?: MaterialTheme.colorScheme.onSecondaryContainer
     val free = judgement == EventJudge.Judgement.Free
+    val rim = if (event.colour == null) MaterialTheme.colorScheme.outline else colour
     Box(
         Modifier.fillMaxSize().clip(RoundedCornerShape(8.dp))
-            .then(if (free) Modifier.border(1.dp, colour, RoundedCornerShape(8.dp)) else Modifier.background(colour))
+            .then(if (free) Modifier else Modifier.background(colour))
+            .then(if (free || event.colour == null) Modifier.border(1.dp, rim, RoundedCornerShape(8.dp)) else Modifier)
             .clickable { actions.onEvent(event) }
             .padding(horizontal = 6.dp, vertical = 2.dp),
     ) {
@@ -455,7 +458,10 @@ private fun EventBlock(event: CalendarEvent, judgement: EventJudge.Judgement, as
     }
 }
 
-/** A slot on record: kept, grey and struck through; missed, outlined and worded in the error colour, its sheet a tap away. */
+/**
+ * A slot on record: kept, grey, rimmed in the outline (its grey is the school band's by night) and struck through; missed,
+ * outlined and worded in the error colour, its sheet a tap away.
+ */
 @Composable
 private fun RecordBlock(item: DayModel.Row.Recorded, zone: ZoneId, actions: DayActions, fit: (String) -> String) {
     val record = item.record
@@ -464,7 +470,7 @@ private fun RecordBlock(item: DayModel.Row.Recorded, zone: ZoneId, actions: DayA
     val keeps = item.piece?.takeIf { actions.canKeep(item) }
     Box(
         Modifier.fillMaxSize().clip(RoundedCornerShape(8.dp))
-            .then(if (missed) Modifier.border(1.dp, MaterialTheme.colorScheme.error, RoundedCornerShape(8.dp)) else Modifier.background(MaterialTheme.colorScheme.surfaceVariant))
+            .then(if (missed) Modifier.border(1.dp, MaterialTheme.colorScheme.error, RoundedCornerShape(8.dp)) else Modifier.background(MaterialTheme.colorScheme.surfaceVariant).border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(8.dp)))
             .then(
                 if (missed) {
                     Modifier.semantics { if (keeps != null) customActions = listOf(CustomAccessibilityAction("Done") { actions.onDone(keeps); true }) }
