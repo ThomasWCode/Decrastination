@@ -4,6 +4,7 @@ import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.luminance
 
 /**
@@ -63,6 +64,22 @@ object Colours {
             error = errorOn(scheme, container), onError = Color.White,
             onSurface = ink, onSurfaceVariant = CardGrey, outline = CardGrey,
         )
+    }
+
+    /**
+     * The Day's school bands behind its blocks: by day the secondary container's light lilac tint; by night, where the band's
+     * name wouldn't read on that lilac, the graphite a tone above the shaded hours, as the website's band, so the name reads
+     * and the blocks in the cards' lilac stand out on it.
+     */
+    fun schoolBand(scheme: ColorScheme): Color = if (contrast(scheme.onSurfaceVariant, scheme.secondaryContainer) >= 4.5f) scheme.secondaryContainer else scheme.surfaceContainerHigh
+
+    /**
+     * A break outside's pale strip on the Day: the tertiary container at 0.6 where its words still read on it over the page
+     * (by day); the container itself where they don't (by night, where the graphite through it takes its words to about 4.2:1).
+     */
+    fun outsideStrip(scheme: ColorScheme): Color {
+        val pale = scheme.tertiaryContainer.copy(alpha = 0.6f)
+        return if (contrast(scheme.onTertiaryContainer, pale.compositeOver(scheme.surface)) >= 4.5f) pale else scheme.tertiaryContainer
     }
 
     /**

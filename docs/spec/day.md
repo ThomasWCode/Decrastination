@@ -13,7 +13,7 @@ The Day tab (UI-17, D-118), opened from the chat's Plan button (D-121, [felix.md
 
 ## The grid
 
-- 00:00 to 24:00 down a gutter of hours, as the app writes times ("15:00"), every hour but midnight's, a thin line across at each. The day's windows are bands behind the blocks, school's tinted, each named at its top ("Study period", "Break", "Lunch", "Your time"); the hours outside every window are shaded.
+- 00:00 to 24:00 down a gutter of hours, as the app writes times ("15:00"), every hour but midnight's, a thin line across at each. The day's windows are bands behind the blocks, school's tinted (by day the secondary container's lilac, by night the graphite a tone above the shaded hours, as the website's band, `Colours.schoolBand`), each named at its top ("Study period", "Break", "Lunch", "Your time"); the hours outside every window are shaded.
 - Each slot, record, timed event and busy time of yours is a **block** from its start, as tall as it lasts but never under 24 dp. Blocks at the same time stand side by side, each in the first column free at its start and widened right over the columns free for all its time (`DayLayout.columns`); a block under 40 dp wide shows its first word only.
 - The grid is the day's wall clock (`DayLayout.minuteOf`): on the day the clocks go back, the hour repeated is drawn once, two things in it side by side; on the day they go forward, the missing hour is empty. An event across midnight is drawn on each day it covers, from 00:00 or to 24:00.
 - Today's moment is a line across in the primary colour with a dot at the gutter's edge, moved each minute.
@@ -28,10 +28,10 @@ The Day tab (UI-17, D-118), opened from the chat's Plan button (D-121, [felix.md
 | A piece ahead | `primaryContainer`: its label, its times, then as its height allows its reason (`Chunk.whyLine`), its first step ("First: …", AI-15) and the last thing said about its task; urgent, a red edge on its left; a ✓ where it's at least 32 dp tall and 120 dp wide | its piece's sheet (`PieceSheet`) | right to left: Done, with Undo; left to right: later today (today's only) | drag |
 | The piece under way | the same in `primary`, its times followed by " · now" | as above | as above | as above |
 | A piece gone by, not yet moved | faded, " · gone by" | as above | as above | as above |
-| A break outside | a pale strip, "Outside" | none | none | drag within its day, not under way |
-| A slot kept, or kept late | grey, its label struck through, its outcome | none | none | none |
+| A break outside | a pale strip, "Outside" (by night not see-through, so its word reads on the graphite, `Colours.outsideStrip`) | none | none | drag within its day, not under way |
+| A slot kept, or kept late | grey, rimmed in the outline, its label struck through, its outcome | none | none | none |
 | A slot missed | outlined and worded in the error colour, "Missed" | its sheet (`MissedSheet`, below) | none | none |
-| An event | its colour (the event's own, else its calendar's, `CalendarEvent.colour`); its words black or white, whichever reads better on it (`Colours.onEvent`); outlined only where the plan counts it free; a small "?" where the plan needs your answer about it, not asked yet | its event sheet (`EventSheet`) | none | none |
+| An event | its colour (the event's own, else its calendar's, `CalendarEvent.colour`); its words black or white, whichever reads better on it (`Colours.onEvent`); outlined only where the plan counts it free; with no colour of its own, the secondary container's lilac rimmed in the outline; a small "?" where the plan needs your answer about it, not asked yet | its event sheet (`EventSheet`) | none | none |
 | A busy time of yours (D-117) | outlined, "Busy: Football", or "Busy" | none | none | none |
 
 For TalkBack, each piece's block says its times and label, and offers *Done*, *Later today* and *Move it* (the move sheet), so nothing needs the drag or a swipe; a break outside is moved without the drag by asking Felix (D-116). The DO NOW card offers *Fold it* on its first line, so the grid can be reached while the card fills the Day and leaves it no room; folded, its line unfolds it at a double tap. A missed slot's block offers *Done* too, where its sheet has it.
