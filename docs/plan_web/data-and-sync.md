@@ -9,7 +9,7 @@ SQLite, one file, `/opt/decrastination/data/decrastination.db`, in WAL mode (Lit
 | Table | Columns | Holds |
 |---|---|---|
 | `stores` | `name` PK, `version`, `revision`, `json`, `updated_at` | the current text of every store, by its file's name: `tasks.json`, `settings.json`, `session.json`, `chat.json`, `chat-archive-2026-10.json`, … exactly the JSON the phone's files hold |
-| `store_history` | `revision`, `name`, `version`, `json`, `cause`, `at` | every past text of every store, one row a write; `cause` is the command's id. Trimmed to 90 days of history and never fewer than the last 20 rows a store |
+| `store_history` | `revision`, `name`, `version`, `json`, `cause`, `at` | every past text of every store, one row a write; `cause` is the command's id. Kept whole for a day, then one row a store an hour, for 30 days, and never fewer than the last 20 rows a store (D-151) |
 | `commands` | `id` PK, `device`, `protocol`, `payload`, `received_at`, `at`, `outcome`, `why`, `revision` | every command received, for 90 days, with how it went: applied, dropped or refused, and why |
 | `devices` | `id`, `name`, `token_hash`, `created_at`, `last_seen_at`, `revoked_at`, `fid` | the phone's token(s), and from stage 8 each phone's Firebase Installation ID, where it's told of a change |
 | `sessions` | `id`, `created_at`, `expires_at`, `last_seen_at` | the website's sign-ins |
