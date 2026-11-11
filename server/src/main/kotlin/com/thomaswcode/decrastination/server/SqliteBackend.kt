@@ -166,15 +166,27 @@ class SqliteBackend(private val db: Database, private val clock: () -> Long = Sy
         }
     }
 
-    /** The history older than [before] let go, but each store's newest [keep] rows. */
-    fun trimHistory(before: Long, keep: Int = HISTORY_KEPT) {
+    /**
+     * The history older than [before] let go, and older than [thinBefore] thinned to each store's last row of each hour, but each
+     * store's newest [keep] rows. Most of a store's rows differ from the one before by a sync's time alone, each a whole copy, so an
+     * hour's last says what the hour came to. A copy set aside as unreadable isn't thinned: it's the only one of what couldn't be read.
+     */
+    fun trimHistory(before: Long, keep: Int = HISTORY_KEPT, thinBefore: Long = before) {
         db.transaction { c ->
             c.prepareStatement(
-                """DELETE FROM store_history WHERE at < ? AND rowid NOT IN (
-                     SELECT rowid FROM (SELECT rowid, row_number() OVER (PARTITION BY name ORDER BY revision DESC) AS n FROM store_history) WHERE n <= ?)""",
+                """DELETE FROM store_history WHERE rowid IN (
+                     SELECT rowid FROM (
+                       SELECT rowid, at, cause, row_number() OVER (PARTITION BY name ORDER BY revision DESC) AS n,
+                         row_number() OVER (PARTITION BY name, at / ?, cause = ? ORDER BY revision DESC) AS h
+                       FROM store_history)
+                     WHERE n > ? AND (at < ? OR (at < ? AND h > 1 AND cause <> ?)))""",
             ).use { q ->
-                q.setLong(1, before)
-                q.setInt(2, keep)
+                q.setLong(1, HOUR_MS)
+                q.setString(2, UNREADABLE)
+                q.setInt(3, keep)
+                q.setLong(4, before)
+                q.setLong(5, thinBefore)
+                q.setString(6, UNREADABLE)
                 q.executeUpdate()
             }
         }
@@ -218,7 +230,16 @@ class SqliteBackend(private val db: Database, private val clock: () -> Long = Sy
         /** The rows of a store's history kept however old they are. */
         const val HISTORY_KEPT = 20
 
-        /** How long a store's history is kept. */
-        const val HISTORY_MS = 90 * 24 * 3_600_000L
+        /** How long a store's history is kept (D-151). */
+        const val HISTORY_MS = 30 * 24 * 3_600_000L
+
+        /** How long every row of a store's history is kept, before it's thinned to one an hour (D-151). */
+        const val HISTORY_WHOLE_MS = 24 * 3_600_000L
+
+        /** How long the commands on record are kept. */
+        const val COMMANDS_MS = 90 * 24 * 3_600_000L
+
+        /** The span a thinned history keeps one row of. */
+        private const val HOUR_MS = 3_600_000L
     }
 }

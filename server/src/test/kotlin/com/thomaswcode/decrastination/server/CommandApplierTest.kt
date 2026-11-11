@@ -208,6 +208,10 @@ class CommandApplierTest {
         assertFalse("what I avoided" in left, left)
         assertTrue("Essay" in left)
         assertEquals(2, rows())
+        // Kept past the history's 30 days: the tidy lets them go only at their own 90.
+        db.transactionless { c -> c.createStatement().use { it.execute("UPDATE commands SET received_at = ${System.currentTimeMillis() - 40 * 24 * 3_600_000L}") } }
+        graph.tidy()
+        assertEquals(2, rows())
         graph.backend.trimCommands(System.currentTimeMillis() + 1_000)
         assertEquals(0, rows())
     }

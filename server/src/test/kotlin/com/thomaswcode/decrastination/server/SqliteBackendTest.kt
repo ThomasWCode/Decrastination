@@ -120,6 +120,48 @@ class SqliteBackendTest {
     }
 
     @Test
+    fun `past its whole span the history keeps each store's last row of each hour, and the newest whatever their hour`() {
+        var now = 0L
+        val timed = SqliteBackend(db) { now }
+        fun at(minute: Long, name: String, text: String) {
+            now = minute * 60_000L
+            timed.write(name, 1, text)
+        }
+        at(0, "a.json", "a0")
+        at(5, "x.json", "x0")
+        at(10, "a.json", "a1")
+        at(15, "x.json", "x1")
+        at(20, "a.json", "a2")
+        at(60, "a.json", "b0")
+        at(70, "a.json", "b1")
+        at(240, "a.json", "c0")
+        at(250, "a.json", "c1")
+        at(260, "x.json", "x2")
+        timed.trimHistory(before = 0L, keep = 1, thinBefore = 180 * 60_000L)
+        assertEquals(listOf("a2", "b1", "c0", "c1"), historyOf("a.json").map { it.second })
+        // Another store's rows in the same hour are its own.
+        assertEquals(listOf("x1", "x2"), historyOf("x.json").map { it.second })
+    }
+
+    @Test
+    fun `a copy set aside as unreadable isn't thinned, only let go of with its time`() {
+        var now = 0L
+        val timed = SqliteBackend(db) { now }
+        timed.write("a.json", 1, "a0")
+        assertNotNull(timed.setAside("a.json", 5 * 60_000L))
+        now = 10 * 60_000L
+        timed.write("a.json", 1, "a1")
+        // A second set aside in the same hour is kept too.
+        assertNotNull(timed.setAside("a.json", 15 * 60_000L))
+        now = 300 * 60_000L
+        timed.write("a.json", 1, "a2")
+        timed.trimHistory(before = 0L, keep = 1, thinBefore = 180 * 60_000L)
+        assertEquals(listOf("a0", "a1", "a1", "a2"), historyOf("a.json").map { it.second }, "both set aside stay beside the hour's last")
+        timed.trimHistory(before = 180 * 60_000L, keep = 1)
+        assertEquals(listOf("a2"), historyOf("a.json").map { it.second })
+    }
+
+    @Test
     fun `a store over rows reads and writes as one over its file, and a broken one is set aside`() = runBlocking {
         val store = JsonStore(backend, "note.json", Note.serializer(), ::Note)
         assertEquals("", store.value.text)
