@@ -268,7 +268,21 @@ class ApiTest {
         assertEquals(SqliteBackend.HISTORY_KEPT + 5, rows())
         graph.tidy()
         assertEquals(SqliteBackend.HISTORY_KEPT + 5, rows(), "none is old enough yet")
-        db.transactionless { c -> c.createStatement().use { it.execute("UPDATE store_history SET at = 0") } }
+        // Each in an hour of its own, so thinning keeps all of them: only their 30 days lets them go.
+        val monthAgo = System.currentTimeMillis() - 31 * 24 * 3_600_000L
+        db.transactionless { c -> c.createStatement().use { it.execute("UPDATE store_history SET at = $monthAgo - rowid * 3600000") } }
+        graph.tidy()
+        assertEquals(SqliteBackend.HISTORY_KEPT, rows())
+    }
+
+    @Test
+    fun `past a day the history is thinned by its rule to a row an hour`() = server {
+        val phone = paired()
+        repeat(SqliteBackend.HISTORY_KEPT + 5) { seed(phone.token, listOf(StoreText("school.json", 1, """{"version":1,"at":$it}"""))) }
+        fun rows() = db.transactionless { c -> c.createStatement().use { s -> s.executeQuery("SELECT COUNT(*) FROM store_history").use { it.next(); it.getInt(1) } } }
+        // All in one hour two days back: inside the 30 days, past the day kept whole.
+        val twoDaysAgo = System.currentTimeMillis() / 3_600_000L * 3_600_000L - 48 * 3_600_000L
+        db.transactionless { c -> c.createStatement().use { it.execute("UPDATE store_history SET at = $twoDaysAgo + rowid") } }
         graph.tidy()
         assertEquals(SqliteBackend.HISTORY_KEPT, rows())
     }

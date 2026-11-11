@@ -617,11 +617,14 @@ class ServerGraph(
         StateAnswer(revision, texts, backend.letGoSince(c, since))
     }
 
-    /** The history let go of as its rule says: older than [SqliteBackend.HISTORY_MS], but each store's last few. */
+    /**
+     * The history let go of as its rule says: older than [SqliteBackend.HISTORY_MS], and past [SqliteBackend.HISTORY_WHOLE_MS] one row
+     * a store an hour, but each store's last few; the commands on record past [SqliteBackend.COMMANDS_MS].
+     */
     fun tidy() {
-        val before = clock.now() - SqliteBackend.HISTORY_MS
-        backend.trimHistory(before)
-        backend.trimCommands(before)
+        val now = clock.now()
+        backend.trimHistory(before = now - SqliteBackend.HISTORY_MS, thinBefore = now - SqliteBackend.HISTORY_WHOLE_MS)
+        backend.trimCommands(now - SqliteBackend.COMMANDS_MS)
     }
 
     /** [date] as the Day shows it, today's if none's given. */
