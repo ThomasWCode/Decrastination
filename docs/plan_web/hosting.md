@@ -60,7 +60,7 @@ dbs:
     replica:
       type: s3
       bucket: ${R2_BUCKET}
-      path: db
+      path: db-2
       endpoint: ${R2_ACCOUNT_ID}.r2.cloudflarestorage.com
       region: auto
       access-key-id: ${R2_ACCESS_KEY_ID}
@@ -69,20 +69,28 @@ dbs:
 
 Litestream's default is 24 hours' snapshots kept 24 hours; `deploy/litestream.yml` has `snapshot: retention: 720h`, so the plan's 30 days hold.
 
-**Its requests.** Each of Litestream's timers is a request to R2, and most are Class A (PUT and LIST; DELETE is free). On its defaults this went past R2's free million in November 2026, the owner billed for the rest. In 0.5.17 the defaults make, for this one database: two LISTs every 15s for L0's retention, whether anything's changed or not (11,520 a day; [litestream#1468](https://github.com/benbjohnson/litestream/issues/1468), not fixed in 0.5.18); up to two LISTs a minute from the idle L1 compaction and a fifth of that from L2's ([litestream#1563](https://github.com/benbjohnson/litestream/issues/1563), fixed in 0.5.18); and a PUT for each second there's a change, each 30s compaction into L1 with work, and so on up. That's of the order of 18,000 a day, about 540,000 a month, which is less than the bill: something more was making requests, unseen from here. So `deploy/litestream.yml` sets each timer itself, and the image is pinned to 0.5.18:
+**Its requests.** Each of Litestream's timers is a request to R2, and most are Class A (PUT and LIST; DELETE is free). On its defaults this went past R2's free million in November 2026, the owner billed for the rest. What did it, read in 0.5.18's source (the box ran 0.5.18 from 4 Nov, through the floating `0.5` tag) and counted in the bucket on 11 Nov:
 
-| Setting | Default | Set | Class A a day, at most |
+- A LIST reads a whole level. The S3 client lists by prefix alone and skips what it doesn't want on its own side, even when it's after one TXID on (`s3/replica_client.go`, `newFileIterator`), so each listing is a request for each 1,000 files in the level.
+- L1 to L3 keep every file till it's behind the oldest snapshot kept (`Store.EnforceSnapshotRetention`), so for 30 days here. With a write each minute (the heartbeat's) and L1 compacted every 30s, L1 gained about 2,600 files a day: 24,817 by 11 Nov, ten days in.
+- L0's retention check lists all of L1, then L0, every 15s whether anything's changed or not (`Compactor.EnforceL0Retention`). Each was 26 requests by then, about 150,000 a day, and it grew by about 15,000 a day each day: some millions over a month. Litestream's metrics count its PUTs and DELETEs, never its LISTs, which is why the count it gave (about 7,400 PUTs a day) was far short of the bill.
+
+So `deploy/litestream.yml` sets each timer itself, the image is pinned to 0.5.18, and the replica has a fresh path, `db-2`, as the old one's 30s files would otherwise go on being listed till they're a month old. A day, once L1 holds its 30 days (96 files a day, 2,880 in all, three requests a listing):
+
+| Setting | Default | Set | Class A a day |
 |---|---|---|---|
-| `sync-interval` (the replica's) | 1s | 1m | 1,440 PUTs |
-| `l0-retention-check-interval` | 15s | 10m | 288 LISTs |
-| `levels` (L1, L2, L3) | 30s, 5m, 1h | 15m, 1h, 6h | about 250 |
+| `sync-interval` (the replica's) | 1s | 1m | up to 1,440 PUTs |
+| `l0-retention-check-interval` | 15s | 10m | 144 checks, 576 LISTs |
+| `levels` (L1, L2, L3) | 30s, 5m, 1h | 15m, 1h, 6h | about 300: a PUT and a LIST of the level below each |
 | `snapshot.interval` | 24h | 24h | a few |
 
-About 2,000 a day, 60,000 a month. What it costs: a box that's lost loses up to its last minute of writes, not its last second, and a restore to a moment lands on a 15-minute boundary rather than a 30-second one. The phone holds its own copy either way.
+About 2,300 a day, 70,000 a month, worked out from the code and the counts above rather than measured: R2's metrics in Cloudflare's dashboard show the real figure, by day and by kind. What it costs: a box that's lost loses up to its last minute of writes, not its last second, and a restore to a moment lands on a 15-minute boundary rather than a 30-second one. The phone holds its own copy either way.
+
+**The move to `db-2`.** The new path starts empty, so Litestream's local state is reset first (`litestream reset`, with Litestream stopped): its next sync then uploads one fresh snapshot, where otherwise it would try every L0 file since the first, most of them long gone. `restore -timestamp` reaches back to the move, a month back again once a month has passed. The old path's files stay under `db/` till an R2 lifecycle rule on that prefix expires them, and till then are restored from with a copy of the config naming `path: db`.
 
 Restore on a fresh box: `litestream restore -config /etc/litestream.yml -if-db-not-exists -if-replica-exists /data/decrastination.db`, run by `bootstrap.sh` before the server starts, so a rebuilt box comes up with the state. `-timestamp` restores to a moment, for a rollback. A failed restore stops `bootstrap.sh`, as an empty server started beside Litestream would replicate over the good copy.
 
-**R2's free tier**: 10 GB stored, a million Class A operations and ten million Class B a month, no egress charge. Litestream's requests are inside it with the timers above (§Its requests); on its defaults they weren't. The nightly Backup-format file goes to **Backblaze B2** (10 GB free) under an application key of its own, so the two off-box copies share no provider and no credential (W-20); Litestream could replicate to B2 the same way if R2 ever stopped suiting.
+**R2's free tier**: 10 GB stored, a million Class A operations and ten million Class B a month, no egress charge. Litestream's requests are inside it with the timers and the fresh path above (§Its requests); on its defaults they weren't. The nightly Backup-format file goes to **Backblaze B2** (10 GB free) under an application key of its own, so the two off-box copies share no provider and no credential (W-20); Litestream could replicate to B2 the same way if R2 ever stopped suiting.
 
 **What's to hold the nightly copies.** B2's console can't make a key that can't delete: its *Write Only* access carries `deleteFiles` and `writeBucketLifecycleRules`, and on 1 Nov 2026 such a key deleted a version outright, while listing and reading were refused. A narrower key can be made only through B2's API, with the account's master key. So the bucket has Object Lock on (the owner's word, 1 Nov), meant for 60 days' default retention, which binds every key alike, and can't be turned off on that bucket. It doesn't hold: tried again on 3 Nov, before the first nightly file, the key still deleted a version outright (`private/tools/b2_refusals.py`, a 204 where a held file answers 403), and B2's docs say Object Lock protects nothing till the bucket's default retention is set. The owner's word that evening: the lock was already enabled, and it doesn't matter, as nothing will delete them. So the nightly files are as safe as the key: nothing in the server deletes one, but a key that leaked could. The same try settled the upload: without a retention in force, B2 takes a file with no `Content-MD5`; should a retention be set one day, try the upload again, as AWS wants one then. The bucket's lifecycle rule hides a file 60 days after it's written and deletes it 60 days after that. Both numbers do work: a file named by its date is never replaced, so nothing else would ever hide it, and a key that can write can hide every file at once, so the second 60 is the time there is to notice. At about 400 KB a file that's 50 MB.
 
