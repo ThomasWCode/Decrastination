@@ -64,7 +64,7 @@ services:
 
   # The sidecar pattern: both see the same local volume and kernel, so SQLite's locks hold between them.
   litestream:
-    image: litestream/litestream:0.5
+    image: litestream/litestream:0.5.18
     restart: unless-stopped
     user: "1000:1000"
     command: replicate

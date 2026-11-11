@@ -2,7 +2,22 @@
 # ${...} is read from the container's environment. A snapshot a day, kept 30 days, so `restore -timestamp`
 # reaches a month back. Its metrics on the compose network alone, where the server reads whether it's still
 # uploading (docs/spec/server.md §Deployment); no port is published for them.
+#
+# Every one of its timers is a request to R2, most of them Class A, billed past a million a month. Its defaults (an
+# upload each second there's a change, L1 compactions every 30s, and two LISTs of the bucket every 15s whether
+# anything's changed or not) went past the million; these hold it to about 2,000 a day (hosting.md §Litestream).
 addr: ":9090"
+
+# Two LISTs a check, changed or not: every 15s by default, 11,520 a day. L0's files are kept 5 minutes past their
+# compaction either way, so a check every 10 minutes deletes them a little later and costs 288.
+l0-retention-check-interval: 10m
+
+# The compactions into L1, L2 and L3, by default every 30s, 5m and 1h: each that has work is a PUT, and each a LIST
+# besides now and then. The restore points between snapshots are 15 minutes apart, not 30 seconds.
+levels:
+  - interval: 15m
+  - interval: 1h
+  - interval: 6h
 
 snapshot:
   interval: 24h
@@ -18,3 +33,5 @@ dbs:
       region: auto
       access-key-id: ${R2_ACCESS_KEY_ID}
       secret-access-key: ${R2_SECRET_ACCESS_KEY}
+      # An upload at most each minute, the default's each second: a box that's lost loses up to its last minute.
+      sync-interval: 1m
