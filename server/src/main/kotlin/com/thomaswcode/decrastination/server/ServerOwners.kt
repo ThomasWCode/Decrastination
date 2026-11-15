@@ -4,9 +4,13 @@ import com.thomaswcode.decrastination.block.AnkiWatch
 import com.thomaswcode.decrastination.block.Focus
 import com.thomaswcode.decrastination.block.Photos
 import com.thomaswcode.decrastination.block.Slots
+import com.thomaswcode.decrastination.core.About
+import com.thomaswcode.decrastination.core.Change
+import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.DayKind
 import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.GmailWrite
+import com.thomaswcode.decrastination.core.Ids
 import com.thomaswcode.decrastination.core.InstructionStatus
 import com.thomaswcode.decrastination.core.OwnTask
 import com.thomaswcode.decrastination.core.SchoolDays
@@ -51,6 +55,7 @@ import com.thomaswcode.decrastination.tasks.Instructions
 import com.thomaswcode.decrastination.tasks.OwnTasks
 import java.io.File
 import java.io.IOException
+import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -232,7 +237,14 @@ class ServerOwners(
             override suspend fun deleteInstruction(id: String) { instructions.deleteInstruction(id) }
             override suspend fun layTaskOverrides() { instructions.layTaskOverrides() }
             override suspend fun changeSettings(change: (Settings) -> Settings) { protection.changeSettings(change) }
-            override suspend fun answerEvent(key: String, answer: String) = Unit
+            // A calendar question answered on the website: kept as your quick change about the event, as only the phone keeps
+            // the calendar's answers (`calendar.json`), so it reaches the phone as an instruction and counts there. One answered
+            // on the phone is kept there by the phone's own run of its command, and is nothing to keep here.
+            override suspend fun answerEvent(key: String, title: String?, answer: String) {
+                if (coroutineContext[AppliedFor]?.device != Client.WEBSITE) return
+                val change = Change(ChangeType.EventTime, eventKey = key, eventTitle = title, eventAnswer = answer)
+                instructions.addOwnChange(Ids.next(), WEBSITE_ANSWER, About(eventKey = key, eventTitle = title), change)
+            }
             override suspend fun recordCheckIn(checkIn: CheckIn, now: Long): Boolean = learning.recordCheckIn(checkIn, now)
             override suspend fun finishGmail(taskId: String): GmailFinishes.Finish = gmailFinishes.finish(taskId, explicit = true)
             override suspend fun unfinishGmail(taskId: String, writeId: String?): Boolean = gmailFinishes.unfinish(taskId, writeId)
@@ -438,3 +450,6 @@ class ServerOwners(
         focus.rewardCompletions { completed -> conversation.askHowItWent(Assessment.asks(completed, stores.log.value)) }
     }
 }
+
+/** The words of a calendar question's answer given on the website, kept as your quick change about the event. */
+private const val WEBSITE_ANSWER = "Your answer to Felix's question, on the website"

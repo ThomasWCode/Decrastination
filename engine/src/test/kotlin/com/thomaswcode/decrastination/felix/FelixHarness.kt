@@ -313,7 +313,7 @@ class FelixHarness(
         /** The calendar's answers kept (the event, the answer as it's kept), as `CalendarWriter.answer` would keep them. */
         val events: MutableList<Pair<String, String>> = Collections.synchronizedList(mutableListOf())
 
-        override suspend fun answerEvent(key: String, answer: String) {
+        override suspend fun answerEvent(key: String, title: String?, answer: String) {
             events += key to answer
             conversation.settleEvent(key)
         }

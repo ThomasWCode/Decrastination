@@ -9,6 +9,8 @@ import com.thomaswcode.decrastination.sync.protocol.CommandBatch
 import com.thomaswcode.decrastination.sync.protocol.Commands
 import com.thomaswcode.decrastination.sync.protocol.Outcome
 import com.thomaswcode.decrastination.sync.protocol.Owners
+import kotlin.coroutines.AbstractCoroutineContextElement
+import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
@@ -79,7 +81,7 @@ class CommandApplier(
             var undo: Action? = null
             var said: String? = null
             val stale = command.action.stale(owners)
-            val why = stale ?: commands.apply(command).let { answer ->
+            val why = stale ?: withContext(AppliedFor(device)) { commands.apply(command) }.let { answer ->
                 undo = command.action.undoing(answer)
                 said = command.action.said(answer)
                 command.action.refused(answer)
@@ -129,4 +131,9 @@ class CommandApplier(
             }
         }
     }
+}
+
+/** The client a command being applied came from, [Client.WEBSITE] or a phone's id: what one of them keeps itself, the other can't. */
+class AppliedFor(val device: String) : AbstractCoroutineContextElement(AppliedFor) {
+    companion object Key : CoroutineContext.Key<AppliedFor>
 }
