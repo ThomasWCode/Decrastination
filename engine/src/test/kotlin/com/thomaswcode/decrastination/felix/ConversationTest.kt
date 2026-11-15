@@ -712,6 +712,21 @@ class ConversationTest {
     }
 
     @Test
+    fun `a short event's question asked with a few hours before half of it still takes it, with no call`() = runBlocking {
+        // Asked with the three of old and still waiting at the update: its chip keeps 180 minutes, not a turn of the chat.
+        val start = Fixtures.at("2026-10-21T18:00")
+        val club = CalendarEvent(3, "Revision club", start, start + 90 * 60_000L, allDay = false, description = "Tentative")
+        FelixHarness(calendar = { EventJudge.Time(emptyList(), emptyMap(), emptyList(), events = listOf(club)) }).use { h ->
+            h.conversation.askAboutEvent("revision club", "Revision club", "Wednesday 21 October", start, listOf("all of it", "a few hours", "none"))
+            val question = h.stores.chat.value.messages.single { it.kind == MessageKind.EventQuestion }
+            h.server.enqueue(MockResponse().setResponseCode(400))
+            assertTrue(h.conversation.ask("a few hours", replyTo = question.id))
+            assertEquals(listOf("revision club" to "load:${EventJudge.FEW_HOURS_MIN}"), h.owners.events)
+            assertEquals(0, h.server.requestCount)
+        }
+    }
+
+    @Test
     fun `his button counts his messages since you last left the chat, but a question you've answered`() = runBlocking {
         felix.outbox.send(ChatMessage("n1", Speaker.Felix, "Up at 17:00.", now - 60_000L, kind = MessageKind.SlotStart))
         conversation.askAboutEvent("open day", "Open day", "Saturday 24 October", now + 86_400_000L, CalendarTime.ANSWERS.map { it.first })

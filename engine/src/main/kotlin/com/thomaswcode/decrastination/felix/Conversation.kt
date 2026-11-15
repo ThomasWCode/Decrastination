@@ -553,8 +553,13 @@ class Conversation(
         // A check-in's question takes its answer only while it's the one the check-in under way asked last:
         // one from a week long gone, scrolled back to in the archive, is a turn of the chat.
         val checkIn = chat.value.felix.checkInDraft != null && message.id == chat.value.messages.lastOrNull { it.from == Speaker.Felix && it.kind == MessageKind.CheckIn }?.id
-        // A calendar event's question's three are its event's, as last read: *Half of it* worked out from its length (Q149).
-        val eventAnswers = if (message.kind == MessageKind.EventQuestion) CalendarTime.answers(message.about.eventKey.orEmpty(), message.about.eventStart, calendarTime().events) else CalendarTime.ANSWERS
+        // A calendar event's question's answers are its event's, as last read: *Half of it* worked out from its length (Q149);
+        // *A few hours* stays one too, for a question still waiting that was asked with it before *Half of it* was its chip.
+        val eventAnswers = if (message.kind == MessageKind.EventQuestion) {
+            (CalendarTime.answers(message.about.eventKey.orEmpty(), message.about.eventStart, calendarTime().events) + CalendarTime.ANSWERS).distinctBy { it.first.lowercase() }
+        } else {
+            CalendarTime.ANSWERS
+        }
         when (val route = Replies.route(message, words, checkInUnderWay = checkIn, eventAnswers = eventAnswers)) {
             // An answer to a check-in question (LR-02): the next asked, or the check-in kept.
             Replies.Route.CheckIn -> return checkInReply(message, words, id)
