@@ -265,9 +265,10 @@ class Sync(
         // Your instructions' answers about events changed (one laid or taken back here, or pulled from the server, which lays
         // them once the phone sends commands): the calendar's judged again with them and the plan made again, as nothing
         // else here reads the calendar for an instruction the server laid, and the event's sheet already shows its answer.
-        // Against what the last read judged with, not the store's first value, so a change made before this watch began counts too.
+        // Against what the last read judged with, not the store's first value nor the last seen here, so a change made before this
+        // watch began counts too, and one taken back while a read judged with it isn't missed.
         scope.launch {
-            instructions.state.map { InstructionRules.eventAnswers(it.applied) }.distinctUntilChanged().collect { answers ->
+            instructions.state.map { InstructionRules.eventAnswers(it.applied) }.collect { answers ->
                 if (judgedWith != null && answers != judgedWith) {
                     refreshCalendar()
                     replan()
