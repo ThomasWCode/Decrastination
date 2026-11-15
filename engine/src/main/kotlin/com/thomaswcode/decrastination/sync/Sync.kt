@@ -241,7 +241,7 @@ class Sync(
 
     /** [event] asked about as Felix's message, one a name: its three answers his chips, one of them kept for every event of its name. */
     private suspend fun ask(event: CalendarEvent, zone: ZoneId) =
-        askAboutEvent(EventJudge.key(event), event.title, CalendarTime.questionDay(event, zone), event.start, FelixWords.eventReplies(CalendarTime.ANSWERS.map { it.first }))
+        askAboutEvent(EventJudge.key(event), event.title, CalendarTime.questionDay(event, zone), event.start, FelixWords.eventReplies(CalendarTime.answers(event).map { it.first }))
 
     /**
      * What's read again as it changes, from the app's start: the calendar (its [calendarChanges]), the

@@ -768,7 +768,7 @@ internal fun EventSheet(graph: AppGraph, activity: Activity, event: CalendarEven
                 Text("Your instruction says how it counts: take it back in the chat's Your changes to answer here.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             } else {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    CalendarTime.ANSWERS.forEach { (label, answer) ->
+                    CalendarTime.answers(event).forEach { (label, answer) ->
                         OutlinedButton(onClick = { graph.scope.launch { graph.calendarWriter.answer(key, answer) } }) { Text(label) }
                     }
                 }

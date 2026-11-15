@@ -41,9 +41,11 @@ import com.thomaswcode.decrastination.core.Window
 import com.thomaswcode.decrastination.core.WindowKind
 import com.thomaswcode.decrastination.data.SlotOutcome
 import com.thomaswcode.decrastination.data.SlotRecord
+import com.thomaswcode.decrastination.learn.CalendarEvent
 import com.thomaswcode.decrastination.learn.CalendarTime
 import com.thomaswcode.decrastination.learn.CheckIn
 import com.thomaswcode.decrastination.learn.Daily
+import com.thomaswcode.decrastination.learn.EventJudge
 import com.thomaswcode.decrastination.sync.GmailFinishes
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
@@ -690,6 +692,21 @@ class ConversationTest {
         assertEquals(0, conversation.unread.first())
         felix.outbox.send(ChatMessage("n2", Speaker.Felix, "Good, keep going.", now, kind = MessageKind.SlotStart))
         assertEquals(1, conversation.unread.first())
+    }
+
+    @Test
+    fun `a short event's question takes half of it, worked out from the event as last read`() = runBlocking {
+        // Q149: a 90-minute club marked tentative, asked about with half of it; the reply kept as 45 minutes.
+        val start = Fixtures.at("2026-10-21T18:00")
+        val club = CalendarEvent(3, "Revision club", start, start + 90 * 60_000L, allDay = false, description = "Tentative")
+        FelixHarness(calendar = { EventJudge.Time(emptyList(), emptyMap(), emptyList(), events = listOf(club)) }).use { h ->
+            h.conversation.askAboutEvent("revision club", "Revision club", "Wednesday 21 October", start, CalendarTime.answers(club).map { it.first.lowercase() })
+            val question = h.stores.chat.value.messages.single { it.kind == MessageKind.EventQuestion }
+            assertEquals(listOf("all of it", "half of it", "none"), question.suggestedReplies)
+            assertTrue(h.conversation.ask("half of it", replyTo = question.id))
+            assertEquals(listOf("revision club" to "load:45"), h.owners.events)
+            assertEquals(0, h.server.requestCount)
+        }
     }
 
     @Test

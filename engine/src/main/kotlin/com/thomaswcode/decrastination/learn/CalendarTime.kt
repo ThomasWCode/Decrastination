@@ -23,12 +23,30 @@ object CalendarTime {
         Instant.ofEpochMilli(now).atZone(zone).toLocalDate().plusDays(Planner.MAX_HORIZON_DAYS + 1).atStartOfDay(zone).toInstant().toEpochMilli()
     const val ASK_AHEAD_MS = 7 * DAY_MS
 
-    /** The answers a question offers, in words and as they're kept: his chips on it, and on the Calendar page. */
+    /**
+     * The answers a question offers, in words and as they're kept, for an all-day event or a timed one of
+     * four hours or more: his chips on it, and on the event's sheet.
+     */
     val ANSWERS: List<Pair<String, String>> = listOf(
         "All of it" to EventJudge.Judgement.Busy,
         "A few hours" to EventJudge.Judgement.Load(EventJudge.FEW_HOURS_MIN),
         "None" to EventJudge.Judgement.Free,
     ).map { (label, judgement) -> label to EventJudge.store(judgement)!! }
+
+    /**
+     * [event]'s answers (Q149): a timed one under four hours has *Half of it* in place of *A few hours*,
+     * kept as half its length in minutes, so another event of its name takes the same minutes.
+     */
+    fun answers(event: CalendarEvent): List<Pair<String, String>> =
+        if (EventJudge.halves(event)) listOf(ANSWERS[0], "Half of it" to EventJudge.store(EventJudge.middle(event))!!, ANSWERS[2]) else ANSWERS
+
+    /**
+     * The answers a question about the event named [key] starting at [start] was asked with, worked out
+     * from the [events] as last read, as its message keeps the event's name and start, not its length; one
+     * no longer among them has [ANSWERS], so a reply of *Half of it* to it goes to Felix as words.
+     */
+    fun answers(key: String, start: Long?, events: List<CalendarEvent>): List<Pair<String, String>> =
+        events.firstOrNull { EventJudge.key(it) == key && it.start == start }?.let(::answers) ?: ANSWERS
 
     private val DAY = DateTimeFormatter.ofPattern("EEEE d MMMM", Locale.UK)
 

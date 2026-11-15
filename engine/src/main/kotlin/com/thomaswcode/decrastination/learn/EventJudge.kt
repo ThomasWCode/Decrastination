@@ -56,6 +56,16 @@ object EventJudge {
     /** A timed event this long may or may not take all its time: asked about, like an all-day one. */
     private const val LONG_MS = 4 * 3_600_000L
 
+    /**
+     * Whether [event]'s middle answer is *Half of it* (Q149): a timed one under four hours, where a few
+     * hours could be all of it or more; an all-day one, or a timed one of four hours or more, has *A few hours*.
+     */
+    fun halves(event: CalendarEvent): Boolean = !event.allDay && event.end - event.start < LONG_MS
+
+    /** [event]'s middle answer: half its length, rounded down ([halves]), else a few hours. */
+    fun middle(event: CalendarEvent): Judgement.Load =
+        Judgement.Load(if (halves(event)) ((event.end - event.start).coerceAtLeast(0) / 60_000L / 2).toInt() else FEW_HOURS_MIN)
+
     private val TRAVEL = Regex("""\b(train|bus|coach|flight|plane|ferry|tube|metro)\b""", RegexOption.IGNORE_CASE)
     private val NOT_YOURS = Regex("""holiday|birthday|observance|week number""", RegexOption.IGNORE_CASE)
     /** A timed event saying it may not be on, or not need you (DX-12). */
@@ -104,7 +114,8 @@ object EventJudge {
      * leaves them free of work. One to ask
      * about takes all its time until you answer (D-44), so the plan counts on no time it may not
      * have; one that would be asked about but starts after [askUntil] (DX-14: questions keep to the
-     * week ahead) counts as a few hours of its time meanwhile, so the plan beyond it leaves it room.
+     * week ahead) counts as its middle answer meanwhile ([middle]: half a short timed one, else a few
+     * hours), so the plan beyond it leaves it room.
      * [events] as last read, judged; [read] from when to when that read ran (null where the calendar's never been read), as a failed read keeps the one before.
      */
     data class Time(val busy: List<Busy>, val dayLoads: Map<LocalDate, Int>, val toAsk: List<CalendarEvent>, val events: List<CalendarEvent> = emptyList(), val read: Pair<Long, Long>? = null)
@@ -119,7 +130,7 @@ object EventJudge {
         }
         for (event in events) {
             val judged = judge(event, answers)
-            when (val judgement = if (judged == Judgement.Ask && event.start > askUntil) Judgement.Load(FEW_HOURS_MIN) else judged) {
+            when (val judgement = if (judged == Judgement.Ask && event.start > askUntil) middle(event) else judged) {
                 Judgement.Free -> Unit
                 Judgement.Busy -> takeAll(event)
                 // An all-day event's load on each of its days; a timed one's inside it, as busy time.

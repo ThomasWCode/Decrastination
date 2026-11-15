@@ -119,9 +119,9 @@ object Replies {
      * answer (a check-in's, any words; a reading's, any words, read by Claude as an instruction; how work went
      * or a calendar event's, one of its three, whatever their case), with no call but a reading's; a reminder of yours not yet answered, *Done* or a
      * snooze; anything else, and any other words, is a turn of the chat, the message it answers told
-     * to him.
+     * to him. A calendar event's three are [eventAnswers], those its event offers ([CalendarTime.answers]).
      */
-    fun route(message: ChatMessage?, words: String, checkInUnderWay: Boolean): Route {
+    fun route(message: ChatMessage?, words: String, checkInUnderWay: Boolean, eventAnswers: List<Pair<String, String>> = CalendarTime.ANSWERS): Route {
         // A reminder's reply: *Done* or a snooze, whatever their case, while it's unanswered.
         if (message != null && message.from == Speaker.Felix && message.kind == MessageKind.Reminder && message.answeredAt == null) {
             val id = message.reminderId ?: return Route.Chat
@@ -134,7 +134,7 @@ object Replies {
             MessageKind.Question -> Route.Question
             MessageKind.Completions -> Assessment.ANSWERS.firstOrNull { it.first.equals(FelixWords.chip(said), ignoreCase = true) }?.let { Route.Completions(it.second) } ?: Route.Chat
             MessageKind.EventQuestion -> message.about.eventKey?.let { key ->
-                CalendarTime.ANSWERS.firstOrNull { it.first.equals(said, ignoreCase = true) }?.let { Route.Event(key, it.second) }
+                eventAnswers.firstOrNull { it.first.equals(said, ignoreCase = true) }?.let { Route.Event(key, it.second) }
             } ?: Route.Chat
             else -> Route.Chat
         }

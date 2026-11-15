@@ -350,6 +350,28 @@ class EventJudgeTest {
     }
 
     @Test
+    fun `a timed event under four hours has half of it, kept as half its minutes, others a few hours`() {
+        // Q149: half of a 141-minute train, rounded down; an all-day event or a nine-hour one, a few hours.
+        val train = CalendarEvent(7, "Train", Fixtures.at("2026-10-10T15:00"), Fixtures.at("2026-10-10T17:21"), allDay = false)
+        assertEquals(listOf("All of it" to "busy", "Half of it" to "load:70", "None" to "free"), CalendarTime.answers(train))
+        assertEquals(listOf("All of it" to "busy", "Half of it" to "load:119", "None" to "free"), CalendarTime.answers(event("Club", hours = 4).copy(end = start + 4 * HOUR - 60_000L)))
+        assertEquals(CalendarTime.ANSWERS, CalendarTime.answers(event("Van hire", hours = 4)))
+        assertEquals(CalendarTime.ANSWERS, CalendarTime.answers(event("Van hire", allDay = true)))
+        // A question's answers are its event's as last read, found by its name and start; one gone, the three of old.
+        assertEquals(CalendarTime.answers(train), CalendarTime.answers("train", train.start, listOf(event("Van hire", allDay = true), train)))
+        assertEquals(CalendarTime.ANSWERS, CalendarTime.answers("train", train.start + HOUR, listOf(train)))
+        assertEquals(CalendarTime.ANSWERS, CalendarTime.answers("train", null, listOf(train)))
+    }
+
+    @Test
+    fun `a short tentative event past the week ahead takes half of it meanwhile, at its ends`() {
+        val now = Fixtures.at("2026-10-08T17:00")
+        val club = CalendarEvent(5, "Revision club", Fixtures.at("2026-10-29T18:00"), Fixtures.at("2026-10-29T19:30"), allDay = false, description = "Tentative")
+        val time = EventJudge.time(listOf(club), emptyMap(), LONDON, askUntil = now + 7 * DAY)
+        assertEquals(listOf(Busy(club.start, Fixtures.at("2026-10-29T18:22")), Busy(Fixtures.at("2026-10-29T19:07"), club.end)), time.busy)
+    }
+
+    @Test
     fun `what can't be judged is listed to ask, and asked once per name`() {
         val time = EventJudge.time(listOf(event("Van hire", allDay = true), event("van hire ", allDay = true)), emptyMap(), LONDON, askUntil = Long.MAX_VALUE)
         assertEquals(2, time.toAsk.size)

@@ -173,6 +173,18 @@ class RepliesTest {
     }
 
     @Test
+    fun `a short timed event's question takes half of it, as its event offers, and not where it doesn't`() {
+        // Q149: the event's own answers, worked out from it as last read; half of it is its minutes.
+        val asked = his(MessageKind.EventQuestion, About(eventKey = "revision club"))
+        val answers = listOf("All of it" to "busy", "Half of it" to "load:45", "None" to "free")
+        assertEquals(Replies.Route.Event("revision club", "load:45"), Replies.route(asked, "half of it", checkInUnderWay = false, eventAnswers = answers))
+        assertEquals(Replies.Route.Event("revision club", "busy"), Replies.route(asked, "All of it", checkInUnderWay = false, eventAnswers = answers))
+        assertEquals(Replies.Route.Chat, Replies.route(asked, "a few hours", checkInUnderWay = false, eventAnswers = answers))
+        // Its event gone from the calendar: half of it can't be worked out, and goes to him as words.
+        assertEquals(Replies.Route.Chat, Replies.route(asked, "half of it", checkInUnderWay = false))
+    }
+
+    @Test
     fun `a nudge, his answer, a question settled already, yours, or none is a turn of the chat`() {
         assertEquals(Replies.Route.Chat, Replies.route(his(MessageKind.SlotStart), "on it", checkInUnderWay = false))
         assertEquals(Replies.Route.Chat, Replies.route(his(MessageKind.Chat), "thanks", checkInUnderWay = false))
