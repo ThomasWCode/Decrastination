@@ -738,7 +738,7 @@ private fun WeekStrip(plan: Plan, chosen: LocalDate, drag: DayDrag, tasks: Map<S
 private fun verdict(judgement: EventJudge.Judgement, asked: Boolean): String = when (judgement) {
     EventJudge.Judgement.Free -> "Free"
     EventJudge.Judgement.Busy -> "Busy"
-    is EventJudge.Judgement.Load -> "${Format.minutes(judgement.minutes)} of the day"
+    is EventJudge.Judgement.Load -> "${Format.minutes(judgement.minutes)} of its time"
     EventJudge.Judgement.Ask -> if (asked) "Asked" else "Not known"
 }
 

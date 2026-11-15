@@ -524,7 +524,7 @@ object InstructionRules {
                 when {
                     change.eventAnswer == "free" -> "$name: you can work through it"
                     change.eventAnswer == "busy" -> "$name: takes all its time"
-                    change.eventAnswer?.startsWith("load:") == true -> "$name: takes ${hours(change.eventAnswer.removePrefix("load:").toIntOrNull() ?: 0)} of its day"
+                    change.eventAnswer?.startsWith("load:") == true -> "$name: takes ${hours(change.eventAnswer.removePrefix("load:").toIntOrNull() ?: 0)} of its time"
                     else -> "$name: ${change.eventAnswer}"
                 }
             }
