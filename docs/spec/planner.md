@@ -9,7 +9,7 @@ It's pure Kotlin: everything comes in through `Planner.Input`, so the same input
 
 - **Tasks**, each with your instructions laid on it (`InstructionRules.taskOverrides`), and the minutes of work it's the same as credited to it (`Duplicates.credited`, DX-15).
 - **Windows** (PL-15): each day's planning time, from `core/SchoolDays.kt` and the school calendar (PL-16).
-- **Busy time**: the phone's calendar (`busy`, and `dayLoads` for time taken at no set time) and the times you said you can't work (`hardBusy`), which nothing overfills, not even overdue work.
+- **Busy time**: the phone's calendar (`busy`, a timed event's minutes inside it among it, and `dayLoads` for an all-day event's minutes, taken at no set time) and the times you said you can't work (`hardBusy`), which nothing overfills, not even overdue work.
 - **Day limits** you gave (`dayCaps`), and the minutes kept today (`workedTodayMin`), which come off today's limit.
 - **Settings**: your hours, `boxMin`, `marginDays`, `softDeadlineDays`, `softMinPerDay`, and the slotter's breaks.
 - **Calibration**: the pace, margins and day yields learned ([learning.md](learning.md)).
@@ -28,7 +28,7 @@ A weekend or a day off school is `weekendHours` as one window; a half-day's scho
 `Planner.capacityOf` gives each day a `Capacity`:
 - each window's free minutes, less what's gone today and the busy time, overlaps merged first;
 - a free stretch of a school window under `minSchoolSlotMin` (15) isn't counted, as the slotter lays nothing in one;
-- time taken at no set time comes off the evening first, then school's;
+- time taken at no set time (an all-day event's minutes alone) comes off the evening first, then school's;
 - the evening's part is multiplied by its kind of day's yield, school's by school's (PL-06); a day's limit then caps the whole.
 
 A piece at a time you gave (PL-04), kept there (one a pin given later moves, or one gone by, takes free time where it's laid, as any piece does), takes of its day's free time only its part within it (D-114), at school or in the evening as that part falls (`Planner.pinSpan`: home work pinned in a school window takes school's time, not the evening's): the part outside the day's windows, over busy time within them, or today already gone by takes none (`Planner.outsideFreeMin`), so the day holds as much other work as it would without it, and its free time as shown (`DayBucket.capacityMin`: the strip's bar, the Day's "planned, free", what Felix is told) is more by those minutes. A day you've limited still counts all of its minutes against the limit, which is the most work in the day wherever it falls, kept apart from the free time for that.

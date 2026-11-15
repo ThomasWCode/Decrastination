@@ -96,7 +96,7 @@ Grouped by prefix and sorted; where a later decision changed an item, its line g
 - DX-11: Seconds per card are learned per deck from the counts read around time in AnkiDroid (a median over recent stretches) and used for the decks' minutes in place of the usual figure.
 - DX-12: A calendar event's location and description (cut short) are read: one saying it's optional or tentative is asked about, and its sheet says where it is and what it says.
 - DX-13: The calendars read for busy time are chosen in Settings; the one written to is never read.
-- DX-14: The calendar is read as far ahead as the plan reaches; questions about events keep to the week ahead, and an unanswered long event beyond it counts meanwhile as three hours of each of its days if it's all day, or of the day it starts if it's timed.
+- DX-14: The calendar is read as far ahead as the plan reaches; questions about events keep to the week ahead, and an unanswered long event beyond it counts meanwhile as three hours of each of its days if it's all day, or three hours inside it if it's timed (half of a timed one under four hours).
 - DX-15: Open tasks from two sources that look like the same work (same subject, due within a day, titles sharing most words) are offered as a pair; linked (a SameAs change), one is hidden and kept as the other's, and a pair said to differ isn't asked about again.
 
 ## G: what Felix can do in the chat
