@@ -164,8 +164,8 @@ class Conversation(
         suspend fun layTaskOverrides()
         suspend fun changeSettings(change: (Settings) -> Settings)
 
-        /** [answer], one of a calendar question's answers as it's kept (`CalendarTime.answers`), for every event named [key] (Q7). */
-        suspend fun answerEvent(key: String, answer: String)
+        /** [answer], one of a calendar question's answers as it's kept (`CalendarTime.answers`), for every event named [key] (Q7), its title [title] as asked. */
+        suspend fun answerEvent(key: String, title: String?, answer: String)
 
         /** The week's [checkIn] on record, once a week ([com.thomaswcode.decrastination.learn.Learning.recordCheckIn]): whether it was kept. */
         suspend fun recordCheckIn(checkIn: CheckIn, now: Long): Boolean
@@ -566,7 +566,7 @@ class Conversation(
             // A reading's question's answer (AI-10), or one of the three to how work went (LR-05): on them, and that's all.
             Replies.Route.Question, is Replies.Route.Completions -> if (!answered(message, words)) return false
             // One of a calendar question's three answers (Q7), for every event of its name.
-            is Replies.Route.Event -> owners.answerEvent(route.key, route.answer)
+            is Replies.Route.Event -> owners.answerEvent(route.key, message.about.eventTitle, route.answer)
             // A reminder's Done or snooze: on it; gone (pruned), a turn of the chat.
             is Replies.Route.Reminder -> if (!replyToReminder(route, now)) return false
             Replies.Route.Chat -> return false

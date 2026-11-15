@@ -416,7 +416,7 @@ class AppGraph private constructor(context: Context) : Owners {
             override suspend fun deleteInstruction(id: String) { instructions.deleteInstruction(id) }
             override suspend fun layTaskOverrides() { instructions.layTaskOverrides() }
             override suspend fun changeSettings(change: (Settings) -> Settings) { protection.changeSettings(change) }
-            override suspend fun answerEvent(key: String, answer: String) {
+            override suspend fun answerEvent(key: String, title: String?, answer: String) {
                 calendarWriter.answer(key, answer)
             }
             override suspend fun recordCheckIn(checkIn: CheckIn, now: Long): Boolean = learning.recordCheckIn(checkIn, now)

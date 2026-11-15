@@ -178,7 +178,9 @@ class Instructions(
     /** Whether [change], a quick change of yours, takes [instruction]'s place: of its kind to its task; a break's, that break's that day. */
     private fun replaces(instruction: Instruction, change: Change): Boolean =
         isQuick(instruction, change.taskId, change.type) &&
-            (change.type != ChangeType.OutsideAt || instruction.changes.single().let { it.date == change.date && it.outsideMin == change.outsideMin })
+            (change.type != ChangeType.OutsideAt || instruction.changes.single().let { it.date == change.date && it.outsideMin == change.outsideMin }) &&
+            // An event's, which has no task either, is the same event's (every event of its name).
+            (change.type != ChangeType.EventTime || instruction.changes.single().eventKey == change.eventKey)
 
     /** Whether [instruction] is a quick change of [type] to [taskId] alone. */
     private fun isQuick(instruction: Instruction, taskId: String?, type: ChangeType): Boolean =

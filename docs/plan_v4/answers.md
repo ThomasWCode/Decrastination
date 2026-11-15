@@ -679,6 +679,13 @@ An event answered with minutes counted as that much of its day at no set time: `
 4. **An event to be asked about further off than the week ahead** takes its middle answer meanwhile (`EventJudge.middle`), not a few hours whatever its length, as the plan had it: a short tentative event would otherwise count three hours inside it and after it, busy time it was never said to take. A timed one of four hours or more is a few hours inside it, as the plan said.
 5. **A minor version**, as it changes how the plan counts your answers.
 
+### Found at the phone, and fixed after it
+
+- **6.3.1: an instruction the server laid didn't re-judge the phone's calendar.** In commands mode, an `EventTime` instruction the server laid reached the phone as its store changing alone, and nothing there read the calendar again. So Day kept the old busy time while the event's sheet showed the new answer. The phone now reads the calendar again whenever the instructions' event answers differ from those its last read judged with (`Sync.start`).
+- **6.3.2: a calendar question answered on the website was lost.** The server marked it answered but couldn't keep the answer, as the calendar's answers are the phone's alone. This was so for every answer since the website began.
+
+**Q150. How should an event question answered on the website be kept?** (15 Nov.) Offered: the server keeps it as your quick change about the event, an instruction the phone pulls, shown in *Your changes* with its *Take back* (recommended); the phone works the answer out from the reply's words as it pulls; the website's event questions offer no answers and say to answer on the phone; or leave it noted. **Your answer: as recommended.** → D-153.
+
 ### Not built
 
 A fourth answer, and minutes anywhere in an event. The answers already kept count the new way from 6.3.0; on the phone, the timed events with minutes as their answer were all over but the train that showed this.
