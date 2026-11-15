@@ -267,10 +267,52 @@ class EventJudgeTest {
     }
 
     @Test
-    fun `a timed event's few hours count once, an all-day event's on each day`() {
+    fun `a timed event's minutes are busy at its ends, half at its start and the rest at its end`() {
+        // Q147: a 15:00 to 17:20 train told to take 70 minutes: 15:00 to 15:35 and 16:45 to 17:20, its middle free.
+        val train = CalendarEvent(7, "Train", Fixtures.at("2026-10-10T15:00"), Fixtures.at("2026-10-10T17:20"), allDay = false)
+        val time = EventJudge.time(listOf(train), mapOf("train" to "load:70"), LONDON, askUntil = Long.MAX_VALUE)
+        assertEquals(listOf(Busy(Fixtures.at("2026-10-10T15:00"), Fixtures.at("2026-10-10T15:35")), Busy(Fixtures.at("2026-10-10T16:45"), Fixtures.at("2026-10-10T17:20"))), time.busy)
+        assertEquals(emptyMap(), time.dayLoads)
+    }
+
+    @Test
+    fun `odd minutes put the start's half down and the rest at the end`() {
+        val train = CalendarEvent(7, "Train", Fixtures.at("2026-10-10T15:00"), Fixtures.at("2026-10-10T17:21"), allDay = false)
+        assertEquals(listOf(Busy(train.start, Fixtures.at("2026-10-10T15:35")), Busy(Fixtures.at("2026-10-10T16:45"), train.end)), EventJudge.within(train, 71))
+        // A single minute: none at its start, the one at its end.
+        assertEquals(listOf(Busy(Fixtures.at("2026-10-10T17:20"), train.end)), EventJudge.within(train, 1))
+        assertEquals(emptyList(), EventJudge.within(train, 0))
+    }
+
+    @Test
+    fun `minutes as long as a timed event take all of it, longer ones what's over straight after it too`() {
+        // Q148: a 19:00 to 21:00 concert said to take 3 hours of the evening: busy 19:00 to 22:00, in the plan alone.
+        val concert = CalendarEvent(8, "Concert", Fixtures.at("2026-10-10T19:00"), Fixtures.at("2026-10-10T21:00"), allDay = false)
+        assertEquals(listOf(Busy(concert.start, concert.end)), EventJudge.time(listOf(concert), mapOf("concert" to "load:120"), LONDON, askUntil = Long.MAX_VALUE).busy)
+        val longer = EventJudge.time(listOf(concert), mapOf("concert" to "load:180"), LONDON, askUntil = Long.MAX_VALUE)
+        assertEquals(listOf(Busy(concert.start, Fixtures.at("2026-10-10T22:00"))), longer.busy)
+        assertEquals(emptyMap(), longer.dayLoads)
+    }
+
+    @Test
+    fun `a timed event across midnight takes its end's part from the next day, and what's over after it`() {
         val night = CalendarEvent(9, "Party", Fixtures.at("2026-10-10T22:00"), Fixtures.at("2026-10-11T02:00"), allDay = false)
         val time = EventJudge.time(listOf(night), mapOf(EventJudge.key(night) to "load:180"), LONDON, askUntil = Long.MAX_VALUE)
-        assertEquals(mapOf(LocalDate.parse("2026-10-10") to 180), time.dayLoads)
+        assertEquals(listOf(Busy(night.start, Fixtures.at("2026-10-10T23:30")), Busy(Fixtures.at("2026-10-11T00:30"), night.end)), time.busy)
+        assertEquals(emptyMap(), time.dayLoads)
+        val over = EventJudge.time(listOf(night), mapOf(EventJudge.key(night) to "load:300"), LONDON, askUntil = Long.MAX_VALUE)
+        assertEquals(listOf(Busy(night.start, Fixtures.at("2026-10-11T03:00"))), over.busy)
+    }
+
+    @Test
+    fun `an all-day event's minutes stay at no set time on each of its days`() {
+        val trip = CalendarEvent(
+            6, "Field trip", LocalDate.parse("2026-10-10").atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli(),
+            LocalDate.parse("2026-10-12").atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli(), allDay = true,
+        )
+        val time = EventJudge.time(listOf(trip), mapOf("field trip" to "load:90"), LONDON, askUntil = Long.MAX_VALUE)
+        assertEquals(mapOf(LocalDate.parse("2026-10-10") to 90, LocalDate.parse("2026-10-11") to 90), time.dayLoads)
+        assertEquals(emptyList(), time.busy)
     }
 
     @Test
@@ -294,6 +336,17 @@ class EventJudgeTest {
         // Answered, the answer holds there too.
         val answered = EventJudge.time(listOf(trip), mapOf(EventJudge.key(trip) to "busy"), LONDON, askUntil = now + 7 * DAY)
         assertEquals(mapOf(LocalDate.parse("2026-10-29") to 24 * 60), answered.dayLoads)
+    }
+
+    @Test
+    fun `a long timed event past the week ahead takes a few hours inside it, not of its day`() {
+        // Nine hours on a Thursday three weeks on: its few hours at its ends, meanwhile.
+        val now = Fixtures.at("2026-10-08T17:00")
+        val hire = CalendarEvent(5, "Van hire", Fixtures.at("2026-10-29T09:00"), Fixtures.at("2026-10-29T18:00"), allDay = false)
+        val time = EventJudge.time(listOf(hire), emptyMap(), LONDON, askUntil = now + 7 * DAY)
+        assertEquals(emptyList(), time.toAsk)
+        assertEquals(emptyMap(), time.dayLoads)
+        assertEquals(listOf(Busy(hire.start, Fixtures.at("2026-10-29T10:30")), Busy(Fixtures.at("2026-10-29T16:30"), hire.end)), time.busy)
     }
 
     @Test

@@ -2,6 +2,8 @@ package com.thomaswcode.decrastination.core
 
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
+import com.thomaswcode.decrastination.learn.CalendarEvent
+import com.thomaswcode.decrastination.learn.EventJudge
 import com.thomaswcode.decrastination.sources.powerplanner.ClassesResponse
 import com.thomaswcode.decrastination.sources.powerplanner.AgendaResponse
 import com.thomaswcode.decrastination.sources.powerplanner.SemesterResponse
@@ -728,6 +730,23 @@ class PlannerTest {
         val drums = Busy(Fixtures.at("2026-10-08T18:00"), Fixtures.at("2026-10-08T19:00"))
         assertEquals(255, Planner.capacity(thursday, input("2026-10-08T08:00", listOf(drums), emptyMap())))
         assertEquals(660, Planner.capacity(saturday, input("2026-10-08T08:00", emptyList(), mapOf(saturday to 180))))
+    }
+
+    @Test
+    fun `a timed event told to take some of its time holds no more work than the rest of it`() {
+        // Q146: a 141-minute train answered with 70 minutes, the day full of work due: what the day can
+        // hold and where the slotter lays it agree, 71 minutes of the train at most, none at its ends.
+        val saturday = LocalDate.parse("2026-10-10")
+        val train = CalendarEvent(7, "Train", Fixtures.at("2026-10-10T15:00"), Fixtures.at("2026-10-10T17:21"), allDay = false)
+        val time = EventJudge.time(listOf(train), mapOf("train" to "load:70"), LONDON, askUntil = Long.MAX_VALUE)
+        val tasks = (1..8).map { task("t$it", Fixtures.at("2026-10-10T23:59"), effort = 120) }
+        val input = Planner.Input(tasks, Fixtures.at("2026-10-09T23:00"), LONDON, settings, busy = time.busy, dayLoads = time.dayLoads, windows = mapOf(saturday to listOf(DayWindow(480, 1320, WindowKind.Evening))))
+        assertEquals(840 - 70, Planner.capacity(saturday, input))
+        val slots = Planner.plan(input).buckets.single { it.date == saturday }.slots
+        fun inside(from: Long, to: Long) = slots.sumOf { (minOf(to, it.end) - maxOf(from, it.start)).coerceAtLeast(0) } / 60_000L
+        assertTrue(inside(train.start, train.end) in 1..71, "${inside(train.start, train.end)} minutes of the train: " + slots.map { Instant.ofEpochMilli(it.start).atZone(LONDON).toLocalTime().toString() + "-" + Instant.ofEpochMilli(it.end).atZone(LONDON).toLocalTime() })
+        assertEquals(0L, inside(train.start, Fixtures.at("2026-10-10T15:35")))
+        assertEquals(0L, inside(Fixtures.at("2026-10-10T16:46"), train.end))
     }
 
     // --- Windows: study periods, break and lunch, the evening (PL-15) ---
