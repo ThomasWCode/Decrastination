@@ -168,6 +168,10 @@ class Sync(
     /** Held while the calendar's read and judged: refreshes at once (a start, a sync, the calendar changing) can't ask an event twice. */
     private val refreshing = Mutex()
 
+    /** Your instructions' answers about events as the last read judged with them; null before the first ([start] reads again as they change). */
+    @Volatile
+    private var judgedWith: Map<String, String>? = null
+
     /** The events being asked about, by key, from their read till they're on record as asked ([eventAsked]): under [refreshing]. */
     private val asking = HashSet<String>()
 
@@ -215,6 +219,7 @@ class Sync(
         // Your instructions about events over your answers to its questions; a question one of them
         // has answered since it was asked is withdrawn.
         val yours = InstructionRules.eventAnswers(instructions.value.applied)
+        judgedWith = yours
         val picked = settings.value
         val excluded = (picked.calendarsExcluded + listOfNotNull(picked.calendarWriteId)).toSet()
         val events = runCatching { withContext(Dispatchers.IO) { ports.readCalendar(now - CalendarTime.DAY_MS, CalendarTime.readUntil(now, clock.zone()), excluded) } }
@@ -255,6 +260,19 @@ class Sync(
             calendarChanges.debounce(CALENDAR_QUIET_MS).collect {
                 refreshCalendar()
                 replan()
+            }
+        }
+        // Your instructions' answers about events changed (one laid or taken back here, or pulled from the server, which lays
+        // them once the phone sends commands): the calendar's judged again with them and the plan made again, as nothing
+        // else here reads the calendar for an instruction the server laid, and the event's sheet already shows its answer.
+        // Against what the last read judged with, not the store's first value nor the last seen here, so a change made before this
+        // watch began counts too, and one taken back while a read judged with it isn't missed.
+        scope.launch {
+            instructions.state.map { InstructionRules.eventAnswers(it.applied) }.collect { answers ->
+                if (judgedWith != null && answers != judgedWith) {
+                    refreshCalendar()
+                    replan()
+                }
             }
         }
         // The calendar written to, or those not read, changed (NF-07, DX-13): the calendar's read again.

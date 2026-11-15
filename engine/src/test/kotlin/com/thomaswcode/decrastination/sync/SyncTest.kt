@@ -2,9 +2,14 @@ package com.thomaswcode.decrastination.sync
 
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
+import com.thomaswcode.decrastination.core.Busy
+import com.thomaswcode.decrastination.core.Change
+import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.Fetched
 import com.thomaswcode.decrastination.core.FixedClock
+import com.thomaswcode.decrastination.core.Instruction
 import com.thomaswcode.decrastination.core.InstructionState
+import com.thomaswcode.decrastination.core.InstructionStatus
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.Source
@@ -76,6 +81,7 @@ class SyncTest {
     /** The chips each event was asked with, by key. */
     private val chips: MutableMap<String, List<String>> = Collections.synchronizedMap(mutableMapOf())
     private val forgot = AtomicInteger()
+    private val replans = AtomicInteger()
     private val watched = AtomicInteger()
 
     private class FakeSource(override val source: Source, var answer: suspend (ReadContext) -> SourceRead) : TaskSource {
@@ -104,7 +110,7 @@ class SyncTest {
             if (recordsAsked) sync.eventAsked(key)
         },
         settleEvent = {},
-        replan = {},
+        replan = { replans.incrementAndGet() },
     )
 
     @AfterTest
@@ -167,6 +173,25 @@ class SyncTest {
         ports.allowed = false
         sync.refreshCalendar()
         assertEquals(emptyList(), sync.calendarTime.busy)
+    }
+
+    @Test
+    fun `an instruction's answer about an event, laid here or pulled from the server, judges the calendar again and makes the plan again`() = runBlocking {
+        // Laid on the server and pulled, an instruction reaches this phone as its store changing alone: the 30-minute event
+        // said to take an hour is busy for the hour, not its own half hour, without the calendar itself changing.
+        val over = CalendarEvent(5, "Check over", Fixtures.at("2026-10-20T21:00"), Fixtures.at("2026-10-20T21:30"), allDay = false)
+        ports.events = listOf(over)
+        sync.refreshCalendar()
+        assertEquals(listOf(Busy(over.start, over.end)), sync.calendarTime.busy)
+        // Pulled before the watch begins: it counts all the same, as the watch compares with what the last read judged with.
+        val change = Change(ChangeType.EventTime, eventKey = "check over", eventTitle = "Check over", eventAnswer = "load:60")
+        instructions.update { it.copy(instructions = it.instructions + Instruction("i1", "it takes an hour", at = clock.now(), state = InstructionStatus.Applied, changes = listOf(change), appliedAt = clock.now())) }
+        sync.start(emptyFlow())
+        withTimeout(5_000) { while (sync.calendarTime.busy != listOf(Busy(over.start, Fixtures.at("2026-10-20T22:00")))) delay(20) }
+        withTimeout(5_000) { while (replans.get() == 0) delay(20) }
+        // Taken back: its own half hour again.
+        instructions.update { it.copy(instructions = emptyList()) }
+        withTimeout(5_000) { while (sync.calendarTime.busy != listOf(Busy(over.start, over.end))) delay(20) }
     }
 
     @Test
