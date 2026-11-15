@@ -257,6 +257,15 @@ class Sync(
                 replan()
             }
         }
+        // Your instructions' answers about events changed (one laid or taken back here, or pulled from the server, which lays
+        // them once the phone sends commands): the calendar's judged again with them and the plan made again, as nothing
+        // else here reads the calendar for an instruction the server laid, and the event's sheet already shows its answer.
+        scope.launch {
+            instructions.state.map { InstructionRules.eventAnswers(it.applied) }.distinctUntilChanged().drop(1).collect {
+                refreshCalendar()
+                replan()
+            }
+        }
         // The calendar written to, or those not read, changed (NF-07, DX-13): the calendar's read again.
         scope.launch {
             settings.state.map { it.calendarWriteId to it.calendarsExcluded }.distinctUntilChanged().drop(1).collect { refreshCalendar() }
