@@ -183,9 +183,10 @@ class SyncTest {
         ports.events = listOf(over)
         sync.refreshCalendar()
         assertEquals(listOf(Busy(over.start, over.end)), sync.calendarTime.busy)
-        sync.start(emptyFlow())
+        // Pulled before the watch begins: it counts all the same, as the watch compares with what the last read judged with.
         val change = Change(ChangeType.EventTime, eventKey = "check over", eventTitle = "Check over", eventAnswer = "load:60")
         instructions.update { it.copy(instructions = it.instructions + Instruction("i1", "it takes an hour", at = clock.now(), state = InstructionStatus.Applied, changes = listOf(change), appliedAt = clock.now())) }
+        sync.start(emptyFlow())
         withTimeout(5_000) { while (sync.calendarTime.busy != listOf(Busy(over.start, Fixtures.at("2026-10-20T22:00")))) delay(20) }
         withTimeout(5_000) { while (replans.get() == 0) delay(20) }
         // Taken back: its own half hour again.
