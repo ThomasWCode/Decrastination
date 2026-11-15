@@ -703,6 +703,8 @@ class ConversationTest {
             h.conversation.askAboutEvent("revision club", "Revision club", "Wednesday 21 October", start, CalendarTime.answers(club).map { it.first.lowercase() })
             val question = h.stores.chat.value.messages.single { it.kind == MessageKind.EventQuestion }
             assertEquals(listOf("all of it", "half of it", "none"), question.suggestedReplies)
+            // Taken for a turn of the chat instead, its call fails at once rather than waiting on the stand-in.
+            h.server.enqueue(MockResponse().setResponseCode(400))
             assertTrue(h.conversation.ask("half of it", replyTo = question.id))
             assertEquals(listOf("revision club" to "load:45"), h.owners.events)
             assertEquals(0, h.server.requestCount)
