@@ -355,7 +355,7 @@ The student tells you about their work. You can:
 - After: the task can't be started until another listed task is done. Needs taskId and afterTaskId.
 - DueBy: the task's deadline is a different date. Needs taskId, date, and time if it gives one (else empty: the end of that day).
 - Minutes: how long the whole task takes, as the student reckons it. Needs taskId and minutes (the whole task's: where they say how much more it needs, add the minutes already worked on it).
-- EventTime: how much of the student's time a calendar event takes, for every event of that name. Needs eventKey and eventTime: "free" (they can work through it), "busy" (it takes all its time; for an all-day event, the whole day), or "hours" with minutes (it takes that many minutes of its day, at no set time).
+- EventTime: how much of the student's time a calendar event takes, for every event of that name. Needs eventKey and eventTime: "free" (they can work through it), "busy" (it takes all its time; for an all-day event, the whole day), or "hours" with minutes (it takes that many minutes of its time: a timed event's from within it, at its start and end, and what's more than it straight after it; an all-day event's, of its day, at no set time).
 - DayLimit: the most minutes of work the student can do on a day: minutes (0 for none at all), and date (one day) or weekday (every such day).
 - BusyTime: a stretch of time the student can't work: time (its start, HH:MM) and endTime (HH:MM), and date or weekday; title what they're doing then, in a word or two as they put it ("Football"), or empty where they don't say. It's put in their calendar as "Busy: Football" to block the time out.
 - NoSchool: days with no school (a holiday, half term, an INSET day). Needs date and endDate (the same date for one day).
@@ -816,7 +816,7 @@ It names Summary and Reply among its reasons, but no message of his is asked for
 
 - **The Sunday check-in** (LR-02): its questions are the app's own text, sent as his messages, with no call; your answers go to the check-in, and from it to him in his diary (above) and to the weekly review.
 - **The morning's list**, where he has no words for the morning; **the week's review's note**, with *Open the review*.
-- **A calendar event's question** (Q7): the app's own text, its answers (*All of it*, *A few hours*, *None*) kept for every event of its name, with no call.
+- **A calendar event's question** (Q7): the app's own text, its answers (*All of it*, *A few hours*, *None*; *Half of it* in place of *A few hours* on a timed event under four hours) kept for every event of its name, with no call.
 - **How work went, with Claude off** (LR-05): a message for each completion, its answers kept as below.
 - **The week's summary**: written in a call of its own, about you in the third person (D-66); "the week's summary's ready. send it?" is the app's own text, with *Send it*.
 - **Your reply to his Question**: read by the instructions reader, shown his question, as an instruction on that task (AI-10); not by him. Kept as its answer, the task read again, where it answers it, or where Claude declined it or gave nothing usable; one that doesn't is answered in the chat, or, where it made a change, done with as that, and either way his question waits again (D-19, 4.3.16).

@@ -738,7 +738,7 @@ private fun WeekStrip(plan: Plan, chosen: LocalDate, drag: DayDrag, tasks: Map<S
 private fun verdict(judgement: EventJudge.Judgement, asked: Boolean): String = when (judgement) {
     EventJudge.Judgement.Free -> "Free"
     EventJudge.Judgement.Busy -> "Busy"
-    is EventJudge.Judgement.Load -> "${Format.minutes(judgement.minutes)} of the day"
+    is EventJudge.Judgement.Load -> "${Format.minutes(judgement.minutes)} of its time"
     EventJudge.Judgement.Ask -> if (asked) "Asked" else "Not known"
 }
 
@@ -768,7 +768,7 @@ internal fun EventSheet(graph: AppGraph, activity: Activity, event: CalendarEven
                 Text("Your instruction says how it counts: take it back in the chat's Your changes to answer here.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             } else {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    CalendarTime.ANSWERS.forEach { (label, answer) ->
+                    CalendarTime.answers(event).forEach { (label, answer) ->
                         OutlinedButton(onClick = { graph.scope.launch { graph.calendarWriter.answer(key, answer) } }) { Text(label) }
                     }
                 }

@@ -324,7 +324,7 @@ class InstructionRulesTest {
         assertEquals("Sat 10 Oct: no work", InstructionRules.describe(Change(ChangeType.DayLimit, date = "2026-10-10", freeMin = 0), tasks, LONDON))
         assertEquals("Every Friday: at most 1 h 30 min of work", InstructionRules.describe(Change(ChangeType.DayLimit, weekday = 5, freeMin = 90), tasks, LONDON))
         assertEquals("Every Tuesday, 16:00–18:00: busy, no work", InstructionRules.describe(Change(ChangeType.BusyTime, weekday = 2, startMin = 960, endMin = 1080), tasks, LONDON))
-        assertEquals("“Train”: takes 2 h of its day", InstructionRules.describe(Change(ChangeType.EventTime, eventKey = "train", eventTitle = "Train", eventAnswer = "load:120"), tasks, LONDON))
+        assertEquals("“Train”: takes 2 h of its time", InstructionRules.describe(Change(ChangeType.EventTime, eventKey = "train", eventTitle = "Train", eventAnswer = "load:120"), tasks, LONDON))
     }
 
     // --- Claude's reading, checked ---

@@ -40,7 +40,10 @@ object EventJudge {
         /** It takes its slot. */
         data object Busy : Judgement
 
-        /** It takes this much of its day, at no set time. */
+        /**
+         * It takes this much of its time: a timed event's from within it, half at its start and the rest
+         * at its end, and what's more than it straight after it; an all-day event's, of each of its days, at no set time.
+         */
         data class Load(val minutes: Int) : Judgement
 
         /** The rules can't tell: ask. */
@@ -52,6 +55,16 @@ object EventJudge {
 
     /** A timed event this long may or may not take all its time: asked about, like an all-day one. */
     private const val LONG_MS = 4 * 3_600_000L
+
+    /**
+     * Whether [event]'s middle answer is *Half of it* (Q149): a timed one under four hours, where a few
+     * hours could be all of it or more; an all-day one, or a timed one of four hours or more, has *A few hours*.
+     */
+    fun halves(event: CalendarEvent): Boolean = !event.allDay && event.end - event.start < LONG_MS
+
+    /** [event]'s middle answer: half its length, rounded down ([halves]), else a few hours. */
+    fun middle(event: CalendarEvent): Judgement.Load =
+        Judgement.Load(if (halves(event)) ((event.end - event.start).coerceAtLeast(0) / 60_000L / 2).toInt() else FEW_HOURS_MIN)
 
     private val TRAVEL = Regex("""\b(train|bus|coach|flight|plane|ferry|tube|metro)\b""", RegexOption.IGNORE_CASE)
     private val NOT_YOURS = Regex("""holiday|birthday|observance|week number""", RegexOption.IGNORE_CASE)
@@ -95,11 +108,14 @@ object EventJudge {
     }
 
     /**
-     * What the planner takes: the busy intervals, and the minutes of each day taken at no set time;
-     * and the events as read, for the Day timeline and your instructions about them. One to ask
+     * What the planner takes: the busy intervals, and the minutes of each day an all-day event takes at
+     * no set time; and the events as read, for the Day timeline and your instructions about them. A timed
+     * event's minutes are busy time inside it ([within]), so the slotter, which sees busy time alone,
+     * leaves them free of work. One to ask
      * about takes all its time until you answer (D-44), so the plan counts on no time it may not
      * have; one that would be asked about but starts after [askUntil] (DX-14: questions keep to the
-     * week ahead) counts as a few hours of its day meanwhile, so the plan beyond it leaves it room.
+     * week ahead) counts as its middle answer meanwhile ([middle]: half a short timed one, else a few
+     * hours), so the plan beyond it leaves it room.
      * [events] as last read, judged; [read] from when to when that read ran (null where the calendar's never been read), as a failed read keeps the one before.
      */
     data class Time(val busy: List<Busy>, val dayLoads: Map<LocalDate, Int>, val toAsk: List<CalendarEvent>, val events: List<CalendarEvent> = emptyList(), val read: Pair<Long, Long>? = null)
@@ -114,12 +130,14 @@ object EventJudge {
         }
         for (event in events) {
             val judged = judge(event, answers)
-            when (val judgement = if (judged == Judgement.Ask && event.start > askUntil) Judgement.Load(FEW_HOURS_MIN) else judged) {
+            when (val judgement = if (judged == Judgement.Ask && event.start > askUntil) middle(event) else judged) {
                 Judgement.Free -> Unit
                 Judgement.Busy -> takeAll(event)
-                // An all-day event's load on each of its days; a timed one's once, on the day it starts.
-                is Judgement.Load -> (if (event.allDay) days(event, zone) else days(event, zone).take(1)).forEach { day ->
-                    loads[day] = ((loads[day] ?: 0) + judgement.minutes).coerceAtMost(24 * 60)
+                // An all-day event's load on each of its days; a timed one's inside it, as busy time.
+                is Judgement.Load -> if (event.allDay) {
+                    days(event, zone).forEach { day -> loads[day] = ((loads[day] ?: 0) + judgement.minutes).coerceAtMost(24 * 60) }
+                } else {
+                    busy += within(event, judgement.minutes)
                 }
                 Judgement.Ask -> {
                     ask += event
@@ -130,6 +148,19 @@ object EventJudge {
         // Every one to ask about: which of them is asked (not over yet, one per name) is decided
         // with the time, so an ended occurrence can't stand in for the next.
         return Time(busy, loads, ask, events)
+    }
+
+    /**
+     * A timed event's [minutes] as busy time (Q147, Q148): half at its start, rounded down, and the rest
+     * at its end, the middle left free to work in; as long as the event or longer, all of it and what's
+     * over straight after it. One across midnight takes its end's part from the next day, as busy time does.
+     */
+    fun within(event: CalendarEvent, minutes: Int): List<Busy> {
+        val taken = minutes * 60_000L
+        if (taken <= 0) return emptyList()
+        if (taken >= event.end - event.start) return listOf(Busy(event.start, event.start + taken))
+        val first = minutes / 2 * 60_000L
+        return listOfNotNull(Busy(event.start, event.start + first).takeIf { first > 0 }, Busy(event.end - (taken - first), event.end))
     }
 
     /**

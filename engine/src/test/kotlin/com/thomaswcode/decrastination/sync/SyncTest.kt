@@ -73,6 +73,8 @@ class SyncTest {
 
     /** The events asked about in Felix's name, by key; those settled; the plan let go, the calendar watched, the plan made again. */
     private val asked: MutableList<String> = Collections.synchronizedList(mutableListOf())
+    /** The chips each event was asked with, by key. */
+    private val chips: MutableMap<String, List<String>> = Collections.synchronizedMap(mutableMapOf())
     private val forgot = AtomicInteger()
     private val watched = AtomicInteger()
 
@@ -95,9 +97,10 @@ class SyncTest {
         settings, calendar, instructions, clock, scope, Syncer(tasks, settings, listOf(teams, gmail), clock), ports,
         forgetPlan = { forgot.incrementAndGet() },
         watchCalendar = { watched.incrementAndGet() },
-        askAboutEvent = { key, _, _, _, _ ->
+        askAboutEvent = { key, _, _, _, replies ->
             beforeAsk(key)
             asked += key
+            chips[key] = replies
             if (recordsAsked) sync.eventAsked(key)
         },
         settleEvent = {},
@@ -164,6 +167,17 @@ class SyncTest {
         ports.allowed = false
         sync.refreshCalendar()
         assertEquals(emptyList(), sync.calendarTime.busy)
+    }
+
+    @Test
+    fun `a short tentative event is asked about with half of it, a long one with a few hours`() = runBlocking {
+        // Q149: Felix asks about a timed event marked tentative whatever its length; under four hours, half of it.
+        val club = CalendarEvent(3, "Revision club", Fixtures.at("2026-10-21T18:00"), Fixtures.at("2026-10-21T19:30"), allDay = false, description = "Tentative")
+        val hire = CalendarEvent(4, "Van hire", Fixtures.at("2026-10-22T09:00"), Fixtures.at("2026-10-22T18:00"), allDay = false)
+        ports.events = listOf(club, hire)
+        sync.refreshCalendar()
+        assertEquals(listOf("all of it", "half of it", "none"), chips["revision club"])
+        assertEquals(listOf("all of it", "a few hours", "none"), chips["van hire"])
     }
 
     @Test

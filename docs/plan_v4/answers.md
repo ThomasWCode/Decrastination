@@ -656,3 +656,29 @@ They were the chat screen's own (`rememberSaveable`), so they went with it: *Pla
 ### Not built
 
 Nothing of the draft outlives the app's process. Words handed in to a nearly full box can run past what the box holds (2,000 characters), as a failed send's could.
+
+## A timed event's minutes taken from its own time (6.3.0, 15 Nov)
+
+An event answered with minutes counted as that much of its day at no set time: `Planner.capacityOf` took them off the day's free time, but the slotter lays work by busy time alone and filled the event. On the phone a 2 h 21 min train told to take half its time held 1 h 45 min of work. The plan was written on 6 Nov and its questions answered on 7 Nov; the numbers continue [plan_web/decisions.md](../plan_web/decisions.md)'s, which ended at Q145.
+
+### Asked and answered
+
+**Q146. Change what minutes mean for a timed event, or add a fourth answer beside them?** Minutes at no set time on a timed event leave the plan free to fill the event, which is never what's meant; a fourth answer ("of its own time") would keep that and add a stored form the phone, the server, the website, the backup's checks and Felix's schema all have to learn. **Your answer: change them.** `load:<minutes>` is written as before; on a timed event it means minutes of its own time.
+
+**Q147. Where in the event the minutes go.** Offered: half at its start and the rest at its end (recommended: on a train the time that's lost is getting on and settling, and packing up before getting off, and the middle is the one stretch long enough to work in); all at its start; or anywhere in it, the slotter keeping no more than the rest of it for work, a budget per event the slotter and `capacityOf` would both keep. **Your answer: half at its start, the rest at its end.**
+
+**Q148. Minutes longer than the event** ("the concert takes 3 hours of my evening", for a 2-hour concert). Offered: all of it and no more, the journey a busy time of yours where it matters (recommended); or the event's time and what's over at no set time on its day. **Your answer: all of it, and what's over as busy time straight after it, in the plan alone** (nothing written to the calendar): what was said is kept, and where it goes is known.
+
+**Q149. The event's sheet's buttons.** *A few hours* (180 minutes) takes all of a timed event under three hours, the same as *All of it*. Offered: *Half of it* in place of *A few hours* on a timed event under four hours, kept as half the length of the event tapped, for every event of that name (recommended); or the three as they were. Felix asks about a short timed event too, one marked optional or tentative, with the same answers. **Your answer: *Half of it* on a timed event under four hours, on its sheet and in Felix's question alike.** As it's kept as minutes, another event of that name and a different length takes the same minutes.
+
+### Decided without asking
+
+1. **Odd minutes**: the start's half is rounded down, the end takes the rest (70 on a 141-minute train: 35 and 35; 71: 35 and 36). *Half of it* on an odd length is rounded down too (70 on a 141-minute train).
+2. **No new call to Claude, and no live check of the prompt.** `EventTime`'s words change but not its schema (`free`, `busy`, `hours`), so there's nothing new for the API to compile; Felix already gave the minutes right, and it was the planner that used them wrong.
+3. **A reply of *half of it* to Felix's question** is worked out from the event as last read (`EventJudge.Time.events`), found by its name and start (`CalendarTime.answers`), as the question's message keeps those and not its length; one no longer in the calendar can't be, and the reply goes to Felix as words. No message changes shape, so the chat's store needs no migration.
+4. **An event to be asked about further off than the week ahead** takes its middle answer meanwhile (`EventJudge.middle`), not a few hours whatever its length, as the plan had it: a short tentative event would otherwise count three hours inside it and after it, busy time it was never said to take. A timed one of four hours or more is a few hours inside it, as the plan said.
+5. **A minor version**, as it changes how the plan counts your answers.
+
+### Not built
+
+A fourth answer, and minutes anywhere in an event. The answers already kept count the new way from 6.3.0; on the phone, the timed events with minutes as their answer were all over but the train that showed this.

@@ -41,9 +41,11 @@ import com.thomaswcode.decrastination.core.Window
 import com.thomaswcode.decrastination.core.WindowKind
 import com.thomaswcode.decrastination.data.SlotOutcome
 import com.thomaswcode.decrastination.data.SlotRecord
+import com.thomaswcode.decrastination.learn.CalendarEvent
 import com.thomaswcode.decrastination.learn.CalendarTime
 import com.thomaswcode.decrastination.learn.CheckIn
 import com.thomaswcode.decrastination.learn.Daily
+import com.thomaswcode.decrastination.learn.EventJudge
 import com.thomaswcode.decrastination.sync.GmailFinishes
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
@@ -690,6 +692,38 @@ class ConversationTest {
         assertEquals(0, conversation.unread.first())
         felix.outbox.send(ChatMessage("n2", Speaker.Felix, "Good, keep going.", now, kind = MessageKind.SlotStart))
         assertEquals(1, conversation.unread.first())
+    }
+
+    @Test
+    fun `a short event's question takes half of it, worked out from the event as last read`() = runBlocking {
+        // Q149: a 90-minute club marked tentative, asked about with half of it; the reply kept as 45 minutes.
+        val start = Fixtures.at("2026-10-21T18:00")
+        val club = CalendarEvent(3, "Revision club", start, start + 90 * 60_000L, allDay = false, description = "Tentative")
+        FelixHarness(calendar = { EventJudge.Time(emptyList(), emptyMap(), emptyList(), events = listOf(club)) }).use { h ->
+            h.conversation.askAboutEvent("revision club", "Revision club", "Wednesday 21 October", start, CalendarTime.answers(club).map { it.first.lowercase() })
+            val question = h.stores.chat.value.messages.single { it.kind == MessageKind.EventQuestion }
+            assertEquals(listOf("all of it", "half of it", "none"), question.suggestedReplies)
+            // Taken for a turn of the chat instead, its call fails at once rather than waiting on the stand-in.
+            h.server.enqueue(MockResponse().setResponseCode(400))
+            assertTrue(h.conversation.ask("half of it", replyTo = question.id))
+            assertEquals(listOf("revision club" to "load:45"), h.owners.events)
+            assertEquals(0, h.server.requestCount)
+        }
+    }
+
+    @Test
+    fun `a short event's question asked with a few hours before half of it still takes it, with no call`() = runBlocking {
+        // Asked with the three of old and still waiting at the update: its chip keeps 180 minutes, not a turn of the chat.
+        val start = Fixtures.at("2026-10-21T18:00")
+        val club = CalendarEvent(3, "Revision club", start, start + 90 * 60_000L, allDay = false, description = "Tentative")
+        FelixHarness(calendar = { EventJudge.Time(emptyList(), emptyMap(), emptyList(), events = listOf(club)) }).use { h ->
+            h.conversation.askAboutEvent("revision club", "Revision club", "Wednesday 21 October", start, listOf("all of it", "a few hours", "none"))
+            val question = h.stores.chat.value.messages.single { it.kind == MessageKind.EventQuestion }
+            h.server.enqueue(MockResponse().setResponseCode(400))
+            assertTrue(h.conversation.ask("a few hours", replyTo = question.id))
+            assertEquals(listOf("revision club" to "load:${EventJudge.FEW_HOURS_MIN}"), h.owners.events)
+            assertEquals(0, h.server.requestCount)
+        }
     }
 
     @Test

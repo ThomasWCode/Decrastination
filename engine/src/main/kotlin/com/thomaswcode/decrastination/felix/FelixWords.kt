@@ -81,6 +81,6 @@ object FelixWords {
     /** [words] as the answer the app keeps where they're one of his chips' ("about right" is "As expected"), else as they are. */
     fun chip(words: String): String = words.trim().let { said -> HOW_IT_WENT.firstOrNull { it.first.equals(said, ignoreCase = true) }?.second ?: said }
 
-    /** A calendar event's question's chips (Q7), in his register: the answers `CalendarTime.ANSWERS` keeps, taken whatever their case. */
+    /** A calendar event's question's chips (Q7), in his register: the answers `CalendarTime.answers` keeps, taken whatever their case. */
     fun eventReplies(answers: List<String>): List<String> = answers.map { it.lowercase() }
 }
