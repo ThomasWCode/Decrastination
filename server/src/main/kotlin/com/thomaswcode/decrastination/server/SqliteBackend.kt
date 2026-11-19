@@ -173,8 +173,8 @@ class SqliteBackend(private val db: Database, private val clock: () -> Long = Sy
 
     /**
      * The history older than [before] let go, and older than [thinBefore] thinned to each store's last row of each hour, but each
-     * store's newest [keep] rows. Most of a store's rows differ from the one before by a sync's time alone, each a whole copy, so an
-     * hour's last says what the hour came to. A copy set aside as unreadable isn't thinned: it's the only one of what couldn't be read.
+     * store's newest [keep] rows, as the history's room is what D-151 traded for the hour between them: an hour's last row holds what
+     * the hour came to. A copy set aside as unreadable isn't thinned: it's the only one of what couldn't be read.
      */
     fun trimHistory(before: Long, keep: Int = HISTORY_KEPT, thinBefore: Long = before) {
         db.transaction { c ->

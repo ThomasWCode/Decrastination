@@ -1,6 +1,6 @@
 # Photos in more places, Day's menus on the website, and the server's storage in sight
 
-The plan for nine pieces of work, a deployment change and eight releases (6.3.3, then 6.4.0 to 6.10.0), written before any is built (18 Nov 2026). Built so far: the snapshots kept 14 days (D-154). The specs say how the app works now.
+The plan for nine pieces of work, a deployment change and eight releases (6.3.3, then 6.4.0 to 6.10.0), written before any is built (18 Nov 2026). Built so far: the snapshots kept 14 days (D-154), and 6.3.3, the writes that change nothing stopped (Q151). The specs say how the app works now.
 
 - [photo-checks.md](photo-checks.md): the photo check itself, its doors on the phone, and its door on the website (6.4.0, 6.5.0, 6.7.0).
 - [website-day.md](website-day.md): the website's Day, each item opening its own menu (6.6.0).
