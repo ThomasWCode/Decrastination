@@ -161,6 +161,50 @@ class SqliteBackendTest {
         assertEquals(listOf("a2"), historyOf("a.json").map { it.second })
     }
 
+    private fun tasks(tried: Long, read: Long, seen: Long, done: Long? = null, title: String = "An essay") =
+        """{"tasks":[{"id":"t1","title":"$title","firstSeenAt":1,"lastSeenAt":$seen,"doneAt":${done ?: "null"}}],"sources":{"Teams":{"lastSuccessAt":$read,"lastAttemptAt":$tried}},"version":9}"""
+
+    @Test
+    fun `a write that moves a sync's times alone adds no history, and still changes the store's row`() {
+        backend.write("tasks.json", 9, tasks(tried = 1, read = 1, seen = 1))
+        backend.write("tasks.json", 9, tasks(tried = 2, read = 2, seen = 2))
+        backend.write("tasks.json", 9, tasks(tried = 3, read = 2, seen = 3))
+        assertEquals(tasks(tried = 3, read = 2, seen = 3), backend.read("tasks.json"))
+        assertEquals(listOf(tasks(tried = 1, read = 1, seen = 1)), historyOf("tasks.json").map { it.second })
+        assertEquals(3L, db.currentRevision(), "each write still a revision, for clients to hear of")
+        backend.write("calendar-read.json", 1, """{"events":[],"from":1,"to":9}""")
+        backend.write("calendar-read.json", 1, """{"events":[],"from":2,"to":9}""")
+        backend.write("chat.json", 13, """{"messages":[],"readAt":1}""")
+        backend.write("chat.json", 13, """{"messages":[],"readAt":2}""")
+        assertEquals(1, historyOf("calendar-read.json").size)
+        assertEquals(1, historyOf("chat.json").size)
+    }
+
+    @Test
+    fun `one that changes anything else adds its row, a time that isn't a sync's among them`() {
+        backend.write("tasks.json", 9, tasks(tried = 1, read = 1, seen = 1))
+        backend.write("tasks.json", 9, tasks(tried = 2, read = 2, seen = 2, title = "An essay, longer"))
+        backend.write("tasks.json", 9, tasks(tried = 2, read = 2, seen = 2, title = "An essay, longer", done = 5))
+        backend.write("tasks.json", 10, tasks(tried = 2, read = 2, seen = 2, title = "An essay, longer", done = 5))
+        backend.write("calendar-read.json", 1, """{"events":[],"from":1,"to":9}""")
+        backend.write("calendar-read.json", 1, """{"events":[],"from":1,"to":10}""")
+        assertEquals(4, historyOf("tasks.json").size, "the words, a task's done time, a new shape")
+        assertEquals(2, historyOf("calendar-read.json").size, "how far it reaches is more than when it began")
+        // Another store's times are its own: only the named ones are a sync's.
+        backend.write("log.json", 1, """{"at":1}""")
+        backend.write("log.json", 1, """{"at":2}""")
+        assertEquals(2, historyOf("log.json").size)
+    }
+
+    @Test
+    fun `a store set aside as unreadable is kept as now, and the write after it too`() {
+        backend.write("tasks.json", 9, "not json")
+        assertNotNull(backend.setAside("tasks.json", 5L))
+        backend.write("tasks.json", 9, "not json")
+        backend.write("tasks.json", 9, "still not json")
+        assertEquals(listOf("not json", "not json", "not json", "still not json"), historyOf("tasks.json").map { it.second })
+    }
+
     @Test
     fun `a store over rows reads and writes as one over its file, and a broken one is set aside`() = runBlocking {
         val store = JsonStore(backend, "note.json", Note.serializer(), ::Note)

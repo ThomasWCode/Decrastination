@@ -44,7 +44,11 @@ class SqliteBackend(private val db: Database, private val clock: () -> Long = Sy
     @Volatile
     var written: (Long) -> Unit = {}
 
-    /** [text] kept as [name], with its history, whatever [writable] says: a seed's. */
+    /**
+     * [text] kept as [name], with its history, whatever [writable] says: a seed's. The history gains a row only when what the store
+     * holds has changed since its last ([TimesAlone]): a write that moves a sync's times alone writes the store's own row, so every
+     * time is as true as now, and adds nothing to what a store that can't be read is brought back from.
+     */
     fun keep(name: String, version: Int, text: String, cause: String = this.cause) {
         val revision = db.transaction { c ->
             val revision = db.revision()
@@ -60,7 +64,8 @@ class SqliteBackend(private val db: Database, private val clock: () -> Long = Sy
                 q.setLong(5, now)
                 q.executeUpdate()
             }
-            history(c, revision, name, version, text, cause, now)
+            val last = lastKept(c, name)
+            if (last == null || last.first != version || TimesAlone.differ(name, last.second, text)) history(c, revision, name, version, text, cause, now)
             revision
         }
         if (!db.inACommand && db.notNested) written(revision)
@@ -168,8 +173,8 @@ class SqliteBackend(private val db: Database, private val clock: () -> Long = Sy
 
     /**
      * The history older than [before] let go, and older than [thinBefore] thinned to each store's last row of each hour, but each
-     * store's newest [keep] rows. Most of a store's rows differ from the one before by a sync's time alone, each a whole copy, so an
-     * hour's last says what the hour came to. A copy set aside as unreadable isn't thinned: it's the only one of what couldn't be read.
+     * store's newest [keep] rows, as the history's room is what D-151 traded for the hour between them: an hour's last row holds what
+     * the hour came to. A copy set aside as unreadable isn't thinned: it's the only one of what couldn't be read.
      */
     fun trimHistory(before: Long, keep: Int = HISTORY_KEPT, thinBefore: Long = before) {
         db.transaction { c ->
@@ -191,6 +196,13 @@ class SqliteBackend(private val db: Database, private val clock: () -> Long = Sy
             }
         }
     }
+
+    /** [name]'s newest row of history, its version and its text; a copy set aside as unreadable among them, at version 0. */
+    private fun lastKept(c: Connection, name: String): Pair<Int, String>? =
+        c.prepareStatement("SELECT version, json FROM store_history WHERE name = ? ORDER BY revision DESC LIMIT 1").use { q ->
+            q.setString(1, name)
+            q.executeQuery().use { if (it.next()) it.getInt(1) to it.getString(2) else null }
+        }
 
     private fun history(c: Connection, revision: Long, name: String, version: Int, text: String, cause: String, at: Long) {
         c.prepareStatement("INSERT INTO store_history(revision, name, version, json, cause, at) VALUES(?, ?, ?, ?, ?, ?)").use { q ->

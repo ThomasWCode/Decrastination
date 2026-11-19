@@ -688,14 +688,14 @@ class AppGraph private constructor(context: Context) : Owners {
             }
         }
         // The calendar as read, which the server plans by and can't read, sent as it changes once the two keep in step by commands
-        // (W-24): a seed carried it before. The same as last sent isn't sent again; nor the nothing a start has before its first read,
-        // which would take the server's last from it ([Sync.calendarKnown]).
+        // (W-24): a seed carried it before. One that says nothing more than the last sent isn't sent again ([CalendarRead.news]); nor
+        // the nothing a start has before its first read, which would take the server's last from it ([Sync.calendarKnown]).
         scope.launch {
             var sent: CalendarRead? = null
             combine(sync.calendarState, sync.calendarKnown) { _, known -> known }.collect { known ->
                 if (!sendsCommands() || !replica.paired || !known) return@collect
                 val read = sync.calendarRead()
-                if (read != sent) runCatching { commands.send(ObserveCalendar(read)) }.onSuccess { sent = read }.onFailure { e -> Log.w(TAG, "Sending the calendar as read failed", e) }
+                if (read.news(sent)) runCatching { commands.send(ObserveCalendar(read)) }.onSuccess { sent = read }.onFailure { e -> Log.w(TAG, "Sending the calendar as read failed", e) }
             }
         }
         // Redraw the widget whenever what it shows may have changed.

@@ -689,3 +689,23 @@ An event answered with minutes counted as that much of its day at no set time: `
 ### Not built
 
 A fourth answer, and minutes anywhere in an event. The answers already kept count the new way from 6.3.0; on the phone, the timed events with minutes as their answer were all over but the train that showed this.
+
+## Photos in more places, the website's Day, and the server's storage (from 18 Nov)
+
+Planned on 18 Nov 2026 in `docs/plan_photos/` with the owner's answers to its questions there, folded in here release by release as each is built. The snapshots kept 14 days came first (D-154).
+
+### The writes that change nothing (6.3.3, 19 Nov)
+
+R2 was on course to pass its free 10 GB with no photo in it: each write of a store added its whole text to `store_history`, and most of them changed nothing but a sync's times; and the phone sent its whole calendar with every read, 67 MB of the commands' 69 in a fortnight.
+
+**Q151. What keeps R2 under its 10 GB, beyond the snapshots' 14 days?** (18 Nov, answered 19 Nov.) Put with what was measured and estimated: 14 days alone come to about 10 GB by February as the database grows. Offered: the writes that change nothing stopped; the snapshots at 7 days; the commands kept 30 days, not 90; the history kept hourly for 14 days, not 30; its rows kept smaller; fewer of Litestream's levels; a snapshot every other day. **Your answer: the writes that change nothing stopped**, built second, as 6.3.3, and none of the others. → D-151, as it's kept since.
+
+#### Decided without asking
+
+1. **Named fields, not every time.** Which times they were was counted on the box (19 Nov, `private/tools/box_time_keys.py`): a source's last try and last read and a task's last listing in `tasks.json` (379 of 391 rows in a day), the read's start in `calendar-read.json` (95 of 100), where you've read to in `chat.json` (4 of 45). Only those are left out of the comparison (`TimesAlone`): a slot moved or a date changed is a time too, and what the history is there to bring back.
+2. **Compared with the history's last row**, not the store's text before, so every row kept says more than the one before it, and a write the same as the last row adds none, whatever the store. A row of an older shape, or a copy set aside as unreadable, is never the same.
+3. **The phone's calendar is compared without when its read began**, which moves with every read; how far it reaches moves each midnight, so it's sent at least once a day, its start with it. What was sent is held in the process, as before, so a start sends it again: no store changes shape, on the phone or the server.
+
+#### Not built
+
+The times kept in a store of their own, so that a read finding nothing new doesn't write `tasks.json` at all: weighed once these two are measured on the box (`box_churn.py`, `box_causes.py`, `r2_size.py`), as it changes a stored shape on the phone and the server.
