@@ -60,6 +60,7 @@ Nothing else: no analytics, no crash reports (crashes are written down on the ph
 | Photos of work | `files/photos/` | While a task holds one |
 | A photo check's pages | the app's cache | Deleted once checked |
 | What photo checks saw (6.4.0) | `session.json`, on the phone and the server, and in backups | Eight a task, the newest, while the task's open: gone when it's done or gone, or at a reset of everything learned |
+| A check's pages kept, its box unticked (6.5.0) | `files/photos/` on the phone, the server's photos' folder on the box; never in a backup or R2 | While the task's open, 14 days at most, or till a reset of everything learned |
 | Crashes | `files/crashes/` | The last three |
 | Daily backups | `Documents/Decrastination` | The newest 14; a reset's copy till you delete it |
 | Copies of unreadable files | `files/` | The newest three of each |

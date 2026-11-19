@@ -29,7 +29,7 @@ The Day tab (UI-17, D-118), opened from the chat's Plan button (D-121, [felix.md
 | The piece under way | the same in `primary`, its times followed by " · now" | as above | as above | as above |
 | A piece gone by, not yet moved | faded, " · gone by" | as above | as above | as above |
 | A break outside | a pale strip, "Outside" (by night not see-through, so its word reads on the graphite, `Colours.outsideStrip`) | none | none | drag within its day, not under way |
-| A slot kept, or kept late | grey, rimmed in the outline, its label struck through, its outcome | none | none | none |
+| A slot kept, or kept late | grey, rimmed in the outline, its label struck through, its outcome | its sheet (`KeptSheet`, below; 6.5.0) | none | none |
 | A slot missed | outlined and worded in the error colour, "Missed" | its sheet (`MissedSheet`, below) | none | none |
 | An event | its colour (the event's own, else its calendar's, `CalendarEvent.colour`); its words black or white, whichever reads better on it (`Colours.onEvent`); outlined only where the plan counts it free; with no colour of its own, the secondary container's lilac rimmed in the outline; a small "?" where the plan needs your answer about it, not asked yet | its event sheet (`EventSheet`) | none | none |
 | A busy time of yours (D-117) | outlined, "Busy: Football", or "Busy" | none | none | none |
@@ -43,9 +43,14 @@ A tap on a missed slot opens its sheet: its label, "Missed, 16:00–16:45", and 
 - **Done** keeps it, late (`Focus.keepSlot`, LR-09): the record is *Kept late*, in the missed slot's place and times, and the miss gives way; its free time is earned as a Done on its piece planned again would (BL-08's limits). It's Day's own Done, so the sheet closes and Day's bar says it with an Undo, which makes it *Missed* again. It's there while its piece is in the plan, and only on the last miss of its key today, as that's the miss a keep gives way (`Focus.keep`): a task in boxes of time has one key for every box, so with two of its boxes missed today, the earlier's sheet says "Done goes on its later miss" in its place, and has *Done* once the later's kept. Tapped on a Day drawn before the later was kept, it's refused as changed since, and taken once Day's drawn again, within the minute.
 - **Open**: the task in its source (`TaskOpener.open`), as on a piece's sheet.
 - **Check it's done** asks its source (a sync of that source alone) and says whether it agrees (`checkDone`); for one of your own, **All of it done** in its place, as on a piece's sheet.
+- **Check with a photo** (6.5.0), where it offers *Done*, for written homework that isn't Anki's, while Claude can be asked (`MissedActions.photo`): the check of the piece in the plan, so a pass keeps the slot late, earning, as a check from the piece's sheet does.
 - **Ask Felix about it** (below).
 
 Where its task is done since, or its piece is no longer in the plan (ticked in the chat, changed), the sheet says "Done since, or planned again" and has only *Open*. Each closes the sheet and says how it went in Day's bar, as a record has no line of its own for a message.
+
+### A slot ticked Done's sheet
+
+A tap on a kept slot's block, or its row in the *done* chip's sheet, opens its sheet (6.5.0, `KeptSheet`): its label, how and when it was kept ("Kept, 16:00–16:40, ticked at 16:42"), whether it's earned its free time, and **Check with a photo** while it can still earn, which `KeptActions.of` says: kept today without earning, written homework that isn't Anki's, its task open, Claude askable. The check names the slot (`SlotRef`: its key, start and when it was kept), so a pass earns on that slot and no other, however long after its tick (`Focus.photoChecked`, `PhotoDone.record`), within the day's plan as a kept slot earns. The piece left the plan when it was kept, so the check is told the record's label and minutes in the piece's place, with its task (`Photos.pieceOf`).
 
 ### Ask Felix about it
 

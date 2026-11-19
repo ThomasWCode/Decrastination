@@ -739,3 +739,26 @@ Seven real pages (five of one piece of written homework, one of another subject'
 #### Not built
 
 A piece that's a part of a task ("part 1 of 2") is judged against the whole task, as before: a first sitting that shows its half doesn't pass, and the second, shown the rest, does. The prompt doesn't know what share of the work a part is.
+
+### More doors to the check, the gallery and the tick box (6.5.0, 20 Nov)
+
+A missed slot's sheet had no photo check, a slot ticked *Done* couldn't be tapped, and a photo earned for a tick only if it was taken within half a minute of it, so a longer piece ticked first had no way to its photo afterwards. Work's camera button only read homework into tasks, and every photo came from the camera there and then. → D-156.
+
+**Q155. Which of Day's pop-ups get the check?** (18 Nov.) **Your answer: a missed slot's sheet, and a piece ticked *Done*, which gets a pop-up of its own.**
+
+**Q156. What does Work's camera button offer?** Offered: new tasks from a photo (as now); a check; a photo added to a task. **Your answer: all three.**
+
+**Q157. Which photos does the tick box delete?** Offered: the app's and the server's copy, once it's used, the gallery never touched; the original in the gallery; a camera photo saved to the gallery when unticked. **Your answer: the app's and the server's copy.**
+
+**Q158. Is the box ticked by default?** **Your answer: yes, everywhere**, put with what it means for the chat (6.8.0).
+
+Said without being asked: the gallery can be picked from on the phone. And on 19 Nov, a check's pages kept unticked are kept with their task, shown on its sheet, sent again with a later check where there's room, the new ones first, and deleted when the task's done or gone, at a reset, or 14 days after they were taken (the plan's question 3: as recommended).
+
+#### Decided without asking
+
+1. **A kept slot's check names its slot** (`SlotRef`: its key, start and when it was kept), so the earning lands on that slot however long after the tick; that day only, as a kept slot earns within the day's plan. The piece has left the plan by then, so the check is told the record's label and minutes with its task.
+2. **The sheet of a slot ticked *Done*** opens from its grey block on Day and from its row in the *done* chip's sheet, both.
+3. **A picture from the gallery is taken as of when it's chosen**, as nothing rests on when it was taken once a kept slot's check names its slot.
+4. **Kept pages are sent again named "Kept page"**, after the new ones, and the prompt says they show what earlier checks showed, never new work, so they can't make a check fresh.
+5. **Kept pages aren't backed up**, as their files aren't, and a reset of everything learned lets go of them, as it does of the notes.
+6. **The tick box** is beside a check's pages, in the first choice and after each page; a task's own photo and a photo of homework read into tasks are kept by design, so they have none.
