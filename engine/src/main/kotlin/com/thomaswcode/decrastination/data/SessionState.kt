@@ -72,7 +72,18 @@ data class CheckNote(
      */
     val passed: Boolean,
     val at: Long,
-)
+    /** Counted by another check's pass, not its own: that pass's note's [at], so its award taken back takes this back too. */
+    val countedBy: Long? = null,
+) {
+    /**
+     * What a pass of its check counts with it: its step, by its place in the task's list, whichever sitting of it it was; or "-1",
+     * every part of a task divided with no step named ([com.thomaswcode.decrastination.core.Chunk.keyOf]).
+     */
+    val scope: String get() = key.removePrefix("$taskId#").substringBefore('#')
+
+    /** The note it is, whatever's been counted since: its task, its piece and when it was kept. */
+    val id: Triple<String, String, Long> get() = Triple(taskId, key, at)
+}
 
 /** The most notes kept of one task's checks, the newest. */
 const val CHECK_NOTES_KEPT = 8

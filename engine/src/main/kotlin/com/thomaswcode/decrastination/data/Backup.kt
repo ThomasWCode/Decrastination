@@ -563,19 +563,20 @@ object Backups {
     }
 
     /**
-     * [current] with [imported]'s records added. One already here (the same moment and task, the
-     * same day or week) isn't doubled, and this phone's own version of it wins.
-     */
-    /**
-     * What photo checks saw here, with [imported]'s it hasn't (6.4.0), in the order they were kept, each task's newest
-     * [CHECK_NOTES_KEPT]: a restore loses none of what was shown here, and brings back what was shown before.
+     * What photo checks saw here, with [imported]'s it hasn't (6.4.0), by each note's own id, a counted copy kept over one that isn't, in
+     * the order they were kept, each task's newest [CHECK_NOTES_KEPT]: a restore loses none of what was shown here, and brings back what
+     * was shown before, never one note twice.
      */
     fun mergedNotes(current: List<CheckNote>, imported: List<CheckNote>): List<CheckNote> {
-        val all = (current + imported.filter { it !in current }).sortedBy { it.at }
+        val all = (current + imported).groupBy { it.id }.values.map { same -> same.firstOrNull { it.passed } ?: same.first() }.sortedBy { it.at }
         val newest = all.groupBy { it.taskId }.values.flatMapTo(HashSet()) { it.takeLast(CHECK_NOTES_KEPT) }
         return all.filter { it in newest }
     }
 
+    /**
+     * [current] with [imported]'s records added. One already here (the same moment and task, the
+     * same day or week) isn't doubled, and this phone's own version of it wins.
+     */
     fun mergeLog(current: ActivityLog, imported: ActivityLog, now: Long): ActivityLog = ActivityLog(
         // A task in boxes keeps one key for its next box: two kept the same day are told apart by when.
         slots = (current.slots + imported.slots).distinctBy { listOf(it.key, it.start, it.outcome, it.at) }.sortedBy { it.at },

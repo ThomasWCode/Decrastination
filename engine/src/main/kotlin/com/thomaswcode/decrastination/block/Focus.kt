@@ -538,6 +538,8 @@ class Focus(
         val today = today(now)
         session.update { state ->
             state.copy(
+                // Its photo's award taken back with it: the work it counted can earn again.
+                notes = uncounted(state.notes, record),
                 // What its keep put in the ledger (one kept before that was on record, its minutes at the rate now), and only
                 // on its own day: yesterday's went at midnight, and today's wasn't its.
                 credit = if (record.earned && today(record.at) == today) state.credit.takeBack(today, record.earnedMin ?: Credit.forSlot(record.plannedMin, settings.value.workMinPerFreeMin)) else state.credit,
@@ -623,11 +625,23 @@ class Focus(
     }
 
     /**
-     * [notes] with [note] after them; where it passed, every earlier note of its task counted with it, as the check that passed was
-     * told them all and relied on them: what they showed has earned too, and can't be shown again as new (6.4.0).
+     * [notes] with [note] after them; where it passed, the earlier notes of its scope counted with it, as the check that passed relied
+     * on them: what they showed has earned too, and can't be shown again as new (6.4.0). Its scope is its step, any of its sittings, or,
+     * for a task divided with no step named, every part of it ([CheckNote.scope]): a named step is judged by its own work, so another
+     * step's note, which it didn't rely on, stays as it was.
      */
     private fun counted(notes: List<CheckNote>, note: CheckNote): List<CheckNote> =
-        (if (note.passed) notes.map { if (it.taskId == note.taskId) it.copy(passed = true) else it } else notes) + note
+        (if (note.passed) notes.map { if (it.taskId == note.taskId && it.scope == note.scope && !it.passed) it.copy(passed = true, countedBy = note.at) else it } else notes) + note
+
+    /**
+     * [notes] with [record]'s award by a photo taken back (6.4.0): the note of the pass that earned it, and those it counted, not
+     * counted any more, so the work can earn again; another pass's, and what it counted, stay.
+     */
+    private fun uncounted(notes: List<CheckNote>, record: SlotRecord): List<CheckNote> {
+        if (!record.photo) return notes
+        val award = notes.lastOrNull { it.taskId == record.taskId && it.key == record.key && it.passed && it.countedBy == null } ?: return notes
+        return notes.map { if (it == award || (it.taskId == award.taskId && it.countedBy == award.at)) it.copy(passed = false, countedBy = null) else it }
+    }
 
     /**
      * The notes of the tasks done or gone let go (6.4.0), and their kept pages with them, as are pages kept past

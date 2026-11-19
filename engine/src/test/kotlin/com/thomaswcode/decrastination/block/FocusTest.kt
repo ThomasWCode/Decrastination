@@ -119,6 +119,29 @@ class FocusTest {
     }
 
     @Test
+    fun `a photo's award taken back takes back its counting, and another pass's stays`() = runTest {
+        val long = laid(task("long", due = "2026-10-12T23:59", effort = 30)).single()
+        val key = long.chunk!!.key
+        clock.time = long.start + 10 * 60_000L
+        // An earlier pass of its own, then a note that didn't pass, then the pass that earns the slot, counting it.
+        focus.noteCheck(CheckNote("teams:long", key, "long", "Q1-4", passed = true, at = clock.time - 3))
+        focus.noteCheck(CheckNote("teams:long", key, "long", "Q5-8", passed = false, at = clock.time - 2))
+        assertTrue(slotted.photoChecked("teams:long", null, 30, key = key, note = CheckNote("teams:long", key, "long", "Q9-12", passed = true, at = clock.time)))
+        assertEquals(listOf(true, true, true), focus.notesOf("teams:long").map { it.passed })
+        assertTrue(slotted.unkeepSlot(key, since = 0L))
+        assertEquals(listOf("Q1-4" to true, "Q5-8" to false, "Q9-12" to false), focus.notesOf("teams:long").map { it.covered to it.passed }, "its work can earn again; the earlier pass's stays")
+    }
+
+    @Test
+    fun `a named step's pass counts its own notes, its sittings', and no other step's, which it didn't rely on`() = runTest {
+        tasks.update { it.copy(tasks = listOf(task("sheet"))) }
+        focus.noteCheck(CheckNote("teams:sheet", "teams:sheet#0", "sheet: Q1-5", "Q1-5, unclear", passed = false, at = clock.time))
+        focus.noteCheck(CheckNote("teams:sheet", "teams:sheet#1#20", "sheet: Q6-10", "Q6-7", passed = false, at = clock.time + 1))
+        focus.photoChecked("teams:sheet", "Q6-10", 40, 1, "teams:sheet#1", clock.time, note = CheckNote("teams:sheet", "teams:sheet#1", "sheet: Q6-10", "Q8-10", passed = true, at = clock.time + 2))
+        assertEquals(listOf("Q1-5, unclear" to false, "Q6-7" to true, "Q8-10" to true), focus.notesOf("teams:sheet").map { it.covered to it.passed })
+    }
+
+    @Test
     fun `confirmed work earns time, reading emails doesn't`() = runTest {
         val homework = task("hw", effort = 45).copy(status = Status.Done, doneAt = clock.time)
         val email = task("email", kind = Kind.Info, effort = 2).copy(status = Status.Done, doneAt = clock.time)
