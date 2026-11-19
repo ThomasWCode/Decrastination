@@ -78,7 +78,7 @@ class PhotoCheckerTest {
         )
         val about = PhotoChecker.context(piece, null, notes, LONDON)
         assertTrue("Earlier checks of this task, their photos not sent again (what each showed counts as shown):" in about)
-        assertTrue("- Wed 18 Nov 17:05, for \"Graphs sheet, part 1 of 2\", passed (earned already): Pages 8 to 10, every question answered" in about)
+        assertTrue("- Wed 18 Nov 17:05, for \"Graphs sheet, part 1 of 2\", counted in a check that passed (earned already): Pages 8 to 10, every question answered" in about)
         assertTrue("- Thu 19 Nov 18:40, for \"Graphs sheet, part 2 of 2\", not passed: Page 11, question 2 alone" in about)
         assertTrue("Earlier checks" !in PhotoChecker.context(piece, null, emptyList(), LONDON))
         // Ten pictures take their room from the text, each at its dearest shape.

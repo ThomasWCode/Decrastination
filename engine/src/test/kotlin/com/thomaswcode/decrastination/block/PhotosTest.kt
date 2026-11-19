@@ -236,7 +236,8 @@ class PhotosTest {
         assertEquals("Claude couldn't say. Try a clearer photo.", answered.checkJpegs(page, piece(Kind.Homework), clock.time))
         val passed = answered.checkJpegs(page, piece(Kind.Homework), clock.time)
         assertTrue(passed.startsWith("Done"), passed)
-        assertEquals(listOf("Q1-8 worked" to false, "Q9-12 worked" to true), focus.notesOf(essay.id).map { it.covered to it.passed })
+        // The pass relied on the first's note, so that's counted with it: Q1-8 can't be shown again as new.
+        assertEquals(listOf("Q1-8 worked" to true, "Q9-12 worked" to true), focus.notesOf(essay.id).map { it.covered to it.passed })
         // The first was told nothing earlier; the last was told the first's, as not passed.
         val first = server.takeRequest().body.readUtf8()
         server.takeRequest()
@@ -256,8 +257,9 @@ class PhotosTest {
         assertEquals(false, focus.notesOf(essay.id).last().passed)
         val passed = answered.checkJpegs(pages, piece(Kind.Homework), clock.time)
         assertTrue(passed.startsWith("Done"), passed)
-        assertEquals(listOf(true, false, true), focus.notesOf(essay.id).map { it.passed })
-        assertTrue("passed (earned already): Pages 1 to 4, written out" in server.takeRequest().body.readUtf8())
+        // The pass relied on every earlier note, the refused one's too: all counted now.
+        assertEquals(listOf(true, true, true), focus.notesOf(essay.id).map { it.passed })
+        assertTrue("counted in a check that passed (earned already): Pages 1 to 4, written out" in server.takeRequest().body.readUtf8())
     }
 
     @Test

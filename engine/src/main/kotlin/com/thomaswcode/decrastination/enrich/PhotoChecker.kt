@@ -137,7 +137,7 @@ class PhotoChecker(private val client: AnthropicClient, val model: String = Clau
                 appendLine("Earlier checks of this task, their photos not sent again (what each showed counts as shown):")
                 notes.forEach { note ->
                     val at = Instant.ofEpochMilli(note.at).atZone(zone).format(WHEN)
-                    appendLine("- $at, for \"${note.label}\", ${if (note.passed) "passed (earned already)" else "not passed"}: ${note.covered}")
+                    appendLine("- $at, for \"${note.label}\", ${if (note.passed) "counted in a check that passed (earned already)" else "not passed"}: ${note.covered}")
                 }
             }
         }.trimEnd()

@@ -601,9 +601,11 @@ class Focus(
      * kept one's free time earned. Saved first ([SessionState.photosDone]), so a stop part-way is
      * finished at start-up.
      */
-    suspend fun photoChecked(taskId: String, step: String?, minutes: Int, stepIndex: Int? = null, key: String, takenAt: Long? = null): Boolean {
+    suspend fun photoChecked(taskId: String, step: String?, minutes: Int, stepIndex: Int? = null, key: String, takenAt: Long? = null, note: CheckNote? = null): Boolean {
         val done = PhotoDone(Ids.next(), taskId, step, minutes, clock.now(), stepIndex, key, takenAt)
-        session.update { it.copy(photosDone = it.photosDone + done) }
+        // Its [note] of what it showed in the same write as what it's owed (6.4.0): a stop between the two would leave the work counted
+        // as earned, and a check of it again refused, with nothing given for it.
+        session.update { state -> state.copy(photosDone = state.photosDone + done, notes = note?.let { notesKept(counted(state.notes, it)) } ?: state.notes) }
         return finishPhoto(done).also { settleTimer() }
     }
 
@@ -615,8 +617,15 @@ class Focus(
      * task done or gone let go with it.
      */
     suspend fun noteCheck(note: CheckNote) {
-        session.update { state -> state.copy(notes = notesKept(state.notes + note)) }
+        session.update { state -> state.copy(notes = notesKept(counted(state.notes, note))) }
     }
+
+    /**
+     * [notes] with [note] after them; where it passed, every earlier note of its task counted with it, as the check that passed was
+     * told them all and relied on them: what they showed has earned too, and can't be shown again as new (6.4.0).
+     */
+    private fun counted(notes: List<CheckNote>, note: CheckNote): List<CheckNote> =
+        (if (note.passed) notes.map { if (it.taskId == note.taskId) it.copy(passed = true) else it } else notes) + note
 
     /** The notes of the tasks done or gone let go (6.4.0): at a start and daily, as a task can go without a check. */
     suspend fun tidyNotes() {

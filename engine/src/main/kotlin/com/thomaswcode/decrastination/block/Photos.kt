@@ -207,11 +207,15 @@ class Photos(
         // Nothing earns twice: where a check of the task has passed, these must show work none that passed showed (6.4.0), by the
         // answer's own field, so the rule is the app's and not the prompt's alone.
         val stale = judged && !verdict.fresh && notes.any { it.passed }
-        // Kept whatever it said, as the photos go: what it showed counts at the next check of any piece of the task.
-        if (verdict.covered.isNotBlank()) focus.noteCheck(CheckNote(piece.taskId, piece.key, piece.label, verdict.covered, judged && !stale, clock.now()))
+        // Kept whatever it said, as the photos go: what it showed counts at the next check of any piece of the task. One that passed is
+        // kept with what it's owed, and counts every earlier note it relied on (`Focus.photoChecked`); a pass always has one.
+        val passes = judged && !stale
+        val covered = verdict.covered.ifBlank { if (passes) verdict.seen.ifBlank { piece.label } else "" }
+        val note = covered.takeIf { it.isNotBlank() }?.let { CheckNote(piece.taskId, piece.key, piece.label, it, passes, clock.now()) }
+        if (!passes) note?.let { focus.noteCheck(it) }
         if (stale) return "Not yet: these show only work an earlier check counted already. Photograph this sitting's work."
         if (!judged) return if (verdict.covered.isBlank()) "Not yet: ${verdict.reason}" else "Not yet: ${verdict.reason.trimEnd('.')}. What these showed is remembered: photograph the rest."
-        if (!focus.photoChecked(piece.taskId, piece.step, piece.minutes, piece.stepIndex, piece.key, takenAt)) return "Done, but it was already ticked off: ${verdict.reason}"
+        if (!focus.photoChecked(piece.taskId, piece.step, piece.minutes, piece.stepIndex, piece.key, takenAt, note)) return "Done, but it was already ticked off: ${verdict.reason}"
         return "Done: ${verdict.reason}"
     }
 

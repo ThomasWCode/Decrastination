@@ -102,6 +102,20 @@ class FocusTest {
     }
 
     @Test
+    fun `a check that passes counts the task's earlier notes with it, and its note is kept in the write that journals what it's owed`() = runTest {
+        tasks.update { it.copy(tasks = listOf(task("sheet"), task("other"))) }
+        focus.noteCheck(CheckNote("teams:sheet", "teams:sheet#-1#1", "sheet", "Q1-8", passed = false, at = clock.time))
+        focus.noteCheck(CheckNote("teams:other", "teams:other#-1#1", "other", "its first page", passed = false, at = clock.time))
+        // A stop right after the write: the note and what's owed are both there, or neither.
+        val passing = CheckNote("teams:sheet", "teams:sheet#-1#1", "sheet", "Q9-12", passed = true, at = clock.time + 1)
+        val before = session.value
+        focus.photoChecked("teams:sheet", null, 45, null, "teams:sheet#-1#1", clock.time, note = passing)
+        assertEquals(listOf("Q1-8" to true, "Q9-12" to true), focus.notesOf("teams:sheet").map { it.covered to it.passed })
+        assertEquals(listOf(false), focus.notesOf("teams:other").map { it.passed }, "another task's are its own")
+        assertTrue(before.photosDone.isEmpty())
+    }
+
+    @Test
     fun `confirmed work earns time, reading emails doesn't`() = runTest {
         val homework = task("hw", effort = 45).copy(status = Status.Done, doneAt = clock.time)
         val email = task("email", kind = Kind.Info, effort = 2).copy(status = Status.Done, doneAt = clock.time)
