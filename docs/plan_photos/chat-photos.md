@@ -31,7 +31,7 @@ A photo sent with a message, from the phone or the website. Felix sees it and an
 **The tick box.**
 
 - *Ticked* (the default): the file is deleted from the server and the phone once the message is answered, with whatever the answer did with it done. Till then, a message that waits, or is tried again, keeps it.
-- *Unticked*: the file is kept 14 days from when it's sent, then deleted, its message staying with his note; a chat reset deletes it at once. Not "while its message is in the chat's window", as first put: the window keeps a message while it's among the newest 200 or within 14 days, whichever keeps more (`Outbox.past`, D-96), and never an unread one or one still waiting, so it sets no limit in days (README, *Still to answer* 4). While it's kept:
+- *Unticked*: the file is kept 14 days from when it's sent, then deleted, its message staying with his note; a chat reset deletes it at once. Not "while its message is in the chat's window", as first put: the window keeps a message while it's among the newest 200 or within 14 days, whichever keeps more (`Outbox.past`, D-96), and never an unread one or one still waiting, so it sets no limit in days (README, *Answered on 19 Nov* 4). While it's kept:
   - it's sent by itself with any message of yours within ten minutes of it;
   - after that the history says it's there, with his note, and Felix asks to see it: one more thing he can ask for, with a task read in full and a search, in the same rounds;
   - the bubble shows the picture.

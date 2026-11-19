@@ -67,26 +67,26 @@ dbs:
       secret-access-key: ${R2_SECRET_ACCESS_KEY}
 ```
 
-Litestream's default is 24 hours' snapshots kept 24 hours; `deploy/litestream.yml` has `snapshot: retention: 720h`, so the plan's 30 days hold.
+Litestream's default is 24 hours' snapshots kept 24 hours; `deploy/litestream.yml` has `snapshot: retention: 336h`, 14 days: the plan's 30 till 19 Nov 2026, when R2 was on course to pass its free 10 GB by the snapshots and the levels kept with them (D-154). The nightly file in B2 is the long term.
 
 **Its requests.** Each of Litestream's timers is a request to R2, and most are Class A (PUT and LIST; DELETE is free). On its defaults this went past R2's free million in November 2026, the owner billed for the rest. What did it, read in 0.5.18's source (the box ran 0.5.18 from 4 Nov, through the floating `0.5` tag) and counted in the bucket on 11 Nov:
 
 - A LIST reads a whole level. The S3 client lists by prefix alone and skips what it doesn't want on its own side, even when it's after one TXID on (`s3/replica_client.go`, `newFileIterator`), so each listing is a request for each 1,000 files in the level.
-- L1 to L3 keep every file till it's behind the oldest snapshot kept (`Store.EnforceSnapshotRetention`), so for 30 days here. With a write each minute (the heartbeat's) and L1 compacted every 30s, L1 gained about 2,600 files a day: 24,817 by 11 Nov, ten days in.
+- L1 to L3 keep every file till it's behind the oldest snapshot kept (`Store.EnforceSnapshotRetention`), so for 14 days here (30 till 19 Nov 2026). With a write each minute (the heartbeat's) and L1 compacted every 30s, L1 gained about 2,600 files a day: 24,817 by 11 Nov, ten days in.
 - L0's retention check lists all of L1, then L0, every 15s whether anything's changed or not (`Compactor.EnforceL0Retention`). Each was 26 requests by then, about 150,000 a day, and it grew by about 15,000 a day each day: some millions over a month. Litestream's metrics count its PUTs and DELETEs, never its LISTs, which is why the count it gave (about 7,400 PUTs a day) was far short of the bill.
 
-So `deploy/litestream.yml` sets each timer itself, the image is pinned to 0.5.18, and the replica has a fresh path, `db-2`, as the old one's 30s files would otherwise go on being listed till they're a month old. A day, once L1 holds its 30 days (96 files a day, 2,880 in all, three requests a listing):
+So `deploy/litestream.yml` sets each timer itself, the image is pinned to 0.5.18, and the replica has a fresh path, `db-2`, as the old one's 30s files would otherwise go on being listed till they're a month old. A day, once L1 holds its 14 days (96 files a day, 1,344 in all, two requests a listing):
 
 | Setting | Default | Set | Class A a day |
 |---|---|---|---|
 | `sync-interval` (the replica's) | 1s | 1m | up to 1,440 PUTs |
-| `l0-retention-check-interval` | 15s | 10m | 144 checks, 576 LISTs |
+| `l0-retention-check-interval` | 15s | 10m | 144 checks, 432 LISTs |
 | `levels` (L1, L2, L3) | 30s, 5m, 1h | 15m, 1h, 6h | about 300: a PUT and a LIST of the level below each |
 | `snapshot.interval` | 24h | 24h | a few |
 
-About 2,300 a day, 70,000 a month, worked out from the code and the counts above rather than measured: R2's metrics in Cloudflare's dashboard show the real figure, by day and by kind. What it costs: a box that's lost loses up to its last minute of writes, not its last second, and a restore to a moment lands on a 15-minute boundary rather than a 30-second one. The phone holds its own copy either way.
+About 2,200 a day, 66,000 a month, worked out from the code and the counts above rather than measured: R2's metrics in Cloudflare's dashboard show the real figure, by day and by kind. What it costs: a box that's lost loses up to its last minute of writes, not its last second, and a restore to a moment lands on a 15-minute boundary rather than a 30-second one. The phone holds its own copy either way.
 
-**The move to `db-2`.** The new path starts empty, so Litestream's local state is reset first (`litestream reset`, with Litestream stopped): its next sync then uploads one fresh snapshot, where otherwise it would try every L0 file since the first, most of them long gone. `restore -timestamp` reaches back to the move, a month back again once a month has passed. The old path's files stay under `db/` till an R2 lifecycle rule on that prefix expires them, and till then are restored from with a copy of the config naming `path: db`.
+**The move to `db-2`.** The new path starts empty, so Litestream's local state is reset first (`litestream reset`, with Litestream stopped): its next sync then uploads one fresh snapshot, where otherwise it would try every L0 file since the first, most of them long gone. `restore -timestamp` reaches back to the move, and since then as far as the snapshots are kept (14 days, D-154). The old path's files stay under `db/` till an R2 lifecycle rule on that prefix expires them, and till then are restored from with a copy of the config naming `path: db`.
 
 Restore on a fresh box: `litestream restore -config /etc/litestream.yml -if-db-not-exists -if-replica-exists /data/decrastination.db`, run by `bootstrap.sh` before the server starts, so a rebuilt box comes up with the state. `-timestamp` restores to a moment, for a rollback. A failed restore stops `bootstrap.sh`, as an empty server started beside Litestream would replicate over the good copy.
 

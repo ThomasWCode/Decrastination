@@ -30,3 +30,8 @@ node_modules/
 /web/playwright-report/
 /web/e2e/.state.json
 /web/e2e/.state-writes.json
+
+# Impeccable's design hook (a Claude Code plugin): its config.json, the detector's shared ignores, is the project's and
+# committed, as the plugin's own docs say; its cache of sessions' edits and a developer's own overrides aren't.
+/.impeccable/hook.cache.json
+/.impeccable/config.local.json

@@ -1,12 +1,13 @@
 # Streams the server's database to a private R2 bucket, continuously (docs/plan_web/hosting.md §Litestream).
-# ${...} is read from the container's environment. A snapshot a day, kept 30 days, so `restore -timestamp`
-# reaches a month back. Its metrics on the compose network alone, where the server reads whether it's still
-# uploading (docs/spec/server.md §Deployment); no port is published for them.
+# ${...} is read from the container's environment. A snapshot a day, kept 14 days, so `restore -timestamp`
+# reaches a fortnight back (D-154; the nightly file in B2 is the long term). Its metrics on the compose network
+# alone, where the server reads whether it's still uploading (docs/spec/server.md §Deployment); no port is published
+# for them.
 #
 # Every one of its timers is a request to R2, most of them Class A, billed past a million a month. Each LIST reads a
-# whole level, a request for each 1,000 files, and L1 to L3 keep every file for the snapshots' 30 days: on the
+# whole level, a request for each 1,000 files, and L1 to L3 keep every file as long as the snapshots: on the
 # defaults L1 gained a file each minute and every check read all of it, about 150,000 requests a day ten days in and
-# growing. These hold it to about 2,300 a day (hosting.md §Litestream).
+# growing. These hold it to about 2,200 a day (hosting.md §Litestream).
 addr: ":9090"
 
 # Each check lists all of L1, then L0: every 15s by default. L0's files are kept 5 minutes past their compaction
@@ -14,7 +15,7 @@ addr: ":9090"
 l0-retention-check-interval: 10m
 
 # The compactions into L1, L2 and L3, by default every 30s, 5m and 1h: each that has work is a PUT and a LIST of the
-# level below. One every 15 minutes keeps L1 to 96 files a day, 2,880 over the 30 days, three requests a listing. The
+# level below. One every 15 minutes keeps L1 to 96 files a day, 1,344 over the 14 days, two requests a listing. The
 # restore points between snapshots are 15 minutes apart, not 30 seconds.
 levels:
   - interval: 15m
@@ -23,7 +24,7 @@ levels:
 
 snapshot:
   interval: 24h
-  retention: 720h
+  retention: 336h
 
 dbs:
   - path: /data/decrastination.db
