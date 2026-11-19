@@ -35,7 +35,7 @@ object TaskSheetModel {
      */
     fun shown(notes: List<CheckNote>, zone: ZoneId): List<String> = notes.sortedByDescending { it.at }.map { note ->
         val at = Instant.ofEpochMilli(note.at).atZone(zone).format(CHECKED)
-        "$at, ${note.label}, ${if (note.passed) "passed" else "not yet"}: ${note.covered}"
+        "$at, ${note.label}, ${if (note.passed) "counted" else "not yet"}: ${note.covered}"
     }
 
     /** [taskId]'s pieces in [plan], soonest first, each with its slot's times where it has one, and why. */

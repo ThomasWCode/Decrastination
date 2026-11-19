@@ -116,6 +116,8 @@ class PhotoChecker(private val client: AnthropicClient, val model: String = Clau
 
             You may be told what earlier checks of the same task saw. Their photos aren't sent again, but what they showed counts as shown: the piece is done when that and these photos together show all of it. A check that passed has earned its time already, so a later one must also show work no passed check showed: say in fresh whether these photos do (true where no earlier check passed). Photos showing only what a passed check showed are not fresh, however much they show. Pages named "Kept page" are from earlier checks, sent again to be seen: they show what those checks showed, never new work.
 
+            A piece may be one part of a task's work, done in order, its share said ("part 1 of 2: with the parts before it, about half of the task's work"). A part is done when the task's work shown, by these photos and earlier checks together, reaches its share from the start of the work: it needs no more than its share, and no less.
+
             Give your confidence from 0 to 1; in reason, one short line the student will read ("Shows worked answers to Q5-8; Q9 isn't visible"), naming a page where it helps; in seen, briefly, what the photos show; in covered, exactly which parts of this task's work these photos show done, by question, page or section ("Exercise 4C Q1-12, each worked in full"), as a later check will rely on it; leave covered empty where they show none of it.
         """.trimIndent()
 
@@ -126,6 +128,9 @@ class PhotoChecker(private val client: AnthropicClient, val model: String = Clau
          */
         fun context(piece: Chunk, task: TaskItem?, notes: List<CheckNote> = emptyList(), zone: ZoneId = ZoneId.systemDefault()): String = buildString {
             appendLine("The piece of work: ${piece.label}, ${piece.minutes} min")
+            // A part's share of the task, so a first sitting's half passes on its half (your answer, 19 Nov): only where the task's
+            // divided with no step named, as parts are numbered task-wide and a named step, or its sitting, is its own scope.
+            if (piece.parts > 1 && piece.step == null) appendLine("It's part ${piece.part} of ${piece.parts}: with the parts before it, ${share(piece.part, piece.parts)} of the task's work (${piece.taskMinutes} min in all)")
             if (task != null) {
                 appendLine("Task: ${task.title}")
                 task.className?.let { appendLine("Subject: $it") }
@@ -142,10 +147,21 @@ class PhotoChecker(private val client: AnthropicClient, val model: String = Clau
                 appendLine("Earlier checks of this task, their photos not sent again (what each showed counts as shown):")
                 notes.forEach { note ->
                     val at = Instant.ofEpochMilli(note.at).atZone(zone).format(WHEN)
-                    appendLine("- $at, for \"${note.label}\", ${if (note.passed) "passed (earned already)" else "not passed"}: ${note.covered}")
+                    appendLine("- $at, for \"${note.label}\", ${if (note.passed) "counted in a check that passed (earned already)" else "not passed"}: ${note.covered}")
                 }
             }
         }.trimEnd()
+
+        /** How much of a task's work parts 1 to [part] of [parts] are, in words: about half, about a third, all of it. */
+        fun share(part: Int, parts: Int): String = when {
+            part >= parts -> "all"
+            part * 2 == parts -> "about half"
+            part * 3 == parts -> "about a third"
+            part * 3 == parts * 2 -> "about two thirds"
+            part * 4 == parts -> "about a quarter"
+            part * 4 == parts * 3 -> "about three quarters"
+            else -> "about ${part * 100 / parts}%"
+        }
 
         val SCHEMA: Map<String, Any> = mapOf(
             "type" to "object",

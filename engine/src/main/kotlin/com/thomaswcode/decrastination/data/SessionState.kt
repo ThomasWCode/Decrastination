@@ -66,7 +66,10 @@ data class CheckNote(
     val label: String,
     /** Exactly which parts of the work its photos showed done, as the check wrote it to be relied on later. */
     val covered: String,
-    /** Whether it passed: its piece was found done by it, so what it showed has earned once already. */
+    /**
+     * Whether it's counted: its check passed, or a later one that passed was told it and relied on it, so what it showed has earned
+     * once already and can't be shown again as new.
+     */
     val passed: Boolean,
     val at: Long,
 )
