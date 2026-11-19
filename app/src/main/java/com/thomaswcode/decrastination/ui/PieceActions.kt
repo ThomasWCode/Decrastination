@@ -116,7 +116,6 @@ fun rememberPhotoCheck(graph: AppGraph, activity: Activity, plan: Plan, say: (ta
     var asking by rememberSaveable { mutableStateOf(false) }
     // The camera's open for the last page again.
     var retaking by rememberSaveable { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
     // App-wide, not this screen's: a check runs on when the screen goes (a tab changed), and its
     // outcome is shown on whichever screen is there, or the next.
     val running by PhotoChecks.running.collectAsStateWithLifecycle()
@@ -181,21 +180,31 @@ fun rememberPhotoCheck(graph: AppGraph, activity: Activity, plan: Plan, say: (ta
             else -> added(wanted, 1)
         }
     }
-    // As many pictures as are left of a check's pages, picked at once (6.5.0), each copied in as a page.
+    // As many pictures as are left of a check's pages, picked at once (6.5.0), each copied in as a page: in the app's scope, what came
+    // of it held app-wide (`PhotoChecks.picked`), so a turn of the phone while they copy loses none.
+    val pickedIn by PhotoChecks.picked.collectAsStateWithLifecycle()
+    LaunchedEffect(pickedIn) {
+        val (room, of) = pickedIn ?: return@LaunchedEffect
+        PhotoChecks.picked.value = null
+        val wanted = photoFor ?: return@LaunchedEffect
+        // Copied in order: one that couldn't be read leaves the rest out, as a page missing could be the one that isn't done.
+        val good = (0 until room).takeWhile { page(wanted.pages + 1 + it).length() > 0 }.size
+        if (good < room) say(wanted.taskId, "A picture couldn't be read: pick it again, or take it with the camera.")
+        else if (of > room) say(wanted.taskId, "Only $room more fit in one check.")
+        if (good == 0 && wanted.pages == 0) photoFor = null else added(wanted, good)
+    }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(PhotoChecker.MAX_PAGES)) { picked ->
         val wanted = photoFor ?: return@rememberLauncherForActivityResult
         if (picked.isEmpty()) {
             if (wanted.pages == 0) photoFor = null else asking = true
             return@rememberLauncherForActivityResult
         }
-        scope.launch {
-            val room = picked.take(PhotoChecker.MAX_PAGES - wanted.pages)
-            val copied = withContext(Dispatchers.IO) { room.withIndex().count { (i, uri) -> copyPicked(activity, uri, page(wanted.pages + 1 + i)) } }
-            if (copied < room.size) say(wanted.taskId, "A picture couldn't be read: pick it again, or take it with the camera.")
-            else if (picked.size > room.size) say(wanted.taskId, "Only ${room.size} more fit in one check.")
-            // Copied in order: one that couldn't be read leaves the rest out, as a page missing could be the one that isn't done.
-            val good = (0 until room.size).takeWhile { page(wanted.pages + 1 + it).length() > 0 }.size
-            if (good == 0 && wanted.pages == 0) photoFor = null else added(wanted, good)
+        val room = picked.take(PhotoChecker.MAX_PAGES - wanted.pages)
+        val from = wanted.pages
+        val app = activity.applicationContext
+        graph.scope.launch(Dispatchers.IO) {
+            room.forEachIndexed { i, uri -> copyPicked(app, uri, page(from + 1 + i)) }
+            PhotoChecks.picked.value = room.size to picked.size
         }
     }
     fun camera() = photoFor?.let { launcher.launch(uriOf(page(it.pages + 1))) }
