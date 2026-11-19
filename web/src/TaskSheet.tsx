@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api, asking, saying } from "./api";
 import { useLive } from "./live";
 import { moment, NewTask } from "./NewTask";
+import { PhotoCheck } from "./PhotoCheck";
 import type { Action, MoveView, OwnTaskFormView, TaskAction, TaskAsk, TaskField } from "./types";
 
 /** What a button came to, for the line under them, and what takes it back. */
@@ -207,11 +208,15 @@ export function TaskSheet({ id, form, close }: { id: string; form: OwnTaskFormVi
           </div>
           {task.next ? <p className="next">{task.next}</p> : null}
           <div className="actions" role="group" aria-label="Do">
-            {task.actions.map((action) => (
-              <button key={action.label} className="action" disabled={busy} onClick={() => ifSure(action)}>
-                {action.label}
-              </button>
-            ))}
+            {task.actions.map((action) =>
+              action.check ? (
+                <PhotoCheck key={action.label} target={action.check} disabled={busy} said={(text, bad) => setSaid({ text, bad, undo: null })} />
+              ) : (
+                <button key={action.label} className="action" disabled={busy} onClick={() => ifSure(action)}>
+                  {action.label}
+                </button>
+              ),
+            )}
             {task.move ? (
               <button className="action" aria-expanded={moving} onClick={() => setMoving(!moving)}>
                 Move

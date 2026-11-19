@@ -4,7 +4,7 @@ import { NewTask } from "./NewTask";
 import type { OwnTaskFormView, PhotoRead } from "./types";
 
 /** The JPEG the model's sent: upright, as a canvas draws a photo the way its EXIF says, and no longer than [side]. */
-async function shrunk(file: File, side: number): Promise<Blob> {
+export async function shrunk(file: File, side: number): Promise<Blob> {
   const photo = await createImageBitmap(file, { imageOrientation: "from-image" });
   const scale = Math.min(1, side / Math.max(photo.width, photo.height));
   const canvas = document.createElement("canvas");
