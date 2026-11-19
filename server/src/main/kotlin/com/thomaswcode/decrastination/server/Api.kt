@@ -107,8 +107,17 @@ private data class StateOut(val revision: Long, val stores: List<StoreOut>, val 
 /** More than a page shrunk to what's sent ever comes to. */
 private const val MAX_PHOTO_BYTES = 4 * 1024 * 1024L
 
-/** A photo check's most pages, each in base64, a third bigger, with room for the rest of it. */
-private const val MAX_CHECK_BYTES = MAX_PHOTO_BYTES * PhotoChecker.MAX_PAGES * 4 / 3 + 64 * 1024
+/**
+ * More than a check's page shrunk to what's sent ([PhotoChecker.MAX_SIDE] on its long side) ever comes to (6.4.0): a whole photo's
+ * [MAX_PHOTO_BYTES] for each of ten pages would be 53 MB held at once.
+ */
+private const val MAX_PAGE_BYTES = 2 * 1024 * 1024L
+
+/** A photo check's most pages, each in base64, a third bigger, with room for the rest of it: 27 MB at ten. */
+private const val MAX_CHECK_BYTES = MAX_PAGE_BYTES * PhotoChecker.MAX_PAGES * 4 / 3 + 64 * 1024
+
+/** More than the commands a client sends at once ever come to: what waits is each a few kilobytes, a calendar's read some tens. */
+private const val MAX_COMMANDS_BYTES = 32 * 1024 * 1024L
 
 /** Whether [bytes] starts as a JPEG does. */
 private fun isJpeg(bytes: ByteArray) = bytes.size > 3 && bytes[0] == 0xFF.toByte() && bytes[1] == 0xD8.toByte() && bytes[2] == 0xFF.toByte()
@@ -322,6 +331,9 @@ private fun Route.signedInRoutes(web: Web) {
         call.heardZone(graph)
         // Mirror mode's writer is the phone, by its seeds: a command now would be undone by the next one.
         if (graph.mode != ServerGraph.COMMANDS) return@post call.respond(HttpStatusCode.Conflict, Problem("The server is mirroring the phone"))
+        // By what it says it is first, as the photos' routes are: nothing's read that's bigger than commands come to (6.4.0).
+        val length = call.request.contentLength()
+        if (length == null || length > MAX_COMMANDS_BYTES) return@post call.respond(HttpStatusCode.PayloadTooLarge, Problem("Those commands are too big"))
         val device = (call.client as? Client.Phone)?.id ?: Client.WEBSITE
         call.respond(graph.applier.apply(call.receive<CommandBatch>(), device))
     }
@@ -446,6 +458,7 @@ private fun Route.signedInRoutes(web: Web) {
         if (jpegs.isEmpty() || jpegs.size > PhotoChecker.MAX_PAGES || jpegs.any { it == null || !isJpeg(it) }) {
             return@post call.respond(HttpStatusCode.UnsupportedMediaType, Problem("Those aren't a check's pages"))
         }
+        if (jpegs.any { it!!.size > MAX_PAGE_BYTES }) return@post call.respond(HttpStatusCode.PayloadTooLarge, Problem("A page is too big"))
         graph.checkPhoto(ask.taskId, ask.key, ask.step, ask.takenAt, jpegs.filterNotNull())?.let { call.respond(it) } ?: call.respond(HttpStatusCode.Conflict, Problem("A photo is being checked already"))
     }
     get("/views/settings") { call.respond(graph.settings()) }
