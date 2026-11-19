@@ -17,7 +17,7 @@ A photo is never a row: the database holds its hash. So no photo reaches R2 or B
 
 - **A page**: the sample pages measured were 80 to 180 KB (scans, 1 240 by 1 754). A page from the phone's camera at 1 568 pixels isn't measured yet; 150 to 500 KB is planned for.
 - **Kept by default**: nothing. A check's pages and a chat photo are deleted once used, the box ticked; what's kept is a line of text.
-- **Kept when unticked**, the chat's for at most 14 days or 200 messages: two photos a day, about 28 held at once, 4 to 14 MB; ten a day, about 140, 20 to 70 MB; at the most (200 messages of four photos, half a megabyte each), 400 MB.
+- **Kept when unticked**, a chat photo for 14 days from when it's sent (README, *Still to answer* 4): two a day, about 28 held at once, 4 to 14 MB; ten a day, about 140, 20 to 70 MB. There's no fixed most: it's whatever is sent unticked in a fortnight (forty a day, at half a megabyte each, would be 280 MB). The photos' folder is among the sizes in Settings (6.10.0).
 - **The box's disk**: 91 GB free of 96 (18 Nov 2026), its photos' folder empty.
 
 ## What R2 holds (measured, 18 Nov 2026)
@@ -41,11 +41,34 @@ Counted in the bucket, seven and a half days after the replica's fresh path bega
 The website's plan foresaw it ([plan_web/decisions.md](../plan_web/decisions.md): "near the limit, the snapshots go to 7 days, as the nightly file covers the long term"). The owner's word is 14.
 
 - `deploy/litestream.yml`: `snapshot.retention` from `720h` to `336h`, its comment with it; `hosting.md` (§Litestream, and the day's requests, as L1 then holds 14 days' files, not 30), `spec/server.md` §Deployment, `plan_web/data-and-sync.md`.
-- By estimate, R2 then levels at 5 to 7 GB: 14 days of L1 to L3 at about 235 MB a day, 3.3 GB, and 14 snapshots at what they've grown to (129 MB each so far, on average).
+- By estimate, at the database's size now: 5 to 7 GB, 14 days of L1 to L3 at about 235 MB a day (3.3 GB) and 14 snapshots (129 MB each so far, on average; the newest are bigger). It doesn't stay there: the database is still growing (§What trims it), and with it about 8 GB in mid-December and 9 to 11 GB by February, unless 6.11.0 lessens it first (README, *Still to answer* 5).
 - What it costs: a restore to a moment reaches a fortnight back, not a month. The nightly file in B2 is the long term, as it was to be.
 - Nothing's lost by it today: the bucket holds eight days.
 - On the box: the file put there after the merge (the timer pulls images alone), Litestream restarted, `box_files.py` showing the box's file is main's, and the bucket counted again a few days on. A step of its own, at the owner's word.
 - A docs-and-deployment PR, no version.
+
+## What trims it, and what it comes to
+
+Nothing here grows without end; each part has a rule that lets go of the old. What they add up to is the question.
+
+**In R2**, Litestream's own rules ([hosting.md](../plan_web/hosting.md) §Litestream):
+
+- a snapshot older than `snapshot.retention` is deleted;
+- L1 to L3's files are deleted once they're behind the oldest snapshot kept, so they last as long as the snapshots do;
+- L0's files go minutes after they're compacted.
+
+So R2 holds about the days kept, times a snapshot and a day's changes: 14 × (a snapshot + about 235 MB). A snapshot is the whole database, so it's the database's size that decides it.
+
+**In the database** (`ServerGraph`'s daily trim, and at each start):
+
+- a store's row is replaced by each write, never added to: all the stores together are about a megabyte;
+- `store_history` keeps every row for a day, then each store's last of each hour, for 30 days (D-151): about 135 MB for the day at the present rate, and by estimate up to 13 MB for each older day, some 500 MB once the 30 days are full, in mid-December;
+- the record of commands is kept 90 days: 69 MB in its first fortnight, so by estimate some 430 MB once the 90 days are full, in early February;
+- the file itself never shrinks (the server never vacuums it): room let go of is used again, so the file stays at the most it has needed.
+
+So the database comes, by estimate, to about 650 MB in mid-December and about 1 GB by February, and then stays. A snapshot has been about half the database's size, so 14 of them are about 4.5 GB in mid-December and 7 GB or more by February, with 3.3 GB of L1 to L3 beside them. These rest on a week's figures and on the snapshots staying half the database's size, neither of which is sure.
+
+What would lessen it, in the order it helps: fewer and smaller writes (6.11.0: a day's changes and the history both); the commands kept less long, or without what they needn't hold; fewer days of snapshots.
 
 ## 6.10.0: the sizes in Settings, and an alert
 

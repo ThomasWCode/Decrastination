@@ -45,7 +45,7 @@ These go into `docs/plan_v4/answers.md` from Q151 on, and what they decide into 
 8. **What does the website's Day gain?** A clicked piece's own menu, a missed slot's sheet, a calendar event's sheet, *Ask Felix about it*, and the photo option, as on the phone.
 9. **How does a photo check work on the website, where any saved picture can be chosen?** Any picture, the same judge, the same earning. Offered too: any picture but earning nothing; checks kept to the phone.
 10. **How long does Felix go on seeing a chat photo?** With any message sent within ten minutes of it, by itself; after that he's told it's there, for as long as its message is in what he's sent, and asks to see it. Offered: your next few messages; once only; as long as it's in his history.
-11. **How long is a chat photo's file kept?** While its message is in the chat's window, then deleted; not in backups. Offered too: as long as the message; a day.
+11. **How long is a chat photo's file kept?** While its message is in the chat's window, then deleted; not in backups. Offered too: as long as the message; a day. The window was put to the owner as "the newest 200, or 14 days", which is wrong: it keeps whichever of the two is more (D-96, `Outbox.past`), so a message can stay in it for months in a quiet chat (*Still to answer* 4).
 12. **Which photos does the tick box delete?** The app's and the server's copy, once it's used, Felix's note of it staying; the gallery is never touched. Offered too: the original in the gallery; a camera photo saved to the gallery when unticked.
 13. **Is the box ticked by default in the chat too?** Yes, everywhere. Put to the owner with what it means: a chat photo is gone once Felix has answered it, so answers 10 and 11 hold only for a photo sent with the box unticked. Offered too: the chat's box unticked by default, a check's ticked, as a chat photo's file is small and on the server's disk, not in R2.
 14. **Said without being asked**: every recommendation below is built; the gallery can be picked from on the phone; the storage is shown in Settings if it can be measured, with a notification near what's billed for; the snapshots are kept 14 days.
@@ -75,6 +75,11 @@ Each has what's built meanwhile, so none holds the work up.
 2. **The alert's lines.** Recommended: a notification at 80% of a free allowance and again at 95%, once each a month for each allowance, with the date it'd be passed at the present rate. Built meanwhile: those.
    ANSWER:
 3. **What a kept check's pages are for.** Unticked, a check's pages aren't deleted. Recommended: kept with their task till it's done, shown on its sheet, and sent again with a later check of the task where its ten pages have room, the new ones first. Built meanwhile: that.
+   ANSWER:
+
+4. **How long a kept chat photo's file lasts, as the window isn't what the owner was told.** The chat's window keeps a message while it's among the newest 200 or within 14 days, whichever keeps more, so "while it's in the window" has no limit in days. Recommended: a kept photo's file is deleted 14 days after it's sent, or at a chat reset, whichever is first: what the owner was told, and a limit that holds however quiet the chat. Its message stays where it is, with Felix's note. Built meanwhile: that.
+   ANSWER:
+5. **Whether 6.11.0 comes sooner.** Fourteen days of snapshots hold R2 under its 10 GB only while the database stays near its size now, and it's still growing ([storage.md](storage.md) §What trims it): by estimate, 14 days come to about 8 GB in mid-December and 9 to 11 GB by February. Recommended: 6.11.0 second, straight after the snapshots, as it mends the cause, lessens both what a snapshot holds and what changes each day, and is a few hours; or the snapshots at 7 days, as the website's plan first had it. Past the allowance costs little either way. Built meanwhile: the order above.
    ANSWER:
 
 ## Decided without asking
