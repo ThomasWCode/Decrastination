@@ -56,7 +56,7 @@ Three releases. 6.4.0 changes the check itself; 6.5.0 opens it from more places 
 
 **At the phone.** A missed slot kept by its photo. A longer piece ticked *Done*, then checked an hour later from its block, earning then, once. Each row of Work's menu. A check from three gallery pictures. A check unticked, its pages on the task's sheet, gone when the task's done.
 
-## 6.7.0: the check on the website
+## 6.7.0: the check on the website (built: D-158, Q161)
 
 - `POST /photos/check` is the phone's alone today ("A photo check is the phone's"). It opens to the website, once the phone sends commands, as it is for the phone.
 - The piece's menu, the missed slot's and the kept slot's sheets on Day, and the task's sheet, gain *Check with a photo* from the server's actions ([website-day.md](website-day.md)): up to ten pictures chosen or taken, shrunk in the browser as *From a photo* on Work shrinks one, with the tick box.
