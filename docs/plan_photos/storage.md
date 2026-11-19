@@ -37,7 +37,7 @@ Counted in the bucket, seven and a half days after the replica's fresh path bega
 - The database's file was 360 MB that day (344 MiB), and its write-ahead log 150 MB beside it, not counted in that. The snapshot taken a quarter of an hour later, 165 MB, is 46% of the file it copies.
 - Past its free 10 GB R2 charges $0.015 a gigabyte a month, by the average of each day's most, rounded up (its pricing page, 30 Oct 2026): a gigabyte or two over is a few cents a month. A request past the free million Class A is $4.50 a million, which is what November's bill was for.
 
-## The snapshots kept 14 days
+## The snapshots kept 14 days (built: D-154)
 
 The website's plan foresaw it ([plan_web/decisions.md](../plan_web/decisions.md): "near the limit, the snapshots go to 7 days, as the nightly file covers the long term"). The owner's word is 14.
 

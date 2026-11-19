@@ -53,17 +53,17 @@ These go into `docs/plan_v4/answers.md` from Q151 on, and what they decide into 
 
 ## The work, in order
 
-|   | What                                                                                                                                                            | Where                             |
-| - | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- |
-| 1 | The snapshots kept 14 days, not 30: `deploy/` and its docs, then the box                                                                                      | [storage.md](storage.md)           |
-| 2 | **6.3.3**: the writes that change nothing stopped: no history for a write that changes a time alone, and the phone's calendar sent only when it's changed | [storage.md](storage.md)           |
-| 3 | **6.4.0**: ten pages, earlier checks remembered, each page named, a page retaken, *Shown so far*                                                        | [photo-checks.md](photo-checks.md) |
-| 4 | **6.5.0**: the check from a missed slot and a slot ticked *Done*, Work's camera menu, the gallery, the tick box                                         | [photo-checks.md](photo-checks.md) |
-| 5 | **6.6.0**: the website's Day, each item its own menu                                                                                                      | [website-day.md](website-day.md)   |
-| 6 | **6.7.0**: the photo check on the website                                                                                                                 | [photo-checks.md](photo-checks.md) |
-| 7 | **6.8.0**: photos in the chat                                                                                                                             | [chat-photos.md](chat-photos.md)   |
-| 8 | **6.9.0**: a chat photo as proof, handed to the photo check                                                                                               | [chat-photos.md](chat-photos.md)   |
-| 9 | **6.10.0**: the storage in Settings, and its alert                                                                                                        | [storage.md](storage.md)           |
+| | What | Where |
+|---|---|---|
+| 1 | The snapshots kept 14 days, not 30: `deploy/` and its docs, then the box | [storage.md](storage.md) |
+| 2 | **6.3.3**: the writes that change nothing stopped: no history for a write that changes a time alone, and the phone's calendar sent only when it's changed | [storage.md](storage.md) |
+| 3 | **6.4.0**: ten pages, earlier checks remembered, each page named, a page retaken, *Shown so far* | [photo-checks.md](photo-checks.md) |
+| 4 | **6.5.0**: the check from a missed slot and a slot ticked *Done*, Work's camera menu, the gallery, the tick box | [photo-checks.md](photo-checks.md) |
+| 5 | **6.6.0**: the website's Day, each item its own menu | [website-day.md](website-day.md) |
+| 6 | **6.7.0**: the photo check on the website | [photo-checks.md](photo-checks.md) |
+| 7 | **6.8.0**: photos in the chat | [chat-photos.md](chat-photos.md) |
+| 8 | **6.9.0**: a chat photo as proof, handed to the photo check | [chat-photos.md](chat-photos.md) |
+| 9 | **6.10.0**: the storage in Settings, and its alert | [storage.md](storage.md) |
 
 The snapshots come first for their date, and 6.3.3 next, as the owner chose it for what keeps R2 within its allowance. 6.4.0 is what the owner opened with. 6.6.0 shares no code with the photos and can be built beside them. Each is a PR of its own, stacked no more than two deep. A release that adds a field to a command or a store goes to the server before the phone.
 
