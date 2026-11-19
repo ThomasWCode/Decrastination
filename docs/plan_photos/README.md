@@ -22,7 +22,7 @@ The plan for nine pieces of work, a deployment change and eight releases (6.4.0 
 
 ## What's there now
 
-- **Three pages a check** (`PhotoChecker.MAX_PAGES`, AI-17), each shrunk to 1 568 pixels on its long side. The API takes far more: a page that size is about 2 350 tokens, about a cent on the model the check uses.
+- **Three pages a check** (`PhotoChecker.MAX_PAGES`, AI-17), each shrunk to 1 568 pixels on its long side. The API takes far more: a page that size is about 2 350 tokens when it's a page's shape and about 3 140 at the most, a square, so a cent or a little over on the model the check uses.
 - **A check knows nothing of the one before.** Its pages are deleted whatever it says, and its answer's `seen` goes nowhere. Pages 8 to 10 are refused for want of 11 and 12, and 11 and 12 for want of 8 to 10.
 - **Day's pop-up for a piece to do already has *Photo check*** (`PieceActions`), shown while Claude is on and the piece is written homework that isn't Anki's (`Chunk.photoCheckable`). A missed slot's sheet has none. A slot ticked *Done* can't be tapped at all, and a photo earns for a tick only if it's taken within half a minute of it (`Focus.photoEarns`, `AGAIN_MS`): a longer piece ticked first has no way to its photo afterwards, though Felix is told it "earns its free time only with a photo of it".
 - **Work's camera button** goes straight to a photo of homework read into tasks (NF-01).
@@ -74,12 +74,12 @@ Each has what's built meanwhile, so none holds the work up.
    ANSWER:
 2. **The alert's lines.** Recommended: a notification at 80% of a free allowance and again at 95%, once each a month for each allowance, with the date it'd be passed at the present rate. Built meanwhile: those.
    ANSWER:
-3. **What a kept check's pages are for.** Unticked, a check's pages aren't deleted. Recommended: kept with their task till it's done, shown on its sheet, and sent again with a later check of the task where its ten pages have room, the new ones first. Built meanwhile: that.
+3. **What a kept check's pages are for.** Unticked, a check's pages aren't deleted. Recommended: kept with their task, shown on its sheet, and sent again with a later check of the task where its ten pages have room, the new ones first; deleted when the task's done or gone, at a reset, or 14 days after they were taken, whichever is first, as a kept chat photo is (4). Built meanwhile: that.
    ANSWER:
 
 4. **How long a kept chat photo's file lasts, as the window isn't what the owner was told.** The chat's window keeps a message while it's among the newest 200 or within 14 days, whichever keeps more, so "while it's in the window" has no limit in days. Recommended: a kept photo's file is deleted 14 days after it's sent, or at a chat reset, whichever is first: what the owner was told, and a limit that holds however quiet the chat. Its message stays where it is, with Felix's note. Built meanwhile: that.
    ANSWER:
-5. **Whether 6.11.0 comes sooner.** Fourteen days of snapshots hold R2 under its 10 GB only while the database stays near its size now, and it's still growing ([storage.md](storage.md) §What trims it): by estimate, 14 days come to about 8 GB in mid-December and 9 to 11 GB by February. Recommended: 6.11.0 second, straight after the snapshots, as it mends the cause, lessens both what a snapshot holds and what changes each day, and is a few hours; or the snapshots at 7 days, as the website's plan first had it. Past the allowance costs little either way. Built meanwhile: the order above.
+5. **Whether 6.11.0 comes sooner.** Fourteen days of snapshots hold R2 under its 10 GB only while the database stays near its size now, and it's still growing ([storage.md](storage.md) §What trims it): by estimate, 14 days come to 7 to 8 GB in mid-December and about 10 GB by February, and the week's own growth is quicker than that reckons on. Recommended: 6.11.0 second, straight after the snapshots, as it mends the cause, lessens both what a snapshot holds and what changes each day, and is a few hours; or the snapshots at 7 days, as the website's plan first had it. Past its 10 GB R2 charges $0.015 a gigabyte a month (its pricing page, 30 Oct 2026), so a gigabyte or two over is a few cents a month either way. Built meanwhile: the order above.
    ANSWER:
 
 ## Decided without asking
@@ -88,10 +88,13 @@ Each has what's built meanwhile, so none holds the work up.
 2. **Eight notes a task at most**, the newest, gone with the task.
 3. **A check from a slot ticked *Done* earns that day only**, as a kept slot's earning already does (`Focus.earnKept`).
 4. **Four photos a chat message.** A check takes ten; proof of more than four pages is the check's own door.
-5. **The cap's dearest call stays $1.35** (`Pricing.WORST_CALL_USD`). A check's text is cut to a bound of its own so ten pages fit inside it, and a chat photo counts against the chat's 40 000 characters, each as the characters its tokens would be.
+5. **The cap's dearest call stays $1.35** (`Pricing.WORST_CALL_USD`). A check's text is cut to a bound of its own so ten pages fit inside it, and a chat photo counts against the chat's 40 000 characters, each as the characters its tokens would be; a picture is costed at its dearest shape, a square, as one from the gallery or the website can be any shape.
 6. **A page stays 1 568 pixels.** The model reads up to 2 576; handwriting is read at the smaller size, at half the tokens.
 7. **What the owner said to Felix reaches the check as the student's word**: it can say what was set, not stand in for the work being seen.
 8. **A picture chosen from the gallery is taken as of when it's chosen.** Nothing rests on when it was taken once a kept slot's check names its slot (6.5.0).
+9. **Nothing earns twice from the notes.** The whole task's notes count as shown (answer 5), but a check must show work no check that passed has shown, so a later sitting can't pass on an earlier one's pages ([photo-checks.md](photo-checks.md)).
+10. **The notes are in the backups**, as with the pages deleted they're the only record of what was shown.
+11. **A kept photo lasts 14 days at most**, a check's pages as a chat's photo (*Still to answer* 3 and 4), and a sweep lets go of any photo file nothing names.
 
 ## Not checked yet
 
@@ -99,6 +102,6 @@ Each has what's built meanwhile, so none holds the work up.
 - Whether anything in front of the server limits a request's size, and the box's room for ten pages held at once.
 - The chat's second round, in which Felix is given what he asked for, read in outline and not line by line.
 - How a build from before a new field treats it, on the phone and the server.
-- The permission a Cloudflare token needs to read R2's figures, and what R2 charges past its free allowance.
+- The permission a Cloudflare token needs to read R2's figures.
 
 `CLAUDE.md`'s *Where things are said* names this folder while it's in use; each file is folded into `answers.md` and the specs, and deleted, as its releases are built.

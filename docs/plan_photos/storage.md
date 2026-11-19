@@ -26,7 +26,7 @@ Counted in the bucket, seven and a half days after the replica's fresh path bega
 
 | Litestream's | Files | Size | A day |
 |---|---|---|---|
-| snapshots, one a day | 8 | 1 033 MB | about 129 MB each, growing with the database |
+| snapshots, one a day | 8 | 1 033 MB | the path's first 252 MB; then 81 MB (12 Nov) rising to 140 MB (18 Nov), and 165 MB on 19 Nov |
 | L1 (every 15 minutes) | 719 | 716 MB | about 95 MB |
 | L2 (hourly) | 179 | 674 MB | about 90 MB |
 | L3 (every 6 hours) | 29 | 372 MB | about 50 MB |
@@ -34,14 +34,15 @@ Counted in the bucket, seven and a half days after the replica's fresh path bega
 
 - L1 to L3 keep every file till it's behind the oldest snapshot kept ([hosting.md](../plan_web/hosting.md) §Litestream), so with 30 days' snapshots all of it is kept 30 days.
 - At that rate, by estimate: 10 GB about the 27th day, 8 or 9 December, and about 11 GB once the 30 days are full; more if the database goes on growing, as each snapshot is the whole of it.
-- The database was 344 MB that day, with 143 MB in its write-ahead log.
+- The database's file was 360 MB that day (344 MiB), and its write-ahead log 150 MB beside it, not counted in that. The snapshot taken a quarter of an hour later, 165 MB, is 46% of the file it copies.
+- Past its free 10 GB R2 charges $0.015 a gigabyte a month, by the average of each day's most, rounded up (its pricing page, 30 Oct 2026): a gigabyte or two over is a few cents a month. A request past the free million Class A is $4.50 a million, which is what November's bill was for.
 
 ## The snapshots kept 14 days
 
 The website's plan foresaw it ([plan_web/decisions.md](../plan_web/decisions.md): "near the limit, the snapshots go to 7 days, as the nightly file covers the long term"). The owner's word is 14.
 
 - `deploy/litestream.yml`: `snapshot.retention` from `720h` to `336h`, its comment with it; `hosting.md` (§Litestream, and the day's requests, as L1 then holds 14 days' files, not 30), `spec/server.md` §Deployment, `plan_web/data-and-sync.md`.
-- By estimate, at the database's size now: 5 to 7 GB, 14 days of L1 to L3 at about 235 MB a day (3.3 GB) and 14 snapshots (129 MB each so far, on average; the newest are bigger). It doesn't stay there: the database is still growing (§What trims it), and with it about 8 GB in mid-December and 9 to 11 GB by February, unless 6.11.0 lessens it first (README, *Still to answer* 5).
+- By estimate, at the database's size now: about 5.6 GB, 14 days of L1 to L3 at about 235 MB a day (3.3 GB) and 14 snapshots at the newest's 165 MB (2.3 GB). It doesn't stay there: the database is still growing (§What trims it), and with it 7 to 8 GB in mid-December and about 10 GB by February, unless 6.11.0 lessens it first (README, *Still to answer* 5).
 - What it costs: a restore to a moment reaches a fortnight back, not a month. The nightly file in B2 is the long term, as it was to be.
 - Nothing's lost by it today: the bucket holds eight days.
 - On the box: the file put there after the merge (the timer pulls images alone), Litestream restarted, `box_files.py` showing the box's file is main's, and the bucket counted again a few days on. A step of its own, at the owner's word.
@@ -66,7 +67,7 @@ So R2 holds about the days kept, times a snapshot and a day's changes: 14 × (a 
 - the record of commands is kept 90 days: 69 MB in its first fortnight, so by estimate some 430 MB once the 90 days are full, in early February;
 - the file itself never shrinks (the server never vacuums it): room let go of is used again, so the file stays at the most it has needed.
 
-So the database comes, by estimate, to about 650 MB in mid-December and about 1 GB by February, and then stays. A snapshot has been about half the database's size, so 14 of them are about 4.5 GB in mid-December and 7 GB or more by February, with 3.3 GB of L1 to L3 beside them. These rest on a week's figures and on the snapshots staying half the database's size, neither of which is sure.
+So the database comes, by estimate, to about 650 MB in mid-December and about 1 GB by February, and then stays. The newest snapshot is 46% of the database it copies (165 MB of 360), so 14 of them are about 4.2 GB in mid-December and 6.4 GB by February, with 3.3 GB of L1 to L3 beside them: about 7.5 GB, then about 10. These rest on a week's figures and on a snapshot staying that share of the database, neither of which is sure; and the week itself ran quicker than the rules above reckon on, a snapshot about 12 MB bigger each day (81 MB to 165 in seven), so the file some 26 MB, so they may be low. 6.10.0's figures show the real course.
 
 What would lessen it, in the order it helps: fewer and smaller writes (6.11.0: a day's changes and the history both); the commands kept less long, or without what they needn't hold; fewer days of snapshots.
 
