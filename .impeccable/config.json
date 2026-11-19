@@ -1,0 +1,17 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": [
+          "web/src/styles.css"
+        ],
+        "createdAt": "2026-10-31T20:29:35.207Z",
+        "reason": "Claude's triage, not the owner's word: the phone's Day grid draws an urgent piece as a 3dp red left edge (DayGrid.kt:377, documented in that composable's comment), and docs/plan_web/architecture.md says the website keeps the phone's colours and words, so this edge carries the same meaning on both clients. The chat's quote (.chat-quote) and its replying strip (.chat-box .replying) are the phone's 3dp primary bar likewise (AskActivity.kt:1095 and 1588), a quote's mark, not decoration (Claude's triage again, 3 Nov)"
+      }
+    ]
+  }
+}
