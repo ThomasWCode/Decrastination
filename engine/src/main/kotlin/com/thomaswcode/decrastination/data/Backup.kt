@@ -92,6 +92,11 @@ data class Backup(
     /** The pairs you've said aren't the same work (DX-15): a judgement no source can give back. */
     val notSame: List<String> = emptyList(),
     /**
+     * What photo checks of each task saw (6.4.0): with their pages deleted, the only record of what was shown, so a check after a
+     * restore counts it. None in a backup from before.
+     */
+    val checkNotes: List<CheckNote> = emptyList(),
+    /**
      * The version of each store its parts come from, by file (docs/plan_v4/data-and-migrations.md §Versions and migrations): an
      * older one's parts are brought to this build's shapes as it's read ([Backups.decode]). None in a
      * backup from before: version 1.
@@ -108,9 +113,10 @@ data class Backup(
          * 4 since slots replaced sessions in the log (LR-09, AR-09), 5 with what's remembered
          * (AI-21), 6 with Felix's state, today's slots and the chat (AR-07), 7 with the chat's earlier
          * messages (4.0.0), 8 with Felix's notes and reminders (4.1.0), 9 with the receipts of writes to
-         * Gmail (4.3.0), 10 with the weeks of weekly work deleted (4.10.0): an older app refuses it rather than losing them.
+         * Gmail (4.3.0), 10 with the weeks of weekly work deleted (4.10.0), 12 with what photo checks saw (6.4.0): an older app
+         * refuses it rather than losing them.
          */
-        const val FORMAT = 11
+        const val FORMAT = 12
     }
 }
 
@@ -181,7 +187,8 @@ object Backups {
         "memory" to ("memory.json" to null), "chat" to ("chat.json" to null), "archive" to ("chat-archive.json" to null), "felixStore" to ("felix.json" to null),
         "instructions" to ("instructions.json" to "instructions"), "ownTasks" to ("tasks.json" to "tasks"),
         "calibration" to ("learning.json" to "calibration"), "eventAnswers" to ("calendar.json" to "eventAnswers"),
-        "aiUsage" to ("model.json" to "aiUsage"), "slots" to ("session.json" to "slots"), "gmailWrites" to ("gmail-writes.json" to "writes"),
+        "aiUsage" to ("model.json" to "aiUsage"), "slots" to ("session.json" to "slots"), "checkNotes" to ("session.json" to "notes"),
+        "gmailWrites" to ("gmail-writes.json" to "writes"),
     )
 
     /**
@@ -559,6 +566,16 @@ object Backups {
      * [current] with [imported]'s records added. One already here (the same moment and task, the
      * same day or week) isn't doubled, and this phone's own version of it wins.
      */
+    /**
+     * What photo checks saw here, with [imported]'s it hasn't (6.4.0), in the order they were kept, each task's newest
+     * [CHECK_NOTES_KEPT]: a restore loses none of what was shown here, and brings back what was shown before.
+     */
+    fun mergedNotes(current: List<CheckNote>, imported: List<CheckNote>): List<CheckNote> {
+        val all = (current + imported.filter { it !in current }).sortedBy { it.at }
+        val newest = all.groupBy { it.taskId }.values.flatMapTo(HashSet()) { it.takeLast(CHECK_NOTES_KEPT) }
+        return all.filter { it in newest }
+    }
+
     fun mergeLog(current: ActivityLog, imported: ActivityLog, now: Long): ActivityLog = ActivityLog(
         // A task in boxes keeps one key for its next box: two kept the same day are told apart by when.
         slots = (current.slots + imported.slots).distinctBy { listOf(it.key, it.start, it.outcome, it.at) }.sortedBy { it.at },

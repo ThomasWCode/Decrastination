@@ -137,6 +137,7 @@ class BackupService(
             school = stores.school.value,
             memory = stores.memory.value,
             slots = stores.session.value.slots,
+            checkNotes = stores.session.value.notes,
             chat = stores.chat.value,
             archive = stores.chatArchive.value,
             felixStore = stores.felix.value,
@@ -268,10 +269,13 @@ class BackupService(
             if (unclear > 0) add("$unclear left unapplied under Your changes in Felix's chat, as ${if (unclear == 1) "it" else "they"} would have tasks wait for each other in a circle")
             if (asTheyWere > 0) add("$asTheyWere not in use back as ${if (asTheyWere == 1) "it was" else "they were"} under Your changes in Felix's chat")
         }.takeIf { it.isNotEmpty() }?.joinToString(", ", prefix = " ", postfix = ".") ?: ""
-        // Today's slots, restored the same day (AR-07).
+        // Today's slots, restored the same day (AR-07); what photo checks saw, with what was seen here (6.4.0).
         val today = Instant.ofEpochMilli(clock.now()).atZone(clock.zone()).toLocalDate().toString()
         stores.replace(stores.session) { s ->
-            s.copy(slots = if (backup.slots.date == today && s.slots.on(LocalDate.parse(today)).let { it.previous.isEmpty() && it.missed.isEmpty() }) backup.slots else s.slots)
+            s.copy(
+                slots = if (backup.slots.date == today && s.slots.on(LocalDate.parse(today)).let { it.previous.isEmpty() && it.missed.isEmpty() }) backup.slots else s.slots,
+                notes = Backups.mergedNotes(s.notes, backup.checkNotes),
+            )
         }
         // This month's spend on Claude, armed or not: it can only rise, so the cap isn't given again.
         val month = AiUsage.monthOf(clock.now(), clock.zone())
@@ -394,6 +398,8 @@ class BackupService(
             // His notification too, a check-in's question among them: nothing's left to answer it.
             cancelFelix()
         }
+        // What photo checks saw (6.4.0), as everything learned goes.
+        if (all) stores.replace(stores.session) { s -> s.copy(notes = s.notes - whole.checkNotes.toSet()) }
         if (all || what == Reset.Instructions) {
             val copied = whole.instructions.mapTo(HashSet()) { it.id }
             stores.replace(stores.instructions) { i -> InstructionState(instructions = i.instructions.filterNot { it.id in copied }) }

@@ -10,5 +10,5 @@ enum class Reset(val title: String, val takes: String) {
     Memories("What Felix remembers", "his facts about you and how you'd have him behave, and your lines for the profile"),
     Chat("The chat and Felix's history", "the chat's messages, Felix's messages and what he was waiting to say, and his notes and reminders"),
     Instructions("Your changes", "every change in use"),
-    Everything("Everything learned", "all of these"),
+    Everything("Everything learned", "all of these, and what photo checks saw"),
 }
