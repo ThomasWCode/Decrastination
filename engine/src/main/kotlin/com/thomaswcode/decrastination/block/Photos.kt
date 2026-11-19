@@ -256,11 +256,20 @@ class Photos(
          * and minutes in the piece's place, with its task. None without its task.
          */
         fun pieceOf(record: SlotRecord, task: TaskItem?): Chunk? = task?.let {
+            // Its place as its key has it ([Chunk.keyOf]): a box of a task divided with no step named its part, a step its place;
+            // the task's parts as its label said them ("part 1 of 2"), so a part's share is told as a planned piece's is (Q159).
+            val (place, part) = record.key.removePrefix("${record.taskId}#").split('#').let { bits -> bits.getOrNull(0)?.toIntOrNull() to bits.getOrNull(1)?.toIntOrNull() }
+            val box = place == -1
+            val parts = if (box) PART_OF.find(record.label)?.groupValues?.get(2)?.toIntOrNull() ?: 1 else 1
             Chunk(
                 taskId = record.taskId, source = it.source, kind = record.kind, title = record.label, step = null, minutes = record.plannedMin, dueAt = it.dueAt,
-                deadline = it.dueAt ?: record.end, soft = false, overdue = false, dueToday = false, behind = false, part = 1, parts = 1, taskMinutes = record.plannedMin, why = Why.Spread,
+                deadline = it.dueAt ?: record.end, soft = false, overdue = false, dueToday = false, behind = false,
+                part = if (box) (part ?: 1).coerceIn(1, parts) else 1, parts = parts, taskMinutes = record.plannedMin * parts, stepIndex = place?.takeIf { p -> p >= 0 }, why = Why.Spread,
             )
         }
+
+        /** A box's step as the planner names it, at the end of a slot's label. */
+        private val PART_OF = Regex("part (\\d+) of (\\d+)$")
 
         /** A task's photo's fingerprint ([TaskPhoto.hash]): SHA-256's first 8 bytes, in hex, the name the server keeps its copy by. */
         fun hashOf(jpeg: ByteArray): String = MessageDigest.getInstance("SHA-256").digest(jpeg).take(8).joinToString("") { "%02x".format(it) }

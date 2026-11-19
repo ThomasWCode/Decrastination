@@ -596,6 +596,9 @@ class AppGraph private constructor(context: Context) : Owners {
         scope.launch(Dispatchers.IO) { runCatching { photos.sweepPhotos() } }
         // What photo checks saw of tasks done or gone since (6.4.0): the server's to let go once the phone sends commands, as it writes them then.
         scope.launch { if (!sendsCommands()) runCatching { focus.tidyChecks() } }
+        // A check's kept pages' files let go here as their record goes (6.5.0): the server's daily tidy, or a task done, changes it
+        // while this process lives on for days, and the files are this phone's own, not a store's.
+        scope.launch(Dispatchers.IO) { stores.session.state.map { it.pages }.distinctUntilChanged().drop(1).collect { runCatching { photos.sweepPhotos() } } }
         // What's read again as it changes: the calendar, the calendars picked, Anki's settings, the Teams widget's list ([Sync.start]).
         sync.start(calendarWriter.calendarChanged)
         // The calendar picked, and each plan once plans have been quiet a while, written ([CalendarWriter.start]).
