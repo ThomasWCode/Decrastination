@@ -15,6 +15,7 @@ import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.Unplanned
 import com.thomaswcode.decrastination.core.longFinished
+import com.thomaswcode.decrastination.data.SlotRef
 import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.enrich.PhotoChecker
 import com.thomaswcode.decrastination.sources.gmail.GmailThreads
@@ -58,7 +59,17 @@ data class PhotoRead(val tasks: List<OwnTaskEdit>, val leftOut: List<String> = e
  * when its first page was taken, each page a JPEG in base64.
  */
 @Serializable
-data class PhotoCheckAsk(val taskId: String, val key: String, val takenAt: Long, val pages: List<String>, val step: String? = null)
+data class PhotoCheckAsk(
+    val taskId: String,
+    val key: String,
+    val takenAt: Long,
+    val pages: List<String>,
+    val step: String? = null,
+    /** The box unticked (6.5.0): the pages kept with their task, not deleted once checked. */
+    val keep: Boolean = false,
+    /** The kept slot it's for, from that slot's sheet (6.5.0), found in the server's own record. */
+    val record: SlotRef? = null,
+)
 
 /** What a photo check came to, in its words. */
 @Serializable

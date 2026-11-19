@@ -509,7 +509,7 @@ class AppGraph private constructor(context: Context) : Owners {
         // A photo of homework read by the server once the phone sends commands, as Claude's the server's then (D-142).
         readByServer = { jpeg -> if (sendsCommands()) replica.readPhotoOnServer(jpeg) else null },
         // A photo check likewise (D-148), its piece found there by its key.
-        checkByServer = { jpegs, piece, takenAt -> if (sendsCommands()) replica.checkPhotoOnServer(piece.taskId, piece.key, piece.step, takenAt, jpegs) else null },
+        checkByServer = { jpegs, piece, takenAt, keep, record -> if (sendsCommands()) replica.checkPhotoOnServer(piece.taskId, record?.key ?: piece.key, piece.step, takenAt, jpegs, keep, record) else null },
     )
 
     /** The calendar's this phone's, read here: nothing to keep of what it sent. */
@@ -595,7 +595,7 @@ class AppGraph private constructor(context: Context) : Owners {
         scope.launch { sync.refreshCalendar() }
         scope.launch(Dispatchers.IO) { runCatching { photos.sweepPhotos() } }
         // What photo checks saw of tasks done or gone since (6.4.0): the server's to let go once the phone sends commands, as it writes them then.
-        scope.launch { if (!sendsCommands()) runCatching { focus.tidyNotes() } }
+        scope.launch { if (!sendsCommands()) runCatching { focus.tidyChecks() } }
         // What's read again as it changes: the calendar, the calendars picked, Anki's settings, the Teams widget's list ([Sync.start]).
         sync.start(calendarWriter.calendarChanged)
         // The calendar picked, and each plan once plans have been quiet a while, written ([CalendarWriter.start]).

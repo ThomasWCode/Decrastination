@@ -20,6 +20,7 @@ import com.thomaswcode.decrastination.data.PieceTimer
 import com.thomaswcode.decrastination.data.Secret
 import com.thomaswcode.decrastination.data.SecretCipher
 import com.thomaswcode.decrastination.data.SecretStore
+import com.thomaswcode.decrastination.data.SlotRef
 import com.thomaswcode.decrastination.data.Stores
 import com.thomaswcode.decrastination.enrich.AiUsage
 import com.thomaswcode.decrastination.enrich.KeyProblem
@@ -293,7 +294,7 @@ class ServerGraph(
                 // command that keeps it, which a stop between the two can hold back till its next try.
                 runCatching { owners.photos.sweepPhotos(keptBefore = clock.now() - PHOTO_GRACE_MS) }.onFailure { Log.w(Log.TAG, "The photos couldn't be swept: ${it::class.simpleName}") }
                 // What photo checks saw of tasks done or gone since (6.4.0), as a task can go without a check.
-                if (mode == COMMANDS) runCatching { owners.focus.tidyNotes() }.onFailure { Log.w(Log.TAG, "The checks' notes couldn't be tidied: ${it::class.simpleName}") }
+                if (mode == COMMANDS) runCatching { owners.focus.tidyChecks() }.onFailure { Log.w(Log.TAG, "The checks' notes couldn't be tidied: ${it::class.simpleName}") }
                 delay(TIDY_EVERY_MS)
             }
         }
@@ -702,12 +703,18 @@ class ServerGraph(
      * server plans it, so one done or planned again since is said so, as the phone says it. Never in a command, as a call can take a
      * minute. Null while another's being checked.
      */
-    suspend fun checkPhoto(taskId: String, key: String, step: String?, takenAt: Long, jpegs: List<ByteArray>): PhotoChecked? {
+    suspend fun checkPhoto(taskId: String, key: String, step: String?, takenAt: Long, jpegs: List<ByteArray>, keep: Boolean = false, record: SlotRef? = null): PhotoChecked? {
         if (!checkingPhoto.compareAndSet(false, true)) return null
         try {
-            // By its step too, as the phone finds it: a key's only the step's place, which another may have taken here since.
-            val piece = planning.plan().chunksOf(taskId).firstOrNull { it.key == key && it.step == step } ?: return PhotoChecked(Photos.PIECE_CHANGED)
-            return PhotoChecked(owners.photos.checkJpegs(jpegs, piece, takenAt))
+            // A kept slot's, from its sheet (6.5.0): that slot, found in this server's own record, with its task.
+            val piece = if (record != null) {
+                val slot = stores.log.value.slots.lastOrNull { record.names(it) && it.taskId == taskId } ?: return PhotoChecked(Photos.SLOT_GONE)
+                Photos.pieceOf(slot, stores.tasks.value.tasks.firstOrNull { it.id == taskId }) ?: return PhotoChecked(Photos.SLOT_GONE)
+            } else {
+                // By its step too, as the phone finds it: a key's only the step's place, which another may have taken here since.
+                planning.plan().chunksOf(taskId).firstOrNull { it.key == key && it.step == step } ?: return PhotoChecked(Photos.PIECE_CHANGED)
+            }
+            return PhotoChecked(owners.photos.checkJpegs(jpegs, piece, takenAt, keep, record))
         } finally {
             checkingPhoto.set(false)
         }

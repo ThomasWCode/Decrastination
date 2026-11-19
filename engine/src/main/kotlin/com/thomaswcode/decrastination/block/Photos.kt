@@ -4,11 +4,15 @@ import com.thomaswcode.decrastination.core.ChatAction
 import com.thomaswcode.decrastination.core.ChatActs
 import com.thomaswcode.decrastination.core.ChatState
 import com.thomaswcode.decrastination.core.Chunk
+import com.thomaswcode.decrastination.core.TaskItem
+import com.thomaswcode.decrastination.core.Why
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.TaskPhoto
 import com.thomaswcode.decrastination.core.WallClock
 import com.thomaswcode.decrastination.data.CheckNote
 import com.thomaswcode.decrastination.data.JsonStore
+import com.thomaswcode.decrastination.data.SlotRecord
+import com.thomaswcode.decrastination.data.SlotRef
 import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.enrich.Called
 import com.thomaswcode.decrastination.enrich.ModelCalls
@@ -64,7 +68,7 @@ class Photos(
      * The pages of a piece's work checked by the server, once the two keep in step by commands, as Claude's the server's to ask
      * then (D-148): what it said of them, or null while this phone asks Claude itself.
      */
-    private val checkByServer: suspend (jpegs: List<ByteArray>, piece: Chunk, takenAt: Long) -> String? = { _, _, _ -> null },
+    private val checkByServer: suspend (jpegs: List<ByteArray>, piece: Chunk, takenAt: Long, keep: Boolean, record: SlotRef?) -> String? = { _, _, _, _, _ -> null },
     /** Where a task's photo is kept: its own file here, or, on the server, its copy in [photos] by its hash (D-148). */
     private val fileOf: (TaskPhoto) -> File = { File(it.path) },
     /** [taskId] read again with its photo, where it's one the model reads ([com.thomaswcode.decrastination.enrich.Readings.enrichNow]). */
@@ -143,8 +147,8 @@ class Photos(
             m.acts.filter { it.action?.type == ChatAction.Type.Delete && ChatActs.canUndo(it, tasks.value.tasks, settings.value, messages) }
                 .mapNotNull { it.was?.photo }
         }
-        // By name, as where a photo's kept is the phone's path here and its hash on the server.
-        val held = (tasks.value.tasks.mapNotNull { it.photo } + undoable).mapTo(HashSet()) { fileOf(it).name }
+        // By name, as where a photo's kept is the phone's path here and its hash on the server; a check's kept pages by theirs (6.5.0).
+        val held = (tasks.value.tasks.mapNotNull { it.photo } + undoable).mapTo(HashSet()) { fileOf(it).name } + focus.keptPages().map { pageFile(it.hash).name }
         photos.listFiles()?.filter { it.name !in held && it.lastModified() < keptBefore }?.forEach { it.delete() }
     }
 
@@ -159,9 +163,10 @@ class Photos(
 
     /**
      * Checks [pages], the photos of [piece]'s work (AI-17), against it and its task (AI-16), records
-     * the cost, and says how it went. The photos are deleted, whatever happens.
+     * the cost, and says how it went. The photos taken are deleted, whatever happens; with [keep] (the box unticked, 6.5.0), copies
+     * shrunk are kept with the task first. [record]: the kept slot it's for, from that slot's sheet.
      */
-    suspend fun check(pages: List<File>, piece: Chunk, takenAt: Long = clock.now()): String {
+    suspend fun check(pages: List<File>, piece: Chunk, takenAt: Long = clock.now(), keep: Boolean = false, record: SlotRef? = null): String {
         // [takenAt], when its first page was taken: a slot of its key kept before then isn't the one it shows.
         if (!piece.photoCheckable) {
             withContext(NonCancellable + Dispatchers.IO) { pages.forEach { it.delete() } }
@@ -175,22 +180,40 @@ class Photos(
         } finally {
             withContext(NonCancellable + Dispatchers.IO) { pages.forEach { it.delete() } }
         }
+        // Kept here too, to show on the task's sheet, where the server keeps its own and says so in what's pulled.
+        if (keep) writePages(jpegs)
         // The server's to check once the phone sends commands, looked at under the lock the switch holds.
-        return checking.withLock { checkByServer(jpegs, piece, takenAt) ?: checkJpegs(jpegs, piece, takenAt) }
+        return checking.withLock { checkByServer(jpegs, piece, takenAt, keep, record) ?: checkJpegs(jpegs, piece, takenAt, keep, record) }
+    }
+
+    /** A check's page kept with its task, by its hash (6.5.0): beside the tasks' photos, in their folder. */
+    fun pageFile(hash: String): File = File(photos, "page-$hash.jpg")
+
+    /** [jpegs] written as kept pages, each once; their hashes. */
+    private suspend fun writePages(jpegs: List<ByteArray>): List<String> = withContext(NonCancellable + Dispatchers.IO) {
+        photos.mkdirs()
+        jpegs.map { jpeg -> hashOf(jpeg).also { hash -> pageFile(hash).takeUnless { it.isFile }?.writeBytes(jpeg) } }
     }
 
     /**
      * [jpegs], the pages of [piece]'s work as the model's sent them, checked against it and its task (AI-16), the cost recorded, and
      * how it went said: the server's own check of a phone's pages, and the end of this phone's ([check]).
      */
-    suspend fun checkJpegs(jpegs: List<ByteArray>, piece: Chunk, takenAt: Long): String {
+    suspend fun checkJpegs(jpegs: List<ByteArray>, piece: Chunk, takenAt: Long, keep: Boolean = false, record: SlotRef? = null): String {
         if (!piece.photoCheckable) return "Only written homework can be checked from a photo."
+        // The task's kept pages sent again after these, the newest first, where they leave room (6.5.0), read before these join them.
+        val earlier = focus.keptPages(piece.taskId).filter { kept -> jpegs.none { hashOf(it) == kept.hash } }.sortedByDescending { it.at }
+        // Kept with their task whatever the check says, the box unticked: on the server, which holds the record of them.
+        if (keep) focus.keepPages(piece.taskId, writePages(jpegs), clock.now())
         // Its room taken with every other model call's, then sent (AC-05).
         val current = gateway.client(ModelEffort.Job.PhotoCheck)?.let { PhotoChecker(it, profile = profile()) } ?: return OFF
+        val again = withContext(Dispatchers.IO) { earlier.take(PhotoChecker.MAX_PAGES - jpegs.size).mapNotNull { runCatching { pageFile(it.hash).readBytes() }.getOrNull() } }
+        // A kept slot's check is on that slot's key, whatever piece stands for it now.
+        val key = record?.key ?: piece.key
         // What earlier checks of the task saw counts as shown (6.4.0): the whole task's, each piece's.
         val notes = focus.notesOf(piece.taskId)
         val about = PhotoChecker.context(piece, tasks.value.tasks.firstOrNull { it.id == piece.taskId }, notes, clock.zone())
-        val result = when (val called = gateway.call(interactive = true, record = ModelCalls.OnRecord(ModelEffort.Job.PhotoCheck, piece.label) { r: PhotoChecker.Result -> r.usage to ModelCalls.outcome(r.refused, r.verdict == null) }, cost = { r: PhotoChecker.Result -> r.costUsd to r.refused }) { current.check(jpegs, about) }) {
+        val result = when (val called = gateway.call(interactive = true, record = ModelCalls.OnRecord(ModelEffort.Job.PhotoCheck, piece.label) { r: PhotoChecker.Result -> r.usage to ModelCalls.outcome(r.refused, r.verdict == null) }, cost = { r: PhotoChecker.Result -> r.costUsd to r.refused }) { current.check(jpegs, about, again) }) {
             is Called.Held -> return when (called.hold) {
                 ModelHold.Off -> OFF
                 ModelHold.Resting -> "Claude's key isn't working (Setup says why): tick it Done, or the source will have to do."
@@ -208,10 +231,10 @@ class Photos(
         // answer's own field, so the rule is the app's and not the prompt's alone.
         val stale = judged && !verdict.fresh && notes.any { it.passed }
         // Kept whatever it said, as the photos go: what it showed counts at the next check of any piece of the task.
-        if (verdict.covered.isNotBlank()) focus.noteCheck(CheckNote(piece.taskId, piece.key, piece.label, verdict.covered, judged && !stale, clock.now()))
+        if (verdict.covered.isNotBlank()) focus.noteCheck(CheckNote(piece.taskId, key, piece.label, verdict.covered, judged && !stale, clock.now()))
         if (stale) return "Not yet: these show only work an earlier check counted already. Photograph this sitting's work."
         if (!judged) return if (verdict.covered.isBlank()) "Not yet: ${verdict.reason}" else "Not yet: ${verdict.reason.trimEnd('.')}. What these showed is remembered: photograph the rest."
-        if (!focus.photoChecked(piece.taskId, piece.step, piece.minutes, piece.stepIndex, piece.key, takenAt)) return "Done, but it was already ticked off: ${verdict.reason}"
+        if (!focus.photoChecked(piece.taskId, piece.step, piece.minutes, piece.stepIndex, key, takenAt, record)) return if (record != null) "Done, but that slot can't earn now (its day is over, or it's earned already): ${verdict.reason}" else "Done, but it was already ticked off: ${verdict.reason}"
         return "Done: ${verdict.reason}"
     }
 
@@ -220,6 +243,20 @@ class Photos(
 
         /** A photo check's piece not found again where it's checked: the phone's screen, or the server's plan. */
         const val PIECE_CHANGED = "That piece has changed since the photo was taken (done, or planned again), so it wasn't checked."
+
+        /** A kept slot's check whose slot, or its task, isn't there where it's checked (6.5.0). */
+        const val SLOT_GONE = "That slot isn't in the record any more, or its task has gone, so it wasn't checked."
+
+        /**
+         * The piece a kept slot's check is for (6.5.0): the slot left the plan when it was kept, so the check is told its record's label
+         * and minutes in the piece's place, with its task. None without its task.
+         */
+        fun pieceOf(record: SlotRecord, task: TaskItem?): Chunk? = task?.let {
+            Chunk(
+                taskId = record.taskId, source = it.source, kind = record.kind, title = record.label, step = null, minutes = record.plannedMin, dueAt = it.dueAt,
+                deadline = it.dueAt ?: record.end, soft = false, overdue = false, dueToday = false, behind = false, part = 1, parts = 1, taskMinutes = record.plannedMin, why = Why.Spread,
+            )
+        }
 
         /** A task's photo's fingerprint ([TaskPhoto.hash]): SHA-256's first 8 bytes, in hex, the name the server keeps its copy by. */
         fun hashOf(jpeg: ByteArray): String = MessageDigest.getInstance("SHA-256").digest(jpeg).take(8).joinToString("") { "%02x".format(it) }
