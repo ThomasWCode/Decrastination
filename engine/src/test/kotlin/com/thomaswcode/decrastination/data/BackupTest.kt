@@ -395,7 +395,7 @@ class BackupTest {
         val backup = Backup(exportedAt = 1, settings = Settings(), log = ActivityLog(), checkNotes = listOf(note("teams:a", "pages 1 to 3", 10, passed = true)))
         assertEquals(backup.checkNotes, Backups.decode(Backups.encode(backup), emptyMap())!!.checkNotes)
         // Its session part goes through the store's migrations as its store's other part does.
-        val shapes = mapOf("session.json" to Shape(SessionState().version, listOf(CreditMigration.SESSION, TimerMigration.SESSION, CheckNotesMigration.SESSION)))
+        val shapes = mapOf("session.json" to Shape(SessionState().version, listOf(CreditMigration.SESSION, TimerMigration.SESSION, CheckNotesMigration.SESSION, PhotoDoorsMigration.SESSION)))
         val older = """{"app":"Decrastination","format":11,"exportedAt":0,"settings":{},"log":{},"slots":{},"versions":{"session.json":3}}"""
         assertEquals(emptyList(), Backups.decode(older, shapes)!!.checkNotes)
         assertEquals(backup.checkNotes, Backups.decode(Backups.encode(backup.copy(versions = mapOf("session.json" to SessionState().version))), shapes)!!.checkNotes)

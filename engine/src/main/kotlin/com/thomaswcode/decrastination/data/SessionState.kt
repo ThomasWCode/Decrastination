@@ -20,9 +20,38 @@ data class SessionState(
     val timer: PieceTimer? = null,
     /** What photo checks of each task saw ([CheckNote], 6.4.0), the newest last: a later check of the task counts it as shown. */
     val notes: List<CheckNote> = emptyList(),
+    /**
+     * A check's pages kept with their task, its box unticked (6.5.0), by their files' hashes: sent again with a later check of it
+     * where its pages leave room, and let go when it's done or gone, or [KeptPage.KEPT_MS] after they were taken. Not backed up, as
+     * the files aren't.
+     */
+    val pages: List<KeptPage> = emptyList(),
     /** The shape this is in ([Migration]): raised with each change of it, a migration bringing older files to it. */
-    val version: Int = 4,
+    val version: Int = 5,
 )
+
+/** A check's page kept with its task (6.5.0): its file, by its hash ([com.thomaswcode.decrastination.block.Photos.hashOf]), and when it was taken. */
+@Serializable
+data class KeptPage(val taskId: String, val hash: String, val at: Long) {
+    companion object {
+        /** How long a kept page lasts at most: a fortnight, as a kept chat photo does. */
+        const val KEPT_MS = 14 * 24 * 3_600_000L
+    }
+}
+
+/**
+ * A slot kept already, as a photo check from its sheet names it (6.5.0): its key, its start and when it was kept, so the check
+ * earns on that slot and no other, however long after its tick, where a key alone can't tell one kept slot of a task from another.
+ */
+@Serializable
+data class SlotRef(val key: String, val start: Long, val at: Long) {
+    /** Whether [record] is the slot this names. */
+    fun names(record: SlotRecord): Boolean = record.key == key && record.start == start && record.at == at
+
+    companion object {
+        fun of(record: SlotRecord): SlotRef = SlotRef(record.key, record.start, record.at)
+    }
+}
 
 /**
  * What a photo check saw of a task's work (6.4.0): kept after a check that said done or not yet, as its photos are deleted, so a
@@ -91,6 +120,8 @@ data class PhotoDone(
     val key: String? = null,
     /** When the photo was taken (the check began): a slot of its key kept before then is another's. */
     val takenAt: Long? = null,
+    /** The kept slot it was taken for, from that slot's sheet (6.5.0): it earns on that slot, or not at all. */
+    val record: SlotRef? = null,
 )
 
 /**
