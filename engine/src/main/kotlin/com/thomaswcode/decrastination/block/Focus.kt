@@ -17,6 +17,8 @@ import com.thomaswcode.decrastination.core.WallClock
 import com.thomaswcode.decrastination.core.WindowKind
 import com.thomaswcode.decrastination.data.ActivityLog
 import com.thomaswcode.decrastination.data.BlockRecord
+import com.thomaswcode.decrastination.data.CHECK_NOTES_KEPT
+import com.thomaswcode.decrastination.data.CheckNote
 import com.thomaswcode.decrastination.data.CompletionRecord
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.Keeping
@@ -603,6 +605,30 @@ class Focus(
         val done = PhotoDone(Ids.next(), taskId, step, minutes, clock.now(), stepIndex, key, takenAt)
         session.update { it.copy(photosDone = it.photosDone + done) }
         return finishPhoto(done).also { settleTimer() }
+    }
+
+    /** What earlier photo checks of [taskId] saw ([SessionState.notes], 6.4.0), the oldest first. */
+    fun notesOf(taskId: String): List<CheckNote> = session.value.notes.filter { it.taskId == taskId }
+
+    /**
+     * What a photo check saw kept ([note], 6.4.0), as its photos are deleted: the task's newest [CHECK_NOTES_KEPT], and those of a
+     * task done or gone let go with it.
+     */
+    suspend fun noteCheck(note: CheckNote) {
+        session.update { state -> state.copy(notes = notesKept(state.notes + note)) }
+    }
+
+    /** The notes of the tasks done or gone let go (6.4.0): at a start and daily, as a task can go without a check. */
+    suspend fun tidyNotes() {
+        session.update { state -> state.copy(notes = notesKept(state.notes)) }
+    }
+
+    /** [notes] of the tasks still open, each one's newest [CHECK_NOTES_KEPT], in the order they were kept. */
+    private fun notesKept(notes: List<CheckNote>): List<CheckNote> {
+        val open = tasks.value.tasks.filter { it.isOpen }.mapTo(HashSet()) { it.id }
+        val kept = notes.filter { it.taskId in open }
+        val newest = kept.groupBy { it.taskId }.values.flatMapTo(HashSet()) { it.takeLast(CHECK_NOTES_KEPT) }
+        return kept.filter { it in newest }
     }
 
     /**

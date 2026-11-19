@@ -594,6 +594,8 @@ class AppGraph private constructor(context: Context) : Owners {
         }
         scope.launch { sync.refreshCalendar() }
         scope.launch(Dispatchers.IO) { runCatching { photos.sweepPhotos() } }
+        // What photo checks saw of tasks done or gone since (6.4.0): the server's to let go once the phone sends commands, as it writes them then.
+        scope.launch { if (!sendsCommands()) runCatching { focus.tidyNotes() } }
         // What's read again as it changes: the calendar, the calendars picked, Anki's settings, the Teams widget's list ([Sync.start]).
         sync.start(calendarWriter.calendarChanged)
         // The calendar picked, and each plan once plans have been quiet a while, written ([CalendarWriter.start]).

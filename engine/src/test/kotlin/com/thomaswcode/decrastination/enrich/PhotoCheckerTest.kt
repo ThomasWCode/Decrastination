@@ -3,7 +3,12 @@ package com.thomaswcode.decrastination.enrich
 import com.anthropic.models.messages.OutputConfig
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
+import com.thomaswcode.decrastination.core.Chunk
 import com.thomaswcode.decrastination.core.Enrichments
+import com.thomaswcode.decrastination.core.Kind
+import com.thomaswcode.decrastination.core.Source
+import com.thomaswcode.decrastination.core.Why
+import com.thomaswcode.decrastination.data.CheckNote
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
 import kotlin.test.Test
@@ -27,7 +32,8 @@ class PhotoCheckerTest {
     fun `the photo goes as a JPEG image block with the piece, and the verdict is read`() = runBlocking {
         val server = MockWebServer().apply { start() }
         try {
-            val text = """{"done":true,"confidence":1.4,"reason":"All eight answers are written out."}"""
+            val covered = "Q1-8, each worked in full. " + "And more. ".repeat(80)
+            val text = """{"done":true,"confidence":1.4,"reason":"All eight answers are written out.","seen":"Two pages","covered":"$covered","fresh":true}"""
             val body = JsonObject(
                 mapOf(
                     "id" to JsonPrimitive("msg"), "type" to JsonPrimitive("message"), "role" to JsonPrimitive("assistant"), "model" to JsonPrimitive("claude-opus-5-5"),
@@ -40,19 +46,44 @@ class PhotoCheckerTest {
             val result = PhotoChecker(ModelGateway.build("test-key", server.url("").toString().trimEnd('/'))).check(listOf(byteArrayOf(1, 2, 3), byteArrayOf(4, 5, 6)), "The piece of work: Chapter 17 review, part 2 of 3, 30 min")
             val request = Json.parseToJsonElement(server.takeRequest().body.readUtf8()).jsonObject
             val content = request["messages"]!!.jsonArray.single().jsonObject["content"]!!.jsonArray
-            // A page each, then what they're of (AI-17).
-            assertEquals(listOf("image", "image", "text"), content.map { it.jsonObject["type"]!!.jsonPrimitive.content })
-            val image = content.first().jsonObject
+            // A page each, each named before it (6.4.0), then what they're of (AI-17).
+            assertEquals(listOf("text", "image", "text", "image", "text"), content.map { it.jsonObject["type"]!!.jsonPrimitive.content })
+            assertEquals(listOf("Page 1:", "Page 2:"), listOf(content[0], content[2]).map { it.jsonObject["text"]!!.jsonPrimitive.content })
+            val image = content[1].jsonObject
             assertEquals("image/jpeg", image["source"]!!.jsonObject["media_type"]!!.jsonPrimitive.content)
             assertEquals("AQID", image["source"]!!.jsonObject["data"]!!.jsonPrimitive.content)
-            assertTrue("Chapter 17 review, part 2 of 3" in content[2].toString())
+            assertTrue("Chapter 17 review, part 2 of 3" in content[4].toString())
             assertEquals(true, result.verdict!!.done)
+            // What it covered is kept for later checks, cut to what's sent again; it's fresh, as the answer says.
+            assertEquals(PhotoChecker.MAX_COVERED, result.verdict!!.covered.length)
+            assertTrue(result.verdict!!.covered.startsWith("Q1-8, each worked in full."))
+            assertTrue(result.verdict!!.fresh)
             // A confidence past 1 is read as 1.
             assertEquals(1.0, result.verdict!!.confidence)
             assertTrue("Blank or crossed-out pages, a photo of a screen, printed answers, or work for a different task are not done" in PhotoChecker.system())
         } finally {
             server.shutdown()
         }
+    }
+
+    @Test
+    fun `a check is told what earlier checks of its task saw, each with its piece, when and whether it passed, and its text is cut to its own bound`() {
+        val piece = Chunk(
+            taskId = "teams:sheet", source = Source.Teams, kind = Kind.Homework, title = "Graphs sheet", step = null, minutes = 40, dueAt = null,
+            deadline = Fixtures.at("2026-11-23T09:00"), soft = false, overdue = false, dueToday = false, behind = false, part = 2, parts = 2, taskMinutes = 80, why = Why.Spread,
+        )
+        val notes = listOf(
+            CheckNote("teams:sheet", "teams:sheet#-1#1", "Graphs sheet, part 1 of 2", "Pages 8 to 10, every question answered", passed = true, at = Fixtures.at("2026-11-18T17:05")),
+            CheckNote("teams:sheet", "teams:sheet#-1#2", "Graphs sheet, part 2 of 2", "Page 11, question 2 alone", passed = false, at = Fixtures.at("2026-11-19T18:40")),
+        )
+        val about = PhotoChecker.context(piece, null, notes, LONDON)
+        assertTrue("Earlier checks of this task, their photos not sent again (what each showed counts as shown):" in about)
+        assertTrue("- Wed 18 Nov 17:05, for \"Graphs sheet, part 1 of 2\", passed (earned already): Pages 8 to 10, every question answered" in about)
+        assertTrue("- Thu 19 Nov 18:40, for \"Graphs sheet, part 2 of 2\", not passed: Page 11, question 2 alone" in about)
+        assertTrue("Earlier checks" !in PhotoChecker.context(piece, null, emptyList(), LONDON))
+        // Ten pictures take their room from the text, each at its dearest shape.
+        assertEquals(Pricing.MAX_INPUT_CHARS - 10 * Pricing.PICTURE_CHARS, PhotoChecker.MAX_TEXT)
+        assertEquals(listOf("done", "confidence", "reason", "seen", "covered", "fresh"), PhotoChecker.SCHEMA["required"])
     }
 
     @Test

@@ -61,6 +61,18 @@ class AiUsageTest {
     }
 
     @Test
+    fun `a photo check of ten square pages, its text at its bound and its prompt written to the hour's cache, is within the dearest call`() {
+        // Every character of its text three tokens, the profile at its most, each page a square of 1 568 pixels a side (6.4.0).
+        val text = 3L * (PhotoChecker.MAX_TEXT + Profile.MAX_BLOCK_CHARS)
+        val pages = PhotoChecker.MAX_PAGES * Pricing.PICTURE_TOKENS.toLong()
+        val prompt = 3L * PhotoChecker.system().length
+        val check = Pricing.costUsd("claude-opus-4-8", input = text + pages, output = ClaudeEnricher.MAX_TOKENS, cacheWriteHour = prompt)
+        assertTrue(check <= Pricing.WORST_CALL_USD, "$check > ${Pricing.WORST_CALL_USD}")
+        // A square that size, by the API's reckoning (width x height / 750), is within what a picture's costed at.
+        assertTrue(PhotoChecker.MAX_SIDE * PhotoChecker.MAX_SIDE / 750 <= Pricing.PICTURE_TOKENS)
+    }
+
+    @Test
     fun `a key problem is alerted once a stretch, once it can be seen, and ends with a call that works or a new key`() {
         val first = AiUsage("2026-10").failure("401", NOW, KeyProblem.Rejected)
         assertTrue(first.keyAlertDue)

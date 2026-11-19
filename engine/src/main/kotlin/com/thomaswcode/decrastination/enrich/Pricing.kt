@@ -13,8 +13,17 @@ object Pricing {
     /** A token is at least a byte, and a character at most three bytes of UTF-8 (a four-byte one is two characters). */
     private const val TOKENS_PER_CHAR = 3
 
-    /** The instructions, the schema, and a photo check's pictures (up to three, AI-17; no more than 1 568 pixels a side, about 3 300 tokens each). */
+    /**
+     * The instructions and the schema, as long as any call's are. A photo check's pictures were counted here while it took three;
+     * from 6.4.0 a call's pictures are counted against its text instead ([PICTURE_CHARS]).
+     */
     private const val PROMPT_TOKENS = 11_000
+
+    /** A picture at its dearest shape, a square no bigger than 1 568 pixels a side, as one from the gallery or a browser can be: about 3 300 tokens. */
+    const val PICTURE_TOKENS = 3_300
+
+    /** The characters of text a picture's tokens would be: a call's pictures take that much from the text it may send ([MAX_INPUT_CHARS]). */
+    const val PICTURE_CHARS = PICTURE_TOKENS / TOKENS_PER_CHAR
 
     /**
      * The most text any call sends, every call's cut to it: room for an email's [ReadingPrompts.MAX_TEXT]

@@ -31,6 +31,8 @@ import com.thomaswcode.decrastination.core.SubStep
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.data.ActivityLog
 import com.thomaswcode.decrastination.data.ChatMigration
+import com.thomaswcode.decrastination.data.CheckNote
+import com.thomaswcode.decrastination.data.CheckNotesMigration
 import com.thomaswcode.decrastination.data.CreditMigration
 import com.thomaswcode.decrastination.data.TimerMigration
 import com.thomaswcode.decrastination.data.MemoryMigration
@@ -70,7 +72,7 @@ class FocusTest {
     private val tasks = JsonStore(File(dir, "tasks.json"), TaskState.serializer(), ::TaskState, migrations = listOf(TasksMigration.TASKS, StepOrderMigration.TASKS, WeeklyMigration.TASKS, NotSameMigration.TASKS))
     private val settings = JsonStore(File(dir, "settings.json"), Settings.serializer(), ::Settings, migrations = listOf(SettingsMigration.SETTINGS, ZoomMigration.SETTINGS, SpeechMigration.SETTINGS))
     private val protection = JsonStore(File(dir, "protection.json"), ProtectionState.serializer(), ::ProtectionState, migrations = listOf(ProtectionSplit.PROTECTION))
-    private val session = JsonStore(File(dir, "session.json"), SessionState.serializer(), ::SessionState, migrations = listOf(CreditMigration.SESSION, TimerMigration.SESSION))
+    private val session = JsonStore(File(dir, "session.json"), SessionState.serializer(), ::SessionState, migrations = listOf(CreditMigration.SESSION, TimerMigration.SESSION, CheckNotesMigration.SESSION))
     private val learning = JsonStore(File(dir, "learning.json"), LearningState.serializer(), ::LearningState)
     private val log = JsonStore(File(dir, "log.json"), ActivityLog.serializer(), ::ActivityLog, migrations = listOf(ChatMigration.LOG, MemoryMigration.LOG, CreditMigration.LOG))
     private val focus = Focus(tasks, settings, session, learning, protection, log, clock) { state, s, now -> Planner.plan(Planner.Input(state.tasks, now, LONDON, s)) }
@@ -79,6 +81,25 @@ class FocusTest {
         id = "teams:$id", source = Source.Teams, sourceId = id, title = id, dueAt = due?.let(Fixtures::at), kind = kind,
         sourceEffortMin = effort, subSteps = steps, firstSeenAt = clock.time, lastSeenAt = clock.time,
     )
+
+    @Test
+    fun `a task's newest eight notes of what checks saw are kept, and they go with it when it's done or gone`() = runTest {
+        tasks.update { it.copy(tasks = listOf(task("sheet"), task("essay"), task("gone"))) }
+        repeat(10) { focus.noteCheck(CheckNote("teams:sheet", "teams:sheet#-1#1", "sheet", "page $it", passed = false, at = clock.time + it)) }
+        focus.noteCheck(CheckNote("teams:essay", "teams:essay#-1#1", "essay", "its plan", passed = true, at = clock.time))
+        focus.noteCheck(CheckNote("teams:gone", "teams:gone#-1#1", "gone", "a page", passed = false, at = clock.time))
+        assertEquals((2..9).map { "page $it" }, focus.notesOf("teams:sheet").map { it.covered })
+        assertEquals(listOf("its plan"), focus.notesOf("teams:essay").map { it.covered })
+        // One task done, another gone from the list: their notes go at the next tidy, the open one's stay.
+        tasks.update { s -> s.copy(tasks = s.tasks.filter { it.id != "teams:gone" }.map { if (it.id == "teams:essay") it.copy(status = Status.Done, doneAt = clock.time) else it }) }
+        focus.tidyNotes()
+        assertEquals(setOf("teams:sheet"), session.value.notes.mapTo(HashSet()) { it.taskId })
+        assertEquals(8, session.value.notes.size)
+        // And at the next note kept, whatever it's for.
+        tasks.update { s -> s.copy(tasks = s.tasks.map { it.copy(status = Status.Done, doneAt = clock.time) } + task("next")) }
+        focus.noteCheck(CheckNote("teams:next", "teams:next#-1#1", "next", "page 1", passed = false, at = clock.time))
+        assertEquals(listOf("teams:next"), session.value.notes.map { it.taskId })
+    }
 
     @Test
     fun `confirmed work earns time, reading emails doesn't`() = runTest {

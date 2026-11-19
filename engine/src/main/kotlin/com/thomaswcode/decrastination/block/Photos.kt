@@ -7,6 +7,7 @@ import com.thomaswcode.decrastination.core.Chunk
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.TaskPhoto
 import com.thomaswcode.decrastination.core.WallClock
+import com.thomaswcode.decrastination.data.CheckNote
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.enrich.Called
@@ -186,7 +187,9 @@ class Photos(
         if (!piece.photoCheckable) return "Only written homework can be checked from a photo."
         // Its room taken with every other model call's, then sent (AC-05).
         val current = gateway.client(ModelEffort.Job.PhotoCheck)?.let { PhotoChecker(it, profile = profile()) } ?: return OFF
-        val about = PhotoChecker.context(piece, tasks.value.tasks.firstOrNull { it.id == piece.taskId })
+        // What earlier checks of the task saw counts as shown (6.4.0): the whole task's, each piece's.
+        val notes = focus.notesOf(piece.taskId)
+        val about = PhotoChecker.context(piece, tasks.value.tasks.firstOrNull { it.id == piece.taskId }, notes, clock.zone())
         val result = when (val called = gateway.call(interactive = true, record = ModelCalls.OnRecord(ModelEffort.Job.PhotoCheck, piece.label) { r: PhotoChecker.Result -> r.usage to ModelCalls.outcome(r.refused, r.verdict == null) }, cost = { r: PhotoChecker.Result -> r.costUsd to r.refused }) { current.check(jpegs, about) }) {
             is Called.Held -> return when (called.hold) {
                 ModelHold.Off -> OFF
@@ -200,7 +203,14 @@ class Photos(
             is Called.Answered -> called.value
         }
         val verdict = result.verdict ?: return "Claude couldn't say. Try a clearer photo."
-        if (!verdict.done || verdict.confidence < PhotoChecker.ACCEPT) return "Not yet: ${verdict.reason}"
+        val judged = verdict.done && verdict.confidence >= PhotoChecker.ACCEPT
+        // Nothing earns twice: where a check of the task has passed, these must show work none that passed showed (6.4.0), by the
+        // answer's own field, so the rule is the app's and not the prompt's alone.
+        val stale = judged && !verdict.fresh && notes.any { it.passed }
+        // Kept whatever it said, as the photos go: what it showed counts at the next check of any piece of the task.
+        if (verdict.covered.isNotBlank()) focus.noteCheck(CheckNote(piece.taskId, piece.key, piece.label, verdict.covered, judged && !stale, clock.now()))
+        if (stale) return "Not yet: these show only work an earlier check counted already. Photograph this sitting's work."
+        if (!judged) return if (verdict.covered.isBlank()) "Not yet: ${verdict.reason}" else "Not yet: ${verdict.reason.trimEnd('.')}. What these showed is remembered: photograph the rest."
         if (!focus.photoChecked(piece.taskId, piece.step, piece.minutes, piece.stepIndex, piece.key, takenAt)) return "Done, but it was already ticked off: ${verdict.reason}"
         return "Done: ${verdict.reason}"
     }

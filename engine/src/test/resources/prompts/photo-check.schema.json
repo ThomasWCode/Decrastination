@@ -12,13 +12,21 @@
         },
         "seen": {
             "type": "string"
+        },
+        "covered": {
+            "type": "string"
+        },
+        "fresh": {
+            "type": "boolean"
         }
     },
     "required": [
         "done",
         "confidence",
         "reason",
-        "seen"
+        "seen",
+        "covered",
+        "fresh"
     ],
     "additionalProperties": false
 }
