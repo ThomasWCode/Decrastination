@@ -77,6 +77,11 @@ class PhotoCheckerTest {
             CheckNote("teams:sheet", "teams:sheet#-1#2", "Graphs sheet, part 2 of 2", "Page 11, question 2 alone", passed = false, at = Fixtures.at("2026-11-19T18:40")),
         )
         val about = PhotoChecker.context(piece, null, notes, LONDON)
+        // A part's share of the task, the parts before it with it (your answer, 19 Nov).
+        assertTrue("It's part 2 of 2: with the parts before it, all of the task's work (80 min in all)" in about, about)
+        assertTrue("part 1 of 2: with the parts before it, about half" in PhotoChecker.context(piece.copy(part = 1), null, emptyList(), LONDON))
+        assertEquals(listOf("about a third", "about two thirds", "all", "about 40%"), listOf(PhotoChecker.share(1, 3), PhotoChecker.share(2, 3), PhotoChecker.share(3, 3), PhotoChecker.share(2, 5)))
+        assertTrue("It's part" !in PhotoChecker.context(piece.copy(part = 1, parts = 1), null, emptyList(), LONDON))
         assertTrue("Earlier checks of this task, their photos not sent again (what each showed counts as shown):" in about)
         assertTrue("- Wed 18 Nov 17:05, for \"Graphs sheet, part 1 of 2\", counted in a check that passed (earned already): Pages 8 to 10, every question answered" in about)
         assertTrue("- Thu 19 Nov 18:40, for \"Graphs sheet, part 2 of 2\", not passed: Page 11, question 2 alone" in about)
