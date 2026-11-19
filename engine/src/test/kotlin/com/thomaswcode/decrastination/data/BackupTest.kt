@@ -402,6 +402,10 @@ class BackupTest {
         // This phone's kept, the backup's it hasn't added, in the order they were kept; past eight a task, its oldest go.
         val here = listOf(note("teams:a", "page 4", 20), note("teams:b", "its plan", 5))
         assertEquals(listOf("its plan", "pages 1 to 3", "page 4"), Backups.mergedNotes(here, backup.checkNotes + here.take(1)).map { it.covered })
+        // A note counted since the backup was made comes back once, counted.
+        val counted = backup.checkNotes.single().copy(passed = false)
+        assertEquals(listOf(true), Backups.mergedNotes(backup.checkNotes, listOf(counted)).map { it.passed })
+        assertEquals(listOf(true), Backups.mergedNotes(listOf(counted), backup.checkNotes).map { it.passed })
         val many = (1..9).map { note("teams:c", "page $it", it.toLong()) }
         assertEquals((2..9).map { "page $it" }, Backups.mergedNotes(many.take(4), many.drop(4)).map { it.covered })
         assertNull(Backups.problem(backup))
