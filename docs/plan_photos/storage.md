@@ -17,7 +17,7 @@ A photo is never a row: the database holds its hash. So no photo reaches R2 or B
 
 - **A page**: the sample pages measured were 80 to 180 KB (scans, 1 240 by 1 754). A page from the phone's camera at 1 568 pixels isn't measured yet; 150 to 500 KB is planned for.
 - **Kept by default**: nothing. A check's pages and a chat photo are deleted once used, the box ticked; what's kept is a line of text.
-- **Kept when unticked**, a chat photo for 14 days from when it's sent (README, *Still to answer* 4): two a day, about 28 held at once, 4 to 14 MB; ten a day, about 140, 20 to 70 MB. There's no fixed most: it's whatever is sent unticked in a fortnight (forty a day, at half a megabyte each, would be 280 MB). The photos' folder is among the sizes in Settings (6.10.0).
+- **Kept when unticked**, a chat photo for 14 days from when it's sent (README, *Answered on 19 Nov* 4): two a day, about 28 held at once, 4 to 14 MB; ten a day, about 140, 20 to 70 MB. There's no fixed most: it's whatever is sent unticked in a fortnight (forty a day, at half a megabyte each, would be 280 MB). The photos' folder is among the sizes in Settings (6.10.0).
 - **The box's disk**: 91 GB free of 96 (18 Nov 2026), its photos' folder empty.
 
 ## What R2 holds (measured, 18 Nov 2026)
@@ -46,7 +46,7 @@ The website's plan foresaw it ([plan_web/decisions.md](../plan_web/decisions.md)
 - What it costs: a restore to a moment reaches a fortnight back, not a month. The nightly file in B2 is the long term, as it was to be.
 - Nothing's lost by it today: the bucket holds eight days.
 - On the box: the file put there after the merge (the timer pulls images alone), Litestream restarted, `box_files.py` showing the box's file is main's, and the bucket counted again a few days on. A step of its own, at the owner's word.
-- A docs-and-deployment PR, no version.
+- A docs-and-deployment PR, no version (D-154).
 
 ## What trims it, and what it comes to
 
@@ -81,7 +81,7 @@ What would lessen it, in the order it helps: fewer and smaller writes (6.3.3, be
 
 **What's shown**, in Settings on the phone and the website, from one view the server makes (`SettingsViews`): each figure beside its free allowance (R2: 10 GB stored, a million Class A requests and ten million Class B a month; B2: 10 GB; the disk), when it was last read, and the date an allowance would be passed at the last week's rate. A figure that couldn't be read says so, with why.
 
-**The alert.** A notification of its own (its own id and channel, so it replaces no other) and a line among the website's notices, at 80% of an allowance and again at 95%, once each a month for each allowance (README, *Still to answer* 2). November's bill was for requests, not size: the requests are watched as the size is.
+**The alert.** A notification of its own (its own id and channel, so it replaces no other) and a line among the website's notices, at 80% of an allowance and again at 95%, once each a month for each allowance (README, *Answered on 19 Nov* 2). November's bill was for requests, not size: the requests are watched as the size is.
 
 **Needs.** A new credential on the box, made by the owner in Cloudflare; its exact permission is read from Cloudflare's own page before the steps are sent. A daily job of the server's, in its jobs' list, which fails quietly and says so in Settings.
 

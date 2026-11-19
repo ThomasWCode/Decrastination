@@ -32,7 +32,7 @@ On the phone, a tap on Day opens what was tapped: a piece's sheet (`PieceSheet`,
 
 ***Ask Felix about it*.** `SendMessage` already carries what a message is about (`About`: a task, an event, a day); the website's box never sets it. The chat page takes one from its address, shows it over the box as the phone's chip does, and sends it with the message.
 
-**Not on the website**, as now, with no way to them from a server: *Open* (the task in its Android app), *Refresh Teams* (the Teams widget on the phone). *Check it's done*: README, *Still to answer* 1.
+**Not on the website**, as now, with no way to them from a server: *Open* (the task in its Android app), *Refresh Teams* (the Teams widget on the phone). *Check it's done*: README, *Answered on 19 Nov* 1.
 
 ## How it fits the page
 

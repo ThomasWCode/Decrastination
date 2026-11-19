@@ -1,6 +1,6 @@
 # Photos in more places, Day's menus on the website, and the server's storage in sight
 
-The plan for nine pieces of work, a deployment change and eight releases (6.3.3, then 6.4.0 to 6.10.0), written before any is built (18 Nov 2026). Nothing here is built yet; the specs say how the app works now.
+The plan for nine pieces of work, a deployment change and eight releases (6.3.3, then 6.4.0 to 6.10.0), written before any is built (18 Nov 2026). Built so far: the snapshots kept 14 days (D-154). The specs say how the app works now.
 
 - [photo-checks.md](photo-checks.md): the photo check itself, its doors on the phone, and its door on the website (6.4.0, 6.5.0, 6.7.0).
 - [website-day.md](website-day.md): the website's Day, each item opening its own menu (6.6.0).
@@ -45,7 +45,7 @@ These go into `docs/plan_v4/answers.md` from Q151 on, and what they decide into 
 8. **What does the website's Day gain?** A clicked piece's own menu, a missed slot's sheet, a calendar event's sheet, *Ask Felix about it*, and the photo option, as on the phone.
 9. **How does a photo check work on the website, where any saved picture can be chosen?** Any picture, the same judge, the same earning. Offered too: any picture but earning nothing; checks kept to the phone.
 10. **How long does Felix go on seeing a chat photo?** With any message sent within ten minutes of it, by itself; after that he's told it's there, for as long as its message is in what he's sent, and asks to see it. Offered: your next few messages; once only; as long as it's in his history.
-11. **How long is a chat photo's file kept?** While its message is in the chat's window, then deleted; not in backups. Offered too: as long as the message; a day. The window was put to the owner as "the newest 200, or 14 days", which is wrong: it keeps whichever of the two is more (D-96, `Outbox.past`), so a message can stay in it for months in a quiet chat (*Still to answer* 4).
+11. **How long is a chat photo's file kept?** While its message is in the chat's window, then deleted; not in backups. Offered too: as long as the message; a day. The window was put to the owner as "the newest 200, or 14 days", which is wrong: it keeps whichever of the two is more (D-96, `Outbox.past`), so a message can stay in it for months in a quiet chat (*Answered on 19 Nov* 4).
 12. **Which photos does the tick box delete?** The app's and the server's copy, once it's used, Felix's note of it staying; the gallery is never touched. Offered too: the original in the gallery; a camera photo saved to the gallery when unticked.
 13. **Is the box ticked by default in the chat too?** Yes, everywhere. Put to the owner with what it means: a chat photo is gone once Felix has answered it, so answers 10 and 11 hold only for a photo sent with the box unticked. Offered too: the chat's box unticked by default, a check's ticked, as a chat photo's file is small and on the server's disk, not in R2.
 14. **What keeps R2 under its 10 GB, beyond the snapshots' 14 days?** The writes that change nothing stopped (19 Nov). Put with what was measured and estimated: 14 days alone come to about 10 GB by February as the database grows. Offered too: the snapshots at 7 days; the commands kept 30 days, not 90; the history kept hourly for 14 days, not 30; its rows kept smaller; fewer of Litestream's levels; a snapshot every other day. So it's built second, as 6.3.3, and the others aren't.
@@ -53,32 +53,28 @@ These go into `docs/plan_v4/answers.md` from Q151 on, and what they decide into 
 
 ## The work, in order
 
-| | What | Where |
-|---|---|---|
-| 1 | The snapshots kept 14 days, not 30: `deploy/` and its docs, then the box | [storage.md](storage.md) |
-| 2 | **6.3.3**: the writes that change nothing stopped: no history for a write that changes a time alone, and the phone's calendar sent only when it's changed | [storage.md](storage.md) |
-| 3 | **6.4.0**: ten pages, earlier checks remembered, each page named, a page retaken, *Shown so far* | [photo-checks.md](photo-checks.md) |
-| 4 | **6.5.0**: the check from a missed slot and a slot ticked *Done*, Work's camera menu, the gallery, the tick box | [photo-checks.md](photo-checks.md) |
-| 5 | **6.6.0**: the website's Day, each item its own menu | [website-day.md](website-day.md) |
-| 6 | **6.7.0**: the photo check on the website | [photo-checks.md](photo-checks.md) |
-| 7 | **6.8.0**: photos in the chat | [chat-photos.md](chat-photos.md) |
-| 8 | **6.9.0**: a chat photo as proof, handed to the photo check | [chat-photos.md](chat-photos.md) |
-| 9 | **6.10.0**: the storage in Settings, and its alert | [storage.md](storage.md) |
+|   | What                                                                                                                                                            | Where                             |
+| - | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- |
+| 1 | The snapshots kept 14 days, not 30: `deploy/` and its docs, then the box                                                                                      | [storage.md](storage.md)           |
+| 2 | **6.3.3**: the writes that change nothing stopped: no history for a write that changes a time alone, and the phone's calendar sent only when it's changed | [storage.md](storage.md)           |
+| 3 | **6.4.0**: ten pages, earlier checks remembered, each page named, a page retaken, *Shown so far*                                                        | [photo-checks.md](photo-checks.md) |
+| 4 | **6.5.0**: the check from a missed slot and a slot ticked *Done*, Work's camera menu, the gallery, the tick box                                         | [photo-checks.md](photo-checks.md) |
+| 5 | **6.6.0**: the website's Day, each item its own menu                                                                                                      | [website-day.md](website-day.md)   |
+| 6 | **6.7.0**: the photo check on the website                                                                                                                 | [photo-checks.md](photo-checks.md) |
+| 7 | **6.8.0**: photos in the chat                                                                                                                             | [chat-photos.md](chat-photos.md)   |
+| 8 | **6.9.0**: a chat photo as proof, handed to the photo check                                                                                               | [chat-photos.md](chat-photos.md)   |
+| 9 | **6.10.0**: the storage in Settings, and its alert                                                                                                        | [storage.md](storage.md)           |
 
 The snapshots come first for their date, and 6.3.3 next, as the owner chose it for what keeps R2 within its allowance. 6.4.0 is what the owner opened with. 6.6.0 shares no code with the photos and can be built beside them. Each is a PR of its own, stacked no more than two deep. A release that adds a field to a command or a store goes to the server before the phone.
 
-## Still to answer
+## Answered on 19 Nov
 
-Each has what's built meanwhile, so none holds the work up.
+The owner kept each recommendation, so what was to be built meanwhile is what's built.
 
-1. ***Check it's done* on the website.** The app's button asks the task's source; the server's own read of a source is reached only through Felix, with no address the website can call. Recommended: left out of 6.6.0, as *Open* and *Refresh Teams* are, and added later if it's missed. Built meanwhile: left out.
-   ANSWER:
-2. **The alert's lines.** Recommended: a notification at 80% of a free allowance and again at 95%, once each a month for each allowance, with the date it'd be passed at the present rate. Built meanwhile: those.
-   ANSWER:
-3. **What a kept check's pages are for.** Unticked, a check's pages aren't deleted. Recommended: kept with their task, shown on its sheet, and sent again with a later check of the task where its ten pages have room, the new ones first; deleted when the task's done or gone, at a reset, or 14 days after they were taken, whichever is first, as a kept chat photo is (4). Built meanwhile: that.
-   ANSWER:
-4. **How long a kept chat photo's file lasts, as the window isn't what the owner was told.** The chat's window keeps a message while it's among the newest 200 or within 14 days, whichever keeps more, so "while it's in the window" has no limit in days. Recommended: a kept photo's file is deleted 14 days after it's sent, or at a chat reset, whichever is first: what the owner was told, and a limit that holds however quiet the chat. Its message stays where it is, with Felix's note. Built meanwhile: that.
-   ANSWER:
+1. ***Check it's done* on the website.** The app's button asks the task's source; the server's own read of a source is reached only through Felix, with no address the website can call. Recommended: left out of 6.6.0, as *Open* and *Refresh Teams* are, and added later if it's missed. **The owner's answer: as recommended.**
+2. **The alert's lines.** Recommended: a notification at 80% of a free allowance and again at 95%, once each a month for each allowance, with the date it'd be passed at the present rate. **The owner's answer: as recommended.**
+3. **What a kept check's pages are for.** Unticked, a check's pages aren't deleted. Recommended: kept with their task, shown on its sheet, and sent again with a later check of the task where its ten pages have room, the new ones first; deleted when the task's done or gone, at a reset, or 14 days after they were taken, whichever is first, as a kept chat photo is (4). **The owner's answer: as recommended.**
+4. **How long a kept chat photo's file lasts, as the window isn't what the owner was told.** The chat's window keeps a message while it's among the newest 200 or within 14 days, whichever keeps more, so "while it's in the window" has no limit in days. Recommended: a kept photo's file is deleted 14 days after it's sent, or at a chat reset, whichever is first: what the owner was told, and a limit that holds however quiet the chat. Its message stays where it is, with Felix's note. **The owner's answer: as recommended.**
 
 ## Decided without asking
 
@@ -92,7 +88,7 @@ Each has what's built meanwhile, so none holds the work up.
 8. **A picture chosen from the gallery is taken as of when it's chosen.** Nothing rests on when it was taken once a kept slot's check names its slot (6.5.0).
 9. **Nothing earns twice from the notes.** The whole task's notes count as shown (answer 5), but a check must show work no check that passed has shown, so a later sitting can't pass on an earlier one's pages ([photo-checks.md](photo-checks.md)).
 10. **The notes are in the backups**, as with the pages deleted they're the only record of what was shown.
-11. **A kept photo lasts 14 days at most**, a check's pages as a chat's photo (*Still to answer* 3 and 4), and a sweep lets go of any photo file nothing names.
+11. **A kept photo lasts 14 days at most**, a check's pages as a chat's photo (*Answered on 19 Nov* 3 and 4), and a sweep lets go of any photo file nothing names.
 
 ## Not checked yet
 
