@@ -4,6 +4,7 @@ import com.thomaswcode.decrastination.block.Focus
 import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.Change
 import com.thomaswcode.decrastination.core.ChangeType
+import com.thomaswcode.decrastination.core.Chunk
 import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.Ids
 import com.thomaswcode.decrastination.core.Instruction
@@ -20,6 +21,8 @@ import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.data.CheckNote
 import com.thomaswcode.decrastination.data.PieceTimer
+import com.thomaswcode.decrastination.data.SlotRef
+import com.thomaswcode.decrastination.enrich.PhotoChecker
 import com.thomaswcode.decrastination.sync.protocol.Action
 import com.thomaswcode.decrastination.sync.protocol.AddOwnChange
 import com.thomaswcode.decrastination.sync.protocol.DeleteNote
@@ -109,7 +112,26 @@ data class TaskAction(
     val confirm: String? = null,
     val detail: String? = null,
     val undo: Action? = null,
+    /** A photo check it starts (6.7.0): pictures chosen or taken, sent with this to `POST /photos/check`. */
+    val check: PhotoCheckTarget? = null,
 )
+
+/**
+ * What a photo check from the website is of (6.7.0): the piece by its task, key and step, as the phone's check names it, or a kept
+ * slot by its record (6.5.0); the longest side each page is shrunk to, and the most a check takes.
+ */
+@Serializable
+data class PhotoCheckTarget(
+    val taskId: String,
+    val key: String,
+    val step: String? = null,
+    val record: SlotRef? = null,
+    val side: Int = PhotoChecker.MAX_SIDE,
+    val pages: Int = PhotoChecker.MAX_PAGES,
+)
+
+/** *Check with a photo*, of [piece], where a photo can check it. */
+internal fun checkAction(piece: Chunk): TaskAction = TaskAction("Check with a photo", check = PhotoCheckTarget(piece.taskId, piece.key, piece.step))
 
 /** One of your own as the form opens it: saved under the same id, so it stays the one task. */
 @Serializable
@@ -127,7 +149,7 @@ object TaskViews {
     private const val MOVE_DAYS = 14L
 
     /** [task]'s sheet in [plan] at [now], with what's in use on it. [writable]: the server applies commands, so it can be changed here. */
-    fun of(task: TaskItem, byId: Map<String, TaskItem>, plan: Plan, settings: Settings, applied: List<Instruction>, notes: List<Note>, now: Long, zone: ZoneId, writable: Boolean, timer: PieceTimer? = null, checks: List<CheckNote> = emptyList()): TaskView {
+    fun of(task: TaskItem, byId: Map<String, TaskItem>, plan: Plan, settings: Settings, applied: List<Instruction>, notes: List<Note>, now: Long, zone: ZoneId, writable: Boolean, timer: PieceTimer? = null, checks: List<CheckNote> = emptyList(), photos: Boolean = false): TaskView {
         val own = task.source == Source.Own
         val changeable = writable && task.isOpen && !task.derived
         val next = TaskSheetModel.next(plan, task.id).takeIf { task.isOpen }
@@ -144,6 +166,8 @@ object TaskViews {
                 if (TaskSheetModel.canGo(task, tomorrow, now, zone)) {
                     add(TaskAction("Tomorrow", AddOwnChange(Ids.next(), "Tomorrow", about, Change(ChangeType.OnDay, taskId = task.id, date = tomorrow.toString()))))
                 }
+                // Written work, its next piece, where the server can ask Claude (6.7.0).
+                if (photos && piece.photoCheckable) add(checkAction(piece))
             }
             if (own && task.isOpen) add(TaskAction("All of it done", FinishOwnTask(task.id)))
             if (own && task.status == Status.Done) add(TaskAction("Not done", ReopenOwnTask(task.id)))

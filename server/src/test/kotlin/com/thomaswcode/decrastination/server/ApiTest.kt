@@ -563,7 +563,8 @@ class ApiTest {
         fun ask(key: String, pages: List<String> = listOf(page), step: String? = null) = PhotoCheckAsk("own:s-Essay", key, 1L, pages, step)
         assertEquals(HttpStatusCode.Conflict, check(ask("k"), byPhone).status, "not while mirroring")
         graph.commandsForATest()
-        assertEquals(HttpStatusCode.Forbidden, check(ask("k"), website).status)
+        // The website's too, once the server applies commands (6.7.0): the same judge, the piece found the same way.
+        assertEquals(Photos.PIECE_CHANGED, json.decodeFromString(PhotoChecked.serializer(), check(ask("k"), website).bodyAsText()).said)
         assertEquals(HttpStatusCode.UnsupportedMediaType, check(ask("k", listOf(Base64.getEncoder().encodeToString("not a photo".toByteArray()))), byPhone).status)
         assertEquals(HttpStatusCode.UnsupportedMediaType, check(ask("k", List(11) { page }), byPhone).status, "past its most pages")
         // Ten are a check's (6.4.0), each no bigger than a page shrunk to what's sent ever comes to.

@@ -1,5 +1,6 @@
 package com.thomaswcode.decrastination.views
 
+import com.thomaswcode.decrastination.block.Photos
 import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.BusyBlock
 import com.thomaswcode.decrastination.core.Change
@@ -14,6 +15,7 @@ import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.data.PieceTimer
 import com.thomaswcode.decrastination.data.SlotOutcome
 import com.thomaswcode.decrastination.data.SlotRecord
+import com.thomaswcode.decrastination.data.SlotRef
 import com.thomaswcode.decrastination.enrich.MicroPlan
 import com.thomaswcode.decrastination.learn.CalendarEvent
 import com.thomaswcode.decrastination.learn.CalendarTime
@@ -27,6 +29,7 @@ import com.thomaswcode.decrastination.sync.protocol.UndoKeep
 import com.thomaswcode.decrastination.ui.DayLayout
 import com.thomaswcode.decrastination.ui.DayModel
 import com.thomaswcode.decrastination.ui.Format
+import com.thomaswcode.decrastination.ui.KeptActions
 import com.thomaswcode.decrastination.ui.MissedActions
 import com.thomaswcode.decrastination.ui.blockKey
 import com.thomaswcode.decrastination.ui.outcomeWords
@@ -191,6 +194,8 @@ object DayViews {
         answers: Map<String, String> = emptyMap(),
         /** The events an instruction of yours that isn't a quick answer says how to count: their sheets offer no answers. */
         instructed: Set<String> = emptySet(),
+        /** Whether a photo can check written work here: the server applies commands and can ask Claude (6.7.0). */
+        photos: Boolean = false,
     ): DayView {
         val model = DayModel.from(plan, date, events, records, windows, now, zone, busy)
         val today = date == plan.today
@@ -203,7 +208,7 @@ object DayViews {
             opensAt = model.opensAt,
             windows = model.windows.map { WindowView(windowName(it.window.kind), it.window.startMin, it.window.endMin) },
             allDay = model.allDay.map { EventChip(it.title.ifBlank { "(no title)" }, it.colour, eventSheet(it, answers, instructed, now, zone, writable)) },
-            blocks = placed(model.blocks.mapNotNull { block(it, date, zone, judge, micro, writable)?.let { b -> b.copy(sheet = sheetOf(it, date, plan, records, tasks, answers, instructed, micro, timer, now, zone, writable)) } }),
+            blocks = placed(model.blocks.mapNotNull { block(it, date, zone, judge, micro, writable)?.let { b -> b.copy(sheet = sheetOf(it, date, plan, records, tasks, answers, instructed, micro, timer, now, zone, writable, photos)) } }),
             unslotted = model.unslotted.map(::chip),
             done = model.done.map { PieceChip(it.label, Format.minutes(it.workedMin)) },
             load = Format.load(model.plannedMin, model.freeMin),
@@ -264,6 +269,7 @@ object DayViews {
         now: Long,
         zone: ZoneId,
         writable: Boolean,
+        photos: Boolean = false,
     ): BlockSheet? = when (val item = block.item) {
         is DayModel.Row.Planned -> item.slot.chunk?.takeIf { item.slot.kind != SlotKind.Outside }?.let { piece ->
             val task = tasks[piece.taskId]
@@ -274,9 +280,24 @@ object DayViews {
             )
             BlockSheet(
                 "piece", piece.label, lines,
-                if (writable) pieceActions(piece, plan, timer, now, date == plan.today) else emptyList(),
+                if (writable) pieceActions(piece, plan, timer, now, date == plan.today) + listOfNotNull(checkAction(piece).takeIf { photos && piece.photoCheckable }) else emptyList(),
                 piece.taskId, About(taskId = piece.taskId, taskTitle = task?.title ?: piece.title), taskSheet = task != null,
             )
+        }
+        // A slot ticked Done's (6.7.0), as the phone's (6.5.0): how it was kept, and a photo of it while it can still earn.
+        is DayModel.Row.Recorded if item.record.outcome.kept -> item.record.let { record ->
+            val task = tasks[record.taskId]
+            val can = KeptActions.of(record, task, plan.today.toString())
+            val lines = listOf(
+                "${outcomeWords(record.outcome).replaceFirstChar { it.uppercase() }}, ${Format.span(record.start, record.end, zone)}, ticked at ${Format.span(record.at, record.at, zone).substringBefore('–')}",
+                when {
+                    can.earned -> "It's earned its free time${if (record.photo) ", with a photo" else ""}."
+                    can.photo -> "Not earning yet: a photo of the work earns it, today."
+                    else -> "It doesn't earn free time now."
+                },
+            )
+            val check = Photos.pieceOf(record, task)?.takeIf { writable && photos && can.photo }?.let { TaskAction("Check with a photo", check = PhotoCheckTarget(record.taskId, record.key, it.step, SlotRef.of(record))) }
+            BlockSheet("kept", record.label, lines, listOfNotNull(check), record.taskId, About(taskId = record.taskId, taskTitle = task?.title))
         }
         is DayModel.Row.Recorded -> item.record.takeIf { it.outcome == SlotOutcome.Missed }?.let { record ->
             val task = tasks[record.taskId]
@@ -289,6 +310,7 @@ object DayViews {
             val actions = if (!writable) emptyList() else buildList {
                 item.piece?.takeIf { can.done }?.let { piece -> add(TaskAction("Done", ask = TaskAsk(TaskAsk.DONE, at = now, key = piece.key), undo = UndoKeep(piece.key, now))) }
                 if (can.allDone) add(TaskAction("All of it done", FinishOwnTask(record.taskId)))
+                item.piece?.takeIf { photos && can.photo }?.let { add(checkAction(it)) }
             }
             BlockSheet("missed", record.label, lines, actions, record.taskId, About(taskId = record.taskId, taskTitle = task?.title ?: item.piece?.title).takeIf { can.ask })
         }

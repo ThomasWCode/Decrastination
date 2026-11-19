@@ -16,6 +16,7 @@ import com.thomaswcode.decrastination.core.WindowKind
 import com.thomaswcode.decrastination.data.PieceTimer
 import com.thomaswcode.decrastination.data.SlotOutcome
 import com.thomaswcode.decrastination.data.SlotRecord
+import com.thomaswcode.decrastination.data.SlotRef
 import com.thomaswcode.decrastination.learn.CalendarEvent
 import com.thomaswcode.decrastination.learn.CalendarTime
 import com.thomaswcode.decrastination.learn.EventJudge
@@ -70,9 +71,25 @@ class DayViewTest {
 
     private val tasks = listOf(task("a", 30), task("b", 30)).associateBy { it.id }
 
-    /** Today at 17:10, the tasks and their answers given, writable or not. */
-    private fun sheets(events: List<CalendarEvent> = emptyList(), records: List<SlotRecord> = emptyList(), answers: Map<String, String> = emptyMap(), instructed: Set<String> = emptySet(), writable: Boolean = true) =
-        DayViews.of(plan(), monday, events, records, evening, Fixtures.at("2026-10-12T17:10"), LONDON, emptyList(), { EventJudge.judge(it, answers) }, emptyMap(), asOf = 5L, writable = writable, tasks = tasks, answers = answers, instructed = instructed)
+    /** Today at 17:10, the tasks and their answers given, writable or not, a photo able to check work or not. */
+    private fun sheets(events: List<CalendarEvent> = emptyList(), records: List<SlotRecord> = emptyList(), answers: Map<String, String> = emptyMap(), instructed: Set<String> = emptySet(), writable: Boolean = true, photos: Boolean = false) =
+        DayViews.of(plan(), monday, events, records, evening, Fixtures.at("2026-10-12T17:10"), LONDON, emptyList(), { EventJudge.judge(it, answers) }, emptyMap(), asOf = 5L, writable = writable, tasks = tasks, answers = answers, instructed = instructed, photos = photos)
+
+    @Test
+    fun `written work's sheet offers a photo check of its own piece where Claude can be asked, and a slot ticked Done its own while it can earn`() {
+        val piece = plan().todaySlots.first().chunk!!
+        val check = assertNotNull(sheets(photos = true).blocks.first().sheet).actions.single { it.check != null }
+        assertEquals("Check with a photo", check.label)
+        assertEquals(PhotoCheckTarget(piece.taskId, piece.key, piece.step), check.check)
+        assertTrue(assertNotNull(sheets(photos = false).blocks.first().sheet).actions.none { it.check != null })
+        assertTrue(assertNotNull(sheets(photos = true, writable = false).blocks.first().sheet).actions.isEmpty())
+        val kept = SlotRecord(date = "2026-10-12", key = piece.key, taskId = piece.taskId, kind = Kind.Homework, label = "a", plannedMin = 30, start = Fixtures.at("2026-10-12T16:00"), end = Fixtures.at("2026-10-12T16:30"), window = WindowKind.Evening, outcome = SlotOutcome.Kept, workedMin = 30, at = Fixtures.at("2026-10-12T16:31"))
+        val sheet = assertNotNull(sheets(records = listOf(kept), photos = true).blocks.single { it.kind == "record" }.sheet)
+        assertEquals("kept", sheet.kind)
+        assertEquals("Not earning yet: a photo of the work earns it, today.", sheet.lines[1])
+        assertEquals(SlotRef.of(kept), sheet.actions.single().check?.record)
+        assertTrue(assertNotNull(sheets(records = listOf(kept.copy(earned = true)), photos = true).blocks.single { it.kind == "record" }.sheet).actions.isEmpty())
+    }
 
     @Test
     fun `a piece opens its own sheet, its times and why, its buttons on its own key, its task's sheet a step away`() {
@@ -101,7 +118,7 @@ class DayViewTest {
     }
 
     @Test
-    fun `a missed slot's sheet has what MissedActions gives it, Done on its piece, and a kept one has none here yet`() {
+    fun `a missed slot's sheet has what MissedActions gives it, Done on its piece, and a kept one has its own`() {
         val piece = plan().todaySlots.first().chunk!!
         val missed = SlotRecord(date = "2026-10-12", key = piece.key, taskId = piece.taskId, kind = Kind.Homework, label = "a", plannedMin = 30, start = Fixtures.at("2026-10-12T16:00"), end = Fixtures.at("2026-10-12T16:30"), window = WindowKind.Evening, outcome = SlotOutcome.Missed, workedMin = 0, at = Fixtures.at("2026-10-12T16:30"))
         val day = sheets(records = listOf(missed))
@@ -111,7 +128,7 @@ class DayViewTest {
         assertEquals(listOf("Done"), sheet.actions.map { it.label })
         assertEquals(piece.key, sheet.actions.single().ask?.key)
         assertNotNull(sheet.about)
-        assertNull(sheets(records = listOf(missed.copy(outcome = SlotOutcome.Kept))).blocks.single { it.kind == "record" }.sheet)
+        assertEquals("kept", sheets(records = listOf(missed.copy(outcome = SlotOutcome.Kept))).blocks.single { it.kind == "record" }.sheet?.kind)
     }
 
     @Test

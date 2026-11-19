@@ -653,6 +653,7 @@ class ServerGraph(
             answers = answers,
             // An instruction of yours that isn't a quick answer says how the event counts: its sheet answers nothing, as the phone's.
             instructed = InstructionRules.eventAnswers(applied.filterNot { it.quick }).keys,
+            photos = readsPhotos,
         )
     }
 
@@ -865,7 +866,7 @@ class ServerGraph(
     fun task(id: String): TaskView? {
         val state = stores.tasks.value
         val task = state.tasks.firstOrNull { it.id == id } ?: return null
-        return TaskViews.of(task, state.tasks.associateBy { it.id }, planning.plan(), stores.settings.value, stores.instructions.value.applied, stores.felix.value.notes, clock.now(), clock.zone(), writable = mode == COMMANDS, timer = stores.session.value.timer, checks = stores.session.value.notes)
+        return TaskViews.of(task, state.tasks.associateBy { it.id }, planning.plan(), stores.settings.value, stores.instructions.value.applied, stores.felix.value.notes, clock.now(), clock.zone(), writable = mode == COMMANDS, timer = stores.session.value.timer, checks = stores.session.value.notes, photos = readsPhotos)
     }
 
     /**

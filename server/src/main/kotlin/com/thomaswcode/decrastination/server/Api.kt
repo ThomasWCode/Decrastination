@@ -446,9 +446,9 @@ private fun Route.signedInRoutes(web: Web) {
         if (!graph.keepTaskPhoto(hash, jpeg)) return@post call.respond(HttpStatusCode.BadRequest, Problem("That photo isn't the one its hash names"))
         call.respond(HttpStatusCode.NoContent)
     }
-    // A phone's, once it sends commands, as Claude's the server's to ask then (D-148): the website has no photo check.
+    // A phone's, once it sends commands, as Claude's the server's to ask then (D-148); the website's too (6.7.0), any picture it chooses,
+    // the same judge and the same earning (the owner's answer, 18 Nov).
     post("/photos/check") {
-        if (call.client !is Client.Phone) return@post call.respond(HttpStatusCode.Forbidden, Problem("A photo check is the phone's"))
         if (graph.mode != ServerGraph.COMMANDS) return@post call.respond(HttpStatusCode.Conflict, Problem("The server is mirroring the phone"))
         // By what it says it is first, as for a photo of homework.
         val length = call.request.contentLength()
@@ -459,7 +459,9 @@ private fun Route.signedInRoutes(web: Web) {
             return@post call.respond(HttpStatusCode.UnsupportedMediaType, Problem("Those aren't a check's pages"))
         }
         if (jpegs.any { it!!.size > MAX_PAGE_BYTES }) return@post call.respond(HttpStatusCode.PayloadTooLarge, Problem("A page is too big"))
-        graph.checkPhoto(ask.taskId, ask.key, ask.step, ask.takenAt, jpegs.filterNotNull(), ask.keep, ask.record)?.let { call.respond(it) } ?: call.respond(HttpStatusCode.Conflict, Problem("A photo is being checked already"))
+        // The website's taken as of when it's received: its pictures can be any, and it's the server's clock either way.
+        val takenAt = if (call.client is Client.Phone) ask.takenAt else graph.clock.now()
+        graph.checkPhoto(ask.taskId, ask.key, ask.step, takenAt, jpegs.filterNotNull(), ask.keep, ask.record)?.let { call.respond(it) } ?: call.respond(HttpStatusCode.Conflict, Problem("A photo is being checked already"))
     }
     get("/views/settings") { call.respond(graph.settings()) }
     post("/parent-code") {
