@@ -536,6 +536,8 @@ class Focus(
         val today = today(now)
         session.update { state ->
             state.copy(
+                // Its photo's award taken back with it: the work it counted can earn again.
+                notes = uncounted(state.notes, record),
                 // What its keep put in the ledger (one kept before that was on record, its minutes at the rate now), and only
                 // on its own day: yesterday's went at midnight, and today's wasn't its.
                 credit = if (record.earned && today(record.at) == today) state.credit.takeBack(today, record.earnedMin ?: Credit.forSlot(record.plannedMin, settings.value.workMinPerFreeMin)) else state.credit,
@@ -627,7 +629,17 @@ class Focus(
      * step's note, which it didn't rely on, stays as it was.
      */
     private fun counted(notes: List<CheckNote>, note: CheckNote): List<CheckNote> =
-        (if (note.passed) notes.map { if (it.taskId == note.taskId && it.scope == note.scope) it.copy(passed = true) else it } else notes) + note
+        (if (note.passed) notes.map { if (it.taskId == note.taskId && it.scope == note.scope && !it.passed) it.copy(passed = true, countedBy = note.at) else it } else notes) + note
+
+    /**
+     * [notes] with [record]'s award by a photo taken back (6.4.0): the note of the pass that earned it, and those it counted, not
+     * counted any more, so the work can earn again; another pass's, and what it counted, stay.
+     */
+    private fun uncounted(notes: List<CheckNote>, record: SlotRecord): List<CheckNote> {
+        if (!record.photo) return notes
+        val award = notes.lastOrNull { it.taskId == record.taskId && it.key == record.key && it.passed && it.countedBy == null } ?: return notes
+        return notes.map { if (it == award || (it.taskId == award.taskId && it.countedBy == award.at)) it.copy(passed = false, countedBy = null) else it }
+    }
 
     /** The notes of the tasks done or gone let go (6.4.0): at a start and daily, as a task can go without a check. */
     suspend fun tidyNotes() {

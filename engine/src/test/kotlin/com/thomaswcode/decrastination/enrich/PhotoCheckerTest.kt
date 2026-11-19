@@ -6,7 +6,10 @@ import com.thomaswcode.decrastination.Fixtures.LONDON
 import com.thomaswcode.decrastination.core.Chunk
 import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.Kind
+import com.thomaswcode.decrastination.core.Planner
+import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.Source
+import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.Why
 import com.thomaswcode.decrastination.data.CheckNote
 import java.net.SocketTimeoutException
@@ -84,6 +87,11 @@ class PhotoCheckerTest {
         assertTrue("It's part" !in PhotoChecker.context(piece.copy(part = 1, parts = 1), null, emptyList(), LONDON))
         // A named step's piece is judged by its own scope, its label, however the task's parts are numbered.
         assertTrue("It's part" !in PhotoChecker.context(piece.copy(step = "Q1", stepIndex = 0), null, emptyList(), LONDON))
+        // As the planner makes a divided task's boxes: each named "part n of m", with no place in a list of steps.
+        val boxes = Planner.plan(Planner.Input(listOf(TaskItem(id = "teams:long", source = Source.Teams, sourceId = "long", title = "A long sheet", dueAt = Fixtures.at("2026-10-20T09:00"), kind = Kind.Homework, sourceEffortMin = 150, firstSeenAt = 1, lastSeenAt = 1)), Fixtures.at("2026-10-12T16:00"), LONDON, Settings())).ordered
+        assertTrue(boxes.size > 1, "a long task in boxes")
+        assertEquals("part 1 of ${boxes.size}", boxes.first().step)
+        assertTrue("It's part 1 of ${boxes.size}: with the parts before it" in PhotoChecker.context(boxes.first(), null, emptyList(), LONDON))
         assertTrue("Earlier checks of this task, their photos not sent again (what each showed counts as shown):" in about)
         assertTrue("- Wed 18 Nov 17:05, for \"Graphs sheet, part 1 of 2\", counted in a check that passed (earned already): Pages 8 to 10, every question answered" in about)
         assertTrue("- Thu 19 Nov 18:40, for \"Graphs sheet, part 2 of 2\", not passed: Page 11, question 2 alone" in about)
