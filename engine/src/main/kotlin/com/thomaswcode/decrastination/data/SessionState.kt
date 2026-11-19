@@ -18,9 +18,32 @@ data class SessionState(
     val rewarded: List<Rewarded> = emptyList(),
     /** The timer on a piece (D-112), running or stopped by hand; none once its piece is done. Not backed up: a running timer is this phone's moment. */
     val timer: PieceTimer? = null,
+    /** What photo checks of each task saw ([CheckNote], 6.4.0), the newest last: a later check of the task counts it as shown. */
+    val notes: List<CheckNote> = emptyList(),
     /** The shape this is in ([Migration]): raised with each change of it, a migration bringing older files to it. */
-    val version: Int = 3,
+    val version: Int = 4,
 )
+
+/**
+ * What a photo check saw of a task's work (6.4.0): kept after a check that said done or not yet, as its photos are deleted, so a
+ * later check of any of the task's pieces counts it as shown. [CHECK_NOTES_KEPT] a task, the newest; a task's go when it's done or
+ * gone ([com.thomaswcode.decrastination.block.Focus.noteCheck]).
+ */
+@Serializable
+data class CheckNote(
+    val taskId: String,
+    /** The piece it was for ([com.thomaswcode.decrastination.core.Chunk.key]) and its label, as they were. */
+    val key: String,
+    val label: String,
+    /** Exactly which parts of the work its photos showed done, as the check wrote it to be relied on later. */
+    val covered: String,
+    /** Whether it passed: its piece was found done by it, so what it showed has earned once already. */
+    val passed: Boolean,
+    val at: Long,
+)
+
+/** The most notes kept of one task's checks, the newest. */
+const val CHECK_NOTES_KEPT = 8
 
 /** A timer on a piece (D-112): the owner's word they're on it, running from [startedAt] for [minutes]; stopped by hand, kept with [stoppedAt] till the next Start, so Felix's slot-over message waits its 30 minutes from the stop. */
 @Serializable
