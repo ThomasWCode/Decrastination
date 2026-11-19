@@ -123,8 +123,9 @@ class PhotoChecker(private val client: AnthropicClient, val model: String = Clau
          */
         fun context(piece: Chunk, task: TaskItem?, notes: List<CheckNote> = emptyList(), zone: ZoneId = ZoneId.systemDefault()): String = buildString {
             appendLine("The piece of work: ${piece.label}, ${piece.minutes} min")
-            // A part's share of the task, so a first sitting's half passes on its half (your answer, 19 Nov).
-            if (piece.parts > 1) appendLine("It's part ${piece.part} of ${piece.parts}: with the parts before it, ${share(piece.part, piece.parts)} of the task's work (${piece.taskMinutes} min in all)")
+            // A part's share of the task, so a first sitting's half passes on its half (your answer, 19 Nov): only where the task's
+            // divided with no step named, as parts are numbered task-wide and a named step, or its sitting, is its own scope.
+            if (piece.parts > 1 && piece.step == null) appendLine("It's part ${piece.part} of ${piece.parts}: with the parts before it, ${share(piece.part, piece.parts)} of the task's work (${piece.taskMinutes} min in all)")
             if (task != null) {
                 appendLine("Task: ${task.title}")
                 task.className?.let { appendLine("Subject: $it") }

@@ -82,6 +82,8 @@ class PhotoCheckerTest {
         assertTrue("part 1 of 2: with the parts before it, about half" in PhotoChecker.context(piece.copy(part = 1), null, emptyList(), LONDON))
         assertEquals(listOf("about a third", "about two thirds", "all", "about 40%"), listOf(PhotoChecker.share(1, 3), PhotoChecker.share(2, 3), PhotoChecker.share(3, 3), PhotoChecker.share(2, 5)))
         assertTrue("It's part" !in PhotoChecker.context(piece.copy(part = 1, parts = 1), null, emptyList(), LONDON))
+        // A named step's piece is judged by its own scope, its label, however the task's parts are numbered.
+        assertTrue("It's part" !in PhotoChecker.context(piece.copy(step = "Q1", stepIndex = 0), null, emptyList(), LONDON))
         assertTrue("Earlier checks of this task, their photos not sent again (what each showed counts as shown):" in about)
         assertTrue("- Wed 18 Nov 17:05, for \"Graphs sheet, part 1 of 2\", counted in a check that passed (earned already): Pages 8 to 10, every question answered" in about)
         assertTrue("- Thu 19 Nov 18:40, for \"Graphs sheet, part 2 of 2\", not passed: Page 11, question 2 alone" in about)
