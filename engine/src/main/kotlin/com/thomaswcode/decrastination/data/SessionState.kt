@@ -72,6 +72,8 @@ data class CheckNote(
      */
     val passed: Boolean,
     val at: Long,
+    /** Counted by another check's pass, not its own: that pass's note's [at], so its award taken back takes this back too. */
+    val countedBy: Long? = null,
 ) {
     /**
      * What a pass of its check counts with it: its step, by its place in the task's list, whichever sitting of it it was; or "-1",

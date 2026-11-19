@@ -110,7 +110,8 @@
       "label": "History essay: causes of the war: Read the two sources",
       "covered": "Notes on both sources, a page each, written out in full",
       "passed": true,
-      "at": 1792312260000
+      "at": 1792312260000,
+      "countedBy": 1792314000000
     },
     {
       "taskId": "teams:as-essay",
@@ -118,7 +119,17 @@
       "label": "History essay: causes of the war: Plan the essay",
       "covered": "The plan's first half: an introduction and two of its four paragraphs",
       "passed": false,
-      "at": 1792313940000
+      "at": 1792313940000,
+      "countedBy": null
+    },
+    {
+      "taskId": "teams:as-essay",
+      "key": "teams:as-essay#0",
+      "label": "History essay: causes of the war: Read the two sources",
+      "covered": "The second source, its notes finished",
+      "passed": true,
+      "at": 1792314000000,
+      "countedBy": null
     }
   ],
   "version": 4
