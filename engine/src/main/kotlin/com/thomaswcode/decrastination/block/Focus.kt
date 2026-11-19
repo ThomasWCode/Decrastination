@@ -621,11 +621,13 @@ class Focus(
     }
 
     /**
-     * [notes] with [note] after them; where it passed, every earlier note of its task counted with it, as the check that passed was
-     * told them all and relied on them: what they showed has earned too, and can't be shown again as new (6.4.0).
+     * [notes] with [note] after them; where it passed, the earlier notes of its scope counted with it, as the check that passed relied
+     * on them: what they showed has earned too, and can't be shown again as new (6.4.0). Its scope is its step, any of its sittings, or,
+     * for a task divided with no step named, every part of it ([CheckNote.scope]): a named step is judged by its own work, so another
+     * step's note, which it didn't rely on, stays as it was.
      */
     private fun counted(notes: List<CheckNote>, note: CheckNote): List<CheckNote> =
-        (if (note.passed) notes.map { if (it.taskId == note.taskId) it.copy(passed = true) else it } else notes) + note
+        (if (note.passed) notes.map { if (it.taskId == note.taskId && it.scope == note.scope) it.copy(passed = true) else it } else notes) + note
 
     /** The notes of the tasks done or gone let go (6.4.0): at a start and daily, as a task can go without a check. */
     suspend fun tidyNotes() {

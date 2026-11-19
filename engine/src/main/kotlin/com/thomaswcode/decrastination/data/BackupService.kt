@@ -399,7 +399,7 @@ class BackupService(
             cancelFelix()
         }
         // What photo checks saw (6.4.0), as everything learned goes.
-        if (all) stores.replace(stores.session) { s -> s.copy(notes = s.notes - whole.checkNotes.toSet()) }
+        if (all) stores.replace(stores.session) { s -> s.copy(notes = whole.checkNotes.mapTo(HashSet()) { it.id }.let { copied -> s.notes.filterNot { it.id in copied } }) }
         if (all || what == Reset.Instructions) {
             val copied = whole.instructions.mapTo(HashSet()) { it.id }
             stores.replace(stores.instructions) { i -> InstructionState(instructions = i.instructions.filterNot { it.id in copied }) }

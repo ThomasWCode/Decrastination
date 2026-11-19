@@ -116,6 +116,15 @@ class FocusTest {
     }
 
     @Test
+    fun `a named step's pass counts its own notes, its sittings', and no other step's, which it didn't rely on`() = runTest {
+        tasks.update { it.copy(tasks = listOf(task("sheet"))) }
+        focus.noteCheck(CheckNote("teams:sheet", "teams:sheet#0", "sheet: Q1-5", "Q1-5, unclear", passed = false, at = clock.time))
+        focus.noteCheck(CheckNote("teams:sheet", "teams:sheet#1#20", "sheet: Q6-10", "Q6-7", passed = false, at = clock.time + 1))
+        focus.photoChecked("teams:sheet", "Q6-10", 40, 1, "teams:sheet#1", clock.time, note = CheckNote("teams:sheet", "teams:sheet#1", "sheet: Q6-10", "Q8-10", passed = true, at = clock.time + 2))
+        assertEquals(listOf("Q1-5, unclear" to false, "Q6-7" to true, "Q8-10" to true), focus.notesOf("teams:sheet").map { it.covered to it.passed })
+    }
+
+    @Test
     fun `confirmed work earns time, reading emails doesn't`() = runTest {
         val homework = task("hw", effort = 45).copy(status = Status.Done, doneAt = clock.time)
         val email = task("email", kind = Kind.Info, effort = 2).copy(status = Status.Done, doneAt = clock.time)
