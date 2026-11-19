@@ -26,6 +26,13 @@ data class CalendarRead(
     fun time(applied: List<Instruction>, now: Long, zone: ZoneId): EventJudge.Time =
         EventJudge.time(events, answers + InstructionRules.eventAnswers(applied), zone, askUntil = now + CalendarTime.ASK_AHEAD_MS).copy(read = (from to to).takeIf { to > 0 })
 
+    /**
+     * Whether it says more than [sent], the read last sent, did: its events, your answers or how far it reaches. Not when the read
+     * began, which moves with every read, so a day's reads each sent the whole calendar, nearly all of the commands on record
+     * (6.3.3). How far it reaches moves each midnight, so it's sent at least once a day, its start with it.
+     */
+    fun news(sent: CalendarRead?): Boolean = sent == null || copy(from = 0) != sent.copy(from = 0)
+
     companion object {
         /** Its name among the server's stores. */
         const val NAME = "calendar-read.json"
