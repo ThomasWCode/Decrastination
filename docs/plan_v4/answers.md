@@ -709,3 +709,33 @@ R2 was on course to pass its free 10 GB with no photo in it: each write of a sto
 #### Not built
 
 The times kept in a store of their own, so that a read finding nothing new doesn't write `tasks.json` at all: weighed once these two are measured on the box (`box_churn.py`, `box_causes.py`, `r2_size.py`), as it changes a stored shape on the phone and the server.
+
+### Ten pages a check, and what earlier checks saw (6.4.0, 19 Nov)
+
+A check took three pages and knew nothing of the one before: its pages were deleted whatever it said, and its answer's `seen` went nowhere, so pages 8 to 10 were refused for want of 11 and 12, and 11 and 12 for want of 8 to 10. → D-155.
+
+**Q152. How many pages a check?** (18 Nov.) Offered: six, ten, twenty. **Your answer: ten.**
+
+**Q153. What's kept from an earlier check?** Offered: Claude's note of what it saw, the photos deleted as now; the photos themselves, sent again; both, the photos for a day. **Your answer: Claude's note.**
+
+**Q154. Whose checks count?** Offered: the whole task's, each note with its piece and whether it passed; the same piece's alone. **Your answer: the whole task's.**
+
+#### Decided without asking
+
+1. **The notes are kept in `session.json`**, written by `Focus`, its owner, at `Photos`' asking: a small store, written about 50 times a day on the server. Not on the task, as every sync's merge would have to carry them.
+2. **Eight notes a task**, the newest, gone when the task's done or gone (at each note kept, at a start while the phone mirrors, and daily on the server).
+3. **Nothing earns twice.** A note that passed still counts as shown, but where the task has one, a later check must show work no passed note covers: the answer's own field (`fresh`), held by the app, so the rule isn't the prompt's alone.
+4. **A note is kept only where the pages showed some of the work** (`covered` not empty): a check of another task's work, or of blank pages, leaves none, as it showed nothing to rely on.
+5. **The cap's dearest call stays $1.35.** A check's text is cut to a bound of its own (`PhotoChecker.MAX_TEXT`, 29 000 characters), the room ten pictures leave, each costed at its dearest shape, a square of 1 568 pixels a side, as one from the gallery or a browser can be any shape. `Pricing.PROMPT_TOKENS` keeps its 11 000: it's what a call's instructions may be, and the pictures are counted against the text instead.
+6. **A page stays 1 568 pixels.** Handwriting is read at that size, at half the tokens of the model's largest.
+7. **The notes are in the backups** (format 12, a part of their own), as with the pages deleted they're the only record of what was shown; a reset of everything learned takes them, its copy keeping them.
+8. **A page taken again** goes to a file of its own first, so a retake that isn't taken leaves the page before as it was.
+9. **The server's bounds**, from real pages measured: seven photos from the phone's camera, 3 000 by 4 000 and about 3.7 MB each, came to 183 to 290 KB shrunk as the app sends them, so a page may be 2 MB and a check 27 MB; `POST /commands`, which had no bound, takes 32 MB, by its stated length, as the photos' routes do.
+
+#### Judged on real pages
+
+Seven real pages (five of one piece of written homework, one of another subject's work, one blank), sent as the app sends them and judged by the app's own rule, each case run twice, $0.94 in all: the piece whole in one check passed; split across two checks, the first said not yet and the second passed with the first's note; split with a page never shown, the second named the missing page; another subject's work and a blank page among good ones didn't pass; a second sitting that sent a page a passed check had shown was refused as nothing new. The prompt before, where it could be asked at all (three pages, no notes), answered the same on the cases it could take. One wording was changed after: told to say "nothing" where the pages showed none of the work, it wrote the word, so it's told to leave the field empty, and did, three times out of three.
+
+#### Not built
+
+A piece that's a part of a task ("part 1 of 2") is judged against the whole task, as before: a first sitting that shows its half doesn't pass, and the second, shown the rest, does. The prompt doesn't know what share of the work a part is.

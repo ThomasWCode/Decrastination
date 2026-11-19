@@ -10,7 +10,7 @@ What's kept where, and how each change to stored data is made safely on a phone 
 | `instructions.json` | your changes and Felix's, read into values laid on the tasks (`TaskItem.mine`), each with who set it | Instructions | at each change |
 | `settings.json` | the settings, a change still waiting among them | Protection | on a change |
 | `runtime.json` | the daily runs, the last backup, Teams' auto-sync, the files found unreadable, the notifier's counts and held list | small owners | rarely |
-| `session.json` | credit, today's slots, slots being kept, photo checks under way, completions rewarded | Focus | every half minute |
+| `session.json` | credit, today's slots, slots being kept, photo checks under way, completions rewarded, what photo checks saw | Focus | every half minute |
 | `protection.json` | changes waiting, the override, the code's lock, the uptime mark | Protection | on a change |
 | `device.json` | what's only this phone's: the device admin's arming, the watchdog's finding, forced blocking | Protection and the watchdog | on a change |
 | `sync.json` | this phone's pairing with the server, what's been sent it, the id Firebase reaches it by (5.11.0) | the replica | at each send, and as Firebase registers the phone |
@@ -65,6 +65,7 @@ Each store's migrations are listed in `data/Stores.kt`; the shapes they came fro
 - **4.3.5** (`StepOrderMigration`): `anyOrder` on `SubStep` and `OwnStep`; `tasks.json`, `instructions.json`, the chat and the archive raised; the fixture `fixtures/stores/2026-10-22-4.3.5`.
 - **4.3.18** (`CreditMigration`): a kept slot's record carries the credit it earned, so an Undo gives back what was earned, not the rate's value now; `log.json` and `session.json` raised.
 - **4.4.0** (`TimerMigration`): `session.json` raised for the timer on a piece (`SessionState.timer`, D-112), none in a file from before; the fixture `fixtures/stores/2026-10-26-4.4.0`.
+- **6.4.0** (`CheckNotesMigration`): `session.json` raised to 4 for what photo checks saw (`SessionState.notes`, D-155), none in a file from before; a backup's part of its own (`checkNotes`, format 12), none in one from before; the fixture `fixtures/stores/2026-11-19-6.4.0`.
 - **4.5.1** (`OnlyMigration`): a change of a new type, `DayOnly`, with what else its day lets in (`Change.alsoAllow`, D-115): `instructions.json` at version 4, `chat.json` and the archive's months raised (8 and 7), nothing migrated; the fixture `fixtures/stores/2026-10-27-4.5.1`.
 - **4.5.2** (`OutsideMigration`): three changes of new types for a day's breaks outside, `OutsideAt`, `NoOutside` and `OutsideAdded`, with the break's own time (`Change.outsideMin`, -1 for none, D-116): `instructions.json` at version 5, `chat.json` and the archive's months raised (9 and 8), nothing migrated; the fixture `fixtures/stores/2026-10-27-4.5.2`.
 - **4.6.0** (`ZoomMigration`): `settings.json` at version 3, the Day grid's zoom (`Settings.dayHourDp`, the height of an hour as last pinched, 40 to 120 dp), none in a file from before, nothing migrated; the fixture `fixtures/stores/2026-10-27-4.6.0`.
