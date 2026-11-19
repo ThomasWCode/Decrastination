@@ -44,7 +44,11 @@ class SqliteBackend(private val db: Database, private val clock: () -> Long = Sy
     @Volatile
     var written: (Long) -> Unit = {}
 
-    /** [text] kept as [name], with its history, whatever [writable] says: a seed's. */
+    /**
+     * [text] kept as [name], with its history, whatever [writable] says: a seed's. The history gains a row only when what the store
+     * holds has changed since its last ([TimesAlone]): a write that moves a sync's times alone writes the store's own row, so every
+     * time is as true as now, and adds nothing to what a store that can't be read is brought back from.
+     */
     fun keep(name: String, version: Int, text: String, cause: String = this.cause) {
         val revision = db.transaction { c ->
             val revision = db.revision()
@@ -60,7 +64,8 @@ class SqliteBackend(private val db: Database, private val clock: () -> Long = Sy
                 q.setLong(5, now)
                 q.executeUpdate()
             }
-            history(c, revision, name, version, text, cause, now)
+            val last = lastKept(c, name)
+            if (last == null || last.first != version || TimesAlone.differ(name, last.second, text)) history(c, revision, name, version, text, cause, now)
             revision
         }
         if (!db.inACommand && db.notNested) written(revision)
@@ -191,6 +196,13 @@ class SqliteBackend(private val db: Database, private val clock: () -> Long = Sy
             }
         }
     }
+
+    /** [name]'s newest row of history, its version and its text; a copy set aside as unreadable among them, at version 0. */
+    private fun lastKept(c: Connection, name: String): Pair<Int, String>? =
+        c.prepareStatement("SELECT version, json FROM store_history WHERE name = ? ORDER BY revision DESC LIMIT 1").use { q ->
+            q.setString(1, name)
+            q.executeQuery().use { if (it.next()) it.getInt(1) to it.getString(2) else null }
+        }
 
     private fun history(c: Connection, revision: Long, name: String, version: Int, text: String, cause: String, at: Long) {
         c.prepareStatement("INSERT INTO store_history(revision, name, version, json, cause, at) VALUES(?, ?, ?, ?, ?, ?)").use { q ->
