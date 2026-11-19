@@ -18,6 +18,7 @@ import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.core.TaskItem
+import com.thomaswcode.decrastination.data.CheckNote
 import com.thomaswcode.decrastination.data.PieceTimer
 import com.thomaswcode.decrastination.sync.protocol.Action
 import com.thomaswcode.decrastination.sync.protocol.AddOwnChange
@@ -65,6 +66,8 @@ data class TaskView(
     /** The changes in use on it, as you made them. */
     val instructions: List<String>,
     val notes: List<NoteLine>,
+    /** *Shown so far*: what photo checks of it saw, newest first (6.4.0). */
+    val shown: List<String> = emptyList(),
     val actions: List<TaskAction>,
     /** Whether a note can be added: an open task's. */
     val notable: Boolean,
@@ -124,7 +127,7 @@ object TaskViews {
     private const val MOVE_DAYS = 14L
 
     /** [task]'s sheet in [plan] at [now], with what's in use on it. [writable]: the server applies commands, so it can be changed here. */
-    fun of(task: TaskItem, byId: Map<String, TaskItem>, plan: Plan, settings: Settings, applied: List<Instruction>, notes: List<Note>, now: Long, zone: ZoneId, writable: Boolean, timer: PieceTimer? = null): TaskView {
+    fun of(task: TaskItem, byId: Map<String, TaskItem>, plan: Plan, settings: Settings, applied: List<Instruction>, notes: List<Note>, now: Long, zone: ZoneId, writable: Boolean, timer: PieceTimer? = null, checks: List<CheckNote> = emptyList()): TaskView {
         val own = task.source == Source.Own
         val changeable = writable && task.isOpen && !task.derived
         val next = TaskSheetModel.next(plan, task.id).takeIf { task.isOpen }
@@ -178,6 +181,7 @@ object TaskViews {
                 val delete = TaskAction("Delete", DeleteNote(note.id), confirm = note.every?.let { "Delete the note for $it?" }, detail = note.every?.let { "It goes from every task it's for, not only this one." })
                 NoteLine(note.line, delete.takeIf { writable })
             },
+            shown = TaskSheetModel.shown(checks.filter { it.taskId == task.id }, zone),
             actions = actions,
             notable = writable && task.isOpen,
             edit = if (writable && own && task.isOpen) OwnTaskEdit(task.sourceId, OwnTaskRules.draftOf(task)) else null,

@@ -9,7 +9,9 @@ import com.thomaswcode.decrastination.core.Notes
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Planner
 import com.thomaswcode.decrastination.core.TaskItem
+import com.thomaswcode.decrastination.data.CheckNote
 import com.thomaswcode.decrastination.sources.gmail.GmailThreads
+import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -24,6 +26,17 @@ object TaskSheetModel {
 
     private val WEEKDAY = DateTimeFormatter.ofPattern("EEE", Locale.UK)
     private val DATE = DateTimeFormatter.ofPattern("EEE d MMM", Locale.UK)
+
+    private val CHECKED = DateTimeFormatter.ofPattern("EEE d MMM HH:mm", Locale.UK)
+
+    /**
+     * *Shown so far* (6.4.0): what photo checks of the task saw, [notes] of it, newest first, each with when, its piece and whether
+     * it passed, so what's still wanted can be seen before the camera's out.
+     */
+    fun shown(notes: List<CheckNote>, zone: ZoneId): List<String> = notes.sortedByDescending { it.at }.map { note ->
+        val at = Instant.ofEpochMilli(note.at).atZone(zone).format(CHECKED)
+        "$at, ${note.label}, ${if (note.passed) "passed" else "not yet"}: ${note.covered}"
+    }
 
     /** [taskId]'s pieces in [plan], soonest first, each with its slot's times where it has one, and why. */
     fun planned(plan: Plan, taskId: String, zone: ZoneId): List<Planned> = plan.buckets.flatMap { bucket ->

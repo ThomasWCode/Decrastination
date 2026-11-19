@@ -269,6 +269,16 @@ export function TaskSheet({ id, form, close }: { id: string; form: OwnTaskFormVi
               </ul>
             </section>
           ) : null}
+          {task.shown && task.shown.length > 0 ? (
+            <section>
+              <h3>Shown so far</h3>
+              <ul>
+                {task.shown.map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
           {task.instructions.length > 0 ? (
             <section>
               <h3>Your changes</h3>

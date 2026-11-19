@@ -400,6 +400,8 @@ export interface TaskView {
   planned: string[];
   instructions: string[];
   notes: NoteLine[];
+  /** What photo checks of it saw, newest first (6.4.0). */
+  shown?: string[];
   actions: TaskAction[];
   notable: boolean;
   edit?: OwnTaskEdit | null;
