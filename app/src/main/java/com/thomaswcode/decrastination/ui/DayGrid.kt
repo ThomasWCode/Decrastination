@@ -106,6 +106,8 @@ internal class DayActions(
     val onDrop: () -> Unit,
     /** A missed slot tapped: its sheet. */
     val onMissed: (SlotRecord) -> Unit,
+    /** A slot ticked *Done* tapped: its sheet (6.5.0). */
+    val onKept: (SlotRecord) -> Unit,
     /** Whether a missed slot's sheet has a Done just now ([MissedActions]), which TalkBack offers on its block too. */
     val canKeep: (DayModel.Row.Recorded) -> Boolean,
 )
@@ -460,7 +462,7 @@ private fun EventBlock(event: CalendarEvent, judgement: EventJudge.Judgement, as
 
 /**
  * A slot on record: kept, grey, rimmed in the outline (its grey is the school band's by night) and struck through; missed,
- * outlined and worded in the error colour, its sheet a tap away.
+ * outlined and worded in the error colour. Either's sheet is a tap away (a kept one's from 6.5.0).
  */
 @Composable
 private fun RecordBlock(item: DayModel.Row.Recorded, zone: ZoneId, actions: DayActions, fit: (String) -> String) {
@@ -476,7 +478,7 @@ private fun RecordBlock(item: DayModel.Row.Recorded, zone: ZoneId, actions: DayA
                     Modifier.semantics { if (keeps != null) customActions = listOf(CustomAccessibilityAction("Done") { actions.onDone(keeps); true }) }
                         .clickable { actions.onMissed(record) }
                 } else {
-                    Modifier
+                    Modifier.clickable { actions.onKept(record) }
                 },
             )
             .padding(horizontal = 6.dp, vertical = 2.dp),

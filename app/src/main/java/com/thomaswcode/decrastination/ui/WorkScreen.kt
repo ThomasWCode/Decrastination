@@ -108,9 +108,13 @@ fun WorkScreen(graph: AppGraph, activity: Activity, opening: String? = null, onO
     val reading = photoReading?.busy == true
     LaunchedEffect(photoReading) { photoReading?.let { p -> said = if (p.busy) "Reading the photo…" else p.why } }
     val homework = remember { File(activity.cacheDir, "photos/homework.jpg").also { it.parentFile?.mkdirs() } }
-    val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { taken ->
-        if (taken) graph.photos.readPhotoOf(homework) else homework.delete()
-    }
+    // From the camera or the gallery (6.5.0).
+    val picture = rememberPicture(activity, homework) { taken -> if (taken) graph.photos.readPhotoOf(homework) else homework.delete() }
+    // The camera button's menu (6.5.0): what the photo's for, then where it comes from.
+    var cameraMenu by rememberSaveable { mutableStateOf(false) }
+    var readingFrom by rememberSaveable { mutableStateOf(false) }
+    // A task a photo of the work is being added to, from the menu, by its id.
+    var photoForTask by rememberSaveable { mutableStateOf<String?>(null) }
     // The screen's camera, for a photo of the work from a task's sheet (UI-09); what it said, about which task.
     var saidAbout by rememberSaveable { mutableStateOf<String?>(null) }
     val photo = rememberPhotoCheck(graph, activity, plan) { taskId, text ->
@@ -233,8 +237,8 @@ fun WorkScreen(graph: AppGraph, activity: Activity, opening: String? = null, onO
             FelixFab(activity)
             // Or photograph it (NF-01), once Claude is on to read it.
             if (settings.aiEnabled && settings.aiKeyActive) {
-                SmallFloatingActionButton(onClick = { if (!reading) camera.launch(FileProvider.getUriForFile(activity, "${activity.packageName}.photos", homework)) }) {
-                    Icon(painterResource(R.drawable.ic_camera), contentDescription = "Photograph homework")
+                SmallFloatingActionButton(onClick = { if (!reading) cameraMenu = true }) {
+                    Icon(painterResource(R.drawable.ic_camera), contentDescription = "A photo: new tasks, a check, or a task's")
                 }
             }
             ExtendedFloatingActionButton(
@@ -244,6 +248,25 @@ fun WorkScreen(graph: AppGraph, activity: Activity, opening: String? = null, onO
             )
         }
     }
+    if (cameraMenu) {
+        CameraMenu(graph, plan, state.tasks, now, photo, onNewTasks = {
+            cameraMenu = false
+            readingFrom = true
+        }, onTask = { id ->
+            cameraMenu = false
+            photoForTask = id
+        }) { cameraMenu = false }
+    }
+    if (readingFrom) {
+        CameraOrGallery("New tasks from a photo", "Claude reads the homework into tasks of your own to check.", onCamera = {
+            readingFrom = false
+            picture.camera()
+        }, onGallery = {
+            readingFrom = false
+            picture.gallery()
+        }, onDismiss = { readingFrom = false })
+    }
+    photoForTask?.let { id -> TaskPhoto(graph, activity, id, say = { said = it }) { photoForTask = null } }
     sheetFor?.let { id -> TaskSheetHost(graph, activity, id, plan, photo, said.takeIf { saidAbout == id }) { sheetFor = null } }
     if (making) OwnTaskForm(graph, editing = null) { making = false }
     photoReading?.takeIf { !it.busy }?.let { p -> p.reading?.let { got -> p.jpeg?.let { jpeg -> PhotoTasksSheet(graph, got, jpeg) { graph.photos.photoReading.value = null } } } }

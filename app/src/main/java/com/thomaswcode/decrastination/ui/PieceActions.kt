@@ -2,8 +2,10 @@ package com.thomaswcode.decrastination.ui
 
 import android.app.Activity
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.material3.AlertDialog
@@ -39,40 +41,63 @@ import com.thomaswcode.decrastination.core.Planner
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.data.PieceTimer
+import com.thomaswcode.decrastination.data.SlotRef
 import com.thomaswcode.decrastination.data.SyncState
 import com.thomaswcode.decrastination.enrich.PhotoChecker
 import com.thomaswcode.decrastination.sync.protocol.FinishOwnTask
 import com.thomaswcode.decrastination.sync.protocol.KeepSlot
 import java.io.File
 import kotlin.math.roundToInt
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * The photo check of written work (Q16) for a screen showing pieces of the plan: one camera for the
  * screen, whichever piece it's for. [available]: Claude is on with its key. [checking]: a photo is
  * being checked, meanwhile no session is started, as both would count the piece.
  */
-class PhotoCheck(val available: Boolean, val checking: Boolean, val take: (Chunk) -> Unit)
+class PhotoCheck(val available: Boolean, val checking: Boolean, private val start: (Chunk, SlotRef?) -> Unit) {
+    /** [piece] checked with photos of its work; with [record], the kept slot it stands for, from that slot's sheet (6.5.0). */
+    fun take(piece: Chunk, record: SlotRef? = null) = start(piece, record)
+}
 
 /**
  * A piece of the plan being photographed: its task, its step's place and name (or "part 1 of 2"),
  * and which of the step's sittings it is ([after], as [com.thomaswcode.decrastination.core.Sitting.after]);
  * the pages taken so far (AI-17), and when the first was: a slot of its key kept before then isn't
- * the one the photos show.
+ * the one the photos show. [keep]: its box unticked, its pages kept with the task (6.5.0); [record], a kept slot's check's slot.
  */
-private data class PhotoPiece(val taskId: String, val stepIndex: Int?, val step: String?, val pages: Int = 0, val takenAt: Long? = null, val after: Int? = null)
+private data class PhotoPiece(
+    val taskId: String,
+    val stepIndex: Int?,
+    val step: String?,
+    val pages: Int = 0,
+    val takenAt: Long? = null,
+    val after: Int? = null,
+    val keep: Boolean = false,
+    val record: SlotRef? = null,
+)
 
 private val PIECE = Saver<PhotoPiece?, ArrayList<String?>>(
-    save = { p -> p?.let { arrayListOf(it.taskId, it.stepIndex?.toString(), it.step, it.pages.toString(), it.takenAt?.toString(), it.after?.toString()) } },
-    restore = { saved -> PhotoPiece(saved[0]!!, saved[1]?.toInt(), saved[2], saved.getOrNull(3)?.toInt() ?: 0, saved.getOrNull(4)?.toLongOrNull(), saved.getOrNull(5)?.toIntOrNull()) },
+    save = { p ->
+        p?.let {
+            arrayListOf(it.taskId, it.stepIndex?.toString(), it.step, it.pages.toString(), it.takenAt?.toString(), it.after?.toString(), it.keep.toString(), it.record?.key, it.record?.start?.toString(), it.record?.at?.toString())
+        }
+    },
+    restore = { saved ->
+        val record = saved.getOrNull(7)?.let { key -> SlotRef(key, saved[8]!!.toLong(), saved[9]!!.toLong()) }
+        PhotoPiece(saved[0]!!, saved[1]?.toInt(), saved[2], saved.getOrNull(3)?.toInt() ?: 0, saved.getOrNull(4)?.toLongOrNull(), saved.getOrNull(5)?.toIntOrNull(), saved.getOrNull(6) == "true", record)
+    },
 )
 
 /**
- * The screen's photo check: a page, then "Add another page?", up to [PhotoChecker.MAX_PAGES] in one
- * check (AI-17), the last one taken again where it came out wrong (6.4.0). The piece being photographed, with its pages so far, is kept through the screen
+ * The screen's photo check: *Camera* or *Gallery* and the tick box first (6.5.0), then a page, then "Add another page?", up to
+ * [PhotoChecker.MAX_PAGES] in one check (AI-17), the last one taken again where it came out wrong (6.4.0), more from either, as many
+ * as are left from the gallery at once. The piece being photographed, with its pages so far, is kept through the screen
  * being made again while the camera is open (a turn of the phone, Android needing the memory), and
- * found again in [plan] when the photos are checked (BUG-P2-011). [say] gives how it went, and for
+ * found again in [plan] when the photos are checked (BUG-P2-011), or a kept slot's in the record. [say] gives how it went, and for
  * which task.
  */
 @Composable
@@ -85,10 +110,13 @@ fun rememberPhotoCheck(graph: AppGraph, activity: Activity, plan: Plan, say: (ta
     val again = File(dir, "check-again.jpg")
     fun uriOf(file: File) = FileProvider.getUriForFile(activity, "${activity.packageName}.photos", file)
     var photoFor by rememberSaveable(stateSaver = PIECE) { mutableStateOf<PhotoPiece?>(null) }
+    // Asked first: the camera or the gallery, and the tick box.
+    var choosing by rememberSaveable { mutableStateOf(false) }
     // Asked after a page: another, the last again, or check those taken.
     var asking by rememberSaveable { mutableStateOf(false) }
     // The camera's open for the last page again.
     var retaking by rememberSaveable { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
     // App-wide, not this screen's: a check runs on when the screen goes (a tab changed), and its
     // outcome is shown on whichever screen is there, or the next.
     val running by PhotoChecks.running.collectAsStateWithLifecycle()
@@ -98,25 +126,39 @@ fun rememberPhotoCheck(graph: AppGraph, activity: Activity, plan: Plan, say: (ta
         PhotoChecks.unseen.value = null
         say(taskId, text)
     }
-    /** The pages taken checked together, the piece found again in the plan as it is now. */
+    /**
+     * The pages taken checked together, the piece found again in the plan as it is now; a kept slot's, its slot in the record, the
+     * check told its label and minutes with its task, as the piece left the plan when it was kept.
+     */
     fun check(wanted: PhotoPiece) {
         photoFor = null
         val pages = (1..wanted.pages).map(::page)
-        val piece = plan.chunksOf(wanted.taskId).firstOrNull { it.stepIndex == wanted.stepIndex && it.step == wanted.step && it.sitting?.after == wanted.after }
+        val record = wanted.record
+        val piece = if (record != null) {
+            graph.stores.log.value.slots.lastOrNull { record.names(it) }?.let { slot -> Photos.pieceOf(slot, graph.tasks.value.tasks.firstOrNull { it.id == wanted.taskId }) }
+        } else {
+            plan.chunksOf(wanted.taskId).firstOrNull { it.stepIndex == wanted.stepIndex && it.step == wanted.step && it.sitting?.after == wanted.after }
+        }
         if (piece == null || !checkable) {
             pages.forEach { it.delete() }
-            if (piece == null) say(wanted.taskId, Photos.PIECE_CHANGED)
+            if (piece == null) say(wanted.taskId, if (record != null) Photos.SLOT_GONE else Photos.PIECE_CHANGED)
             return
         }
         say(piece.taskId, if (pages.size == 1) "Checking the photo…" else "Checking the ${pages.size} pages…")
         PhotoChecks.running.value = piece.taskId
         graph.scope.launch {
             try {
-                PhotoChecks.unseen.value = piece.taskId to graph.photos.check(pages, piece, takenAt = wanted.takenAt ?: graph.clock.now())
+                PhotoChecks.unseen.value = piece.taskId to graph.photos.check(pages, piece, takenAt = wanted.takenAt ?: graph.clock.now(), keep = wanted.keep, record = record)
             } finally {
                 PhotoChecks.running.value = null
             }
         }
+    }
+    /** [wanted] with [added] more pages: checked at the most a check takes, else asked again. */
+    fun added(wanted: PhotoPiece, added: Int) {
+        val more = wanted.copy(pages = wanted.pages + added, takenAt = wanted.takenAt ?: graph.clock.now())
+        photoFor = more
+        if (more.pages >= PhotoChecker.MAX_PAGES) check(more) else asking = true
     }
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { taken ->
         val wanted = photoFor ?: return@rememberLauncherForActivityResult
@@ -136,12 +178,45 @@ fun rememberPhotoCheck(graph: AppGraph, activity: Activity, plan: Plan, say: (ta
             }
             // That page not taken: those before it are checked.
             !taken -> check(wanted)
-            else -> {
-                val more = wanted.copy(pages = wanted.pages + 1, takenAt = wanted.takenAt ?: graph.clock.now())
-                photoFor = more
-                if (more.pages >= PhotoChecker.MAX_PAGES) check(more) else asking = true
-            }
+            else -> added(wanted, 1)
         }
+    }
+    // As many pictures as are left of a check's pages, picked at once (6.5.0), each copied in as a page.
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(PhotoChecker.MAX_PAGES)) { picked ->
+        val wanted = photoFor ?: return@rememberLauncherForActivityResult
+        if (picked.isEmpty()) {
+            if (wanted.pages == 0) photoFor = null else asking = true
+            return@rememberLauncherForActivityResult
+        }
+        scope.launch {
+            val room = picked.take(PhotoChecker.MAX_PAGES - wanted.pages)
+            val copied = withContext(Dispatchers.IO) { room.withIndex().count { (i, uri) -> copyPicked(activity, uri, page(wanted.pages + 1 + i)) } }
+            if (copied < room.size) say(wanted.taskId, "A picture couldn't be read: pick it again, or take it with the camera.")
+            else if (picked.size > room.size) say(wanted.taskId, "Only ${room.size} more fit in one check.")
+            // Copied in order: one that couldn't be read leaves the rest out, as a page missing could be the one that isn't done.
+            val good = (0 until room.size).takeWhile { page(wanted.pages + 1 + it).length() > 0 }.size
+            if (good == 0 && wanted.pages == 0) photoFor = null else added(wanted, good)
+        }
+    }
+    fun camera() = photoFor?.let { launcher.launch(uriOf(page(it.pages + 1))) }
+    fun gallery() = picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+    if (choosing) {
+        CameraOrGallery(
+            "Check with a photo",
+            "Up to ${PhotoChecker.MAX_PAGES} pages go in one check.",
+            onCamera = {
+                choosing = false
+                camera()
+            },
+            onGallery = {
+                choosing = false
+                gallery()
+            },
+            onDismiss = {
+                choosing = false
+                photoFor = null
+            },
+        ) { DeleteAfterUse(photoFor?.keep != true) { ticked -> photoFor = photoFor?.copy(keep = !ticked) } }
     }
     if (asking) {
         AlertDialog(
@@ -150,12 +225,23 @@ fun rememberPhotoCheck(graph: AppGraph, activity: Activity, plan: Plan, say: (ta
                 photoFor?.let(::check)
             },
             title = { Text("Add another page?") },
-            text = { Text("Page ${photoFor?.pages ?: 1} taken. Up to ${PhotoChecker.MAX_PAGES} pages go in one check.") },
+            text = {
+                Column {
+                    Text("Page ${photoFor?.pages ?: 1} taken. Up to ${PhotoChecker.MAX_PAGES} pages go in one check.")
+                    DeleteAfterUse(photoFor?.keep != true) { ticked -> photoFor = photoFor?.copy(keep = !ticked) }
+                }
+            },
             confirmButton = {
-                TextButton(onClick = {
-                    asking = false
-                    photoFor?.let { launcher.launch(uriOf(page(it.pages + 1))) }
-                }) { Text("Add a page") }
+                Row {
+                    TextButton(onClick = {
+                        asking = false
+                        gallery()
+                    }) { Text("Gallery") }
+                    TextButton(onClick = {
+                        asking = false
+                        camera()
+                    }) { Text("Camera") }
+                }
             },
             dismissButton = {
                 Row {
@@ -173,11 +259,12 @@ fun rememberPhotoCheck(graph: AppGraph, activity: Activity, plan: Plan, say: (ta
             },
         )
     }
-    return PhotoCheck(checkable, running != null) { piece ->
+    return PhotoCheck(checkable, running != null) { piece, record ->
         (1..PhotoChecker.MAX_PAGES).forEach { page(it).delete() }
         again.delete()
-        photoFor = PhotoPiece(piece.taskId, piece.stepIndex, piece.step, after = piece.sitting?.after)
-        launcher.launch(uriOf(page(1)))
+        // The box ticked each time it's shown.
+        photoFor = PhotoPiece(piece.taskId, piece.stepIndex, piece.step, after = piece.sitting?.after, record = record)
+        choosing = true
     }
 }
 
