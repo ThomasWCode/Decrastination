@@ -790,14 +790,6 @@ private fun WeekStrip(plan: Plan, chosen: LocalDate, drag: DayDrag, tasks: Map<S
     }
 }
 
-/** How the plan counts an event, in a word or two. */
-private fun verdict(judgement: EventJudge.Judgement, asked: Boolean): String = when (judgement) {
-    EventJudge.Judgement.Free -> "Free"
-    EventJudge.Judgement.Busy -> "Busy"
-    is EventJudge.Judgement.Load -> "${Format.minutes(judgement.minutes)} of its time"
-    EventJudge.Judgement.Ask -> if (asked) "Asked" else "Not known"
-}
-
 /**
  * An event's sheet (UI-17, UI-11): when and where, what it says, how
  * the plan counts it, its answers (for every event of that name), an instruction about it, and Felix asked about it.

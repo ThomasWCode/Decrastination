@@ -141,3 +141,11 @@ fun outcomeWords(outcome: SlotOutcome): String = when (outcome) {
     SlotOutcome.Missed -> "Missed"
     SlotOutcome.Moved -> "Moved"
 }
+
+/** How the plan counts an event, in a word or two. */
+fun verdict(judgement: EventJudge.Judgement, asked: Boolean): String = when (judgement) {
+    EventJudge.Judgement.Free -> "Free"
+    EventJudge.Judgement.Busy -> "Busy"
+    is EventJudge.Judgement.Load -> "${Format.minutes(judgement.minutes)} of its time"
+    EventJudge.Judgement.Ask -> if (asked) "Asked" else "Not known"
+}

@@ -649,6 +649,10 @@ class ServerGraph(
             asOf = devices.lastSeen(),
             timer = stores.session.value.timer,
             writable = mode == COMMANDS,
+            tasks = tasks.tasks.associateBy { it.id },
+            answers = answers,
+            // An instruction of yours that isn't a quick answer says how the event counts: its sheet answers nothing, as the phone's.
+            instructed = InstructionRules.eventAnswers(applied.filterNot { it.quick }).keys,
         )
     }
 
