@@ -608,7 +608,13 @@ class Focus(
         // Its [note] of what it showed in the same write as what it's owed (6.4.0): a stop between the two would leave the work counted
         // as earned, and a check of it again refused, with nothing given for it.
         session.update { state -> state.copy(photosDone = state.photosDone + done, notes = note?.let { notesKept(counted(state.notes, it)) } ?: state.notes) }
-        return finishPhoto(done).also { settleTimer() }
+        val earned = finishPhoto(done)
+        // A pass that earned nothing (its piece earned already, or its slot's day over) counts nothing: its note back to not passed, and
+        // what it counted with it, so the work it showed isn't held as earned, and a later award taken back finds its own note.
+        if (!earned && note?.passed == true) {
+            session.update { state -> state.copy(notes = state.notes.map { if (it.id == note.id || (it.taskId == note.taskId && it.countedBy == note.at)) it.copy(passed = false, countedBy = null) else it }) }
+        }
+        return earned.also { settleTimer() }
     }
 
     /** What earlier photo checks of [taskId] saw ([SessionState.notes], 6.4.0), the oldest first. */
