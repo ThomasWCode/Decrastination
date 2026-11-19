@@ -4,7 +4,7 @@ import { Link, type Go } from "./App";
 import { useLive } from "./live";
 import { Markdown } from "./Markdown";
 import { NewTask } from "./NewTask";
-import type { Action, ChangeRow, ChatButton, ChatCard, ChatChip, ChatQuote, ChatRow, ChatView, OwnTaskFormView } from "./types";
+import type { About, Action, ChangeRow, ChatButton, ChatCard, ChatChip, ChatQuote, ChatRow, ChatView, OwnTaskFormView } from "./types";
 import { Visit } from "./visit";
 
 /** How close to the top of the list scrolling back loads the archive's next page, and to the foot counts as being there. */
@@ -430,7 +430,34 @@ interface Undoing {
 }
 
 /** The box you write in, with what it replies to over it. What's unsent stays through a move to another page. */
-function Box({ view, replying, chosen, sent, letGo }: { view: ChatView; replying: ChatQuote | null; chosen: boolean; sent: () => void; letGo: () => void }) {
+/**
+ * What a message is about, from the page's address (6.6.0: *Ask Felix about it* on the Day's sheets): a task, an event or a day,
+ * only the fields an `About` has, each a string or an event's start; null where there's none, or it isn't one.
+ */
+export function aboutFrom(search: string): About | null {
+  const raw = new URLSearchParams(search).get("about");
+  if (!raw) return null;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed !== "object" || parsed === null) return null;
+    const given = parsed as Record<string, unknown>;
+    const about: About = {};
+    for (const field of ["taskId", "taskTitle", "eventKey", "eventTitle", "day"] as const) {
+      if (typeof given[field] === "string") about[field] = given[field];
+    }
+    if (typeof given.eventStart === "number") about.eventStart = given.eventStart;
+    return about.taskId || about.eventKey || about.day ? about : null;
+  } catch {
+    return null;
+  }
+}
+
+/** What [about] is, in a few words, as the phone's chip over its box says it. */
+export function aboutLine(about: About): string {
+  return `About ${about.taskTitle ?? about.eventTitle ?? about.day ?? "it"}`;
+}
+
+function Box({ view, replying, chosen, sent, letGo, about, dropAbout }: { view: ChatView; replying: ChatQuote | null; chosen: boolean; sent: () => void; letGo: () => void; about: About | null; dropAbout: () => void }) {
   const [draft, setDraft] = useState(() => sessionStorage.getItem(DRAFT) ?? "");
   const [said, setSaid] = useState<string | null>(null);
   const change = (text: string) => {
@@ -447,9 +474,11 @@ function Box({ view, replying, chosen, sent, letGo }: { view: ChatView; replying
     setSaid(null);
     sent();
     const replyTo = replying?.id ?? view.quiet ?? null;
-    void saying({ type: "SendMessage", text, id, replyTo, takeItsSubject: replying !== null }).then((why) => {
+    // What it's about goes with it, once: the next is about whatever it says.
+    void saying({ type: "SendMessage", text, id, replyTo, takeItsSubject: replying !== null, ...(about ? { about } : {}) }).then((why) => {
       if (why === null) {
         sessionStorage.removeItem(LOST);
+        dropAbout();
         return;
       }
       sessionStorage.setItem(LOST, JSON.stringify({ text, id }));
@@ -487,6 +516,16 @@ function Box({ view, replying, chosen, sent, letGo }: { view: ChatView; replying
           </button>
         </div>
       ) : null}
+      {about ? (
+        <div className="replying about-chip" data-testid="about">
+          <span>
+            <span className="line">{aboutLine(about)}</span>
+          </span>
+          <button type="button" className="quiet" aria-label="Not about it" onClick={dropAbout}>
+            ×
+          </button>
+        </div>
+      ) : null}
       <div className="writing">
         <textarea aria-label={`Tell ${view.name}…`} placeholder={`Tell ${view.name}…`} value={draft} onChange={(event) => change(event.target.value)} onKeyDown={key} maxLength={view.maxText} rows={2} />
         <button className="button" disabled={!draft.trim()}>
@@ -505,6 +544,16 @@ function Foot({ children }: { children: ReactNode }) {
 /** The chat, the website's home (D-121): the phone's, a message at a time, and what's still to come read as it's looked at (Q120). */
 export function ChatPage({ go }: { go: Go }) {
   const [earlier, setEarlier] = useState(0);
+  // What it's about, from the address *Ask Felix about it* came by (6.6.0); let go of with the address's mention of it.
+  const [about, setAbout] = useState<About | null>(() => aboutFrom(location.search));
+  const dropAbout = useCallback(() => {
+    setAbout(null);
+    const url = new URL(location.href);
+    if (url.searchParams.has("about")) {
+      url.searchParams.delete("about");
+      history.replaceState(null, "", url.pathname + url.search + url.hash);
+    }
+  }, []);
   const [reach, setReach] = useState<string | null>(null);
   // Asked again once a wait's gone on: that a call's running changes no store, so nothing else says it has.
   const [looked, setLooked] = useState(0);
@@ -745,6 +794,8 @@ export function ChatPage({ go }: { go: Go }) {
               if (picked) setChosen(null);
               else setDeclined(view.offer?.id ?? null);
             }}
+            about={about}
+            dropAbout={dropAbout}
           />
         ) : (
           <p className="chat-read-only">To write to {view.name}, use the phone for now.</p>

@@ -18,6 +18,15 @@ test("while the phone writes, the Day has nothing to press, and a block can't be
   await expect(page.getByTestId("grid")).toBeVisible();
   await expect(page.getByRole("group", { name: "Do" })).toHaveCount(0);
   await expect(page.locator(".block.movable")).toHaveCount(0);
+  // A block's own sheet opens to read, its buttons absent (6.6.0).
+  const piece = page.getByTestId("piece").first();
+  if ((await piece.count()) > 0) {
+    await piece.click();
+    const sheet = page.getByTestId("block-sheet");
+    await expect(sheet).toBeVisible();
+    await expect(sheet.getByRole("button", { name: "Done", exact: true })).toHaveCount(0);
+    await expect(sheet.getByRole("button", { name: "Ask Felix about it" })).toHaveCount(0);
+  }
 });
 
 test("Stats shows the record, by period, with nothing to press while the phone writes", async ({ page }) => {

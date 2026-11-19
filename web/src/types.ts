@@ -7,6 +7,8 @@ export interface WindowView {
 }
 
 export interface EventChip {
+  /** Its own sheet (6.6.0), as a timed event's. */
+  sheet?: BlockSheet | null;
   title: string;
   colour?: number | null;
 }
@@ -64,6 +66,30 @@ export interface BlockView {
   span: number;
   taskId?: string | null;
   drag?: DragView | null;
+  /** What a click on it opens (6.6.0): its own sheet. */
+  sheet?: BlockSheet | null;
+}
+
+/** What a message, a sheet or a change is about. */
+export interface About {
+  taskId?: string | null;
+  taskTitle?: string | null;
+  eventKey?: string | null;
+  eventTitle?: string | null;
+  eventStart?: number | null;
+  day?: string | null;
+}
+
+/** A block of the Day's own sheet (6.6.0), as the server built it: what it says and what can be done with it. */
+export interface BlockSheet {
+  kind: "piece" | "missed" | "event";
+  title: string;
+  lines: string[];
+  actions: TaskAction[];
+  taskId?: string | null;
+  about?: About | null;
+  taskSheet: boolean;
+  note?: string | null;
 }
 
 export interface DayView {
