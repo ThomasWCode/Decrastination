@@ -12,6 +12,7 @@ import com.thomaswcode.decrastination.data.Backups
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.Secret
 import com.thomaswcode.decrastination.data.SecretCipher
+import com.thomaswcode.decrastination.data.SlotRef
 import com.thomaswcode.decrastination.ports.Log
 import com.thomaswcode.decrastination.sync.DeviceToken
 import com.thomaswcode.decrastination.sync.PairingCode
@@ -573,6 +574,8 @@ class ApiTest {
         assertEquals(Photos.PIECE_CHANGED, json.decodeFromString(PhotoChecked.serializer(), check(ask("own:s-Essay#0"), byPhone).bodyAsText()).said)
         graph.stores.tasks.update { it.copy(tasks = listOf(TaskItem(id = "own:s-Essay", source = Source.Own, sourceId = "s-Essay", title = "A made-up essay", dueAt = null, kind = Kind.Homework, firstSeenAt = 1, lastSeenAt = 1))) }
         assertEquals(Photos.PIECE_CHANGED, json.decodeFromString(PhotoChecked.serializer(), check(ask("own:s-Essay#99"), byPhone).bodyAsText()).said)
+        // A kept slot's, by the slot its sheet named (6.5.0): one not in this server's record isn't checked.
+        assertEquals(Photos.SLOT_GONE, json.decodeFromString(PhotoChecked.serializer(), check(ask("own:s-Essay#0").copy(record = SlotRef("own:s-Essay#0", 1L, 2L)), byPhone).bodyAsText()).said)
         // One it does, checked here: with no key on this box, it says so.
         val piece = graph.planning.plan().chunksOf("own:s-Essay").first()
         assertEquals("Claude is off: the timer or the source will have to do.", json.decodeFromString(PhotoChecked.serializer(), check(ask(piece.key, step = piece.step), byPhone).bodyAsText()).said)

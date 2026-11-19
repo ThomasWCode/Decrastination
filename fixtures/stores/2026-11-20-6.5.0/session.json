@@ -86,7 +86,8 @@
         "at": 1792314000000,
         "stepIndex": 1,
         "key": "teams:as-essay#1",
-        "takenAt": 1792313880000
+        "takenAt": 1792313880000,
+        "record": null
       },
       "earnOnly": true
     }

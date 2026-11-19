@@ -165,7 +165,7 @@ class PhotosTest {
         var server = false
         val switching = Photos(
             tasks, settings, chat, clock, scope, gateway, focus, folder, shrink = { it.readBytes() }, profile = { Profile.Block.NONE },
-            checkByServer = { _, _, _ -> "Done: every question answered".takeIf { server } },
+            checkByServer = { _, _, _, _, _ -> "Done: every question answered".takeIf { server } },
         ) { read += it }
         val held = CompletableDeferred<Unit>()
         val quiet = launch(start = CoroutineStart.UNDISPATCHED) { switching.quiet { held.await(); server = true } }
@@ -183,7 +183,7 @@ class PhotosTest {
         val asked = mutableListOf<Triple<List<String>, String, Long>>()
         val byServer = Photos(
             tasks, settings, chat, clock, scope, gateway, focus, folder, shrink = { it.readBytes() }, profile = { Profile.Block.NONE },
-            checkByServer = { jpegs, piece, takenAt -> asked += Triple(jpegs.map { it.decodeToString() }, piece.key, takenAt); "Done: every question answered" },
+            checkByServer = { jpegs, piece, takenAt, _, _ -> asked += Triple(jpegs.map { it.decodeToString() }, piece.key, takenAt); "Done: every question answered" },
         ) { read += it }
         val two = pages("page-1.jpg", "page-2.jpg")
         assertEquals("Done: every question answered", byServer.check(two, piece(Kind.Homework), takenAt = 5L))
@@ -259,6 +259,30 @@ class PhotosTest {
         assertTrue(passed.startsWith("Done"), passed)
         assertEquals(listOf(true, false, true), focus.notesOf(essay.id).map { it.passed })
         assertTrue("passed (earned already): Pages 1 to 4, written out" in server.takeRequest().body.readUtf8())
+    }
+
+    @Test
+    fun `a check's pages its box left kept stay with the task, are sent again after a later check's new ones, and are swept only when nothing names them`() = runBlocking {
+        settings.update { it.copy(aiEnabled = true, aiKeyActive = true) }
+        tasks.update { it.copy(tasks = listOf(essay)) }
+        answers(verdict(false, "Q1-4", reason = "Q5-8 aren't shown."), verdict(true, "Q5-8"))
+        val first = listOf(byteArrayOf(1, 1), byteArrayOf(2, 2))
+        answered.checkJpegs(first, piece(Kind.Homework), clock.time, keep = true)
+        val kept = focus.keptPages(essay.id)
+        assertEquals(first.map(Photos::hashOf), kept.map { it.hash })
+        assertTrue(kept.all { answered.pageFile(it.hash).isFile })
+        // Ticked, the next check's page isn't kept; the kept ones go with it, after it, named so.
+        answered.checkJpegs(listOf(byteArrayOf(3, 3)), piece(Kind.Homework), clock.time)
+        server.takeRequest()
+        val second = server.takeRequest().body.readUtf8()
+        assertTrue("Kept page 1, from an earlier check:" in second && "Kept page 2, from an earlier check:" in second, second)
+        assertTrue(second.indexOf("Page 1:") < second.indexOf("Kept page 1"))
+        assertEquals(2, focus.keptPages(essay.id).size)
+        // A page nothing names goes at a sweep, the kept ones stay.
+        val stray = answered.pageFile("0000000000000000").apply { writeBytes(byteArrayOf(1)) }
+        answered.sweepPhotos()
+        assertFalse(stray.exists())
+        assertTrue(kept.all { answered.pageFile(it.hash).isFile })
     }
 
     @Test

@@ -398,8 +398,8 @@ class BackupService(
             // His notification too, a check-in's question among them: nothing's left to answer it.
             cancelFelix()
         }
-        // What photo checks saw (6.4.0), as everything learned goes.
-        if (all) stores.replace(stores.session) { s -> s.copy(notes = s.notes - whole.checkNotes.toSet()) }
+        // What photo checks saw (6.4.0), as everything learned goes, and the pages kept with tasks (6.5.0), which no copy holds.
+        if (all) stores.replace(stores.session) { s -> s.copy(notes = s.notes - whole.checkNotes.toSet(), pages = emptyList()) }
         if (all || what == Reset.Instructions) {
             val copied = whole.instructions.mapTo(HashSet()) { it.id }
             stores.replace(stores.instructions) { i -> InstructionState(instructions = i.instructions.filterNot { it.id in copied }) }

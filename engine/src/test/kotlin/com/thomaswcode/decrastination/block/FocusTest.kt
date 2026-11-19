@@ -3,6 +3,8 @@ package com.thomaswcode.decrastination.block
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
 import com.thomaswcode.decrastination.core.Calibration
+import com.thomaswcode.decrastination.data.KeptPage
+import com.thomaswcode.decrastination.data.SlotRef
 import com.thomaswcode.decrastination.data.StepOrderMigration
 import java.time.LocalDate
 import com.thomaswcode.decrastination.core.yours
@@ -680,6 +682,39 @@ class FocusTest {
         assertTrue(slotted.photoChecked("teams:long", null, 30, key = long.chunk!!.key, takenAt = tick + 5_000L))
         assertTrue(log.value.slots.single().let { it.earned && it.photo })
         assertEquals(30, tasks.value.tasks.single().workedMin)
+    }
+
+    @Test
+    fun `a check from a kept slot's sheet earns on that slot, an hour after its tick, once, and on no slot it doesn't name`() = runTest {
+        val long = laid(task("long", due = "2026-10-12T23:59", effort = 30)).single()
+        clock.time = long.end
+        assertTrue(slotted.keepSlot(long.chunk!!.key, seenAt = long.start))
+        val kept = log.value.slots.single()
+        assertFalse(kept.earned)
+        // An hour on, the half minute long past: by its key alone the photo couldn't tell this slot from another.
+        clock.time = long.end + 3_600_000L
+        assertFalse(slotted.photoChecked("teams:long", null, 30, key = kept.key, takenAt = clock.time, record = SlotRef(kept.key, kept.start + 1, kept.at)))
+        assertFalse(log.value.slots.single().earned)
+        assertTrue(slotted.photoChecked("teams:long", null, 30, key = kept.key, takenAt = clock.time, record = SlotRef.of(kept)))
+        assertTrue(log.value.slots.single().let { it.earned && it.photo })
+        assertEquals(10 * 60_000L, slotted.creditLeftMs())
+        assertFalse(slotted.photoChecked("teams:long", null, 30, key = kept.key, takenAt = clock.time, record = SlotRef.of(kept)))
+        assertEquals(10 * 60_000L, slotted.creditLeftMs())
+        assertEquals(1, log.value.slots.size, "no slot kept again by it")
+    }
+
+    @Test
+    fun `a check's kept pages stay with their open task, once each, for a fortnight at most`() = runTest {
+        tasks.update { it.copy(tasks = listOf(task("sheet"), task("other"))) }
+        focus.keepPages("teams:sheet", listOf("a1", "a2", "a1"), clock.time)
+        focus.keepPages("teams:sheet", listOf("a2", "a3"), clock.time + 1)
+        focus.keepPages("teams:other", listOf("b1"), clock.time + 1)
+        assertEquals(listOf("a1", "a2", "a3"), focus.keptPages("teams:sheet").map { it.hash })
+        // A fortnight on, the first two go; the other task done, its page with it.
+        clock.time += KeptPage.KEPT_MS + 1
+        tasks.update { s -> s.copy(tasks = s.tasks.map { if (it.id == "teams:other") it.copy(status = Status.Done, doneAt = clock.time) else it }) }
+        focus.tidyChecks()
+        assertEquals(listOf("a3"), focus.keptPages().map { it.hash })
     }
 
     @Test
