@@ -109,7 +109,7 @@ fun WorkScreen(graph: AppGraph, activity: Activity, opening: String? = null, onO
     LaunchedEffect(photoReading) { photoReading?.let { p -> said = if (p.busy) "Reading the photo…" else p.why } }
     val homework = remember { File(activity.cacheDir, "photos/homework.jpg").also { it.parentFile?.mkdirs() } }
     // From the camera or the gallery (6.5.0).
-    val picture = rememberPicture(activity, homework) { taken -> if (taken) graph.photos.readPhotoOf(homework) else homework.delete() }
+    val picture = rememberPicture(activity, graph.scope, homework) { taken -> if (taken) graph.photos.readPhotoOf(homework) else homework.delete() }
     // The camera button's menu (6.5.0): what the photo's for, then where it comes from.
     var cameraMenu by rememberSaveable { mutableStateOf(false) }
     var readingFrom by rememberSaveable { mutableStateOf(false) }
