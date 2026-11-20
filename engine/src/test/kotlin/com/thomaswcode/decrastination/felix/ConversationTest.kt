@@ -250,6 +250,37 @@ class ConversationTest {
     }
 
     @Test
+    fun `the photos of messages answered together all go as proof, past one message's four`() = runBlocking {
+        stores.tasks.update { it.copy(tasks = it.tasks + sheet) }
+        val pages = (1..6).map { byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), it.toByte(), 7) }
+        pages.forEach { felix.owners.chatPhotos[Photos.hashOf(it)] = it }
+        val check = """[{"type":"checkPhotos","taskId":"teams:sheet","stepIndex":-1,"setting":"","value":""}]"""
+        // His answer to the first comes late: the second is sent meanwhile, and one answer goes to both.
+        felix.answers(felix.chatAnswer("Checking it now."), delayMs = 1_000)
+        felix.answers(felix.chatAnswer("Checking all six now.", actions = check))
+        assertTrue(conversation.ask("done, pages 1 to 3", photos = pages.take(3).map { ChatPhoto(Photos.hashOf(it)) }))
+        withTimeout(5_000) { while (conversation.answeringSince.value == null) delay(10) }
+        assertTrue(conversation.ask("and 4 to 6", photos = pages.drop(3).map { ChatPhoto(Photos.hashOf(it)) }))
+        felix.settle()
+        assertEquals(6, felix.owners.checked.single().third)
+    }
+
+    @Test
+    fun `a step reordered as he answered is checked as the step he named, not by its old place`() = runBlocking {
+        val steps = sheet.copy(id = "teams:steps", sourceId = "steps", title = "A worksheet in two", subSteps = listOf(SubStep("Questions 1 to 5", 30), SubStep("Questions 6 to 10", 30)))
+        stores.tasks.update { it.copy(tasks = it.tasks + steps) }
+        felix.owners.chatPhotos[hash] = jpeg
+        val check = """[{"type":"checkPhotos","taskId":"teams:steps","stepIndex":1,"setting":"","value":""}]"""
+        felix.answers(felix.chatAnswer("Checking it now.", actions = check), delayMs = 1_000)
+        assertTrue(conversation.ask("done questions 6 to 10", photos = listOf(ChatPhoto(hash))))
+        withTimeout(5_000) { while (conversation.answeringSince.value == null) delay(10) }
+        // Its steps swapped round while he answered: the one he named is now the first.
+        stores.tasks.update { s -> s.copy(tasks = s.tasks.map { if (it.id == steps.id) it.copy(subSteps = it.subSteps.reversed()) else it }) }
+        felix.settle()
+        assertEquals(0, felix.owners.checked.single().first.stepIndex)
+    }
+
+    @Test
     fun `a check that fails says so, and one a stop left saying it's checked is settled as unfinished`() = runBlocking {
         stores.tasks.update { it.copy(tasks = it.tasks + sheet) }
         felix.owners.chatPhotos[hash] = jpeg
@@ -266,6 +297,11 @@ class ConversationTest {
         stores.chat.update { it.copy(messages = it.messages + left) }
         conversation.settleChecks(felix.clock.now() + 1_000)
         assertTrue(stores.chat.value.messages.single { it.id == "h-left" }.acts.single().line.startsWith(Conversation.CHECKING))
+        // A phone that sends commands leaves it to the server, whose chat it is.
+        felix.byServer = true
+        conversation.settleChecks(felix.clock.now() + Conversation.CHECK_SETTLE_MS + 1)
+        assertTrue(stores.chat.value.messages.single { it.id == "h-left" }.acts.single().line.startsWith(Conversation.CHECKING))
+        felix.byServer = false
         conversation.settleChecks(felix.clock.now() + Conversation.CHECK_SETTLE_MS + 1)
         val settled = stores.chat.value.messages.single { it.id == "h-left" }.acts.single()
         assertEquals(Conversation.CHECK_UNFINISHED, settled.line)
