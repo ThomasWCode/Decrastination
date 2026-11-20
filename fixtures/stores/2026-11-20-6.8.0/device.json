@@ -1,0 +1,15 @@
+{
+  "adminArmed": true,
+  "watchdog": {
+    "problems": [
+      "The focus service is off"
+    ],
+    "offSince": 1792148400000,
+    "checkedAt": 1792314000000,
+    "stoppedSince": 1792148400000,
+    "restartedAt": 1792148700000,
+    "restartTries": 1
+  },
+  "forceActiveUntil": 1792188600000,
+  "version": 1
+}

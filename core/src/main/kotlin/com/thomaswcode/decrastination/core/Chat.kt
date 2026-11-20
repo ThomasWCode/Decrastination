@@ -18,7 +18,7 @@ data class ChatState(
     /** His state between looks (LR-03): his next check, what he wrote ahead, what waits to be asked, the check-in's answers so far. */
     val felix: FelixState = FelixState(),
     /** The shape this is in ([com.thomaswcode.decrastination.data.Migration]): raised with each change of it. */
-    val version: Int = 13,
+    val version: Int = 14,
 ) {
     /**
      * Your newest message still waiting for his answer: a message of his written since, unasked, doesn't
@@ -122,7 +122,39 @@ data class ChatMessage(
      */
     val unsent: List<String> = emptyList(),
     val preferred: String = "",
-)
+    /** Yours, the photos sent with it (6.8.0), by their hashes alone: a file each, the app's and the server's, let go once it's done with. */
+    val photos: List<ChatPhoto> = emptyList(),
+) {
+    /** Whether it says anything: words, or a photo of yours, which counts as words (6.8.0). */
+    val says: Boolean get() = text.isNotBlank() || photos.isNotEmpty()
+
+    /**
+     * What it says where a message is its text alone (a notification's line, a quote, his story of the day, the record): each photo
+     * "[photo]", with Felix's note of it where he's seen it, then its words (6.8.0).
+     */
+    val said: String get() = (photos.map { if (it.note.isBlank()) "[photo]" else "[photo: ${it.note}]" } + listOfNotNull(text.trim().takeIf { it.isNotEmpty() })).joinToString(" ")
+}
+
+/**
+ * A photo sent with a message of yours (6.8.0): its file's [hash] (`Photos.hashOf`), the name it's kept and sent under; whether it's
+ * [kept] (*Delete after use* unticked), and Felix's [note] of what it is once he's seen it, shown in its place once it's gone.
+ */
+@Serializable
+data class ChatPhoto(val hash: String, val kept: Boolean = false, val note: String = "") {
+    /**
+     * Whether its file's kept still at [now], [message] the one it came with: a ticked one's till the message is answered, a kept
+     * one's a fortnight from when it was sent; neither past the fortnight, so one whose message is never answered goes too.
+     */
+    fun live(message: ChatMessage, now: Long): Boolean = now - message.at < KEPT_MS && (kept || message.answeredAt == null)
+
+    companion object {
+        /** How long a photo's file is kept at most, from when its message was sent: the owner's answer, 19 Nov. */
+        const val KEPT_MS = 14 * 24 * 3_600_000L
+
+        /** The most photos a message holds: proof of more pages is the photo check's own door. */
+        const val MAX = 4
+    }
+}
 
 /** A page a web search found ([ChatMessage.sources]): its title and where it is. */
 @Serializable
@@ -136,7 +168,7 @@ data class WebSource(val title: String, val url: String)
 data class ChatArchive(
     val messages: List<ChatMessage> = emptyList(),
     /** The shape this is in ([com.thomaswcode.decrastination.data.Migration]): raised with each change of it. */
-    val version: Int = 12,
+    val version: Int = 13,
 )
 
 /** The conversation read as a thread. Pure. */
@@ -222,7 +254,7 @@ data class ChatAction(
     val stepTitle: String? = null,
     val stepId: String? = null,
 ) {
-    enum class Type { TickStep, Open, UntickStep, Done, Reopen, Delete, Setting, SetReminder, MoveReminder, CancelReminder, AddNote, DeleteNote, KeepPiece, UnkeepPiece, Sync }
+    enum class Type { TickStep, Open, UntickStep, Done, Reopen, Delete, Setting, SetReminder, MoveReminder, CancelReminder, AddNote, DeleteNote, KeepPiece, UnkeepPiece, Sync, KeepPhoto }
 }
 
 /**
@@ -363,6 +395,8 @@ object ChatActs {
             // Kept again since it took one back (a newer record of its key) bars it; an older box's record under the key doesn't.
             ChatAction.Type.UnkeepPiece -> act.after?.toLongOrNull()?.let { removed -> removed >= (dayStart ?: Long.MIN_VALUE) && kept[a.value]?.let { it < removed } ?: true } == true && task?.isOpen == true
             ChatAction.Type.Sync -> false
+            // A chat photo kept with a task (6.8.0): while the task has that photo still, the one before it goes back.
+            ChatAction.Type.KeepPhoto -> act.was != null && task?.photo?.hash == a.value
         }
     }
 
