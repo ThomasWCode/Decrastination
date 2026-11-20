@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { asking, saying } from "./api";
-import { PhotoCheck } from "./PhotoCheck";
+import { PhotoCheck, targetKey } from "./PhotoCheck";
 import type { About, Action, BlockSheet as Sheet, TaskAction } from "./types";
 
 /** The chat's address about [about]: the chat page shows it over its box and sends it with the message (6.6.0). */
@@ -70,7 +70,7 @@ export function BlockSheet({ sheet, gone, canChange, close, openTask, go }: { sh
         <div className="actions" role="group" aria-label={sheet.kind === "event" ? "How it counts" : "Do"}>
           {sheet.actions.map((button) =>
             button.check ? (
-              <PhotoCheck key={button.label} target={button.check} disabled={busy} said={(text, bad) => setSaid({ text, bad, undo: null })} />
+              <PhotoCheck key={targetKey(button.check)} target={button.check} disabled={busy} said={(text, bad) => setSaid({ text, bad, undo: null })} />
             ) : (
               <button key={button.label} className="action" disabled={busy} onClick={() => ifSure(button)}>
                 {button.label}

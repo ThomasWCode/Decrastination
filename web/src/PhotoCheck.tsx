@@ -14,6 +14,14 @@ function base64(blob: Blob): Promise<string> {
 }
 
 /**
+ * What [target] checks, as a key: pictures chosen for one piece are never sent against another the sheet comes to show in its place
+ * (its next, once one's done), as a check keyed by it starts again with nothing chosen.
+ */
+export function targetKey(target: PhotoCheckTarget): string {
+  return [target.taskId, target.key, target.step ?? "", target.record?.key ?? "", target.record?.start ?? "", target.record?.at ?? ""].join("|");
+}
+
+/**
  * *Check with a photo* on the website (6.7.0): up to [PhotoCheckTarget.pages] pictures, chosen or taken, any saved picture as the
  * owner chose, each shrunk in the browser as *From a photo* on Work shrinks one, and the tick box, *Delete after use*, ticked each
  * time it's shown. The same judge as the phone's and the same earning; what it says is said in its place, through [said].
