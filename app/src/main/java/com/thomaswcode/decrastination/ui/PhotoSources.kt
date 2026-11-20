@@ -74,7 +74,11 @@ internal fun DeleteAfterUse(checked: Boolean, onChange: (Boolean) -> Unit) {
  */
 internal fun copyPicked(context: Context, uri: Uri, into: File): Boolean = runCatching {
     context.contentResolver.openInputStream(uri)?.use { input -> into.outputStream().use { input.copyTo(it) } } != null
-}.getOrDefault(false) && into.length() > 0
+}.getOrElse {
+    // A copy cut short leaves no part of a picture to be read as one.
+    into.delete()
+    false
+} && into.length() > 0
 
 /** One picture for a file: from the camera, or picked from the gallery and copied there. */
 internal class PictureSource(val camera: () -> Unit, val gallery: () -> Unit)

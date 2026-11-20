@@ -256,6 +256,7 @@ class Photos(
          * and minutes in the piece's place, with its task. None without its task.
          */
         fun pieceOf(record: SlotRecord, task: TaskItem?): Chunk? = task?.let {
+            // The task's work in all: its own estimate where it's more than the slot (the parts needn't be the same size), else the slot's minutes a part.
             // Its place as its key has it ([Chunk.keyOf]): a box of a task divided with no step named its part, a step its place;
             // the task's parts as its label said them ("part 1 of 2"), so a part's share is told as a planned piece's is (Q159).
             val (place, part) = record.key.removePrefix("${record.taskId}#").split('#').let { bits -> bits.getOrNull(0)?.toIntOrNull() to bits.getOrNull(1)?.toIntOrNull() }
@@ -264,7 +265,7 @@ class Photos(
             Chunk(
                 taskId = record.taskId, source = it.source, kind = record.kind, title = record.label, step = null, minutes = record.plannedMin, dueAt = it.dueAt,
                 deadline = it.dueAt ?: record.end, soft = false, overdue = false, dueToday = false, behind = false,
-                part = if (box) (part ?: 1).coerceIn(1, parts) else 1, parts = parts, taskMinutes = record.plannedMin * parts, stepIndex = place?.takeIf { p -> p >= 0 }, why = Why.Spread,
+                part = if (box) (part ?: 1).coerceIn(1, parts) else 1, parts = parts, taskMinutes = if (parts > 1 && it.effortMin > record.plannedMin) it.effortMin else record.plannedMin * parts, stepIndex = place?.takeIf { p -> p >= 0 }, why = Why.Spread,
             )
         }
 
