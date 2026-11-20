@@ -67,6 +67,30 @@ test("a message is answered, and the box is ready for the next", async ({ page }
   await expect(page.getByRole("textbox", { name: /^Tell / })).toHaveValue("");
 });
 
+/** Two pictures of a pixel, each shrunk to a photo of its own name. */
+const PHOTO = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", "base64");
+const OTHER = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGM4IScHAAK2AQU0pnWqAAAAAElFTkSuQmCC", "base64");
+
+test("a photo alone is a message, shown till he's answered it and his line of it after; one kept stays", async ({ page }) => {
+  await page.goto("/");
+  const offered = page.getByRole("button", { name: "Not replying to this" });
+  if (await offered.isVisible()) await offered.click();
+  await page.getByTestId("chat-photo-input").setInputFiles({ name: "page.png", mimeType: "image/png", buffer: PHOTO });
+  const chosen = page.getByRole("group", { name: "Photos to send" });
+  await expect(chosen.getByRole("img")).toHaveCount(1);
+  await expect(chosen.getByLabel("Delete after use")).toBeChecked();
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  await expect(message(page, "I see the photo.")).toBeVisible();
+  // Answered, it's let go: his line of it in its place.
+  await expect(page.getByText("[photo: a page of questions]")).toBeVisible();
+  // Kept, it stays after he's answered, his line its words.
+  await page.getByTestId("chat-photo-input").setInputFiles({ name: "kept.png", mimeType: "image/png", buffer: OTHER });
+  await chosen.getByLabel("Delete after use").uncheck();
+  await page.getByRole("textbox", { name: /^Tell / }).fill("This one's kept");
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  await expect(message(page, "This one's kept").getByRole("img", { name: "a page of questions" })).toBeVisible();
+});
+
 test("Enter sends, and what's unsent stays through a move to another page", async ({ page }) => {
   await page.goto("/");
   const box = page.getByRole("textbox", { name: /^Tell / });
