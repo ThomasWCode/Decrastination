@@ -10,6 +10,7 @@ import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.core.Status
+import com.thomaswcode.decrastination.core.SubStep
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.enrich.Pricing
 import kotlin.test.Test
@@ -104,6 +105,24 @@ class ChatPhotosTest {
         assertEquals(a, ChatPrompts.photoAsk(" Photo: ${a.uppercase()} "))
         assertNull(ChatPrompts.photoAsk("photo:12"))
         assertNull(ChatPrompts.photoAsk("calendar"))
+    }
+
+    @Test
+    fun `photos handed to the check carry their task, a step of its own and the student's word, only where there are photos`() {
+        val sheet = TaskItem(
+            id = "teams:s", source = Source.Teams, sourceId = "s", title = "Sheet", dueAt = now + 86_400_000L, kind = Kind.Homework, firstSeenAt = now, lastSeenAt = now,
+            subSteps = listOf(SubStep("Q1-5", 20), SubStep("Q6-10", 20)),
+        )
+        fun reading(action: String, photos: Set<String> = setOf(a)) = assertNotNull(
+            ChatAnswers.parse(
+                """{"reply":"Checking.","newTasks":[],"changes":[],"memories":[],"suggestedReplies":[],"actions":[$action],"research":"","details":[],"answered":[],"photos":""}""",
+                listOf(sheet), emptyList(), About(), now, LONDON, context = ChatPrompts.Context("", "", photos = photos),
+            ),
+        )
+        assertEquals(listOf(ChatAction(ChatAction.Type.CheckPhotos, "teams:s", 1, value = "only the odd ones were set")), reading("""{"type":"checkPhotos","taskId":"teams:s","stepIndex":1,"setting":"","value":" only the odd ones were set "}""").actions)
+        assertEquals(listOf(ChatAction(ChatAction.Type.CheckPhotos, "teams:s", null, value = "")), reading("""{"type":"checkPhotos","taskId":"teams:s","stepIndex":-1,"setting":"","value":""}""").actions)
+        assertTrue(reading("""{"type":"checkPhotos","taskId":"teams:s","stepIndex":5,"setting":"","value":""}""").actions.isEmpty(), "a step it hasn't")
+        assertTrue(reading("""{"type":"checkPhotos","taskId":"teams:s","stepIndex":-1,"setting":"","value":""}""", photos = emptySet()).actions.isEmpty(), "no photos here")
     }
 
     @Test

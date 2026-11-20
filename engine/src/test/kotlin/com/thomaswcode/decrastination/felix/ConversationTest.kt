@@ -133,6 +133,43 @@ class ConversationTest {
     }
 
     @Test
+    fun `photos sent as proof are handed to the photo check with his line as your word, what it says under his answer`() = runBlocking {
+        stores.tasks.update { it.copy(tasks = it.tasks + sheet) }
+        felix.owners.chatPhotos[hash] = jpeg
+        felix.owners.checkAnswer = "Done: Every question is answered."
+        val check = """[{"type":"checkPhotos","taskId":"teams:sheet","stepIndex":-1,"setting":"","value":"only the odd ones were set"}]"""
+        felix.answers(felix.chatAnswer("Checking it now.", photos = "the forces worksheet", actions = check))
+        assertTrue(conversation.ask("done, only had to do the odd ones", photos = listOf(ChatPhoto(hash))))
+        felix.settle()
+        val (piece, said, pages) = felix.owners.checked.single()
+        assertEquals("teams:sheet", piece.taskId)
+        assertEquals("only the odd ones were set", said)
+        assertEquals(1, pages)
+        val line = his().last().acts.single()
+        assertEquals("Photo check: Done: Every question is answered.", line.line)
+        assertFalse(line.problem)
+        // Told him in the turns after.
+        felix.server.takeRequest()
+        felix.answers(felix.chatAnswer("Nice."))
+        assertTrue(conversation.ask("so am I done?"))
+        felix.settle()
+        assertTrue("[Photo check: Done: Every question is answered.]" in felix.server.takeRequest().body.readUtf8())
+    }
+
+    @Test
+    fun `photos sent as proof of a task with nothing to check now say so, and nothing's asked`() = runBlocking {
+        val done = sheet.copy(id = "teams:gone", sourceId = "gone", title = "A sheet with nothing planned", dueAt = null, sourceEffortMin = 0)
+        stores.tasks.update { it.copy(tasks = it.tasks + done) }
+        felix.owners.chatPhotos[hash] = jpeg
+        val check = """[{"type":"checkPhotos","taskId":"teams:gone","stepIndex":-1,"setting":"","value":""}]"""
+        felix.answers(felix.chatAnswer("Checking it now.", actions = check))
+        assertTrue(conversation.ask("done", photos = listOf(ChatPhoto(hash))))
+        felix.settle()
+        assertTrue(felix.owners.checked.isEmpty())
+        assertTrue(his().last().acts.single().problem)
+    }
+
+    @Test
     fun `he keeps a photo with a task, and its Undo puts back the photo it had`() = runBlocking {
         stores.tasks.update { it.copy(tasks = it.tasks + sheet) }
         felix.owners.chatPhotos[hash] = jpeg

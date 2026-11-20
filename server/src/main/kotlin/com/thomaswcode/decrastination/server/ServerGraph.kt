@@ -734,7 +734,8 @@ class ServerGraph(
                 // By its step too, as the phone finds it: a key's only the step's place, which another may have taken here since.
                 planning.plan().chunksOf(taskId).firstOrNull { it.key == key && it.step == step } ?: return PhotoChecked(Photos.PIECE_CHANGED)
             }
-            return PhotoChecked(owners.photos.checkJpegs(jpegs, piece, takenAt, keep, record))
+            // Under the same lock as a check Felix hands it from the chat (6.9.0), so only one is asked at a time.
+            return PhotoChecked(owners.photos.quiet { owners.photos.checkJpegs(jpegs, piece, takenAt, keep, record) })
         } finally {
             checkingPhoto.set(false)
         }

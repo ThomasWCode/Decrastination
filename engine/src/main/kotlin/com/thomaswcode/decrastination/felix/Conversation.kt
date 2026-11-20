@@ -13,6 +13,7 @@ import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.core.ChatPhoto
 import com.thomaswcode.decrastination.core.ChatState
 import com.thomaswcode.decrastination.core.CheckInDraft
+import com.thomaswcode.decrastination.core.Chunk
 import com.thomaswcode.decrastination.core.DueKind
 import com.thomaswcode.decrastination.core.Duplicates
 import com.thomaswcode.decrastination.core.Fact
@@ -51,6 +52,7 @@ import com.thomaswcode.decrastination.data.FelixStore
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.LearningState
 import com.thomaswcode.decrastination.data.SlotRecord
+import com.thomaswcode.decrastination.data.SlotRef
 import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.enrich.Called
 import com.thomaswcode.decrastination.enrich.Found
@@ -71,6 +73,7 @@ import com.thomaswcode.decrastination.notify.Notices
 import com.thomaswcode.decrastination.plan.Planning
 import com.thomaswcode.decrastination.ports.Log
 import com.thomaswcode.decrastination.sync.GmailFinishes
+import com.thomaswcode.decrastination.ui.KeptActions
 import java.time.Instant
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -193,6 +196,12 @@ class Conversation(
 
         /** [photo] [taskId]'s photo again, or none: a chat photo kept with it taken back (6.8.0). */
         suspend fun restoreTaskPhoto(taskId: String, photo: TaskPhoto?) {}
+
+        /**
+         * [jpegs], photos from the chat, checked against [piece] by the photo check (6.9.0), [said] as the student's word, a kept slot's
+         * [record] where it's one ticked Done: what came of it, in its words. One check at a time, as each is a paid call.
+         */
+        suspend fun checkPhotos(jpegs: List<ByteArray>, piece: Chunk, takenAt: Long, record: SlotRef?, said: String): String = "The photo check isn't here."
     }
 
     /**
@@ -953,6 +962,10 @@ class Conversation(
             )
             // The photos his actions keep with tasks, read now (6.8.0): a ticked one's let go once your message is answered, which comes first.
             val photosKept = reading.actions.filter { it.type == ChatAction.Type.KeepPhoto }.mapNotNull { a -> a.value?.let { hash -> owners.chatPhoto(hash)?.let { hash to it } } }.toMap()
+            // The photos his check of the work is given (6.9.0): this answer's call's, read now, as a ticked one's let go once your message is answered.
+            val proof = if (reading.actions.any { it.type == ChatAction.Type.CheckPhotos }) pictured.take(ChatPhoto.MAX).mapNotNull { owners.chatPhoto(it) } else emptyList()
+            // His checks of the work, each its own call, made once his answer's in the chat ([act]).
+            val checks = mutableListOf<suspend () -> Unit>()
             // His line of each photo he was shown, in the order shown (6.8.0), kept on your message in its place.
             val photoNotes = pictured.zip(reading.photoNotes).filter { it.second.isNotBlank() }.toMap()
             var kept = false
@@ -982,8 +995,10 @@ class Conversation(
             if (edits.isNotEmpty()) chat.update { s -> s.copy(messages = s.messages.map { if (it.id == reply.id) it.copy(memoryEdits = edits) else it }) }
             // Its actions (AI-14; D-60), said under it with their Undo: before its
             // changes, as its steps are the ones it was shown.
-            val acts = if (kept) act(reading.actions, shownAt, reply.id, photosKept) else emptyList()
+            val acts = if (kept) act(reading.actions, shownAt, reply.id, photosKept, proof, checks) else emptyList()
             if (acts.isNotEmpty()) chat.update { s -> s.copy(messages = s.messages.map { if (it.id == reply.id) it.copy(acts = acts + it.acts) else it }) }
+            // His photo checks (6.9.0), each a call of its own that can take a minute: after his answer, in the app's scope, as the chat waits for none.
+            checks.forEach { check -> scope.launch { runCatching { check() }.onFailure { Log.w(Log.TAG, "A photo check from the chat failed", it) } } }
             // Its cards, made now, as if Apply were tapped: Undo takes them back.
             if (kept) {
                 val instant = reply.proposals.filter { it.instant }
@@ -1036,7 +1051,7 @@ class Conversation(
      * [shownAt] (G1): one kept from Day meanwhile isn't kept twice. A task to open where it lives with
      * the chat not on screen comes on a card on his message ([replyId]) instead (G3).
      */
-    private suspend fun act(actions: List<ChatAction>, shownAt: Long, replyId: String, photos: Map<String, ByteArray> = emptyMap()): List<Act> {
+    private suspend fun act(actions: List<ChatAction>, shownAt: Long, replyId: String, photos: Map<String, ByteArray> = emptyMap(), proof: List<ByteArray> = emptyList(), checks: MutableList<suspend () -> Unit> = mutableListOf()): List<Act> {
         fun said(line: String, a: ChatAction) = Act(line, a)
         // A task's card on his message (G3), where it isn't, or mayn't have been, opened where it lives.
         suspend fun card(t: TaskItem) = chat.update { s -> s.copy(messages = s.messages.map { m -> if (m.id == replyId) m.copy(proposals = m.proposals + Proposal(Ids.next(), open = t.id)) else m }) }
@@ -1154,6 +1169,25 @@ class Conversation(
                     val open = task?.takeIf { it.isOpen } ?: return@mapNotNull Act(Act.NOT_MADE + "the photo wasn't kept: “${task?.title ?: "its task"}” was finished, or went, while he answered.", problem = true)
                     owners.keepPhotoFromChat(open.id, a.value.orEmpty(), jpeg)
                     Act("Kept the photo with “${open.title}”", a, was = open)
+                }
+                // Photos of yours handed to the photo check at his word (6.9.0), which alone says whether the work's done: the piece as a
+                // check finds it, in the plan, else a slot of it ticked Done today that can still earn; his line of what else you said as
+                // your word. Said under his answer as it's checked, and again with what it said.
+                ChatAction.Type.CheckPhotos -> {
+                    val open = task?.takeIf { it.isOpen } ?: return@mapNotNull Act(Act.NOT_MADE + "the photos weren't checked: “${task?.title ?: "its task"}” was finished, or went, while he answered.", problem = true)
+                    if (proof.isEmpty()) return@mapNotNull Act(Act.NOT_MADE + "the photos weren't checked: they went from the chat while he answered.", problem = true)
+                    val now = clock.now()
+                    val planned = planning.plan().chunksOf(open.id).firstOrNull { a.stepIndex == null || it.stepIndex == a.stepIndex }
+                    val record = if (planned != null) null else log.value.slots.filter { it.taskId == open.id && it.outcome.kept && focus.today(it.at) == focus.today(now) && KeptActions.of(it, open, focus.today(now).toString()).photo }.maxByOrNull { it.at }
+                    val piece = planned ?: record?.let { Photos.pieceOf(it, open) }
+                        ?: return@mapNotNull Act(Act.NOT_MADE + "the photos weren't checked: “${open.title}” has no piece to check now, planned or ticked Done today.", problem = true)
+                    val under = Act("Checking the photo${if (proof.size == 1) "" else "s"} against “${piece.label}”…", a)
+                    checks += {
+                        val said = owners.checkPhotos(proof, piece, now, record?.let(SlotRef::of), a.value.orEmpty())
+                        val done = Act("Photo check: $said", a, problem = !said.startsWith("Done:"))
+                        chat.update { s -> s.copy(messages = s.messages.map { m -> if (m.id == replyId) m.copy(acts = m.acts.map { if (it == under) done else it }) else m }) }
+                    }
+                    under
                 }
                 // A piece done that has no step to tick (G1): kept as Day's Done keeps it, earning as that does; or taken back.
                 ChatAction.Type.KeepPiece -> {
@@ -1279,8 +1313,8 @@ class Conversation(
         val step = at?.let { task.subSteps[it] }
         fun open(id: String) = tasks.value.tasks.firstOrNull { it.id == id }?.isOpen
         val undone = when (a.type) {
-            // A task shown, a source read (G2): nothing to take back.
-            ChatAction.Type.Open, ChatAction.Type.Sync -> false
+            // A task shown, a source read (G2), photos checked (6.9.0): nothing to take back.
+            ChatAction.Type.Open, ChatAction.Type.Sync, ChatAction.Type.CheckPhotos -> false
             // The step that finished one of yours: open again with it to do.
             ChatAction.Type.TickStep -> step?.done == true && ChatActs.tickedBy(act, task!!.id, at!!, step, keptAt()) && focus.untickBlock(task.id, at, step.title, reopen = true)
             ChatAction.Type.UntickStep -> step?.done == false && task!!.isOpen && tick(task, at!!, step.title) != null

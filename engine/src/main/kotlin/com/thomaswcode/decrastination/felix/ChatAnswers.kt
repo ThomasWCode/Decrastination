@@ -34,6 +34,7 @@ import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.shareOut
 import com.thomaswcode.decrastination.data.FelixStore
 import com.thomaswcode.decrastination.enrich.InstructionAnswers
+import com.thomaswcode.decrastination.enrich.PhotoChecker
 import com.thomaswcode.decrastination.enrich.ResearchPrompts
 import com.thomaswcode.decrastination.enrich.filled
 import com.thomaswcode.decrastination.learn.CalendarEvent
@@ -494,6 +495,14 @@ object ChatAnswers {
             val field = FelixSettings.field(a.setting) ?: return no("a setting the app doesn't let him change (${a.setting.trim().take(40)})")
             if (settings != null && FelixSettings.set(settings, field.name, a.value) == null) return no("“${field.label}” set to “${a.value.trim().take(40)}”, which it can't be")
             return ChatAction(ChatAction.Type.Setting, "", setting = field.name, value = a.value.trim())
+        }
+        // Photos handed to the photo check as proof of work (6.9.0): a task listed and open, its step one of its own where named; what else
+        // was said that bears on it, a line or two, as the student's word. The check alone says whether it's done.
+        if (a.type == "checkPhotos") {
+            val task = byId[a.taskId]?.takeIf { it.isOpen } ?: return no("photos to check against a task that isn't listed, or is finished")
+            if (context?.photos.isNullOrEmpty()) return no("photos to check, with none here")
+            val step = a.stepIndex.takeIf { it >= 0 }?.let { i -> i.takeIf { task.subSteps.getOrNull(it) != null } ?: return no("photos to check against a step “${task.title.take(60)}” hasn't") }
+            return ChatAction(ChatAction.Type.CheckPhotos, task.id, step, value = a.value.trim().take(PhotoChecker.MAX_SAID))
         }
         // A photo of theirs from the chat kept as a task's photo of the work (6.8.0): one still here, on an open task Claude reads, as the
         // task's own sheet offers it.
