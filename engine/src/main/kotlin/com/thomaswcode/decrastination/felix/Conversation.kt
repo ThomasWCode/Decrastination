@@ -1181,7 +1181,8 @@ class Conversation(
                     if (proof.isEmpty()) return@mapNotNull Act(Act.NOT_MADE + "the photos weren't checked: they went from the chat while he answered.", problem = true)
                     val now = clock.now()
                     val planned = planning.plan().chunksOf(open.id).firstOrNull { a.stepIndex == null || it.stepIndex == a.stepIndex }
-                    val record = if (planned != null) null else log.value.slots.filter { it.taskId == open.id && it.outcome.kept && focus.today(it.at) == focus.today(now) && KeptActions.of(it, open, focus.today(now).toString()).photo }.maxByOrNull { it.at }
+                    // A slot of the step named, as the plan's piece is: another step's is never checked in its place.
+                    val record = if (planned != null) null else log.value.slots.filter { it.taskId == open.id && it.outcome.kept && focus.today(it.at) == focus.today(now) && KeptActions.of(it, open, focus.today(now).toString()).photo && Photos.pieceOf(it, open)?.stepIndex == a.stepIndex }.maxByOrNull { it.at }
                     val piece = planned ?: record?.let { Photos.pieceOf(it, open) }
                         ?: return@mapNotNull Act(Act.NOT_MADE + "the photos weren't checked: “${open.title}” has no piece to check now, planned or ticked Done today.", problem = true)
                     val under = Act("Checking the photo${if (proof.size == 1) "" else "s"} against “${piece.label}”…", a)
