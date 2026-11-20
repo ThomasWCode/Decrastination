@@ -29,6 +29,7 @@ import com.thomaswcode.decrastination.core.Rule
 import com.thomaswcode.decrastination.core.SlotState
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Speaker
+import com.thomaswcode.decrastination.core.SubStep
 import com.thomaswcode.decrastination.core.TaskItem
 import java.util.concurrent.TimeUnit
 import kotlin.test.AfterTest
@@ -154,6 +155,25 @@ class ConversationTest {
         assertTrue(conversation.ask("so am I done?"))
         felix.settle()
         assertTrue("[Photo check: Done: Every question is answered.]" in felix.server.takeRequest().body.readUtf8())
+    }
+
+    @Test
+    fun `photos sent as proof of a step ticked Done are checked against that step's slot, not another's ticked since`() = runBlocking {
+        val steps = sheet.copy(id = "teams:steps", sourceId = "steps", title = "A worksheet in two", subSteps = listOf(SubStep("Questions 1 to 5", 30), SubStep("Questions 6 to 10", 30)))
+        stores.tasks.update { it.copy(tasks = it.tasks + steps) }
+        val pieces = felix.planning.plan().chunksOf(steps.id)
+        assertTrue(pieces.any { it.stepIndex == 0 } && pieces.any { it.stepIndex == 1 }, pieces.joinToString { "${it.key}:${it.stepIndex}" })
+        val first = pieces.first { it.stepIndex == 0 }
+        val second = pieces.first { it.stepIndex == 1 }
+        assertTrue(felix.focusKeep(first.key))
+        felix.clock.time += 60_000L
+        assertTrue(felix.focusKeep(second.key))
+        felix.owners.chatPhotos[hash] = jpeg
+        val check = """[{"type":"checkPhotos","taskId":"teams:steps","stepIndex":0,"setting":"","value":""}]"""
+        felix.answers(felix.chatAnswer("Checking it now.", actions = check))
+        assertTrue(conversation.ask("done the first half", photos = listOf(ChatPhoto(hash))))
+        felix.settle()
+        assertEquals(0, felix.owners.checked.single().first.stepIndex)
     }
 
     @Test
