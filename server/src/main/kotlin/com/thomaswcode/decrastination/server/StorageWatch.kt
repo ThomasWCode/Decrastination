@@ -14,6 +14,7 @@ import java.nio.file.StandardCopyOption
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
+import java.time.YearMonth
 import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
@@ -194,7 +195,8 @@ object StorageRules {
         }
         if (perDay <= 0) return null
         val date = today.plusDays(Math.ceil((limit - used) / perDay).toLong())
-        return date.takeIf { !monthly(allowance) || it.month == today.month }
+        // A month's requests start again with the next: a date in another month, or another year's same month, isn't this one's.
+        return date.takeIf { !monthly(allowance) || YearMonth.from(it) == YearMonth.from(today) }
     }
 
     /** [bytes] as the page says them, in MB or GB. */
@@ -266,12 +268,17 @@ object StorageRules {
  * Cloudflare's analytics for R2's bucket (6.10.0): what it holds, and this month's requests, by a token that can read analytics alone
  * (`CF_ANALYTICS_TOKEN`), one question each a day. Nothing of the stores goes: the account and the bucket's names.
  */
-class CloudflareR2(private val token: String, private val account: String, private val bucket: String, private val timeout: Duration = Duration.ofSeconds(30)) {
+/** What R2 holds and its requests this month (6.10.0), and why where they couldn't be read: Cloudflare's, or a test's. */
+fun interface R2Reader {
+    fun read(now: Long): Triple<Long?, Pair<Long, Long>?, String?>
+}
+
+class CloudflareR2(private val token: String, private val account: String, private val bucket: String, private val timeout: Duration = Duration.ofSeconds(30)) : R2Reader {
     private val client = HttpClient.newBuilder().connectTimeout(timeout).build()
     private val json = Json { ignoreUnknownKeys = true }
 
     /** What R2 holds and its requests this month, at [now]; and why, where it couldn't be read. */
-    fun read(now: Long): Triple<Long?, Pair<Long, Long>?, String?> {
+    override fun read(now: Long): Triple<Long?, Pair<Long, Long>?, String?> {
         val end = Instant.ofEpochMilli(now)
         val stored = ask(STORED, end.minus(Duration.ofDays(2)), end)
         val month = end.atOffset(ZoneOffset.UTC).toLocalDate().withDayOfMonth(1).atStartOfDay().toInstant(ZoneOffset.UTC)
@@ -327,12 +334,12 @@ class CloudflareR2(private val token: String, private val account: String, priva
 
 /**
  * The storage watched (6.10.0, D-161): a reading a day ([read], one of the server's jobs), a month of them kept with the alerts given in
- * [file], never a store; the nightly files written to B2 noted as they go ([noteB2]); each alert handed to [alert] in its words.
+ * [file], never a store; the nightly files written to B2 noted as they go ([noteB2]); a reading's alerts handed to [alert] as one, a line each.
  */
 class StorageWatch(
     private val file: File,
     private val dataDir: File,
-    private val r2: CloudflareR2?,
+    private val r2: R2Reader?,
     private val clock: WallClock,
     private val alert: (String) -> Unit,
 ) {
@@ -341,7 +348,8 @@ class StorageWatch(
     @Volatile
     private var held: StorageRecord? = null
 
-    /** The record as it is: read from its file the first time, nothing where there's none or it can't be read. */
+    /** The record as it is: read from its file the first time, under the writers' lock, so a first read never puts back one older than theirs. */
+    @Synchronized
     fun record(): StorageRecord = held ?: (runCatching { json.decodeFromString(StorageRecord.serializer(), file.readText()) }.getOrNull() ?: StorageRecord()).also { held = it }
 
     /** A nightly file of [bytes] written to B2 now: kept in the record while B2 keeps it. */
@@ -378,7 +386,8 @@ class StorageWatch(
             }
         }
         if (reading.r2Problem != null) Log.w(Log.TAG, "R2's storage couldn't be read: ${reading.r2Problem}")
-        said.forEach(alert)
+        // A reading's alerts as one, as each goes under the same name and would take another's place.
+        if (said.isNotEmpty()) alert(said.joinToString("\n"))
     }
 
     /** [record] kept, whole, under a name of its own first, so a stop part-way leaves the one before. */

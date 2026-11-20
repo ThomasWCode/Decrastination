@@ -74,6 +74,8 @@ class StorageWatchTest {
         // 50 000 a day, 250 000 left: five days.
         assertEquals(LocalDate.of(2026, 11, 25), StorageRules.passes(Allowance.R2ClassA, requests, zone))
         assertNull(StorageRules.passes(Allowance.R2ClassA, listOf(reading(at("2026-11-13T05:00:00Z"), classA = 10_000), reading(at("2026-11-20T05:00:00Z"), classA = 20_000)), zone))
+        // So slow it lands in this month of next year: not this month's.
+        assertNull(StorageRules.passes(Allowance.R2ClassA, listOf(reading(at("2026-11-13T05:00:00Z"), classA = 628_000), reading(at("2026-11-20T05:00:00Z"), classA = 635_000)), zone))
         // One unread: no share.
         assertNull(StorageRules.percent(Allowance.R2ClassA, reading(at("2026-11-20T05:00:00Z"), classA = null)))
     }
@@ -131,5 +133,18 @@ class StorageWatchTest {
         assertEquals(0, watch.record().readings.last().b2Kept)
         assertEquals(2, watch.record().readings.size)
         assertTrue(said.none { "B2" in it })
+    }
+
+    @Test
+    fun `a reading's alerts go as one, each its line, as one would take another's place`() = runBlocking {
+        val clock = FixedClock(at("2026-11-20T05:00:00Z"), zone)
+        // R2's stored and its requests past their shares, and B2's: three at once.
+        val said = mutableListOf<String>()
+        val watch = StorageWatch(File(dir, "storage.json"), dir, r2 = { Triple(9_600_000_000, 1_200_000L to 30_000L, null) }, clock = clock) { said += it }
+        repeat(30) { watch.noteB2(330_000_000) }
+        watch.read()
+        assertEquals(1, said.size)
+        val lines = said.single().lines()
+        assertTrue(lines.any { it.startsWith("R2, stored is at 96%") } && lines.any { it.startsWith("R2, Class A requests this month is at 120%") } && lines.any { it.startsWith("B2, the nightly files kept is at 99%") }, said.single())
     }
 }
