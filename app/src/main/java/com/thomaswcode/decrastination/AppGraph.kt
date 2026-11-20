@@ -582,6 +582,8 @@ class AppGraph private constructor(context: Context) : Owners {
         }
         // A task Felix asked a source to read about, changed by the read: said in his note (G2).
         syncer.addAfterEverySync { conversation.afterSync() }
+        // His photo checks a stop left saying they're being checked, said not to have finished (6.9.0), while this phone answers the chat.
+        syncer.addAfterEverySync { conversation.settleChecks() }
         // "How was it?" questions kept for his evening question, asked in the app's words once Claude's off.
         syncer.addAfterEverySync { conversation.askKept() }
         // A task back after aging out of the list (or new) takes the overrides its instructions give.

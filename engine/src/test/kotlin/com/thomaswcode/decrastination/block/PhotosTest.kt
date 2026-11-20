@@ -272,6 +272,24 @@ class PhotosTest {
     }
 
     @Test
+    fun `a check of the plan's next part keeps that part, though the part before was ticked with no photo and its key is the same`() = runBlocking {
+        settings.update { it.copy(aiEnabled = true, aiKeyActive = true) }
+        tasks.update { it.copy(tasks = listOf(essay.copy(sourceEffortMin = 120))) }
+        fun plan() = Planner.plan(Planner.Input(tasks.value.tasks, clock.time, LONDON, settings.value))
+        val first = plan().chunksOf(essay.id).first()
+        assertTrue(focus.keepSlot(first.key))
+        // An hour on, the next part's photo, checked as the plan now numbers it ("part 1 of 3"), under the key the part ticked has.
+        clock.time += 3_600_000
+        val next = plan().chunksOf(essay.id).first()
+        assertEquals(first.key, next.key)
+        answers(verdict(true, "Pages 1 to 6, written out"))
+        val said = answered.checkJpegs(listOf(byteArrayOf(1, 2, 3)), next, clock.time)
+        assertTrue(said.startsWith("Done:"), said)
+        // The next part kept and earning; the part ticked before left as it was.
+        assertEquals(listOf(first.label to false, next.label to true), log.value.slots.filter { it.taskId == essay.id && it.outcome.kept }.map { it.label to it.earned })
+    }
+
+    @Test
     fun `a check's pages its box left kept stay with the task, are sent again after a later check's new ones, and are swept only when nothing names them`() = runBlocking {
         settings.update { it.copy(aiEnabled = true, aiKeyActive = true) }
         tasks.update { it.copy(tasks = listOf(essay)) }

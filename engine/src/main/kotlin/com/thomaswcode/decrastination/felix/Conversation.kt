@@ -60,6 +60,7 @@ import com.thomaswcode.decrastination.enrich.ModelCalls
 import com.thomaswcode.decrastination.enrich.ModelEffort
 import com.thomaswcode.decrastination.enrich.ModelGateway
 import com.thomaswcode.decrastination.enrich.ModelHold
+import com.thomaswcode.decrastination.enrich.PhotoChecker
 import com.thomaswcode.decrastination.enrich.Profile
 import com.thomaswcode.decrastination.enrich.WebResearcher
 import com.thomaswcode.decrastination.learn.Assessment
@@ -516,10 +517,11 @@ class Conversation(
 
     /**
      * His photo checks left saying they're being checked by a stop part-way (6.9.0): said not to have finished, so the photos are sent
-     * again, and he isn't told for good that they're being checked. Run after every sync; none under way here, and none newer than
-     * [CHECK_SETTLE_MS], is touched.
+     * again, and he isn't told for good that they're being checked. Run after every sync, on the phone too, where this app answers the
+     * chat (the server's, once the phone sends commands); none under way here, and none newer than [CHECK_SETTLE_MS], is touched.
      */
     suspend fun settleChecks(now: Long = clock.now()) {
+        if (byServer()) return
         fun stale(m: ChatMessage, act: Act) = act.action?.type == ChatAction.Type.CheckPhotos && act.line.startsWith(CHECKING) && act.after !in checksRunning && now - m.at > CHECK_SETTLE_MS
         if (chat.value.messages.none { m -> m.acts.any { stale(m, it) } }) return
         chat.update { s -> s.copy(messages = s.messages.map { m -> if (m.acts.none { stale(m, it) }) m else m.copy(acts = m.acts.map { if (stale(m, it)) Act(CHECK_UNFINISHED, it.action, after = it.after, problem = true) else it }) }) }
@@ -986,9 +988,10 @@ class Conversation(
             // The photos his actions keep with tasks, read now (6.8.0): a ticked one's let go once your message is answered, which comes first.
             val photosKept = reading.actions.filter { it.type == ChatAction.Type.KeepPhoto }.mapNotNull { a -> a.value?.let { hash -> owners.chatPhoto(hash)?.let { hash to it } } }.toMap()
             // The photos his check of the work is given (6.9.0): those of the messages his answer answers, as this answer's call was shown them,
-            // not those seen again or kept from before; read now, as a ticked one's let go once your message is answered.
+            // not those seen again or kept from before, each message's four with the others' answered with it, within the check's pages;
+            // read now, as a ticked one's let go once your message is answered.
             val own = upTo(chat.value.messages).takeLastWhile { it.from == Speaker.You }.flatMapTo(HashSet()) { m -> m.photos.map { it.hash } }
-            val proof = if (reading.actions.any { it.type == ChatAction.Type.CheckPhotos }) pictured.filter { it in own }.take(ChatPhoto.MAX).mapNotNull { owners.chatPhoto(it) } else emptyList()
+            val proof = if (reading.actions.any { it.type == ChatAction.Type.CheckPhotos }) pictured.filter { it in own }.take(PhotoChecker.MAX_PAGES).mapNotNull { owners.chatPhoto(it) } else emptyList()
             // His checks of the work, each its own call, made once his answer's in the chat ([act]).
             val checks = mutableListOf<suspend () -> Unit>()
             // His line of each photo he was shown, in the order shown (6.8.0), kept on your message in its place.
@@ -1202,14 +1205,17 @@ class Conversation(
                     val open = task?.takeIf { it.isOpen } ?: return@mapNotNull Act(Act.NOT_MADE + "the photos weren't checked: “${task?.title ?: "its task"}” was finished, or went, while he answered.", problem = true)
                     if (proof.isEmpty()) return@mapNotNull Act(Act.NOT_MADE + "the photos weren't checked: they went from the chat while he answered.", problem = true)
                     val now = clock.now()
+                    // The step he named as it is now, found by its id or title as a tick's is: one reordered or replaced as he answered isn't
+                    // checked by its old place.
+                    val stepIndex = a.stepIndex?.let { ChatActs.stepOf(Act("", a), open) ?: return@mapNotNull Act(Act.NOT_MADE + "the photos weren't checked: “${open.title}”'s steps changed as he answered.", problem = true) }
                     // The plan's piece he names, where your words or the photos made it plain (your answer of 20 Nov), so the next part's
                     // photo isn't taken for the part before it, ticked with none. Only the plan's: a part kept is numbered again in the plan,
                     // its key then the next part's, and a slot ticked is found by the step without one.
                     val named = a.setting?.takeIf { it.isNotBlank() }
                     // Else a slot of the step named ticked Done today that can still earn, first, as its earning ends with the day; else
                     // the plan's piece of that step. Another step's is never checked in its place.
-                    val record = if (named != null) null else log.value.slots.filter { it.taskId == open.id && it.outcome.kept && focus.today(it.at) == focus.today(now) && KeptActions.of(it, open, focus.today(now).toString()).photo && Photos.pieceOf(it, open)?.stepIndex == a.stepIndex }.maxByOrNull { it.at }
-                    val piece = record?.let { Photos.pieceOf(it, open) } ?: planning.plan().chunksOf(open.id).firstOrNull { if (named != null) it.key == named else a.stepIndex == null || it.stepIndex == a.stepIndex }
+                    val record = if (named != null) null else log.value.slots.filter { it.taskId == open.id && it.outcome.kept && focus.today(it.at) == focus.today(now) && KeptActions.of(it, open, focus.today(now).toString()).photo && Photos.pieceOf(it, open)?.stepIndex == stepIndex }.maxByOrNull { it.at }
+                    val piece = record?.let { Photos.pieceOf(it, open) } ?: planning.plan().chunksOf(open.id).firstOrNull { if (named != null) it.key == named else stepIndex == null || it.stepIndex == stepIndex }
                         ?: return@mapNotNull Act(Act.NOT_MADE + if (named != null) "the photos weren't checked: the piece of “${open.title}” he named isn't planned now." else "the photos weren't checked: “${open.title}” has no piece to check now, planned or ticked Done today.", problem = true)
                     // Found again by a token of its own, so two alike are each their own, and one left by a stop part-way is settled ([settleChecks]).
                     val token = Ids.next()
