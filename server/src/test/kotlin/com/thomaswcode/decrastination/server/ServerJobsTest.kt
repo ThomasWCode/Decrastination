@@ -101,7 +101,7 @@ class ServerJobsTest {
         graph.jobs.tick()
         assertEquals(listOf(url), asked.toList())
         val ran = db.transaction { c -> c.createStatement().use { s -> s.executeQuery("SELECT key FROM meta WHERE key LIKE 'job:%'").use { r -> buildList { while (r.next()) add(r.getString(1)) } } } }
-        assertEquals(listOf("job:heartbeat"), ran, "the phone does all the rest till then")
+        assertEquals(listOf("job:heartbeat", "job:storage"), ran.sorted(), "the phone does all the rest till then, but for the box's own: its heartbeat, and what it holds (6.10.0)")
     }
 
     @Test
