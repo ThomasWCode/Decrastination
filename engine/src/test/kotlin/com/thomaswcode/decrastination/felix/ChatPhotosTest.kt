@@ -88,6 +88,17 @@ class ChatPhotosTest {
     }
 
     @Test
+    fun `a photo he asks to see goes before one kept within ten minutes, which he didn't ask for`() {
+        val old = you("y0", "Older", at = now - 3_600_000L, photos = listOf(ChatPhoto(b, kept = true)), answeredAt = now - 3_500_000L)
+        val first = you("y1", "Here", photos = listOf(ChatPhoto(a, kept = true)), answeredAt = now + 1_000)
+        val reply = ChatMessage("h1", Speaker.Felix, "Got it.", now + 1_000)
+        val soon = you("y2", "And the older one?", at = now + 60_000L)
+        // Room for one picture: the one asked for.
+        val budget = 4 * Pricing.PICTURE_CHARS + 100
+        assertEquals(listOf(b), ChatPrompts.sent(listOf(old, first, reply, soon), "", emptyMap(), LONDON, budget = budget, live = setOf(a, b), seen = listOf(b)).pictures)
+    }
+
+    @Test
     fun `his lines of the photos, those he asks to see and a photo kept with a task are read as the app can use them`() {
         val bridge = TaskItem(id = "teams:b", source = Source.Teams, sourceId = "b", title = "Bridge", dueAt = now + 86_400_000L, kind = Kind.Homework, firstSeenAt = now, lastSeenAt = now)
         val context = ChatPrompts.Context("", "", photos = setOf(a))

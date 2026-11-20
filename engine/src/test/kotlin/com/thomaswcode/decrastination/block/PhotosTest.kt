@@ -332,10 +332,15 @@ class PhotosTest {
     @Test
     fun `a chat photo kept with a task is a copy of its own, read again with it`() = runBlocking {
         tasks.update { it.copy(tasks = listOf(essay)) }
+        // The photo it had, its file still there once another's kept in its place, for the Undo that brings it back.
+        val before = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 5)
+        photos.attachPhoto(essay.id, before)
+        val had = task().photo!!
         val jpeg = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 6)
         val hash = Photos.hashOf(jpeg)
         photos.keepChatPhoto(hash, jpeg)
         val photo = photos.keepFromChat(essay.id, hash, jpeg)
+        assertTrue(File(had.path).readBytes().contentEquals(before))
         assertEquals(hash, task().photo?.hash)
         assertEquals(photo, task().photo)
         photos.chatPhotoFile(hash).delete()

@@ -165,10 +165,10 @@ class Photos(
     /**
      * [jpeg], the chat photo [hash], kept as [taskId]'s photo of the work (AI-23) at Felix's word (6.8.0): a copy of its own, so the
      * chat's letting go of it takes nothing from the task, and the task read again with it. Where it's kept is as a task's photo is
-     * here: by the task on the phone, by its hash on the server.
+     * here, by its hash on the server; on the phone by the task and the hash, so the photo it replaces is still there for its Undo.
      */
     suspend fun keepFromChat(taskId: String, hash: String, jpeg: ByteArray): TaskPhoto {
-        val photo = TaskPhoto(File(photos, taskId.replace(Regex("[^A-Za-z0-9._-]"), "_") + ".jpg").path, hash, clock.now())
+        val photo = TaskPhoto(File(photos, taskId.replace(Regex("[^A-Za-z0-9._-]"), "_") + "-$hash.jpg").path, hash, clock.now())
         withContext(Dispatchers.IO) {
             photos.mkdirs()
             fileOf(photo).writeBytes(jpeg)

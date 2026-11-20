@@ -114,6 +114,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -607,6 +608,13 @@ class AppGraph private constructor(context: Context) : Owners {
         scope.launch(Dispatchers.IO) { stores.session.state.map { it.pages }.distinctUntilChanged().drop(1).collect { runCatching { photos.sweepPhotos(keptBefore = clock.now() - PHOTO_GRACE_MS) } } }
         // A chat photo's file here let go as its message is done with it (6.8.0), as the server's is.
         scope.launch(Dispatchers.IO) { stores.chat.state.map { Photos.chatPhotos(it.messages) }.distinctUntilChanged().drop(1).collect { runCatching { photos.sweepPhotos(keptBefore = clock.now() - PHOTO_GRACE_MS) } } }
+        // And every six hours, as a kept one's fortnight ends with no change to set a sweep off, and this process can live for days.
+        scope.launch(Dispatchers.IO) {
+            while (true) {
+                delay(PHOTO_SWEEP_MS)
+                runCatching { photos.sweepPhotos(keptBefore = clock.now() - PHOTO_GRACE_MS) }
+            }
+        }
         // What's read again as it changes: the calendar, the calendars picked, Anki's settings, the Teams widget's list ([Sync.start]).
         sync.start(calendarWriter.calendarChanged)
         // The calendar picked, and each plan once plans have been quiet a while, written ([CalendarWriter.start]).
@@ -869,6 +877,9 @@ class AppGraph private constructor(context: Context) : Owners {
          * and a sweep runs as the app's used (6.5.0), so it's given an hour, not the server's day, which waits for a phone offline.
          */
         private const val PHOTO_GRACE_MS = 60 * 60_000L
+
+        /** How often the phone sweeps its photos while the app lives, a kept chat photo's fortnight being up between changes (6.8.0). */
+        private const val PHOTO_SWEEP_MS = 6 * 3_600_000L
 
         // It holds only the application context, which lives as long as the process anyway.
         @SuppressLint("StaticFieldLeak")
