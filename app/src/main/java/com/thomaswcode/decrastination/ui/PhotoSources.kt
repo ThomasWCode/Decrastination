@@ -73,6 +73,8 @@ internal fun DeleteAfterUse(checked: Boolean, onChange: (Boolean) -> Unit) {
  * ([com.thomaswcode.decrastination.block.PhotoChecks.shrink]); whether there's one there now.
  */
 internal fun copyPicked(context: Context, uri: Uri, into: File): Boolean = runCatching {
+    // Its folder made here, as the camera's path makes it: a cache cleared since leaves none.
+    into.parentFile?.mkdirs()
     context.contentResolver.openInputStream(uri)?.use { input -> into.outputStream().use { input.copyTo(it) } } != null
 }.getOrElse {
     // A copy cut short leaves no part of a picture to be read as one.
