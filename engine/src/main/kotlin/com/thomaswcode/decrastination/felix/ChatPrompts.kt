@@ -126,7 +126,7 @@ object ChatPrompts {
      * Photos in the chat (6.8.0): seen and answered from, made into tasks as words are, noted in a line each, seen again where kept,
      * kept with a task; never taken as proof that work's done, which is the photo check's (6.9.0).
      */
-    private const val PHOTOS = "11. Photos (photos): a message of theirs can come with photos, up to four, each sent before its words and named (\"Photo 1, id 1a2b3c4d5e6f7a8b:\"). Look at what each shows and answer from it as from their words, and make or change tasks from it as from words (a worksheet's questions, a planner's page). In photos, give a line for each photo you're shown in this turn, in the order shown, one to a line and nothing before it: what it is, in a few words (\"a worksheet of vector questions, the first three answered\"), kept in its place once the photo's gone; empty when there's none. An earlier one is in the conversation as [photo id: your line], and one still kept says so: photo:id in details shows it again, where what you're asked needs more than your line. keepPhoto keeps a photo with a task as its photo of the work, in place of one it had, read with it: only when they ask for that, never because it shows the task's work. When they send photos to show work's done (\"done, here it is\", \"finished the sheet\"), checkPhotos hands them to the photo check, which alone decides whether it's done and earns its free time (taskId; stepIndex the step they show, as tickStep names it, where their words or the photos make it plain, else -1; setting empty, when a slot of it ticked Done today is checked first, else the plan's next piece, or the key of the plan's piece shown, from today's slots or the next pieces, where it's plainly that one, such as the next part though the one before was ticked with no photo; value a line or two of what else they said that bears on it, such as what was set, empty for nothing): reply only that it's being checked, and you'll be told what it said. You never decide it yourself: never tick a step, keep a piece or mark a task done because a photo shows it; their word that it's done, with no photo, is as it always was."
+    private const val PHOTOS = "11. Photos (photos): a message of theirs can come with photos, up to four, each sent before its words and named (\"Photo 1, id 1a2b3c4d5e6f7a8b:\"). Look at what each shows and answer from it as from their words, and make or change tasks from it as from words (a worksheet's questions, a planner's page). In photos, give a line for each photo you're shown in this turn, in the order shown, one to a line and nothing before it: what it is, in a few words (\"a worksheet of vector questions, the first three answered\"), kept in its place once the photo's gone; empty when there's none. An earlier one is in the conversation as [photo id: your line], and one still kept says so: photo:id in details shows it again, where what you're asked needs more than your line. One kept from an earlier message can be shown again with this turn, named as from that message: it's there only so you can look back at it where what they say now needs it; don't remark on it otherwise, as they haven't sent it again. keepPhoto keeps a photo with a task as its photo of the work, in place of one it had, read with it: only when they ask for that, never because it shows the task's work. When they send photos to show work's done (\"done, here it is\", \"finished the sheet\"), checkPhotos hands them to the photo check, which alone decides whether it's done and earns its free time (taskId; stepIndex the step they show, as tickStep names it, where their words or the photos make it plain, else -1; setting empty, when a slot of it ticked Done today is checked first, else the plan's next piece, or the key of the plan's piece shown, from today's slots or the next pieces, where it's plainly that one, such as the next part though the one before was ticked with no photo; value a line or two of what else they said that bears on it, such as what was set, empty for nothing): reply only that it's being checked, and you'll be told what it said. You never decide it yourself: never tick a step, keep a piece or mark a task done because a photo shows it; their word that it's done, with no photo, is as it always was."
 
     /** What [READ]'s `details` asks for beside tasks' ids: the week's numbers (G6), and the calendar past the fortnight (G7). */
     const val ASK_STATS = "stats"
@@ -417,7 +417,7 @@ object ChatPrompts {
             return if (to.from == Speaker.Felix) "(Replying to your message: “$said”)\n" else "(Replying to their own earlier message: “$said”)\n"
         }
         // A turn each way at a time: a message of Felix's from a notification can follow his last answer.
-        val folded = recent.map { m -> m.from to quote(m) + text(m, tasks, zone, shown, live) }.fold(emptyList<Pair<Speaker, String>>()) { turns, (from, text) ->
+        val folded = recent.map { m -> m.from to quote(m) + text(m, tasks, zone, shown, live, newest = newestYours.any { it.id == m.id }) }.fold(emptyList<Pair<Speaker, String>>()) { turns, (from, text) ->
             if (turns.lastOrNull()?.first == from) turns.dropLast(1) + (from to turns.last().second + "\n\n" + text) else turns + (from to text)
         }
         val texts = if (lead.isEmpty()) folded else {
@@ -511,8 +511,8 @@ object ChatPrompts {
      * One message as it's sent: yours with what it was about; Felix's with its cards and what became of
      * them, and one the app wrote in his name (a check-in's question, the morning's list) said as such.
      */
-    private fun text(m: ChatMessage, tasks: Map<String, TaskItem>, zone: ZoneId, shown: Map<String, Int> = emptyMap(), live: Set<String> = emptySet()): String = when (m.from) {
-        Speaker.You -> aboutLine(m.about) + (listOf(photoLines(m, shown, live)) + m.text.trim().take(MAX_TEXT)).filter { it.isNotEmpty() }.joinToString("\n")
+    private fun text(m: ChatMessage, tasks: Map<String, TaskItem>, zone: ZoneId, shown: Map<String, Int> = emptyMap(), live: Set<String> = emptySet(), newest: Boolean = true): String = when (m.from) {
+        Speaker.You -> aboutLine(m.about) + (listOf(photoLines(m, shown, live, newest)) + m.text.trim().take(MAX_TEXT)).filter { it.isNotEmpty() }.joinToString("\n")
         Speaker.Felix -> (if (m.byApp) "(the app wrote this for you) " else "") + m.text + checksOf(m) + m.proposals.joinToString("") { p ->
             // In the words it was proposed in, where they're kept: made, a task's estimate is the new one.
             val what = p.task?.let { "add the task “${it.title}”" }
@@ -536,13 +536,15 @@ object ChatPrompts {
     private fun checksOf(m: ChatMessage): String = m.acts.filter { it.action?.type == ChatAction.Type.CheckPhotos }.joinToString("") { "\n[${it.line}]" }
 
     /**
-     * [m]'s photos as its turn says them (6.8.0): one sent as a picture with this turn by its number ([shown]); one still here by its
-     * id, kept, or not sent for want of room; one gone by his line of it, so he's told what it was once it isn't there.
+     * [m]'s photos as its turn says them (6.8.0): one sent as a picture with this turn by its number ([shown]), as sent with it where [m]'s
+     * of the [newest] turn, else as one of [m]'s shown again (6.10.1), so he doesn't take it for sent anew; one still here by its id, kept,
+     * or not sent for want of room; one gone by his line of it, so he's told what it was once it isn't there.
      */
-    private fun photoLines(m: ChatMessage, shown: Map<String, Int>, live: Set<String>): String = m.photos.joinToString("\n") { p ->
+    private fun photoLines(m: ChatMessage, shown: Map<String, Int>, live: Set<String>, newest: Boolean = true): String = m.photos.joinToString("\n") { p ->
         val line = p.note.takeIf { it.isNotBlank() }?.let { ": $it" }.orEmpty()
         when {
-            p.hash in shown -> "[Photo ${shown.getValue(p.hash)}, sent with this turn]"
+            p.hash in shown && newest -> "[Photo ${shown.getValue(p.hash)}, sent with this turn]"
+            p.hash in shown -> "[Photo ${shown.getValue(p.hash)}, from this earlier message, shown again]"
             p.hash in live && p.kept -> "[photo ${p.hash}, still kept$line]"
             p.hash in live -> "[photo ${p.hash}, not sent for room$line]"
             else -> "[photo ${p.hash}$line]"

@@ -1238,6 +1238,8 @@ private fun Claudes(graph: AppGraph, screen: ChatScreenState, message: ChatMessa
             }
             Time(message, zone, waiting, onAnswer = onReply, onRated = { onRate(message.rating == Conversation.RATED_UP) })
         }
+        // A photo check's line and what was left out, in the chat under his words, not folded (6.10.1).
+        Outside(message)
         // A message in the app's words carries its own button: the week's review to open, its summary to send.
         Opens(message)
         // A task he shows you (AI-14), the point of the message: never folded.
@@ -1252,7 +1254,6 @@ private fun Claudes(graph: AppGraph, screen: ChatScreenState, message: ChatMessa
                 // What it did beyond its cards (AI-14; D-60, everything he does), likewise, each with its Undo;
                 // and what it says of them with nothing to undo (a change refused, where a time went).
                 Acts(graph, message, live)
-                message.note?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 4.dp)) }
             }
         }
     }
@@ -1458,6 +1459,8 @@ private fun Acts(graph: AppGraph, message: ChatMessage, live: Boolean) {
     var said by remember(message.id) { mutableStateOf<String?>(null) }
     val quiet = MaterialTheme.colorScheme.onSurfaceVariant
     message.acts.forEachIndexed { i, act ->
+        // Said outside the fold ([Outside]).
+        if (ChatSummary.outside(act)) return@forEachIndexed
         Row(Modifier.fillMaxWidth().padding(start = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(
                 act.line,
@@ -1473,6 +1476,20 @@ private fun Acts(graph: AppGraph, message: ChatMessage, live: Boolean) {
         }
     }
     said?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(horizontal = 4.dp)) }
+}
+
+/**
+ * What's said of [message] in the chat, under his words, not folded (6.10.1, your note of 20 Nov): a photo check's line
+ * ([ChatSummary.outside]), red where it didn't pass or wasn't made; and what was left out of his answer, red.
+ */
+@Composable
+private fun Outside(message: ChatMessage) {
+    val lines = message.acts.filter(ChatSummary::outside)
+    if (lines.isEmpty() && message.note == null) return
+    Column(Modifier.padding(horizontal = 4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        lines.forEach { Text(it.line, style = MaterialTheme.typography.bodyMedium, color = if (it.problem) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant) }
+        message.note?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error) }
+    }
 }
 
 /**

@@ -166,12 +166,14 @@ object Planner {
         val at: Long? = null,
         /** Which of its step's sittings it is, where it's cut into them ([sittings]). */
         val sitting: Sitting? = null,
+        /** A box's parts of its task done already (Q7): its parts are numbered on from them. */
+        val before: Int = 0,
     ) {
         /** Without its own dates: a step's dates gone by were a plan's (PL-14), so it's done with its task's own. */
-        fun undated() = Piece(step, minutes, box, index = index, where = where, sitting = sitting)
+        fun undated() = Piece(step, minutes, box, index = index, where = where, sitting = sitting, before = before)
 
         /** On the day you put it on (PL-04). */
-        fun pinned() = Piece(step, minutes, box, from, due, index, where, pinned = true, at = at, sitting = sitting)
+        fun pinned() = Piece(step, minutes, box, from, due, index, where, pinned = true, at = at, sitting = sitting, before = before)
     }
 
     /**
@@ -184,7 +186,9 @@ object Planner {
      * [hard] where its deadline is the task's own, hard one: a step's own date is a plan (PL-14).
      */
     private fun windows(task: TaskItem, deadline: Long, soft: Boolean, hard: Boolean, pieces: List<Piece>, softFrom: (Long) -> Long): List<Item> {
-        if (pieces.all { it.from == null && it.due == null }) return listOf(Item(task, deadline, soft, pieces, hard = hard, home = pieces.isNotEmpty() && pieces.all { it.where == Where.Home }))
+        // Its parts done already, a box's (Q7): the rest are numbered on from them.
+        val before = pieces.firstOrNull()?.before ?: 0
+        if (pieces.all { it.from == null && it.due == null }) return listOf(Item(task, deadline, soft, pieces, hard = hard, home = pieces.isNotEmpty() && pieces.all { it.where == Where.Home }, offset = before, taskParts = before + pieces.size))
         val runs = mutableListOf<MutableList<Piece>>()
         for (piece in pieces) {
             val last = runs.lastOrNull()?.last()
@@ -214,7 +218,7 @@ object Planner {
             }
             if (!window.soft) cap = cap?.let { minOf(it, window.end) } ?: window.end
         }
-        var offset = 0
+        var offset = before
         return runs.mapIndexed { index, run ->
             val window = windows[index]
             Item(
@@ -232,7 +236,7 @@ object Planner {
                 windowed = true,
                 run = index,
                 offset = offset,
-                taskParts = pieces.size,
+                taskParts = before + pieces.size,
                 taskMinutes = pieces.sumOf { it.minutes },
             ).also { offset += run.size }
         }
@@ -299,7 +303,7 @@ object Planner {
         fun pinnedAt(task: TaskItem, pieces: List<Piece>, real: Long?): List<Piece> {
             val at = pinnedTime(task, real, input) ?: return pieces
             val first = pieces.firstOrNull() ?: return pieces
-            return listOf(Piece(first.step, first.minutes, first.box, from = at, due = dayOf(at).second, index = first.index, where = first.where, pinned = true, at = at, sitting = first.sitting)) + pieces.drop(1)
+            return listOf(Piece(first.step, first.minutes, first.box, from = at, due = dayOf(at).second, index = first.index, where = first.where, pinned = true, at = at, sitting = first.sitting, before = first.before)) + pieces.drop(1)
         }
         // A day you gave for all of a task (PL-04): each run of it from that day's start and by its end,
         // its last usable day whatever the margin, a deadline still only where its own is that day;
@@ -1153,11 +1157,18 @@ object Planner {
     fun remaining(task: TaskItem, multiplier: Double): Double {
         val whole = task.effortMin * multiplier
         val bySource = whole * (1 - task.sourceProgress.coerceIn(0.0, 1.0))
-        // From the lower of the first-seen and current progress: a percentage corrected downward
-        // brings its work back, rather than the first-seen one capping what's left.
-        val baseline = minOf(task.firstProgress ?: task.sourceProgress, task.sourceProgress)
-        val bySessions = whole * (1 - baseline.coerceIn(0.0, 1.0)) - task.workedMin - task.photoMin
+        val bySessions = started(task, multiplier) - task.workedMin - task.photoMin
         return minOf(bySource, bySessions)
+    }
+
+    /**
+     * [task]'s work from the start, in minutes of its calibrated estimate: what [remaining]'s kept slots count down from, so its
+     * parts done can be counted from it (Q7). From the lower of the first-seen and current progress: a percentage corrected
+     * downward brings its work back, rather than the first-seen one capping what's left.
+     */
+    private fun started(task: TaskItem, multiplier: Double): Double {
+        val baseline = minOf(task.firstProgress ?: task.sourceProgress, task.sourceProgress)
+        return task.effortMin * multiplier * (1 - baseline.coerceIn(0.0, 1.0))
     }
 
     /**
@@ -1224,11 +1235,14 @@ object Planner {
             // box too long for all of them would be planned on none.
             .let { box -> roomiest(task, input)?.takeIf { it in MIN_CHUNK until box } ?: box }
         val count = ceil(remaining / box.toDouble()).toInt().coerceAtLeast(1)
+        // Its parts done already (Q7, your answer of 20 Nov): as many as its work from the start makes, less those left. The rest are
+        // numbered on from them ("part 2 of 4", not "part 1 of 3"), so each keeps a key of its own and a part's share is of the whole.
+        val done = (ceil(started(task, multiplier).roundToInt() / box.toDouble()).toInt() - count).coerceAtLeast(0)
         return (0 until count).map { i ->
             // Even boxes: 100 minutes is 34, 33 and 33, not 45, 45 and a stray 10.
             val minutes = remaining / count + if (i < remaining % count) 1 else 0
-            // The box only where it cut the task: in one piece, its length was the task's own.
-            Piece(null, minutes, box = box.takeIf { count > 1 }, where = where)
+            // The box only where it cut the task: in one piece from the start, its length was the task's own.
+            Piece(null, minutes, box = box.takeIf { done + count > 1 }, where = where, before = done)
         }
     }
 

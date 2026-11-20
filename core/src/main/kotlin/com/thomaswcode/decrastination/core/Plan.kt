@@ -153,6 +153,9 @@ data class Chunk(
             after != null && after > 0 -> "$taskId#$stepIndex#$after"
             else -> "$taskId#$stepIndex"
         }
+
+        /** The part [key] names of [taskId]'s, a piece of time with no step of its own ([keyOf]); null for a step's, or another task's. */
+        fun partOf(key: String, taskId: String): Int? = key.takeIf { it.startsWith("$taskId#-1#") }?.removePrefix("$taskId#-1#")?.toIntOrNull()
     }
 
     /** Bad news, shown in red wherever it appears: overdue, due today, or behind. */

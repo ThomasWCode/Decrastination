@@ -261,7 +261,8 @@ object StorageRules {
             if (key in kept) continue
             ALERT_AT.filter { it <= at }.forEach { kept["${allowance.name}:$it"] = month }
             val used = used(allowance, reading)!!
-            said += "${allowance.label} is at $share% of its free allowance (${amount(allowance, used)} of ${amount(allowance, limit(allowance, reading))})."
+            // Its label then its share, as the website's notice says it: no verb to agree with a label's plural ("requests").
+            said += "${allowance.label}: $share% of its free allowance (${amount(allowance, used)} of ${amount(allowance, limit(allowance, reading))})."
         }
         return said to kept
     }

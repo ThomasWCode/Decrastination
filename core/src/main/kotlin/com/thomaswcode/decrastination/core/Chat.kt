@@ -297,18 +297,25 @@ object ChatSummary {
     /**
      * Whether [message] has anything under its words to fold (Q4: A): its cards but a task to open (the
      * point of a message that shows you one), what it did and said of it, what it remembered, what was
-     * searched and found, what was left out. A message that's just talk has none: no chevron, no label.
+     * searched and found. A message that's just talk has none: no chevron, no label. What's said outside
+     * the fold ([outside]) and what was left out are in the chat itself (6.10.1).
      */
     fun folds(message: ChatMessage): Boolean =
-        message.proposals.any { it.open == null } || message.acts.isNotEmpty() || message.memoryEdits.isNotEmpty() ||
-            message.searched.isNotEmpty() || message.sources.isNotEmpty() || message.note != null
+        message.proposals.any { it.open == null } || message.acts.any { !outside(it) } || message.memoryEdits.isNotEmpty() ||
+            message.searched.isNotEmpty() || message.sources.isNotEmpty()
 
     /**
-     * How many things under [message] went wrong (Q5: A): a card not made, a search not looked up, what was
-     * left out; and a card from before everything was made as it came whose making failed, said only on it.
-     * Any, and its chevron is red.
+     * Whether [act] is said in the chat, under its message's words, not folded (6.10.1, your note of 20 Nov): a photo check's line,
+     * its result once it's in, to be read where it's said, not looked for. What was left out ([ChatMessage.note]) is likewise.
      */
-    fun problems(message: ChatMessage): Int = message.acts.count { it.problem } + failedBefore(message) + if (message.note != null) 1 else 0
+    fun outside(act: Act): Boolean = act.action?.type == ChatAction.Type.CheckPhotos
+
+    /**
+     * How many things folded under [message] went wrong (Q5: A): a card not made, a search not looked up;
+     * and a card from before everything was made as it came whose making failed, said only on it. Any, and
+     * its chevron is red. What's said outside the fold is red where it's said.
+     */
+    fun problems(message: ChatMessage): Int = message.acts.count { it.problem && !outside(it) } + failedBefore(message)
 
     /** Cards from before everything was made as it came whose making failed: their note says why, with no line of their own. */
     private fun failedBefore(message: ChatMessage): Int =
@@ -327,8 +334,8 @@ object ChatSummary {
      */
     fun line(message: ChatMessage): Line {
         val made = message.proposals.filter { it.open == null && it.state == ProposalState.Applied }.sumOf { if (it.task != null) 1 else it.changes.size }
-        val changes = made + message.acts.count { it.action != null && !it.undone }
-        val notMade = message.acts.count { it.problem && it.line.startsWith(Act.NOT_MADE) } + failedBefore(message)
+        val changes = made + message.acts.count { it.action != null && !it.undone && !outside(it) }
+        val notMade = message.acts.count { it.problem && it.line.startsWith(Act.NOT_MADE) && !outside(it) } + failedBefore(message)
         return Line(
             listOfNotNull(
                 "Changes: $changes".takeIf { changes > 0 },
@@ -339,7 +346,6 @@ object ChatSummary {
                 "$notMade not made".takeIf { notMade > 0 },
                 "not looked up".takeIf { message.acts.any { it.problem && it.line.startsWith(Act.NOT_LOOKED_UP) } },
                 "not brought".takeIf { message.acts.any { it.problem && it.line.startsWith(Act.NOT_BROUGHT) } },
-                "left out".takeIf { message.note != null },
             ).joinToString(" · "),
         )
     }

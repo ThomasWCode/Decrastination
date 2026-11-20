@@ -137,7 +137,9 @@ class PhotoChecker(private val client: AnthropicClient, val model: String = Clau
             // A part's share of the task, so a first sitting's half passes on its half (your answer, 19 Nov): only where the task's
             // divided with no step named (no place in its list; the planner names a box "part 1 of 2"), as parts are numbered
             // task-wide and a named step, or its sitting, is its own scope.
-            if (piece.parts > 1 && piece.stepIndex == null) appendLine("It's part ${piece.part} of ${piece.parts}: with the parts before it, ${share(piece.part, piece.parts)} of the task's work (${piece.taskMinutes} min in all)")
+            // The task's minutes in all: its parts' even, so this one's times their number where some are done already (6.10.1: the
+            // plan's minutes are those left), else what's left of it.
+            if (piece.parts > 1 && piece.stepIndex == null) appendLine("It's part ${piece.part} of ${piece.parts}: with the parts before it, ${share(piece.part, piece.parts)} of the task's work (${maxOf(piece.taskMinutes, piece.minutes * piece.parts)} min in all)")
             if (task != null) {
                 appendLine("Task: ${task.title}")
                 task.className?.let { appendLine("Subject: $it") }

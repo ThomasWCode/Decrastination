@@ -121,7 +121,7 @@ data class ChatSourceLine(val title: String, val url: String? = null)
 
 /** What he did, a line, with its Undo while it can be taken back; struck through once it's [undone]. */
 @Serializable
-data class ChatDid(val line: String, val undone: Boolean = false, val undo: Action? = null)
+data class ChatDid(val line: String, val undone: Boolean = false, val undo: Action? = null, val problem: Boolean = false)
 
 /** A button: what it sends, or the form it opens first ([edit]), what's filled in then going in [action]'s `edited`. */
 @Serializable
@@ -194,6 +194,8 @@ data class ChatRow(
     val shown: List<ChatCard> = emptyList(),
     val cards: List<ChatCard> = emptyList(),
     val lines: List<ChatDid> = emptyList(),
+    /** Said under his words, not folded (6.10.1): a photo check's line, red where it didn't pass; then what was left out ([said]). */
+    val outside: List<ChatDid> = emptyList(),
     val said: String? = null,
     /** Yours, its photos (6.8.0): each where it can be fetched while its file's here, and Felix's line of it. */
     val photos: List<ChatPhotoView> = emptyList(),
@@ -268,7 +270,8 @@ object ChatViews {
 
         fun lines(message: ChatMessage, live: Boolean): List<ChatDid> =
             message.memoryEdits.mapIndexed { index, edit -> ChatDid(edit.line, edit.undone, UndoMemory(message.id, index).takeIf { live && !edit.undone && Memories.undo(memory, edit) != null }) } +
-                message.acts.mapIndexed { index, act ->
+                message.acts.mapIndexedNotNull { index, act ->
+                    if (ChatSummary.outside(act)) return@mapIndexedNotNull null
                     val can = live && !act.undone && ChatActs.canUndo(act, tasks.tasks, settings, chat.messages, felix.notes, felix.reminders, kept, messageId = message.id, now = now, dayStart = dayStart, finishing = finishing, readAt = { source -> tasks.status(source).lastSuccessAt })
                     ChatDid(act.line, act.undone, UndoAct(message.id, index).takeIf { can })
                 }
@@ -310,6 +313,7 @@ object ChatViews {
                 shown = message.proposals.filter { it.open != null }.map { card(message, it, byId, live, now, zone) },
                 cards = message.proposals.filter { it.open == null }.map { card(message, it, byId, live, now, zone) },
                 lines = lines(message, live),
+                outside = message.acts.filter(ChatSummary::outside).map { ChatDid(it.line, it.undone, problem = it.problem) },
                 said = message.note,
                 opens = message.opens?.let { if (it.startsWith(Conversation.OPENS_SUMMARY)) "Send it" else "Open the review" },
             )

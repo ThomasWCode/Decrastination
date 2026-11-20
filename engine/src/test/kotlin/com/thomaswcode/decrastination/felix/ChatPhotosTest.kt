@@ -78,7 +78,8 @@ class ChatPhotosTest {
         val soon = you("y2", "Which is hardest?", at = now + ChatPrompts.PHOTO_WITHIN_MS)
         val again = ChatPrompts.sent(listOf(first, reply, soon), "", emptyMap(), LONDON, live = setOf(a))
         assertEquals(listOf(a), again.pictures)
-        assertTrue("[Photo 1, sent with this turn]\nHere" in again.turns.first().second)
+        // Named as its own message's, shown again, so he doesn't take it for sent anew (6.10.1).
+        assertTrue("[Photo 1, from this earlier message, shown again]\nHere" in again.turns.first().second, again.turns.first().second)
         val later = soon.copy(at = now + ChatPrompts.PHOTO_WITHIN_MS + 1)
         val told = ChatPrompts.sent(listOf(first, reply, later), "", emptyMap(), LONDON, live = setOf(a))
         assertEquals(emptyList(), told.pictures)

@@ -219,10 +219,10 @@ class ConversationTest {
         val parts = felix.planning.plan().chunksOf(long.id)
         assertTrue(parts.size > 1, parts.joinToString { it.key })
         assertTrue(felix.focusKeep(parts.first().key))
-        // The plan's next, as the list of next pieces shows it him: numbered again ("part 1 of 3"), its key the one kept's.
+        // The plan's next, as the list of next pieces shows it him: numbered on from the part kept, its own key (D-163).
         val next = felix.planning.plan().chunksOf(long.id).first()
-        assertNotEquals(parts.first().label, next.label)
-        assertEquals(parts.first().key, next.key)
+        assertNotEquals(parts.first().key, next.key)
+        assertEquals(parts[1].key, next.key)
         felix.owners.chatPhotos[hash] = jpeg
         val check = """[{"type":"checkPhotos","taskId":"teams:long","stepIndex":-1,"setting":"${next.key}","value":""}]"""
         felix.answers(felix.chatAnswer("Checking it now.", actions = check))

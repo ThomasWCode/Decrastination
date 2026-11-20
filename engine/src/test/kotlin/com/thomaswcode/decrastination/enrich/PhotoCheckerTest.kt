@@ -97,6 +97,9 @@ class PhotoCheckerTest {
         // A part's share of the task, the parts before it with it (your answer, 19 Nov).
         assertTrue("It's part 2 of 2: with the parts before it, all of the task's work (80 min in all)" in about, about)
         assertTrue("part 1 of 2: with the parts before it, about half" in PhotoChecker.context(piece.copy(part = 1), null, emptyList(), LONDON))
+        // Parts done already (D-163): the plan's minutes are those left, so the whole is this part's times their number.
+        val later = PhotoChecker.context(piece.copy(parts = 4, taskMinutes = 120), null, emptyList(), LONDON)
+        assertTrue("It's part 2 of 4: with the parts before it, about half of the task's work (160 min in all)" in later, later)
         assertEquals(listOf("about a third", "about two thirds", "all", "about 40%"), listOf(PhotoChecker.share(1, 3), PhotoChecker.share(2, 3), PhotoChecker.share(3, 3), PhotoChecker.share(2, 5)))
         assertTrue("It's part" !in PhotoChecker.context(piece.copy(part = 1, parts = 1), null, emptyList(), LONDON))
         // A named step's piece is judged by its own scope, its label, however the task's parts are numbered.

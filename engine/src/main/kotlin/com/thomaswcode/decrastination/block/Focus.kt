@@ -788,8 +788,10 @@ class Focus(
         // From a kept slot's sheet (6.5.0): that slot, kept today without earning, and no other, however long after its tick.
         done.record?.let { named ->
             val slot = log.value.slots.lastOrNull { named.names(it) && it.outcome.kept && it.date == today && !it.earned } ?: return false
+            earnPartsBefore(slot.taskId, slot.key, today)
             return keeping.withLock { earnKept(slot, photo = true, letGo = done) }
         }
+        earnPartsBefore(done.taskId, key, today)
         // Taken of a piece still to do: a slot of it kept since (ticked while the check ran), or moments
         // before (Done, then the photo at once: [AGAIN_MS]), is the one it shows; one kept before that is
         // another (an earlier box under the same key, a round before the task reopened), and the piece in
@@ -802,6 +804,17 @@ class Focus(
             return true
         }
         return keeping.withLock { earnKept(unearned, photo = true, letGo = done) }
+    }
+
+    /**
+     * The parts of [taskId]'s before [key]'s, ticked today and earning nothing yet, earned with it (Q5, your answer of 20 Nov): a part's
+     * check asks for its share of the work from the start, so its pass shows theirs too. Each once ([earnKept]), and before the part
+     * checked's own, so a stop between gives them at start-up, its photo not yet let go. A step's check is of its own work alone.
+     */
+    private suspend fun earnPartsBefore(taskId: String, key: String, today: String) {
+        val part = Chunk.partOf(key, taskId) ?: return
+        log.value.slots.filter { s -> s.outcome.kept && s.date == today && !s.earned && Chunk.partOf(s.key, taskId)?.let { it < part } == true }
+            .forEach { keeping.withLock { earnKept(it, photo = true) } }
     }
 
     /**
