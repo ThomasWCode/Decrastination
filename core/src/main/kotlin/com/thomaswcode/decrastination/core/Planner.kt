@@ -168,12 +168,14 @@ object Planner {
         val sitting: Sitting? = null,
         /** A box's parts of its task done already (Q7): its parts are numbered on from them. */
         val before: Int = 0,
+        /** A box's task's work from the start ([started]), what a part's share is of; null for a step. */
+        val whole: Int? = null,
     ) {
         /** Without its own dates: a step's dates gone by were a plan's (PL-14), so it's done with its task's own. */
-        fun undated() = Piece(step, minutes, box, index = index, where = where, sitting = sitting, before = before)
+        fun undated() = Piece(step, minutes, box, index = index, where = where, sitting = sitting, before = before, whole = whole)
 
         /** On the day you put it on (PL-04). */
-        fun pinned() = Piece(step, minutes, box, from, due, index, where, pinned = true, at = at, sitting = sitting, before = before)
+        fun pinned() = Piece(step, minutes, box, from, due, index, where, pinned = true, at = at, sitting = sitting, before = before, whole = whole)
     }
 
     /**
@@ -303,7 +305,7 @@ object Planner {
         fun pinnedAt(task: TaskItem, pieces: List<Piece>, real: Long?): List<Piece> {
             val at = pinnedTime(task, real, input) ?: return pieces
             val first = pieces.firstOrNull() ?: return pieces
-            return listOf(Piece(first.step, first.minutes, first.box, from = at, due = dayOf(at).second, index = first.index, where = first.where, pinned = true, at = at, sitting = first.sitting, before = first.before)) + pieces.drop(1)
+            return listOf(Piece(first.step, first.minutes, first.box, from = at, due = dayOf(at).second, index = first.index, where = first.where, pinned = true, at = at, sitting = first.sitting, before = first.before, whole = first.whole)) + pieces.drop(1)
         }
         // A day you gave for all of a task (PL-04): each run of it from that day's start and by its end,
         // its last usable day whatever the margin, a deadline still only where its own is that day;
@@ -505,6 +507,7 @@ object Planner {
                 part = part,
                 parts = item.taskParts,
                 taskMinutes = item.taskMinutes,
+                wholeMinutes = piece.whole?.takeIf { piece.box != null },
                 availableAt = item.notBefore?.takeIf { it > input.now },
                 box = piece.box,
                 stepIndex = piece.index,
@@ -1237,12 +1240,13 @@ object Planner {
         val count = ceil(remaining / box.toDouble()).toInt().coerceAtLeast(1)
         // Its parts done already (Q7, your answer of 20 Nov): as many as its work from the start makes, less those left. The rest are
         // numbered on from them ("part 2 of 4", not "part 1 of 3"), so each keeps a key of its own and a part's share is of the whole.
-        val done = (ceil(started(task, multiplier).roundToInt() / box.toDouble()).toInt() - count).coerceAtLeast(0)
+        val from = started(task, multiplier).roundToInt()
+        val done = (ceil(from / box.toDouble()).toInt() - count).coerceAtLeast(0)
         return (0 until count).map { i ->
             // Even boxes: 100 minutes is 34, 33 and 33, not 45, 45 and a stray 10.
             val minutes = remaining / count + if (i < remaining % count) 1 else 0
             // The box only where it cut the task: in one piece from the start, its length was the task's own.
-            Piece(null, minutes, box = box.takeIf { done + count > 1 }, where = where, before = done)
+            Piece(null, minutes, box = box.takeIf { done + count > 1 }, where = where, before = done, whole = from)
         }
     }
 

@@ -31,6 +31,7 @@ import com.thomaswcode.decrastination.core.Rule
 import com.thomaswcode.decrastination.core.SlotState
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Speaker
+import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.core.SubStep
 import com.thomaswcode.decrastination.core.TaskItem
 import java.util.concurrent.TimeUnit
@@ -230,6 +231,25 @@ class ConversationTest {
         felix.settle()
         assertEquals(next.label, felix.owners.checked.single().first.label)
         assertEquals(next.key, his().last().acts.single().action?.setting)
+    }
+
+    @Test
+    fun `one of yours whose last piece's tick finished it is checked against that slot, ticked with no photo`() = runBlocking {
+        // Due tonight, so its piece is today's.
+        val own = sheet.copy(id = "own:last", source = Source.Own, sourceId = "last", title = "A worksheet of my own", sourceEffortMin = 30, dueAt = Fixtures.at("2026-10-19T23:59"))
+        stores.tasks.update { it.copy(tasks = it.tasks + own) }
+        val key = felix.planning.plan().chunksOf(own.id).single().key
+        assertTrue(felix.focusKeep(key))
+        // Its last piece's tick finishes it, as the app finishes one of yours at once.
+        val keptAt = stores.log.value.slots.last().at
+        stores.tasks.update { s -> s.copy(tasks = s.tasks.map { if (it.id == own.id) it.copy(status = Status.Done, doneAt = keptAt + 1_000) else it }) }
+        felix.owners.chatPhotos[hash] = jpeg
+        val check = """[{"type":"checkPhotos","taskId":"own:last","stepIndex":-1,"setting":"","value":""}]"""
+        felix.answers(felix.chatAnswer("Checking it now.", actions = check))
+        assertTrue(conversation.ask("done it, here", photos = listOf(ChatPhoto(hash))))
+        felix.settle()
+        assertEquals(stores.log.value.slots.last().label, felix.owners.checked.singleOrNull()?.first?.label, his().last().acts.toString())
+        assertTrue(his().last().acts.single().line.startsWith("Photo check: "), his().last().acts.toString())
     }
 
     @Test

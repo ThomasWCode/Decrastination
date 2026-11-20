@@ -83,6 +83,8 @@ data class Chunk(
     val parts: Int,
     /** The whole task's remaining minutes: shorter tasks go first among equals. */
     val taskMinutes: Int,
+    /** A part's task's work from the start (6.10.1, D-163), what its share is of, as a part done ran its own length; null but for a part. */
+    val wholeMinutes: Int? = null,
     /** When it can be started, if that's later than the plan's now (an Anki deck's cards come at 04:00). */
     val availableAt: Long? = null,
     /** The box length that cut it, when its task was split into boxes; null for a step or a task in one piece. */

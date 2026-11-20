@@ -1202,15 +1202,18 @@ class Conversation(
                 // piece he names by its key, else as a check finds it, a slot of it ticked Done today that can still earn, else in the
                 // plan; his line of what else you said as your word. Said under his answer as it's checked, and again with what it said.
                 ChatAction.Type.CheckPhotos -> {
-                    val open = task?.takeIf { it.isOpen } ?: return@mapNotNull Act(Act.NOT_MADE + "the photos weren't checked: “${task?.title ?: "its task"}” was finished, or went, while he answered.", problem = true)
-                    if (proof.isEmpty()) return@mapNotNull Act(Act.NOT_MADE + "the photos weren't checked: they went from the chat while he answered.", problem = true)
                     val now = clock.now()
+                    // Open, or finished by a piece of it ticked Done today whose slot can still earn by a photo (6.10.1: one of yours, its last
+                    // piece), as Day's sheet of that slot offers its check.
+                    val open = task?.takeIf { t -> t.isOpen || log.value.slots.any { it.taskId == t.id && KeptActions.of(it, t, focus.today(now).toString()).photo } }
+                        ?: return@mapNotNull Act(Act.NOT_MADE + "the photos weren't checked: “${task?.title ?: "its task"}” was finished, or went, while he answered.", problem = true)
+                    if (proof.isEmpty()) return@mapNotNull Act(Act.NOT_MADE + "the photos weren't checked: they went from the chat while he answered.", problem = true)
                     // The step he named as it is now, found by its id or title as a tick's is: one reordered or replaced as he answered isn't
                     // checked by its old place.
                     val stepIndex = a.stepIndex?.let { ChatActs.stepOf(Act("", a), open) ?: return@mapNotNull Act(Act.NOT_MADE + "the photos weren't checked: “${open.title}”'s steps changed as he answered.", problem = true) }
                     // The plan's piece he names, where your words or the photos made it plain (your answer of 20 Nov), so the next part's
-                    // photo isn't taken for the part before it, ticked with none. Only the plan's: a part kept is numbered again in the plan,
-                    // its key then the next part's, and a slot ticked is found by the step without one.
+                    // photo isn't taken for the part before it, ticked with none. Only the plan's: a slot ticked is found by the step without
+                    // one, and a part kept short keeps its key in the plan, still to finish.
                     val named = a.setting?.takeIf { it.isNotBlank() }
                     // Else a slot of the step named ticked Done today that can still earn, first, as its earning ends with the day; else
                     // the plan's piece of that step. Another step's is never checked in its place.

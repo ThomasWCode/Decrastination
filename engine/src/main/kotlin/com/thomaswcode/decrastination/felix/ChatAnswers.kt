@@ -523,7 +523,8 @@ object ChatAnswers {
         // task's the plan shown lists; what else was said that bears on it, a line or two, as the student's word. The check alone says
         // whether it's done.
         if (a.type == "checkPhotos") {
-            val task = byId[a.taskId]?.takeIf { it.isOpen } ?: return no("photos to check against a task that isn't listed, or is finished")
+            // Open, or finished with a piece of it kept today, whose slot may still earn by a photo (6.10.1: one of yours, its last piece).
+            val task = byId[a.taskId]?.takeIf { it.isOpen || context?.kept?.containsValue(it.id) == true } ?: return no("photos to check against a task that isn't listed, or is finished")
             if (context?.photos.isNullOrEmpty()) return no("photos to check, with none here")
             val index = a.stepIndex.takeIf { it >= 0 }
             val step = index?.let { task.subSteps.getOrNull(it) ?: return no("photos to check against a step “${task.title.take(60)}” hasn't") }
