@@ -18,7 +18,17 @@ const SLOW_MS = 12_500;
 /** How often each message has been answered, so one can fail the first time. */
 const asked = new Map();
 
+/** A photo check's answer (6.7.0): a task whose title says it passes passes; the rest show half the work, remembered. */
+const PHOTO_ASKED = "The piece of work: ";
+const PASSES = "passes on a photo";
+
+function photo(said) {
+  if (said.includes(PASSES)) return JSON.stringify({ done: true, confidence: 0.95, reason: "Every question is answered.", seen: "A page of answers", covered: "Q1-10, each answered", fresh: true });
+  return JSON.stringify({ done: false, confidence: 0.9, reason: "Q6-10 aren't shown.", seen: "A page of answers", covered: "Q1-5, each answered", fresh: true });
+}
+
 function text(said) {
+  if (said.includes(PHOTO_ASKED)) return photo(said);
   if (said.includes(NEVER_ASKED)) return "That isn't an answer.";
   if (said.includes(ONCE_ASKED)) {
     const times = asked.get(ONCE_ASKED) ?? 0;

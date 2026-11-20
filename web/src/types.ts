@@ -84,7 +84,7 @@ export interface About {
 
 /** A block of the Day's own sheet (6.6.0), as the server built it: what it says and what can be done with it. */
 export interface BlockSheet {
-  kind: "piece" | "missed" | "event";
+  kind: "piece" | "missed" | "event" | "kept";
   title: string;
   lines: string[];
   actions: TaskAction[];
@@ -350,6 +350,18 @@ export interface TaskAction {
   confirm?: string | null;
   detail?: string | null;
   undo?: Action | null;
+  /** A photo check it starts (6.7.0). */
+  check?: PhotoCheckTarget | null;
+}
+
+/** What a photo check from here is of (6.7.0): a piece by its task, key and step, or a kept slot by its record. */
+export interface PhotoCheckTarget {
+  taskId: string;
+  key: string;
+  step?: string | null;
+  record?: { key: string; start: number; at: number } | null;
+  side: number;
+  pages: number;
 }
 
 export interface TaskField {

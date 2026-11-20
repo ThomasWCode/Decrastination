@@ -594,6 +594,48 @@ test("tasks read from a photo are checked one at a time, and kept only if they'r
   expect(sent).toBe("image/jpeg");
 });
 
+test("a photo check from a piece's own sheet passes, the same judge as the phone's", async ({ page }) => {
+  await dueTask(page, "A sheet that passes on a photo");
+  const block = await pieceOf(page, "A sheet that passes on a photo");
+  await block.click();
+  const sheet = page.getByTestId("block-sheet");
+  await sheet.getByTestId("photo-check-input").setInputFiles({ name: "page.png", mimeType: "image/png", buffer: PHOTO });
+  await expect(sheet.getByText("1 page chosen.")).toBeVisible();
+  await expect(sheet.getByLabel("Delete after use")).toBeChecked();
+  await sheet.getByRole("button", { name: "Check it" }).click();
+  await expect(sheet.getByRole("status")).toContainText("Done");
+});
+
+test("a photo check that says not yet keeps what it saw, shown on the task's sheet; more than ten pictures take the first ten", async ({ page }) => {
+  await dueTask(page, "A sheet half shown");
+  const block = await pieceOf(page, "A sheet half shown");
+  await block.click();
+  const sheet = page.getByTestId("block-sheet");
+  const eleven = Array.from({ length: 11 }, (_, i) => ({ name: `page-${i}.png`, mimeType: "image/png", buffer: PHOTO }));
+  await sheet.getByTestId("photo-check-input").setInputFiles(eleven);
+  await expect(sheet.getByText("10 pages chosen.")).toBeVisible();
+  await expect(sheet.getByRole("status")).toContainText("Only 10 pages go in one check");
+  await sheet.getByRole("button", { name: "Cancel" }).click();
+  await sheet.getByTestId("photo-check-input").setInputFiles({ name: "page.png", mimeType: "image/png", buffer: PHOTO });
+  await sheet.getByRole("button", { name: "Check it" }).click();
+  await expect(sheet.getByRole("status")).toContainText("What these showed is remembered");
+  await sheet.getByRole("button", { name: "Its due date, minutes…" }).click();
+  await expect(page.getByTestId("task-sheet").getByText("Q1-5, each answered")).toBeVisible();
+});
+
+test("a photo check's pages past their bound aren't read", async ({ page }) => {
+  await page.goto("/day");
+  const big = Buffer.alloc(3 * 1024 * 1024, 7);
+  big[0] = 0xff;
+  big[1] = 0xd8;
+  big[2] = 0xff;
+  const answer = await page.request.post("/api/photos/check", {
+    headers: { "X-Requested-With": "decrastination" },
+    data: { taskId: "own:none", key: "own:none#-1#1", takenAt: 0, pages: [big.toString("base64")], step: null, keep: false, record: null },
+  });
+  expect(answer.status()).toBe(413);
+});
+
 /** Settings' page [name], from the side. */
 async function settingsPage(page: Page, name: string) {
   await page.goto("/settings");

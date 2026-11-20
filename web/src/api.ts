@@ -1,4 +1,4 @@
-import type { Action, Asked, BackupView, ChatView, DayView, DeviceLine, NoticesView, Outcome, PairingCode, PhotoRead, ReviewsView, SettingsView, SetupView, StatsView, TaskAsk, TaskView, WeekView, WorkView } from "./types";
+import type { Action, Asked, BackupView, ChatView, DayView, DeviceLine, NoticesView, Outcome, PairingCode, PhotoCheckTarget, PhotoRead, ReviewsView, SettingsView, SetupView, StatsView, TaskAsk, TaskView, WeekView, WorkView } from "./types";
 
 /** A request the server answered with a refusal. */
 export class ApiError extends Error {
@@ -48,6 +48,14 @@ export const api = {
 /** [jpeg], a photo of homework, read into tasks to check: a call to Claude, so only at your asking. */
 export function readPhoto(jpeg: Blob): Promise<PhotoRead> {
   return read<PhotoRead>("/api/photos/tasks", { method: "POST", headers: { ...CHANGING, "Content-Type": "image/jpeg" }, body: jpeg });
+}
+
+/**
+ * [pages], JPEGs in base64, checked as [target]'s work (6.7.0): a call to Claude, so only at your asking, its time the server's.
+ * [keep]: the box unticked, the pages kept with their task.
+ */
+export function checkPhotos(target: PhotoCheckTarget, pages: string[], keep: boolean): Promise<{ said: string }> {
+  return read<{ said: string }>("/api/photos/check", posting({ taskId: target.taskId, key: target.key, takenAt: 0, pages, step: target.step ?? null, keep, record: target.record ?? null }));
 }
 
 /** [action] as a command, made here: the server applies it through its owner, and says what came of it (D-140). */

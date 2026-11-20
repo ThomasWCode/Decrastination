@@ -776,3 +776,16 @@ A click on a piece of the website's Day opened its task's sheet, whose *Done*, *
 3. **After a Done the sheet stays** on its last reading, its buttons gone, so what Done came to, and its Undo, aren't lost as the piece leaves the grid.
 4. **What a message is about rides in the chat's address**, from *Ask Felix about it*, and goes with the next message once, as the phone's chip does; a ✕ lets it go.
 5. **The browser tests seed no calendar event or missed slot**, as either would move the plan under the other tests: their sheets are held by `DayViewTest`, and a piece's, *Ask Felix about it* and the read-only sheet while mirroring by the browser tests.
+
+### The photo check on the website (6.7.0, 20 Nov)
+
+`POST /photos/check` was the phone's alone. → D-158.
+
+**Q161. How does a photo check work on the website, where any saved picture can be chosen?** (18 Nov.) Offered: any picture, the same judge, the same earning; any picture but earning nothing; checks kept to the phone. **Your answer: any picture, the same judge, the same earning.**
+
+#### Decided without asking
+
+1. **The button carries what it checks** (`TaskAction.check`: the piece's task, key and step, or a kept slot's record, with the side to shrink to and the most pages), built by the server where the work's written homework and Claude can be asked, so the page holds no rule (D-137).
+2. **When the photo was taken is when the server received it**, whatever the page says.
+3. **More than ten pictures chosen take the first ten**, and say so.
+4. **A slot kept has its sheet on the website now**, as the phone's has from 6.5.0, with the photo while it can still earn.
