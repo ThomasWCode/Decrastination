@@ -37,7 +37,13 @@
       "unsent": [],
       "preferred": "",
       "reminderId": null,
-      "photos": []
+      "photos": [
+        {
+          "hash": "5e6f7a8b1a2b3c4d",
+          "kept": false,
+          "note": "a page of a planner, the week's homework"
+        }
+      ]
     },
     {
       "id": "arch-answer",

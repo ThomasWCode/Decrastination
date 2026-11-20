@@ -104,9 +104,10 @@ class ChatPhotosTest {
         val bridge = TaskItem(id = "teams:b", source = Source.Teams, sourceId = "b", title = "Bridge", dueAt = now + 86_400_000L, kind = Kind.Homework, firstSeenAt = now, lastSeenAt = now)
         val context = ChatPrompts.Context("", "", photos = setOf(a))
         val keep = """{"type":"keepPhoto","taskId":"teams:b","stepIndex":-1,"setting":"","value":"${a.uppercase()}"},{"type":"keepPhoto","taskId":"teams:b","stepIndex":-1,"setting":"","value":"$b"}"""
-        val json = """{"reply":"Kept.","newTasks":[],"changes":[],"memories":[],"suggestedReplies":[],"actions":[$keep],"research":"","details":["photo:$a","photo:$b","photo:nonsense"],"answered":[],"photos":"Photo 1, id $a: a worksheet \n\nthe second"}"""
+        val json = """{"reply":"Kept.","newTasks":[],"changes":[],"memories":[],"suggestedReplies":[],"actions":[$keep],"research":"","details":["photo:$a","photo:$b","photo:nonsense"],"answered":[],"photos":"Photo 1, id $a: a worksheet \n\nthe second\nPhoto 4: the fourth"}"""
         val reading = assertNotNull(ChatAnswers.parse(json, listOf(bridge), emptyList(), About(), now, LONDON, context = context))
-        assertEquals(listOf("a worksheet", "", "the second"), reading.photoNotes)
+        // A blank line isn't a photo's; one naming its photo is that one's.
+        assertEquals(listOf("a worksheet", "the second", "", "the fourth"), reading.photoNotes)
         assertEquals(listOf(a), reading.see, "only one still here")
         assertEquals(listOf(ChatAction(ChatAction.Type.KeepPhoto, "teams:b", value = a)), reading.actions)
         assertTrue(reading.leftOut.any { "a photo to keep that isn't one of theirs still here" in it }, reading.leftOut.toString())

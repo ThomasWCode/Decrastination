@@ -815,6 +815,25 @@
           "undone": false,
           "problem": true,
           "reminder": null
+        },
+        {
+          "line": "Kept the photo with “Forces worksheet”",
+          "action": {
+            "type": "KeepPhoto",
+            "taskId": "teams:as-sheet",
+            "stepIndex": null,
+            "setting": null,
+            "value": "1a2b3c4d5e6f7a8b",
+            "stepTitle": null,
+            "stepId": null
+          },
+          "was": null,
+          "cards": [],
+          "before": null,
+          "after": null,
+          "undone": false,
+          "problem": false,
+          "reminder": null
         }
       ],
       "suggestedReplies": [
