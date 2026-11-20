@@ -108,6 +108,8 @@ class DayViewTest {
         assertTrue(sheet.taskSheet)
         assertEquals(About(taskId = "teams:b", taskTitle = "b"), sheet.about)
         assertEquals(listOf("Start", "Done", "Later today"), assertNotNull(first.sheet).actions.map { it.label })
+        // Found again by its piece, wherever it's moved to, not by where it was.
+        assertEquals("piece-$key", second.sheetKey)
     }
 
     @Test

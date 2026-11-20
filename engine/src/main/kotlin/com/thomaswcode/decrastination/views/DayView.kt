@@ -147,6 +147,11 @@ data class BlockView(
     val drag: DragView? = null,
     /** What a click on it opens (6.6.0): its own sheet, as the phone's tap does; none for a block that opens nothing. */
     val sheet: BlockSheet? = null,
+    /**
+     * What its sheet's found again by in the next reading of the day: a piece's by its piece, wherever it's moved to since (dragged,
+     * *Later today*, planned again), as the phone's is; none for its own [key].
+     */
+    val sheetKey: String? = null,
 )
 
 /**
@@ -324,23 +329,21 @@ object DayViews {
      * place; none where an instruction of yours says how it counts.
      */
     private fun eventSheet(event: CalendarEvent, answers: Map<String, String>, instructed: Set<String>, now: Long, zone: ZoneId, writable: Boolean): BlockSheet {
-        run {
-            val key = EventJudge.key(event)
-            val title = event.title.ifBlank { "(no title)" }
-            val lines = listOfNotNull(
-                if (event.allDay) "All day" else "${Format.at(event.start, now, zone)} to ${Format.span(event.end, event.end, zone).substringBefore('–')}",
-                event.location.takeIf(String::isNotBlank),
-                event.description.takeIf(String::isNotBlank)?.take(EVENT_WORDS),
-                "The plan counts it: ${verdict(EventJudge.judge(event, answers), false).lowercase(Locale.UK)}",
-                "Your instruction says how it counts: take it back in the chat's Your changes to answer here.".takeIf { key in instructed },
-            )
-            val about = About(eventKey = key, eventTitle = event.title, eventStart = event.start)
-            val answering = writable && key !in instructed
-            val actions = if (!answering) emptyList() else CalendarTime.answers(event).map { (label, answer) ->
-                TaskAction(label, AddOwnChange(Ids.next(), DAY_ANSWER, About(eventKey = key, eventTitle = event.title), Change(ChangeType.EventTime, eventKey = key, eventTitle = event.title, eventAnswer = answer)))
-            }
-            return BlockSheet("event", title, lines, actions, about = about, note = "For every event of that name.".takeIf { answering })
+        val key = EventJudge.key(event)
+        val title = event.title.ifBlank { "(no title)" }
+        val lines = listOfNotNull(
+            if (event.allDay) "All day" else "${Format.at(event.start, now, zone)} to ${Format.span(event.end, event.end, zone).substringBefore('–')}",
+            event.location.takeIf(String::isNotBlank),
+            event.description.takeIf(String::isNotBlank)?.take(EVENT_WORDS),
+            "The plan counts it: ${verdict(EventJudge.judge(event, answers), false).lowercase(Locale.UK)}",
+            "Your instruction says how it counts: take it back in the chat's Your changes to answer here.".takeIf { key in instructed },
+        )
+        val about = About(eventKey = key, eventTitle = event.title, eventStart = event.start)
+        val answering = writable && key !in instructed
+        val actions = if (!answering) emptyList() else CalendarTime.answers(event).map { (label, answer) ->
+            TaskAction(label, AddOwnChange(Ids.next(), DAY_ANSWER, About(eventKey = key, eventTitle = event.title), Change(ChangeType.EventTime, eventKey = key, eventTitle = event.title, eventAnswer = answer)))
         }
+        return BlockSheet("event", title, lines, actions, about = about, note = "For every event of that name.".takeIf { answering })
     }
 
     /** A piece's buttons on its sheet, as the phone's (`PieceActions`): Start or Stop, Done with its Undo, Later today, All of it done. */
@@ -370,7 +373,7 @@ object DayViews {
                     // Not under way (D-113, D-116).
                     BlockView(key, "outside", start, end, "Outside", times, state, drag = DragView(item.slot.key, ((block.end - block.start) / 60_000L).toInt()).takeIf { writable && item.state == DayModel.State.Ahead })
                 } else {
-                    BlockView(key, "piece", start, end, chunk.label, times, state, chunk.urgent, micro[chunk.key]?.first?.takeIf(String::isNotEmpty), taskId = chunk.taskId, drag = DragView(item.slot.key, chunk.minutes).takeIf { writable })
+                    BlockView(key, "piece", start, end, chunk.label, times, state, chunk.urgent, micro[chunk.key]?.first?.takeIf(String::isNotEmpty), taskId = chunk.taskId, drag = DragView(item.slot.key, chunk.minutes).takeIf { writable }, sheetKey = "piece-${chunk.key}")
                 }
             }
             is DayModel.Row.Event -> {

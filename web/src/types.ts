@@ -68,6 +68,8 @@ export interface BlockView {
   drag?: DragView | null;
   /** What a click on it opens (6.6.0): its own sheet. */
   sheet?: BlockSheet | null;
+  /** What its sheet's found again by in the next reading: a piece's by its piece, wherever it's moved to; none for its own key. */
+  sheetKey?: string | null;
 }
 
 /** What a message, a sheet or a change is about. */
