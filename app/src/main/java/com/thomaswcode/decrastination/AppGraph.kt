@@ -417,7 +417,9 @@ class AppGraph private constructor(context: Context) : Owners {
             override fun hasChatPhoto(hash: String): Boolean = photos.chatPhotoFile(hash).isFile
             override suspend fun keepPhotoFromChat(taskId: String, hash: String, jpeg: ByteArray) { photos.keepFromChat(taskId, hash, jpeg) }
             override suspend fun restoreTaskPhoto(taskId: String, photo: TaskPhoto?) { photos.keep(taskId, photo) }
-            override suspend fun checkPhotos(jpegs: List<ByteArray>, piece: Chunk, takenAt: Long, record: SlotRef?, said: String): String = photos.quiet { photos.checkJpegs(jpegs, piece, takenAt, record = record, said = said) }
+            // Looked at again under the lock, as the switch holds it: one that waited for it is the server's to check (D-141).
+            override suspend fun checkPhotos(jpegs: List<ByteArray>, piece: Chunk, takenAt: Long, record: SlotRef?, said: String): String =
+                photos.quiet { if (sendsCommands()) "The server checks photos now: send them again in the chat." else photos.checkJpegs(jpegs, piece, takenAt, record = record, said = said) }
             override suspend fun finishOwnTask(taskId: String) { ownTasks.finishOwnTask(taskId) }
             override suspend fun reopenOwnTask(taskId: String) { ownTasks.reopenOwnTask(taskId) }
             override suspend fun deleteOwnTask(taskId: String) { ownTasks.deleteOwnTask(taskId) }

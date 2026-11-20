@@ -219,6 +219,16 @@ class Photos(
      */
     suspend fun <T> quiet(block: suspend () -> T): T = checking.withLock { block() }
 
+    /** [block] where no photo check's under way, null at once where one is (6.9.0): a phone's check waits on no other past its own wait. */
+    suspend fun <T> quietOrNull(block: suspend () -> T): T? {
+        if (!checking.tryLock()) return null
+        try {
+            return block()
+        } finally {
+            checking.unlock()
+        }
+    }
+
     /**
      * Checks [pages], the photos of [piece]'s work (AI-17), against it and its task (AI-16), records
      * the cost, and says how it went. The photos taken are deleted, whatever happens; with [keep] (the box unticked, 6.5.0), copies

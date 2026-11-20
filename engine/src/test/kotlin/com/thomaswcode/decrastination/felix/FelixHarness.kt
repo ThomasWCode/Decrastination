@@ -360,7 +360,14 @@ class FelixHarness(
         val checked: MutableList<Triple<Chunk, String, Int>> = Collections.synchronizedList(mutableListOf())
         var checkAnswer = "Not yet: Q6-10 aren't shown."
 
-        override suspend fun checkPhotos(jpegs: List<ByteArray>, piece: Chunk, takenAt: Long, record: SlotRef?, said: String): String = checkAnswer.also { checked += Triple(piece, said, jpegs.size) }
+        /** Whether a check fails, as a call with no connection does. */
+        var checkFails = false
+
+        override suspend fun checkPhotos(jpegs: List<ByteArray>, piece: Chunk, takenAt: Long, record: SlotRef?, said: String): String {
+            checked += Triple(piece, said, jpegs.size)
+            check(!checkFails) { "no connection" }
+            return checkAnswer
+        }
 
         /** Your answer to his question, kept to be read, as `Instructions.addInstruction` keeps one. */
         suspend fun instruction(text: String, about: About, answer: Boolean): String {
