@@ -157,7 +157,7 @@ data class BlockView(
  */
 @Serializable
 data class BlockSheet(
-    /** piece, missed or event. */
+    /** piece, missed, kept (6.7.0) or event. */
     val kind: String,
     val title: String,
     val lines: List<String>,

@@ -9,7 +9,7 @@ export function chatAbout(about: About): string {
 }
 
 /**
- * A block of the Day's own sheet (6.6.0), as the phone's tap opens one: a piece's, a missed slot's or an event's, what it says
+ * A block of the Day's own sheet (6.6.0), as the phone's tap opens one: a piece's, a missed slot's, a kept slot's (6.7.0) or an event's, what it says
  * and what can be done with it, all as the server built it (D-137). The same panel as a task's sheet, one open at a time, Escape
  * closing it and the focus going back to the block. [openTask]: *Its due date, minutes…*, the task's own sheet. While the server
  * mirrors the phone it opens to read: its buttons are absent.
@@ -70,7 +70,7 @@ export function BlockSheet({ sheet, gone, canChange, close, openTask, go }: { sh
         <div className="actions" role="group" aria-label={sheet.kind === "event" ? "How it counts" : "Do"}>
           {sheet.actions.map((button) =>
             button.check ? (
-              <PhotoCheck key={targetKey(button.check)} target={button.check} disabled={busy} said={(text, bad) => setSaid({ text, bad, undo: null })} />
+              <PhotoCheck key={targetKey(button.check)} target={button.check} disabled={busy} said={(text, bad) => setSaid({ text, bad, undo: null })} onBusy={setBusy} />
             ) : (
               <button key={button.label} className="action" disabled={busy} onClick={() => ifSure(button)}>
                 {button.label}

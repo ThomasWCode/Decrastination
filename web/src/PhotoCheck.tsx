@@ -26,7 +26,7 @@ export function targetKey(target: PhotoCheckTarget): string {
  * owner chose, each shrunk in the browser as *From a photo* on Work shrinks one, and the tick box, *Delete after use*, ticked each
  * time it's shown. The same judge as the phone's and the same earning; what it says is said in its place, through [said].
  */
-export function PhotoCheck({ target, disabled, said }: { target: PhotoCheckTarget; disabled: boolean; said: (text: string, bad: boolean) => void }) {
+export function PhotoCheck({ target, disabled, said, onBusy }: { target: PhotoCheckTarget; disabled: boolean; said: (text: string, bad: boolean) => void; onBusy: (busy: boolean) => void }) {
   const input = useRef<HTMLInputElement>(null);
   const [chosen, setChosen] = useState<File[] | null>(null);
   const [deleting, setDeleting] = useState(true);
@@ -44,14 +44,22 @@ export function PhotoCheck({ target, disabled, said }: { target: PhotoCheckTarge
   const check = () => {
     if (!chosen) return;
     setChecking(true);
-    void Promise.all(chosen.map((file) => shrunk(file, target.side).then(base64)))
-      .then((pages) => checkPhotos(target, pages, !deleting))
-      .then((answer) => said(answer.said, !answer.said.startsWith("Done")))
+    // The sheet's other buttons wait while it's checked, as its answer takes the sheet's line.
+    onBusy(true);
+    void (async () => {
+      // One at a time: ten pictures decoded at once can be more than a phone's browser holds.
+      const pages: string[] = [];
+      for (const file of chosen) pages.push(await base64(await shrunk(file, target.side)));
+      return checkPhotos(target, pages, !deleting);
+    })()
+      // Passed and earning: "Done: …"; done but earning nothing ("Done, but …") is said as a check that didn't pass is.
+      .then((answer) => said(answer.said, !answer.said.startsWith("Done:")))
       .catch((failed: unknown) =>
         said(failed instanceof ApiError && failed.status === 409 ? "A photo is being checked already: try again once it's done." : failed instanceof ApiError && failed.status === 413 ? "Those pictures are too big to check." : "The check didn't go through. Try again.", true),
       )
       .finally(() => {
         setChecking(false);
+        onBusy(false);
         setChosen(null);
       });
   };
@@ -70,7 +78,7 @@ export function PhotoCheck({ target, disabled, said }: { target: PhotoCheckTarge
           <label className="tick">
             <input type="checkbox" checked={deleting} onChange={(event) => setDeleting(event.target.checked)} /> Delete after use
           </label>
-          <button className="button" onClick={check}>
+          <button className="button" disabled={disabled} onClick={check}>
             Check {chosen.length === 1 ? "it" : `the ${chosen.length} pages`}
           </button>
           <button className="quiet" onClick={() => setChosen(null)}>
