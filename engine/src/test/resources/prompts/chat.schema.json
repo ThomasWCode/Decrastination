@@ -321,7 +321,8 @@
                             "keepPiece",
                             "unkeepPiece",
                             "sync",
-                            "keepPhoto"
+                            "keepPhoto",
+                            "checkPhotos"
                         ]
                     },
                     "taskId": {

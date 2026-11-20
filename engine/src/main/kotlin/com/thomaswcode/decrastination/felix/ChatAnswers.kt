@@ -34,6 +34,7 @@ import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.shareOut
 import com.thomaswcode.decrastination.data.FelixStore
 import com.thomaswcode.decrastination.enrich.InstructionAnswers
+import com.thomaswcode.decrastination.enrich.PhotoChecker
 import com.thomaswcode.decrastination.enrich.ResearchPrompts
 import com.thomaswcode.decrastination.enrich.filled
 import com.thomaswcode.decrastination.learn.CalendarEvent
@@ -299,7 +300,7 @@ object ChatAnswers {
         val replies = answer.suggestedReplies.map { it.trim().take(FelixAnswers.MAX_REPLY) }.filter { it.isNotEmpty() }.distinct().take(FelixAnswers.MAX_REPLIES)
         // A step ticked or unticked, a listed task shown (AI-14); a task of yours done, open again or
         // deleted, a setting set: each only as the task, or the setting, can be.
-        val actions = answer.actions.take(MAX_ACTIONS).mapNotNull { a -> action(a, byId, settings, felix, context, leftOut) }.distinct()
+        val actions = answer.actions.take(MAX_ACTIONS).mapNotNull { a -> action(a, byId, settings, felix, context, leftOut) }.distinct().let(::oneCheckAPiece)
         // Tasks to read in full (D-93): listed and open, not the one the message is about (it came whole); and beside
         // them what else it asks for, each once: the week's numbers, and the calendar past the fortnight or a
         // month of it, the first asked for. Any other word is dropped.
@@ -446,6 +447,17 @@ object ChatAnswers {
         return g.copy(date = start.toLocalDate().toString(), time = start.toLocalTime().format(CLOCK), lesson = "")
     }
 
+    /**
+     * [actions] with one photo check a piece (6.9.0), the first: two of a task's same step or piece, or one of its next piece beside one
+     * that names a step or piece of it, would each pay for a call on the same pages, the second unable to earn. Each step its own.
+     */
+    private fun oneCheckAPiece(actions: List<ChatAction>): List<ChatAction> {
+        fun named(a: ChatAction) = a.stepIndex != null || a.setting != null
+        val placed = actions.filter { it.type == ChatAction.Type.CheckPhotos && named(it) }.mapTo(HashSet()) { it.taskId }
+        val seen = HashSet<Triple<String, Int?, String?>>()
+        return actions.filter { a -> a.type != ChatAction.Type.CheckPhotos || ((named(a) || a.taskId !in placed) && seen.add(Triple(a.taskId, a.stepIndex, a.setting))) }
+    }
+
     /** Why a due date at [lesson]'s next lesson can't be set (G8): no timetable read, one over a week old or of no known age, or no such class with a lesson ahead. */
     private fun lessonProblem(lesson: String, context: ChatPrompts.Context?, zone: ZoneId): String {
         val lessons = context?.lessons ?: return "a due date at the next lesson, with no timetable read: ask them the date"
@@ -505,6 +517,18 @@ object ChatAnswers {
             val field = FelixSettings.field(a.setting) ?: return no("a setting the app doesn't let him change (${a.setting.trim().take(40)})")
             if (settings != null && FelixSettings.set(settings, field.name, a.value) == null) return no("“${field.label}” set to “${a.value.trim().take(40)}”, which it can't be")
             return ChatAction(ChatAction.Type.Setting, "", setting = field.name, value = a.value.trim())
+        }
+        // Photos handed to the photo check as proof of work (6.9.0): a task listed and open, its step one of its own where named, with its
+        // title and id as a tick's, so it's found as it is when the check's made, and the plan's piece by its key where named, one of the
+        // task's the plan shown lists; what else was said that bears on it, a line or two, as the student's word. The check alone says
+        // whether it's done.
+        if (a.type == "checkPhotos") {
+            val task = byId[a.taskId]?.takeIf { it.isOpen } ?: return no("photos to check against a task that isn't listed, or is finished")
+            if (context?.photos.isNullOrEmpty()) return no("photos to check, with none here")
+            val index = a.stepIndex.takeIf { it >= 0 }
+            val step = index?.let { task.subSteps.getOrNull(it) ?: return no("photos to check against a step “${task.title.take(60)}” hasn't") }
+            val key = a.setting.trim().takeIf { it.isNotEmpty() }?.let { k -> k.takeIf { context?.keepable?.get(it) == task.id } ?: return no("photos to check against a piece of “${task.title.take(60)}” the plan shown doesn't list") }
+            return ChatAction(ChatAction.Type.CheckPhotos, task.id, index, setting = key, value = a.value.trim().take(PhotoChecker.MAX_SAID)).copy(stepTitle = step?.title, stepId = step?.id?.ifEmpty { null })
         }
         // A photo of theirs from the chat kept as a task's photo of the work (6.8.0): one still here, on an open task Claude reads, as the
         // task's own sheet offers it.

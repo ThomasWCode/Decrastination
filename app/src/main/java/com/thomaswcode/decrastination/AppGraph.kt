@@ -14,6 +14,7 @@ import com.thomaswcode.decrastination.block.Slots
 import com.thomaswcode.decrastination.block.TimerAlarms
 import com.thomaswcode.decrastination.calendar.CalendarWriter
 import com.thomaswcode.decrastination.calendar.SlotCalendar
+import com.thomaswcode.decrastination.core.Chunk
 import com.thomaswcode.decrastination.core.DayKind
 import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.InstructionRules
@@ -37,6 +38,7 @@ import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.KeystoreCipher
 import com.thomaswcode.decrastination.data.Reset
 import com.thomaswcode.decrastination.data.Secret
+import com.thomaswcode.decrastination.data.SlotRef
 import com.thomaswcode.decrastination.data.Stores
 import com.thomaswcode.decrastination.data.SyncState
 import com.thomaswcode.decrastination.enrich.AndroidModelAlerts
@@ -415,6 +417,9 @@ class AppGraph private constructor(context: Context) : Owners {
             override fun hasChatPhoto(hash: String): Boolean = photos.chatPhotoFile(hash).isFile
             override suspend fun keepPhotoFromChat(taskId: String, hash: String, jpeg: ByteArray) { photos.keepFromChat(taskId, hash, jpeg) }
             override suspend fun restoreTaskPhoto(taskId: String, photo: TaskPhoto?) { photos.keep(taskId, photo) }
+            // Looked at again under the lock, as the switch holds it: one that waited for it is the server's to check (D-141).
+            override suspend fun checkPhotos(jpegs: List<ByteArray>, piece: Chunk, takenAt: Long, record: SlotRef?, said: String): String =
+                photos.quiet { if (sendsCommands()) "The server checks photos now: send them again in the chat." else photos.checkJpegs(jpegs, piece, takenAt, record = record, said = said) }
             override suspend fun finishOwnTask(taskId: String) { ownTasks.finishOwnTask(taskId) }
             override suspend fun reopenOwnTask(taskId: String) { ownTasks.reopenOwnTask(taskId) }
             override suspend fun deleteOwnTask(taskId: String) { ownTasks.deleteOwnTask(taskId) }
@@ -577,6 +582,8 @@ class AppGraph private constructor(context: Context) : Owners {
         }
         // A task Felix asked a source to read about, changed by the read: said in his note (G2).
         syncer.addAfterEverySync { conversation.afterSync() }
+        // His photo checks a stop left saying they're being checked, said not to have finished (6.9.0), while this phone answers the chat.
+        syncer.addAfterEverySync { conversation.settleChecks() }
         // "How was it?" questions kept for his evening question, asked in the app's words once Claude's off.
         syncer.addAfterEverySync { conversation.askKept() }
         // A task back after aging out of the list (or new) takes the overrides its instructions give.

@@ -254,7 +254,7 @@ data class ChatAction(
     val stepTitle: String? = null,
     val stepId: String? = null,
 ) {
-    enum class Type { TickStep, Open, UntickStep, Done, Reopen, Delete, Setting, SetReminder, MoveReminder, CancelReminder, AddNote, DeleteNote, KeepPiece, UnkeepPiece, Sync, KeepPhoto }
+    enum class Type { TickStep, Open, UntickStep, Done, Reopen, Delete, Setting, SetReminder, MoveReminder, CancelReminder, AddNote, DeleteNote, KeepPiece, UnkeepPiece, Sync, KeepPhoto, CheckPhotos }
 }
 
 /**
@@ -397,6 +397,8 @@ object ChatActs {
             ChatAction.Type.Sync -> false
             // A chat photo kept with a task (6.8.0): while the task has that photo still, the one before it goes back.
             ChatAction.Type.KeepPhoto -> act.was != null && task?.photo?.hash == a.value
+            // A photo check (6.9.0): what it earned is the check's, taken back as a tick is, on Day.
+            ChatAction.Type.CheckPhotos -> false
         }
     }
 

@@ -7,6 +7,7 @@ import com.thomaswcode.decrastination.block.Slots
 import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.Change
 import com.thomaswcode.decrastination.core.ChangeType
+import com.thomaswcode.decrastination.core.Chunk
 import com.thomaswcode.decrastination.core.DayKind
 import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.GmailWrite
@@ -21,6 +22,7 @@ import com.thomaswcode.decrastination.core.TaskPhoto
 import com.thomaswcode.decrastination.core.WallClock
 import com.thomaswcode.decrastination.data.BackupService
 import com.thomaswcode.decrastination.data.CalendarRead
+import com.thomaswcode.decrastination.data.SlotRef
 import com.thomaswcode.decrastination.data.Stores
 import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.data.JsonStore
@@ -234,6 +236,7 @@ class ServerOwners(
             override fun hasChatPhoto(hash: String): Boolean = photos.chatPhotoFile(hash).isFile
             override suspend fun keepPhotoFromChat(taskId: String, hash: String, jpeg: ByteArray) { photos.keepFromChat(taskId, hash, jpeg) }
             override suspend fun restoreTaskPhoto(taskId: String, photo: TaskPhoto?) { photos.keep(taskId, photo) }
+            override suspend fun checkPhotos(jpegs: List<ByteArray>, piece: Chunk, takenAt: Long, record: SlotRef?, said: String): String = photos.quiet { photos.checkJpegs(jpegs, piece, takenAt, record = record, said = said) }
             override suspend fun finishOwnTask(taskId: String) { ownTasks.finishOwnTask(taskId) }
             override suspend fun reopenOwnTask(taskId: String) { ownTasks.reopenOwnTask(taskId) }
             override suspend fun deleteOwnTask(taskId: String) { ownTasks.deleteOwnTask(taskId) }
@@ -432,6 +435,7 @@ class ServerOwners(
         // What follows a read, as `AppGraph` has it, less what's the phone's: its calendar, its notifications.
         syncer.addListener { settleCompletions() }
         syncer.addAfterEverySync { conversation.afterSync() }
+        syncer.addAfterEverySync { conversation.settleChecks() }
         syncer.addAfterEverySync { conversation.askKept() }
         syncer.addAfterEverySync { instructions.layTaskOverrides() }
         syncer.addAfterEverySync { ownTasks.pruneOwn() }

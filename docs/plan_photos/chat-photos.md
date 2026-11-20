@@ -55,7 +55,7 @@ A photo sent with a message, from the phone or the website. Felix sees it and an
 
 **At the phone.** A photo with a question, answered. A photo alone. A worksheet made into his task card. A photo kept with a task, on its sheet after. Ticked: the bubble showing his note once he's answered. Unticked: a second question two minutes on answered from the picture; one an hour on, Felix asking to see it. One sent from the website shown on the phone.
 
-## 6.9.0: a photo as proof
+## 6.9.0: a photo as proof (built: D-160, Q165)
 
 Felix isn't the judge. He's a friend, briefed as one, with none of the check's rules; were he to tick work off from a photo there'd be two standards for earning free time, the chat's the softer.
 

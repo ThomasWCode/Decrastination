@@ -3,9 +3,11 @@ package com.thomaswcode.decrastination.felix
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.block.Photos
 import com.thomaswcode.decrastination.core.About
+import com.thomaswcode.decrastination.core.Act
 import com.thomaswcode.decrastination.core.AssessLater
 import com.thomaswcode.decrastination.core.Change
 import com.thomaswcode.decrastination.core.ChangeType
+import com.thomaswcode.decrastination.core.ChatAction
 import com.thomaswcode.decrastination.core.ChatActs
 import com.thomaswcode.decrastination.core.ChatHistory
 import com.thomaswcode.decrastination.core.ChatMessage
@@ -29,12 +31,14 @@ import com.thomaswcode.decrastination.core.Rule
 import com.thomaswcode.decrastination.core.SlotState
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Speaker
+import com.thomaswcode.decrastination.core.SubStep
 import com.thomaswcode.decrastination.core.TaskItem
 import java.util.concurrent.TimeUnit
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -130,6 +134,191 @@ class ConversationTest {
         assertFalse("Photo 1, id $hash:" in first)
         assertTrue("Photo 1, id $hash:" in felix.server.takeRequest().body.readUtf8(), "shown when he asks")
         assertEquals("Looked again: 1 photo kept.", his().last().acts.single().line)
+    }
+
+    @Test
+    fun `photos sent as proof are handed to the photo check with his line as your word, what it says under his answer`() = runBlocking {
+        stores.tasks.update { it.copy(tasks = it.tasks + sheet) }
+        felix.owners.chatPhotos[hash] = jpeg
+        felix.owners.checkAnswer = "Done: Every question is answered."
+        val check = """[{"type":"checkPhotos","taskId":"teams:sheet","stepIndex":-1,"setting":"","value":"only the odd ones were set"}]"""
+        felix.answers(felix.chatAnswer("Checking it now.", photos = "the forces worksheet", actions = check))
+        assertTrue(conversation.ask("done, only had to do the odd ones", photos = listOf(ChatPhoto(hash))))
+        felix.settle()
+        val (piece, said, pages) = felix.owners.checked.single()
+        assertEquals("teams:sheet", piece.taskId)
+        assertEquals("only the odd ones were set", said)
+        assertEquals(1, pages)
+        val line = his().last().acts.single()
+        assertEquals("Photo check: Done: Every question is answered.", line.line)
+        assertFalse(line.problem)
+        // Told him in the turns after.
+        felix.server.takeRequest()
+        felix.answers(felix.chatAnswer("Nice."))
+        assertTrue(conversation.ask("so am I done?"))
+        felix.settle()
+        assertTrue("[Photo check: Done: Every question is answered.]" in felix.server.takeRequest().body.readUtf8())
+    }
+
+    @Test
+    fun `photos sent as proof of a step ticked Done are checked against that step's slot, not another's ticked since`() = runBlocking {
+        val steps = sheet.copy(id = "teams:steps", sourceId = "steps", title = "A worksheet in two", subSteps = listOf(SubStep("Questions 1 to 5", 30), SubStep("Questions 6 to 10", 30)))
+        stores.tasks.update { it.copy(tasks = it.tasks + steps) }
+        val pieces = felix.planning.plan().chunksOf(steps.id)
+        assertTrue(pieces.any { it.stepIndex == 0 } && pieces.any { it.stepIndex == 1 }, pieces.joinToString { "${it.key}:${it.stepIndex}" })
+        val first = pieces.first { it.stepIndex == 0 }
+        val second = pieces.first { it.stepIndex == 1 }
+        assertTrue(felix.focusKeep(first.key))
+        felix.clock.time += 60_000L
+        assertTrue(felix.focusKeep(second.key))
+        felix.owners.chatPhotos[hash] = jpeg
+        val check = """[{"type":"checkPhotos","taskId":"teams:steps","stepIndex":0,"setting":"","value":""}]"""
+        felix.answers(felix.chatAnswer("Checking it now.", actions = check))
+        assertTrue(conversation.ask("done the first half", photos = listOf(ChatPhoto(hash))))
+        felix.settle()
+        assertEquals(0, felix.owners.checked.single().first.stepIndex)
+    }
+
+    @Test
+    fun `only the photos of the message answered go as proof, not one kept from before that goes with it`() = runBlocking {
+        stores.tasks.update { it.copy(tasks = it.tasks + sheet) }
+        val older = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 9)
+        felix.owners.chatPhotos[Photos.hashOf(older)] = older
+        felix.owners.chatPhotos[hash] = jpeg
+        felix.answers(felix.chatAnswer("Got it.", photos = "the question sheet"))
+        assertTrue(conversation.ask("here's the sheet", photos = listOf(ChatPhoto(Photos.hashOf(older), kept = true))))
+        felix.settle()
+        felix.clock.time += 2 * 60_000L
+        val check = """[{"type":"checkPhotos","taskId":"teams:sheet","stepIndex":-1,"setting":"","value":""}]"""
+        felix.answers(felix.chatAnswer("Checking it now.", photos = "the answers", actions = check))
+        assertTrue(conversation.ask("and done", photos = listOf(ChatPhoto(hash))))
+        felix.settle()
+        assertEquals(1, felix.owners.checked.single().third, "the question sheet, sent again with it, isn't proof")
+    }
+
+    @Test
+    fun `a part ticked Done today is checked before the plan's next one, as its earning ends with the day`() = runBlocking {
+        val long = sheet.copy(id = "teams:long", sourceId = "long", title = "A long worksheet", sourceEffortMin = 120, dueAt = Fixtures.at("2026-10-24T09:00"))
+        stores.tasks.update { it.copy(tasks = it.tasks + long) }
+        val parts = felix.planning.plan().chunksOf(long.id)
+        assertTrue(parts.size > 1, parts.joinToString { it.key })
+        assertTrue(felix.focusKeep(parts.first().key))
+        felix.owners.chatPhotos[hash] = jpeg
+        val check = """[{"type":"checkPhotos","taskId":"teams:long","stepIndex":-1,"setting":"","value":""}]"""
+        felix.answers(felix.chatAnswer("Checking it now.", actions = check))
+        assertTrue(conversation.ask("done the first part", photos = listOf(ChatPhoto(hash))))
+        felix.settle()
+        // The slot ticked, by its label ("part 1 of 3"), not the plan's next, which the plan numbers afresh.
+        assertEquals(parts.first().label, felix.owners.checked.single().first.label)
+    }
+
+    @Test
+    fun `the next part he names by its key is checked, though the one before was ticked Done today with no photo`() = runBlocking {
+        val long = sheet.copy(id = "teams:long", sourceId = "long", title = "A long worksheet", sourceEffortMin = 120, dueAt = Fixtures.at("2026-10-24T09:00"))
+        stores.tasks.update { it.copy(tasks = it.tasks + long) }
+        val parts = felix.planning.plan().chunksOf(long.id)
+        assertTrue(parts.size > 1, parts.joinToString { it.key })
+        assertTrue(felix.focusKeep(parts.first().key))
+        // The plan's next, as the list of next pieces shows it him: numbered again ("part 1 of 3"), its key the one kept's.
+        val next = felix.planning.plan().chunksOf(long.id).first()
+        assertNotEquals(parts.first().label, next.label)
+        assertEquals(parts.first().key, next.key)
+        felix.owners.chatPhotos[hash] = jpeg
+        val check = """[{"type":"checkPhotos","taskId":"teams:long","stepIndex":-1,"setting":"${next.key}","value":""}]"""
+        felix.answers(felix.chatAnswer("Checking it now.", actions = check))
+        assertTrue(conversation.ask("done the second part", photos = listOf(ChatPhoto(hash))))
+        felix.settle()
+        assertEquals(next.label, felix.owners.checked.single().first.label)
+        assertEquals(next.key, his().last().acts.single().action?.setting)
+    }
+
+    @Test
+    fun `a piece he names by its key is checked, not the plan's first`() = runBlocking {
+        // Due tomorrow morning, so its parts are all today's slots, each listed for him.
+        val long = sheet.copy(id = "teams:long", sourceId = "long", title = "A long worksheet", sourceEffortMin = 120)
+        stores.tasks.update { it.copy(tasks = it.tasks + long) }
+        val plan = felix.planning.plan()
+        val second = plan.chunksOf(long.id)[1]
+        // Listed for him among today's slots, so his key's one the plan shown has.
+        assertTrue(plan.todaySlots.any { it.chunk?.key == second.key }, plan.todaySlots.joinToString { it.chunk?.key.orEmpty() })
+        felix.owners.chatPhotos[hash] = jpeg
+        val check = """[{"type":"checkPhotos","taskId":"teams:long","stepIndex":-1,"setting":"${second.key}","value":""}]"""
+        felix.answers(felix.chatAnswer("Checking it now.", actions = check))
+        assertTrue(conversation.ask("done the second part", photos = listOf(ChatPhoto(hash))))
+        felix.settle()
+        assertEquals(second.label, felix.owners.checked.single().first.label)
+    }
+
+    @Test
+    fun `the photos of messages answered together all go as proof, past one message's four`() = runBlocking {
+        stores.tasks.update { it.copy(tasks = it.tasks + sheet) }
+        val pages = (1..6).map { byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), it.toByte(), 7) }
+        pages.forEach { felix.owners.chatPhotos[Photos.hashOf(it)] = it }
+        val check = """[{"type":"checkPhotos","taskId":"teams:sheet","stepIndex":-1,"setting":"","value":""}]"""
+        // His answer to the first comes late: the second is sent meanwhile, and one answer goes to both.
+        felix.answers(felix.chatAnswer("Checking it now."), delayMs = 1_000)
+        felix.answers(felix.chatAnswer("Checking all six now.", actions = check))
+        assertTrue(conversation.ask("done, pages 1 to 3", photos = pages.take(3).map { ChatPhoto(Photos.hashOf(it)) }))
+        withTimeout(5_000) { while (conversation.answeringSince.value == null) delay(10) }
+        assertTrue(conversation.ask("and 4 to 6", photos = pages.drop(3).map { ChatPhoto(Photos.hashOf(it)) }))
+        felix.settle()
+        assertEquals(6, felix.owners.checked.single().third)
+    }
+
+    @Test
+    fun `a step reordered as he answered is checked as the step he named, not by its old place`() = runBlocking {
+        val steps = sheet.copy(id = "teams:steps", sourceId = "steps", title = "A worksheet in two", subSteps = listOf(SubStep("Questions 1 to 5", 30), SubStep("Questions 6 to 10", 30)))
+        stores.tasks.update { it.copy(tasks = it.tasks + steps) }
+        felix.owners.chatPhotos[hash] = jpeg
+        val check = """[{"type":"checkPhotos","taskId":"teams:steps","stepIndex":1,"setting":"","value":""}]"""
+        felix.answers(felix.chatAnswer("Checking it now.", actions = check), delayMs = 1_000)
+        assertTrue(conversation.ask("done questions 6 to 10", photos = listOf(ChatPhoto(hash))))
+        withTimeout(5_000) { while (conversation.answeringSince.value == null) delay(10) }
+        // Its steps swapped round while he answered: the one he named is now the first.
+        stores.tasks.update { s -> s.copy(tasks = s.tasks.map { if (it.id == steps.id) it.copy(subSteps = it.subSteps.reversed()) else it }) }
+        felix.settle()
+        assertEquals(0, felix.owners.checked.single().first.stepIndex)
+    }
+
+    @Test
+    fun `a check that fails says so, and one a stop left saying it's checked is settled as unfinished`() = runBlocking {
+        stores.tasks.update { it.copy(tasks = it.tasks + sheet) }
+        felix.owners.chatPhotos[hash] = jpeg
+        felix.owners.checkFails = true
+        val check = """[{"type":"checkPhotos","taskId":"teams:sheet","stepIndex":-1,"setting":"","value":""}]"""
+        felix.answers(felix.chatAnswer("Checking it now.", actions = check))
+        assertTrue(conversation.ask("done", photos = listOf(ChatPhoto(hash))))
+        felix.settle()
+        val failed = his().last().acts.single()
+        assertTrue(failed.line.startsWith("Photo check: The check didn't go through (no connection)"), failed.line)
+        assertTrue(failed.problem)
+        // One a stop part-way left: settled once it's older than a call's start, none under way here.
+        val left = ChatMessage("h-left", Speaker.Felix, "Checking it now.", felix.clock.now(), acts = listOf(Act(Conversation.CHECKING + " against “a piece”…", ChatAction(ChatAction.Type.CheckPhotos, "teams:sheet"), after = "t-left")))
+        stores.chat.update { it.copy(messages = it.messages + left) }
+        conversation.settleChecks(felix.clock.now() + 1_000)
+        assertTrue(stores.chat.value.messages.single { it.id == "h-left" }.acts.single().line.startsWith(Conversation.CHECKING))
+        // A phone that sends commands leaves it to the server, whose chat it is.
+        felix.byServer = true
+        conversation.settleChecks(felix.clock.now() + Conversation.CHECK_SETTLE_MS + 1)
+        assertTrue(stores.chat.value.messages.single { it.id == "h-left" }.acts.single().line.startsWith(Conversation.CHECKING))
+        felix.byServer = false
+        conversation.settleChecks(felix.clock.now() + Conversation.CHECK_SETTLE_MS + 1)
+        val settled = stores.chat.value.messages.single { it.id == "h-left" }.acts.single()
+        assertEquals(Conversation.CHECK_UNFINISHED, settled.line)
+        assertTrue(settled.problem)
+    }
+
+    @Test
+    fun `photos sent as proof of a task with nothing to check now say so, and nothing's asked`() = runBlocking {
+        val done = sheet.copy(id = "teams:gone", sourceId = "gone", title = "A sheet with nothing planned", dueAt = null, sourceEffortMin = 0)
+        stores.tasks.update { it.copy(tasks = it.tasks + done) }
+        felix.owners.chatPhotos[hash] = jpeg
+        val check = """[{"type":"checkPhotos","taskId":"teams:gone","stepIndex":-1,"setting":"","value":""}]"""
+        felix.answers(felix.chatAnswer("Checking it now.", actions = check))
+        assertTrue(conversation.ask("done", photos = listOf(ChatPhoto(hash))))
+        felix.settle()
+        assertTrue(felix.owners.checked.isEmpty())
+        assertTrue(his().last().acts.single().problem)
     }
 
     @Test

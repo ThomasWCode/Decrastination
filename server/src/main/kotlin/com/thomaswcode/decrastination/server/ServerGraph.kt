@@ -726,15 +726,19 @@ class ServerGraph(
     suspend fun checkPhoto(taskId: String, key: String, step: String?, takenAt: Long, jpegs: List<ByteArray>, keep: Boolean = false, record: SlotRef? = null): PhotoChecked? {
         if (!checkingPhoto.compareAndSet(false, true)) return null
         try {
-            // A kept slot's, from its sheet (6.5.0): that slot, found in this server's own record, with its task.
-            val piece = if (record != null) {
-                val slot = stores.log.value.slots.lastOrNull { record.names(it) && it.taskId == taskId } ?: return PhotoChecked(Photos.SLOT_GONE)
-                Photos.pieceOf(slot, stores.tasks.value.tasks.firstOrNull { it.id == taskId }) ?: return PhotoChecked(Photos.SLOT_GONE)
-            } else {
-                // By its step too, as the phone finds it: a key's only the step's place, which another may have taken here since.
-                planning.plan().chunksOf(taskId).firstOrNull { it.key == key && it.step == step } ?: return PhotoChecked(Photos.PIECE_CHANGED)
+            // Under the same lock as a check Felix hands it from the chat (6.9.0), so only one is asked at a time: one under way, this
+            // says so at once rather than wait past the phone's wait. The piece found under it, as of when it's checked.
+            return owners.photos.quietOrNull {
+                // A kept slot's, from its sheet (6.5.0): that slot, found in this server's own record, with its task.
+                val piece = if (record != null) {
+                    val slot = stores.log.value.slots.lastOrNull { record.names(it) && it.taskId == taskId } ?: return@quietOrNull PhotoChecked(Photos.SLOT_GONE)
+                    Photos.pieceOf(slot, stores.tasks.value.tasks.firstOrNull { it.id == taskId }) ?: return@quietOrNull PhotoChecked(Photos.SLOT_GONE)
+                } else {
+                    // By its step too, as the phone finds it: a key's only the step's place, which another may have taken here since.
+                    planning.plan().chunksOf(taskId).firstOrNull { it.key == key && it.step == step } ?: return@quietOrNull PhotoChecked(Photos.PIECE_CHANGED)
+                }
+                PhotoChecked(owners.photos.checkJpegs(jpegs, piece, takenAt, keep, record))
             }
-            return PhotoChecked(owners.photos.checkJpegs(jpegs, piece, takenAt, keep, record))
         } finally {
             checkingPhoto.set(false)
         }

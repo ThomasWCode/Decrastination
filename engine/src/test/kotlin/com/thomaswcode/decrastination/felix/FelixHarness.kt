@@ -4,6 +4,7 @@ import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
 import com.thomaswcode.decrastination.block.Focus
 import com.thomaswcode.decrastination.core.About
+import com.thomaswcode.decrastination.core.Chunk
 import com.thomaswcode.decrastination.core.FixedClock
 import com.thomaswcode.decrastination.core.Instruction
 import com.thomaswcode.decrastination.core.InstructionStatus
@@ -14,6 +15,7 @@ import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.TaskPhoto
 import com.thomaswcode.decrastination.data.SecretCipher
+import com.thomaswcode.decrastination.data.SlotRef
 import com.thomaswcode.decrastination.data.Stores
 import com.thomaswcode.decrastination.enrich.InstructionPrompts
 import com.thomaswcode.decrastination.enrich.KeyProblem
@@ -352,6 +354,19 @@ class FelixHarness(
 
         override suspend fun restoreTaskPhoto(taskId: String, photo: TaskPhoto?) {
             stores.tasks.update { s -> s.copy(tasks = s.tasks.map { if (it.id == taskId) it.copy(photo = photo) else it }) }
+        }
+
+        /** The photo checks Felix handed on (6.9.0): the piece, the student's word and how many pages, each answered [checkAnswer]. */
+        val checked: MutableList<Triple<Chunk, String, Int>> = Collections.synchronizedList(mutableListOf())
+        var checkAnswer = "Not yet: Q6-10 aren't shown."
+
+        /** Whether a check fails, as a call with no connection does. */
+        var checkFails = false
+
+        override suspend fun checkPhotos(jpegs: List<ByteArray>, piece: Chunk, takenAt: Long, record: SlotRef?, said: String): String {
+            checked += Triple(piece, said, jpegs.size)
+            check(!checkFails) { "no connection" }
+            return checkAnswer
         }
 
         /** Your answer to his question, kept to be read, as `Instructions.addInstruction` keeps one. */
