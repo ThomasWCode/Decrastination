@@ -459,7 +459,7 @@ private fun Route.signedInRoutes(web: Web) {
             return@post call.respond(HttpStatusCode.UnsupportedMediaType, Problem("Those aren't a check's pages"))
         }
         if (jpegs.any { it!!.size > MAX_PAGE_BYTES }) return@post call.respond(HttpStatusCode.PayloadTooLarge, Problem("A page is too big"))
-        graph.checkPhoto(ask.taskId, ask.key, ask.step, ask.takenAt, jpegs.filterNotNull())?.let { call.respond(it) } ?: call.respond(HttpStatusCode.Conflict, Problem("A photo is being checked already"))
+        graph.checkPhoto(ask.taskId, ask.key, ask.step, ask.takenAt, jpegs.filterNotNull(), ask.keep, ask.record)?.let { call.respond(it) } ?: call.respond(HttpStatusCode.Conflict, Problem("A photo is being checked already"))
     }
     get("/views/settings") { call.respond(graph.settings()) }
     post("/parent-code") {

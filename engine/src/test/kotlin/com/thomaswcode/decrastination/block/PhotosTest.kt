@@ -12,13 +12,17 @@ import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.TaskPhoto
 import com.thomaswcode.decrastination.core.Why
+import com.thomaswcode.decrastination.core.WindowKind
 import com.thomaswcode.decrastination.data.ActivityLog
 import com.thomaswcode.decrastination.data.ChatMigration
 import com.thomaswcode.decrastination.data.CheckNote
 import com.thomaswcode.decrastination.data.CheckNotesMigration
+import com.thomaswcode.decrastination.data.PhotoDoorsMigration
 import com.thomaswcode.decrastination.data.CreditMigration
 import com.thomaswcode.decrastination.data.OnlyMigration
 import com.thomaswcode.decrastination.data.MoodMigration
+import com.thomaswcode.decrastination.data.SlotOutcome
+import com.thomaswcode.decrastination.data.SlotRecord
 import com.thomaswcode.decrastination.data.SpeechMigration
 import com.thomaswcode.decrastination.data.StepActionMigration
 import com.thomaswcode.decrastination.data.OutsideMigration
@@ -42,6 +46,7 @@ import com.thomaswcode.decrastination.data.ZoomMigration
 import com.thomaswcode.decrastination.data.TasksMigration
 import com.thomaswcode.decrastination.enrich.KeyProblem
 import com.thomaswcode.decrastination.enrich.ModelGateway
+import com.thomaswcode.decrastination.enrich.PhotoChecker
 import com.thomaswcode.decrastination.enrich.PhotoTasks
 import com.thomaswcode.decrastination.enrich.Profile
 import java.io.File
@@ -84,7 +89,7 @@ class PhotosTest {
     private val learning = JsonStore(File(dir, "learning.json"), LearningState.serializer(), ::LearningState)
     private val model = JsonStore(File(dir, "model.json"), ModelState.serializer(), ::ModelState)
     private val protection = JsonStore(File(dir, "protection.json"), ProtectionState.serializer(), ::ProtectionState, migrations = listOf(ProtectionSplit.PROTECTION))
-    private val session = JsonStore(File(dir, "session.json"), SessionState.serializer(), ::SessionState, migrations = listOf(CreditMigration.SESSION, TimerMigration.SESSION, CheckNotesMigration.SESSION))
+    private val session = JsonStore(File(dir, "session.json"), SessionState.serializer(), ::SessionState, migrations = listOf(CreditMigration.SESSION, TimerMigration.SESSION, CheckNotesMigration.SESSION, PhotoDoorsMigration.SESSION))
     private val log = JsonStore(File(dir, "log.json"), ActivityLog.serializer(), ::ActivityLog, migrations = listOf(ChatMigration.LOG, MemoryMigration.LOG, CreditMigration.LOG))
     private val chat = JsonStore(File(dir, "chat.json"), ChatState.serializer(), ::ChatState, migrations = listOf(ChatMigration.CHAT, TasksMigration.CHAT, FelixStore.CHAT, FelixStore.CHAT_PIECES, MemoryMigration.CHAT, StepOrderMigration.CHAT, OnlyMigration.CHAT, OutsideMigration.CHAT, MoodMigration.CHAT, SpeechMigration.CHAT, StepActionMigration.CHAT, WeeklyMigration.CHAT))
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -164,7 +169,7 @@ class PhotosTest {
         var server = false
         val switching = Photos(
             tasks, settings, chat, clock, scope, gateway, focus, folder, shrink = { it.readBytes() }, profile = { Profile.Block.NONE },
-            checkByServer = { _, _, _ -> "Done: every question answered".takeIf { server } },
+            checkByServer = { _, _, _, _, _ -> "Done: every question answered".takeIf { server } },
         ) { read += it }
         val held = CompletableDeferred<Unit>()
         val quiet = launch(start = CoroutineStart.UNDISPATCHED) { switching.quiet { held.await(); server = true } }
@@ -182,7 +187,7 @@ class PhotosTest {
         val asked = mutableListOf<Triple<List<String>, String, Long>>()
         val byServer = Photos(
             tasks, settings, chat, clock, scope, gateway, focus, folder, shrink = { it.readBytes() }, profile = { Profile.Block.NONE },
-            checkByServer = { jpegs, piece, takenAt -> asked += Triple(jpegs.map { it.decodeToString() }, piece.key, takenAt); "Done: every question answered" },
+            checkByServer = { jpegs, piece, takenAt, _, _ -> asked += Triple(jpegs.map { it.decodeToString() }, piece.key, takenAt); "Done: every question answered" },
         ) { read += it }
         val two = pages("page-1.jpg", "page-2.jpg")
         assertEquals("Done: every question answered", byServer.check(two, piece(Kind.Homework), takenAt = 5L))
@@ -260,6 +265,45 @@ class PhotosTest {
         // The pass relied on every earlier note, the refused one's too: all counted now.
         assertEquals(listOf(true, true, true), focus.notesOf(essay.id).map { it.passed })
         assertTrue("counted in a check that passed (earned already): Pages 1 to 4, written out" in server.takeRequest().body.readUtf8())
+    }
+
+    @Test
+    fun `a check's pages its box left kept stay with the task, are sent again after a later check's new ones, and are swept only when nothing names them`() = runBlocking {
+        settings.update { it.copy(aiEnabled = true, aiKeyActive = true) }
+        tasks.update { it.copy(tasks = listOf(essay)) }
+        answers(verdict(false, "Q1-4", reason = "Q5-8 aren't shown."), verdict(true, "Q5-8"))
+        val first = listOf(byteArrayOf(1, 1), byteArrayOf(2, 2))
+        answered.checkJpegs(first, piece(Kind.Homework), clock.time, keep = true)
+        val kept = focus.keptPages(essay.id)
+        assertEquals(first.map(Photos::hashOf), kept.map { it.hash })
+        assertTrue(kept.all { answered.pageFile(it.hash).isFile })
+        // Ticked, the next check's page isn't kept; the kept ones go with it, after it, named so.
+        answered.checkJpegs(listOf(byteArrayOf(3, 3)), piece(Kind.Homework), clock.time)
+        server.takeRequest()
+        val second = server.takeRequest().body.readUtf8()
+        assertTrue("Kept page 1, from an earlier check:" in second && "Kept page 2, from an earlier check:" in second, second)
+        assertTrue(second.indexOf("Page 1:") < second.indexOf("Kept page 1"))
+        assertEquals(2, focus.keptPages(essay.id).size)
+        // A page nothing names goes at a sweep, the kept ones stay.
+        val stray = answered.pageFile("0000000000000000").apply { writeBytes(byteArrayOf(1)) }
+        answered.sweepPhotos()
+        assertFalse(stray.exists())
+        assertTrue(kept.all { answered.pageFile(it.hash).isFile })
+    }
+
+    @Test
+    fun `a kept slot's piece keeps its part's share from its key and label, and a named step its place`() {
+        val box = SlotRecord(date = "2026-10-19", key = "teams:essay#-1#2", taskId = essay.id, kind = Kind.Homework, label = "Essay: part 2 of 3", plannedMin = 40, start = 1, end = 2, window = WindowKind.Evening, outcome = SlotOutcome.Kept, workedMin = 40, at = 3)
+        val piece = Photos.pieceOf(box, essay)!!
+        assertEquals(2 to 3, piece.part to piece.parts)
+        assertEquals(null, piece.stepIndex)
+        assertTrue("It's part 2 of 3: with the parts before it, about two thirds" in PhotoChecker.context(piece, essay, emptyList(), LONDON))
+        val step = Photos.pieceOf(box.copy(key = "teams:essay#1", label = "Essay: Plan it"), essay)!!
+        assertEquals(1 to 1, step.stepIndex to step.parts)
+        assertEquals(null, Photos.pieceOf(box, null))
+        // The task's work in all: its own estimate where it's more than the slot, else the slot's minutes a part.
+        assertEquals(150, Photos.pieceOf(box, essay.copy(sourceEffortMin = 150, aiEffortMin = null))!!.taskMinutes)
+        assertEquals(120, Photos.pieceOf(box, essay.copy(sourceEffortMin = 30, aiEffortMin = null))!!.taskMinutes)
     }
 
     @Test

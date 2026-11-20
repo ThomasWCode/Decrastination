@@ -23,6 +23,12 @@ object PhotoChecks {
     val unseen = MutableStateFlow<Pair<String, String>?>(null)
 
     /**
+     * Pictures picked from the gallery copied in as a check's pages (6.5.0), by the app, not a screen, so a turn of the phone while
+     * they copy loses none: how many of how many picked, till the screen made again takes them.
+     */
+    val picked = MutableStateFlow<Pair<Int, Int>?>(null)
+
+    /**
      * The photo as a JPEG no bigger than [PhotoChecker.MAX_SIDE] on its long side, the right way up:
      * a camera can store a portrait page as landscape pixels with a note to turn them (EXIF), which
      * decoding doesn't read, so the page went sideways (IMP-P2-014).

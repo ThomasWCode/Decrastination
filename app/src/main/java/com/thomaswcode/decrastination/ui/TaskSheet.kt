@@ -169,10 +169,12 @@ fun TaskSheet(
     val ticksHere = Focus.tickable(task) && task.subSteps.isNotEmpty()
     // A photo of the work (AI-23), for a task Claude reads: kept with it, and read with it.
     val shot = remember { File(activity.cacheDir, "photos/work.jpg").also { it.parentFile?.mkdirs() } }
-    val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { taken ->
+    // From the camera or the gallery (6.5.0).
+    var choosingPhoto by rememberSaveable { mutableStateOf(false) }
+    val picture = rememberPicture(activity, graph.scope, shot) { taken ->
         if (!taken) {
             shot.delete()
-            return@rememberLauncherForActivityResult
+            return@rememberPicture
         }
         graph.scope.launch {
             val jpeg = withContext(Dispatchers.IO) { PhotoChecks.shrink(shot).also { shot.delete() } }
@@ -192,6 +194,15 @@ fun TaskSheet(
         scope.launch { sheet.make(task, change, text) }
     }
 
+    if (choosingPhoto) {
+        CameraOrGallery("A photo of the work", "Kept with the task, and Claude reads it again with it.", onCamera = {
+            choosingPhoto = false
+            picture.camera()
+        }, onGallery = {
+            choosingPhoto = false
+            picture.gallery()
+        }, onDismiss = { choosingPhoto = false })
+    }
     ModalBottomSheet(onDismissRequest = onClose) {
         Column(
             Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 24.dp, end = 24.dp, bottom = 32.dp),
@@ -255,7 +266,7 @@ fun TaskSheet(
                 }
                 // The work itself photographed, so Claude reads its size from it (AI-23).
                 if (task.isOpen && Enrichments.jobFor(task, GmailThreads::textRead) != null) {
-                    OutlinedButton(onClick = { camera.launch(FileProvider.getUriForFile(activity, "${activity.packageName}.photos", shot)) }) {
+                    OutlinedButton(onClick = { choosingPhoto = true }) {
                         Text(if (task.photo == null) "Add a photo of the work" else "Photograph the work again")
                     }
                 }
@@ -385,6 +396,8 @@ fun TaskSheet(
                 Text("Shown so far", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 shown.forEach { Text("• $it", style = MaterialTheme.typography.bodyMedium) }
             }
+            // A check's pages kept with it, the box unticked (6.5.0): sent again with its next check.
+            session.pages.filter { it.taskId == task.id }.takeIf { it.isNotEmpty() }?.let { kept -> KeptPages(graph, kept, zone) }
             // What you've said about it, folded.
             TaskSheetModel.instructions(instructions.applied, task.id).takeIf { it.isNotEmpty() }?.let { words ->
                 Row(Modifier.fillMaxWidth().clickable { showInstructions = !showInstructions }, verticalAlignment = Alignment.CenterVertically) {

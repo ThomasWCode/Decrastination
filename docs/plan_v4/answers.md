@@ -739,3 +739,26 @@ Seven real pages (five of one piece of written homework, one of another subject'
 #### Found in building, and answered
 
 **Q159. A part of a task was judged against the whole task.** (19 Nov.) Tried on the real pages: a piece "part 1 of 2" of a task of pages 8 to 12, sent pages 8 to 10, was told "not yet: pages 11 and 12 aren't shown", as the check wasn't told it was a part at all; the second part, sent 11 and 12 with the first's note, passed. So a first sitting's work never earned at its own check. It was so before 6.4.0 too. Recommended: the check told a part's share by its place ("part 1 of 2: with the parts before it, about half of the task's work") and that parts are done in order, so a part passes when the task's work shown, with earlier checks', reaches its share; the rule that a counted check's work can't pass again staying. **Your answer: as recommended.** Run again on the same pages, twice ($0.35): part 1 with pages 8 to 10 passed; part 2 with 11 and 12 passed on its note; part 2 sent 8 to 10 again was refused as nothing new; part 1 with page 8 alone was "not yet: this part needs about half"; the whole in one check still passed. → D-155.
+
+### More doors to the check, the gallery and the tick box (6.5.0, 20 Nov)
+
+A missed slot's sheet had no photo check, a slot ticked *Done* couldn't be tapped, and a photo earned for a tick only if it was taken within half a minute of it, so a longer piece ticked first had no way to its photo afterwards. Work's camera button only read homework into tasks, and every photo came from the camera there and then. → D-156.
+
+**Q155. Which of Day's pop-ups get the check?** (18 Nov.) **Your answer: a missed slot's sheet, and a piece ticked *Done*, which gets a pop-up of its own.**
+
+**Q156. What does Work's camera button offer?** Offered: new tasks from a photo (as now); a check; a photo added to a task. **Your answer: all three.**
+
+**Q157. Which photos does the tick box delete?** Offered: the app's and the server's copy, once it's used, the gallery never touched; the original in the gallery; a camera photo saved to the gallery when unticked. **Your answer: the app's and the server's copy.**
+
+**Q158. Is the box ticked by default?** **Your answer: yes, everywhere**, put with what it means for the chat (6.8.0).
+
+Said without being asked: the gallery can be picked from on the phone. And on 19 Nov, a check's pages kept unticked are kept with their task, shown on its sheet, sent again with a later check where there's room, the new ones first, and deleted when the task's done or gone, at a reset, or 14 days after they were taken (the plan's question 3: as recommended).
+
+#### Decided without asking
+
+1. **A kept slot's check names its slot** (`SlotRef`: its key, start and when it was kept), so the earning lands on that slot however long after the tick; that day only, as a kept slot earns within the day's plan. The piece has left the plan by then, so the check is told the record's label and minutes with its task.
+2. **The sheet of a slot ticked *Done*** opens from its grey block on Day and from its row in the *done* chip's sheet, both.
+3. **A picture from the gallery is taken as of when it's chosen**, as nothing rests on when it was taken once a kept slot's check names its slot.
+4. **Kept pages are sent again named "Kept page"**, after the new ones, and the prompt says they show what earlier checks showed, never new work, so they can't make a check fresh.
+5. **Kept pages aren't backed up**, as their files aren't, and a reset of everything learned lets go of them, as it does of the notes.
+6. **The tick box** is beside a check's pages, in the first choice and after each page; a task's own photo and a photo of homework read into tasks are kept by design, so they have none.

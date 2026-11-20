@@ -91,6 +91,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.thomaswcode.decrastination.AppGraph
+import com.thomaswcode.decrastination.block.Photos
 import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.Chunk
@@ -102,6 +103,7 @@ import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.data.SlotOutcome
 import com.thomaswcode.decrastination.data.SlotRecord
+import com.thomaswcode.decrastination.data.SlotRef
 import com.thomaswcode.decrastination.learn.CalendarEvent
 import com.thomaswcode.decrastination.learn.CalendarTime
 import com.thomaswcode.decrastination.learn.EventJudge
@@ -200,8 +202,9 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
     var lastDone by remember { mutableStateOf<Pair<String, Long>?>(null) }
     var changing by rememberSaveable { mutableStateOf<String?>(null) }
     var eventFor by rememberSaveable { mutableStateOf<String?>(null) }
-    // A missed slot's sheet, by the record's key and start.
+    // A missed slot's sheet, by the record's key and start; a kept one's likewise (6.5.0).
     var missedFor by rememberSaveable { mutableStateOf<String?>(null) }
+    var keptFor by rememberSaveable { mutableStateOf<String?>(null) }
     // A piece being moved by the sheet (UI-04, TalkBack's Move it), by its key; an instruction about the day being written.
     var moving by rememberSaveable { mutableStateOf<String?>(null) }
     var writingDay by rememberSaveable { mutableStateOf(false) }
@@ -300,6 +303,7 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
         onMove = { moving = it.key },
         onDrop = ::drop,
         onMissed = { missedFor = missedKey(it) },
+        onKept = { keptFor = missedKey(it) },
         canKeep = { row -> MissedActions.of(row.record, log.slots, row.piece, tasks.tasks.firstOrNull { it.id == row.record.taskId }).done },
     )
 
@@ -492,7 +496,11 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
                     DaySheet.Done -> {
                         Box(Modifier.padding(horizontal = 24.dp)) { SectionHeading("Done ${if (today) "today" else "that day"}", trailing = Format.minutes(model.doneMin), sheet = true) }
                         model.done.forEachIndexed { index, record ->
-                            ListTile(index, model.done.size) {
+                            // Each opens its sheet (6.5.0): how it was kept, and a photo of it while it can still earn.
+                            ListTile(index, model.done.size, onClick = {
+                                daySheet = null
+                                keptFor = missedKey(record)
+                            }) {
                                 Text(record.label, style = MaterialTheme.typography.bodyLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
                                 Text(
                                     "${outcomeWords(record.outcome)} · ${Format.minutes(record.workedMin)}" + if (record.earned) " · earned" else "",
@@ -581,7 +589,52 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
                 onOpen = act { TaskOpener.open(activity, it)?.let(::bar) },
                 onCheck = act { checkDone(graph, it, ::bar) },
                 onAllDone = act { allDone(graph, it.id, ::bar) },
+                onPhoto = {
+                    missedFor = null
+                    row.piece.let { if (it != null) photo.take(it) }
+                }.takeIf { photo.available && !photo.checking },
             ) { missedFor = null }
+        }
+    }
+    keptFor?.let { key ->
+        val record = log.slots.lastOrNull { it.outcome.kept && missedKey(it) == key }
+        if (record == null) {
+            LaunchedEffect(key) { keptFor = null }
+        } else {
+            val task = tasks.tasks.firstOrNull { it.id == record.taskId }
+            val can = KeptActions.of(record, task, plan.today.toString())
+            KeptSheet(
+                record, can, zone,
+                onPhoto = {
+                    keptFor = null
+                    Photos.pieceOf(record, task).let { if (it != null) photo.take(it, SlotRef.of(record)) }
+                }.takeIf { can.photo && photo.available && !photo.checking },
+            ) { keptFor = null }
+        }
+    }
+}
+
+/**
+ * A slot ticked *Done*'s sheet (6.5.0): its label and times, how it was kept and what it earned, and *Check with a photo* while
+ * it can still earn ([KeptActions]): the check names this slot, so it earns on it, however long after the tick.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun KeptSheet(record: SlotRecord, can: KeptActions, zone: ZoneId, onPhoto: (() -> Unit)?, onClose: () -> Unit) {
+    ModalBottomSheet(onDismissRequest = onClose) {
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 24.dp, end = 24.dp, bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(record.label, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+            Text("${outcomeWords(record.outcome).replaceFirstChar { it.uppercase() }}, ${clock(record.start, zone)}–${clock(record.end, zone)}, ticked at ${clock(record.at, zone)}", style = MaterialTheme.typography.bodyMedium)
+            Text(
+                when {
+                    can.earned -> "It's earned its free time${if (record.photo) ", with a photo" else ""}."
+                    can.photo -> "Not earning yet: a photo of the work earns it, today."
+                    else -> "It doesn't earn free time now."
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            onPhoto?.let { OutlinedButton(onClick = it) { Text("Check with a photo") } }
         }
     }
 }
@@ -604,6 +657,8 @@ private fun MissedSheet(
     onOpen: () -> Unit,
     onCheck: () -> Unit,
     onAllDone: () -> Unit,
+    /** *Check with a photo* (6.5.0), where the sheet offers it and Claude can be asked. */
+    onPhoto: (() -> Unit)? = null,
     onClose: () -> Unit,
 ) {
     val record = row.record
@@ -618,6 +673,7 @@ private fun MissedSheet(
                 if (can.open) Button(onClick = onOpen) { Text("Open") }
                 if (can.check) OutlinedButton(onClick = onCheck) { Text("Check it's done") }
                 if (can.allDone) OutlinedButton(onClick = onAllDone) { Text("All of it done") }
+                if (can.photo) onPhoto?.let { OutlinedButton(onClick = it) { Text("Check with a photo") } }
                 if (can.ask) AskFelixButton(activity, About(taskId = record.taskId, taskTitle = row.piece?.title))
             }
         }

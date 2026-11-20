@@ -36,7 +36,7 @@ Three releases. 6.4.0 changes the check itself; 6.5.0 opens it from more places 
 
 **At the phone.** A piece of five pages checked in one go. A piece checked with its first pages, refused with the rest named, then passed with the rest alone, earning once. *Shown so far* on its sheet between the two. A page retaken. A task in two sittings: the first passed with its pages, the second refused with one of those pages again, then passed with the rest.
 
-## 6.5.0: more doors on the phone
+## 6.5.0: more doors on the phone (built: D-156, Q155 to Q158)
 
 **A missed slot's sheet** gains *Check with a photo* where it offers *Done*, by the same rule (`MissedActions`, which gains it, so the website's sheet has it from the same place): the last miss of its key that day, its piece still in the plan, written homework, Claude on.
 

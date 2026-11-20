@@ -43,12 +43,17 @@ class PhotoChecker(private val client: AnthropicClient, val model: String = Clau
 
     private val json = Json { ignoreUnknownKeys = true }
 
-    /** Checks [jpegs], a page each, against [about], the piece and its task as [context] says them. */
-    suspend fun check(jpegs: List<ByteArray>, about: String): Result {
+    /**
+     * Checks [jpegs], a page each, against [about], the piece and its task as [context] says them; with [kept], pages of earlier checks
+     * kept with the task (6.5.0), sent again after them where there's room, named so as not to be taken for new work.
+     */
+    suspend fun check(jpegs: List<ByteArray>, about: String, kept: List<ByteArray> = emptyList()): Result {
+        val pages = jpegs.take(MAX_PAGES)
+        val named = pages.mapIndexed { i, jpeg -> "Page ${i + 1}:" to jpeg } + kept.take(MAX_PAGES - pages.size).mapIndexed { i, jpeg -> "Kept page ${i + 1}, from an earlier check:" to jpeg }
         // Each page named before its picture, so the answer can say which shows what (6.4.0).
-        val images = jpegs.take(MAX_PAGES).flatMapIndexed { i, jpeg ->
+        val images = named.flatMap { (name, jpeg) ->
             listOf(
-                ContentBlockParam.ofText(TextBlockParam.builder().text("Page ${i + 1}:").build()),
+                ContentBlockParam.ofText(TextBlockParam.builder().text(name).build()),
                 ContentBlockParam.ofImage(
                     ImageBlockParam.builder().source(Base64ImageSource.builder().data(Base64.getEncoder().encodeToString(jpeg)).mediaType(Base64ImageSource.MediaType.IMAGE_JPEG).build()).build(),
                 ),
@@ -109,7 +114,7 @@ class PhotoChecker(private val client: AnthropicClient, val model: String = Clau
         fun system(year: Int = 12): String = """
             You check photos of a UK sixth-form student's written work (Year $year) for the planner app that times their homework: up to $MAX_PAGES photos, each named ("Page 1:"), the pages of one piece of work. Say whether they show the piece of work described done: answers or writing for all of it, not blank pages, the questions alone, a few lines, or a different task. Blank or crossed-out pages, a photo of a screen, printed answers, or work for a different task are not done. Name what you can see. Be fair, and not easily fooled.
 
-            You may be told what earlier checks of the same task saw. Their photos aren't sent again, but what they showed counts as shown: the piece is done when that and these photos together show all of it. A check that passed has earned its time already, so a later one must also show work no passed check showed: say in fresh whether these photos do (true where no earlier check passed). Photos showing only what a passed check showed are not fresh, however much they show.
+            You may be told what earlier checks of the same task saw. Their photos aren't sent again unless kept (named "Kept page", below), but what they showed counts as shown: the piece is done when that and these photos together show all of it. A check that passed has earned its time already, so a later one must also show work no passed check showed: say in fresh whether these photos do (true where no earlier check passed). Photos showing only what a passed check showed are not fresh, however much they show. Pages named "Kept page" are from earlier checks, sent again to be seen: they show what those checks showed, never new work.
 
             A piece may be one part of a task's work, done in order, its share said ("part 1 of 2: with the parts before it, about half of the task's work"). A part is done when the task's work shown, by these photos and earlier checks together, reaches its share from the start of the work: it needs no more than its share, and no less.
 
@@ -140,7 +145,7 @@ class PhotoChecker(private val client: AnthropicClient, val model: String = Clau
             if (notes.isNotEmpty()) {
                 appendLine()
                 appendLine()
-                appendLine("Earlier checks of this task, their photos not sent again (what each showed counts as shown):")
+                appendLine("Earlier checks of this task (what each showed counts as shown; their photos not sent again, but for a page kept, named \"Kept page\"):")
                 notes.forEach { note ->
                     val at = Instant.ofEpochMilli(note.at).atZone(zone).format(WHEN)
                     appendLine("- $at, for \"${note.label}\", ${if (note.passed) "counted in a check that passed (earned already)" else "not passed"}: ${note.covered}")

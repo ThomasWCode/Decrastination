@@ -21,6 +21,7 @@ import com.thomaswcode.decrastination.data.CHECK_NOTES_KEPT
 import com.thomaswcode.decrastination.data.CheckNote
 import com.thomaswcode.decrastination.data.CompletionRecord
 import com.thomaswcode.decrastination.data.JsonStore
+import com.thomaswcode.decrastination.data.KeptPage
 import com.thomaswcode.decrastination.data.Keeping
 import com.thomaswcode.decrastination.data.PhotoDone
 import com.thomaswcode.decrastination.data.PieceTimer
@@ -32,6 +33,7 @@ import com.thomaswcode.decrastination.data.SessionState
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.data.SlotOutcome
 import com.thomaswcode.decrastination.data.SlotRecord
+import com.thomaswcode.decrastination.data.SlotRef
 import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.core.AnkiRules
 import java.time.Instant
@@ -601,10 +603,10 @@ class Focus(
     /**
      * The piece [key] of [taskId] the photo check found done (BL-08): its slot kept, or a
      * kept one's free time earned. Saved first ([SessionState.photosDone]), so a stop part-way is
-     * finished at start-up.
+     * finished at start-up. [record]: the kept slot its sheet named (6.5.0), which alone it earns on.
      */
-    suspend fun photoChecked(taskId: String, step: String?, minutes: Int, stepIndex: Int? = null, key: String, takenAt: Long? = null, note: CheckNote? = null): Boolean {
-        val done = PhotoDone(Ids.next(), taskId, step, minutes, clock.now(), stepIndex, key, takenAt)
+    suspend fun photoChecked(taskId: String, step: String?, minutes: Int, stepIndex: Int? = null, key: String, takenAt: Long? = null, record: SlotRef? = null, note: CheckNote? = null): Boolean {
+        val done = PhotoDone(Ids.next(), taskId, step, minutes, clock.now(), stepIndex, key, takenAt, record)
         // Its [note] of what it showed in the same write as what it's owed (6.4.0): a stop between the two would leave the work counted
         // as earned, and a check of it again refused, with nothing given for it.
         session.update { state -> state.copy(photosDone = state.photosDone + done, notes = note?.let { notesKept(counted(state.notes, it)) } ?: state.notes) }
@@ -647,9 +649,30 @@ class Focus(
         return notes.map { if (it == award || (it.taskId == award.taskId && it.countedBy == award.at)) it.copy(passed = false, countedBy = null) else it }
     }
 
-    /** The notes of the tasks done or gone let go (6.4.0): at a start and daily, as a task can go without a check. */
-    suspend fun tidyNotes() {
-        session.update { state -> state.copy(notes = notesKept(state.notes)) }
+    /**
+     * The notes of the tasks done or gone let go (6.4.0), and their kept pages with them, as are pages kept past
+     * [KeptPage.KEPT_MS] (6.5.0): at a start and daily, as a task can go without a check.
+     */
+    suspend fun tidyChecks() {
+        session.update { state -> state.copy(notes = notesKept(state.notes), pages = pagesKept(state.pages)) }
+    }
+
+    /** A check's pages kept with their task (6.5.0), the oldest first: [taskId]'s, or every task's. */
+    fun keptPages(taskId: String? = null): List<KeptPage> = session.value.pages.filter { taskId == null || it.taskId == taskId }
+
+    /** [hashes], a check's pages its box left kept (6.5.0), kept with [taskId] as taken at [at]: once each, the task's open ones alone. */
+    suspend fun keepPages(taskId: String, hashes: List<String>, at: Long) {
+        session.update { state ->
+            val new = hashes.distinct().filter { hash -> state.pages.none { it.taskId == taskId && it.hash == hash } }.map { KeptPage(taskId, it, at) }
+            state.copy(pages = pagesKept(state.pages + new))
+        }
+    }
+
+    /** [pages] of the tasks still open, taken within [KeptPage.KEPT_MS]. */
+    private fun pagesKept(pages: List<KeptPage>): List<KeptPage> {
+        val open = tasks.value.tasks.filter { it.isOpen }.mapTo(HashSet()) { it.id }
+        val since = clock.now() - KeptPage.KEPT_MS
+        return pages.filter { it.taskId in open && it.at >= since }
     }
 
     /** [notes] of the tasks still open, each one's newest [CHECK_NOTES_KEPT], in the order they were kept. */
@@ -762,6 +785,11 @@ class Focus(
     private suspend fun photoEarns(done: PhotoDone, key: String): Boolean {
         val at = done.at
         val today = today(at).toString()
+        // From a kept slot's sheet (6.5.0): that slot, kept today without earning, and no other, however long after its tick.
+        done.record?.let { named ->
+            val slot = log.value.slots.lastOrNull { named.names(it) && it.outcome.kept && it.date == today && !it.earned } ?: return false
+            return keeping.withLock { earnKept(slot, photo = true, letGo = done) }
+        }
         // Taken of a piece still to do: a slot of it kept since (ticked while the check ran), or moments
         // before (Done, then the photo at once: [AGAIN_MS]), is the one it shows; one kept before that is
         // another (an earlier box under the same key, a round before the task reopened), and the piece in

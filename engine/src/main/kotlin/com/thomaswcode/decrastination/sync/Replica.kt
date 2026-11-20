@@ -9,6 +9,7 @@ import com.thomaswcode.decrastination.data.CalendarRead
 import com.thomaswcode.decrastination.data.ChatArchiveStore
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.Secret
+import com.thomaswcode.decrastination.data.SlotRef
 import com.thomaswcode.decrastination.data.Stores
 import com.thomaswcode.decrastination.data.SyncState
 import com.thomaswcode.decrastination.enrich.ModelEffort
@@ -610,14 +611,14 @@ class Replica(
      * server's to ask then (D-148): what came of it, in its words, or why it didn't go through. On [photoHttp], as a check waits on
      * Claude's call as a photo's reading does; off the thread it's asked from, as [importOnServer] is.
      */
-    suspend fun checkPhotoOnServer(taskId: String, key: String, step: String?, takenAt: Long, jpegs: List<ByteArray>): String = withContext(Dispatchers.IO) {
+    suspend fun checkPhotoOnServer(taskId: String, key: String, step: String?, takenAt: Long, jpegs: List<ByteArray>, keep: Boolean = false, record: SlotRef? = null): String = withContext(Dispatchers.IO) {
         val token = stores.secrets[Secret.DeviceToken] ?: return@withContext "The check didn't go through (this phone isn't paired)."
         // What's waiting first, as the piece may be new, or changed, in it, so the server plans it as this phone does; not held through
         // the check, which can take minutes.
         val flushed = sending.withLock { stores.outbox.value.commands.isEmpty() || exchange() }
         if (!flushed) return@withContext "The check didn't go through (what's changed here hasn't reached the server yet)."
         val headers = mapOf("Content-Type" to "application/json", "Authorization" to "Bearer $token", Protocol.HEADER to Protocol.VERSION.toString())
-        val ask = PhotoCheckAsk(taskId, key, takenAt, jpegs.map { Base64.getEncoder().encodeToString(it) }, step)
+        val ask = PhotoCheckAsk(taskId, key, takenAt, jpegs.map { Base64.getEncoder().encodeToString(it) }, step, keep, record)
         val answer = try {
             photoHttp.post("${sync.value.server}/api/photos/check", headers, JSON.encodeToString(PhotoCheckAsk.serializer(), ask))
         } catch (failed: IOException) {

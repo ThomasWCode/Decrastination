@@ -41,12 +41,38 @@ class MissedActionsTest {
     private val slot = miss("2026-10-12T16:00", "2026-10-12T16:45")
 
     @Test
-    fun `a missed slot with its piece in the plan has Done, Open, Check it's done and Ask Felix about it`() {
+    fun `a missed slot with its piece in the plan has Done, Open, Check it's done, Ask Felix about it and Check with a photo`() {
         val task = task()
         assertEquals(
-            MissedActions(done = true, doneOnLater = false, check = true, allDone = false, ask = true, open = true, since = false),
+            MissedActions(done = true, doneOnLater = false, check = true, allDone = false, ask = true, open = true, since = false, photo = true),
             MissedActions.of(slot, listOf(slot), piece(task), task),
         )
+    }
+
+    @Test
+    fun `a missed slot offers Check with a photo where it offers Done, for written homework alone`() {
+        val task = task()
+        assertTrue(MissedActions.of(slot, listOf(slot), piece(task), task).photo)
+        // A later miss of its key today: Done goes on that one, and its photo with it.
+        val later = miss("2026-10-12T18:00", "2026-10-12T18:30")
+        assertFalse(MissedActions.of(slot, listOf(slot, later), piece(task), task).photo)
+        val revision = task().copy(kind = Kind.Revision)
+        assertFalse(MissedActions.of(slot, listOf(slot), piece(revision), revision).photo)
+    }
+
+    @Test
+    fun `a slot ticked Done offers Check with a photo while it can still earn, today, unearned, written homework of an open task`() {
+        val task = task()
+        val kept = slot.copy(outcome = SlotOutcome.Kept)
+        assertEquals(KeptActions(photo = true, earned = false), KeptActions.of(kept, task, "2026-10-12"))
+        assertTrue(KeptActions.of(kept.copy(outcome = SlotOutcome.KeptLate), task, "2026-10-12").photo)
+        assertEquals(KeptActions(photo = false, earned = true), KeptActions.of(kept.copy(earned = true), task, "2026-10-12"))
+        assertFalse(KeptActions.of(kept, task, "2026-10-13").photo, "its day is over")
+        assertFalse(KeptActions.of(kept.copy(kind = Kind.Revision), task, "2026-10-12").photo)
+        assertFalse(KeptActions.of(kept, task(status = Status.Done), "2026-10-12").photo)
+        assertFalse(KeptActions.of(kept, task(Source.Anki), "2026-10-12").photo)
+        assertFalse(KeptActions.of(kept, null, "2026-10-12").photo)
+        assertFalse(KeptActions.of(slot, task, "2026-10-12").photo, "a miss is the missed sheet's")
     }
 
     @Test
