@@ -48,12 +48,16 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.http.encodeURLPathPart
+import io.ktor.http.content.OutgoingContent
+import io.ktor.http.content.TextContent
 import io.ktor.http.setCookie
 import io.ktor.server.routing.get
 import io.ktor.server.routing.routing
 import io.ktor.server.testing.ApplicationTestBuilder
 import io.ktor.server.testing.testApplication
 import io.ktor.util.cio.ChannelWriteException
+import io.ktor.utils.io.ByteWriteChannel
+import io.ktor.utils.io.writeStringUtf8
 import java.io.File
 import java.io.IOException
 import java.nio.file.Files
@@ -517,6 +521,27 @@ class ApiTest {
     }
 
     @Test
+    fun `commands bigger than a client ever sends at once, or that don't say their size, aren't read`() = server {
+        val phone = paired()
+        graph.commandsForATest()
+        suspend fun send(body: OutgoingContent) = plain().post("/api/commands") {
+            bearerAuth(phone.token)
+            header(Protocol.HEADER, Protocol.VERSION.toString())
+            setBody(body)
+        }
+        val empty = json.encodeToString(CommandBatch.serializer(), CommandBatch(emptyList()))
+        assertEquals(HttpStatusCode.OK, send(TextContent(empty, ContentType.Application.Json)).status)
+        // Streamed, its size unsaid: not read, as the photos' routes aren't.
+        val streamed = object : OutgoingContent.WriteChannelContent() {
+            override val contentType = ContentType.Application.Json
+            override suspend fun writeTo(channel: ByteWriteChannel) = channel.writeStringUtf8(empty)
+        }
+        assertEquals(HttpStatusCode.PayloadTooLarge, send(streamed).status)
+        val padded = empty.dropLast(1) + "," + "\"x\":\"" + "x".repeat(32 * 1024 * 1024) + "\"}"
+        assertEquals(HttpStatusCode.PayloadTooLarge, send(TextContent(padded, ContentType.Application.Json)).status)
+    }
+
+    @Test
     fun `a photo check is a phone's sending commands, its pages JPEGs, its piece the one the server plans by its key`() = server {
         val cookie = signIn()
         val phone = paired()
@@ -539,7 +564,11 @@ class ApiTest {
         graph.commandsForATest()
         assertEquals(HttpStatusCode.Forbidden, check(ask("k"), website).status)
         assertEquals(HttpStatusCode.UnsupportedMediaType, check(ask("k", listOf(Base64.getEncoder().encodeToString("not a photo".toByteArray()))), byPhone).status)
-        assertEquals(HttpStatusCode.UnsupportedMediaType, check(ask("k", List(4) { page }), byPhone).status, "past its most pages")
+        assertEquals(HttpStatusCode.UnsupportedMediaType, check(ask("k", List(11) { page }), byPhone).status, "past its most pages")
+        // Ten are a check's (6.4.0), each no bigger than a page shrunk to what's sent ever comes to.
+        assertEquals(Photos.PIECE_CHANGED, json.decodeFromString(PhotoChecked.serializer(), check(ask("k", List(10) { page }), byPhone).bodyAsText()).said)
+        val big = Base64.getEncoder().encodeToString(byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte()) + ByteArray(2 * 1024 * 1024))
+        assertEquals(HttpStatusCode.PayloadTooLarge, check(ask("k", listOf(big)), byPhone).status)
         // A piece this server doesn't plan, its task planned or not: said as the phone says it.
         assertEquals(Photos.PIECE_CHANGED, json.decodeFromString(PhotoChecked.serializer(), check(ask("own:s-Essay#0"), byPhone).bodyAsText()).said)
         graph.stores.tasks.update { it.copy(tasks = listOf(TaskItem(id = "own:s-Essay", source = Source.Own, sourceId = "s-Essay", title = "A made-up essay", dueAt = null, kind = Kind.Homework, firstSeenAt = 1, lastSeenAt = 1))) }

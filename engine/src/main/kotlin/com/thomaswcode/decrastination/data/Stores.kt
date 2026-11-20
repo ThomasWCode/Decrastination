@@ -51,7 +51,7 @@ class Stores(
     val runtime = store("runtime.json", RuntimeState.serializer(), ::RuntimeState, migrations = listOf(ChatMigration.RUNTIME, RuntimeSplit.RUNTIME, NotSameMigration.RUNTIME))
 
     /** What the blocker keeps from moment to moment, changing every half minute (Focus's). */
-    val session = store("session.json", SessionState.serializer(), ::SessionState, migrations = listOf(CreditMigration.SESSION, TimerMigration.SESSION))
+    val session = store("session.json", SessionState.serializer(), ::SessionState, migrations = listOf(CreditMigration.SESSION, TimerMigration.SESSION, CheckNotesMigration.SESSION))
 
     /** Protection's state wherever it's asked for: changes waiting, the override, the code's lock. */
     val protection = store("protection.json", ProtectionState.serializer(), ::ProtectionState, migrations = listOf(ProtectionSplit.PROTECTION))
@@ -139,7 +139,8 @@ class Stores(
         Kept("settings.json", backup = "the settings as asked for, a change still waiting among them", resets = setOf(Reset.Memories), clears = emptySet()),
         Kept("secrets.bin", backup = null, why = "passwords and keys stay on this phone (D-78)"),
         Kept("runtime.json", backup = null, why = "the notifications held, the daily runs and the files found unreadable are this phone's"),
-        Kept("session.json", backup = "today's slots"),
+        // Everything learned takes what photo checks saw (6.4.0), and leaves the rest: its copies hold the rest.
+        Kept("session.json", backup = "today's slots, and what photo checks saw", resets = setOf(Reset.Everything), clears = emptySet()),
         Kept("protection.json", backup = null, why = "protection is this phone's; a change still waiting goes with the settings"),
         Kept("device.json", backup = null, why = "the device admin, the watchdog's finding and forced blocking are this phone's"),
         Kept("model.json", backup = "Claude's month"),

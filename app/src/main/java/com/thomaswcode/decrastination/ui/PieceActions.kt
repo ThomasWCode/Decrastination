@@ -5,6 +5,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilledTonalButton
@@ -69,7 +70,7 @@ private val PIECE = Saver<PhotoPiece?, ArrayList<String?>>(
 
 /**
  * The screen's photo check: a page, then "Add another page?", up to [PhotoChecker.MAX_PAGES] in one
- * check (AI-17). The piece being photographed, with its pages so far, is kept through the screen
+ * check (AI-17), the last one taken again where it came out wrong (6.4.0). The piece being photographed, with its pages so far, is kept through the screen
  * being made again while the camera is open (a turn of the phone, Android needing the memory), and
  * found again in [plan] when the photos are checked (BUG-P2-011). [say] gives how it went, and for
  * which task.
@@ -80,10 +81,14 @@ fun rememberPhotoCheck(graph: AppGraph, activity: Activity, plan: Plan, say: (ta
     val checkable = remember(settings.aiEnabled, settings.aiKeyActive) { graph.claudeAskable() }
     val dir = remember { File(activity.cacheDir, "photos").also { it.mkdirs() } }
     fun page(n: Int) = File(dir, "check-$n.jpg")
+    // A page taken again goes here first, so one not taken leaves the page before as it was.
+    val again = File(dir, "check-again.jpg")
     fun uriOf(file: File) = FileProvider.getUriForFile(activity, "${activity.packageName}.photos", file)
     var photoFor by rememberSaveable(stateSaver = PIECE) { mutableStateOf<PhotoPiece?>(null) }
-    // Asked after a page: another, or check those taken.
+    // Asked after a page: another, the last again, or check those taken.
     var asking by rememberSaveable { mutableStateOf(false) }
+    // The camera's open for the last page again.
+    var retaking by rememberSaveable { mutableStateOf(false) }
     // App-wide, not this screen's: a check runs on when the screen goes (a tab changed), and its
     // outcome is shown on whichever screen is there, or the next.
     val running by PhotoChecks.running.collectAsStateWithLifecycle()
@@ -115,6 +120,14 @@ fun rememberPhotoCheck(graph: AppGraph, activity: Activity, plan: Plan, say: (ta
     }
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { taken ->
         val wanted = photoFor ?: return@rememberLauncherForActivityResult
+        if (retaking) {
+            // In the last page's place, or that page as it was; then asked again.
+            retaking = false
+            if (taken && again.length() > 0) again.copyTo(page(wanted.pages), overwrite = true)
+            again.delete()
+            if (checkable) asking = true else photoFor = null
+            return@rememberLauncherForActivityResult
+        }
         when {
             // Not to be checked: with no page yet, nothing to keep.
             !checkable || (!taken && wanted.pages == 0) -> {
@@ -137,7 +150,7 @@ fun rememberPhotoCheck(graph: AppGraph, activity: Activity, plan: Plan, say: (ta
                 photoFor?.let(::check)
             },
             title = { Text("Add another page?") },
-            text = { Text("Up to ${PhotoChecker.MAX_PAGES} pages go in one check.") },
+            text = { Text("Page ${photoFor?.pages ?: 1} taken. Up to ${PhotoChecker.MAX_PAGES} pages go in one check.") },
             confirmButton = {
                 TextButton(onClick = {
                     asking = false
@@ -145,15 +158,24 @@ fun rememberPhotoCheck(graph: AppGraph, activity: Activity, plan: Plan, say: (ta
                 }) { Text("Add a page") }
             },
             dismissButton = {
-                TextButton(onClick = {
-                    asking = false
-                    photoFor?.let(::check)
-                }) { Text("Check it now") }
+                Row {
+                    TextButton(onClick = {
+                        asking = false
+                        retaking = true
+                        again.delete()
+                        launcher.launch(uriOf(again))
+                    }) { Text("Retake") }
+                    TextButton(onClick = {
+                        asking = false
+                        photoFor?.let(::check)
+                    }) { Text("Check it now") }
+                }
             },
         )
     }
     return PhotoCheck(checkable, running != null) { piece ->
         (1..PhotoChecker.MAX_PAGES).forEach { page(it).delete() }
+        again.delete()
         photoFor = PhotoPiece(piece.taskId, piece.stepIndex, piece.step, after = piece.sitting?.after)
         launcher.launch(uriOf(page(1)))
     }

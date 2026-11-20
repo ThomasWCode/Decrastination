@@ -29,7 +29,7 @@ Everything is under `/api`, on the same origin as the website. Open: `GET /healt
 | `POST /devices/push/test` | a phone | it told through Firebase now, whatever the mode, and what came of it |
 | `POST /stores/seed` | a phone | its stores, [sync.md](sync.md) |
 | `POST /stores/switch` | a phone | its last whole seed, the server gone over to commands in its transaction (§The modes); the answer said again under its id, a 409 for a seed this build can't read or one after the switch |
-| `POST /commands` | a client | a batch of commands, each one's outcome; a 409 in mirror mode, a 500 if one fails, for the client to send it again |
+| `POST /commands` | a client | a batch of commands, each one's outcome; a 413 for one past 32 MB by its stated length, or that doesn't state it (6.4.0), as the photos' routes; a 409 in mirror mode, a 500 if one fails, for the client to send it again |
 | `GET /state?since=` | a client | every store above a revision, whole, and the stores whose copies a clear or a reset let go of since (`letGo`, D-94) |
 | `GET /events` | a client | the state's revision: the one it's at on connecting, then each new one, with a heartbeat every 25 seconds |
 | `GET /views/day?date=`, `GET /views/work`, `GET /views/task/{id}`, `GET /views/settings`, `GET /views/chat?earlier=&reach=`, `GET /views/notices`, `GET /views/stats?period=`, `GET /views/week`, `GET /views/reviews`, `GET /views/backup`, `GET /views/setup` | a client | the pages' view models, [website.md](website.md) |
@@ -43,7 +43,7 @@ Everything is under `/api`, on the same origin as the website. Open: `GET /healt
 | `POST /backup/import` | the website, or a phone (D-146) | a backup taken in, all of it or none; a 409 in mirror mode, a 413 past 8 MB by what it says it is |
 | `POST /backup/copy` | the website | a reset's copy, by its name, taken in the same way; a 409 in mirror mode |
 | `POST /photos/tasks` | the website, or a phone (D-148) | a JPEG of homework read into tasks to check, one at a time; a 409 in mirror mode, or with another being read |
-| `POST /photos/check` | a phone (D-148) | a piece's pages (at most three JPEGs, in base64) checked against it (AI-16), the piece found by its key in this server's plan, ticked off here if it's done; one at a time; a 409 in mirror mode, or with another being checked |
+| `POST /photos/check` | a phone (D-148) | a piece's pages (at most ten JPEGs, in base64, each no more than 2 MB, the whole no more than 27 MB, by its stated length) checked against it (AI-16), with what earlier checks of its task saw, the piece found by its key in this server's plan, ticked off here if it's done; one at a time; a 409 in mirror mode, or with another being checked |
 | `POST /task-photos/{hash}` | a phone (D-148) | a task's photo, sent ahead of the command that keeps it, kept in the data folder's `photos/` by its hash (SHA-256's first 8 bytes), refused where the hash isn't the photo's; the photos no task holds swept at each start and daily, but those come within the day, as a photo's command can come after it |
 | `POST /push/subscription` | the website | a browser asking to be told of what it names; a 409 in mirror mode or with no keys on the box, a 400 at an address that isn't one of the browsers' push services |
 | `POST /push/channels`, `POST /push/forget` | the website | what a browser's asked for, and its stopping |

@@ -18,9 +18,46 @@ data class SessionState(
     val rewarded: List<Rewarded> = emptyList(),
     /** The timer on a piece (D-112), running or stopped by hand; none once its piece is done. Not backed up: a running timer is this phone's moment. */
     val timer: PieceTimer? = null,
+    /** What photo checks of each task saw ([CheckNote], 6.4.0), the newest last: a later check of the task counts it as shown. */
+    val notes: List<CheckNote> = emptyList(),
     /** The shape this is in ([Migration]): raised with each change of it, a migration bringing older files to it. */
-    val version: Int = 3,
+    val version: Int = 4,
 )
+
+/**
+ * What a photo check saw of a task's work (6.4.0): kept after a check that said done or not yet, as its photos are deleted, so a
+ * later check of any of the task's pieces counts it as shown. [CHECK_NOTES_KEPT] a task, the newest; a task's go when it's done or
+ * gone ([com.thomaswcode.decrastination.block.Focus.noteCheck]).
+ */
+@Serializable
+data class CheckNote(
+    val taskId: String,
+    /** The piece it was for ([com.thomaswcode.decrastination.core.Chunk.key]) and its label, as they were. */
+    val key: String,
+    val label: String,
+    /** Exactly which parts of the work its photos showed done, as the check wrote it to be relied on later. */
+    val covered: String,
+    /**
+     * Whether it's counted: its check passed, or a later one that passed was told it and relied on it, so what it showed has earned
+     * once already and can't be shown again as new.
+     */
+    val passed: Boolean,
+    val at: Long,
+    /** Counted by another check's pass, not its own: that pass's note's [at], so its award taken back takes this back too. */
+    val countedBy: Long? = null,
+) {
+    /**
+     * What a pass of its check counts with it: its step, by its place in the task's list, whichever sitting of it it was; or "-1",
+     * every part of a task divided with no step named ([com.thomaswcode.decrastination.core.Chunk.keyOf]).
+     */
+    val scope: String get() = key.removePrefix("$taskId#").substringBefore('#')
+
+    /** The note it is, whatever's been counted since: its task, its piece and when it was kept. */
+    val id: Triple<String, String, Long> get() = Triple(taskId, key, at)
+}
+
+/** The most notes kept of one task's checks, the newest. */
+const val CHECK_NOTES_KEPT = 8
 
 /** A timer on a piece (D-112): the owner's word they're on it, running from [startedAt] for [minutes]; stopped by hand, kept with [stoppedAt] till the next Start, so Felix's slot-over message waits its 30 minutes from the stop. */
 @Serializable

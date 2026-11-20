@@ -390,6 +390,28 @@ class BackupTest {
     }
 
     @Test
+    fun `format 12 keeps what photo checks saw, merged with this phone's on a restore, each task's newest eight, and one from before has none`() {
+        fun note(task: String, covered: String, at: Long, passed: Boolean = false) = CheckNote(task, "$task#-1#1", task, covered, passed, at)
+        val backup = Backup(exportedAt = 1, settings = Settings(), log = ActivityLog(), checkNotes = listOf(note("teams:a", "pages 1 to 3", 10, passed = true)))
+        assertEquals(backup.checkNotes, Backups.decode(Backups.encode(backup), emptyMap())!!.checkNotes)
+        // Its session part goes through the store's migrations as its store's other part does.
+        val shapes = mapOf("session.json" to Shape(SessionState().version, listOf(CreditMigration.SESSION, TimerMigration.SESSION, CheckNotesMigration.SESSION)))
+        val older = """{"app":"Decrastination","format":11,"exportedAt":0,"settings":{},"log":{},"slots":{},"versions":{"session.json":3}}"""
+        assertEquals(emptyList(), Backups.decode(older, shapes)!!.checkNotes)
+        assertEquals(backup.checkNotes, Backups.decode(Backups.encode(backup.copy(versions = mapOf("session.json" to SessionState().version))), shapes)!!.checkNotes)
+        // This phone's kept, the backup's it hasn't added, in the order they were kept; past eight a task, its oldest go.
+        val here = listOf(note("teams:a", "page 4", 20), note("teams:b", "its plan", 5))
+        assertEquals(listOf("its plan", "pages 1 to 3", "page 4"), Backups.mergedNotes(here, backup.checkNotes + here.take(1)).map { it.covered })
+        // A note counted since the backup was made comes back once, counted.
+        val counted = backup.checkNotes.single().copy(passed = false)
+        assertEquals(listOf(true), Backups.mergedNotes(backup.checkNotes, listOf(counted)).map { it.passed })
+        assertEquals(listOf(true), Backups.mergedNotes(listOf(counted), backup.checkNotes).map { it.passed })
+        val many = (1..9).map { note("teams:c", "page $it", it.toLong()) }
+        assertEquals((2..9).map { "page $it" }, Backups.mergedNotes(many.take(4), many.drop(4)).map { it.covered })
+        assertNull(Backups.problem(backup))
+    }
+
+    @Test
     fun `format 11 keeps the pairs that aren't the same work, one said on either side standing`() {
         val backup = Backup(exportedAt = 1, settings = Settings(), log = ActivityLog(), notSame = listOf("a|b", "c|d"))
         assertEquals(listOf("a|b", "c|d"), Backups.decode(Backups.encode(backup), emptyMap())!!.notSame)
@@ -412,7 +434,7 @@ class BackupTest {
         val pending = GmailWrite("w2", "gmail:t2", "Club email", "t2", 6, notBefore = 7)
         val backup = Backup(exportedAt = 1, settings = Settings(), log = ActivityLog(), gmailWrites = listOf(made))
         val back = Backups.decode(Backups.encode(backup), emptyMap())!!
-        assertEquals(11, Backup.FORMAT)
+        assertEquals(12, Backup.FORMAT)
         assertEquals(listOf(made), back.gmailWrites)
         // None in one from before.
         assertEquals(emptyList(), Backups.decode("""{"app":"Decrastination","format":8,"exportedAt":0,"settings":{},"log":{}}""", emptyMap())!!.gmailWrites)

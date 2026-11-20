@@ -4,6 +4,7 @@ import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
 import com.thomaswcode.decrastination.data.ActivityLog
 import com.thomaswcode.decrastination.data.ChatMigration
+import com.thomaswcode.decrastination.data.CheckNotesMigration
 import com.thomaswcode.decrastination.data.CreditMigration
 import com.thomaswcode.decrastination.data.OnlyMigration
 import com.thomaswcode.decrastination.data.OutsideMigration
@@ -139,7 +140,7 @@ class PlanSnapshotTest {
 
     /** The stores' migrations, as [com.thomaswcode.decrastination.data.Stores] gives them: those of a shape past the first. */
     private val MIGRATIONS = mapOf(
-        "log.json" to listOf(ChatMigration.LOG, MemoryMigration.LOG, CreditMigration.LOG), "session.json" to listOf(CreditMigration.SESSION, TimerMigration.SESSION),
+        "log.json" to listOf(ChatMigration.LOG, MemoryMigration.LOG, CreditMigration.LOG), "session.json" to listOf(CreditMigration.SESSION, TimerMigration.SESSION, CheckNotesMigration.SESSION),
         "tasks.json" to listOf(TasksMigration.TASKS, StepOrderMigration.TASKS, WeeklyMigration.TASKS, NotSameMigration.TASKS), "instructions.json" to listOf(TasksMigration.INSTRUCTIONS, StepOrderMigration.INSTRUCTIONS, OnlyMigration.INSTRUCTIONS, OutsideMigration.INSTRUCTIONS, WeeklyMigration.INSTRUCTIONS),
         "settings.json" to listOf(SettingsMigration.SETTINGS, ZoomMigration.SETTINGS, SpeechMigration.SETTINGS),
     )

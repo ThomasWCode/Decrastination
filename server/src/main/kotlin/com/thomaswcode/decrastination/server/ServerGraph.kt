@@ -292,6 +292,8 @@ class ServerGraph(
                 // The tasks' photos no task holds let go, as the phone's are (D-148), but a day's: a phone's photo comes ahead of the
                 // command that keeps it, which a stop between the two can hold back till its next try.
                 runCatching { owners.photos.sweepPhotos(keptBefore = clock.now() - PHOTO_GRACE_MS) }.onFailure { Log.w(Log.TAG, "The photos couldn't be swept: ${it::class.simpleName}") }
+                // What photo checks saw of tasks done or gone since (6.4.0), as a task can go without a check.
+                if (mode == COMMANDS) runCatching { owners.focus.tidyNotes() }.onFailure { Log.w(Log.TAG, "The checks' notes couldn't be tidied: ${it::class.simpleName}") }
                 delay(TIDY_EVERY_MS)
             }
         }
@@ -852,7 +854,7 @@ class ServerGraph(
     fun task(id: String): TaskView? {
         val state = stores.tasks.value
         val task = state.tasks.firstOrNull { it.id == id } ?: return null
-        return TaskViews.of(task, state.tasks.associateBy { it.id }, planning.plan(), stores.settings.value, stores.instructions.value.applied, stores.felix.value.notes, clock.now(), clock.zone(), writable = mode == COMMANDS, timer = stores.session.value.timer)
+        return TaskViews.of(task, state.tasks.associateBy { it.id }, planning.plan(), stores.settings.value, stores.instructions.value.applied, stores.felix.value.notes, clock.now(), clock.zone(), writable = mode == COMMANDS, timer = stores.session.value.timer, checks = stores.session.value.notes)
     }
 
     /**

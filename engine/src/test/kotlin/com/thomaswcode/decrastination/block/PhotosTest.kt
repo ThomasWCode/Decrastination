@@ -14,6 +14,8 @@ import com.thomaswcode.decrastination.core.TaskPhoto
 import com.thomaswcode.decrastination.core.Why
 import com.thomaswcode.decrastination.data.ActivityLog
 import com.thomaswcode.decrastination.data.ChatMigration
+import com.thomaswcode.decrastination.data.CheckNote
+import com.thomaswcode.decrastination.data.CheckNotesMigration
 import com.thomaswcode.decrastination.data.CreditMigration
 import com.thomaswcode.decrastination.data.OnlyMigration
 import com.thomaswcode.decrastination.data.MoodMigration
@@ -61,6 +63,12 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import okhttp3.mockwebserver.MockResponse
+import okhttp3.mockwebserver.MockWebServer
 
 /**
  * The photos' service on temporary stores (docs/plan_v4/architecture.md §The rules): a photo of a task's work kept
@@ -76,7 +84,7 @@ class PhotosTest {
     private val learning = JsonStore(File(dir, "learning.json"), LearningState.serializer(), ::LearningState)
     private val model = JsonStore(File(dir, "model.json"), ModelState.serializer(), ::ModelState)
     private val protection = JsonStore(File(dir, "protection.json"), ProtectionState.serializer(), ::ProtectionState, migrations = listOf(ProtectionSplit.PROTECTION))
-    private val session = JsonStore(File(dir, "session.json"), SessionState.serializer(), ::SessionState, migrations = listOf(CreditMigration.SESSION, TimerMigration.SESSION))
+    private val session = JsonStore(File(dir, "session.json"), SessionState.serializer(), ::SessionState, migrations = listOf(CreditMigration.SESSION, TimerMigration.SESSION, CheckNotesMigration.SESSION))
     private val log = JsonStore(File(dir, "log.json"), ActivityLog.serializer(), ::ActivityLog, migrations = listOf(ChatMigration.LOG, MemoryMigration.LOG, CreditMigration.LOG))
     private val chat = JsonStore(File(dir, "chat.json"), ChatState.serializer(), ::ChatState, migrations = listOf(ChatMigration.CHAT, TasksMigration.CHAT, FelixStore.CHAT, FelixStore.CHAT_PIECES, MemoryMigration.CHAT, StepOrderMigration.CHAT, OnlyMigration.CHAT, OutsideMigration.CHAT, MoodMigration.CHAT, SpeechMigration.CHAT, StepActionMigration.CHAT, WeeklyMigration.CHAT))
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -88,6 +96,28 @@ class PhotosTest {
     private val read: MutableList<String> = Collections.synchronizedList(mutableListOf())
     private val photos = Photos(tasks, settings, chat, clock, scope, gateway, focus, folder, shrink = { null }, profile = { Profile.Block.NONE }) { read += it }
 
+    /** A stand-in for Claude's API, and the photos' service that asks it: Claude on, for the checks that are answered. */
+    private val server = MockWebServer().apply { start() }
+    private val claude = ModelGateway(settings, { "test-key" }, model, tasks, clock, NoAlerts, scope) {}.also { it.endpoint = server.url("").toString().trimEnd('/') }
+    private val answered = Photos(tasks, settings, chat, clock, scope, claude, focus, folder, shrink = { null }, profile = { Profile.Block.NONE }) { read += it }
+
+    /** Each of [texts] the stand-in's next answer, in turn, as the API sends one. */
+    private fun answers(vararg texts: String) = texts.forEach { text ->
+        val body = JsonObject(
+            mapOf(
+                "id" to JsonPrimitive("msg"), "type" to JsonPrimitive("message"), "role" to JsonPrimitive("assistant"), "model" to JsonPrimitive("claude-opus-5-5"),
+                "content" to JsonArray(listOf(JsonObject(mapOf("type" to JsonPrimitive("text"), "text" to JsonPrimitive(text))))),
+                "stop_reason" to JsonPrimitive("end_turn"), "stop_sequence" to JsonNull,
+                "usage" to JsonObject(mapOf("input_tokens" to JsonPrimitive(3_000), "output_tokens" to JsonPrimitive(100))),
+            ),
+        )
+        server.enqueue(MockResponse().setHeader("Content-Type", "application/json").setBody(body.toString()))
+    }
+
+    /** A check's answer: [done], by how sure, what the pages [covered] and whether that's [fresh]. */
+    private fun verdict(done: Boolean, covered: String, fresh: Boolean = true, reason: String = "Every question is answered.") =
+        """{"done":$done,"confidence":0.9,"reason":"$reason","seen":"Pages of written work","covered":"$covered","fresh":$fresh}"""
+
     private val essay = TaskItem(
         id = "teams:essay", source = Source.Teams, sourceId = "essay", title = "Essay", dueAt = Fixtures.at("2026-10-23T09:00"), kind = Kind.Homework,
         firstSeenAt = clock.time, lastSeenAt = clock.time,
@@ -95,6 +125,7 @@ class PhotosTest {
 
     @AfterTest
     fun cleanUp() {
+        server.shutdown()
         scope.cancel()
         dir.deleteRecursively()
     }
@@ -192,6 +223,43 @@ class PhotosTest {
         photos.sweepPhotos()
         assertFalse(stray.exists())
         assertTrue(File(task().photo!!.path).exists())
+    }
+
+    @Test
+    fun `a check's note is kept after a not yet and a pass, none where Claude couldn't say, and the next check of the task is told them`() = runBlocking {
+        settings.update { it.copy(aiEnabled = true, aiKeyActive = true) }
+        tasks.update { it.copy(tasks = listOf(essay)) }
+        // The pass isn't fresh, but nothing that passed was shown before it, so that's no bar.
+        answers(verdict(false, "Q1-8 worked", reason = "Q9-12 aren't shown."), "not an answer", verdict(true, "Q9-12 worked", fresh = false))
+        val page = listOf(byteArrayOf(1, 2, 3))
+        assertEquals("Not yet: Q9-12 aren't shown. What these showed is remembered: photograph the rest.", answered.checkJpegs(page, piece(Kind.Homework), clock.time))
+        assertEquals("Claude couldn't say. Try a clearer photo.", answered.checkJpegs(page, piece(Kind.Homework), clock.time))
+        val passed = answered.checkJpegs(page, piece(Kind.Homework), clock.time)
+        assertTrue(passed.startsWith("Done"), passed)
+        // The pass relied on the first's note, so that's counted with it: Q1-8 can't be shown again as new.
+        assertEquals(listOf("Q1-8 worked" to true, "Q9-12 worked" to true), focus.notesOf(essay.id).map { it.covered to it.passed })
+        // The first was told nothing earlier; the last was told the first's, as not passed.
+        val first = server.takeRequest().body.readUtf8()
+        server.takeRequest()
+        val last = server.takeRequest().body.readUtf8()
+        assertFalse("Earlier checks of this task" in first)
+        assertTrue("not passed: Q1-8 worked" in last, last)
+    }
+
+    @Test
+    fun `a second sitting showing only what a passed check showed is refused, kept as not passed, and one showing the rest passes`() = runBlocking {
+        settings.update { it.copy(aiEnabled = true, aiKeyActive = true) }
+        tasks.update { it.copy(tasks = listOf(essay)) }
+        focus.noteCheck(CheckNote(essay.id, "teams:essay#-1#1", "Essay, part 1 of 2", "Pages 1 to 4, written out", passed = true, at = clock.time - 3_600_000))
+        answers(verdict(true, "Pages 1 to 4, written out", fresh = false), verdict(true, "Pages 5 and 6", fresh = true))
+        val pages = listOf(byteArrayOf(1, 2, 3), byteArrayOf(4, 5, 6))
+        assertEquals("Not yet: these show only work an earlier check counted already. Photograph this sitting's work.", answered.checkJpegs(pages, piece(Kind.Homework), clock.time))
+        assertEquals(false, focus.notesOf(essay.id).last().passed)
+        val passed = answered.checkJpegs(pages, piece(Kind.Homework), clock.time)
+        assertTrue(passed.startsWith("Done"), passed)
+        // The pass relied on every earlier note, the refused one's too: all counted now.
+        assertEquals(listOf(true, true, true), focus.notesOf(essay.id).map { it.passed })
+        assertTrue("counted in a check that passed (earned already): Pages 1 to 4, written out" in server.takeRequest().body.readUtf8())
     }
 
     @Test

@@ -2,7 +2,7 @@
 
 Three releases. 6.4.0 changes the check itself; 6.5.0 opens it from more places on the phone, from the gallery too, with the tick box; 6.7.0 opens it on the website. One judge throughout (`Photos.checkJpegs`, `enrich/PhotoChecker.kt`): every door hands it pages and a piece, and it alone says done.
 
-## 6.4.0: ten pages, and what earlier checks saw
+## 6.4.0: ten pages, and what earlier checks saw (built: D-155, Q152 to Q154)
 
 **Ten pages.** `PhotoChecker.MAX_PAGES` goes from 3 to 10, and with it the prompt's "up to 3 photos", *Add another page?*'s line, the pages the screen keeps through a turn of the phone, and the server's count of what a check may send.
 

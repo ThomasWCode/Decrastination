@@ -1,6 +1,6 @@
 # Photos in more places, Day's menus on the website, and the server's storage in sight
 
-The plan for nine pieces of work, a deployment change and eight releases (6.3.3, then 6.4.0 to 6.10.0), written before any is built (18 Nov 2026). Built so far: the snapshots kept 14 days (D-154), and 6.3.3, the writes that change nothing stopped (Q151). The specs say how the app works now.
+The plan for nine pieces of work, a deployment change and eight releases (6.3.3, then 6.4.0 to 6.10.0), written before any is built (18 Nov 2026). Built so far: the snapshots kept 14 days (D-154), 6.3.3, the writes that change nothing stopped (Q151), and 6.4.0, ten pages a check that remembers what earlier ones saw (D-155, Q152 to Q154). The specs say how the app works now.
 
 - [photo-checks.md](photo-checks.md): the photo check itself, its doors on the phone, and its door on the website (6.4.0, 6.5.0, 6.7.0).
 - [website-day.md](website-day.md): the website's Day, each item opening its own menu (6.6.0).
@@ -75,6 +75,10 @@ The owner kept each recommendation, so what was to be built meanwhile is what's 
 2. **The alert's lines.** Recommended: a notification at 80% of a free allowance and again at 95%, once each a month for each allowance, with the date it'd be passed at the present rate. **The owner's answer: as recommended.**
 3. **What a kept check's pages are for.** Unticked, a check's pages aren't deleted. Recommended: kept with their task, shown on its sheet, and sent again with a later check of the task where its ten pages have room, the new ones first; deleted when the task's done or gone, at a reset, or 14 days after they were taken, whichever is first, as a kept chat photo is (4). **The owner's answer: as recommended.**
 4. **How long a kept chat photo's file lasts, as the window isn't what the owner was told.** The chat's window keeps a message while it's among the newest 200 or within 14 days, whichever keeps more, so "while it's in the window" has no limit in days. Recommended: a kept photo's file is deleted 14 days after it's sent, or at a chat reset, whichever is first: what the owner was told, and a limit that holds however quiet the chat. Its message stays where it is, with Felix's note. **The owner's answer: as recommended.**
+
+## Answered on 19 Nov, from building
+
+5. **A part of a task is judged against the whole task.** Tried on real pages (6.4.0): a piece "part 1 of 2" of a task of pages 8 to 12, sent pages 8 to 10, is told "not yet: pages 11 and 12 aren't shown", as the check isn't told what share of the work a part is; the second part, sent 11 and 12 with the first's note, passes. So a first sitting's work never earns at its own check, only through the next. It was so before 6.4.0 too. Recommended: the check is told a part's share by its minutes ("part 1 of 2, about half of the task's work") and that parts are done in order, so a part passes when the task's work shown, with earlier checks', reaches its share; the rule that a passed check's work can't pass again stays. **The owner's answer: as recommended**, built in 6.4.0 (Q159).
 
 ## Decided without asking
 

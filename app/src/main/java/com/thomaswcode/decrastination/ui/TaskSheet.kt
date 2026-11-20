@@ -380,6 +380,11 @@ fun TaskSheet(
                 planned.take(MAX_PLANNED).forEach { Text("• " + TaskSheetModel.line(it, today, zone), style = MaterialTheme.typography.bodyMedium) }
                 if (planned.size > MAX_PLANNED) Text("and ${planned.size - MAX_PLANNED} more", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
+            // What photo checks of it saw (6.4.0), so what's still wanted can be seen before the camera's out.
+            TaskSheetModel.shown(session.notes.filter { it.taskId == task.id }, zone).takeIf { it.isNotEmpty() }?.let { shown ->
+                Text("Shown so far", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                shown.forEach { Text("• $it", style = MaterialTheme.typography.bodyMedium) }
+            }
             // What you've said about it, folded.
             TaskSheetModel.instructions(instructions.applied, task.id).takeIf { it.isNotEmpty() }?.let { words ->
                 Row(Modifier.fillMaxWidth().clickable { showInstructions = !showInstructions }, verticalAlignment = Alignment.CenterVertically) {

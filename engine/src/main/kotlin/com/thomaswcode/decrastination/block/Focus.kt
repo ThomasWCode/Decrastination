@@ -17,6 +17,8 @@ import com.thomaswcode.decrastination.core.WallClock
 import com.thomaswcode.decrastination.core.WindowKind
 import com.thomaswcode.decrastination.data.ActivityLog
 import com.thomaswcode.decrastination.data.BlockRecord
+import com.thomaswcode.decrastination.data.CHECK_NOTES_KEPT
+import com.thomaswcode.decrastination.data.CheckNote
 import com.thomaswcode.decrastination.data.CompletionRecord
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.Keeping
@@ -534,6 +536,8 @@ class Focus(
         val today = today(now)
         session.update { state ->
             state.copy(
+                // Its photo's award taken back with it: the work it counted can earn again.
+                notes = uncounted(state.notes, record),
                 // What its keep put in the ledger (one kept before that was on record, its minutes at the rate now), and only
                 // on its own day: yesterday's went at midnight, and today's wasn't its.
                 credit = if (record.earned && today(record.at) == today) state.credit.takeBack(today, record.earnedMin ?: Credit.forSlot(record.plannedMin, settings.value.workMinPerFreeMin)) else state.credit,
@@ -599,10 +603,61 @@ class Focus(
      * kept one's free time earned. Saved first ([SessionState.photosDone]), so a stop part-way is
      * finished at start-up.
      */
-    suspend fun photoChecked(taskId: String, step: String?, minutes: Int, stepIndex: Int? = null, key: String, takenAt: Long? = null): Boolean {
+    suspend fun photoChecked(taskId: String, step: String?, minutes: Int, stepIndex: Int? = null, key: String, takenAt: Long? = null, note: CheckNote? = null): Boolean {
         val done = PhotoDone(Ids.next(), taskId, step, minutes, clock.now(), stepIndex, key, takenAt)
-        session.update { it.copy(photosDone = it.photosDone + done) }
-        return finishPhoto(done).also { settleTimer() }
+        // Its [note] of what it showed in the same write as what it's owed (6.4.0): a stop between the two would leave the work counted
+        // as earned, and a check of it again refused, with nothing given for it.
+        session.update { state -> state.copy(photosDone = state.photosDone + done, notes = note?.let { notesKept(counted(state.notes, it)) } ?: state.notes) }
+        val earned = finishPhoto(done)
+        // A pass that earned nothing (its piece earned already, or its slot's day over) counts nothing: its note back to not passed, and
+        // what it counted with it, so the work it showed isn't held as earned, and a later award taken back finds its own note.
+        if (!earned && note?.passed == true) {
+            session.update { state -> state.copy(notes = state.notes.map { if (it.id == note.id || (it.taskId == note.taskId && it.countedBy == note.at)) it.copy(passed = false, countedBy = null) else it }) }
+        }
+        return earned.also { settleTimer() }
+    }
+
+    /** What earlier photo checks of [taskId] saw ([SessionState.notes], 6.4.0), the oldest first. */
+    fun notesOf(taskId: String): List<CheckNote> = session.value.notes.filter { it.taskId == taskId }
+
+    /**
+     * What a photo check saw kept ([note], 6.4.0), as its photos are deleted: the task's newest [CHECK_NOTES_KEPT], and those of a
+     * task done or gone let go with it.
+     */
+    suspend fun noteCheck(note: CheckNote) {
+        session.update { state -> state.copy(notes = notesKept(counted(state.notes, note))) }
+    }
+
+    /**
+     * [notes] with [note] after them; where it passed, the earlier notes of its scope counted with it, as the check that passed relied
+     * on them: what they showed has earned too, and can't be shown again as new (6.4.0). Its scope is its step, any of its sittings, or,
+     * for a task divided with no step named, every part of it ([CheckNote.scope]): a named step is judged by its own work, so another
+     * step's note, which it didn't rely on, stays as it was.
+     */
+    private fun counted(notes: List<CheckNote>, note: CheckNote): List<CheckNote> =
+        (if (note.passed) notes.map { if (it.taskId == note.taskId && it.scope == note.scope && !it.passed) it.copy(passed = true, countedBy = note.at) else it } else notes) + note
+
+    /**
+     * [notes] with [record]'s award by a photo taken back (6.4.0): the note of the pass that earned it, and those it counted, not
+     * counted any more, so the work can earn again; another pass's, and what it counted, stay.
+     */
+    private fun uncounted(notes: List<CheckNote>, record: SlotRecord): List<CheckNote> {
+        if (!record.photo) return notes
+        val award = notes.lastOrNull { it.taskId == record.taskId && it.key == record.key && it.passed && it.countedBy == null } ?: return notes
+        return notes.map { if (it == award || (it.taskId == award.taskId && it.countedBy == award.at)) it.copy(passed = false, countedBy = null) else it }
+    }
+
+    /** The notes of the tasks done or gone let go (6.4.0): at a start and daily, as a task can go without a check. */
+    suspend fun tidyNotes() {
+        session.update { state -> state.copy(notes = notesKept(state.notes)) }
+    }
+
+    /** [notes] of the tasks still open, each one's newest [CHECK_NOTES_KEPT], in the order they were kept. */
+    private fun notesKept(notes: List<CheckNote>): List<CheckNote> {
+        val open = tasks.value.tasks.filter { it.isOpen }.mapTo(HashSet()) { it.id }
+        val kept = notes.filter { it.taskId in open }
+        val newest = kept.groupBy { it.taskId }.values.flatMapTo(HashSet()) { it.takeLast(CHECK_NOTES_KEPT) }
+        return kept.filter { it in newest }
     }
 
     /**

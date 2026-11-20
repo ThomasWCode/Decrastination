@@ -31,6 +31,8 @@ import com.thomaswcode.decrastination.core.SubStep
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.data.ActivityLog
 import com.thomaswcode.decrastination.data.ChatMigration
+import com.thomaswcode.decrastination.data.CheckNote
+import com.thomaswcode.decrastination.data.CheckNotesMigration
 import com.thomaswcode.decrastination.data.CreditMigration
 import com.thomaswcode.decrastination.data.TimerMigration
 import com.thomaswcode.decrastination.data.MemoryMigration
@@ -70,7 +72,7 @@ class FocusTest {
     private val tasks = JsonStore(File(dir, "tasks.json"), TaskState.serializer(), ::TaskState, migrations = listOf(TasksMigration.TASKS, StepOrderMigration.TASKS, WeeklyMigration.TASKS, NotSameMigration.TASKS))
     private val settings = JsonStore(File(dir, "settings.json"), Settings.serializer(), ::Settings, migrations = listOf(SettingsMigration.SETTINGS, ZoomMigration.SETTINGS, SpeechMigration.SETTINGS))
     private val protection = JsonStore(File(dir, "protection.json"), ProtectionState.serializer(), ::ProtectionState, migrations = listOf(ProtectionSplit.PROTECTION))
-    private val session = JsonStore(File(dir, "session.json"), SessionState.serializer(), ::SessionState, migrations = listOf(CreditMigration.SESSION, TimerMigration.SESSION))
+    private val session = JsonStore(File(dir, "session.json"), SessionState.serializer(), ::SessionState, migrations = listOf(CreditMigration.SESSION, TimerMigration.SESSION, CheckNotesMigration.SESSION))
     private val learning = JsonStore(File(dir, "learning.json"), LearningState.serializer(), ::LearningState)
     private val log = JsonStore(File(dir, "log.json"), ActivityLog.serializer(), ::ActivityLog, migrations = listOf(ChatMigration.LOG, MemoryMigration.LOG, CreditMigration.LOG))
     private val focus = Focus(tasks, settings, session, learning, protection, log, clock) { state, s, now -> Planner.plan(Planner.Input(state.tasks, now, LONDON, s)) }
@@ -79,6 +81,78 @@ class FocusTest {
         id = "teams:$id", source = Source.Teams, sourceId = id, title = id, dueAt = due?.let(Fixtures::at), kind = kind,
         sourceEffortMin = effort, subSteps = steps, firstSeenAt = clock.time, lastSeenAt = clock.time,
     )
+
+    @Test
+    fun `a task's newest eight notes of what checks saw are kept, and they go with it when it's done or gone`() = runTest {
+        tasks.update { it.copy(tasks = listOf(task("sheet"), task("essay"), task("gone"))) }
+        repeat(10) { focus.noteCheck(CheckNote("teams:sheet", "teams:sheet#-1#1", "sheet", "page $it", passed = false, at = clock.time + it)) }
+        focus.noteCheck(CheckNote("teams:essay", "teams:essay#-1#1", "essay", "its plan", passed = true, at = clock.time))
+        focus.noteCheck(CheckNote("teams:gone", "teams:gone#-1#1", "gone", "a page", passed = false, at = clock.time))
+        assertEquals((2..9).map { "page $it" }, focus.notesOf("teams:sheet").map { it.covered })
+        assertEquals(listOf("its plan"), focus.notesOf("teams:essay").map { it.covered })
+        // One task done, another gone from the list: their notes go at the next tidy, the open one's stay.
+        tasks.update { s -> s.copy(tasks = s.tasks.filter { it.id != "teams:gone" }.map { if (it.id == "teams:essay") it.copy(status = Status.Done, doneAt = clock.time) else it }) }
+        focus.tidyNotes()
+        assertEquals(setOf("teams:sheet"), session.value.notes.mapTo(HashSet()) { it.taskId })
+        assertEquals(8, session.value.notes.size)
+        // And at the next note kept, whatever it's for.
+        tasks.update { s -> s.copy(tasks = s.tasks.map { it.copy(status = Status.Done, doneAt = clock.time) } + task("next")) }
+        focus.noteCheck(CheckNote("teams:next", "teams:next#-1#1", "next", "page 1", passed = false, at = clock.time))
+        assertEquals(listOf("teams:next"), session.value.notes.map { it.taskId })
+    }
+
+    @Test
+    fun `a check that passes counts the task's earlier notes with it, and its note is kept in the write that journals what it's owed`() = runTest {
+        tasks.update { it.copy(tasks = listOf(task("sheet"), task("other"))) }
+        focus.noteCheck(CheckNote("teams:sheet", "teams:sheet#-1#1", "sheet", "Q1-8", passed = false, at = clock.time))
+        focus.noteCheck(CheckNote("teams:other", "teams:other#-1#1", "other", "its first page", passed = false, at = clock.time))
+        // A stop right after the write: the note and what's owed are both there, or neither.
+        val passing = CheckNote("teams:sheet", "teams:sheet#-1#1", "sheet", "Q9-12", passed = true, at = clock.time + 1)
+        val before = session.value
+        focus.photoChecked("teams:sheet", null, 45, null, "teams:sheet#-1#1", clock.time, note = passing)
+        assertEquals(listOf("Q1-8" to true, "Q9-12" to true), focus.notesOf("teams:sheet").map { it.covered to it.passed })
+        assertEquals(listOf(false), focus.notesOf("teams:other").map { it.passed }, "another task's are its own")
+        assertTrue(before.photosDone.isEmpty())
+    }
+
+    @Test
+    fun `a pass that earns nothing counts nothing, so a later award taken back finds its own note`() = runTest {
+        val long = laid(task("long", due = "2026-10-12T23:59", effort = 30)).single()
+        val key = long.chunk!!.key
+        clock.time = long.start + 10 * 60_000L
+        assertTrue(slotted.photoChecked("teams:long", null, 30, key = key, note = CheckNote("teams:long", key, "long", "Q1-12", passed = true, at = clock.time)))
+        // Checked again, the piece earned already: nothing given, and its note, and what it counted, not counted.
+        focus.noteCheck(CheckNote("teams:long", key, "long", "Q13", passed = false, at = clock.time + 1))
+        assertFalse(slotted.photoChecked("teams:long", null, 30, key = key, note = CheckNote("teams:long", key, "long", "Q1-12 again", passed = true, at = clock.time + 2)))
+        assertEquals(listOf("Q1-12" to true, "Q13" to false, "Q1-12 again" to false), focus.notesOf("teams:long").map { it.covered to it.passed })
+        // The award taken back finds its own note.
+        assertTrue(slotted.unkeepSlot(key, since = 0L))
+        assertEquals(listOf(false, false, false), focus.notesOf("teams:long").map { it.passed })
+    }
+
+    @Test
+    fun `a photo's award taken back takes back its counting, and another pass's stays`() = runTest {
+        val long = laid(task("long", due = "2026-10-12T23:59", effort = 30)).single()
+        val key = long.chunk!!.key
+        clock.time = long.start + 10 * 60_000L
+        // An earlier pass of its own, then a note that didn't pass, then the pass that earns the slot, counting it.
+        focus.noteCheck(CheckNote("teams:long", key, "long", "Q1-4", passed = true, at = clock.time - 3))
+        focus.noteCheck(CheckNote("teams:long", key, "long", "Q5-8", passed = false, at = clock.time - 2))
+        assertTrue(slotted.photoChecked("teams:long", null, 30, key = key, note = CheckNote("teams:long", key, "long", "Q9-12", passed = true, at = clock.time)))
+        assertEquals(listOf(true, true, true), focus.notesOf("teams:long").map { it.passed })
+        assertTrue(slotted.unkeepSlot(key, since = 0L))
+        assertEquals(listOf("Q1-4" to true, "Q5-8" to false, "Q9-12" to false), focus.notesOf("teams:long").map { it.covered to it.passed }, "its work can earn again; the earlier pass's stays")
+    }
+
+    @Test
+    fun `a named step's pass counts its own notes, its sittings', and no other step's, which it didn't rely on`() = runTest {
+        tasks.update { it.copy(tasks = listOf(task("sheet"))) }
+        focus.noteCheck(CheckNote("teams:sheet", "teams:sheet#0", "sheet: Q1-5", "Q1-5, unclear", passed = false, at = clock.time))
+        focus.noteCheck(CheckNote("teams:sheet", "teams:sheet#1#20", "sheet: Q6-10", "Q6-7", passed = false, at = clock.time + 1))
+        // A pass kept as a note alone: what it counts is the point here, not what it earns.
+        focus.noteCheck(CheckNote("teams:sheet", "teams:sheet#1", "sheet: Q6-10", "Q8-10", passed = true, at = clock.time + 2))
+        assertEquals(listOf("Q1-5, unclear" to false, "Q6-7" to true, "Q8-10" to true), focus.notesOf("teams:sheet").map { it.covered to it.passed })
+    }
 
     @Test
     fun `confirmed work earns time, reading emails doesn't`() = runTest {

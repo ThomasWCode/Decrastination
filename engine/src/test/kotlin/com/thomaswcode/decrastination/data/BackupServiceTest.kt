@@ -204,6 +204,9 @@ class BackupServiceTest {
         assertEquals(was.learning.value.calibration, now.learning.value.calibration)
         assertEquals(was.calendar.value.eventAnswers, now.calendar.value.eventAnswers)
         assertEquals(was.session.value.slots, now.session.value.slots)
+        // What photo checks saw (6.4.0): the only record of what was shown, with the pages deleted.
+        assertTrue(was.session.value.notes.isNotEmpty())
+        assertEquals(was.session.value.notes, now.session.value.notes)
         assertEquals(was.model.value.aiUsage.spentUsd, now.model.value.aiUsage.spentUsd, 1e-9)
         // Every record, in the order a merge keeps them: each list by its time.
         assertEquals(Backups.mergeLog(ActivityLog(), was.log.value, clock.time), now.log.value)
@@ -292,7 +295,7 @@ class BackupServiceTest {
     @Test
     fun `a reset of the chat whose copy has no room for its earliest messages keeps them whole beside it`() = runTest {
         // Room for all but the archive's earliest messages: the rest of the copy fits, as it must to be read back.
-        val small = Phone(full = true, cap = 122_200)
+        val small = Phone(full = true, cap = 123_600)
         val archive = ChatArchive((1..80).map { ChatMessage("a$it", Speaker.You, "x".repeat(1_000), it.toLong(), answeredAt = it.toLong()) })
         small.stores.replace(small.stores.chatArchive, archive)
         val said = small.service.reset(Reset.Chat)
