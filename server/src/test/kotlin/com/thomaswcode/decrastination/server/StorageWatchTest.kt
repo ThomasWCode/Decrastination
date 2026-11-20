@@ -84,7 +84,7 @@ class StorageWatchTest {
     fun `an alert's given at 80 and 95 percent, each once a month, the higher alone where both are reached at once`() {
         val now = at("2026-11-20T05:00:00Z")
         val (first, alerted) = StorageRules.alerts(emptyMap(), reading(now, classA = 1_170_000), zone)
-        assertEquals(listOf("R2, Class A requests this month is at 117% of its free allowance (1.17 million of 1.00 million)."), first)
+        assertEquals(listOf("R2, Class A requests this month: 117% of its free allowance (1.17 million of 1.00 million)."), first)
         assertEquals(setOf("R2ClassA:80", "R2ClassA:95"), alerted.keys)
         assertTrue(StorageRules.alerts(alerted, reading(now + 86_400_000L, classA = 1_200_000), zone).first.isEmpty(), "once a month")
         // A new month starts again.
@@ -93,8 +93,8 @@ class StorageWatchTest {
         assertEquals(setOf("2027-06"), StorageRules.alerts(emptyMap(), reading(at("2027-06-30T23:30:00Z"), classA = 1_100_000), zone).second.values.toSet())
         // 80 first, then 95 when it's reached.
         val (eighty, then) = StorageRules.alerts(emptyMap(), reading(now, r2Stored = 8_500_000_000), zone)
-        assertTrue(eighty.single().startsWith("R2, stored is at 85%"))
-        assertTrue(StorageRules.alerts(then, reading(now, r2Stored = 9_600_000_000), zone).first.single().startsWith("R2, stored is at 96%"))
+        assertTrue(eighty.single().startsWith("R2, stored: 85%"))
+        assertTrue(StorageRules.alerts(then, reading(now, r2Stored = 9_600_000_000), zone).first.single().startsWith("R2, stored: 96%"))
     }
 
     @Test
@@ -147,6 +147,6 @@ class StorageWatchTest {
         watch.read()
         assertEquals(1, said.size)
         val lines = said.single().lines()
-        assertTrue(lines.any { it.startsWith("R2, stored is at 96%") } && lines.any { it.startsWith("R2, Class A requests this month is at 120%") } && lines.any { it.startsWith("B2, the nightly files kept is at 99%") }, said.single())
+        assertTrue(lines.any { it.startsWith("R2, stored: 96%") } && lines.any { it.startsWith("R2, Class A requests this month: 120%") } && lines.any { it.startsWith("B2, the nightly files kept: 99%") }, said.single())
     }
 }

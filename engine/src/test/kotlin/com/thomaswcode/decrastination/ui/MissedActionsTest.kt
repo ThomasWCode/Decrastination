@@ -70,6 +70,9 @@ class MissedActionsTest {
         assertFalse(KeptActions.of(kept, task, "2026-10-13").photo, "its day is over")
         assertFalse(KeptActions.of(kept.copy(kind = Kind.Revision), task, "2026-10-12").photo)
         assertFalse(KeptActions.of(kept, task(status = Status.Done), "2026-10-12").photo)
+        // One of yours that this very tick finished (its last piece, 6.10.1) can still earn by its photo today; one finished after, not.
+        assertTrue(KeptActions.of(kept, task(Source.Own, Status.Done).copy(doneAt = kept.at + 2_000), "2026-10-12").photo)
+        assertFalse(KeptActions.of(kept, task(Source.Own, Status.Done).copy(doneAt = kept.at + 3_600_000), "2026-10-12").photo)
         assertFalse(KeptActions.of(kept, task(Source.Anki), "2026-10-12").photo)
         assertFalse(KeptActions.of(kept, null, "2026-10-12").photo)
         assertFalse(KeptActions.of(slot, task, "2026-10-12").photo, "a miss is the missed sheet's")

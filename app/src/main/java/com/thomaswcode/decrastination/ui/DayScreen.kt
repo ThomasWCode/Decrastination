@@ -190,7 +190,10 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
         messageFor = taskId
         message = text
     }
-    val photo = rememberPhotoCheck(graph, activity, plan, say)
+    // What a photo check said once it's in (6.10.1): in the snackbar too, as one from a ticked block's sheet has no sheet open to say
+    // it in once the camera's closed.
+    var checkedSaid by remember { mutableStateOf<String?>(null) }
+    val photo = rememberPhotoCheck(graph, activity, plan, checked = { _, text -> checkedSaid = text }, say = say)
     fun messageOf(taskId: String, general: Boolean = false): String? = message?.takeIf { messageFor == taskId || (general && messageFor == null) }
 
     // The day chosen in the strip (today's by default), a piece's sheet, a task's, an event's, a chip's.
@@ -217,6 +220,12 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
         )
     }
     val snackbar = remember { SnackbarHostState() }
+    // Let go once it's been shown: let go first, the change of key would cancel this, and the snackbar with it.
+    LaunchedEffect(checkedSaid) {
+        val text = checkedSaid ?: return@LaunchedEffect
+        snackbar.showSnackbar(text, withDismissAction = true, duration = SnackbarDuration.Long)
+        checkedSaid = null
+    }
     // What a missed slot's actions say, its sheet closed: each new word takes the last's place ("Asking Teams…", then what it said).
     fun bar(text: String) {
         scope.launch {

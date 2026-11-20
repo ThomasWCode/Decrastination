@@ -63,9 +63,28 @@ class ChatSummaryTest {
             ),
             note = "Left out, as the app can't use it: a step with no minutes",
         )
-        assertEquals(ChatSummary.Line("", "2 not made · not looked up · left out"), ChatSummary.line(message))
-        assertEquals(4, ChatSummary.problems(message))
+        // What was left out is said in the chat itself (6.10.1), not counted under the chevron.
+        assertEquals(ChatSummary.Line("", "2 not made · not looked up"), ChatSummary.line(message))
+        assertEquals(3, ChatSummary.problems(message))
         assertTrue(ChatSummary.folds(message))
+    }
+
+    @Test
+    fun `a photo check's line and what was left out are said outside the fold, neither folded nor counted under it`() {
+        val check = ChatAction(ChatAction.Type.CheckPhotos, "own:essay")
+        val notYet = Act("Photo check: Not yet: Q5-8 aren't shown.", check, problem = true)
+        assertTrue(ChatSummary.outside(notYet))
+        assertFalse(ChatSummary.outside(Act("Ticked “Plan” on “Essay”.", tick)))
+        // A check alone, and what was left out alone: nothing folded, no chevron, no label.
+        val alone = his(acts = listOf(notYet), note = "Left out, as the app can't use it: a photo kept with a task that isn't listed")
+        assertFalse(ChatSummary.folds(alone))
+        assertEquals(0, ChatSummary.problems(alone))
+        assertTrue(ChatSummary.line(alone).isEmpty)
+        // Beside a tick, the tick alone is folded and counted.
+        val both = his(acts = listOf(notYet, Act("Ticked “Plan” on “Essay”.", tick), Act(Act.NOT_MADE + "the photos weren't checked: no piece.", check, problem = true)))
+        assertTrue(ChatSummary.folds(both))
+        assertEquals(0, ChatSummary.problems(both))
+        assertEquals(ChatSummary.Line("Changes: 1", ""), ChatSummary.line(both))
     }
 
     @Test

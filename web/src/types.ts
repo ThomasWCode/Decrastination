@@ -487,6 +487,8 @@ export interface ChatDid {
   line: string;
   undone: boolean;
   undo?: Action | null;
+  /** Said outside the fold (6.10.1): red where it didn't pass. */
+  problem?: boolean;
 }
 
 export interface ChatButton {
@@ -552,6 +554,8 @@ export interface ChatRow {
   shown: ChatCard[];
   cards: ChatCard[];
   lines: ChatDid[];
+  /** A photo check's line, under his words, not folded (6.10.1); then what was left out ([said]). */
+  outside?: ChatDid[];
   said?: string | null;
   opens?: string | null;
   /** Yours, its photos (6.8.0). */

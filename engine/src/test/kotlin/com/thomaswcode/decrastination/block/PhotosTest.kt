@@ -61,6 +61,7 @@ import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -272,21 +273,22 @@ class PhotosTest {
     }
 
     @Test
-    fun `a check of the plan's next part keeps that part, though the part before was ticked with no photo and its key is the same`() = runBlocking {
+    fun `a check of the plan's next part keeps that part, and earns the part before, ticked with no photo`() = runBlocking {
         settings.update { it.copy(aiEnabled = true, aiKeyActive = true) }
         tasks.update { it.copy(tasks = listOf(essay.copy(sourceEffortMin = 120))) }
         fun plan() = Planner.plan(Planner.Input(tasks.value.tasks, clock.time, LONDON, settings.value))
         val first = plan().chunksOf(essay.id).first()
         assertTrue(focus.keepSlot(first.key))
-        // An hour on, the next part's photo, checked as the plan now numbers it ("part 1 of 3"), under the key the part ticked has.
+        // An hour on, the next part's photo: numbered on from the part ticked (Q7), its key its own.
         clock.time += 3_600_000
         val next = plan().chunksOf(essay.id).first()
-        assertEquals(first.key, next.key)
+        assertEquals(first.part + 1, next.part)
+        assertNotEquals(first.key, next.key)
         answers(verdict(true, "Pages 1 to 6, written out"))
         val said = answered.checkJpegs(listOf(byteArrayOf(1, 2, 3)), next, clock.time)
         assertTrue(said.startsWith("Done:"), said)
-        // The next part kept and earning; the part ticked before left as it was.
-        assertEquals(listOf(first.label to false, next.label to true), log.value.slots.filter { it.taskId == essay.id && it.outcome.kept }.map { it.label to it.earned })
+        // The next part kept and earning, and the part ticked before with no photo earning with it (Q5): its pass shows that work too.
+        assertEquals(listOf(first.label to true, next.label to true), log.value.slots.filter { it.taskId == essay.id && it.outcome.kept }.map { it.label to it.earned })
     }
 
     @Test

@@ -52,6 +52,12 @@ class GapsTest {
     private fun action(type: String, taskId: String = "", value: String = "") = """{"type":"$type","taskId":"$taskId","stepIndex":-1,"setting":"","value":"$value"}"""
 
     /** His answer to [words], made, and the message it is. */
+    /**
+     * [taskId]'s work taken back, as a round before it reopened: its parts numbered from the first again (D-163), so a part's key is
+     * kept a second time the same day, as each part's otherwise has its own.
+     */
+    private suspend fun takenBack(taskId: String) = stores.tasks.update { s -> s.copy(tasks = s.tasks.map { if (it.id == taskId) it.copy(workedMin = 0) else it }) }
+
     private fun asked(words: String, answer: String): ChatMessage = runBlocking {
         felix.answers(answer)
         assertTrue(conversation.ask(words))
@@ -101,8 +107,9 @@ class GapsTest {
         felix.answers(answer("Kept: nice one.", listOf(action("keepPiece", long.id, key))), delayMs = 1_500)
         assertTrue(conversation.ask("I've done the first hour"))
         delay(500)
-        // Kept from Day meanwhile: the next box has its key now.
+        // Kept from Day meanwhile, and its work taken back: the box under its key to do again.
         assertTrue(felix.focusKeep(key))
+        takenBack(long.id)
         val worked = stores.tasks.value.tasks.single().workedMin
         assertTrue(felix.planning.plan().ordered.any { it.key == key }, "the next box under the same key")
         felix.settle()
@@ -250,6 +257,7 @@ class GapsTest {
         stores.tasks.update { it.copy(tasks = listOf(long)) }
         val key = felix.planning.plan().todaySlots.mapNotNull { it.chunk }.first { it.taskId == long.id }.key
         assertTrue(felix.focusKeep(key))
+        takenBack(long.id)
         felix.clock.time = now + 60_000L
         assertTrue(felix.focusKeep(key))
         assertEquals(listOf(now + 60_000L), conversation.keptToday().map { it.at })
@@ -261,7 +269,8 @@ class GapsTest {
         stores.tasks.update { it.copy(tasks = listOf(long)) }
         val key = felix.planning.plan().todaySlots.mapNotNull { it.chunk }.first { it.taskId == long.id }.key
         assertTrue(felix.focusKeep(key))
-        // The next box has the key now: kept too, a minute on.
+        // Its work taken back, the box under its key again: kept too, a minute on.
+        takenBack(long.id)
         felix.clock.time = now + 60_000L
         assertTrue(felix.focusKeep(key))
         felix.clock.time = now + 2 * 60_000L

@@ -98,10 +98,10 @@ private val PIECE = Saver<PhotoPiece?, ArrayList<String?>>(
  * as are left from the gallery at once. The piece being photographed, with its pages so far, is kept through the screen
  * being made again while the camera is open (a turn of the phone, Android needing the memory), and
  * found again in [plan] when the photos are checked (BUG-P2-011), or a kept slot's in the record. [say] gives how it went, and for
- * which task.
+ * which task; [checked], what the check said once it's in (6.10.1), for a screen to say where it's seen.
  */
 @Composable
-fun rememberPhotoCheck(graph: AppGraph, activity: Activity, plan: Plan, say: (taskId: String, text: String) -> Unit): PhotoCheck {
+fun rememberPhotoCheck(graph: AppGraph, activity: Activity, plan: Plan, checked: (taskId: String, text: String) -> Unit = { _, _ -> }, say: (taskId: String, text: String) -> Unit): PhotoCheck {
     val settings by graph.settings.state.collectAsStateWithLifecycle()
     val checkable = remember(settings.aiEnabled, settings.aiKeyActive) { graph.claudeAskable() }
     val dir = remember { File(activity.cacheDir, "photos").also { it.mkdirs() } }
@@ -124,6 +124,7 @@ fun rememberPhotoCheck(graph: AppGraph, activity: Activity, plan: Plan, say: (ta
         val (taskId, text) = unseen ?: return@LaunchedEffect
         PhotoChecks.unseen.value = null
         say(taskId, text)
+        checked(taskId, text)
     }
     /**
      * The pages taken checked together, the piece found again in the plan as it is now; a kept slot's, its slot in the record, the

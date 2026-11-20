@@ -329,6 +329,32 @@ class PlannerTest {
     }
 
     @Test
+    fun `a task's parts are numbered on from those done, each keeping its key, the last its label`() {
+        // 135 minutes in three 45s (Q7): one kept, the rest are parts 2 and 3 of 3, not 1 and 2 of 2, under the keys they had.
+        val big = task("big", Fixtures.at("2026-10-12T09:00"), effort = 135)
+        fun parts(worked: Int) = plan(listOf(big.copy(workedMin = worked)), "2026-10-08T17:00").chunksOf("teams:big")
+        val fresh = parts(0)
+        assertEquals(listOf("part 1 of 3", "part 2 of 3", "part 3 of 3"), fresh.map { it.step })
+        assertEquals(listOf("part 2 of 3", "part 3 of 3"), parts(45).map { it.step })
+        assertEquals(fresh.drop(1).map { it.key }, parts(45).map { it.key })
+        assertEquals(listOf(2, 3), parts(45).mapNotNull { Chunk.partOf(it.key, it.taskId) })
+        // Each told its task's work from the start, what its share is of, though part 1 ran long; none for a task in one piece.
+        assertEquals(listOf(135, 135, 135), fresh.map { it.wholeMinutes })
+        assertEquals(listOf("part 2 of 3" to 135, "part 3 of 3" to 135), parts(80).map { it.step to it.wholeMinutes })
+        assertEquals(listOf(null), plan(listOf(task("small", Fixtures.at("2026-10-12T09:00"), effort = 30)), "2026-10-08T17:00").chunksOf("teams:small").map { it.wholeMinutes })
+        // The last part left keeps its label and its key; one kept short is the part it was, still to finish.
+        assertEquals(listOf("part 3 of 3" to fresh.last().key), parts(90).map { it.step to it.key })
+        assertEquals(listOf("part 1 of 3", "part 2 of 3", "part 3 of 3"), parts(20).map { it.step })
+        // At a time you gave its next piece (PL-04), a run of its own: numbered on all the same.
+        val pinned = plan(listOf(big.copy(workedMin = 45).yours(atTime = Fixtures.at("2026-10-09T18:00"))), "2026-10-08T17:00").chunksOf("teams:big")
+        assertEquals(listOf("part 2 of 3", "part 3 of 3"), pinned.map { it.step })
+        assertEquals(fresh.drop(1).map { it.key }, pinned.map { it.key })
+        // A step's key names no part.
+        assertEquals(null, Chunk.partOf(Chunk.keyOf("teams:big", 2, 1), "teams:big"))
+        assertEquals(null, Chunk.partOf(fresh.first().key, "teams:bigger"))
+    }
+
+    @Test
     fun `boxes are even`() {
         val plan = plan(listOf(task("t", Fixtures.at("2026-10-20T09:00"), effort = 100)), "2026-10-08T17:00")
         assertEquals(listOf(34, 33, 33), plan.chunksOf("teams:t").map { it.minutes })

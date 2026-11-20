@@ -78,7 +78,8 @@ class ChatPhotosTest {
         val soon = you("y2", "Which is hardest?", at = now + ChatPrompts.PHOTO_WITHIN_MS)
         val again = ChatPrompts.sent(listOf(first, reply, soon), "", emptyMap(), LONDON, live = setOf(a))
         assertEquals(listOf(a), again.pictures)
-        assertTrue("[Photo 1, sent with this turn]\nHere" in again.turns.first().second)
+        // Named as its own message's, shown again, so he doesn't take it for sent anew (6.10.1).
+        assertTrue("[Photo 1, from this earlier message, shown again]\nHere" in again.turns.first().second, again.turns.first().second)
         val later = soon.copy(at = now + ChatPrompts.PHOTO_WITHIN_MS + 1)
         val told = ChatPrompts.sent(listOf(first, reply, later), "", emptyMap(), LONDON, live = setOf(a))
         assertEquals(emptyList(), told.pictures)
@@ -142,6 +143,15 @@ class ChatPhotosTest {
         assertTrue(reading("""{"type":"checkPhotos","taskId":"teams:s","stepIndex":-1,"setting":"teams:s#0","value":""}""").actions.isEmpty(), "a piece kept today")
         assertTrue(reading("""{"type":"checkPhotos","taskId":"teams:s","stepIndex":-1,"setting":"teams:o#-1#2","value":""}""").actions.isEmpty(), "another task's piece")
         assertTrue(reading("""{"type":"checkPhotos","taskId":"teams:s","stepIndex":-1,"setting":"teams:s#7","value":""}""").actions.isEmpty(), "a piece not listed")
+        // One of yours its last piece's tick finished today (6.10.1), a piece of it kept today: checked, its slot found as Day's is; one
+        // finished with none kept today, not.
+        val done = TaskItem(id = "own:d", source = Source.Own, sourceId = "d", title = "Done", dueAt = now, kind = Kind.Homework, firstSeenAt = now, lastSeenAt = now, status = Status.Done, doneAt = now)
+        fun finished(kept: Map<String, String>) = ChatAnswers.parse(
+            """{"reply":"Checking.","newTasks":[],"changes":[],"memories":[],"suggestedReplies":[],"actions":[{"type":"checkPhotos","taskId":"own:d","stepIndex":-1,"setting":"","value":""}],"research":"","details":[],"answered":[],"photos":""}""",
+            listOf(done), emptyList(), About(), now, LONDON, context = ChatPrompts.Context("", "", kept = kept, photos = setOf(a)),
+        )!!.actions
+        assertEquals(listOf(ChatAction(ChatAction.Type.CheckPhotos, "own:d", null, value = "")), finished(mapOf("own:d#-1#1" to "own:d")))
+        assertTrue(finished(emptyMap()).isEmpty())
         // One check a piece, the first: the same step twice, or the task's next beside a step of it, pays once; each step its own.
         fun check(step: Int, said: String = "") = """{"type":"checkPhotos","taskId":"teams:s","stepIndex":$step,"setting":"","value":"$said"}"""
         assertEquals(listOf("first"), reading(check(1, "first") + "," + check(1, "again")).actions.map { it.value })

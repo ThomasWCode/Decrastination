@@ -18,6 +18,7 @@ import com.thomaswcode.decrastination.core.Slotter
 import com.thomaswcode.decrastination.core.SlotState
 import com.thomaswcode.decrastination.core.SlotKind
 import com.thomaswcode.decrastination.core.Slot
+import com.thomaswcode.decrastination.core.Chunk
 import com.thomaswcode.decrastination.core.DayWindow
 import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.FixedClock
@@ -86,20 +87,24 @@ class FocusTest {
     )
 
     @Test
-    fun `a task's newest eight notes of what checks saw are kept, and they go with it when it's done or gone`() = runTest {
+    fun `a task's newest eight notes of what checks saw are kept, and they go with it when it's done or gone, after its day`() = runTest {
         tasks.update { it.copy(tasks = listOf(task("sheet"), task("essay"), task("gone"))) }
         repeat(10) { focus.noteCheck(CheckNote("teams:sheet", "teams:sheet#-1#1", "sheet", "page $it", passed = false, at = clock.time + it)) }
         focus.noteCheck(CheckNote("teams:essay", "teams:essay#-1#1", "essay", "its plan", passed = true, at = clock.time))
         focus.noteCheck(CheckNote("teams:gone", "teams:gone#-1#1", "gone", "a page", passed = false, at = clock.time))
         assertEquals((2..9).map { "page $it" }, focus.notesOf("teams:sheet").map { it.covered })
         assertEquals(listOf("its plan"), focus.notesOf("teams:essay").map { it.covered })
-        // One task done, another gone from the list: their notes go at the next tidy, the open one's stay.
+        // One task done, another gone from the list: the gone one's notes go at the next tidy; the done one's stay its day, as a slot
+        // its finish ticked can still earn by a photo that day (6.10.1), and go after.
         tasks.update { s -> s.copy(tasks = s.tasks.filter { it.id != "teams:gone" }.map { if (it.id == "teams:essay") it.copy(status = Status.Done, doneAt = clock.time) else it }) }
+        focus.tidyChecks()
+        assertEquals(setOf("teams:sheet", "teams:essay"), session.value.notes.mapTo(HashSet()) { it.taskId })
+        tasks.update { s -> s.copy(tasks = s.tasks.map { if (it.id == "teams:essay") it.copy(doneAt = clock.time - 86_400_000L) else it }) }
         focus.tidyChecks()
         assertEquals(setOf("teams:sheet"), session.value.notes.mapTo(HashSet()) { it.taskId })
         assertEquals(8, session.value.notes.size)
         // And at the next note kept, whatever it's for.
-        tasks.update { s -> s.copy(tasks = s.tasks.map { it.copy(status = Status.Done, doneAt = clock.time) } + task("next")) }
+        tasks.update { s -> s.copy(tasks = s.tasks.map { it.copy(status = Status.Done, doneAt = clock.time - 86_400_000L) } + task("next")) }
         focus.noteCheck(CheckNote("teams:next", "teams:next#-1#1", "next", "page 1", passed = false, at = clock.time))
         assertEquals(listOf("teams:next"), session.value.notes.map { it.taskId })
     }
@@ -372,7 +377,8 @@ class FocusTest {
         // Learned to take half its estimate: a 100-minute task is 50 minutes of pieces, both kept.
         learning.update { it.copy(calibration = Calibration(multipliers = mapOf("Homework|" to 0.5))) }
         tasks.update { it.copy(tasks = listOf(task("hw", effort = 100))) }
-        repeat(2) { assertTrue(focus.keepSlot("teams:hw#-1#1")) }
+        // Each part its own key, numbered on from those done (D-163).
+        listOf(1, 2).forEach { assertTrue(focus.keepSlot("teams:hw#-1#$it")) }
         assertEquals(50, tasks.value.tasks.single().workedMin)
         val afterSlots = focus.creditLeftMs()
         focus.onCompleted(listOf(tasks.value.tasks.single().copy(status = Status.Done, doneAt = clock.time)))
@@ -680,9 +686,12 @@ class FocusTest {
         clock.time += 4_500L
         assertFalse(slotted.keepSlot(key, seenAt = clock.time))
         assertEquals(1, log.value.slots.size)
-        // The next box, its key the same now, is kept by a tick seen after the first, once it's been worked.
+        // The next box, its own key (D-163), is kept by a tick seen after the first, once it's been worked; the first's no more.
         clock.time += 30 * 60_000L
-        assertTrue(slotted.keepSlot(key, seenAt = clock.time))
+        assertFalse(slotted.keepSlot(key, seenAt = clock.time))
+        val next = Planner.plan(input(tasks.value, settings.value, clock.time)).chunksOf("teams:box").single()
+        assertEquals(2, Chunk.partOf(next.key, "teams:box"))
+        assertTrue(slotted.keepSlot(next.key, seenAt = clock.time))
         assertEquals(60, tasks.value.tasks.single().workedMin)
     }
 
@@ -735,6 +744,46 @@ class FocusTest {
         assertTrue(slotted.photoChecked("teams:long", null, 30, key = long.chunk!!.key, takenAt = tick + 5_000L))
         assertTrue(log.value.slots.single().let { it.earned && it.photo })
         assertEquals(30, tasks.value.tasks.single().workedMin)
+    }
+
+    @Test
+    fun `a part's pass earns the parts before it ticked today with no photo, not one after it, each once`() = runTest {
+        // 90 minutes in three parts, all today's.
+        val parts = laid(task("long", due = "2026-10-12T23:59", effort = 90))
+        assertEquals(3, parts.size)
+        clock.time = parts[0].end
+        assertTrue(slotted.keepSlot(parts[0].chunk!!.key, seenAt = parts[0].start))
+        clock.time = parts[1].end
+        assertTrue(slotted.keepSlot(parts[1].chunk!!.key, seenAt = parts[1].start))
+        // The first's slot checked from its sheet: it earns; the second, after it, doesn't.
+        val first = log.value.slots.first()
+        assertTrue(slotted.photoChecked("teams:long", null, 30, key = first.key, takenAt = clock.time, record = SlotRef.of(first)))
+        assertEquals(listOf(true, false), log.value.slots.map { it.earned })
+        // The third ticked too, and checked from its sheet an hour on (Q5): it earns, and the second, before it, with it; the first
+        // not again. (A check of the plan's next part earns those before it likewise: PhotosTest.)
+        clock.time = parts[2].end
+        assertTrue(slotted.keepSlot(parts[2].chunk!!.key, seenAt = parts[2].start))
+        clock.time += 3_600_000L
+        val credit = slotted.creditLeftMs()
+        val third = log.value.slots.last()
+        assertTrue(slotted.photoChecked("teams:long", null, 30, key = third.key, takenAt = clock.time, record = SlotRef.of(third)))
+        assertEquals(listOf(true, true, true), log.value.slots.map { it.earned })
+        assertTrue(log.value.slots.all { it.photo })
+        assertEquals(parts.map { it.chunk!!.key }, log.value.slots.map { it.key })
+        assertTrue(slotted.creditLeftMs() > credit)
+    }
+
+    @Test
+    fun `the next part's photo moments after the part before's Done keeps the next part, each part's key its own`() = runTest {
+        val parts = laid(task("long", due = "2026-10-12T23:59", effort = 60))
+        clock.time = parts[0].end
+        assertTrue(slotted.keepSlot(parts[0].chunk!!.key, seenAt = parts[0].start))
+        val tick = clock.time
+        // Within the half minute that once took the photo for the slot just ticked, as the two shared a key (Q7).
+        clock.time = tick + 25_000L
+        assertTrue(slotted.photoChecked("teams:long", null, 30, key = parts[1].chunk!!.key, takenAt = tick + 5_000L))
+        assertEquals(parts.map { it.chunk!!.key }, log.value.slots.map { it.key })
+        assertTrue(log.value.slots.all { it.earned && it.photo })
     }
 
     @Test
@@ -1061,17 +1110,19 @@ class FocusTest {
 
     @Test
     fun `a photo of a piece is its own, not a slot of its key kept before it was taken`() = runTest {
-        // A task in boxes: the first kept without a photo, then a photo of the next, which has its key now.
+        // A task in boxes: the first kept without a photo, then its work taken back (a round before the task reopened), so the box
+        // under its key is to do again (each part's key is its own, D-163), and a photo of that.
         val first = laid(task("box", due = "2026-10-12T23:59", effort = 60)).first()
         val key = first.chunk!!.key
         clock.time = first.end
         assertTrue(slotted.keepSlot(key))
+        tasks.update { state -> state.copy(tasks = state.tasks.map { it.copy(workedMin = 0) }) }
         clock.time += 10 * 60_000L
         val taken = clock.time
         clock.time += 60_000L
         assertTrue(slotted.photoChecked("teams:box", null, 30, key = key, takenAt = taken))
         assertEquals(listOf(false, true), log.value.slots.map { it.earned })
-        assertEquals(60, tasks.value.tasks.single().workedMin)
+        assertEquals(30, tasks.value.tasks.single().workedMin)
         // Ticked while a check of it ran: that's the slot the photo shows, and it earns.
         tasks.update { state -> state.copy(tasks = state.tasks.map { it.copy(workedMin = 0) }) }
         log.update { it.copy(slots = emptyList()) }

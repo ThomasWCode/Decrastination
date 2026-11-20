@@ -1,5 +1,6 @@
 package com.thomaswcode.decrastination.ui
 
+import com.thomaswcode.decrastination.core.ChatActs
 import com.thomaswcode.decrastination.core.Chunk
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Source
@@ -53,13 +54,15 @@ data class MissedActions(
 
 /**
  * What a slot ticked *Done* offers on its sheet (6.5.0), by [of]. Pure. [photo]: *Check with a photo*, while it can still earn: kept
- * today without earning, written homework that isn't Anki's, its task still open; Claude on where it's drawn. The check names this
- * slot, so it earns on it and no other (`PhotoDone.record`).
+ * today without earning, written homework that isn't Anki's, its task still open, or finished by this very tick (6.10.1: one of yours,
+ * its last piece, [ChatActs.finishedBy]); Claude on where it's drawn. The check names this slot, so it earns on it and no other
+ * (`PhotoDone.record`).
  */
 data class KeptActions(val photo: Boolean, val earned: Boolean) {
     companion object {
         fun of(record: SlotRecord, task: TaskItem?, today: String): KeptActions = KeptActions(
-            photo = record.outcome.kept && !record.earned && record.date == today && record.kind == Kind.Homework && task?.isOpen == true && task.source != Source.Anki,
+            photo = record.outcome.kept && !record.earned && record.date == today && record.kind == Kind.Homework && task != null &&
+                (task.isOpen || ChatActs.finishedBy(task, record.at)) && task.source != Source.Anki,
             earned = record.earned,
         )
     }

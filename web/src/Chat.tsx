@@ -163,7 +163,6 @@ function Under({ row, form, go }: { row: ChatRow; form: OwnTaskFormView | null; 
         <Card key={card.id} card={card} form={form} go={go} />
       ))}
       <Did row={row} />
-      {row.said ? <p className="chat-did">{row.said}</p> : null}
     </div>
   );
 }
@@ -285,6 +284,12 @@ function Message({ row, view, doing, go }: { row: ChatRow; view: ChatView; doing
         </span>
       </p>
       {row.note ? <p className="problem">{row.note}</p> : null}
+      {(row.outside ?? []).map((line, index) => (
+        <p key={index} className={line.problem ? "chat-did problem" : "chat-did"}>
+          {line.line}
+        </p>
+      ))}
+      {row.said ? <p className="chat-did problem">{row.said}</p> : null}
       {row.tryAgain || row.takeBack ? (
         <div className="chat-buttons">
           {row.tryAgain ? (

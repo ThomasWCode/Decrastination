@@ -2,6 +2,8 @@ package com.thomaswcode.decrastination.views
 
 import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.Act
+import com.thomaswcode.decrastination.core.ChatAction
+import com.thomaswcode.decrastination.sync.protocol.UndoAct
 import com.thomaswcode.decrastination.core.Change
 import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.ChatMessage
@@ -289,6 +291,24 @@ class ChatViewTest {
         val plain = view(his("plain")).rows.single()
         assertFalse(plain.folds)
         assertFalse(plain.problem)
+    }
+
+    @Test
+    fun `a photo check's line and what was left out are said under his words, not folded, the check's Undo index its own`() {
+        val check = Act("Photo check: Not yet: Q5-8 aren't shown.", ChatAction(ChatAction.Type.CheckPhotos, "own:essay"), problem = true)
+        // A setting he changed, still as he set it: its Undo's offered.
+        val act = Act("A line of what he did", ChatAction(ChatAction.Type.Setting, "", setting = "boxMin", value = "30"), before = "40", after = "30")
+        val row = view(his("m").copy(acts = listOf(check, act), note = "Left out, as the app can't use it: a step")).rows.single()
+        assertEquals(listOf(ChatDid(check.line, problem = true)), row.outside)
+        assertEquals("Left out, as the app can't use it: a step", row.said)
+        assertEquals(listOf("A line of what he did"), row.lines.map { it.line })
+        // The line folded keeps its place among his acts, so its Undo takes back that one.
+        assertEquals(listOf(1), row.lines.mapNotNull { (it.undo as? UndoAct)?.index })
+        assertTrue(row.folds)
+        assertFalse(row.problem)
+        val alone = view(his("c").copy(acts = listOf(check))).rows.single()
+        assertFalse(alone.folds)
+        assertEquals(1, alone.outside.size)
     }
 
     private fun card(proposal: Proposal, tasks: List<TaskItem> = emptyList(), writable: Boolean = true) = view(ChatState(listOf(his("m").copy(proposals = listOf(proposal)))), tasks = tasks, writable = writable).rows.single().cards.single()
