@@ -1469,6 +1469,50 @@ section.waiting h2 {
   color: var(--on-pale);
 }
 
+/* A message's photos (6.8.0): as wide as its bubble at most, and not too tall; his line in a gone one's place. */
+.chat-photos img {
+  display: block;
+  max-width: 100%;
+  max-height: 320px;
+  margin: 4px 0;
+  border-radius: 10px;
+}
+
+.chat-photos .photo-gone {
+  margin: 4px 0;
+  font-style: italic;
+}
+
+/* The photos waiting to go with a message, small, each with its ✕. */
+.chosen-photos {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.chosen-photo {
+  position: relative;
+  display: inline-flex;
+}
+
+.chosen-photo img {
+  height: 64px;
+  border-radius: 6px;
+}
+
+.chosen-photo button {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+}
+
+.photo-button.disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .bubble .words {
   font-size: 16px;
   white-space: pre-wrap;

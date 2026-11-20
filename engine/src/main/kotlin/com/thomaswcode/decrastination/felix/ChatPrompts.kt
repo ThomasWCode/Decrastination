@@ -397,13 +397,13 @@ object ChatPrompts {
         val lead = last.takeWhile { it.from != Speaker.You }.filter { it.kind != MessageKind.Chat }
         val recent = last.dropWhile { it.from != Speaker.You }
         if (recent.isEmpty()) return Sent(emptyList(), emptySet())
-        // The photos sent as pictures with the newest turn (6.8.0): its own, then any kept with a message of yours within ten minutes
-        // before it, then those he asked to see again; each while its file's here and its message needs it ([live]), [MAX_PICTURES]
+        // The photos sent as pictures with the newest turn (6.8.0): its own, then those he asked to see again, then any kept with a message
+        // of yours within ten minutes before it, which he didn't; each while its file's here and its message needs it ([live]), [MAX_PICTURES]
         // at most, as many as a quarter of the budget holds, each taking from the text's room what its tokens would be as text.
         val newestYours = recent.takeLastWhile { it.from == Speaker.You }
         val newestAt = newestYours.lastOrNull()?.at ?: 0
         val near = recent.filter { m -> m.from == Speaker.You && newestYours.none { it.id == m.id } && newestAt - m.at <= PHOTO_WITHIN_MS }.flatMap { m -> m.photos.filter { it.kept } }
-        val pictures = ((newestYours.flatMap { it.photos } + near).map { it.hash } + seen).filter { it in live }.distinct()
+        val pictures = (newestYours.flatMap { it.photos }.map { it.hash } + seen + near.map { it.hash }).filter { it in live }.distinct()
             .take(minOf(MAX_PICTURES, budget / 4 / Pricing.PICTURE_CHARS))
         val shown = pictures.withIndex().associate { (i, hash) -> hash to i + 1 }
         val textBudget = budget - pictures.size * Pricing.PICTURE_CHARS

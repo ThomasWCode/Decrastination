@@ -933,6 +933,8 @@ class Conversation(
             // Still asking after the last round a message has: said under his answer, not his "looking" passed off as one.
             val unserved = ChatRounds.asking(reading, searched = found != null || notLooked != null, searches = settings.value.felixSearches, read = read.map { it.id }, stats = stats, calendar = calendar, seen = seen)
             reading = reading.copy(research = null, details = emptyList(), stats = false, calendar = null, see = emptyList())
+            // Those he asked to see that went with the call answered: one the pictures' room left out wasn't seen.
+            val looked = seen.filter { it in pictured }
             gathered = null
             val reply = ChatMessage(
                 id = Ids.next(),
@@ -954,8 +956,9 @@ class Conversation(
                     read.takeIf { it.isNotEmpty() }?.let { r -> Act("Read in full: " + r.joinToString("; ") { "“${it.title}”" } + ".") },
                     // What else he read to answer, said under it as the texts are.
                     Act("Read: the week's numbers.").takeIf { stats },
-                    // The photos kept that he looked at again (6.8.0), said as the texts are.
-                    Act("Looked again: ${seen.size} photo${if (seen.size == 1) "" else "s"} kept.").takeIf { seen.isNotEmpty() },
+                    // The photos kept that he looked at again (6.8.0), said as the texts are: those sent, and any there wasn't room for.
+                    Act("Looked again: ${looked.size} photo${if (looked.size == 1) "" else "s"} kept.").takeIf { looked.isNotEmpty() },
+                    Act(Act.NOT_BROUGHT + "a photo he asked to see again, as there wasn't room for it with the rest: ask again to go on.", problem = true).takeIf { looked.size < seen.size },
                     *calendar.map { Act("Read: the calendar for " + ChatPrompts.calendarWhat(it, shownAt, clock.zone()) + ".") }.toTypedArray(),
                     Act(Act.NOT_BROUGHT + "he asked for more than one message brings (two rounds, three texts, two spans of the calendar): ask again to go on.", problem = true).takeIf { unserved },
                 ),

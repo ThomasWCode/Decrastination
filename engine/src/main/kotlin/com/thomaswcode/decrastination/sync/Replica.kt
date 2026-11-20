@@ -395,6 +395,9 @@ class Replica(
         return http.postBytes("$server/api/chat-photos/$hash", headers + ("Content-Type" to "image/jpeg"), jpeg).ok
     }
 
+    /** The chat's photos still needed now ([ChatPhoto.live]), by hash (6.8.0): those a switch takes to the server. */
+    private fun liveChatPhotos(): List<String> = clock.now().let { now -> stores.chat.value.messages.flatMap { m -> m.photos.filter { it.live(m, now) }.map { it.hash } }.distinct() }
+
     /** A chat photo from the server (6.8.0): one sent from the website, for its bubble here; null where it's gone, or can't be had. */
     suspend fun fetchChatPhoto(hash: String): ByteArray? = withContext(Dispatchers.IO) {
         val token = stores.secrets[Secret.DeviceToken] ?: return@withContext null
@@ -440,6 +443,17 @@ class Replica(
             if (!sent) return@withLock "Nothing switched: a task's photo couldn't be sent first"
             photosSent += photo.hash
         }
+        // The chat's photos still needed likewise (6.8.0): one sent while mirroring has no command to take it there.
+        val chatSent = HashSet<String>()
+        for (hash in liveChatPhotos()) {
+            val sent = try {
+                sendChatPhoto(sync.value.server, headers, hash)
+            } catch (failed: IOException) {
+                false
+            }
+            if (!sent) return@withLock "Nothing switched: a photo in the chat couldn't be sent first"
+            chatSent += hash
+        }
         if (!backup()) return@withLock "Nothing switched: a backup couldn't be saved first"
         val id = UUID.randomUUID().toString()
         val seed = commands.switching(
@@ -453,7 +467,7 @@ class Replica(
                 }
             },
         )
-        sendSwitch(seed, headers, photosSent)
+        sendSwitch(seed, headers, photosSent, chatSent)
     }
 
     /**
@@ -503,7 +517,7 @@ class Replica(
      * gone over already, the next pull's a first one, checked (W-26). The tasks' photos not yet on the box ([photosSent] are) go
      * first: one attached as the switch began is in the seed, and its command's never made. Why it isn't made, or null where it is.
      */
-    private suspend fun sendSwitch(seed: SwitchSeed, headers: Map<String, String>, photosSent: Set<String> = emptySet()): String? {
+    private suspend fun sendSwitch(seed: SwitchSeed, headers: Map<String, String>, photosSent: Set<String> = emptySet(), chatSent: Set<String> = emptySet()): String? {
         for (photo in stores.tasks.value.tasks.mapNotNull { it.photo }.filter { it.hash !in photosSent }) {
             val sent = try {
                 sendTaskPhoto(sync.value.server, headers, photo)
@@ -513,6 +527,18 @@ class Replica(
             if (!sent) {
                 failed("The switch's seed is waiting: a task's photo couldn't be sent ahead of it")
                 return "Under way: a task's photo couldn't be sent ahead of the seed, so the switch goes at the next sync"
+            }
+        }
+        // The chat's photos still needed (6.8.0), those not sent as the switch began ([chatSent]).
+        for (hash in liveChatPhotos().filter { it !in chatSent }) {
+            val sent = try {
+                sendChatPhoto(sync.value.server, headers, hash)
+            } catch (failed: IOException) {
+                false
+            }
+            if (!sent) {
+                failed("The switch's seed is waiting: a photo in the chat couldn't be sent ahead of it")
+                return "Under way: a photo in the chat couldn't be sent ahead of the seed, so the switch goes at the next sync"
             }
         }
         val answer = try {
