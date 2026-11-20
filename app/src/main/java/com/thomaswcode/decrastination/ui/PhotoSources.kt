@@ -1,6 +1,7 @@
 package com.thomaswcode.decrastination.ui
 
 import android.app.Activity
+import android.content.Context
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -68,8 +69,8 @@ internal fun DeleteAfterUse(checked: Boolean, onChange: (Boolean) -> Unit) {
  * [uri], a picture picked, copied into [into] as it is, its EXIF note with it, so it's turned upright and shrunk as a camera's is
  * ([com.thomaswcode.decrastination.block.PhotoChecks.shrink]); whether there's one there now.
  */
-internal fun copyPicked(activity: Activity, uri: Uri, into: File): Boolean = runCatching {
-    activity.contentResolver.openInputStream(uri)?.use { input -> into.outputStream().use { input.copyTo(it) } } != null
+internal fun copyPicked(context: Context, uri: Uri, into: File): Boolean = runCatching {
+    context.contentResolver.openInputStream(uri)?.use { input -> into.outputStream().use { input.copyTo(it) } } != null
 }.getOrDefault(false) && into.length() > 0
 
 /** One picture for a file: from the camera, or picked from the gallery and copied there. */

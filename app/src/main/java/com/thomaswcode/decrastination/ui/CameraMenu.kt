@@ -99,9 +99,11 @@ internal fun CameraMenu(
                 val kept = log.slots.filter { KeptActions.of(it, byId[it.taskId], plan.today.toString()).photo }
                 when {
                     !photo.available -> Hint("Claude can't be asked now: a photo check needs it.")
+                    // One at a time, as the sheets' are: a second would take the first's pages.
+                    photo.checking -> Hint("A photo is being checked: wait for it to finish.")
                     pieces.isEmpty() && kept.isEmpty() -> Hint("No written work today, and no slot ticked Done that can still earn.")
                 }
-                if (photo.available) {
+                if (photo.available && !photo.checking) {
                     pieces.forEachIndexed { i, piece ->
                         ListTile(i, pieces.size + kept.size, onClick = {
                             onClose()

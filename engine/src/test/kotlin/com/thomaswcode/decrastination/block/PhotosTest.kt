@@ -12,6 +12,7 @@ import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.TaskPhoto
 import com.thomaswcode.decrastination.core.Why
+import com.thomaswcode.decrastination.core.WindowKind
 import com.thomaswcode.decrastination.data.ActivityLog
 import com.thomaswcode.decrastination.data.ChatMigration
 import com.thomaswcode.decrastination.data.CheckNote
@@ -20,6 +21,8 @@ import com.thomaswcode.decrastination.data.PhotoDoorsMigration
 import com.thomaswcode.decrastination.data.CreditMigration
 import com.thomaswcode.decrastination.data.OnlyMigration
 import com.thomaswcode.decrastination.data.MoodMigration
+import com.thomaswcode.decrastination.data.SlotOutcome
+import com.thomaswcode.decrastination.data.SlotRecord
 import com.thomaswcode.decrastination.data.SpeechMigration
 import com.thomaswcode.decrastination.data.StepActionMigration
 import com.thomaswcode.decrastination.data.OutsideMigration
@@ -43,6 +46,7 @@ import com.thomaswcode.decrastination.data.ZoomMigration
 import com.thomaswcode.decrastination.data.TasksMigration
 import com.thomaswcode.decrastination.enrich.KeyProblem
 import com.thomaswcode.decrastination.enrich.ModelGateway
+import com.thomaswcode.decrastination.enrich.PhotoChecker
 import com.thomaswcode.decrastination.enrich.PhotoTasks
 import com.thomaswcode.decrastination.enrich.Profile
 import java.io.File
@@ -285,6 +289,18 @@ class PhotosTest {
         answered.sweepPhotos()
         assertFalse(stray.exists())
         assertTrue(kept.all { answered.pageFile(it.hash).isFile })
+    }
+
+    @Test
+    fun `a kept slot's piece keeps its part's share from its key and label, and a named step its place`() {
+        val box = SlotRecord(date = "2026-10-19", key = "teams:essay#-1#2", taskId = essay.id, kind = Kind.Homework, label = "Essay: part 2 of 3", plannedMin = 40, start = 1, end = 2, window = WindowKind.Evening, outcome = SlotOutcome.Kept, workedMin = 40, at = 3)
+        val piece = Photos.pieceOf(box, essay)!!
+        assertEquals(2 to 3, piece.part to piece.parts)
+        assertEquals(null, piece.stepIndex)
+        assertTrue("It's part 2 of 3: with the parts before it, about two thirds" in PhotoChecker.context(piece, essay, emptyList(), LONDON))
+        val step = Photos.pieceOf(box.copy(key = "teams:essay#1", label = "Essay: Plan it"), essay)!!
+        assertEquals(1 to 1, step.stepIndex to step.parts)
+        assertEquals(null, Photos.pieceOf(box, null))
     }
 
     @Test
