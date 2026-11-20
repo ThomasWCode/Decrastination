@@ -811,3 +811,16 @@ The chat was text throughout: each turn one string, a message with no words drop
 7. **A photo from the website shows on the phone**: fetched from the server once and kept as the phone's own while its message needs it.
 8. **He keeps a photo with a task only when you ask**: tried on a real page, told he might where it plainly showed the task's work, he kept it every time, which replaces the task's photo and sets off a paid reading.
 9. **The phone's box, given a subject by *Ask Felix about it*, no longer answers a nudge by itself**, as the website's doesn't from 6.6.0: the words go as a turn about the subject.
+
+### A chat photo as proof (6.9.0, 20 Nov)
+
+Felix was told a photo isn't proof, and couldn't hand one to the check. → D-160.
+
+**Q165. Who decides whether a photo sent in the chat as proof passes?** (18 Nov.) Offered: the photo check, given the picture itself, with Felix's summary of whatever else in the message bears on it; Felix himself; no proof in the chat, Felix pointing to the check. **Your answer: the photo check.**
+
+#### Decided without asking
+
+1. **The piece is his to name, as his other actions name one**: the task, and a step where it has steps; found in the plan as a check's piece is, else as a slot of it ticked *Done* today that can still earn; none, and his answer says so, nothing asked.
+2. **The photos checked are those his answer's call was shown**, four at most, read before your message is marked answered, as a ticked one's let go then.
+3. **The check runs after his answer's in the chat**, in a call of its own, his line under it saying it's being checked, then what it said ("Photo check: …"); one at a time with every other check, the website's and the phone's.
+4. **Tried on the real pages** (two runs each): pages 8 to 10 of a task of 8 to 12, with "the teacher dropped pages 11 and 12", passed, the check saying it took the word for what was set; page 8 alone, with "that's all of it", didn't ($0.11).
