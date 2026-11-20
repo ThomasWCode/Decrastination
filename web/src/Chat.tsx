@@ -452,12 +452,22 @@ export function aboutFrom(search: string): About | null {
   }
 }
 
+/**
+ * The message the box sends: [text] as [id], replying to what's [replying] (chosen, or offered), else to his nudge the box answers
+ * by itself ([quiet]); with what it's [about], where *Ask Felix about it* gave a subject, and then to nothing it didn't choose, so
+ * the words go as a turn about that subject, not as the answer to a question about something else (6.6.0).
+ */
+export function messageOf(text: string, id: string, replying: ChatQuote | null, quiet: string | null, about: About | null): Action {
+  const replyTo = replying?.id ?? (about ? null : quiet);
+  return { type: "SendMessage", text, id, replyTo, takeItsSubject: replying !== null, ...(about ? { about } : {}) };
+}
+
 /** What [about] is, in a few words, as the phone's chip over its box says it. */
 export function aboutLine(about: About): string {
   return `About ${about.taskTitle ?? about.eventTitle ?? about.day ?? "it"}`;
 }
 
-function Box({ view, replying, chosen, sent, letGo, about, dropAbout }: { view: ChatView; replying: ChatQuote | null; chosen: boolean; sent: () => void; letGo: () => void; about: About | null; dropAbout: () => void }) {
+function Box({ view, replying, chosen, sent, letGo, about, dropAbout, keepAbout }: { view: ChatView; replying: ChatQuote | null; chosen: boolean; sent: () => void; letGo: () => void; about: About | null; dropAbout: () => void; keepAbout: (about: About) => void }) {
   const [draft, setDraft] = useState(() => sessionStorage.getItem(DRAFT) ?? "");
   const [said, setSaid] = useState<string | null>(null);
   const change = (text: string) => {
@@ -473,15 +483,17 @@ function Box({ view, replying, chosen, sent, letGo, about, dropAbout }: { view: 
     change("");
     setSaid(null);
     sent();
-    const replyTo = replying?.id ?? view.quiet ?? null;
-    // What it's about goes with it, once: the next is about whatever it says.
-    void saying({ type: "SendMessage", text, id, replyTo, takeItsSubject: replying !== null, ...(about ? { about } : {}) }).then((why) => {
+    const message = messageOf(text, id, replying, view.quiet ?? null, about);
+    // What it's about goes with it, once: taken as it goes, so one sent before its answer comes is about whatever it says; back if it didn't go.
+    const subject = about;
+    if (subject) dropAbout();
+    void saying(message).then((why) => {
       if (why === null) {
         sessionStorage.removeItem(LOST);
-        dropAbout();
         return;
       }
       sessionStorage.setItem(LOST, JSON.stringify({ text, id }));
+      if (subject) keepAbout(subject);
       setSaid(why);
       setDraft((typed) => {
         const back = typed ? `${text}\n\n${typed}` : text;
@@ -642,7 +654,8 @@ export function ChatPage({ go }: { go: Go }) {
 
   const offered = view.offer && view.offer.id !== declined ? view.offer : null;
   const picked = chosen && view.rows.some((row) => row.id === chosen.id) ? chosen : null;
-  const replying: ChatQuote | null = picked ? { id: picked.id, who: picked.yours ? "You" : view.name, line: (picked.texts.at(-1) ?? "").trim().split("\n")[0] ?? "" } : offered;
+  // A subject given takes the place of the reply the box offers by itself: the words are about it (6.6.0).
+  const replying: ChatQuote | null = picked ? { id: picked.id, who: picked.yours ? "You" : view.name, line: (picked.texts.at(-1) ?? "").trim().split("\n")[0] ?? "" } : about ? null : offered;
   const own = view.rows.find((row) => row.id === picked?.id)?.chips ?? [];
   const chips: ChatChip[] = own.length > 0 ? own : view.chips;
 
@@ -796,6 +809,7 @@ export function ChatPage({ go }: { go: Go }) {
             }}
             about={about}
             dropAbout={dropAbout}
+            keepAbout={(back) => setAbout((now) => now ?? back)}
           />
         ) : (
           <p className="chat-read-only">To write to {view.name}, use the phone for now.</p>
