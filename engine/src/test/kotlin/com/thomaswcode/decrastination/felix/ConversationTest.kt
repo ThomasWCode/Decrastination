@@ -38,6 +38,7 @@ import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -209,6 +210,43 @@ class ConversationTest {
         felix.settle()
         // The slot ticked, by its label ("part 1 of 3"), not the plan's next, which the plan numbers afresh.
         assertEquals(parts.first().label, felix.owners.checked.single().first.label)
+    }
+
+    @Test
+    fun `the next part he names by its key is checked, though the one before was ticked Done today with no photo`() = runBlocking {
+        val long = sheet.copy(id = "teams:long", sourceId = "long", title = "A long worksheet", sourceEffortMin = 120, dueAt = Fixtures.at("2026-10-24T09:00"))
+        stores.tasks.update { it.copy(tasks = it.tasks + long) }
+        val parts = felix.planning.plan().chunksOf(long.id)
+        assertTrue(parts.size > 1, parts.joinToString { it.key })
+        assertTrue(felix.focusKeep(parts.first().key))
+        // The plan's next, as the list of next pieces shows it him: numbered again ("part 1 of 3"), its key the one kept's.
+        val next = felix.planning.plan().chunksOf(long.id).first()
+        assertNotEquals(parts.first().label, next.label)
+        assertEquals(parts.first().key, next.key)
+        felix.owners.chatPhotos[hash] = jpeg
+        val check = """[{"type":"checkPhotos","taskId":"teams:long","stepIndex":-1,"setting":"${next.key}","value":""}]"""
+        felix.answers(felix.chatAnswer("Checking it now.", actions = check))
+        assertTrue(conversation.ask("done the second part", photos = listOf(ChatPhoto(hash))))
+        felix.settle()
+        assertEquals(next.label, felix.owners.checked.single().first.label)
+        assertEquals(next.key, his().last().acts.single().action?.setting)
+    }
+
+    @Test
+    fun `a piece he names by its key is checked, not the plan's first`() = runBlocking {
+        // Due tomorrow morning, so its parts are all today's slots, each listed for him.
+        val long = sheet.copy(id = "teams:long", sourceId = "long", title = "A long worksheet", sourceEffortMin = 120)
+        stores.tasks.update { it.copy(tasks = it.tasks + long) }
+        val plan = felix.planning.plan()
+        val second = plan.chunksOf(long.id)[1]
+        // Listed for him among today's slots, so his key's one the plan shown has.
+        assertTrue(plan.todaySlots.any { it.chunk?.key == second.key }, plan.todaySlots.joinToString { it.chunk?.key.orEmpty() })
+        felix.owners.chatPhotos[hash] = jpeg
+        val check = """[{"type":"checkPhotos","taskId":"teams:long","stepIndex":-1,"setting":"${second.key}","value":""}]"""
+        felix.answers(felix.chatAnswer("Checking it now.", actions = check))
+        assertTrue(conversation.ask("done the second part", photos = listOf(ChatPhoto(hash))))
+        felix.settle()
+        assertEquals(second.label, felix.owners.checked.single().first.label)
     }
 
     @Test
