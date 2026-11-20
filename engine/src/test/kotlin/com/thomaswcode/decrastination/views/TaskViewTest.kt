@@ -40,9 +40,20 @@ class TaskViewTest {
         sourceEffortMin = 30, firstSeenAt = now, lastSeenAt = now, status = status, subSteps = steps, doneAt = if (status == Status.Done) now else null,
     )
 
-    private fun view(task: TaskItem, writable: Boolean = true, applied: List<Instruction> = emptyList(), notes: List<Note> = emptyList(), timer: PieceTimer? = null): TaskView {
+    private fun view(task: TaskItem, writable: Boolean = true, applied: List<Instruction> = emptyList(), notes: List<Note> = emptyList(), timer: PieceTimer? = null, photos: Boolean = false): TaskView {
         val plan = Planner.plan(Planner.Input(listOf(task), now, LONDON, Settings(), windows = mapOf(monday to listOf(DayWindow(17 * 60, 22 * 60, WindowKind.Evening)))))
-        return TaskViews.of(task, mapOf(task.id to task), plan, Settings(), applied, notes, now, LONDON, writable, timer)
+        return TaskViews.of(task, mapOf(task.id to task), plan, Settings(), applied, notes, now, LONDON, writable, timer, photos = photos)
+    }
+
+    @Test
+    fun `written work's next piece has its photo check where Claude can be asked, none where it can't or while mirroring`() {
+        val sheet = view(task(), photos = true)
+        val check = sheet.actions.single { it.check != null }
+        assertEquals("Check with a photo", check.label)
+        assertEquals("teams:a", check.check?.taskId)
+        assertEquals(sheet.actions.first { it.label == "Done" }.ask?.key, check.check?.key)
+        assertTrue(view(task()).actions.none { it.check != null })
+        assertTrue(view(task(), writable = false, photos = true).actions.none { it.check != null })
     }
 
     private fun TaskView.labels() = actions.map { it.label }

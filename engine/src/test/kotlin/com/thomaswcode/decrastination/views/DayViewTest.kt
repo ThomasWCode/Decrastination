@@ -108,6 +108,8 @@ class DayViewTest {
         assertTrue(sheet.taskSheet)
         assertEquals(About(taskId = "teams:b", taskTitle = "b"), sheet.about)
         assertEquals(listOf("Start", "Done", "Later today"), assertNotNull(first.sheet).actions.map { it.label })
+        // Found again by its piece, wherever it's moved to, not by where it was.
+        assertEquals("piece-$key", second.sheetKey)
     }
 
     @Test
@@ -129,6 +131,9 @@ class DayViewTest {
         assertEquals(piece.key, sheet.actions.single().ask?.key)
         assertNotNull(sheet.about)
         assertEquals("kept", sheets(records = listOf(missed.copy(outcome = SlotOutcome.Kept))).blocks.single { it.kind == "record" }.sheet?.kind)
+        // Where Claude can be asked, its piece's photo check too, as MissedActions offers it (6.7.0).
+        val checked = assertNotNull(sheets(records = listOf(missed), photos = true).blocks.single { it.kind == "record" }.sheet)
+        assertEquals(PhotoCheckTarget(piece.taskId, piece.key, piece.step), checked.actions.single { it.check != null }.check)
     }
 
     @Test

@@ -18,15 +18,21 @@ test("while the phone writes, the Day has nothing to press, and a block can't be
   await expect(page.getByTestId("grid")).toBeVisible();
   await expect(page.getByRole("group", { name: "Do" })).toHaveCount(0);
   await expect(page.locator(".block.movable")).toHaveCount(0);
-  // A block's own sheet opens to read, its buttons absent (6.6.0).
-  const piece = page.getByTestId("piece").first();
-  if ((await piece.count()) > 0) {
-    await piece.click();
-    const sheet = page.getByTestId("block-sheet");
-    await expect(sheet).toBeVisible();
-    await expect(sheet.getByRole("button", { name: "Done", exact: true })).toHaveCount(0);
-    await expect(sheet.getByRole("button", { name: "Ask Felix about it" })).toHaveCount(0);
+  // A block's own sheet opens to read, its buttons absent (6.6.0): a piece's, on the first of the coming days with one, as whether
+  // one's left today depends on the hour.
+  let piece = page.getByTestId("piece").first();
+  for (let ahead = 1; ahead < 7 && (await piece.count()) === 0; ahead++) {
+    const day = new Date();
+    day.setDate(day.getDate() + ahead);
+    await page.goto(`/day?date=${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, "0")}-${String(day.getDate()).padStart(2, "0")}`);
+    await expect(page.getByTestId("grid")).toBeVisible();
+    piece = page.getByTestId("piece").first();
   }
+  await piece.click();
+  const sheet = page.getByTestId("block-sheet");
+  await expect(sheet).toBeVisible();
+  await expect(sheet.getByRole("button", { name: "Done", exact: true })).toHaveCount(0);
+  await expect(sheet.getByRole("button", { name: "Ask Felix about it" })).toHaveCount(0);
 });
 
 test("Stats shows the record, by period, with nothing to press while the phone writes", async ({ page }) => {

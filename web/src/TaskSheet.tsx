@@ -210,7 +210,7 @@ export function TaskSheet({ id, form, close }: { id: string; form: OwnTaskFormVi
           <div className="actions" role="group" aria-label="Do">
             {task.actions.map((action) =>
               action.check ? (
-                <PhotoCheck key={targetKey(action.check)} target={action.check} disabled={busy} said={(text, bad) => setSaid({ text, bad, undo: null })} />
+                <PhotoCheck key={targetKey(action.check)} target={action.check} disabled={busy} said={(text, bad) => setSaid({ text, bad, undo: null })} onBusy={setBusy} />
               ) : (
                 <button key={action.label} className="action" disabled={busy} onClick={() => ifSure(action)}>
                   {action.label}
