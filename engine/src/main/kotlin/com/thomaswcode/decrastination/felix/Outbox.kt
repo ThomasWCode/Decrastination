@@ -243,10 +243,11 @@ class Outbox(
 
         /**
          * [message] in words, its [text] (its last text, for his), as his notification shows it: his, and the gist of what
-         * it made (as the chat's history tells him of his cards); yours, and why it waits for his answer, if it does.
+         * it made (as the chat's history tells him of his cards); yours, its photos said as such (6.8.0), and why it waits for his
+         * answer, if it does.
          */
         private fun line(message: ChatMessage, text: String = message.text): String = when (message.from) {
-            Speaker.You -> text + (message.note?.takeIf { message.answeredAt == null }?.let { "\n($it)" } ?: "")
+            Speaker.You -> message.said + (message.note?.takeIf { message.answeredAt == null }?.let { "\n($it)" } ?: "")
             Speaker.Felix -> (
                 listOf(text) +
                     message.proposals.filter { it.state == ProposalState.Applied }.map { p -> p.task?.let { "Added “${it.title}”" } ?: p.lines.joinToString("; ") } +

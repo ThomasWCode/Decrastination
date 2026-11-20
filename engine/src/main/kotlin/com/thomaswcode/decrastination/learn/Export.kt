@@ -39,7 +39,7 @@ object Export {
                 listOf("at", "why", "said", "replies", "piece", "task", "reply", "replied"),
                 ChatHistory.his(messages).map { m ->
                     val reply = ChatHistory.replyOf(m, messages)
-                    listOf(t(m.at), m.kind, m.text, m.suggestedReplies.joinToString(" | "), m.pieceKey, m.about.taskId, reply?.text, t(reply?.at))
+                    listOf(t(m.at), m.kind, m.text, m.suggestedReplies.joinToString(" | "), m.pieceKey, m.about.taskId, reply?.said, t(reply?.at))
                 },
             ),
             "calibration.csv" to table(

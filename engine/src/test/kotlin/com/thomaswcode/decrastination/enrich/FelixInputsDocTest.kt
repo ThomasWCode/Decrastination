@@ -10,6 +10,7 @@ import com.thomaswcode.decrastination.core.Calibration
 import com.thomaswcode.decrastination.core.Change
 import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.ChatMessage
+import com.thomaswcode.decrastination.core.ChatPhoto
 import com.thomaswcode.decrastination.core.DayWindow
 import com.thomaswcode.decrastination.core.Due
 import com.thomaswcode.decrastination.core.DueKind
@@ -224,6 +225,14 @@ class FelixInputsDocTest {
         out["chat turn with research"] = ChatPrompts.turns(listOf(ChatMessage("m6", Speaker.You, "What happens at the open day on Saturday?", now)), "(the context)", byId, LONDON, plan = "(the plan)", found = found).last().second
         // Asked again with a task he asked to read in full.
         out["chat turn with read"] = ChatPrompts.turns(listOf(ChatMessage("m7", Speaker.You, "What do I need for the museum trip?", now)), "(the context)", byId, LONDON, plan = "(the plan)", read = listOf(form)).last().second
+        // With photos (6.8.0): each named before its picture, then the turn's words; one kept from an hour before said by his line of it.
+        val hourBefore = now - 3_600_000L
+        val keptOne = ChatMessage("m9", Speaker.You, "This is the worksheet", hourBefore, answeredAt = hourBefore + 60_000L, photos = listOf(ChatPhoto("1a2b3c4d5e6f7a8b", kept = true, note = "a forces worksheet, questions 1 to 6")))
+        val seenIt = ChatMessage("m9a", Speaker.Felix, "Got it: six questions.", hourBefore + 60_000L)
+        val withPhoto = ChatMessage("m10", Speaker.You, "Is this right?", now, photos = listOf(ChatPhoto("9f8e7d6c5b4a3f2e")))
+        val pictured = ChatPrompts.sent(listOf(keptOne, seenIt, withPhoto), "(the context)", byId, LONDON, plan = "(the plan)", live = setOf("1a2b3c4d5e6f7a8b", "9f8e7d6c5b4a3f2e"))
+        out["chat turn with photos"] = (pictured.pictures.mapIndexed { i, hash -> ChatPrompts.pictureName(i, hash) + "\n(the picture)" } + pictured.turns.last().second).joinToString("\n\n")
+        out["chat turn with a photo kept"] = pictured.turns.first().second
         out["research system"] = ResearchPrompts.system(12)
         out["research user"] = ResearchPrompts.describe("the open day's programme and times", "What happens at the open day on Saturday?", now, LONDON)
         // Felix's own messages.

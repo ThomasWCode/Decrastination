@@ -63,7 +63,7 @@ object ChatRows {
                 day = on
             }
             if (m.id == firstUnread) add(Item.Divider)
-            add(Item.Message(m, m.replyTo?.takeIf { it != above?.id }?.let(byId::get)?.takeIf { it.text.isNotBlank() }, archived = m.id !in live))
+            add(Item.Message(m, m.replyTo?.takeIf { it != above?.id }?.let(byId::get)?.takeIf { it.says }, archived = m.id !in live))
             above = m
         }
     }

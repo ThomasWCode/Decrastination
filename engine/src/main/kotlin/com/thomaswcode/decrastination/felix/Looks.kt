@@ -502,7 +502,7 @@ class Looks(
     }
 
     /** When something was last said in the chat, by him or you: a message written ahead before it would talk past it (D-57). */
-    private fun lastSaid(): Long? = chat.value.messages.filter { it.text.isNotBlank() }.maxOfOrNull { it.at }
+    private fun lastSaid(): Long? = chat.value.messages.filter { it.says }.maxOfOrNull { it.at }
 
     private companion object {
         /** A late reminder's time, as it says it: the day's, or another day's. */

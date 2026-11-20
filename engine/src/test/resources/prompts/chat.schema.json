@@ -320,7 +320,8 @@
                             "deleteNote",
                             "keepPiece",
                             "unkeepPiece",
-                            "sync"
+                            "sync",
+                            "keepPhoto"
                         ]
                     },
                     "taskId": {
@@ -360,6 +361,9 @@
             "items": {
                 "type": "string"
             }
+        },
+        "photos": {
+            "type": "string"
         }
     },
     "required": [
@@ -372,7 +376,8 @@
         "actions",
         "research",
         "details",
-        "answered"
+        "answered",
+        "photos"
     ],
     "additionalProperties": false
 }

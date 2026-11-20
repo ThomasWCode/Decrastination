@@ -1,6 +1,7 @@
 package com.thomaswcode.decrastination.felix
 
 import com.thomaswcode.decrastination.Fixtures
+import com.thomaswcode.decrastination.block.Photos
 import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.AssessLater
 import com.thomaswcode.decrastination.core.Change
@@ -8,6 +9,7 @@ import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.ChatActs
 import com.thomaswcode.decrastination.core.ChatHistory
 import com.thomaswcode.decrastination.core.ChatMessage
+import com.thomaswcode.decrastination.core.ChatPhoto
 import com.thomaswcode.decrastination.core.ChatState
 import com.thomaswcode.decrastination.core.Fact
 import com.thomaswcode.decrastination.core.InstructionRules
@@ -83,6 +85,68 @@ class ConversationTest {
 
     /** His messages in the chat, oldest first. */
     private fun his() = stores.chat.value.messages.filter { it.from == Speaker.Felix }
+
+    /** A photo's bytes, its hash its name (6.8.0). */
+    private val jpeg = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 1, 2, 3)
+    private val hash = Photos.hashOf(jpeg)
+
+    @Test
+    fun `a photo alone is a message, sent as its picture, his line of it kept on it`() = runBlocking {
+        felix.owners.chatPhotos[hash] = jpeg
+        felix.answers(felix.chatAnswer("A worksheet on forces.", photos = "a forces worksheet, the first page"))
+        assertTrue(conversation.ask("", photos = listOf(ChatPhoto(hash))))
+        felix.settle()
+        val sent = felix.server.takeRequest().body.readUtf8()
+        assertTrue("\"image\"" in sent, "sent as a picture")
+        assertTrue("Photo 1, id $hash:" in sent)
+        assertTrue("[Photo 1, sent with this turn]" in sent)
+        val yours = stores.chat.value.messages.single { it.from == Speaker.You }
+        assertEquals("", yours.text)
+        assertEquals("a forces worksheet, the first page", yours.photos.single().note)
+        assertEquals("[photo: a forces worksheet, the first page]", yours.said)
+        // No words and no photo: nothing.
+        assertFalse(conversation.ask("  "))
+    }
+
+    @Test
+    fun `a kept photo goes again with a message within ten minutes of it, after that by his line, and he can ask to see it`() = runBlocking {
+        felix.owners.chatPhotos[hash] = jpeg
+        felix.answers(felix.chatAnswer("Got it.", photos = "a forces worksheet"))
+        assertTrue(conversation.ask("Here's the sheet", photos = listOf(ChatPhoto(hash, kept = true))))
+        felix.settle()
+        felix.server.takeRequest()
+        felix.clock.time += 5 * 60_000L
+        felix.answers(felix.chatAnswer("Question 2's the hard one."))
+        assertTrue(conversation.ask("Which is hardest?"))
+        felix.settle()
+        assertTrue("Photo 1, id $hash:" in felix.server.takeRequest().body.readUtf8(), "within ten minutes: sent again by itself")
+        felix.clock.time += 60 * 60_000L
+        felix.answers(felix.chatAnswer("Let me look again.", details = """["photo:$hash"]"""))
+        felix.answers(felix.chatAnswer("Question 3 needs the angle."))
+        assertTrue(conversation.ask("And question 3?"))
+        felix.settle()
+        val first = felix.server.takeRequest().body.readUtf8()
+        assertTrue("[photo $hash, still kept: a forces worksheet]" in first)
+        assertFalse("Photo 1, id $hash:" in first)
+        assertTrue("Photo 1, id $hash:" in felix.server.takeRequest().body.readUtf8(), "shown when he asks")
+        assertEquals("Looked again: 1 photo kept.", his().last().acts.single().line)
+    }
+
+    @Test
+    fun `he keeps a photo with a task, and its Undo puts back the photo it had`() = runBlocking {
+        stores.tasks.update { it.copy(tasks = it.tasks + sheet) }
+        felix.owners.chatPhotos[hash] = jpeg
+        val keep = """[{"type":"keepPhoto","taskId":"teams:sheet","stepIndex":-1,"setting":"","value":"$hash"}]"""
+        felix.answers(felix.chatAnswer("Kept it with the worksheet.", photos = "the worksheet, done", actions = keep))
+        assertTrue(conversation.ask("This is the forces sheet", photos = listOf(ChatPhoto(hash))))
+        felix.settle()
+        val answer = his().last()
+        assertEquals("Kept the photo with “Forces worksheet”", answer.acts.single().line)
+        assertEquals(hash, stores.tasks.value.tasks.single { it.id == "teams:sheet" }.photo?.hash)
+        assertNull(conversation.undoAct(answer.id, 0))
+        assertNull(stores.tasks.value.tasks.single { it.id == "teams:sheet" }.photo)
+        assertTrue(his().last().acts.single().undone)
+    }
 
     @Test
     fun `a fact or a rule deleted from Settings' list goes, and only it`() = runBlocking {
