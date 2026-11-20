@@ -3,9 +3,11 @@ package com.thomaswcode.decrastination.felix
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.block.Photos
 import com.thomaswcode.decrastination.core.About
+import com.thomaswcode.decrastination.core.Act
 import com.thomaswcode.decrastination.core.AssessLater
 import com.thomaswcode.decrastination.core.Change
 import com.thomaswcode.decrastination.core.ChangeType
+import com.thomaswcode.decrastination.core.ChatAction
 import com.thomaswcode.decrastination.core.ChatActs
 import com.thomaswcode.decrastination.core.ChatHistory
 import com.thomaswcode.decrastination.core.ChatMessage
@@ -174,6 +176,62 @@ class ConversationTest {
         assertTrue(conversation.ask("done the first half", photos = listOf(ChatPhoto(hash))))
         felix.settle()
         assertEquals(0, felix.owners.checked.single().first.stepIndex)
+    }
+
+    @Test
+    fun `only the photos of the message answered go as proof, not one kept from before that goes with it`() = runBlocking {
+        stores.tasks.update { it.copy(tasks = it.tasks + sheet) }
+        val older = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 9)
+        felix.owners.chatPhotos[Photos.hashOf(older)] = older
+        felix.owners.chatPhotos[hash] = jpeg
+        felix.answers(felix.chatAnswer("Got it.", photos = "the question sheet"))
+        assertTrue(conversation.ask("here's the sheet", photos = listOf(ChatPhoto(Photos.hashOf(older), kept = true))))
+        felix.settle()
+        felix.clock.time += 2 * 60_000L
+        val check = """[{"type":"checkPhotos","taskId":"teams:sheet","stepIndex":-1,"setting":"","value":""}]"""
+        felix.answers(felix.chatAnswer("Checking it now.", photos = "the answers", actions = check))
+        assertTrue(conversation.ask("and done", photos = listOf(ChatPhoto(hash))))
+        felix.settle()
+        assertEquals(1, felix.owners.checked.single().third, "the question sheet, sent again with it, isn't proof")
+    }
+
+    @Test
+    fun `a part ticked Done today is checked before the plan's next one, as its earning ends with the day`() = runBlocking {
+        val long = sheet.copy(id = "teams:long", sourceId = "long", title = "A long worksheet", sourceEffortMin = 120, dueAt = Fixtures.at("2026-10-24T09:00"))
+        stores.tasks.update { it.copy(tasks = it.tasks + long) }
+        val parts = felix.planning.plan().chunksOf(long.id)
+        assertTrue(parts.size > 1, parts.joinToString { it.key })
+        assertTrue(felix.focusKeep(parts.first().key))
+        felix.owners.chatPhotos[hash] = jpeg
+        val check = """[{"type":"checkPhotos","taskId":"teams:long","stepIndex":-1,"setting":"","value":""}]"""
+        felix.answers(felix.chatAnswer("Checking it now.", actions = check))
+        assertTrue(conversation.ask("done the first part", photos = listOf(ChatPhoto(hash))))
+        felix.settle()
+        // The slot ticked, by its label ("part 1 of 3"), not the plan's next, which the plan numbers afresh.
+        assertEquals(parts.first().label, felix.owners.checked.single().first.label)
+    }
+
+    @Test
+    fun `a check that fails says so, and one a stop left saying it's checked is settled as unfinished`() = runBlocking {
+        stores.tasks.update { it.copy(tasks = it.tasks + sheet) }
+        felix.owners.chatPhotos[hash] = jpeg
+        felix.owners.checkFails = true
+        val check = """[{"type":"checkPhotos","taskId":"teams:sheet","stepIndex":-1,"setting":"","value":""}]"""
+        felix.answers(felix.chatAnswer("Checking it now.", actions = check))
+        assertTrue(conversation.ask("done", photos = listOf(ChatPhoto(hash))))
+        felix.settle()
+        val failed = his().last().acts.single()
+        assertTrue(failed.line.startsWith("Photo check: The check didn't go through (no connection)"), failed.line)
+        assertTrue(failed.problem)
+        // One a stop part-way left: settled once it's older than a call's start, none under way here.
+        val left = ChatMessage("h-left", Speaker.Felix, "Checking it now.", felix.clock.now(), acts = listOf(Act(Conversation.CHECKING + " against “a piece”…", ChatAction(ChatAction.Type.CheckPhotos, "teams:sheet"), after = "t-left")))
+        stores.chat.update { it.copy(messages = it.messages + left) }
+        conversation.settleChecks(felix.clock.now() + 1_000)
+        assertTrue(stores.chat.value.messages.single { it.id == "h-left" }.acts.single().line.startsWith(Conversation.CHECKING))
+        conversation.settleChecks(felix.clock.now() + Conversation.CHECK_SETTLE_MS + 1)
+        val settled = stores.chat.value.messages.single { it.id == "h-left" }.acts.single()
+        assertEquals(Conversation.CHECK_UNFINISHED, settled.line)
+        assertTrue(settled.problem)
     }
 
     @Test

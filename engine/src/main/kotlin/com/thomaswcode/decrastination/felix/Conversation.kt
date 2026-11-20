@@ -76,6 +76,7 @@ import com.thomaswcode.decrastination.sync.GmailFinishes
 import com.thomaswcode.decrastination.ui.KeptActions
 import java.time.Instant
 import java.time.format.DateTimeFormatter
+import java.util.Collections
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CoroutineScope
@@ -505,6 +506,25 @@ class Conversation(
      * again with them, never searching or asking for them again, as each is paid for; a search held
      * back (Claude off or resting, the cap) isn't kept, so it can be made later.
      */
+    /** The photo checks from the chat under way here (6.9.0), by their acts' tokens: one not among them after a stop part-way is settled. */
+    private val checksRunning: MutableSet<String> = Collections.synchronizedSet(HashSet())
+
+    /** [token]'s line under [replyId], his message, said as [done]. */
+    private suspend fun settleCheck(replyId: String, token: String, done: Act) {
+        chat.update { s -> s.copy(messages = s.messages.map { m -> if (m.id == replyId) m.copy(acts = m.acts.map { if (it.action?.type == ChatAction.Type.CheckPhotos && it.after == token) done else it }) else m }) }
+    }
+
+    /**
+     * His photo checks left saying they're being checked by a stop part-way (6.9.0): said not to have finished, so the photos are sent
+     * again, and he isn't told for good that they're being checked. Run after every sync; none under way here, and none newer than
+     * [CHECK_SETTLE_MS], is touched.
+     */
+    suspend fun settleChecks(now: Long = clock.now()) {
+        fun stale(m: ChatMessage, act: Act) = act.action?.type == ChatAction.Type.CheckPhotos && act.line.startsWith(CHECKING) && act.after !in checksRunning && now - m.at > CHECK_SETTLE_MS
+        if (chat.value.messages.none { m -> m.acts.any { stale(m, it) } }) return
+        chat.update { s -> s.copy(messages = s.messages.map { m -> if (m.acts.none { stale(m, it) }) m else m.copy(acts = m.acts.map { if (stale(m, it)) Act(CHECK_UNFINISHED, it.action, after = it.after, problem = true) else it }) }) }
+    }
+
     private data class Gathered(val id: String, val found: Found?, val notLooked: String?, val read: List<String>, val stats: Boolean = false, val calendar: List<String> = emptyList(), val seen: List<String> = emptyList())
 
     @Volatile
@@ -965,8 +985,10 @@ class Conversation(
             )
             // The photos his actions keep with tasks, read now (6.8.0): a ticked one's let go once your message is answered, which comes first.
             val photosKept = reading.actions.filter { it.type == ChatAction.Type.KeepPhoto }.mapNotNull { a -> a.value?.let { hash -> owners.chatPhoto(hash)?.let { hash to it } } }.toMap()
-            // The photos his check of the work is given (6.9.0): this answer's call's, read now, as a ticked one's let go once your message is answered.
-            val proof = if (reading.actions.any { it.type == ChatAction.Type.CheckPhotos }) pictured.take(ChatPhoto.MAX).mapNotNull { owners.chatPhoto(it) } else emptyList()
+            // The photos his check of the work is given (6.9.0): those of the messages his answer answers, as this answer's call was shown them,
+            // not those seen again or kept from before; read now, as a ticked one's let go once your message is answered.
+            val own = upTo(chat.value.messages).takeLastWhile { it.from == Speaker.You }.flatMapTo(HashSet()) { m -> m.photos.map { it.hash } }
+            val proof = if (reading.actions.any { it.type == ChatAction.Type.CheckPhotos }) pictured.filter { it in own }.take(ChatPhoto.MAX).mapNotNull { owners.chatPhoto(it) } else emptyList()
             // His checks of the work, each its own call, made once his answer's in the chat ([act]).
             val checks = mutableListOf<suspend () -> Unit>()
             // His line of each photo he was shown, in the order shown (6.8.0), kept on your message in its place.
@@ -1180,16 +1202,23 @@ class Conversation(
                     val open = task?.takeIf { it.isOpen } ?: return@mapNotNull Act(Act.NOT_MADE + "the photos weren't checked: “${task?.title ?: "its task"}” was finished, or went, while he answered.", problem = true)
                     if (proof.isEmpty()) return@mapNotNull Act(Act.NOT_MADE + "the photos weren't checked: they went from the chat while he answered.", problem = true)
                     val now = clock.now()
-                    val planned = planning.plan().chunksOf(open.id).firstOrNull { a.stepIndex == null || it.stepIndex == a.stepIndex }
-                    // A slot of the step named, as the plan's piece is: another step's is never checked in its place.
-                    val record = if (planned != null) null else log.value.slots.filter { it.taskId == open.id && it.outcome.kept && focus.today(it.at) == focus.today(now) && KeptActions.of(it, open, focus.today(now).toString()).photo && Photos.pieceOf(it, open)?.stepIndex == a.stepIndex }.maxByOrNull { it.at }
-                    val piece = planned ?: record?.let { Photos.pieceOf(it, open) }
+                    // A slot of the step named ticked Done today that can still earn, first, as its earning ends with the day; else the plan's
+                    // piece of that step. Another step's is never checked in its place.
+                    val record = log.value.slots.filter { it.taskId == open.id && it.outcome.kept && focus.today(it.at) == focus.today(now) && KeptActions.of(it, open, focus.today(now).toString()).photo && Photos.pieceOf(it, open)?.stepIndex == a.stepIndex }.maxByOrNull { it.at }
+                    val piece = record?.let { Photos.pieceOf(it, open) } ?: planning.plan().chunksOf(open.id).firstOrNull { a.stepIndex == null || it.stepIndex == a.stepIndex }
                         ?: return@mapNotNull Act(Act.NOT_MADE + "the photos weren't checked: “${open.title}” has no piece to check now, planned or ticked Done today.", problem = true)
-                    val under = Act("Checking the photo${if (proof.size == 1) "" else "s"} against “${piece.label}”…", a)
+                    // Found again by a token of its own, so two alike are each their own, and one left by a stop part-way is settled ([settleChecks]).
+                    val token = Ids.next()
+                    val under = Act(CHECKING + "${if (proof.size == 1) "" else "s"} against “${piece.label}”…", a, after = token)
                     checks += {
-                        val said = owners.checkPhotos(proof, piece, now, record?.let(SlotRef::of), a.value.orEmpty())
-                        val done = Act("Photo check: $said", a, problem = !said.startsWith("Done:"))
-                        chat.update { s -> s.copy(messages = s.messages.map { m -> if (m.id == replyId) m.copy(acts = m.acts.map { if (it == under) done else it }) else m }) }
+                        checksRunning += token
+                        try {
+                            val said = runCatching { owners.checkPhotos(proof, piece, now, record?.let(SlotRef::of), a.value.orEmpty()) }
+                                .getOrElse { failed -> "The check didn't go through (${failed.message ?: failed::class.simpleName}): send the photos again." }
+                            settleCheck(replyId, token, Act("Photo check: $said", a, after = token, problem = !said.startsWith("Done:")))
+                        } finally {
+                            checksRunning -= token
+                        }
                     }
                     under
                 }
@@ -1740,6 +1769,15 @@ class Conversation(
     }
 
     companion object {
+        /** How his line of a photo check from the chat starts while it's checked (6.9.0). */
+        const val CHECKING = "Checking the photo"
+
+        /** His line of one a stop part-way left (6.9.0). */
+        const val CHECK_UNFINISHED = "Photo check: it didn't finish (the server stopped part-way): send the photos again."
+
+        /** How long a check's line is left before it's settled as unfinished, where none's under way: past a call's start. */
+        const val CHECK_SETTLE_MS = 60_000L
+
         /** A message's button opening the week's review ([ChatMessage.opens]). */
         const val OPENS_REVIEW = "review"
 

@@ -435,6 +435,7 @@ class ServerOwners(
         // What follows a read, as `AppGraph` has it, less what's the phone's: its calendar, its notifications.
         syncer.addListener { settleCompletions() }
         syncer.addAfterEverySync { conversation.afterSync() }
+        syncer.addAfterEverySync { conversation.settleChecks() }
         syncer.addAfterEverySync { conversation.askKept() }
         syncer.addAfterEverySync { instructions.layTaskOverrides() }
         syncer.addAfterEverySync { ownTasks.pruneOwn() }

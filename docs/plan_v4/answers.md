@@ -820,7 +820,7 @@ Felix was told a photo isn't proof, and couldn't hand one to the check. → D-16
 
 #### Decided without asking
 
-1. **The piece is his to name, as his other actions name one**: the task, and a step where it has steps; found in the plan as a check's piece is, else as a slot of it ticked *Done* today that can still earn; none, and his answer says so, nothing asked.
-2. **The photos checked are those his answer's call was shown**, four at most, read before your message is marked answered, as a ticked one's let go then.
-3. **The check runs after his answer's in the chat**, in a call of its own, his line under it saying it's being checked, then what it said ("Photo check: …"); one at a time with every other check, the website's and the phone's.
+1. **The piece is his to name, as his other actions name one**: the task, and a step where it has steps; found first as a slot of that step ticked *Done* today that can still earn, as its earning ends with the day, else in the plan as a check's piece is; another step's never in its place; none, and his answer says so, nothing asked. Put to you in the morning, as the plan named both without an order.
+2. **The photos checked are those of the message his answer answers**, four at most, not those he saw again or that were kept from before, read before your message is marked answered, as a ticked one's let go then.
+3. **The check runs after his answer's in the chat**, in a call of its own, his line under it saying it's being checked, then what it said ("Photo check: …"), or that it didn't go through; one a stop part-way left is settled as unfinished after the next sync. One at a time with every other check: the website's and the phone's say at once that one's under way rather than wait.
 4. **Tried on the real pages** (two runs each): pages 8 to 10 of a task of 8 to 12, with "the teacher dropped pages 11 and 12", passed, the check saying it took the word for what was set; page 8 alone, with "that's all of it", didn't ($0.11).
