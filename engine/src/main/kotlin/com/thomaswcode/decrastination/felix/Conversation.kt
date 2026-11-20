@@ -500,13 +500,6 @@ class Conversation(
     @Volatile
     private var letGo: String? = null
 
-    /**
-     * What a message's answer has been given beyond its context, by the message's [id], kept till
-     * he's answered with it: what a web search [found], or why one made found nothing
-     * ([notLooked]), and the tasks [read] in full (D-93). An answer with them that failed is asked
-     * again with them, never searching or asking for them again, as each is paid for; a search held
-     * back (Claude off or resting, the cap) isn't kept, so it can be made later.
-     */
     /** The photo checks from the chat under way here (6.9.0), by their acts' tokens: one not among them after a stop part-way is settled. */
     private val checksRunning: MutableSet<String> = Collections.synchronizedSet(HashSet())
 
@@ -527,6 +520,13 @@ class Conversation(
         chat.update { s -> s.copy(messages = s.messages.map { m -> if (m.acts.none { stale(m, it) }) m else m.copy(acts = m.acts.map { if (stale(m, it)) Act(CHECK_UNFINISHED, it.action, after = it.after, problem = true) else it }) }) }
     }
 
+    /**
+     * What a message's answer has been given beyond its context, by the message's [id], kept till
+     * he's answered with it: what a web search [found], or why one made found nothing
+     * ([notLooked]), and the tasks [read] in full (D-93). An answer with them that failed is asked
+     * again with them, never searching or asking for them again, as each is paid for; a search held
+     * back (Claude off or resting, the cap) isn't kept, so it can be made later.
+     */
     private data class Gathered(val id: String, val found: Found?, val notLooked: String?, val read: List<String>, val stats: Boolean = false, val calendar: List<String> = emptyList(), val seen: List<String> = emptyList())
 
     @Volatile
@@ -1783,7 +1783,7 @@ class Conversation(
         const val CHECKING = "Checking the photo"
 
         /** His line of one a stop part-way left (6.9.0). */
-        const val CHECK_UNFINISHED = "Photo check: it didn't finish (the server stopped part-way): send the photos again."
+        const val CHECK_UNFINISHED = "Photo check: it was cut off before it finished: send the photos again."
 
         /** How long a check's line is left before it's settled as unfinished, where none's under way: past a call's start. */
         const val CHECK_SETTLE_MS = 60_000L
