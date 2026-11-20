@@ -175,6 +175,8 @@ class ServerGraph(
     phoneSender: PhonePushes.Sender? = null,
     /** Where Litestream says what it's uploaded, if it's watched. */
     streamMetrics: String? = null,
+    /** R2's sizes and requests, from Cloudflare's analytics, if the box has a token that can read them (6.10.0). */
+    storageR2: CloudflareR2? = null,
     /** What makes the journal's writes to Gmail, by the sign-ins held here: IMAP's, but for a test's stand-in. */
     private val gmailWriter: (SecretStore) -> GmailWriter = { ImapGmailWriter(it) },
 ) {
@@ -248,7 +250,8 @@ class ServerGraph(
         stores, clock, scope, gateway, planning,
         calendarTime = { calendarTime() },
         photosFolder = taskPhotos,
-        nightly = nightly,
+        // Each nightly file B2 takes noted, as the key can't list what it holds (6.10.0).
+        nightly = nightly?.let { folder -> NotedFolder(folder) { bytes -> storage.noteB2(bytes) } },
         resetCopies = File(dataDir, "reset-copies"),
         version = version,
         eventAnswers = { calendarRead.value.answers },
@@ -439,12 +442,17 @@ class ServerGraph(
             ServerJob("check-in", due = { last, now -> sundayDue(last, now, stores.settings.value.checkInMin) }) { owners.conversation.remindCheckIn() },
             ServerJob("review", due = { last, now -> sundayDue(last, now, stores.settings.value.checkInMin + Daily.REVIEW_AFTER_MIN) }) { owners.learning.review(ifDue = true) },
             ServerJob("nightly", due = { last, now -> nightDue(last, now) }, retryMs = HOUR_MS) { nightly() },
+            // What the box, R2 and B2 hold, once a day (6.10.0): what can't be read is said in Settings, never failing the job.
+            ServerJob.every("storage", DAY_MS, inMirror = true) { storage.read() },
             ServerJob.every("heartbeat", MINUTE_MS, inMirror = true) { heartbeat() },
         ),
     )
 
     /** Whether Litestream's still carrying the database off the box. */
     private val stream = StreamWatch(http, streamMetrics)
+
+    /** What the box, R2 and B2 hold, read daily, with an alert near each free allowance's end (6.10.0, D-161): to the phone, and the website's notices. */
+    val storage: StorageWatch = StorageWatch(File(dataDir, "storage.json"), dataDir, storageR2, clock) { words -> phones.tellStorage(words) }
 
     /** Whether it was, at the last beat: a change is said once. */
     @Volatile
@@ -749,7 +757,7 @@ class ServerGraph(
         return SettingsViews.of(
             owners.protection.asked, owners.protection.pending, stores.tasks.value, stores.school.value, stores.memory.value, usage,
             credentials(), stores.secrets.has(Secret.TotpSecret), now, zone, writable = mode == COMMANDS, calls = stores.model.value.calls, pushKey = pushKey.takeIf { pushes.on },
-        )
+        ).copy(storage = StorageRules.view(storage.record(), zone))
     }
 
     /** The parent code's secret, as the phone sends it or takes it away (W-19): held here so a code typed on the website can be checked. */
@@ -876,7 +884,7 @@ class ServerGraph(
         val keyProblem = stores.model.value.aiUsage.keyProblem != null && settings.aiEnabled && settings.aiKeyActive
         // Gmail's writes given up are this server's to say once it makes them.
         val gmailGivenUp = mode == COMMANDS && GmailWrites.givenUp(stores.gmailWrites.value.writes).isNotEmpty()
-        return NoticesView(Outbox.unreadOf(stores.chat.value).size, SetupPage.attention(stores.tasks.value, gmailGivenUp = gmailGivenUp, keyProblem = keyProblem, watchdog = false, unreadable = unreadable().isNotEmpty()))
+        return NoticesView(Outbox.unreadOf(stores.chat.value).size, SetupPage.attention(stores.tasks.value, gmailGivenUp = gmailGivenUp, keyProblem = keyProblem, watchdog = false, unreadable = unreadable().isNotEmpty()), StorageRules.notice(storage.record()))
     }
 
     /** Task [id]'s sheet, if there's such a task. */
@@ -958,6 +966,7 @@ class ServerGraph(
         private const val PUSH_REACH_MS = 5 * 60_000L
         private const val MINUTE_MS = 60_000L
         private const val HOUR_MS = 60 * MINUTE_MS
+        private const val DAY_MS = 24 * HOUR_MS
         private const val SOURCES_EVERY_MS = 15 * MINUTE_MS
         private const val NIGHTLY_HOUR = 3
 

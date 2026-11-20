@@ -25,6 +25,11 @@ services:
       B2_KEY_ID: ${B2_KEY_ID:-}
       B2_APPLICATION_KEY: ${B2_APPLICATION_KEY:-}
       B2_BUCKET: ${B2_BUCKET:-}
+      # R2's sizes and requests, read once a day from Cloudflare's analytics with a token that reads analytics alone (6.10.0): the
+      # bucket's account and name, Litestream's own, and the token; none, and Settings says R2 isn't read.
+      CF_ANALYTICS_TOKEN: ${CF_ANALYTICS_TOKEN:-}
+      R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:-}
+      R2_BUCKET: ${R2_BUCKET:-}
       # Litestream's metrics, read with each heartbeat: the heartbeat fails while it's uploaded nothing for a while.
       LITESTREAM_METRICS: http://litestream:9090/metrics
     expose:

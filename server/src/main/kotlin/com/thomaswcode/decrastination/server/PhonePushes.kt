@@ -52,6 +52,9 @@ class PhonePushes(
 
         /** [sources] to be read now by the phone at [fid], by their names, as [send] goes. */
         fun read(fid: String, sources: List<String>): Boolean = true
+
+        /** [words], the storage's alert (6.10.0), to the phone at [fid], shown as a notification of its own, as [send] goes. */
+        fun storage(fid: String, words: String): Boolean = true
     }
 
     val on: Boolean get() = sender != null
@@ -137,6 +140,29 @@ class PhonePushes(
      * applies commands; a failure's only logged, as the phone reads them at its own sync all the same. Whether any phone could be
      * asked: none where Firebase isn't set up here or no phone's id is held.
      */
+    /**
+     * [words], the storage's alert (6.10.0, D-161), to each paired phone, a notification of its own there; in either mode, as the box's
+     * storage is watched in both. A failure's only logged: the website's notices and Settings say it too.
+     */
+    fun tellStorage(words: String) {
+        val sender = sender ?: return
+        val reached = try {
+            fids()
+        } catch (failed: Exception) {
+            Log.w(Log.TAG, "Reading which phones to tell of the storage failed: ${failed::class.simpleName}")
+            return
+        }
+        scope.launch(Dispatchers.IO) {
+            for ((device, fid) in reached) {
+                try {
+                    if (!sender.storage(fid, words)) forget(device, fid)
+                } catch (failed: Exception) {
+                    Log.w(Log.TAG, "Telling a phone of the storage failed: ${failed::class.simpleName}")
+                }
+            }
+        }
+    }
+
     fun askToRead(sources: Set<Source>): Boolean {
         val sender = sender ?: return false
         if (sources.isEmpty() || !telling()) return false
@@ -254,6 +280,9 @@ class FcmSender(
     // Not kept past a sync's quarter-hour: by then the phone's read them at its own.
     override fun read(fid: String, sources: List<String>): Boolean = deliver(fid, "read" to sources.joinToString(","), READ_COLLAPSE, READ_TTL_SECONDS)
 
+    // Kept a day: an alert's still worth having when the phone's back.
+    override fun storage(fid: String, words: String): Boolean = deliver(fid, "storage" to words, STORAGE_COLLAPSE, STORAGE_TTL_SECONDS)
+
     private fun deliver(fid: String, data: Pair<String, String>, collapse: String, ttlSeconds: Int): Boolean {
         val first = post(fid, data, collapse, ttlSeconds, bearer())
         // A token Google's let go of before its time: a new one, once.
@@ -351,6 +380,10 @@ class FcmSender(
 
         /** An ask to read the phone's sources takes the place of the one before, apart from the revision's. */
         const val READ_COLLAPSE = "read"
+
+        /** The storage's alert's own (6.10.0), so it and a revision's never take each other's place. */
+        const val STORAGE_COLLAPSE = "storage"
+        const val STORAGE_TTL_SECONDS = 86_400
 
         /** A quarter-hour: the phone's own sync reads them by then. */
         const val READ_TTL_SECONDS = 900
