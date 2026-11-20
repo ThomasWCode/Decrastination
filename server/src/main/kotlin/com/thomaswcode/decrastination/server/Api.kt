@@ -107,6 +107,9 @@ private data class StateOut(val revision: Long, val stores: List<StoreOut>, val 
 /** More than a page shrunk to what's sent ever comes to. */
 private const val MAX_PHOTO_BYTES = 4 * 1024 * 1024L
 
+/** How long a browser keeps a chat photo it's fetched (6.8.0): a week, as its name is always the same photo. */
+private const val PHOTO_CACHE_S = 7 * 24 * 3_600
+
 /**
  * More than a check's page shrunk to what's sent ([PhotoChecker.MAX_SIDE] on its long side) ever comes to (6.4.0): a whole photo's
  * [MAX_PHOTO_BYTES] for each of ten pages would be 53 MB held at once.
@@ -445,6 +448,25 @@ private fun Route.signedInRoutes(web: Web) {
         if (!isJpeg(jpeg)) return@post call.respond(HttpStatusCode.UnsupportedMediaType, Problem("That isn't a JPEG"))
         if (!graph.keepTaskPhoto(hash, jpeg)) return@post call.respond(HttpStatusCode.BadRequest, Problem("That photo isn't the one its hash names"))
         call.respond(HttpStatusCode.NoContent)
+    }
+    // A photo for a message of yours (6.8.0), from the phone or the website, sent ahead of the message that names it; and fetched back, so
+    // each shows the other's. Its hash, its size and that it's a JPEG checked, as a task's photo's are.
+    post("/chat-photos/{hash}") {
+        val hash = call.parameters["hash"].orEmpty()
+        if (!Photos.HASH.matches(hash)) return@post call.respond(HttpStatusCode.BadRequest, Problem("That isn't a photo's hash"))
+        val length = call.request.contentLength()
+        if (length == null || length > MAX_PHOTO_BYTES) return@post call.respond(HttpStatusCode.PayloadTooLarge, Problem("That photo's too big"))
+        val jpeg = call.receive<ByteArray>()
+        if (!isJpeg(jpeg)) return@post call.respond(HttpStatusCode.UnsupportedMediaType, Problem("That isn't a JPEG"))
+        if (!graph.keepChatPhoto(hash, jpeg)) return@post call.respond(HttpStatusCode.BadRequest, Problem("That photo isn't the one its hash names"))
+        call.respond(HttpStatusCode.NoContent)
+    }
+    get("/chat-photos/{hash}") {
+        val hash = call.parameters["hash"].orEmpty()
+        val jpeg = hash.takeIf(Photos.HASH::matches)?.let(graph::chatPhoto) ?: return@get call.respond(HttpStatusCode.NotFound, Problem("That photo's gone"))
+        // The same name is always the same photo, so the browser keeps it; for this account alone.
+        call.response.header(HttpHeaders.CacheControl, "private, max-age=$PHOTO_CACHE_S")
+        call.respondBytes(jpeg, ContentType.Image.JPEG)
     }
     // A phone's, once it sends commands, as Claude's the server's to ask then (D-148); the website's too (6.7.0), any picture it chooses,
     // the same judge and the same earning (the owner's answer, 18 Nov).

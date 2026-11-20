@@ -44,6 +44,7 @@ import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
+import io.ktor.client.statement.readRawBytes
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
@@ -606,6 +607,39 @@ class ApiTest {
         assertFalse(File(dataDir, "photos/a1b2c3d4e5f60718.jpg").exists())
         assertEquals(HttpStatusCode.NoContent, send(hash, jpeg, byPhone).status)
         assertTrue(File(dataDir, "photos/$hash.jpg").readBytes().contentEquals(jpeg))
+    }
+
+    @Test
+    fun `a chat photo comes from the phone or the website, kept by its hash where the hash is the photo's, and fetched back by either`() = server {
+        val cookie = signIn()
+        val phone = paired()
+        val byPhone: HttpRequestBuilder.() -> Unit = {
+            bearerAuth(phone.token)
+            header(Protocol.HEADER, Protocol.VERSION.toString())
+        }
+        val bySite: HttpRequestBuilder.() -> Unit = {
+            header(HttpHeaders.Cookie, cookie)
+            header("X-Requested-With", "test")
+        }
+        suspend fun send(hash: String, bytes: ByteArray, signed: HttpRequestBuilder.() -> Unit) = plain().post("/api/chat-photos/$hash") {
+            signed()
+            contentType(ContentType.Image.JPEG)
+            setBody(bytes)
+        }
+        suspend fun fetch(hash: String, signed: HttpRequestBuilder.() -> Unit) = plain().get("/api/chat-photos/$hash") { signed() }
+        val jpeg = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 4, 5, 6)
+        val hash = Photos.hashOf(jpeg)
+        assertEquals(HttpStatusCode.BadRequest, send("NOT-A-HASH", jpeg, byPhone).status)
+        assertEquals(HttpStatusCode.UnsupportedMediaType, send(Photos.hashOf("not a photo".toByteArray()), "not a photo".toByteArray(), bySite).status)
+        assertEquals(HttpStatusCode.PayloadTooLarge, send(hash, ByteArray(5 * 1024 * 1024) { 0xFF.toByte() }, bySite).status)
+        assertEquals(HttpStatusCode.BadRequest, send("a1b2c3d4e5f60718", jpeg, byPhone).status, "not the photo its hash names")
+        assertEquals(HttpStatusCode.NotFound, fetch(hash, byPhone).status)
+        assertEquals(HttpStatusCode.NoContent, send(hash, jpeg, bySite).status)
+        assertTrue(File(dataDir, "photos/chat-$hash.jpg").readBytes().contentEquals(jpeg))
+        assertTrue(fetch(hash, byPhone).readRawBytes().contentEquals(jpeg), "the website's, fetched by the phone")
+        val other = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 7)
+        assertEquals(HttpStatusCode.NoContent, send(Photos.hashOf(other), other, byPhone).status)
+        assertEquals(ContentType.Image.JPEG, fetch(Photos.hashOf(other), bySite).contentType()?.withoutParameters())
     }
 
     @Test

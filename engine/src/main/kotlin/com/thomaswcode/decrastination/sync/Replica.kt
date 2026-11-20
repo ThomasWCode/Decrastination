@@ -18,6 +18,7 @@ import com.thomaswcode.decrastination.net.Http
 import com.thomaswcode.decrastination.ports.Log
 import com.thomaswcode.decrastination.sync.protocol.AttachPhoto
 import com.thomaswcode.decrastination.sync.protocol.Command
+import com.thomaswcode.decrastination.sync.protocol.SendMessage
 import com.thomaswcode.decrastination.ui.Format
 import com.thomaswcode.decrastination.views.Asked
 import com.thomaswcode.decrastination.views.PhotoCheckAsk
@@ -66,6 +67,8 @@ class Replica(
     private val seedFile: File? = null,
     /** This phone mirroring again, however it came back to it ([backToMirroring]): what's its own again then, set going. */
     private val mirroringAgain: () -> Unit = {},
+    /** A chat photo's bytes here, by its hash (6.8.0), sent ahead of the message that names it. */
+    private val chatPhoto: (String) -> ByteArray? = { null },
     /** The chat's messages a pull brought, none of them here before: Felix's, said on the server, heard here as his notification. */
     private val heard: (List<ChatMessage>) -> Unit = {},
 ) {
@@ -323,6 +326,10 @@ class Replica(
                 for (photo in waiting.mapNotNull { (it.action as? AttachPhoto)?.photo }) {
                     if (!sendTaskPhoto(server, headers, photo)) return failed("A task's photo couldn't be sent")
                 }
+                // A message's photos likewise (6.8.0), so Felix's answer on the server has them.
+                for (hash in waiting.flatMap { (it.action as? SendMessage)?.photos.orEmpty() }.map { it.hash }.distinct()) {
+                    if (!sendChatPhoto(server, headers, hash)) return failed("A photo in the chat couldn't be sent")
+                }
                 val answer = http.post("$server/api/commands", headers, JSON.encodeToString(CommandBatch.serializer(), CommandBatch(waiting)))
                 if (!answer.ok) return if (answer.code == 409 && serverMode(headers) == SyncState.MIRROR) backToMirroring() else failed(problem(answer.code))
                 val outcomes = JSON.decodeFromString(ListSerializer(Outcome.serializer()), answer.body)
@@ -377,6 +384,23 @@ class Replica(
     private fun sendTaskPhoto(server: String, headers: Map<String, String>, photo: TaskPhoto): Boolean {
         val jpeg = runCatching { File(photo.path).readBytes() }.getOrNull()?.takeIf { Photos.hashOf(it) == photo.hash } ?: return true
         return http.postBytes("$server/api/task-photos/${photo.hash}", headers + ("Content-Type" to "image/jpeg"), jpeg).ok
+    }
+
+    /**
+     * The chat photo [hash]'s file to the server (6.8.0), as a task's is: whether it went, or needn't, its file here gone (let go
+     * since: the message is answered, or taken back), as the server then has it, or its message no need of it.
+     */
+    private fun sendChatPhoto(server: String, headers: Map<String, String>, hash: String): Boolean {
+        val jpeg = chatPhoto(hash)?.takeIf { Photos.hashOf(it) == hash } ?: return true
+        return http.postBytes("$server/api/chat-photos/$hash", headers + ("Content-Type" to "image/jpeg"), jpeg).ok
+    }
+
+    /** A chat photo from the server (6.8.0): one sent from the website, for its bubble here; null where it's gone, or can't be had. */
+    suspend fun fetchChatPhoto(hash: String): ByteArray? = withContext(Dispatchers.IO) {
+        val token = stores.secrets[Secret.DeviceToken] ?: return@withContext null
+        if (!Photos.HASH.matches(hash)) return@withContext null
+        val headers = mapOf("Authorization" to "Bearer $token", Protocol.HEADER to Protocol.VERSION.toString())
+        runCatching { http.getBytes("${sync.value.server}/api/chat-photos/$hash", headers) }.getOrNull()?.takeIf { Photos.hashOf(it) == hash }
     }
 
     /** What's said of a command the server dropped: which it was and when, as a reason alone can't say what's to be done again. */
