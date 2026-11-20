@@ -87,20 +87,24 @@ class FocusTest {
     )
 
     @Test
-    fun `a task's newest eight notes of what checks saw are kept, and they go with it when it's done or gone`() = runTest {
+    fun `a task's newest eight notes of what checks saw are kept, and they go with it when it's done or gone, after its day`() = runTest {
         tasks.update { it.copy(tasks = listOf(task("sheet"), task("essay"), task("gone"))) }
         repeat(10) { focus.noteCheck(CheckNote("teams:sheet", "teams:sheet#-1#1", "sheet", "page $it", passed = false, at = clock.time + it)) }
         focus.noteCheck(CheckNote("teams:essay", "teams:essay#-1#1", "essay", "its plan", passed = true, at = clock.time))
         focus.noteCheck(CheckNote("teams:gone", "teams:gone#-1#1", "gone", "a page", passed = false, at = clock.time))
         assertEquals((2..9).map { "page $it" }, focus.notesOf("teams:sheet").map { it.covered })
         assertEquals(listOf("its plan"), focus.notesOf("teams:essay").map { it.covered })
-        // One task done, another gone from the list: their notes go at the next tidy, the open one's stay.
+        // One task done, another gone from the list: the gone one's notes go at the next tidy; the done one's stay its day, as a slot
+        // its finish ticked can still earn by a photo that day (6.10.1), and go after.
         tasks.update { s -> s.copy(tasks = s.tasks.filter { it.id != "teams:gone" }.map { if (it.id == "teams:essay") it.copy(status = Status.Done, doneAt = clock.time) else it }) }
+        focus.tidyChecks()
+        assertEquals(setOf("teams:sheet", "teams:essay"), session.value.notes.mapTo(HashSet()) { it.taskId })
+        tasks.update { s -> s.copy(tasks = s.tasks.map { if (it.id == "teams:essay") it.copy(doneAt = clock.time - 86_400_000L) else it }) }
         focus.tidyChecks()
         assertEquals(setOf("teams:sheet"), session.value.notes.mapTo(HashSet()) { it.taskId })
         assertEquals(8, session.value.notes.size)
         // And at the next note kept, whatever it's for.
-        tasks.update { s -> s.copy(tasks = s.tasks.map { it.copy(status = Status.Done, doneAt = clock.time) } + task("next")) }
+        tasks.update { s -> s.copy(tasks = s.tasks.map { it.copy(status = Status.Done, doneAt = clock.time - 86_400_000L) } + task("next")) }
         focus.noteCheck(CheckNote("teams:next", "teams:next#-1#1", "next", "page 1", passed = false, at = clock.time))
         assertEquals(listOf("teams:next"), session.value.notes.map { it.taskId })
     }

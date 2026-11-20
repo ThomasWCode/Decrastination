@@ -675,9 +675,13 @@ class Focus(
         return pages.filter { it.taskId in open && it.at >= since }
     }
 
-    /** [notes] of the tasks still open, each one's newest [CHECK_NOTES_KEPT], in the order they were kept. */
+    /**
+     * [notes] of the tasks still open, or finished today (6.10.1: one of yours its last piece's tick finished, whose slot can still earn
+     * by a photo today, its check's "remembered" so), each one's newest [CHECK_NOTES_KEPT], in the order they were kept.
+     */
     private fun notesKept(notes: List<CheckNote>): List<CheckNote> {
-        val open = tasks.value.tasks.filter { it.isOpen }.mapTo(HashSet()) { it.id }
+        val today = today(clock.now())
+        val open = tasks.value.tasks.filter { t -> t.isOpen || t.doneAt?.let { today(it) == today } == true }.mapTo(HashSet()) { it.id }
         val kept = notes.filter { it.taskId in open }
         val newest = kept.groupBy { it.taskId }.values.flatMapTo(HashSet()) { it.takeLast(CHECK_NOTES_KEPT) }
         return kept.filter { it in newest }
