@@ -189,12 +189,23 @@ object ChatAnswers {
     /** The longest line of his of a photo (6.8.0): a few words are what's meant. */
     private const val MAX_PHOTO_NOTE = 200
 
-    /** What a line may start with that isn't his line of a photo: the photo's name, as its turn gave it. */
-    private val PHOTO_NAMED = Regex("""^Photo \d+(, id [0-9a-fA-F]+)?:\s*""")
+    /** What a line may start with that isn't his line of a photo: the photo's name, as its turn gave it, its number taken. */
+    private val PHOTO_NAMED = Regex("""^Photo (\d+)(, id [0-9a-fA-F]+)?:\s*""")
 
-    /** [given], his lines of the photos (6.8.0), one to a line in the order shown, each its photo's: a name put before one taken off. */
-    private fun photoLines(given: String): List<String> =
-        given.trim('\n').takeIf { it.isNotBlank() }?.split('\n')?.map { it.trim().replace(PHOTO_NAMED, "").take(MAX_PHOTO_NOTE) }.orEmpty()
+    /**
+     * [given], his lines of the photos (6.8.0), each its photo's by place in the order shown: a blank line isn't one, and a line that
+     * names its photo ("Photo 2: …") is that one's, the lines after it the next ones'; a photo with no line has an empty one.
+     */
+    private fun photoLines(given: String): List<String> {
+        val lines = mutableMapOf<Int, String>()
+        var next = 0
+        for (line in given.split('\n').map(String::trim).filter(String::isNotEmpty)) {
+            val at = PHOTO_NAMED.find(line)?.groupValues?.get(1)?.toIntOrNull()?.minus(1)?.takeIf { it in 0 until ChatPrompts.MAX_PICTURES } ?: next
+            lines[at] = line.replace(PHOTO_NAMED, "").take(MAX_PHOTO_NOTE)
+            next = at + 1
+        }
+        return (0..(lines.keys.maxOrNull() ?: -1)).map { lines[it].orEmpty() }
+    }
 
     /** An open's value that opens the task where it lives (G3), not its page here. */
     const val OPEN_SOURCE = "source"
