@@ -71,7 +71,7 @@ So the database comes, by estimate, to about 650 MB in mid-December and about 1 
 
 What would lessen it, in the order it helps: fewer and smaller writes (6.3.3, below: a day's changes, the history and the commands); the commands kept less long, or without what they needn't hold; fewer days of snapshots.
 
-## 6.10.0: the sizes in Settings, and an alert
+## 6.10.0: the sizes in Settings, and an alert (built: D-161, Q166)
 
 **Can it be measured?** Yes.
 

@@ -824,3 +824,19 @@ Felix was told a photo isn't proof, and couldn't hand one to the check. → D-16
 2. **The photos checked are those his answer's call was shown**, four at most, read before your message is marked answered, as a ticked one's let go then.
 3. **The check runs after his answer's in the chat**, in a call of its own, his line under it saying it's being checked, then what it said ("Photo check: …"); one at a time with every other check, the website's and the phone's.
 4. **Tried on the real pages** (two runs each): pages 8 to 10 of a task of 8 to 12, with "the teacher dropped pages 11 and 12", passed, the check saying it took the word for what was set; page 8 alone, with "that's all of it", didn't ($0.11).
+
+### The storage in Settings, and its alert (6.10.0, 20 Nov)
+
+R2's November bill was for requests, which nothing on the phone or the website showed. → D-161.
+
+**Q166. Is the storage shown, and is there an alert near what's billed for?** (18 Nov, said without being asked in answer 15; the alert's lines recommended on 19 Nov.) **Your answer: shown in Settings if it can be measured, with a notification near what's billed for; at 80% of a free allowance and again at 95%, once each a month for each, with the date it'd be passed at the present rate.**
+
+#### Decided without asking
+
+1. **What's read**: the box's own with no credential (the database's file and its log, the photos, the disk); R2's from Cloudflare's analytics (`r2StorageAdaptiveGroups`, `r2OperationsAdaptiveGroups`), one question each a day; B2's as what the server's written there that B2 still keeps (120 days: hidden at 60, deleted 60 after), as its key can't list the bucket, said to be that.
+2. **R2's classes by its own pricing page** (read 20 Nov): Class A, the 15 operations it lists (`ListObjects`, `PutObject`, the multipart uploads among them); Class B, its 8 (`GetObject`, `HeadObject` among them); deletes and aborted uploads free.
+3. **Kept in a file of the server's own** (`storage.json` in its data folder), a month's readings and the alerts given, never a store: nothing of it goes to the phone but by the view.
+4. **A job like the others** (`ServerJob.every("storage")`), daily, in either mode, as the box is watched in both; what can't be read is said in Settings and never fails it.
+5. **The alert's way to the phone** is a Firebase message of its own (`storage`), kept a day, shown with its own id and channel, its tap opening Settings' Storage; on the website, a line beside the bell to Settings. The higher share alone where both are reached at once.
+6. **The phone's Settings fetches the view from the server** as its Storage page opens, as only the server reads the figures.
+7. **Read on 20 Nov, before it was built**: R2 held 3.33 GB, and this month's Class A requests were past the free million (1.17 million, nearly all `ListObjects`, from before the fix of 11 Nov), so the first reading's alert will say so.
