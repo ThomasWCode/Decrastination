@@ -158,7 +158,7 @@ private const val TASK = "task"
 internal fun TaskPhoto(graph: AppGraph, activity: Activity, taskId: String, say: (String) -> Unit, onClose: () -> Unit) {
     val shot = remember { File(activity.cacheDir, "photos/task.jpg") }
     var choosing by rememberSaveable { mutableStateOf(true) }
-    val picture = rememberPicture(activity, shot) { taken ->
+    val picture = rememberPicture(activity, graph.scope, shot) { taken ->
         if (taken) {
             graph.scope.launch {
                 val jpeg = withContext(Dispatchers.IO) { PhotoChecks.shrink(shot).also { shot.delete() } }

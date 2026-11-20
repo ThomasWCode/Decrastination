@@ -171,7 +171,7 @@ fun TaskSheet(
     val shot = remember { File(activity.cacheDir, "photos/work.jpg").also { it.parentFile?.mkdirs() } }
     // From the camera or the gallery (6.5.0).
     var choosingPhoto by rememberSaveable { mutableStateOf(false) }
-    val picture = rememberPicture(activity, shot) { taken ->
+    val picture = rememberPicture(activity, graph.scope, shot) { taken ->
         if (!taken) {
             shot.delete()
             return@rememberPicture

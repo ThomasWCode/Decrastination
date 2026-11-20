@@ -17,15 +17,18 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import java.io.File
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 /**
  * Where a photo comes from (6.5.0): the camera, or a picture picked from the gallery by Android's photo picker, which asks no
@@ -77,15 +80,27 @@ internal fun copyPicked(context: Context, uri: Uri, into: File): Boolean = runCa
 internal class PictureSource(val camera: () -> Unit, val gallery: () -> Unit)
 
 /**
+ * A picture copied in from the gallery (6.5.0), by the app, not a screen, so a turn of the phone while it copies loses none: the file
+ * it went to, and whether there's one there, till the screen made again takes it.
+ */
+internal val copiedIn = MutableStateFlow<Pair<String, Boolean>?>(null)
+
+/**
  * One picture into [file] (6.5.0), from the camera or the gallery; [onTaken] whether there's one there. A picture chosen from the
- * gallery is taken as of when it's chosen.
+ * gallery is taken as of when it's chosen, and copied in [scope], the app's, what came of it held in [copiedIn].
  */
 @Composable
-internal fun rememberPicture(activity: Activity, file: File, onTaken: (Boolean) -> Unit): PictureSource {
-    val scope = rememberCoroutineScope()
+internal fun rememberPicture(activity: Activity, scope: CoroutineScope, file: File, onTaken: (Boolean) -> Unit): PictureSource {
+    val copied by copiedIn.collectAsStateWithLifecycle()
+    LaunchedEffect(copied) {
+        val (_, taken) = copied?.takeIf { it.first == file.path } ?: return@LaunchedEffect
+        copiedIn.value = null
+        onTaken(taken)
+    }
     val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { onTaken(it) }
+    val app = activity.applicationContext
     val gallery = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-        if (uri == null) onTaken(false) else scope.launch { onTaken(withContext(Dispatchers.IO) { copyPicked(activity, uri, file) }) }
+        if (uri == null) onTaken(false) else scope.launch(Dispatchers.IO) { copiedIn.value = file.path to copyPicked(app, uri, file) }
     }
     return PictureSource(
         camera = {
