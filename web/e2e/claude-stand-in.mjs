@@ -32,7 +32,6 @@ const PHOTO_NOTE = "a page of questions";
 
 function text(said, pictures) {
   if (said.includes(PHOTO_ASKED)) return photo(said);
-  if (pictures > 0) return answer(pictures === 1 ? "I see the photo." : `I see ${pictures} photos.`, { photos: Array(pictures).fill(PHOTO_NOTE).join("\n") });
   if (said.includes(NEVER_ASKED)) return "That isn't an answer.";
   if (said.includes(ONCE_ASKED)) {
     const times = asked.get(ONCE_ASKED) ?? 0;
@@ -40,6 +39,8 @@ function text(said, pictures) {
     return times === 0 ? "That isn't an answer." : answer("Read you this time.");
   }
   if (said.includes(CARD_ASKED)) return answer("Added it.", { newTasks: [WORKSHEET] });
+  // A message's photos, where its words ask for nothing else: a kept one goes again with each message for ten minutes.
+  if (pictures > 0) return answer(pictures === 1 ? "I see the photo." : `I see ${pictures} photos.`, { photos: Array(pictures).fill(PHOTO_NOTE).join("\n") });
   return answer("I hear you.");
 }
 
