@@ -220,10 +220,11 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
         )
     }
     val snackbar = remember { SnackbarHostState() }
+    // Let go once it's been shown: let go first, the change of key would cancel this, and the snackbar with it.
     LaunchedEffect(checkedSaid) {
         val text = checkedSaid ?: return@LaunchedEffect
-        checkedSaid = null
         snackbar.showSnackbar(text, withDismissAction = true, duration = SnackbarDuration.Long)
+        checkedSaid = null
     }
     // What a missed slot's actions say, its sheet closed: each new word takes the last's place ("Asking Teams…", then what it said).
     fun bar(text: String) {
