@@ -1195,18 +1195,22 @@ class Conversation(
                     owners.keepPhotoFromChat(open.id, a.value.orEmpty(), jpeg)
                     Act("Kept the photo with “${open.title}”", a, was = open)
                 }
-                // Photos of yours handed to the photo check at his word (6.9.0), which alone says whether the work's done: the piece as a
-                // check finds it, in the plan, else a slot of it ticked Done today that can still earn; his line of what else you said as
-                // your word. Said under his answer as it's checked, and again with what it said.
+                // Photos of yours handed to the photo check at his word (6.9.0), which alone says whether the work's done: the plan's
+                // piece he names by its key, else as a check finds it, a slot of it ticked Done today that can still earn, else in the
+                // plan; his line of what else you said as your word. Said under his answer as it's checked, and again with what it said.
                 ChatAction.Type.CheckPhotos -> {
                     val open = task?.takeIf { it.isOpen } ?: return@mapNotNull Act(Act.NOT_MADE + "the photos weren't checked: “${task?.title ?: "its task"}” was finished, or went, while he answered.", problem = true)
                     if (proof.isEmpty()) return@mapNotNull Act(Act.NOT_MADE + "the photos weren't checked: they went from the chat while he answered.", problem = true)
                     val now = clock.now()
-                    // A slot of the step named ticked Done today that can still earn, first, as its earning ends with the day; else the plan's
-                    // piece of that step. Another step's is never checked in its place.
-                    val record = log.value.slots.filter { it.taskId == open.id && it.outcome.kept && focus.today(it.at) == focus.today(now) && KeptActions.of(it, open, focus.today(now).toString()).photo && Photos.pieceOf(it, open)?.stepIndex == a.stepIndex }.maxByOrNull { it.at }
-                    val piece = record?.let { Photos.pieceOf(it, open) } ?: planning.plan().chunksOf(open.id).firstOrNull { a.stepIndex == null || it.stepIndex == a.stepIndex }
-                        ?: return@mapNotNull Act(Act.NOT_MADE + "the photos weren't checked: “${open.title}” has no piece to check now, planned or ticked Done today.", problem = true)
+                    // The plan's piece he names, where your words or the photos made it plain (your answer of 20 Nov), so the next part's
+                    // photo isn't taken for the part before it, ticked with none. Only the plan's: a part kept is numbered again in the plan,
+                    // its key then the next part's, and a slot ticked is found by the step without one.
+                    val named = a.setting?.takeIf { it.isNotBlank() }
+                    // Else a slot of the step named ticked Done today that can still earn, first, as its earning ends with the day; else
+                    // the plan's piece of that step. Another step's is never checked in its place.
+                    val record = if (named != null) null else log.value.slots.filter { it.taskId == open.id && it.outcome.kept && focus.today(it.at) == focus.today(now) && KeptActions.of(it, open, focus.today(now).toString()).photo && Photos.pieceOf(it, open)?.stepIndex == a.stepIndex }.maxByOrNull { it.at }
+                    val piece = record?.let { Photos.pieceOf(it, open) } ?: planning.plan().chunksOf(open.id).firstOrNull { if (named != null) it.key == named else a.stepIndex == null || it.stepIndex == a.stepIndex }
+                        ?: return@mapNotNull Act(Act.NOT_MADE + if (named != null) "the photos weren't checked: the piece of “${open.title}” he named isn't planned now." else "the photos weren't checked: “${open.title}” has no piece to check now, planned or ticked Done today.", problem = true)
                     // Found again by a token of its own, so two alike are each their own, and one left by a stop part-way is settled ([settleChecks]).
                     val token = Ids.next()
                     val under = Act(CHECKING + "${if (proof.size == 1) "" else "s"} against “${piece.label}”…", a, after = token)
