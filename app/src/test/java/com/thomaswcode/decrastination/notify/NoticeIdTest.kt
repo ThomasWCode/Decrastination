@@ -48,7 +48,7 @@ class NoticeIdTest {
             mapOf(
                 "Sync" to 1001, "Readings" to 1002, "ReviewWork" to 1003, "ReplyWork" to 1004, "FelixWork" to 1005, "ReminderWork" to 1006, "FreeTime" to 2003, "FreeTimeEnding" to 2004, "Timer" to 2005, "TimerOver" to 2007,
                 "Protection" to 3001, "Briefing" to 4001, "CheckIn" to 4002, "Review" to 4003, "Summary" to 4004, "Assessment" to 4100, "FelixMessage" to 4200,
-                "CalendarMove" to 4300, "CalendarQuestion" to 4400, "GmailWrite" to 4500, "ModelDropped" to 5001, "ModelKey" to 5002, "Felix" to 6000,
+                "CalendarMove" to 4300, "CalendarQuestion" to 4400, "GmailWrite" to 4500, "ModelDropped" to 5001, "ModelKey" to 5002, "Storage" to 5100, "Felix" to 6000,
             ),
             NoticeId.entries.associate { it.name to it.id },
         )
