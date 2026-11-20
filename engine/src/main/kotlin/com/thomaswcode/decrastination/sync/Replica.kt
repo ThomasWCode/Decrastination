@@ -24,6 +24,8 @@ import com.thomaswcode.decrastination.views.Asked
 import com.thomaswcode.decrastination.views.PhotoCheckAsk
 import com.thomaswcode.decrastination.views.PhotoChecked
 import com.thomaswcode.decrastination.views.PhotoRead
+import com.thomaswcode.decrastination.views.SettingsView
+import com.thomaswcode.decrastination.views.StorageView
 import java.io.File
 import java.io.IOException
 import java.net.URLEncoder
@@ -397,6 +399,14 @@ class Replica(
 
     /** The chat's photos still needed now ([ChatPhoto.live]), by hash (6.8.0): those a switch takes to the server. */
     private fun liveChatPhotos(): List<String> = clock.now().let { now -> stores.chat.value.messages.flatMap { m -> m.photos.filter { it.live(m, now) }.map { it.hash } }.distinct() }
+
+    /** The storage as the server last read it (6.10.0), from its Settings' view; null where it can't be had (not paired, no reading yet). */
+    suspend fun storage(): StorageView? = withContext(Dispatchers.IO) {
+        val token = stores.secrets[Secret.DeviceToken] ?: return@withContext null
+        val headers = mapOf("Authorization" to "Bearer $token", Protocol.HEADER to Protocol.VERSION.toString())
+        val answer = runCatching { http.get("${sync.value.server}/api/views/settings", headers) }.getOrNull()?.takeIf { it.ok } ?: return@withContext null
+        runCatching { JSON.decodeFromString(SettingsView.serializer(), answer.body).storage }.getOrNull()
+    }
 
     /** A chat photo from the server (6.8.0): one sent from the website, for its bubble here; null where it's gone, or can't be had. */
     suspend fun fetchChatPhoto(hash: String): ByteArray? = withContext(Dispatchers.IO) {

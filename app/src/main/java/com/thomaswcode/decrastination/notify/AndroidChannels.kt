@@ -80,6 +80,9 @@ object AndroidChannels {
                 NotificationChannel(Channels.SOURCES, "Your sources", NotificationManager.IMPORTANCE_DEFAULT).apply {
                     description = "When an email finished here couldn't be unstarred or archived in Gmail"
                 },
+                NotificationChannel(Channels.STORAGE, "Storage", NotificationManager.IMPORTANCE_DEFAULT).apply {
+                    description = "When what the box, R2 or B2 holds nears its free allowance"
+                },
                 // Silent, while it's spent (IMP-P2-011); and once, loud enough to see, a minute before it runs out.
                 NotificationChannel(Channels.FREE_TIME, "Free time", NotificationManager.IMPORTANCE_LOW).apply {
                     description = "Your earned free time counting down while a blocked app uses it"

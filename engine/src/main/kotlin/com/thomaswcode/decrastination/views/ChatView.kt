@@ -106,7 +106,7 @@ data class ChatView(
 
 /** What's said wherever you are on the website (W-9): how many of his wait unread, and whether Setup needs you (UI-18). */
 @Serializable
-data class NoticesView(val unread: Int, val setup: Boolean = false)
+data class NoticesView(val unread: Int, val setup: Boolean = false, /** The storage nearest a free allowance's end, where one's past 80% (6.10.0). */ val storage: String? = null)
 
 /** Who wrote a message replied to, and its first line. */
 @Serializable

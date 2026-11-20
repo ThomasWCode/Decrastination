@@ -6,6 +6,7 @@ import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.core.Source
+import com.thomaswcode.decrastination.notify.StorageNotice
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 
@@ -32,6 +33,11 @@ class PushService : FirebaseMessagingService() {
      * chat's on screen, as his act asks it here (D-11).
      */
     override fun onMessageReceived(message: RemoteMessage) {
+        // The storage near a free allowance's end (6.10.0): a notification of its own, opening Settings' Storage.
+        message.data["storage"]?.let { words ->
+            StorageNotice.show(applicationContext, words)
+            return
+        }
         message.data["read"]?.let { names ->
             val graph = AppGraph.get(applicationContext)
             val sources = names.split(",").mapNotNullTo(HashSet()) { name -> Source.entries.firstOrNull { it.name == name } }

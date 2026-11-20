@@ -246,6 +246,22 @@ export interface CredentialGroup {
   fields: CredentialField[];
 }
 
+/** The storage, as Settings shows it (6.10.0): each free allowance's line, the box's own, when it was read, and what couldn't be. */
+export interface StorageView {
+  lines: StorageLine[];
+  box: string[];
+  read: string;
+  problems: string[];
+}
+
+export interface StorageLine {
+  label: string;
+  used: string;
+  percent: number;
+  passes?: string | null;
+  near: boolean;
+}
+
 export interface SettingsView {
   pages: SettingsPage[];
   pending: PendingLine[];
@@ -263,6 +279,8 @@ export interface SettingsView {
   calls: CallLine[];
   phoneOnly: string[];
   push?: PushView | null;
+  /** The storage and its allowances, as the server last read them (6.10.0). */
+  storage?: StorageView | null;
 }
 
 export interface PushChannel {
@@ -591,6 +609,8 @@ export interface ChatView {
 export interface NoticesView {
   unread: number;
   setup: boolean;
+  /** The storage nearest a free allowance's end, where one's past 80% (6.10.0). */
+  storage?: string | null;
 }
 
 export interface PeriodChoice {
