@@ -762,3 +762,17 @@ Said without being asked: the gallery can be picked from on the phone. And on 19
 4. **Kept pages are sent again named "Kept page"**, after the new ones, and the prompt says they show what earlier checks showed, never new work, so they can't make a check fresh.
 5. **Kept pages aren't backed up**, as their files aren't, and a reset of everything learned lets go of them, as it does of the notes.
 6. **The tick box** is beside a check's pages, in the first choice and after each page; a task's own photo and a photo of homework read into tasks are kept by design, so they have none.
+
+### Each item of the website's Day its own menu (6.6.0, 20 Nov)
+
+A click on a piece of the website's Day opened its task's sheet, whose *Done*, *Start* and *Later today* were for the task's next piece, whichever was clicked; a missed slot and an event opened nothing. → D-157.
+
+**Q160. What does the website's Day gain?** (18 Nov.) Offered: a clicked piece's own menu, a missed slot's sheet, a calendar event's sheet, *Ask Felix about it*, and the photo option, as on the phone. **Your answer: all of them.** The photo option comes with the website's photo check, 6.7.0. And on 19 Nov, *Check it's done* left off the website, as the server reads a source only through Felix (the plan's question 1: as recommended).
+
+#### Decided without asking
+
+1. **Each block's sheet is built by the server** (`DayViews.sheetOf`) and sent with it, the rules the phone's own (`MissedActions`, `CalendarTime.answers`), so the page draws and sends what it's given (D-137).
+2. **An event's answer on the Day is the same quick change as a reply to Felix's question on the website** (D-153), so the next answer takes its place; where an instruction of yours that isn't a quick answer says how it counts, the sheet says so and offers none, as the phone's.
+3. **After a Done the sheet stays** on its last reading, its buttons gone, so what Done came to, and its Undo, aren't lost as the piece leaves the grid.
+4. **What a message is about rides in the chat's address**, from *Ask Felix about it*, and goes with the next message once, as the phone's chip does; a ✕ lets it go.
+5. **The browser tests seed no calendar event or missed slot**, as either would move the plan under the other tests: their sheets are held by `DayViewTest`, and a piece's, *Ask Felix about it* and the read-only sheet while mirroring by the browser tests.

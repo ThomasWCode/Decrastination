@@ -2,9 +2,10 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties, type Keyb
 import { Link, type Go } from "./App";
 import { api, asking, dropping, saying } from "./api";
 import { DAY_MINUTES, dropStart, HOUR_PX, minuteAt, yOf, zoomed } from "./dayLayout";
+import { BlockSheet } from "./BlockSheet";
 import { ago, useLive } from "./live";
 import { TaskSheet } from "./TaskSheet";
-import type { Action, BlockView, DayView, TaskAction } from "./types";
+import type { Action, BlockSheet as Sheet, BlockView, DayView, TaskAction } from "./types";
 
 // The grid's blocks are laid out by the server, side by side where they overlap; how tall an hour is, the wheel's.
 const HOURS = Array.from({ length: 25 }, (_, hour) => hour);
@@ -48,7 +49,7 @@ interface Lifted {
   minute: number | null;
 }
 
-function Block({ block, hourPx, shortest, lifted, open, lift }: { block: BlockView; hourPx: number; shortest: number; lifted: boolean; open: (id: string) => void; lift: (block: BlockView, event: PointerEvent<HTMLDivElement>) => void }) {
+function Block({ block, hourPx, shortest, lifted, open, lift }: { block: BlockView; hourPx: number; shortest: number; lifted: boolean; open: (block: BlockView) => void; lift: (block: BlockView, event: PointerEvent<HTMLDivElement>) => void }) {
   const colours: CSSProperties =
     block.kind === "event" && block.colour != null
       ? block.free
@@ -57,22 +58,23 @@ function Block({ block, hourPx, shortest, lifted, open, lift }: { block: BlockVi
       : {};
   const short = block.endMin - block.startMin < 36 ? "short" : null;
   const kinds = ["block", block.kind, block.state, block.outcome, block.urgent ? "urgent" : null, block.free ? "free" : null, short, block.drag ? "movable" : null, lifted ? "lifted" : null].filter(Boolean).join(" ");
-  const taskId = block.taskId;
+  // Each kind its own sheet, as the phone's tap opens it (6.6.0): pressed as a piece is, or by its keys.
+  const opens = block.sheet != null;
   const key = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (taskId && (event.key === "Enter" || event.key === " ")) {
+    if (opens && (event.key === "Enter" || event.key === " ")) {
       event.preventDefault();
-      open(taskId);
+      open(block);
     }
   };
   return (
     <div
       className={kinds}
       style={{ ...placement(block, hourPx, shortest), ...colours }}
-      data-testid={block.kind === "piece" ? "piece" : undefined}
-      role={taskId ? "button" : undefined}
-      tabIndex={taskId ? 0 : undefined}
+      data-testid={block.kind === "piece" ? "piece" : block.kind === "event" ? "event" : block.kind === "record" ? "record" : undefined}
+      role={opens ? "button" : undefined}
+      tabIndex={opens ? 0 : undefined}
       onKeyDown={key}
-      onPointerDown={block.drag || taskId ? (event) => lift(block, event) : undefined}
+      onPointerDown={block.drag || opens ? (event) => lift(block, event) : undefined}
     >
       <span className="title">{block.title}</span>
       <span className="times">{block.times}</span>
@@ -86,7 +88,7 @@ function clock(minute: number): string {
 }
 
 /** Whether the wheel's a zoom: over the grid with Ctrl or Cmd held, as a browser's page zoom is. Alone, it scrolls. */
-function Grid({ day, hourPx, zoom, open, dropped }: { day: DayView; hourPx: number; zoom: (wheelUp: boolean) => void; open: (id: string) => void; dropped: (block: BlockView, onto: string | null, minute: number | null) => void }) {
+function Grid({ day, hourPx, zoom, open, dropped }: { day: DayView; hourPx: number; zoom: (wheelUp: boolean) => void; open: (block: BlockView) => void; dropped: (block: BlockView, onto: string | null, minute: number | null) => void }) {
   const scroller = useRef<HTMLDivElement>(null);
   const placed = useRef<string | null>(null);
   const [lifted, setLifted] = useState<Lifted | null>(null);
@@ -144,7 +146,7 @@ function Grid({ day, hourPx, zoom, open, dropped }: { day: DayView; hourPx: numb
       const landed = moved ? where(event) : null;
       stop();
       if (landed) dropped(block, landed.onto, landed.minute);
-      else if (block.taskId) open(block.taskId);
+      else if (block.sheet) open(block);
     };
     const cancel = (event: globalThis.KeyboardEvent) => {
       if (event.key === "Escape") stop();
@@ -304,9 +306,30 @@ export function DayPage({ date, go }: { date: string | null; go: Go }) {
   const { value: day, failed } = useLive(load);
   const [hourPx, setHourPx] = useState(() => Number(localStorage.getItem(ZOOM)) || HOUR_PX);
   const [opened, setOpened] = useState<string | null>(null);
+  // A block's sheet, found again in each new reading of the day by its sheet's key (a piece's by its piece, wherever it's moved to);
+  // an all-day event's by its place.
+  const [sheetFor, setSheetFor] = useState<string | null>(null);
+  // Its last reading, held while it's open: a piece done goes from the grid, and what Done came to, with its Undo, stays.
+  const lastSheet = useRef<Sheet | null>(null);
+  // Another day shown: what was open was of the day it was opened on, and closes.
+  const [sheetDay, setSheetDay] = useState(date);
+  if (sheetDay !== date) {
+    setSheetDay(date);
+    setSheetFor(null);
+  }
   // What a drop came to, on the day it was dropped on: it says nothing of another.
   const [said, setSaid] = useState<{ date: string; text: string } | null>(null);
   const shut = useCallback(() => setOpened(null), []);
+  const shutSheet = useCallback(() => setSheetFor(null), []);
+  // One open at a time: a task's sheet from a block's closes the block's.
+  const openTask = useCallback((id: string) => {
+    setSheetFor(null);
+    setOpened(id);
+  }, []);
+  const openBlock = useCallback((block: BlockView) => {
+    setOpened(null);
+    setSheetFor(block.sheetKey ?? block.key);
+  }, []);
   const zoom = useCallback((wheelUp: boolean) => {
     setHourPx((was) => {
       const next = zoomed(was, wheelUp);
@@ -321,6 +344,9 @@ export function DayPage({ date, go }: { date: string | null; go: Go }) {
     return () => clearTimeout(timer);
   }, [nextAt]);
   if (!day) return failed ? <p className="problem">The Day couldn't be read. It tries again with the next change.</p> : null;
+  const found: Sheet | null = sheetFor === null ? null : (day.blocks.find((b) => (b.sheetKey ?? b.key) === sheetFor)?.sheet ?? day.allDay.find((e, i) => `all-day-${i}-${e.title}` === sheetFor)?.sheet ?? null);
+  if (found) lastSheet.current = found;
+  const sheet = sheetFor === null ? null : (found ?? lastSheet.current);
   const dropped = (block: BlockView, onto: string | null, minute: number | null) => {
     if (!block.drag || (onto === null && minute === null)) return;
     void dropping({ key: block.drag.key, date: day.date, onto, minute }).then((came) => setSaid(came.said ? { date: day.date, text: came.said } : null));
@@ -347,15 +373,28 @@ export function DayPage({ date, go }: { date: string | null; go: Go }) {
         ) : null}
         {day.allDay.length > 0 ? (
           <ul className="all-day">
-            {day.allDay.map((event) => (
+            {day.allDay.map((event, i) => (
               <li key={event.title} style={event.colour != null ? { background: cssColour(event.colour), color: onColour(event.colour) } : undefined}>
-                {event.title}
+                {event.sheet ? (
+                  <button
+                    className="all-day-open"
+                    onClick={() => {
+                      setOpened(null);
+                      setSheetFor(`all-day-${i}-${event.title}`);
+                    }}
+                  >
+                    {event.title}
+                  </button>
+                ) : (
+                  event.title
+                )}
               </li>
             ))}
           </ul>
         ) : null}
-        <Grid day={day} hourPx={hourPx} zoom={zoom} open={setOpened} dropped={dropped} />
+        <Grid day={day} hourPx={hourPx} zoom={zoom} open={openBlock} dropped={dropped} />
       </section>
+      {sheet ? <BlockSheet key={sheetFor} sheet={sheet} gone={found === null} canChange={day.canChange} close={shutSheet} openTask={openTask} go={go} /> : null}
       {opened ? <TaskSheet key={opened} id={opened} form={day.form ?? null} close={shut} /> : null}
     </main>
   );

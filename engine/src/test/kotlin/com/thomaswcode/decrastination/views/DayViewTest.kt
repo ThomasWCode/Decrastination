@@ -2,6 +2,8 @@ package com.thomaswcode.decrastination.views
 
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
+import com.thomaswcode.decrastination.core.About
+import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.DayWindow
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Planner
@@ -15,8 +17,11 @@ import com.thomaswcode.decrastination.data.PieceTimer
 import com.thomaswcode.decrastination.data.SlotOutcome
 import com.thomaswcode.decrastination.data.SlotRecord
 import com.thomaswcode.decrastination.learn.CalendarEvent
+import com.thomaswcode.decrastination.learn.CalendarTime
 import com.thomaswcode.decrastination.learn.EventJudge
+import com.thomaswcode.decrastination.sync.protocol.AddOwnChange
 import com.thomaswcode.decrastination.sync.protocol.StopTimer
+import com.thomaswcode.decrastination.sync.protocol.UndoKeep
 import com.thomaswcode.decrastination.ui.DayModel
 import java.time.LocalDate
 import kotlin.test.Test
@@ -61,6 +66,75 @@ class DayViewTest {
         assertTrue(day.blocks.first().endMin > day.blocks.first().startMin)
         assertEquals("a", assertNotNull(day.next).label.take(1))
         assertEquals(5L, day.asOf)
+    }
+
+    private val tasks = listOf(task("a", 30), task("b", 30)).associateBy { it.id }
+
+    /** Today at 17:10, the tasks and their answers given, writable or not. */
+    private fun sheets(events: List<CalendarEvent> = emptyList(), records: List<SlotRecord> = emptyList(), answers: Map<String, String> = emptyMap(), instructed: Set<String> = emptySet(), writable: Boolean = true) =
+        DayViews.of(plan(), monday, events, records, evening, Fixtures.at("2026-10-12T17:10"), LONDON, emptyList(), { EventJudge.judge(it, answers) }, emptyMap(), asOf = 5L, writable = writable, tasks = tasks, answers = answers, instructed = instructed)
+
+    @Test
+    fun `a piece opens its own sheet, its times and why, its buttons on its own key, its task's sheet a step away`() {
+        val day = sheets()
+        val (first, second) = day.blocks
+        val sheet = assertNotNull(second.sheet)
+        assertEquals("piece", sheet.kind)
+        assertEquals(second.title, sheet.title)
+        assertEquals(second.times, sheet.lines.first())
+        val done = sheet.actions.single { it.label == "Done" }
+        // Done on the piece clicked, not the task's next piece as the task's sheet has it.
+        val key = plan().todaySlots.first { it.chunk?.taskId == "teams:b" }.chunk!!.key
+        assertEquals(TaskAsk(TaskAsk.DONE, at = Fixtures.at("2026-10-12T17:10"), key = key), done.ask)
+        assertEquals(UndoKeep(key, Fixtures.at("2026-10-12T17:10")), done.undo)
+        assertEquals("teams:b", sheet.taskId)
+        assertTrue(sheet.taskSheet)
+        assertEquals(About(taskId = "teams:b", taskTitle = "b"), sheet.about)
+        assertEquals(listOf("Start", "Done", "Later today"), assertNotNull(first.sheet).actions.map { it.label })
+        // Found again by its piece, wherever it's moved to, not by where it was.
+        assertEquals("piece-$key", second.sheetKey)
+    }
+
+    @Test
+    fun `mirroring, a block's sheet opens to read, its buttons absent`() {
+        val sheet = assertNotNull(sheets(writable = false).blocks.first().sheet)
+        assertTrue(sheet.actions.isEmpty())
+        assertTrue(sheet.lines.isNotEmpty())
+    }
+
+    @Test
+    fun `a missed slot's sheet has what MissedActions gives it, Done on its piece, and a kept one has none here yet`() {
+        val piece = plan().todaySlots.first().chunk!!
+        val missed = SlotRecord(date = "2026-10-12", key = piece.key, taskId = piece.taskId, kind = Kind.Homework, label = "a", plannedMin = 30, start = Fixtures.at("2026-10-12T16:00"), end = Fixtures.at("2026-10-12T16:30"), window = WindowKind.Evening, outcome = SlotOutcome.Missed, workedMin = 0, at = Fixtures.at("2026-10-12T16:30"))
+        val day = sheets(records = listOf(missed))
+        val sheet = assertNotNull(day.blocks.single { it.kind == "record" }.sheet)
+        assertEquals("missed", sheet.kind)
+        assertEquals("Missed, 16:00–16:30", sheet.lines.first())
+        assertEquals(listOf("Done"), sheet.actions.map { it.label })
+        assertEquals(piece.key, sheet.actions.single().ask?.key)
+        assertNotNull(sheet.about)
+        assertNull(sheets(records = listOf(missed.copy(outcome = SlotOutcome.Kept))).blocks.single { it.kind == "record" }.sheet)
+    }
+
+    @Test
+    fun `an event's sheet says how the plan counts it and offers its answers by its length, kept as your quick change, none where your instruction says`() {
+        val event = CalendarEvent(7L, "Football", Fixtures.at("2026-10-12T18:00"), Fixtures.at("2026-10-12T19:30"), allDay = false, location = "The park")
+        val sheet = assertNotNull(sheets(events = listOf(event)).blocks.single { it.kind == "event" }.sheet)
+        assertEquals("event", sheet.kind)
+        assertTrue("The park" in sheet.lines)
+        assertTrue(sheet.lines.any { it.startsWith("The plan counts it: ") })
+        assertEquals(CalendarTime.answers(event).map { it.first }, sheet.actions.map { it.label })
+        val change = (sheet.actions.first().action as AddOwnChange).change
+        assertEquals(ChangeType.EventTime, change.type)
+        assertEquals(EventJudge.key(event), change.eventKey)
+        assertEquals("For every event of that name.", sheet.note)
+        assertEquals(About(eventKey = EventJudge.key(event), eventTitle = "Football", eventStart = event.start), sheet.about)
+        val told = assertNotNull(sheets(events = listOf(event), instructed = setOf(EventJudge.key(event))).blocks.single { it.kind == "event" }.sheet)
+        assertTrue(told.actions.isEmpty())
+        assertTrue(told.lines.any { it.startsWith("Your instruction says how it counts") })
+        // An all-day one has its sheet too.
+        val holiday = CalendarEvent(8L, "Half term", Fixtures.at("2026-10-12T00:00"), Fixtures.at("2026-10-13T00:00"), allDay = true)
+        assertEquals("All day", assertNotNull(sheets(events = listOf(holiday)).allDay.single().sheet).lines.first())
     }
 
     @Test

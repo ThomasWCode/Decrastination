@@ -281,7 +281,45 @@ test("Escape puts a block back, and a tap opens its sheet", async ({ page }) => 
   await page.mouse.up();
   await expect(page.getByRole("status")).toHaveCount(0);
   await block.click();
+  // Its own sheet, the piece's (6.6.0), and from it the task's.
+  await expect(page.getByTestId("block-sheet").getByRole("heading", { name: "Lifted and let go" })).toBeVisible();
+  await page.getByTestId("block-sheet").getByRole("button", { name: "Its due date, minutes…" }).click();
   await expect(page.getByTestId("task-sheet").getByRole("heading", { name: "Lifted and let go" })).toBeVisible();
+  await expect(page.getByTestId("block-sheet")).toHaveCount(0);
+});
+
+test("a piece's own sheet does Done on that piece, says what it came to with its Undo though the piece goes, and closes with Escape", async ({ page }) => {
+  await dueTask(page, "Its own sheet");
+  const block = await pieceOf(page, "Its own sheet");
+  await block.click();
+  const sheet = page.getByTestId("block-sheet");
+  await expect(sheet.getByRole("heading", { name: "Its own sheet" })).toBeVisible();
+  await sheet.getByRole("button", { name: "Done", exact: true }).click();
+  await expect(sheet.getByRole("status")).toContainText("Done");
+  await expect(sheet.getByText("Done, or planned again, since.")).toBeVisible();
+  await sheet.getByRole("status").getByRole("button", { name: "Undo" }).click();
+  await expect(sheet.getByRole("status")).toBeHidden();
+  await page.keyboard.press("Escape");
+  await expect(sheet).toHaveCount(0);
+  await expect(page.getByTestId("piece").filter({ hasText: "Its own sheet" })).toBeVisible();
+});
+
+test("Ask Felix about it takes a piece to the chat, shown over the box, sent with the message once", async ({ page }) => {
+  await dueTask(page, "Asked about");
+  const block = await pieceOf(page, "Asked about");
+  await block.click();
+  await page.getByTestId("block-sheet").getByRole("button", { name: "Ask Felix about it" }).click();
+  await expect(page).toHaveURL(/about=/);
+  const chip = page.getByTestId("about");
+  await expect(chip).toContainText("About Asked about");
+  const box = page.getByRole("textbox", { name: /^Tell / });
+  const offered = page.getByRole("button", { name: "Not replying to this" });
+  if (await offered.isVisible()) await offered.click();
+  await box.fill("Is it worth starting tonight?");
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  await expect(chip).toHaveCount(0);
+  await expect(page).not.toHaveURL(/about=/);
+  await expect(page.locator(".about").filter({ hasText: "Asked about" }).first()).toBeVisible();
 });
 
 test("the wheel with Ctrl held zooms the grid, and it stays so", async ({ page }) => {

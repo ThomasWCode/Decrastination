@@ -1,4 +1,4 @@
-# The website's Day: each item its own menu (6.6.0)
+# The website's Day: each item its own menu (6.6.0, built: D-157, Q160)
 
 On the phone, a tap on Day opens what was tapped: a piece's sheet (`PieceSheet`, its buttons `PieceActions`), a missed slot's (`MissedSheet`, by `MissedActions`), an event's (`EventSheet`). On the website a click on a piece opens its task's sheet, and nothing else opens anything.
 

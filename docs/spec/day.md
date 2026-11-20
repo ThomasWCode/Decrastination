@@ -56,6 +56,8 @@ A tap on a kept slot's block, or its row in the *done* chip's sheet, opens its s
 
 *Ask Felix about it* (`AskFelixButton`, UI-16) is on Day's sheets for one task, event or day, as it is on the Work tab's task sheet: it opens the chat about that, sends nothing, and wears his unread count.
 
+The website's Day has the same sheets for a piece, a missed slot and an event, built by the server from the same rules ([website.md](website.md) §Day, 6.6.0); a kept slot's comes there with the photo check (6.7.0).
+
 | Sheet | About | Shown |
 |---|---|---|
 | A piece's (`PieceSheet`) | its task | always |
