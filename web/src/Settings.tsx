@@ -436,7 +436,6 @@ function Calls({ view }: { view: SettingsView }) {
   );
 }
 
-/** The settings that are shared state, a page at a time: what each takes is the server's to say, and a loosening waits there whichever client asks. */
 /** Settings' Storage (6.10.0, D-161): what the box, R2 and B2 hold, each beside its free allowance, as the server read it once a day. */
 function Storage({ storage }: { storage: StorageView | null }) {
   if (!storage) return <p className="note">The server hasn't read it yet: it's read once a day.</p>;
@@ -467,6 +466,7 @@ function Storage({ storage }: { storage: StorageView | null }) {
   );
 }
 
+/** The settings that are shared state, a page at a time: what each takes is the server's to say, and a loosening waits there whichever client asks. */
 export function SettingsPageView() {
   const load = useCallback(() => api.settings(), []);
   const { value: view, failed } = useLive(load);

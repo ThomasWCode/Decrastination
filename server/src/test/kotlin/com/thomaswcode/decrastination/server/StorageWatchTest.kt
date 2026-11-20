@@ -89,6 +89,8 @@ class StorageWatchTest {
         assertTrue(StorageRules.alerts(alerted, reading(now + 86_400_000L, classA = 1_200_000), zone).first.isEmpty(), "once a month")
         // A new month starts again.
         assertEquals(1, StorageRules.alerts(alerted, reading(at("2026-12-20T05:00:00Z"), classA = 900_000), zone).first.size)
+        // By the UTC month, as Cloudflare counts it: a reading in the first hour of July in summer time is June's.
+        assertEquals(setOf("2027-06"), StorageRules.alerts(emptyMap(), reading(at("2027-06-30T23:30:00Z"), classA = 1_100_000), zone).second.values.toSet())
         // 80 first, then 95 when it's reached.
         val (eighty, then) = StorageRules.alerts(emptyMap(), reading(now, r2Stored = 8_500_000_000), zone)
         assertTrue(eighty.single().startsWith("R2, stored is at 85%"))

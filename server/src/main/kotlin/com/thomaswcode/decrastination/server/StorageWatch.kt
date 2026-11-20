@@ -178,13 +178,15 @@ object StorageRules {
      * month's out. Null where it won't be, or is past already.
      */
     fun passes(allowance: Allowance, readings: List<StorageReading>, zone: ZoneId): LocalDate? {
+        // A month's requests by UTC's days, as Cloudflare counts them from the UTC month and the allowance starts again with it.
+        val days = if (monthly(allowance)) ZoneOffset.UTC else zone
         val latest = readings.lastOrNull() ?: return null
         val used = used(allowance, latest) ?: return null
         val limit = limit(allowance, latest)
         if (used >= limit) return null
-        val today = Instant.ofEpochMilli(latest.at).atZone(zone).toLocalDate()
+        val today = Instant.ofEpochMilli(latest.at).atZone(days).toLocalDate()
         val month = today.withDayOfMonth(1)
-        val earlier = readings.filter { latest.at - it.at in 1..8 * DAY_MS && used(allowance, it) != null && (!monthly(allowance) || !Instant.ofEpochMilli(it.at).atZone(zone).toLocalDate().isBefore(month)) }.minByOrNull { it.at }
+        val earlier = readings.filter { latest.at - it.at in 1..8 * DAY_MS && used(allowance, it) != null && (!monthly(allowance) || !Instant.ofEpochMilli(it.at).atZone(days).toLocalDate().isBefore(month)) }.minByOrNull { it.at }
         val perDay = if (earlier != null) {
             (used - used(allowance, earlier)!!).toDouble() / ((latest.at - earlier.at).toDouble() / DAY_MS)
         } else if (monthly(allowance)) {
@@ -243,11 +245,12 @@ object StorageRules {
     }
 
     /**
-     * The alerts [reading] gives (6.10.0), each share of [ALERT_AT] an allowance has reached, once a month for each: their words, and
+     * The alerts [reading] gives (6.10.0), each share of [ALERT_AT] an allowance has reached, once a UTC month for each: their words, and
      * [alerted] with them, an earlier month's let go.
      */
     fun alerts(alerted: Map<String, String>, reading: StorageReading, zone: ZoneId): Pair<List<String>, Map<String, String>> {
-        val month = Instant.ofEpochMilli(reading.at).atZone(zone).toLocalDate().withDayOfMonth(1).toString().take(7)
+        // The UTC month, as Cloudflare counts a month's requests from it: one alert a month for each, of that month's figures.
+        val month = Instant.ofEpochMilli(reading.at).atOffset(ZoneOffset.UTC).toLocalDate().withDayOfMonth(1).toString().take(7)
         val kept = alerted.filterValues { it == month }.toMutableMap()
         val said = mutableListOf<String>()
         for (allowance in Allowance.entries) {
@@ -264,15 +267,15 @@ object StorageRules {
     }
 }
 
-/**
- * Cloudflare's analytics for R2's bucket (6.10.0): what it holds, and this month's requests, by a token that can read analytics alone
- * (`CF_ANALYTICS_TOKEN`), one question each a day. Nothing of the stores goes: the account and the bucket's names.
- */
 /** What R2 holds and its requests this month (6.10.0), and why where they couldn't be read: Cloudflare's, or a test's. */
 fun interface R2Reader {
     fun read(now: Long): Triple<Long?, Pair<Long, Long>?, String?>
 }
 
+/**
+ * Cloudflare's analytics for R2's bucket (6.10.0): what it holds, and this month's requests, by a token that can read analytics alone
+ * (`CF_ANALYTICS_TOKEN`), one question each a day. Nothing of the stores goes: the account and the bucket's names.
+ */
 class CloudflareR2(private val token: String, private val account: String, private val bucket: String, private val timeout: Duration = Duration.ofSeconds(30)) : R2Reader {
     private val client = HttpClient.newBuilder().connectTimeout(timeout).build()
     private val json = Json { ignoreUnknownKeys = true }
@@ -287,6 +290,8 @@ class CloudflareR2(private val token: String, private val account: String, priva
         val counts = (requests as? Answer.Read)?.body?.let(StorageRules::requests)
         val problem = listOf(stored, requests).firstNotNullOfOrNull { (it as? Answer.Failed)?.why }
             ?: listOfNotNull((stored as? Answer.Read)?.body, (requests as? Answer.Read)?.body).firstNotNullOfOrNull(StorageRules::problem)
+            // Answered, with no error and no figures: the account or the bucket named isn't Cloudflare's, or nothing's been sampled.
+            ?: NO_FIGURES.takeIf { bytes == null || counts == null }
         return Triple(bytes, counts, problem)
     }
 
@@ -321,6 +326,9 @@ class CloudflareR2(private val token: String, private val account: String, priva
             "r2StorageAdaptiveGroups(limit: 1, filter: {datetime_geq: \$start, datetime_leq: \$end, bucketName: \$bucket}, orderBy: [datetime_DESC]) { max { objectCount payloadSize metadataSize } dimensions { datetime } } } } }"
         private const val REQUESTS = "query(\$account: string!, \$bucket: string, \$start: Time, \$end: Time) { viewer { accounts(filter: {accountTag: \$account}) { " +
             "r2OperationsAdaptiveGroups(limit: 100, filter: {datetime_geq: \$start, datetime_leq: \$end, bucketName: \$bucket}) { sum { requests } dimensions { actionType } } } } }"
+
+        /** What's said of an answer with no error and no figures in it. */
+        const val NO_FIGURES = "Cloudflare sent no figures for the bucket: its account or its name may be wrong"
 
         /** From the box's `.env`: none where any of the three is missing, and R2 says it isn't read. */
         fun from(env: (String) -> String?): CloudflareR2? {

@@ -135,12 +135,6 @@ class PhonePushes(
     }
 
     /**
-     * [sources], which only a phone reads (Teams, AnkiDroid), read now by each paired phone, as Felix's `sync` act asks once the server
-     * says what he says (D-142): a message of its own, so it and a revision's never take each other's place. Only once the server
-     * applies commands; a failure's only logged, as the phone reads them at its own sync all the same. Whether any phone could be
-     * asked: none where Firebase isn't set up here or no phone's id is held.
-     */
-    /**
      * [words], the storage's alert (6.10.0, D-161), to each paired phone, a notification of its own there; in either mode, as the box's
      * storage is watched in both. A failure's only logged: the website's notices and Settings say it too.
      */
@@ -163,6 +157,12 @@ class PhonePushes(
         }
     }
 
+    /**
+     * [sources], which only a phone reads (Teams, AnkiDroid), read now by each paired phone, as Felix's `sync` act asks once the server
+     * says what he says (D-142): a message of its own, so it and a revision's never take each other's place. Only once the server
+     * applies commands; a failure's only logged, as the phone reads them at its own sync all the same. Whether any phone could be
+     * asked: none where Firebase isn't set up here or no phone's id is held.
+     */
     fun askToRead(sources: Set<Source>): Boolean {
         val sender = sender ?: return false
         if (sources.isEmpty() || !telling()) return false
