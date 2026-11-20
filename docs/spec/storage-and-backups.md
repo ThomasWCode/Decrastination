@@ -49,7 +49,7 @@ Under the app's `files/` folder:
 | `secrets.bin` | The credentials and keys, encrypted (`data/SecretStore.kt`, [privacy.md](privacy.md)) |
 
 Beside them:
-- `photos/`: a photo of the work for a task, one a task, let go once no task holds it (AI-23);
+- `photos/`: a photo of the work for a task, one a task, let go once no task holds it (AI-23); a photo sent in the chat (`chat-<hash>.jpg`, 6.8.0), let go once its message is answered, or 14 days from when it was sent where it's kept, or as its message goes; never backed up, as only its hash is in `chat.json`;
 - `crashes/`: the last three crashes (`data/Crashes.kt`, AR-06), the newest in Settings → Claude;
 - `backups/`: a reset's copy, or the switch's (`switch-<date>-<time>.json`, 6.0.0, W-26), where `Documents` can't be written;
 - `switch-seed.json`: the switch's last seed, every store whole, from going over till the server's answer, sent again the same till then;

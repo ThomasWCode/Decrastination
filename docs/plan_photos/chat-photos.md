@@ -10,7 +10,7 @@ A photo sent with a message, from the phone or the website. Felix sees it and an
 - **A command is kept in three places**: the phone's outbox till it's answered, the server's record of commands for 90 days, and a row of history for each write of `chat.json`. And it runs twice, on the phone and on the server.
 - **Elsewhere a message is its text**: a notification's lines, the website's rows, Felix's story of the day, the record's export.
 
-## 6.8.0: a photo with a message
+## 6.8.0: a photo with a message (built: D-159, Q162 to Q164)
 
 **Sending.**
 
