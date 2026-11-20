@@ -497,6 +497,12 @@ export interface ChatCard {
   buttons: ChatButton[];
 }
 
+/** A photo of yours in the chat (6.8.0): where it's fetched from while its file's on the server, and Felix's line of it. */
+export interface ChatPhotoView {
+  url?: string | null;
+  note: string;
+}
+
 export interface ChatRow {
   id: string;
   yours: boolean;
@@ -530,6 +536,8 @@ export interface ChatRow {
   lines: ChatDid[];
   said?: string | null;
   opens?: string | null;
+  /** Yours, its photos (6.8.0). */
+  photos?: ChatPhotoView[];
 }
 
 export interface ChangeRow {
@@ -571,6 +579,9 @@ export interface ChatView {
   canChange: boolean;
   form?: OwnTaskFormView | null;
   maxText: number;
+  /** How many photos a message takes, and the side each is shrunk to (6.8.0). */
+  maxPhotos: number;
+  photoSide: number;
   maxFeedback: number;
   readAfterMs: number;
   undoMs: number;

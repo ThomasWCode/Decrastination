@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
-import { api, readTo, saying, send, tryAgain } from "./api";
+import { api, readTo, saying, send, sendChatPhoto, tryAgain } from "./api";
 import { Link, type Go } from "./App";
 import { useLive } from "./live";
 import { Markdown } from "./Markdown";
 import { NewTask } from "./NewTask";
-import type { About, Action, ChangeRow, ChatButton, ChatCard, ChatChip, ChatQuote, ChatRow, ChatView, OwnTaskFormView } from "./types";
+import { photoHash } from "./photos";
+import { shrunk } from "./PhotoTasks";
+import type { About, Action, ChangeRow, ChatButton, ChatCard, ChatChip, ChatPhotoView, ChatQuote, ChatRow, ChatView, OwnTaskFormView } from "./types";
 import { Visit } from "./visit";
 
 /** How close to the top of the list scrolling back loads the archive's next page, and to the foot counts as being there. */
@@ -14,10 +16,27 @@ const NEAR_FOOT = 48;
 const DRAFT = "chat-draft";
 const LOST = "chat-lost";
 
-/** The message that may have got there unheard, kept with its words so a page moved to and back still sends it as itself. */
-function lostOne(): { text: string; id: string } | null {
+/** The message that may have got there unheard, kept with its words and its photos' names, so a page moved to and back still sends it as itself. */
+function lostOne(): { text: string; id: string; photos?: string[] } | null {
   const held = sessionStorage.getItem(LOST);
-  return held ? (JSON.parse(held) as { text: string; id: string }) : null;
+  return held ? (JSON.parse(held) as { text: string; id: string; photos?: string[] }) : null;
+}
+
+/** A message's photos (6.8.0): each while its file's on the server, Felix's line of it in its place once it's gone. */
+function Pictures({ photos }: { photos: ChatPhotoView[] }) {
+  return (
+    <div className="chat-photos">
+      {photos.map((photo, index) =>
+        photo.url ? (
+          <img key={index} src={photo.url} alt={photo.note || "A photo"} loading="lazy" />
+        ) : (
+          <p key={index} className="photo-gone">
+            {photo.note ? `[photo: ${photo.note}]` : "[photo]"}
+          </p>
+        ),
+      )}
+    </div>
+  );
 }
 
 /** What a button came to, in a line under it where that wasn't what was asked. */
@@ -221,12 +240,14 @@ function Message({ row, view, doing, go }: { row: ChatRow; view: ChatView; doing
   const rated = row.rating === "Up" ? "thumbs up" : row.rating === "Down" ? "thumbs down" : null;
   return (
     <article className={row.yours ? "chat-message yours" : "chat-message his"} id={`message-${row.id}`} data-testid="message">
-      {row.texts.map((text, index) => (
+      {/* A photo alone has no words: its bubble's the photo's (6.8.0). */}
+      {(row.texts.length > 0 ? row.texts : [""]).map((text, index) => (
         <div className="bubble" key={index}>
           {index === 0 && row.quote ? <Quoted quote={row.quote} open={doing.quoted} /> : null}
           {index === 0 && row.about ? <p className="about">{row.about}</p> : null}
+          {index === 0 && row.photos && row.photos.length > 0 ? <Pictures photos={row.photos} /> : null}
           {/* His words as Markdown; yours as you wrote them. */}
-          {row.yours ? <p className="words">{text}</p> : <Markdown text={text} className="words" />}
+          {text ? row.yours ? <p className="words">{text}</p> : <Markdown text={text} className="words" /> : null}
         </div>
       ))}
       <p className="time">
@@ -457,9 +478,9 @@ export function aboutFrom(search: string): About | null {
  * by itself ([quiet]); with what it's [about], where *Ask Felix about it* gave a subject, and then to nothing it didn't choose, so
  * the words go as a turn about that subject, not as the answer to a question about something else (6.6.0).
  */
-export function messageOf(text: string, id: string, replying: ChatQuote | null, quiet: string | null, about: About | null): Action {
+export function messageOf(text: string, id: string, replying: ChatQuote | null, quiet: string | null, about: About | null, photos: { hash: string; kept: boolean }[] = []): Action {
   const replyTo = replying?.id ?? (about ? null : quiet);
-  return { type: "SendMessage", text, id, replyTo, takeItsSubject: replying !== null, ...(about ? { about } : {}) };
+  return { type: "SendMessage", text, id, replyTo, takeItsSubject: replying !== null, ...(about ? { about } : {}), ...(photos.length > 0 ? { photos } : {}) };
 }
 
 /** What [about] is, in a few words, as the phone's chip over its box says it. */
@@ -470,37 +491,69 @@ export function aboutLine(about: About): string {
 function Box({ view, replying, chosen, sent, letGo, about, dropAbout, keepAbout }: { view: ChatView; replying: ChatQuote | null; chosen: boolean; sent: () => void; letGo: () => void; about: About | null; dropAbout: () => void; keepAbout: (about: About) => void }) {
   const [draft, setDraft] = useState(() => sessionStorage.getItem(DRAFT) ?? "");
   const [said, setSaid] = useState<string | null>(null);
+  // The photos chosen for it (6.8.0), shrunk as they're chosen as a check's pages are, each with its name, [view.maxPhotos] at most;
+  // and the tick box, ticked each time they're shown.
+  const [photos, setPhotos] = useState<{ hash: string; jpeg: Blob; url: string }[]>([]);
+  const [deleting, setDeleting] = useState(true);
+  const picker = useRef<HTMLInputElement>(null);
   const change = (text: string) => {
     setDraft(text);
     sessionStorage.setItem(DRAFT, text);
   };
+  const chose = (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const room = view.maxPhotos - photos.length;
+    if (files.length > room) setSaid(`Only ${view.maxPhotos} photos go with a message.`);
+    if (photos.length === 0) setDeleting(true);
+    const taken = Array.from(files).slice(0, room);
+    if (picker.current) picker.current.value = "";
+    void (async () => {
+      // One at a time: several pictures decoded at once can be more than a phone's browser holds.
+      const made: { hash: string; jpeg: Blob; url: string }[] = [];
+      for (const file of taken) {
+        const jpeg = await shrunk(file, view.photoSide);
+        made.push({ hash: await photoHash(jpeg), jpeg, url: URL.createObjectURL(jpeg) });
+      }
+      return made;
+    })()
+      .then((made) => setPhotos((was) => [...was, ...made.filter((one) => !was.some((other) => other.hash === one.hash))].slice(0, view.maxPhotos)))
+      .catch(() => setSaid("That picture couldn't be read."));
+  };
   const go = () => {
     const text = draft.trim();
-    if (!text) return;
+    if (!text && photos.length === 0) return;
+    const going = photos;
+    const names = going.map((photo) => photo.hash);
     // One that may have got there unheard goes again as itself, so it's the one message.
     const lost = lostOne();
-    const id = lost?.text === text ? lost.id : crypto.randomUUID();
+    const id = lost?.text === text && (lost.photos ?? []).join() === names.join() ? lost.id : crypto.randomUUID();
     change("");
+    setPhotos([]);
     setSaid(null);
     sent();
-    const message = messageOf(text, id, replying, view.quiet ?? null, about);
+    const message = messageOf(text, id, replying, view.quiet ?? null, about, names.map((hash) => ({ hash, kept: !deleting })));
     // What it's about goes with it, once: taken as it goes, so one sent before its answer comes is about whatever it says; back if it didn't go.
     const subject = about;
     if (subject) dropAbout();
-    void saying(message).then((why) => {
-      if (why === null) {
-        sessionStorage.removeItem(LOST);
-        return;
-      }
-      sessionStorage.setItem(LOST, JSON.stringify({ text, id }));
-      if (subject) keepAbout(subject);
-      setSaid(why);
-      setDraft((typed) => {
-        const back = typed ? `${text}\n\n${typed}` : text;
-        sessionStorage.setItem(DRAFT, back);
-        return back;
+    // Its photos to the server first, as the phone's go ahead of its commands, so the message that names them finds them there.
+    void Promise.all(going.map((photo) => sendChatPhoto(photo.hash, photo.jpeg)))
+      .then(() => saying(message), () => "The photos didn't reach the server. Try again.")
+      .then((why) => {
+        if (why === null) {
+          sessionStorage.removeItem(LOST);
+          going.forEach((photo) => URL.revokeObjectURL(photo.url));
+          return;
+        }
+        sessionStorage.setItem(LOST, JSON.stringify({ text, id, photos: names }));
+        if (subject) keepAbout(subject);
+        setPhotos((now) => [...going, ...now.filter((photo) => !names.includes(photo.hash))].slice(0, view.maxPhotos));
+        setSaid(why);
+        setDraft((typed) => {
+          const back = typed ? `${text}\n\n${typed}` : text;
+          sessionStorage.setItem(DRAFT, back);
+          return back;
+        });
       });
-    });
   };
   const key = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     // While an input method composes, Enter is its own: it confirms what's being written.
@@ -538,9 +591,38 @@ function Box({ view, replying, chosen, sent, letGo, about, dropAbout, keepAbout 
           </button>
         </div>
       ) : null}
+      {photos.length > 0 ? (
+        <div className="chosen-photos" role="group" aria-label="Photos to send">
+          {photos.map((photo) => (
+            <span key={photo.hash} className="chosen-photo">
+              <img src={photo.url} alt="A photo to send" />
+              <button
+                type="button"
+                className="quiet"
+                aria-label="Not this one"
+                onClick={() => {
+                  URL.revokeObjectURL(photo.url);
+                  setPhotos((was) => was.filter((other) => other.hash !== photo.hash));
+                }}
+              >
+                ×
+              </button>
+            </span>
+          ))}
+          <label className="delete-after-use">
+            <input type="checkbox" checked={deleting} onChange={(event) => setDeleting(event.target.checked)} /> Delete after use
+          </label>
+        </div>
+      ) : null}
       <div className="writing">
         <textarea aria-label={`Tell ${view.name}…`} placeholder={`Tell ${view.name}…`} value={draft} onChange={(event) => change(event.target.value)} onKeyDown={key} maxLength={view.maxText} rows={2} />
-        <button className="button" disabled={!draft.trim()}>
+        {/* A photo with it (6.8.0), as many as a message takes: any picture, shrunk here. */}
+        <label className={photos.length >= view.maxPhotos ? "quiet photo-button disabled" : "quiet photo-button"}>
+          Photo
+          <input ref={picker} className="hidden" type="file" accept="image/*" multiple disabled={photos.length >= view.maxPhotos} onChange={(event) => chose(event.target.files)} data-testid="chat-photo-input" />
+        </label>
+        {/* A photo alone is a message: it counts as words. */}
+        <button className="button" disabled={!draft.trim() && photos.length === 0}>
           Send
         </button>
       </div>

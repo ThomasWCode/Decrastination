@@ -2,6 +2,8 @@ package com.thomaswcode.decrastination.block
 
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
+import com.thomaswcode.decrastination.core.ChatMessage
+import com.thomaswcode.decrastination.core.ChatPhoto
 import com.thomaswcode.decrastination.core.ChatState
 import com.thomaswcode.decrastination.core.Chunk
 import com.thomaswcode.decrastination.core.FixedClock
@@ -9,12 +11,14 @@ import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Planner
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.Source
+import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.TaskPhoto
 import com.thomaswcode.decrastination.core.Why
 import com.thomaswcode.decrastination.core.WindowKind
 import com.thomaswcode.decrastination.data.ActivityLog
 import com.thomaswcode.decrastination.data.ChatMigration
+import com.thomaswcode.decrastination.data.ChatPhotoMigration
 import com.thomaswcode.decrastination.data.CheckNote
 import com.thomaswcode.decrastination.data.CheckNotesMigration
 import com.thomaswcode.decrastination.data.PhotoDoorsMigration
@@ -91,7 +95,7 @@ class PhotosTest {
     private val protection = JsonStore(File(dir, "protection.json"), ProtectionState.serializer(), ::ProtectionState, migrations = listOf(ProtectionSplit.PROTECTION))
     private val session = JsonStore(File(dir, "session.json"), SessionState.serializer(), ::SessionState, migrations = listOf(CreditMigration.SESSION, TimerMigration.SESSION, CheckNotesMigration.SESSION, PhotoDoorsMigration.SESSION))
     private val log = JsonStore(File(dir, "log.json"), ActivityLog.serializer(), ::ActivityLog, migrations = listOf(ChatMigration.LOG, MemoryMigration.LOG, CreditMigration.LOG))
-    private val chat = JsonStore(File(dir, "chat.json"), ChatState.serializer(), ::ChatState, migrations = listOf(ChatMigration.CHAT, TasksMigration.CHAT, FelixStore.CHAT, FelixStore.CHAT_PIECES, MemoryMigration.CHAT, StepOrderMigration.CHAT, OnlyMigration.CHAT, OutsideMigration.CHAT, MoodMigration.CHAT, SpeechMigration.CHAT, StepActionMigration.CHAT, WeeklyMigration.CHAT))
+    private val chat = JsonStore(File(dir, "chat.json"), ChatState.serializer(), ::ChatState, migrations = listOf(ChatMigration.CHAT, TasksMigration.CHAT, FelixStore.CHAT, FelixStore.CHAT_PIECES, MemoryMigration.CHAT, StepOrderMigration.CHAT, OnlyMigration.CHAT, OutsideMigration.CHAT, MoodMigration.CHAT, SpeechMigration.CHAT, StepActionMigration.CHAT, WeeklyMigration.CHAT, ChatPhotoMigration.CHAT))
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val gateway = ModelGateway(settings, { null }, model, tasks, clock, NoAlerts, scope) {}
     private val focus = Focus(tasks, settings, session, learning, protection, log, clock) { state, s, now -> Planner.plan(Planner.Input(state.tasks, now, LONDON, s)) }
@@ -289,6 +293,59 @@ class PhotosTest {
         answered.sweepPhotos()
         assertFalse(stray.exists())
         assertTrue(kept.all { answered.pageFile(it.hash).isFile })
+    }
+
+    @Test
+    fun `a chat photo's file is kept by its hash, and let go once its message is done with it`() = runBlocking {
+        val jpeg = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 9)
+        val hash = Photos.hashOf(jpeg)
+        assertFalse(photos.keepChatPhoto("a1b2c3d4e5f60718", jpeg), "not the photo its hash names")
+        assertTrue(photos.keepChatPhoto(hash, jpeg))
+        assertTrue(photos.chatPhoto(hash)!!.contentEquals(jpeg))
+        val kept = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 8).also { photos.keepChatPhoto(Photos.hashOf(it), it) }
+        val keptHash = Photos.hashOf(kept)
+        val waiting = ChatMessage("y1", Speaker.You, "", clock.time, photos = listOf(ChatPhoto(hash), ChatPhoto(keptHash, kept = true)))
+        chat.update { it.copy(messages = listOf(waiting)) }
+        // Its message waiting: both kept, however long ago they came.
+        photos.sweepPhotos()
+        assertTrue(photos.chatPhotoFile(hash).isFile && photos.chatPhotoFile(keptHash).isFile)
+        // Answered: the ticked one goes at once, grace or none; the kept one stays its fortnight.
+        chat.update { it.copy(messages = listOf(waiting.copy(answeredAt = clock.time))) }
+        photos.sweepPhotos(keptBefore = clock.time - 86_400_000L)
+        assertFalse(photos.chatPhotoFile(hash).exists())
+        assertTrue(photos.chatPhotoFile(keptHash).isFile)
+        clock.time += ChatPhoto.KEPT_MS
+        photos.sweepPhotos(keptBefore = clock.time - 86_400_000L)
+        assertFalse(photos.chatPhotoFile(keptHash).exists())
+        // One come ahead of its message waits the grace; once named, gone with its message at once (taken back, the chat cleared).
+        val ahead = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 7).also { photos.keepChatPhoto(Photos.hashOf(it), it) }
+        val aheadHash = Photos.hashOf(ahead)
+        photos.sweepPhotos(keptBefore = clock.time - 86_400_000L)
+        assertTrue(photos.chatPhotoFile(aheadHash).isFile)
+        chat.update { it.copy(messages = listOf(ChatMessage("y2", Speaker.You, "", clock.time, photos = listOf(ChatPhoto(aheadHash, kept = true))))) }
+        photos.sweepPhotos(keptBefore = clock.time - 86_400_000L)
+        chat.update { it.copy(messages = emptyList()) }
+        photos.sweepPhotos(keptBefore = clock.time - 86_400_000L)
+        assertFalse(photos.chatPhotoFile(aheadHash).exists())
+    }
+
+    @Test
+    fun `a chat photo kept with a task is a copy of its own, read again with it`() = runBlocking {
+        tasks.update { it.copy(tasks = listOf(essay)) }
+        // The photo it had, its file still there once another's kept in its place, for the Undo that brings it back.
+        val before = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 5)
+        photos.attachPhoto(essay.id, before)
+        val had = task().photo!!
+        val jpeg = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 6)
+        val hash = Photos.hashOf(jpeg)
+        photos.keepChatPhoto(hash, jpeg)
+        val photo = photos.keepFromChat(essay.id, hash, jpeg)
+        assertTrue(File(had.path).readBytes().contentEquals(before))
+        assertEquals(hash, task().photo?.hash)
+        assertEquals(photo, task().photo)
+        photos.chatPhotoFile(hash).delete()
+        assertTrue(File(photo.path).readBytes().contentEquals(jpeg), "its own copy stays as the chat's goes")
+        while (essay.id !in read) delay(10)
     }
 
     @Test

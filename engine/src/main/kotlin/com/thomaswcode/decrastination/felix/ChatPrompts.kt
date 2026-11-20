@@ -1,5 +1,6 @@
 package com.thomaswcode.decrastination.felix
 
+import com.thomaswcode.decrastination.block.Photos
 import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.By
 import com.thomaswcode.decrastination.core.Calibration
@@ -120,9 +121,34 @@ object ChatPrompts {
         6. Look things up (research): when their message needs facts that neither they nor the app have given you (a competition's rules and dates, an exam board's specification, what an event involves), give what to search the web for in a few words, reply only that you're looking it up, and change nothing: you'll be asked again with what's found, to answer and act on (its steps, dates and minutes). Never for what the lists here tell you, nor for anything about the student themselves; most messages need none, and research is then an empty string.
     """.trimIndent()
 
+    /**
+     * Photos in the chat (6.8.0): seen and answered from, made into tasks as words are, noted in a line each, seen again where kept,
+     * kept with a task; never taken as proof that work's done, which is the photo check's (6.9.0).
+     */
+    private const val PHOTOS = "11. Photos (photos): a message of theirs can come with photos, up to four, each sent before its words and named (\"Photo 1, id 1a2b3c4d5e6f7a8b:\"). Look at what each shows and answer from it as from their words, and make or change tasks from it as from words (a worksheet's questions, a planner's page). In photos, give a line for each photo you're shown in this turn, in the order shown, one to a line and nothing before it: what it is, in a few words (\"a worksheet of vector questions, the first three answered\"), kept in its place once the photo's gone; empty when there's none. An earlier one is in the conversation as [photo id: your line], and one still kept says so: photo:id in details shows it again, where what you're asked needs more than your line. keepPhoto keeps a photo with a task as its photo of the work, in place of one it had, read with it: only when they ask for that, never because it shows the task's work. A photo isn't proof that work's done: never tick a step, keep a piece or mark a task done because a photo shows it; their word that it's done is as it always was."
+
     /** What [READ]'s `details` asks for beside tasks' ids: the week's numbers (G6), and the calendar past the fortnight (G7). */
     const val ASK_STATS = "stats"
     const val ASK_CALENDAR = "calendar"
+
+    /** What [PHOTOS]' `details` asks for to see a photo again (6.8.0): `photo:id`. */
+    const val ASK_PHOTO = "photo"
+
+    /** [word] as a request to see a photo again (6.8.0): its id, from `photo:id`; null for any other word, or an id that isn't one's shape. */
+    fun photoAsk(word: String): String? {
+        val w = word.trim()
+        if (!w.startsWith("$ASK_PHOTO:", ignoreCase = true)) return null
+        return w.substringAfter(':').trim().lowercase().takeIf(Photos.HASH::matches)
+    }
+
+    /** A picture's name as the newest turn sends it, before the picture (6.8.0): its number in the turn and its id. */
+    fun pictureName(index: Int, hash: String): String = "Photo ${index + 1}, id $hash:"
+
+    /** The most pictures a turn sends (6.8.0): a message's four, and as many again kept from before or seen again, in a quarter of the budget. */
+    const val MAX_PICTURES = 8
+
+    /** How long after a kept photo a message of yours sends it again by itself (6.8.0): ten minutes, the owner's answer. */
+    const val PHOTO_WITHIN_MS = 10 * 60_000L
 
     /**
      * [word] as a request for the calendar (G7): `calendar`, the four weeks after the fortnight (empty), or
@@ -179,8 +205,8 @@ object ChatPrompts {
         Minutes you set (a new task's, a Minutes change, each step's) are planned exactly as you set them, never stretched by the student's pace: that's only for the app's own estimates (the context gives their pace, and what each task's minutes come to in the plan by it). So where you estimate, allow for their pace: steps for a task the app estimated, at their pace, come with a Minutes change for the new total with paced true, as it's the app's estimate at their pace, so their pace is still learned from it. Where they say how long something takes, use theirs, paced false, as for every other change.
         3. Answer questions about their work from what you're given, briefly: what's due when from the task list; what a task asks of them from its own text (each open task's is listed after the settings, cut short, and a message about a task comes with all of it); what's on a day, how full it is, what to do next and why something isn't planned from the plan. The plan is what the app has them do and shows them, so say what it says rather than planning the work again yourself. The context gives the time now: a deadline later today is still ahead ("due at 16:00 today"), not past, and a slot marked past has gone by; say "overdue" only where the plan marks it so.
         4. Remember (memories): a fact about the student worth keeping for later (a preference, a pattern, something about their week: "football is on Tuesdays"), with a short topic, so a newer fact on the same topic replaces it; or, kind "rule", a standing instruction about how you should behave ("don't message before 8", "be blunter"). To forget one, give its topic (a rule's own words) and an empty text. One that only matters for a while gets until, when it stops mattering, a date (YYYY-MM-DD, through that day) or a date and time (YYYY-MM-DDTHH:MM): "I've got a cold this week" until Sunday's date; "don't message me tonight" a rule until 07:00 tomorrow; "for a bit" a week; "until the exam" the exam task's date where there's one, else ask. A fact that only matters while a task's open gets that task's taskId ("for the trip, I'm sharing a room" with the trip's). Most have neither, both then empty. Busy times, limits and days off are changes, not memories; most messages need none.
-        5. Act (actions): tickStep when the student says a step is done, untickStep when one ticked isn't (taskId, and stepIndex from the list's steps); done when they've finished a task of their own (from Yours), or one whose tick finishes it${if (settings.gmailFinishes) ", or an email they've dealt with (it's unstarred and archived in Gmail; the list marks those \"finish with done\")" else ""}; reopen for one of theirs finished by mistake (from the finished list); delete for a task of their own they no longer want (another source's they can only say isn't a task: NotATask); open to show them a task: value "app" for its page here, or "source" to open it where it lives (Teams, Power Planner, Gmail, AnkiDroid) when they ask for that; setting to change one of the settings listed with their values (taskId empty, setting its name, value as the list writes it: a number, a time as HH:MM, hours as HH:MM-HH:MM); cancelReminder to cancel a reminder set (taskId empty, value its id from the reminders' list); deleteNote to delete a note (taskId empty, value its id from the task's notes); keepPiece when they say a piece is done that has no step to tick (a task in boxes, or a slot of today's), as Day's Done keeps it (taskId, value its key from the plan); unkeepPiece when one kept today isn't (taskId, value its key from Kept today); sync when they say a source has news the app hasn't read ("I've handed it in, check Teams", "I've just starred it"): setting the source (Teams, Power Planner, Gmail or Anki), taskId the task it's about or empty; the source is read now, and you're told if the task changes, so say only that it's reading. stepIndex is -1 but for steps, setting empty but for settings and sync, and value empty but for settings, open, cancelReminder, deleteNote, keepPiece and unkeepPiece. ${if (settings.gmailFinishes) "A task from Teams, Power Planner or Anki is done when its source says so (handed in, completed in Power Planner, studied), so it can't be marked done" else "A task from Teams, Power Planner, Gmail or Anki is done when its source says so (handed in, completed in Power Planner, unstarred, studied), so it can't be marked done; an email they say they've dealt with is done here once it's unstarred in Gmail, as finishing emails there is switched off in Settings: say you can't finish it in Gmail, and ask whether to mark it not a task (NotATask) instead, never calling it done"}. Most messages need none.
-""" + (if (settings.felixSearches) RESEARCH else NO_RESEARCH).prependIndent("        ") + "\n" + READ.prependIndent("        ") + "\n" + REMIND.prependIndent("        ") + "\n" + NOTE.prependIndent("        ") + "\n" + WEEKLY.prependIndent("        ") + "\n" + """
+        5. Act (actions): tickStep when the student says a step is done, untickStep when one ticked isn't (taskId, and stepIndex from the list's steps); done when they've finished a task of their own (from Yours), or one whose tick finishes it${if (settings.gmailFinishes) ", or an email they've dealt with (it's unstarred and archived in Gmail; the list marks those \"finish with done\")" else ""}; reopen for one of theirs finished by mistake (from the finished list); delete for a task of their own they no longer want (another source's they can only say isn't a task: NotATask); open to show them a task: value "app" for its page here, or "source" to open it where it lives (Teams, Power Planner, Gmail, AnkiDroid) when they ask for that; setting to change one of the settings listed with their values (taskId empty, setting its name, value as the list writes it: a number, a time as HH:MM, hours as HH:MM-HH:MM); cancelReminder to cancel a reminder set (taskId empty, value its id from the reminders' list); deleteNote to delete a note (taskId empty, value its id from the task's notes); keepPiece when they say a piece is done that has no step to tick (a task in boxes, or a slot of today's), as Day's Done keeps it (taskId, value its key from the plan); unkeepPiece when one kept today isn't (taskId, value its key from Kept today); keepPhoto to keep a photo of theirs with a task (taskId, value the photo's id, as 11 says); sync when they say a source has news the app hasn't read ("I've handed it in, check Teams", "I've just starred it"): setting the source (Teams, Power Planner, Gmail or Anki), taskId the task it's about or empty; the source is read now, and you're told if the task changes, so say only that it's reading. stepIndex is -1 but for steps, setting empty but for settings and sync, and value empty but for settings, open, cancelReminder, deleteNote, keepPiece, unkeepPiece and keepPhoto. ${if (settings.gmailFinishes) "A task from Teams, Power Planner or Anki is done when its source says so (handed in, completed in Power Planner, studied), so it can't be marked done" else "A task from Teams, Power Planner, Gmail or Anki is done when its source says so (handed in, completed in Power Planner, unstarred, studied), so it can't be marked done; an email they say they've dealt with is done here once it's unstarred in Gmail, as finishing emails there is switched off in Settings: say you can't finish it in Gmail, and ask whether to mark it not a task (NotATask) instead, never calling it done"}. Most messages need none.
+""" + (if (settings.felixSearches) RESEARCH else NO_RESEARCH).prependIndent("        ") + "\n" + READ.prependIndent("        ") + "\n" + REMIND.prependIndent("        ") + "\n" + NOTE.prependIndent("        ") + "\n" + WEEKLY.prependIndent("        ") + "\n" + PHOTOS.prependIndent("        ") + "\n" + """
         Reply in one to three short sentences (asked what's on, a short list instead, a line a task). Everything you give is made as soon as you give it (a new task or event, a change, days off, a step ticked, a setting, a reminder, a note), so say what you've done ("moved it to 19:30", "added it, due tue 27 oct"), never what you'd do: the student has an Undo for each. To undo something yourself, give what puts it back. When a reply from them is likely, offer up to three short ones in their words (suggestedReplies). If what you need is missing or unclear (which task they mean, or when), ask one short question and change nothing. Don't add a task that's already listed: change it instead. When their message is about a given task, event or day, it's about that unless they clearly name another. When it starts with a message it replies to, quoted, it's answering that one; when it answers one of your messages listed as still waiting for their answer, give that one's id in answered, so it no longer waits (most answer none, and answered is then an empty list). Do only what they asked for, and leave every field you don't use empty: an empty string, -1 for a number.
 
 """ + FelixPrompts.REGISTER.prependIndent("        ") + """
@@ -254,7 +280,7 @@ object ChatPrompts {
 
     /** Something to do for the student (AI-14), plain fields so no union is added: stepIndex -1, setting and value empty for none. */
     private val ACTION = InstructionPrompts.obj(
-        "type" to mapOf("type" to "string", "enum" to listOf("tickStep", "untickStep", "done", "reopen", "delete", "open", "setting", "cancelReminder", "deleteNote", "keepPiece", "unkeepPiece", "sync")),
+        "type" to mapOf("type" to "string", "enum" to listOf("tickStep", "untickStep", "done", "reopen", "delete", "open", "setting", "cancelReminder", "deleteNote", "keepPiece", "unkeepPiece", "sync", "keepPhoto")),
         "taskId" to STRING,
         "stepIndex" to INTEGER,
         "setting" to STRING,
@@ -299,6 +325,9 @@ object ChatPrompts {
         "details" to mapOf("type" to "array", "items" to STRING),
         // His messages still waiting that their words answer (D-99), by id, none for none: plain strings, so no union is added.
         "answered" to mapOf("type" to "array", "items" to STRING),
+        // A line for each photo shown in the turn, in the order shown, one to a line (6.8.0), empty for none: one string, as a list of
+        // them makes the chat's grammar more than the API compiles.
+        "photos" to STRING,
     )
 
     /**
@@ -332,10 +361,15 @@ object ChatPrompts {
         brought: List<String> = emptyList(),
         lastRound: Boolean = false,
         notLooked: String? = null,
-    ): List<Pair<Speaker, String>> = sent(messages, context, tasks, zone, budget, plan, found, read, events, quoted, brought, lastRound, notLooked).turns
+        live: Set<String> = emptySet(),
+        seen: List<String> = emptyList(),
+    ): List<Pair<Speaker, String>> = sent(messages, context, tasks, zone, budget, plan, found, read, events, quoted, brought, lastRound, notLooked, live, seen).turns
 
-    /** [turns], and the ids of the messages they hold: those the budget left out aren't among them, so they aren't answered by it. */
-    class Sent(val turns: List<Pair<Speaker, String>>, val ids: Set<String>)
+    /**
+     * [turns], and the ids of the messages they hold: those the budget left out aren't among them, so they aren't answered by it; and
+     * the photos sent as pictures before the newest turn's words, in order, by their hashes (6.8.0).
+     */
+    class Sent(val turns: List<Pair<Speaker, String>>, val ids: Set<String>, val pictures: List<String> = emptyList())
 
     /** [turns] as it's sent, with the ids of the messages that went in it ([Sent]). */
     fun sent(
@@ -352,6 +386,8 @@ object ChatPrompts {
         brought: List<String> = emptyList(),
         lastRound: Boolean = false,
         notLooked: String? = null,
+        live: Set<String> = emptySet(),
+        seen: List<String> = emptyList(),
     ): Sent {
         val last = history(messages)
         // Before any of yours: an answer cut off from its question by the window goes; a message of
@@ -360,17 +396,27 @@ object ChatPrompts {
         val lead = last.takeWhile { it.from != Speaker.You }.filter { it.kind != MessageKind.Chat }
         val recent = last.dropWhile { it.from != Speaker.You }
         if (recent.isEmpty()) return Sent(emptyList(), emptySet())
+        // The photos sent as pictures with the newest turn (6.8.0): its own, then those he asked to see again, then any kept with a message
+        // of yours within ten minutes before it, which he didn't; each while its file's here and its message needs it ([live]), [MAX_PICTURES]
+        // at most, as many as a quarter of the budget holds, each taking from the text's room what its tokens would be as text.
+        val newestYours = recent.takeLastWhile { it.from == Speaker.You }
+        val newestAt = newestYours.lastOrNull()?.at ?: 0
+        val near = recent.filter { m -> m.from == Speaker.You && newestYours.none { it.id == m.id } && newestAt - m.at <= PHOTO_WITHIN_MS }.flatMap { m -> m.photos.filter { it.kept } }
+        val pictures = (newestYours.flatMap { it.photos }.map { it.hash } + seen + near.map { it.hash }).filter { it in live }.distinct()
+            .take(minOf(MAX_PICTURES, budget / 4 / Pricing.PICTURE_CHARS))
+        val shown = pictures.withIndex().associate { (i, hash) -> hash to i + 1 }
+        val textBudget = budget - pictures.size * Pricing.PICTURE_CHARS
         // What a message of yours replies to, where it isn't the message before it: quoted, from the
         // whole chat, as the window may not hold it, nor the window the archive's [quoted].
         val byId = quoted.associateBy { it.id } + messages.associateBy { it.id }
         fun quote(m: ChatMessage): String {
             val before = last.getOrNull(last.indexOfFirst { it.id == m.id } - 1)
-            val to = m.replyTo?.takeIf { m.from == Speaker.You && it != before?.id }?.let(byId::get)?.takeIf { it.text.isNotBlank() } ?: return ""
-            val said = to.text.trim().take(MAX_QUOTE)
+            val to = m.replyTo?.takeIf { m.from == Speaker.You && it != before?.id }?.let(byId::get)?.takeIf { it.says } ?: return ""
+            val said = to.said.trim().take(MAX_QUOTE)
             return if (to.from == Speaker.Felix) "(Replying to your message: “$said”)\n" else "(Replying to their own earlier message: “$said”)\n"
         }
         // A turn each way at a time: a message of Felix's from a notification can follow his last answer.
-        val folded = recent.map { m -> m.from to quote(m) + text(m, tasks, zone) }.fold(emptyList<Pair<Speaker, String>>()) { turns, (from, text) ->
+        val folded = recent.map { m -> m.from to quote(m) + text(m, tasks, zone, shown, live) }.fold(emptyList<Pair<Speaker, String>>()) { turns, (from, text) ->
             if (turns.lastOrNull()?.first == from) turns.dropLast(1) + (from to turns.last().second + "\n\n" + text) else turns + (from to text)
         }
         val texts = if (lead.isEmpty()) folded else {
@@ -381,19 +427,19 @@ object ChatPrompts {
         // he asked to read, to answer and act on. What it's about never at your words' cost: cut
         // to the room they leave, however much it says.
         val words = texts.last().second
-        val about = aboutText(recent.last { it.from == Speaker.You }.about, tasks, events)?.take((budget - words.length - 2).coerceAtLeast(0))?.takeIf { it.isNotEmpty() }
+        val about = aboutText(recent.last { it.from == Speaker.You }.about, tasks, events)?.take((textBudget - words.length - 2).coerceAtLeast(0))?.takeIf { it.isNotEmpty() }
         val head = listOfNotNull(about, words, found?.let(ResearchPrompts::told), notLooked?.let { "Your web search couldn't be made ($it): answer without it, and leave research empty." }, read.takeIf { it.isNotEmpty() }?.let(::readText))
         val tail = listOfNotNull(LAST.takeIf { lastRound })
         // What else he asked for in a room of its own, so it can't crowd out the context the rest of the turn is
         // cut to, nor be cut off its end unseen.
-        val broughtRoom = minOf(BROUGHT_ROOM, budget - (head + tail).sumOf { it.length + 2 } - 2 * brought.size).coerceAtLeast(0)
-        val newest = (head + fitted(brought, broughtRoom) + tail).joinToString("\n\n").take(budget)
+        val broughtRoom = minOf(BROUGHT_ROOM, textBudget - (head + tail).sumOf { it.length + 2 } - 2 * brought.size).coerceAtLeast(0)
+        val newest = (head + fitted(brought, broughtRoom) + tail).joinToString("\n\n").take(textBudget)
         // The turns before it, newest first, while they fit their share, starting again with one of yours.
-        var left = (budget - newest.length) / 4
+        var left = (textBudget - newest.length) / 4
         val earlier = texts.dropLast(1).reversed().takeWhile { (_, t) -> (t.length <= left).also { if (it) left -= t.length } }.reversed()
             .dropWhile { it.first != Speaker.You }
         // The context and the plan in the rest, beside your newest words.
-        val room = (budget - newest.length - 2 - earlier.sumOf { it.second.length }).coerceAtLeast(0)
+        val room = (textBudget - newest.length - 2 - earlier.sumOf { it.second.length }).coerceAtLeast(0)
         val known = when {
             plan.isEmpty() || room <= PLAN_GAP.length -> context.take(room)
             context.length + PLAN_GAP.length + plan.length <= room -> context + PLAN_GAP + plan
@@ -407,7 +453,7 @@ object ChatPrompts {
         val groups = mutableListOf(lead.mapTo(mutableListOf()) { it.id })
         recent.forEachIndexed { i, m -> if (i > 0 && recent[i - 1].from == m.from) groups.last() += m.id else if (i == 0) groups.last() += m.id else groups += mutableListOf(m.id) }
         val went = groups.drop(groups.size - 1 - earlier.size).flatten().toSet()
-        return Sent(earlier + (Speaker.You to known + "\n\n" + newest), went)
+        return Sent(earlier + (Speaker.You to known + "\n\n" + newest), went, pictures)
     }
 
     private const val PLAN_GAP = "\n\n"
@@ -452,9 +498,10 @@ object ChatPrompts {
      * What the app knows, as the chat sends it: [known] ([context]), then the [plan] ([plan]), each with its share of the room ([turns]);
      * and what its answer is checked against that isn't in words: the pieces it lists to keep ([keepable]) and those
      * kept today ([kept]), each key with its task's id (G1); the next lessons a due date at one is set from ([lessons], G8);
-     * each day's breaks outside, which a change to one is checked against ([breaksOn], D-116).
+     * each day's breaks outside, which a change to one is checked against ([breaksOn], D-116); the chat's photos still here, by hash, which
+     * can be kept with a task or seen again ([photos], 6.8.0).
      */
-    data class Context(val known: String, val plan: String, val keepable: Map<String, String> = emptyMap(), val kept: Map<String, String> = emptyMap(), val lessons: Lessons.Timetabled? = null, val waiting: Set<String> = emptySet(), val breaksOn: (LocalDate) -> DayBreaks = { DayBreaks.NONE }, val weekly: List<WeeklyRule> = emptyList()) {
+    data class Context(val known: String, val plan: String, val keepable: Map<String, String> = emptyMap(), val kept: Map<String, String> = emptyMap(), val lessons: Lessons.Timetabled? = null, val waiting: Set<String> = emptySet(), val breaksOn: (LocalDate) -> DayBreaks = { DayBreaks.NONE }, val weekly: List<WeeklyRule> = emptyList(), val photos: Set<String> = emptySet()) {
         /** All of it, as it's sent when there's room. */
         val whole: String get() = if (plan.isEmpty()) known else known + PLAN_GAP + plan
     }
@@ -463,8 +510,8 @@ object ChatPrompts {
      * One message as it's sent: yours with what it was about; Felix's with its cards and what became of
      * them, and one the app wrote in his name (a check-in's question, the morning's list) said as such.
      */
-    private fun text(m: ChatMessage, tasks: Map<String, TaskItem>, zone: ZoneId): String = when (m.from) {
-        Speaker.You -> aboutLine(m.about) + m.text.trim().take(MAX_TEXT)
+    private fun text(m: ChatMessage, tasks: Map<String, TaskItem>, zone: ZoneId, shown: Map<String, Int> = emptyMap(), live: Set<String> = emptySet()): String = when (m.from) {
+        Speaker.You -> aboutLine(m.about) + (listOf(photoLines(m, shown, live)) + m.text.trim().take(MAX_TEXT)).filter { it.isNotEmpty() }.joinToString("\n")
         Speaker.Felix -> (if (m.byApp) "(the app wrote this for you) " else "") + m.text + m.proposals.joinToString("") { p ->
             // In the words it was proposed in, where they're kept: made, a task's estimate is the new one.
             val what = p.task?.let { "add the task “${it.title}”" }
@@ -481,6 +528,20 @@ object ChatPrompts {
                 ProposalState.Discarded -> "the student discarded it"
             }
             "\n[Suggested: $what — $became]"
+        }
+    }
+
+    /**
+     * [m]'s photos as its turn says them (6.8.0): one sent as a picture with this turn by its number ([shown]); one still here by its
+     * id, kept, or not sent for want of room; one gone by his line of it, so he's told what it was once it isn't there.
+     */
+    private fun photoLines(m: ChatMessage, shown: Map<String, Int>, live: Set<String>): String = m.photos.joinToString("\n") { p ->
+        val line = p.note.takeIf { it.isNotBlank() }?.let { ": $it" }.orEmpty()
+        when {
+            p.hash in shown -> "[Photo ${shown.getValue(p.hash)}, sent with this turn]"
+            p.hash in live && p.kept -> "[photo ${p.hash}, still kept$line]"
+            p.hash in live -> "[photo ${p.hash}, not sent for room$line]"
+            else -> "[photo ${p.hash}$line]"
         }
     }
 

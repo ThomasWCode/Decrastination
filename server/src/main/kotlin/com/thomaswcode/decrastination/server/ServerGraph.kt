@@ -102,6 +102,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.job
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -283,6 +286,13 @@ class ServerGraph(
 
     init {
         // A store's every write is kept for a while: at each start, and daily while it runs.
+        // A chat photo's file let go as soon as its message is done with it (6.8.0): answered (ticked), taken back, or the chat cleared;
+        // one that came ahead of its message waits the grace, as a task's does.
+        scope.launch(Dispatchers.IO) {
+            stores.chat.state.map { Photos.chatPhotos(it.messages) }.distinctUntilChanged().drop(1).collect {
+                runCatching { owners.photos.sweepPhotos(keptBefore = clock.now() - PHOTO_GRACE_MS) }.onFailure { Log.w(Log.TAG, "The chat's photos couldn't be swept: ${it::class.simpleName}") }
+            }
+        }
         scope.launch(Dispatchers.IO) {
             while (true) {
                 try {
@@ -686,6 +696,11 @@ class ServerGraph(
      * first, so a reading never finds half of one, and in the photos' folder, so the sweep takes one a crash leaves. Whether it was:
      * not where the hash isn't the photo's.
      */
+    fun keepChatPhoto(hash: String, jpeg: ByteArray): Boolean = owners.photos.keepChatPhoto(hash, jpeg)
+
+    /** A chat photo's bytes (6.8.0), while its file's here. */
+    fun chatPhoto(hash: String): ByteArray? = owners.photos.chatPhoto(hash)
+
     fun keepTaskPhoto(hash: String, jpeg: ByteArray): Boolean {
         if (Photos.hashOf(jpeg) != hash) return false
         taskPhotos.mkdirs()
@@ -760,6 +775,7 @@ class ServerGraph(
             owners.conversation.keptAt(now), owners.conversation.answeringSince.value, claudeOn,
             owners.focus.today(now), now, clock.zone(), writable,
             finishing = GmailWrites.standing(stores.gmailWrites.value.writes),
+            photoHere = { owners.photos.chatPhotoFile(it).isFile },
         )
     }
 

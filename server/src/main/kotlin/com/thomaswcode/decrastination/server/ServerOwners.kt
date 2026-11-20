@@ -230,6 +230,10 @@ class ServerOwners(
         stores.tasks, stores.settings, stores.learning, stores.log, stores.instructions, stores.chat, stores.school, stores.memory, stores.felix, clock, scope, gateway, NoNotices, focus, planning, ports, chatOutbox,
         owners = object : Conversation.Owners {
             override suspend fun saveOwnTask(sourceId: String, task: OwnTask): Boolean = ownTasks.saveOwnTask(sourceId, task)
+            override fun chatPhoto(hash: String): ByteArray? = photos.chatPhoto(hash)
+            override fun hasChatPhoto(hash: String): Boolean = photos.chatPhotoFile(hash).isFile
+            override suspend fun keepPhotoFromChat(taskId: String, hash: String, jpeg: ByteArray) { photos.keepFromChat(taskId, hash, jpeg) }
+            override suspend fun restoreTaskPhoto(taskId: String, photo: TaskPhoto?) { photos.keep(taskId, photo) }
             override suspend fun finishOwnTask(taskId: String) { ownTasks.finishOwnTask(taskId) }
             override suspend fun reopenOwnTask(taskId: String) { ownTasks.reopenOwnTask(taskId) }
             override suspend fun deleteOwnTask(taskId: String) { ownTasks.deleteOwnTask(taskId) }
@@ -321,7 +325,11 @@ class ServerOwners(
     )
 
     /** A photo of homework read into tasks of your own: the browser's shrunk it already. A task's photo, the phone's, kept with it by name. */
-    override val photos: Photos = Photos(stores.tasks, stores.settings, stores.chat, clock, scope, gateway, focus, photosFolder, shrink = { null }, profile = { conversation.profile() }, fileOf = photoFile, read = {})
+    override val photos: Photos = Photos(
+        stores.tasks, stores.settings, stores.chat, clock, scope, gateway, focus, photosFolder, shrink = { null }, profile = { conversation.profile() }, fileOf = photoFile,
+        // A chat photo Felix keeps with a task (6.8.0): read with it now, as nothing else sets a reading off till the next command.
+        read = { taskId -> readings.enrichNow(only = taskId) },
+    )
 
     /** Time in AnkiDroid as work, as the phone saw it and sent it (`AnkiCame`, `AnkiWent`): its decks read there, and nothing to read here. */
     override val ankiWatch: AnkiWatch = AnkiWatch(

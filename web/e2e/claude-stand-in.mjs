@@ -27,7 +27,10 @@ function photo(said) {
   return JSON.stringify({ done: false, confidence: 0.9, reason: "Q6-10 aren't shown.", seen: "A page of answers", covered: "Q1-5, each answered", fresh: true });
 }
 
-function text(said) {
+/** A chat message's photos (6.8.0): each noted, so a row shows his line of it once it's gone. */
+const PHOTO_NOTE = "a page of questions";
+
+function text(said, pictures) {
   if (said.includes(PHOTO_ASKED)) return photo(said);
   if (said.includes(NEVER_ASKED)) return "That isn't an answer.";
   if (said.includes(ONCE_ASKED)) {
@@ -36,6 +39,8 @@ function text(said) {
     return times === 0 ? "That isn't an answer." : answer("Read you this time.");
   }
   if (said.includes(CARD_ASKED)) return answer("Added it.", { newTasks: [WORKSHEET] });
+  // A message's photos, where its words ask for nothing else: a kept one goes again with each message for ten minutes.
+  if (pictures > 0) return answer(pictures === 1 ? "I see the photo." : `I see ${pictures} photos.`, { photos: Array(pictures).fill(PHOTO_NOTE).join("\n") });
   return answer("I hear you.");
 }
 
@@ -60,8 +65,10 @@ const server = createServer((request, response) => {
   let body = "";
   request.on("data", (chunk) => (body += chunk));
   request.on("end", () => {
-    const said = JSON.stringify(JSON.parse(body).messages?.at(-1) ?? "");
-    const reply = () => response.writeHead(200, { "Content-Type": "application/json" }).end(message(text(said)));
+    const last = JSON.parse(body).messages?.at(-1);
+    const said = JSON.stringify(last ?? "");
+    const pictures = Array.isArray(last?.content) ? last.content.filter((block) => block.type === "image").length : 0;
+    const reply = () => response.writeHead(200, { "Content-Type": "application/json" }).end(message(text(said, pictures)));
     if (said.includes(SLOW_ASKED)) setTimeout(reply, SLOW_MS);
     else reply();
   });

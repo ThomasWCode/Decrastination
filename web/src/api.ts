@@ -58,6 +58,12 @@ export function checkPhotos(target: PhotoCheckTarget, pages: string[], keep: boo
   return read<{ said: string }>("/api/photos/check", posting({ taskId: target.taskId, key: target.key, takenAt: 0, pages, step: target.step ?? null, keep, record: target.record ?? null }));
 }
 
+/** A chat photo to the server by its name (6.8.0), ahead of the message that names it, as the phone's goes ahead of its commands. */
+export async function sendChatPhoto(hash: string, jpeg: Blob): Promise<void> {
+  const answer = await fetch(`/api/chat-photos/${hash}`, { method: "POST", headers: { "X-Requested-With": "decrastination", "Content-Type": "image/jpeg" }, body: jpeg, credentials: "same-origin" });
+  if (!answer.ok) throw new ApiError(answer.status);
+}
+
 /** [action] as a command, made here: the server applies it through its owner, and says what came of it (D-140). */
 export async function send(action: Action): Promise<Outcome> {
   const commands = [{ id: crypto.randomUUID(), at: Date.now(), action }];

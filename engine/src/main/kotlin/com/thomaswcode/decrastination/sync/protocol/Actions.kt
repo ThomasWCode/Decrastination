@@ -3,6 +3,7 @@ package com.thomaswcode.decrastination.sync.protocol
 import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.Change
 import com.thomaswcode.decrastination.core.ChangeType
+import com.thomaswcode.decrastination.core.ChatPhoto
 import com.thomaswcode.decrastination.core.Given
 import com.thomaswcode.decrastination.core.HalfDay
 import com.thomaswcode.decrastination.core.Fact
@@ -200,11 +201,11 @@ data class NoteActivity(val taskIds: List<String>) : Action, Answers<Unit> {
 
 // The chat.
 
-/** [id] is the client's, so a message sent twice is one. */
+/** [id] is the client's, so a message sent twice is one. Its [photos] by their hashes alone, each file sent ahead of it (6.8.0). */
 @Serializable
 @SerialName("SendMessage")
-data class SendMessage(val text: String, val about: About = About(), val id: String, val replyTo: String? = null, val takeItsSubject: Boolean = true) : Action, Answers<Boolean> {
-    override suspend fun run(owners: Owners): Boolean = owners.conversation.ask(text, about, id, replyTo, takeItsSubject)
+data class SendMessage(val text: String, val about: About = About(), val id: String, val replyTo: String? = null, val takeItsSubject: Boolean = true, val photos: List<ChatPhoto> = emptyList()) : Action, Answers<Boolean> {
+    override suspend fun run(owners: Owners): Boolean = owners.conversation.ask(text, about, id, replyTo, takeItsSubject, photos)
 }
 
 @Serializable

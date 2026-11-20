@@ -192,7 +192,7 @@ What you write has two jobs, and the second matters as much as the first: tell t
         if (story.isEmpty()) appendLine("- nothing yet") else story.forEach { appendLine("- $it") }
         feeling?.let(Mood::line)?.let { appendLine(it) }
         // Nothing said by either of you for a while: a greeting, now and then as the app says (D-57).
-        val lastSaid = recent.filter { it.text.isNotBlank() }.maxOfOrNull { it.at }
+        val lastSaid = recent.filter { it.says }.maxOfOrNull { it.at }
         if (lastSaid == null || now - lastSaid >= GREET_AFTER_MIN * 60_000L) appendLine("Your first text in a while: open with a quick greeting")
         if (diary.isNotEmpty()) {
             appendLine()
@@ -271,7 +271,7 @@ What you write has two jobs, and the second matters as much as the first: tell t
             appendLine("Your texts before today, oldest first:")
             for (m in before) {
                 appendLine("- ${Instant.ofEpochMilli(m.at).atZone(zone).format(WHEN)}, you texted: ${m.text}")
-                ChatHistory.replyOf(m, recent)?.let { reply -> appendLine("- ${Instant.ofEpochMilli(reply.at).atZone(zone).format(WHEN)}, they replied: ${reply.text}") }
+                ChatHistory.replyOf(m, recent)?.let { reply -> appendLine("- ${Instant.ofEpochMilli(reply.at).atZone(zone).format(WHEN)}, they replied: ${reply.said}") }
             }
         }
         question?.let { appendLine("Question: $it") }

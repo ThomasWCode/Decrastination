@@ -51,9 +51,10 @@ object Story {
             }
             r.at to "${clock(r.start)}–${clock(r.end)} ${r.label}: $how"
         }
-        val said = messages.filter { it.at >= since && it.text.isNotBlank() && !(chat && it.kind == MessageKind.Chat) }
+        val said = messages.filter { it.at >= since && it.says && !(chat && it.kind == MessageKind.Chat) }
         val words = said.map { m ->
-            val text = "“" + cut(m.text) + "”"
+            // A photo of theirs said as such, with his line of it (6.8.0).
+            val text = "“" + cut(m.said) + "”"
             m.at to "${clock(m.at)}, " + when {
                 m.from == Speaker.Felix && m.byApp -> "the app texted them for you: $text"
                 m.from == Speaker.Felix && m.kind == MessageKind.Chat -> "you answered in the chat: $text"

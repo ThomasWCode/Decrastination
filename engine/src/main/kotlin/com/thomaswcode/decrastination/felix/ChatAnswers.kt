@@ -9,6 +9,7 @@ import com.thomaswcode.decrastination.core.DayBreaks
 import com.thomaswcode.decrastination.core.DayBucket
 import com.thomaswcode.decrastination.core.Due
 import com.thomaswcode.decrastination.core.DueKind
+import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.FelixSettings
 import com.thomaswcode.decrastination.core.Given
 import com.thomaswcode.decrastination.core.Ids
@@ -37,6 +38,7 @@ import com.thomaswcode.decrastination.enrich.ResearchPrompts
 import com.thomaswcode.decrastination.enrich.filled
 import com.thomaswcode.decrastination.learn.CalendarEvent
 import com.thomaswcode.decrastination.learn.EventJudge
+import com.thomaswcode.decrastination.sources.gmail.GmailThreads
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
@@ -112,6 +114,10 @@ object ChatAnswers {
         val answered: List<String> = emptyList(),
         /** His note to himself on how he felt (D-119), kept with his reply. */
         val feeling: String = "",
+        /** A line for each photo it was shown (6.8.0), in the order shown: what it is, kept in its place once it's gone. */
+        val photoNotes: List<String> = emptyList(),
+        /** The photos still kept it asks to see again first (6.8.0), by id: its answer is then only that it's looking. */
+        val see: List<String> = emptyList(),
     )
 
     /**
@@ -140,6 +146,7 @@ object ChatAnswers {
         val details: List<String> = emptyList(),
         val answered: List<String> = emptyList(),
         val feeling: String = "",
+        val photos: String = "",
     )
 
     /**
@@ -178,6 +185,27 @@ object ChatAnswers {
 
     @Serializable
     private data class GivenAction(val type: String = "", val taskId: String = "", val stepIndex: Int = -1, val setting: String = "", val value: String = "")
+
+    /** The longest line of his of a photo (6.8.0): a few words are what's meant. */
+    private const val MAX_PHOTO_NOTE = 200
+
+    /** What a line may start with that isn't his line of a photo: the photo's name, as its turn gave it, its number taken. */
+    private val PHOTO_NAMED = Regex("""^Photo (\d+)(, id [0-9a-fA-F]+)?:\s*""")
+
+    /**
+     * [given], his lines of the photos (6.8.0), each its photo's by place in the order shown: a blank line isn't one, and a line that
+     * names its photo ("Photo 2: …") is that one's, the lines after it the next ones'; a photo with no line has an empty one.
+     */
+    private fun photoLines(given: String): List<String> {
+        val lines = mutableMapOf<Int, String>()
+        var next = 0
+        for (line in given.split('\n').map(String::trim).filter(String::isNotEmpty)) {
+            val at = PHOTO_NAMED.find(line)?.groupValues?.get(1)?.toIntOrNull()?.minus(1)?.takeIf { it in 0 until ChatPrompts.MAX_PICTURES } ?: next
+            lines[at] = line.replace(PHOTO_NAMED, "").take(MAX_PHOTO_NOTE)
+            next = at + 1
+        }
+        return (0..(lines.keys.maxOrNull() ?: -1)).map { lines[it].orEmpty() }
+    }
 
     /** An open's value that opens the task where it lives (G3), not its page here. */
     const val OPEN_SOURCE = "source"
@@ -279,6 +307,8 @@ object ChatAnswers {
         val details = asked.filter { id -> id != about.taskId && byId[id]?.let { it.isOpen && !it.hidden } == true }.distinct().take(ChatPrompts.MAX_READ)
         val stats = asked.any { it.equals(ChatPrompts.ASK_STATS, ignoreCase = true) }
         val calendar = asked.firstNotNullOfOrNull(ChatPrompts::calendarAsk)
+        // Photos still here to see again (6.8.0), as photo:id, each once.
+        val see = asked.mapNotNull(ChatPrompts::photoAsk).filter { it in context?.photos.orEmpty() }.distinct().take(ChatPrompts.MAX_PICTURES)
         // Reminders and notes: each as the app can keep it, the rest said.
         // Those the answer cancels make room, as they're cancelled before its reminders are made.
         val cancelled = actions.filter { it.type == ChatAction.Type.CancelReminder }.mapNotNull { it.value }.toSet()
@@ -292,7 +322,7 @@ object ChatAnswers {
         // His messages the words answered: only those the context listed as waiting, each once; any other id dropped.
         val waiting = context?.waiting.orEmpty()
         val answered = answer.answered.map(String::trim).filter { it in waiting }.distinct()
-        return Reading(reply.take(ChatPrompts.MAX_TEXT), made, changes, leftOut, answer.memories.take(MAX_MEMORIES), replies, actions, answer.research.trim().take(ResearchPrompts.MAX_QUESTION).takeIf { it.isNotEmpty() }, details, reminders, notes, stats, calendar, answered, answer.feeling.trim().take(FelixAnswers.MAX_FEELING))
+        return Reading(reply.take(ChatPrompts.MAX_TEXT), made, changes, leftOut, answer.memories.take(MAX_MEMORIES), replies, actions, answer.research.trim().take(ResearchPrompts.MAX_QUESTION).takeIf { it.isNotEmpty() }, details, reminders, notes, stats, calendar, answered, answer.feeling.trim().take(FelixAnswers.MAX_FEELING), photoNotes = photoLines(answer.photos), see = see)
     }
 
     /**
@@ -475,6 +505,13 @@ object ChatAnswers {
             val field = FelixSettings.field(a.setting) ?: return no("a setting the app doesn't let him change (${a.setting.trim().take(40)})")
             if (settings != null && FelixSettings.set(settings, field.name, a.value) == null) return no("“${field.label}” set to “${a.value.trim().take(40)}”, which it can't be")
             return ChatAction(ChatAction.Type.Setting, "", setting = field.name, value = a.value.trim())
+        }
+        // A photo of theirs from the chat kept as a task's photo of the work (6.8.0): one still here, on an open task Claude reads, as the
+        // task's own sheet offers it.
+        if (a.type == "keepPhoto") {
+            val hash = a.value.trim().lowercase().takeIf { it in context?.photos.orEmpty() } ?: return no("a photo to keep that isn't one of theirs still here")
+            val task = byId[a.taskId]?.takeIf { it.isOpen && Enrichments.jobFor(it, GmailThreads::textRead) != null } ?: return no("a photo kept with a task that isn't listed, is finished, or isn't one Claude reads")
+            return ChatAction(ChatAction.Type.KeepPhoto, task.id, value = hash)
         }
         val task = byId[a.taskId] ?: return no("an action on a task that isn't listed")
         val name = "“${task.title.take(60)}”"

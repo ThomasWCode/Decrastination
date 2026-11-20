@@ -8,6 +8,8 @@ import android.net.Uri
 import android.os.Bundle
 import android.speech.RecognizerIntent
 import android.util.Log
+import com.thomaswcode.decrastination.core.ChatPhoto
+import java.io.File
 import java.util.UUID
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
@@ -586,6 +588,10 @@ class AskActivity : ComponentActivity() {
                             }
                         }
                     }
+                    // The photos waiting to go with your next message (6.8.0), and the tick box, ticked each time they're shown.
+                    val drafted by chatDraft.collectAsStateWithLifecycle()
+                    var deleting by rememberSaveable { mutableStateOf(true) }
+                    val pickPhoto = rememberChatPhoto(graph, this@AskActivity, settings.felixName) { if (chatDraft.value.size == 1) deleting = true }
                     InputBar(
                         name = settings.felixName,
                         draft = draft,
@@ -596,22 +602,33 @@ class AskActivity : ComponentActivity() {
                         onNotReplying = { screen.notReplying() },
                         now = now,
                         zone = zone,
+                        photos = drafted.isNotEmpty(),
+                        onPhoto = pickPhoto.takeIf { drafted.size < ChatPhoto.MAX },
+                        pictures = { DraftPhotos(this@AskActivity, drafted, deleting) { deleting = it } },
                     ) {
                         // Kept whatever the screen does meanwhile (Back at once): sent from the app's scope, the
                         // box cleared at once and filled again only if it couldn't be.
                         val text = draft
                         val subject = about.value
                         val replying = screen.replyingTo
+                        // Its photos (6.8.0), each let go once it's answered, or kept a fortnight, as the box was ticked.
+                        val pictures = drafted.map { ChatPhoto(it, kept = !deleting) }
+                        val app = applicationContext
                         setDraft(graph, "")
                         about.value = About()
+                        chatDraft.value = emptyList()
                         screen.sent()
                         seenBySending()
                         graph.scope.launch {
-                            // The box's own reply to his nudge takes none of its subject: your words go to him as they are.
+                            // The box's own reply to his nudge takes none of its subject: your words go to him as they are. A subject given
+                            // takes its place (6.6.0's, on the website too): the words go as a turn about it, not as the answer to a question
+                            // about something else; a message chosen with Reply still is.
                             // One whose write failed (a full disk) is as one not sent: back in the box, to send again (U-05). One
                             // the chat kept before a later write failed went: its answer asked for, not sent again from the box.
                             val id = UUID.randomUUID().toString()
-                            val sent = runCatching { graph.act(SendMessage(text, subject, id, (replying ?: quiet)?.id, replying != null)) }
+                            // Its photos where the message that names them finds them, and the server's copy is sent from, first.
+                            val kept = withContext(Dispatchers.IO) { pictures.all { keepDrafted(graph, app, it.hash) } }
+                            val sent = kept && runCatching { graph.act(SendMessage(text, subject, id, (replying ?: quiet?.takeIf { subject == About() })?.id, replying != null, pictures)) }
                                 .getOrElse { error ->
                                     if (graph.chat.value.messages.any { it.id == id }) {
                                         Log.w(AppGraph.TAG, "Your message was kept, a write after it failed: its answer asked for", error)
@@ -624,6 +641,8 @@ class AskActivity : ComponentActivity() {
                                 }
                             // Back through the holder, as this screen may be gone. Another still waiting for a screen isn't written over.
                             if (!sent) graph.conversation.unsent.update { waiting -> waiting?.copy(text = text + "\n\n" + waiting.text) ?: Unsent(text, subject, replying) }
+                            // Its photos back in the box with it; gone with it, their waiting copies let go.
+                            if (!sent) chatDraft.update { (pictures.map { it.hash } + it).distinct().take(ChatPhoto.MAX) } else withContext(Dispatchers.IO) { pictures.forEach { File(draftDir(app), "${it.hash}.jpg").delete() } }
                         }
                     }
                 } else {
@@ -1095,7 +1114,7 @@ private fun Quote(quote: ChatMessage, name: String, onOpen: () -> Unit) {
         Box(Modifier.width(3.dp).fillMaxHeight().background(MaterialTheme.colorScheme.primary))
         Column(Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
             Text(if (quote.from == Speaker.Felix) name else "You", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-            Text(quote.text.trim().lineSequence().first(), style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(quote.said.trim().lineSequence().first(), style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -1112,7 +1131,8 @@ private fun Yours(graph: AppGraph, message: ChatMessage, quote: ChatMessage?, na
         Bubble(message, MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(18.dp, 18.dp, 4.dp, 18.dp), flash, onReply) {
             quote?.let { Quote(it, name) { onQuote(it.id) } }
             if (message.about != About()) Text(aboutLine(message.about, now, zone), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onPrimaryContainer)
-            Text(message.text, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onPrimaryContainer)
+            MessagePhotos(graph, message, now)
+            if (message.text.isNotBlank()) Text(message.text, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onPrimaryContainer)
         }
         Time(message, zone)
         // While it's answered, he's typing ([Typing]), under it.
@@ -1573,6 +1593,9 @@ private fun InputBar(
     onNotReplying: () -> Unit,
     now: Long,
     zone: ZoneId,
+    photos: Boolean = false,
+    onPhoto: (() -> Unit)? = null,
+    pictures: @Composable () -> Unit = {},
     onSend: () -> Unit,
 ) {
     // Your words by voice (UI-07): put in the box after what's there, not sent, so they're read first.
@@ -1596,7 +1619,7 @@ private fun InputBar(
                     Box(Modifier.width(3.dp).fillMaxHeight().background(MaterialTheme.colorScheme.primary))
                     Column(Modifier.weight(1f).padding(horizontal = 8.dp)) {
                         Text(if (r.from == Speaker.Felix) "Replying to $name" else "Replying to you", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-                        Text(r.text.trim().lineSequence().first(), style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(r.said.trim().lineSequence().first(), style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                     IconButton(onClick = onNotReplying) { Icon(painterResource(R.drawable.ic_close), contentDescription = "Not replying", modifier = Modifier.size(18.dp)) }
                 }
@@ -1609,6 +1632,8 @@ private fun InputBar(
                     trailingIcon = { Icon(painterResource(R.drawable.ic_close), contentDescription = "Not about it", modifier = Modifier.size(16.dp)) },
                 )
             }
+            // The photos waiting to go with it (6.8.0).
+            if (photos) pictures()
             Row(verticalAlignment = Alignment.CenterVertically) {
                 OutlinedTextField(
                     draft,
@@ -1618,12 +1643,17 @@ private fun InputBar(
                     keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
                     modifier = Modifier.weight(1f),
                 )
+                // A photo with it (6.8.0), four at most: none once there are.
+                IconButton(enabled = onPhoto != null, onClick = { onPhoto?.invoke() }) {
+                    Icon(painterResource(R.drawable.ic_camera), contentDescription = "Add a photo")
+                }
                 if (canSpeak) {
                     IconButton(onClick = { listen.launch(speech) }) {
                         Icon(painterResource(R.drawable.ic_mic), contentDescription = "Say it")
                     }
                 }
-                IconButton(enabled = draft.isNotBlank(), onClick = onSend) {
+                // A photo alone is a message: it counts as words.
+                IconButton(enabled = draft.isNotBlank() || photos, onClick = onSend) {
                     Icon(painterResource(R.drawable.ic_send), contentDescription = "Send")
                 }
             }

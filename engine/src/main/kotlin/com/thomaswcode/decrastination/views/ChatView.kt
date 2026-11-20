@@ -3,6 +3,7 @@ package com.thomaswcode.decrastination.views
 import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.ChatActs
 import com.thomaswcode.decrastination.core.ChatMessage
+import com.thomaswcode.decrastination.core.ChatPhoto
 import com.thomaswcode.decrastination.core.ChatState
 import com.thomaswcode.decrastination.core.ChatSummary
 import com.thomaswcode.decrastination.core.Instruction
@@ -22,6 +23,7 @@ import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.WebSource
 import com.thomaswcode.decrastination.data.FelixStore
 import com.thomaswcode.decrastination.data.TaskState
+import com.thomaswcode.decrastination.enrich.PhotoChecker
 import com.thomaswcode.decrastination.felix.ChatPrompts
 import com.thomaswcode.decrastination.felix.Conversation
 import com.thomaswcode.decrastination.felix.FelixAnswers
@@ -93,6 +95,9 @@ data class ChatView(
     /** What the form takes, for a card's task changed first. */
     val form: OwnTaskFormView? = null,
     val maxText: Int = ChatPrompts.MAX_TEXT,
+    /** What a message's photos may be (6.8.0): how many, and the side each is shrunk to in the browser, as a check's pages are. */
+    val maxPhotos: Int = ChatPhoto.MAX,
+    val photoSide: Int = PhotoChecker.MAX_SIDE,
     val maxFeedback: Int = Conversation.MAX_FEEDBACK,
     val readAfterMs: Long = ChatRows.READ_AFTER_MS,
     val undoMs: Long = ChatRows.UNDO_BAR_MS,
@@ -190,7 +195,13 @@ data class ChatRow(
     val cards: List<ChatCard> = emptyList(),
     val lines: List<ChatDid> = emptyList(),
     val said: String? = null,
+    /** Yours, its photos (6.8.0): each where it can be fetched while its file's here, and Felix's line of it. */
+    val photos: List<ChatPhotoView> = emptyList(),
 )
+
+/** A photo of yours in the chat (6.8.0): where it's fetched from ([url]), none once its file's gone; Felix's line of it, shown in its place then. */
+@Serializable
+data class ChatPhotoView(val url: String? = null, val note: String = "")
 
 /** One of your changes, in the chat's Your changes: what it's about, your words, Claude's reading, and what's to do. */
 @Serializable
@@ -209,6 +220,9 @@ data class ChangeRow(
 )
 
 object ChatViews {
+    /** Where the website fetches a chat photo from, by its hash (6.8.0). */
+    const val CHAT_PHOTOS = "/api/chat-photos/"
+
     private val CLEAR_DETAIL = "Its messages go, the earlier ones too. What you added or applied from it stays: your tasks, and your changes (taken back under Your changes)."
 
     /** The chat at [now], with [earlier] of the [archive]'s newest over its window (it holds [older] past them, not read yet), [quotes] those read for a reply further back. */
@@ -232,6 +246,8 @@ object ChatViews {
         writable: Boolean,
         /** The finishes of emails standing in Gmail's journal, by id: an act's own one, its Undo the journal's (`GmailWrites.standing`). */
         finishing: Set<String> = emptySet(),
+        /** Whether a chat photo's file is here to be fetched, by its hash (6.8.0). */
+        photoHere: (String) -> Boolean = { false },
     ): ChatView {
         val name = settings.felixName
         val byId = tasks.tasks.associateBy { it.id }
@@ -242,7 +258,7 @@ object ChatViews {
         val dayStart = today.atStartOfDay(zone).toInstant().toEpochMilli()
         val calendarDay = Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
 
-        fun quote(message: ChatMessage) = ChatQuote(message.id, if (message.from == Speaker.Felix) name else "You", message.text.trim().lineSequence().first())
+        fun quote(message: ChatMessage) = ChatQuote(message.id, if (message.from == Speaker.Felix) name else "You", message.said.trim().lineSequence().first())
 
         // An id fixed by what's been said so far: a press made twice before the page has heard is the one message, one made after it another.
         fun chips(message: ChatMessage): List<ChatChip> {
@@ -264,6 +280,9 @@ object ChatViews {
             if (message.from == Speaker.You) {
                 val why = message.note.takeIf { message.answeredAt == null }
                 return common.copy(
+                    // A photo alone has no words to bubble (6.8.0).
+                    texts = listOf(message.text).filter { it.isNotBlank() },
+                    photos = message.photos.map { p -> ChatPhotoView(p.hash.takeIf { p.live(message, now) && photoHere(it) }?.let { CHAT_PHOTOS + it }, p.note) },
                     about = aboutLine(message.about, now, zone).takeIf { message.about != About() },
                     note = why,
                     takeBack = WithdrawQuestion(message.id).takeIf { live && why != null },

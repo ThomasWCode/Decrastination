@@ -789,3 +789,25 @@ A click on a piece of the website's Day opened its task's sheet, whose *Done*, *
 2. **When the photo was taken is when the server received it**, whatever the page says.
 3. **More than ten pictures chosen take the first ten**, and say so.
 4. **A slot kept has its sheet on the website now**, as the phone's has from 6.5.0, with the photo while it can still earn.
+
+### Photos in the chat (6.8.0, 20 Nov)
+
+The chat was text throughout: each turn one string, a message with no words dropped. → D-159.
+
+**Q162. What may Felix do with a photo in the chat?** (18 Nov.) **Your answer: see it and answer; make or change tasks from it; keep it with a task; and count it as proof of work**, the last 6.9.0's, through the photo check (Q7 of the plan's answers).
+
+**Q163. How long does Felix go on seeing a chat photo?** (18 Nov.) Offered: with any message sent within ten minutes of it, by itself, then told it's there and asking to see it; your next few messages; once only; as long as it's in his history. **Your answer: the first.**
+
+**Q164. How long is a chat photo's file kept?** (18 Nov, put again 19 Nov.) First answered "while its message is in the chat's window", which keeps a message while it's among the newest 200 or within 14 days, whichever keeps more (D-96), so sets no limit in days. Offered on 19 Nov: 14 days after it's sent, or at a chat reset, whichever is first. **Your answer: as recommended.** Ticked, the default (Q158), it goes once its message is answered.
+
+#### Decided without asking
+
+1. **Only a photo's hash is in the stores and the commands**: its bytes go to `POST /chat-photos/{hash}` ahead of the message that names it, from the phone (`Replica.exchange`) or the website, so nothing of a photo reaches R2, a backup or the command log.
+2. **A photo's id, to Felix, is its hash**: each picture named "Photo 1, id …" in its turn, the earlier ones said "[photo id: his line]", and asked to be seen again as `photo:id` in `details`, beside `stats` and `calendar`, so the schema grows by one string (his lines, one to a line, in order: a list of them made the chat's grammar more than the API compiles, found by compiling it live) and one action type (`keepPhoto`).
+3. **Eight pictures a call at most**, as many as a quarter of the budget holds, each taking from the text's room the characters its tokens would be (`Pricing.PICTURE_CHARS`): the dearest call stays as it was.
+4. **A message with photos is always a turn of the chat**, never taken as the answer to a question of his, where he'd never see them.
+5. **A photo he keeps with a task is read before your message is marked answered**, as a ticked one's file goes then; its Undo puts back the photo the task had.
+6. **The file's let go at once when its message is answered, taken back or cleared**, by a sweep set off as the chat changes; one that came ahead of its message waits the grace a task's photo does (the server's day, the phone's hour).
+7. **A photo from the website shows on the phone**: fetched from the server once and kept as the phone's own while its message needs it.
+8. **He keeps a photo with a task only when you ask**: tried on a real page, told he might where it plainly showed the task's work, he kept it every time, which replaces the task's photo and sets off a paid reading.
+9. **The phone's box, given a subject by *Ask Felix about it*, no longer answers a nudge by itself**, as the website's doesn't from 6.6.0: the words go as a turn about the subject.

@@ -18,6 +18,7 @@ import com.thomaswcode.decrastination.net.Http
 import com.thomaswcode.decrastination.ports.Log
 import com.thomaswcode.decrastination.sync.protocol.AttachPhoto
 import com.thomaswcode.decrastination.sync.protocol.Command
+import com.thomaswcode.decrastination.sync.protocol.SendMessage
 import com.thomaswcode.decrastination.ui.Format
 import com.thomaswcode.decrastination.views.Asked
 import com.thomaswcode.decrastination.views.PhotoCheckAsk
@@ -66,6 +67,8 @@ class Replica(
     private val seedFile: File? = null,
     /** This phone mirroring again, however it came back to it ([backToMirroring]): what's its own again then, set going. */
     private val mirroringAgain: () -> Unit = {},
+    /** A chat photo's bytes here, by its hash (6.8.0), sent ahead of the message that names it. */
+    private val chatPhoto: (String) -> ByteArray? = { null },
     /** The chat's messages a pull brought, none of them here before: Felix's, said on the server, heard here as his notification. */
     private val heard: (List<ChatMessage>) -> Unit = {},
 ) {
@@ -323,6 +326,10 @@ class Replica(
                 for (photo in waiting.mapNotNull { (it.action as? AttachPhoto)?.photo }) {
                     if (!sendTaskPhoto(server, headers, photo)) return failed("A task's photo couldn't be sent")
                 }
+                // A message's photos likewise (6.8.0), so Felix's answer on the server has them.
+                for (hash in waiting.flatMap { (it.action as? SendMessage)?.photos.orEmpty() }.map { it.hash }.distinct()) {
+                    if (!sendChatPhoto(server, headers, hash)) return failed("A photo in the chat couldn't be sent")
+                }
                 val answer = http.post("$server/api/commands", headers, JSON.encodeToString(CommandBatch.serializer(), CommandBatch(waiting)))
                 if (!answer.ok) return if (answer.code == 409 && serverMode(headers) == SyncState.MIRROR) backToMirroring() else failed(problem(answer.code))
                 val outcomes = JSON.decodeFromString(ListSerializer(Outcome.serializer()), answer.body)
@@ -379,6 +386,26 @@ class Replica(
         return http.postBytes("$server/api/task-photos/${photo.hash}", headers + ("Content-Type" to "image/jpeg"), jpeg).ok
     }
 
+    /**
+     * The chat photo [hash]'s file to the server (6.8.0), as a task's is: whether it went, or needn't, its file here gone (let go
+     * since: the message is answered, or taken back), as the server then has it, or its message no need of it.
+     */
+    private fun sendChatPhoto(server: String, headers: Map<String, String>, hash: String): Boolean {
+        val jpeg = chatPhoto(hash)?.takeIf { Photos.hashOf(it) == hash } ?: return true
+        return http.postBytes("$server/api/chat-photos/$hash", headers + ("Content-Type" to "image/jpeg"), jpeg).ok
+    }
+
+    /** The chat's photos still needed now ([ChatPhoto.live]), by hash (6.8.0): those a switch takes to the server. */
+    private fun liveChatPhotos(): List<String> = clock.now().let { now -> stores.chat.value.messages.flatMap { m -> m.photos.filter { it.live(m, now) }.map { it.hash } }.distinct() }
+
+    /** A chat photo from the server (6.8.0): one sent from the website, for its bubble here; null where it's gone, or can't be had. */
+    suspend fun fetchChatPhoto(hash: String): ByteArray? = withContext(Dispatchers.IO) {
+        val token = stores.secrets[Secret.DeviceToken] ?: return@withContext null
+        if (!Photos.HASH.matches(hash)) return@withContext null
+        val headers = mapOf("Authorization" to "Bearer $token", Protocol.HEADER to Protocol.VERSION.toString())
+        runCatching { http.getBytes("${sync.value.server}/api/chat-photos/$hash", headers) }.getOrNull()?.takeIf { Photos.hashOf(it) == hash }
+    }
+
     /** What's said of a command the server dropped: which it was and when, as a reason alone can't say what's to be done again. */
     private fun droppedLine(command: Command?, why: String): String = listOfNotNull(command?.let(::named), why).joinToString(": ")
 
@@ -416,6 +443,17 @@ class Replica(
             if (!sent) return@withLock "Nothing switched: a task's photo couldn't be sent first"
             photosSent += photo.hash
         }
+        // The chat's photos still needed likewise (6.8.0): one sent while mirroring has no command to take it there.
+        val chatSent = HashSet<String>()
+        for (hash in liveChatPhotos()) {
+            val sent = try {
+                sendChatPhoto(sync.value.server, headers, hash)
+            } catch (failed: IOException) {
+                false
+            }
+            if (!sent) return@withLock "Nothing switched: a photo in the chat couldn't be sent first"
+            chatSent += hash
+        }
         if (!backup()) return@withLock "Nothing switched: a backup couldn't be saved first"
         val id = UUID.randomUUID().toString()
         val seed = commands.switching(
@@ -429,7 +467,7 @@ class Replica(
                 }
             },
         )
-        sendSwitch(seed, headers, photosSent)
+        sendSwitch(seed, headers, photosSent, chatSent)
     }
 
     /**
@@ -479,7 +517,7 @@ class Replica(
      * gone over already, the next pull's a first one, checked (W-26). The tasks' photos not yet on the box ([photosSent] are) go
      * first: one attached as the switch began is in the seed, and its command's never made. Why it isn't made, or null where it is.
      */
-    private suspend fun sendSwitch(seed: SwitchSeed, headers: Map<String, String>, photosSent: Set<String> = emptySet()): String? {
+    private suspend fun sendSwitch(seed: SwitchSeed, headers: Map<String, String>, photosSent: Set<String> = emptySet(), chatSent: Set<String> = emptySet()): String? {
         for (photo in stores.tasks.value.tasks.mapNotNull { it.photo }.filter { it.hash !in photosSent }) {
             val sent = try {
                 sendTaskPhoto(sync.value.server, headers, photo)
@@ -489,6 +527,18 @@ class Replica(
             if (!sent) {
                 failed("The switch's seed is waiting: a task's photo couldn't be sent ahead of it")
                 return "Under way: a task's photo couldn't be sent ahead of the seed, so the switch goes at the next sync"
+            }
+        }
+        // The chat's photos still needed (6.8.0), those not sent as the switch began ([chatSent]).
+        for (hash in liveChatPhotos().filter { it !in chatSent }) {
+            val sent = try {
+                sendChatPhoto(sync.value.server, headers, hash)
+            } catch (failed: IOException) {
+                false
+            }
+            if (!sent) {
+                failed("The switch's seed is waiting: a photo in the chat couldn't be sent ahead of it")
+                return "Under way: a photo in the chat couldn't be sent ahead of the seed, so the switch goes at the next sync"
             }
         }
         val answer = try {

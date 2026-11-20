@@ -27,6 +27,7 @@ import com.thomaswcode.decrastination.core.ReplayClock
 import com.thomaswcode.decrastination.core.SchoolDays
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.Source
+import com.thomaswcode.decrastination.core.TaskPhoto
 import com.thomaswcode.decrastination.core.WallClock
 import com.thomaswcode.decrastination.data.AndroidBackupFolder
 import com.thomaswcode.decrastination.data.BackupService
@@ -113,6 +114,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -409,6 +411,10 @@ class AppGraph private constructor(context: Context) : Owners {
         tasks, settings, stores.learning, log, stores.instructions, chat, school, memory, stores.felix, clock, scope, gateway, notifier, focus, planning, felixPorts, outbox,
         owners = object : Conversation.Owners {
             override suspend fun saveOwnTask(sourceId: String, task: OwnTask): Boolean = ownTasks.saveOwnTask(sourceId, task)
+            override fun chatPhoto(hash: String): ByteArray? = photos.chatPhoto(hash)
+            override fun hasChatPhoto(hash: String): Boolean = photos.chatPhotoFile(hash).isFile
+            override suspend fun keepPhotoFromChat(taskId: String, hash: String, jpeg: ByteArray) { photos.keepFromChat(taskId, hash, jpeg) }
+            override suspend fun restoreTaskPhoto(taskId: String, photo: TaskPhoto?) { photos.keep(taskId, photo) }
             override suspend fun finishOwnTask(taskId: String) { ownTasks.finishOwnTask(taskId) }
             override suspend fun reopenOwnTask(taskId: String) { ownTasks.reopenOwnTask(taskId) }
             override suspend fun deleteOwnTask(taskId: String) { ownTasks.deleteOwnTask(taskId) }
@@ -487,6 +493,7 @@ class AppGraph private constructor(context: Context) : Owners {
         seedFile = File(app.filesDir, "switch-seed.json"),
         // Mirroring again, at a retry of the switch or at your word: Gmail's writes are this phone's again, and any waiting goes.
         mirroringAgain = { gmailFinishes.rearm() },
+        chatPhoto = { hash -> photos.chatPhoto(hash) },
     ) { fresh -> outbox.heard(clock.now(), fresh) }
 
     /** The tasks' readings ([Readings]): by Claude while it can be asked, by the rules otherwise; one read again on asking. */
@@ -599,6 +606,15 @@ class AppGraph private constructor(context: Context) : Owners {
         // A check's kept pages' files let go here as their record goes (6.5.0): the server's daily tidy, or a task done, changes it
         // while this process lives on for days, and the files are this phone's own, not a store's.
         scope.launch(Dispatchers.IO) { stores.session.state.map { it.pages }.distinctUntilChanged().drop(1).collect { runCatching { photos.sweepPhotos(keptBefore = clock.now() - PHOTO_GRACE_MS) } } }
+        // A chat photo's file here let go as its message is done with it (6.8.0), as the server's is.
+        scope.launch(Dispatchers.IO) { stores.chat.state.map { Photos.chatPhotos(it.messages) }.distinctUntilChanged().drop(1).collect { runCatching { photos.sweepPhotos(keptBefore = clock.now() - PHOTO_GRACE_MS) } } }
+        // And every six hours, as a kept one's fortnight ends with no change to set a sweep off, and this process can live for days.
+        scope.launch(Dispatchers.IO) {
+            while (true) {
+                delay(PHOTO_SWEEP_MS)
+                runCatching { photos.sweepPhotos(keptBefore = clock.now() - PHOTO_GRACE_MS) }
+            }
+        }
         // What's read again as it changes: the calendar, the calendars picked, Anki's settings, the Teams widget's list ([Sync.start]).
         sync.start(calendarWriter.calendarChanged)
         // The calendar picked, and each plan once plans have been quiet a while, written ([CalendarWriter.start]).
@@ -861,6 +877,9 @@ class AppGraph private constructor(context: Context) : Owners {
          * and a sweep runs as the app's used (6.5.0), so it's given an hour, not the server's day, which waits for a phone offline.
          */
         private const val PHOTO_GRACE_MS = 60 * 60_000L
+
+        /** How often the phone sweeps its photos while the app lives, a kept chat photo's fortnight being up between changes (6.8.0). */
+        private const val PHOTO_SWEEP_MS = 6 * 3_600_000L
 
         // It holds only the application context, which lives as long as the process anyway.
         @SuppressLint("StaticFieldLeak")

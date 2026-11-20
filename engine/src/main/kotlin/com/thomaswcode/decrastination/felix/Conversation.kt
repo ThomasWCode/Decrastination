@@ -2,6 +2,7 @@ package com.thomaswcode.decrastination.felix
 
 import com.thomaswcode.decrastination.block.BlockPolicy
 import com.thomaswcode.decrastination.block.Focus
+import com.thomaswcode.decrastination.block.Photos
 import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.Act
 import com.thomaswcode.decrastination.core.AssessLater
@@ -9,6 +10,7 @@ import com.thomaswcode.decrastination.core.By
 import com.thomaswcode.decrastination.core.ChatAction
 import com.thomaswcode.decrastination.core.ChatActs
 import com.thomaswcode.decrastination.core.ChatMessage
+import com.thomaswcode.decrastination.core.ChatPhoto
 import com.thomaswcode.decrastination.core.ChatState
 import com.thomaswcode.decrastination.core.CheckInDraft
 import com.thomaswcode.decrastination.core.DueKind
@@ -41,6 +43,7 @@ import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.core.TaskItem
+import com.thomaswcode.decrastination.core.TaskPhoto
 import com.thomaswcode.decrastination.core.WallClock
 import com.thomaswcode.decrastination.core.WeeklyRules
 import com.thomaswcode.decrastination.data.ActivityLog
@@ -178,6 +181,18 @@ class Conversation(
 
         /** [taskId]'s finish that stands, by its id: the one his act made, for its Undo. */
         fun gmailWriteOf(taskId: String): String? = null
+
+        /** A chat photo's bytes, by its hash (6.8.0), while its file's here; none where none are kept. */
+        fun chatPhoto(hash: String): ByteArray? = null
+
+        /** Whether a chat photo's file is here (6.8.0). */
+        fun hasChatPhoto(hash: String): Boolean = false
+
+        /** [jpeg], the chat photo [hash], kept as [taskId]'s photo of the work, a copy of its own, the task read again with it (6.8.0). */
+        suspend fun keepPhotoFromChat(taskId: String, hash: String, jpeg: ByteArray) {}
+
+        /** [photo] [taskId]'s photo again, or none: a chat photo kept with it taken back (6.8.0). */
+        suspend fun restoreTaskPhoto(taskId: String, photo: TaskPhoto?) {}
     }
 
     /**
@@ -481,7 +496,7 @@ class Conversation(
      * again with them, never searching or asking for them again, as each is paid for; a search held
      * back (Claude off or resting, the cap) isn't kept, so it can be made later.
      */
-    private data class Gathered(val id: String, val found: Found?, val notLooked: String?, val read: List<String>, val stats: Boolean = false, val calendar: List<String> = emptyList())
+    private data class Gathered(val id: String, val found: Found?, val notLooked: String?, val read: List<String>, val stats: Boolean = false, val calendar: List<String> = emptyList(), val seen: List<String> = emptyList())
 
     @Volatile
     private var gathered: Gathered? = null
@@ -506,11 +521,11 @@ class Conversation(
      * chat, kept as message [id] (about what it replies to, where it's about nothing else, unless not
      * [takeItsSubject]: the box's words to his nudge just above it, told him as your words alone, D-99)
      * and answered ([answerChat]). One sent while he answers another of yours lets that answer go, paid
-     * for and unused, and he answers both together (D-98). False only with no words. Kept, it's shown in
-     * his notification under what it answers.
+     * for and unused, and he answers both together (D-98). False only with no words and no [photos], which count as words (6.8.0).
+     * Kept, it's shown in his notification under what it answers.
      */
-    suspend fun ask(text: String, about: About = About(), id: String = Ids.next(), replyTo: String? = null, takeItsSubject: Boolean = true): Boolean =
-        send(text, about, id, replyTo, takeItsSubject) != Asked.Nothing
+    suspend fun ask(text: String, about: About = About(), id: String = Ids.next(), replyTo: String? = null, takeItsSubject: Boolean = true, photos: List<ChatPhoto> = emptyList()): Boolean =
+        send(text, about, id, replyTo, takeItsSubject, photos) != Asked.Nothing
 
     /** What became of words sent ([send]): nothing (there were none), an answer taken as one (with no call, but a reading's question's, read by Claude), or a turn of the chat waiting for his answer. */
     enum class Asked { Nothing, Answer, Turn }
@@ -522,18 +537,21 @@ class Conversation(
      * here is one sent twice (a chip pressed again), and stands: only the window's looked at, as the second
      * press comes straight after, and a miss in the archive reads every month of it.
      */
-    suspend fun send(text: String, about: About = About(), id: String = Ids.next(), replyTo: String? = null, takeItsSubject: Boolean = true): Asked {
+    suspend fun send(text: String, about: About = About(), id: String = Ids.next(), replyTo: String? = null, takeItsSubject: Boolean = true, photos: List<ChatPhoto> = emptyList()): Asked {
         val words = text.trim().take(ChatPrompts.MAX_TEXT)
-        if (words.isEmpty()) return Asked.Nothing
+        // Its photos by their hashes, each once, [ChatPhoto.MAX] at most, Felix's notes his own to write (6.8.0).
+        val pictures = photos.filter { Photos.HASH.matches(it.hash) }.distinctBy { it.hash }.take(ChatPhoto.MAX).map { it.copy(note = "") }
+        if (words.isEmpty() && pictures.isEmpty()) return Asked.Nothing
         if (chat.value.messages.any { it.id == id }) return Asked.Turn
         val repliedTo = replyTo?.let { outbox.find(it) }
-        if (repliedTo != null && routed(repliedTo, words, id)) return Asked.Answer
+        // One with photos is a turn of the chat: taken as the answer to a question of his, he'd never see them.
+        if (repliedTo != null && pictures.isEmpty() && routed(repliedTo, words, id)) return Asked.Answer
         // Yours still waiting go with it, answered together: only the newest says why it waits. Each keeps
         // whether it waits for Try again, for if the newest is taken back ([withdrawQuestion]).
         chat.update { state ->
             state.copy(
                 messages = state.messages.map { if (it.from == Speaker.You && it.answeredAt == null) it.copy(note = null) else it } +
-                    ChatMessage(id, Speaker.You, words, clock.now(), about.takeIf { it != About() } ?: repliedTo?.about?.takeIf { takeItsSubject } ?: About(), replyTo = replyTo),
+                    ChatMessage(id, Speaker.You, words, clock.now(), about.takeIf { it != About() } ?: repliedTo?.about?.takeIf { takeItsSubject } ?: About(), replyTo = replyTo, photos = pictures),
             )
         }
         outbox.delivered()
@@ -649,6 +667,8 @@ class Conversation(
             waiting = waiting.mapTo(HashSet()) { it.id },
             breaksOn = { planning.breaksOn(it, applied) },
             weekly = WeeklyRules.inForce(applied),
+            // The chat's photos still here (6.8.0): their messages need them, their files are here.
+            photos = messages.flatMap { m -> m.photos.filter { it.live(m, now) } }.map { it.hash }.filterTo(HashSet(), owners::hasChatPhoto),
         )
     }
 
@@ -778,7 +798,7 @@ class Conversation(
             // text he asked to [read] (D-93), and the week's numbers and the calendar further out where he asked
             // for them ([stats], [calendar]), as of the moment it's asked, why a search he asked for couldn't be made ([notLooked]),
             // so he doesn't ask for it again; at the [last] round a message has, told so.
-            suspend fun ask(found: Found?, read: List<TaskItem> = emptyList(), stats: Boolean = false, calendar: List<String> = emptyList(), last: Boolean = false, notLooked: String? = null) = gateway.call(interactive = true, record = ModelCalls.OnRecord(ModelEffort.Job.Chat, waiting.text) { r: ChatReader.Result -> r.usage to ModelCalls.outcome(r.refused, r.reading == null) }, cost = { r: ChatReader.Result -> r.costUsd to r.refused }) { at ->
+            suspend fun ask(found: Found?, read: List<TaskItem> = emptyList(), stats: Boolean = false, calendar: List<String> = emptyList(), last: Boolean = false, notLooked: String? = null, seen: List<String> = emptyList()) = gateway.call(interactive = true, record = ModelCalls.OnRecord(ModelEffort.Job.Chat, waiting.said) { r: ChatReader.Result -> r.usage to ModelCalls.outcome(r.refused, r.reading == null) }, cost = { r: ChatReader.Result -> r.costUsd to r.refused }) { at ->
                 // Being asked now: whatever it said before (a failed call) is gone.
                 chat.update { s -> s.copy(messages = s.messages.map { if (it.id == waiting.id) it.copy(note = null, stuck = false) else it }) }
                 sentAt.value = at
@@ -789,7 +809,9 @@ class Conversation(
                     val quoted = sent.mapNotNull { m -> m.replyTo?.takeIf { r -> sent.none { it.id == r } }?.let { outbox.find(it) } }
                     val brought = listOfNotNull(ChatPrompts.statsBlock(Stats.weekLines(log.value, settings.value.classMap, at, clock.zone())).takeIf { stats }) +
                         calendar.map { ChatPrompts.calendarBlock(time.events, it, at, clock.zone(), time.read) }
-                    ChatReader(chatClient, clock.zone(), profile = profile(at), settings = settings.value).answer(sent, state.tasks, time.events, chatContext(at, state, time, instructions.value.applied, noted, sent), at, found, read, quoted, noted, brought, last, notLooked)
+                    // The photos that can go with it (6.8.0): those whose messages need them still, their files here, read as it's sent.
+                    val context = chatContext(at, state, time, instructions.value.applied, noted, sent)
+                    ChatReader(chatClient, clock.zone(), profile = profile(at), settings = settings.value).answer(sent, state.tasks, time.events, context, at, found, read, quoted, noted, brought, last, notLooked, live = context.photos, seen = seen, photo = owners::chatPhoto)
                 } finally {
                     sentAt.value = null
                 }
@@ -802,6 +824,7 @@ class Conversation(
             var read = tasksOf(before?.read.orEmpty())
             var stats = before?.stats == true
             var calendar = before?.calendar.orEmpty()
+            var seen = before?.seen.orEmpty()
             // Let go while it ran (AC-08: the message says so already), or another of yours sent meanwhile, to be
             // answered with it (D-98): the answer goes unused, and nothing more is looked up or read for it.
             fun unwanted(): Boolean {
@@ -809,7 +832,7 @@ class Conversation(
                 if (letGo == waiting.id) letGo = null
                 return gone
             }
-            val called = ask(before?.found, read, stats, calendar, notLooked = before?.notLooked.takeIf { before?.found == null })
+            val called = ask(before?.found, read, stats, calendar, notLooked = before?.notLooked.takeIf { before?.found == null }, seen = seen)
             if (unwanted()) return@withLock
             val result = when (called) {
                 is Called.Held -> return@call gateway.because(called.hold)
@@ -821,6 +844,8 @@ class Conversation(
             }
             // The messages that went in the request answered: the budget can leave some of those waiting out (F-02).
             var went = result.sent
+            // The photos the answer's call was shown, in order (6.8.0): his lines of them are of these.
+            var pictured = result.pictures
             var reading = result.reading ?: run {
                 stuck = true
                 return@call if (result.refused) "Claude declined to answer that: Try again, or put it another way" else "Claude's answer couldn't be read: Try again"
@@ -836,13 +861,13 @@ class Conversation(
             // Why a search made found nothing, kept with the rest; one held back isn't, so it can be made later.
             var tried = before?.notLooked
             for (round in 1..ChatRounds.MAX_ROUNDS) {
-                val next = ChatRounds.next(reading, searched = found != null || notLooked != null, searches = settings.value.felixSearches, read = read.map { it.id }, stats = stats, calendar = calendar) ?: break
+                val next = ChatRounds.next(reading, searched = found != null || notLooked != null, searches = settings.value.felixSearches, read = read.map { it.id }, stats = stats, calendar = calendar, seen = seen) ?: break
                 var looks = false
                 next.search?.let { question ->
                     val search = gateway.call(interactive = true, record = ModelCalls.OnRecord(ModelEffort.Job.Research, question) { r: WebResearcher.Result -> r.usage to ModelCalls.outcome(r.refused, r.found == null) }, cost = { r: WebResearcher.Result -> r.costUsd to r.refused }) { at ->
                         sentAt.value = at
                         try {
-                            WebResearcher(researchClient, year = profile(at).year).look(question, waiting.text, at, clock.zone())
+                            WebResearcher(researchClient, year = profile(at).year).look(question, waiting.said, at, clock.zone())
                         } finally {
                             sentAt.value = null
                         }
@@ -873,10 +898,13 @@ class Conversation(
                 val brings = next.stats != stats || next.calendar != calendar
                 stats = next.stats
                 calendar = next.calendar
+                // The photos still kept he asked to see again (6.8.0), each the first time he asks.
+                val sees = next.see.size > seen.size
+                seen = next.see
                 // Nothing new to answer with (a search that found nothing, no texts asked for): his answer stands.
-                if (!looks && !reads && !brings) break
-                gathered = Gathered(waiting.id, found, tried, read.map { it.id }, stats, calendar)
-                val again = ask(found, read, stats, calendar, last = round == ChatRounds.MAX_ROUNDS, notLooked = notLooked.takeIf { found == null })
+                if (!looks && !reads && !brings && !sees) break
+                gathered = Gathered(waiting.id, found, tried, read.map { it.id }, stats, calendar, seen)
+                val again = ask(found, read, stats, calendar, last = round == ChatRounds.MAX_ROUNDS, notLooked = notLooked.takeIf { found == null }, seen = seen)
                 if (unwanted()) return@withLock
                 val second = when (again) {
                     is Called.Held -> return@call gateway.because(again.hold)
@@ -887,14 +915,17 @@ class Conversation(
                     is Called.Answered -> again.value
                 }
                 went = second.sent ?: went
+                pictured = second.pictures
                 reading = second.reading ?: run {
                     stuck = true
                     return@call if (second.refused) "Claude declined to answer that: Try again, or put it another way" else "Claude's answer couldn't be read: Try again"
                 }
             }
             // Still asking after the last round a message has: said under his answer, not his "looking" passed off as one.
-            val unserved = ChatRounds.asking(reading, searched = found != null || notLooked != null, searches = settings.value.felixSearches, read = read.map { it.id }, stats = stats, calendar = calendar)
-            reading = reading.copy(research = null, details = emptyList(), stats = false, calendar = null)
+            val unserved = ChatRounds.asking(reading, searched = found != null || notLooked != null, searches = settings.value.felixSearches, read = read.map { it.id }, stats = stats, calendar = calendar, seen = seen)
+            reading = reading.copy(research = null, details = emptyList(), stats = false, calendar = null, see = emptyList())
+            // Those he asked to see that went with the call answered: one the pictures' room left out wasn't seen.
+            val looked = seen.filter { it in pictured }
             gathered = null
             val reply = ChatMessage(
                 id = Ids.next(),
@@ -916,10 +947,17 @@ class Conversation(
                     read.takeIf { it.isNotEmpty() }?.let { r -> Act("Read in full: " + r.joinToString("; ") { "“${it.title}”" } + ".") },
                     // What else he read to answer, said under it as the texts are.
                     Act("Read: the week's numbers.").takeIf { stats },
+                    // The photos kept that he looked at again (6.8.0), said as the texts are: those sent, and any there wasn't room for.
+                    Act("Looked again: ${looked.size} photo${if (looked.size == 1) "" else "s"} kept.").takeIf { looked.isNotEmpty() },
+                    Act(Act.NOT_BROUGHT + "a photo he asked to see again, as there wasn't room for it with the rest: ask again to go on.", problem = true).takeIf { looked.size < seen.size },
                     *calendar.map { Act("Read: the calendar for " + ChatPrompts.calendarWhat(it, shownAt, clock.zone()) + ".") }.toTypedArray(),
                     Act(Act.NOT_BROUGHT + "he asked for more than one message brings (two rounds, three texts, two spans of the calendar): ask again to go on.", problem = true).takeIf { unserved },
                 ),
             )
+            // The photos his actions keep with tasks, read now (6.8.0): a ticked one's let go once your message is answered, which comes first.
+            val photosKept = reading.actions.filter { it.type == ChatAction.Type.KeepPhoto }.mapNotNull { a -> a.value?.let { hash -> owners.chatPhoto(hash)?.let { hash to it } } }.toMap()
+            // His line of each photo he was shown, in the order shown (6.8.0), kept on your message in its place.
+            val photoNotes = pictured.zip(reading.photoNotes).filter { it.second.isNotBlank() }.toMap()
             var kept = false
             // What he was sent of the chat, as the request that was answered held it ([ChatPrompts.sent]): yours before it
             // that waited with it and went with it (one sent while he answered: D-98) are answered with it; one left out
@@ -938,7 +976,7 @@ class Conversation(
                                 it.from == Speaker.You && it.answeredAt == null && it.at <= waiting.at -> it.copy(note = LEFT_OUT, stuck = true)
                                 else -> it
                             }
-                        } + reply,
+                        }.map { m -> if (m.photos.none { it.hash in photoNotes }) m else m.copy(photos = m.photos.map { p -> photoNotes[p.hash]?.let { p.copy(note = it) } ?: p }) } + reply,
                     )
                 }
             }
@@ -947,7 +985,7 @@ class Conversation(
             if (edits.isNotEmpty()) chat.update { s -> s.copy(messages = s.messages.map { if (it.id == reply.id) it.copy(memoryEdits = edits) else it }) }
             // Its actions (AI-14; D-60), said under it with their Undo: before its
             // changes, as its steps are the ones it was shown.
-            val acts = if (kept) act(reading.actions, shownAt, reply.id) else emptyList()
+            val acts = if (kept) act(reading.actions, shownAt, reply.id, photosKept) else emptyList()
             if (acts.isNotEmpty()) chat.update { s -> s.copy(messages = s.messages.map { if (it.id == reply.id) it.copy(acts = acts + it.acts) else it }) }
             // Its cards, made now, as if Apply were tapped: Undo takes them back.
             if (kept) {
@@ -1001,7 +1039,7 @@ class Conversation(
      * [shownAt] (G1): one kept from Day meanwhile isn't kept twice. A task to open where it lives with
      * the chat not on screen comes on a card on his message ([replyId]) instead (G3).
      */
-    private suspend fun act(actions: List<ChatAction>, shownAt: Long, replyId: String): List<Act> {
+    private suspend fun act(actions: List<ChatAction>, shownAt: Long, replyId: String, photos: Map<String, ByteArray> = emptyMap()): List<Act> {
         fun said(line: String, a: ChatAction) = Act(line, a)
         // A task's card on his message (G3), where it isn't, or mayn't have been, opened where it lives.
         suspend fun card(t: TaskItem) = chat.update { s -> s.copy(messages = s.messages.map { m -> if (m.id == replyId) m.copy(proposals = m.proposals + Proposal(Ids.next(), open = t.id)) else m }) }
@@ -1111,6 +1149,14 @@ class Conversation(
                             else -> requestTeamsSync()?.let { why -> FelixWords.readingWidget("its sync didn't start (${why.replaceFirstChar(Char::lowercase)})") } ?: FelixWords.TEAMS_SYNCING
                         },
                     )
+                }
+                // A photo of yours from the chat kept as the task's photo of the work (AI-23, 6.8.0): a copy of its own, read again with it;
+                // its bytes read before your message was marked answered ([photos]), as a ticked one's let go then.
+                ChatAction.Type.KeepPhoto -> {
+                    val jpeg = photos[a.value] ?: return@mapNotNull Act(Act.NOT_MADE + "the photo wasn't kept with “${task?.title ?: "the task"}”: it went from the chat while he answered.", problem = true)
+                    val open = task?.takeIf { it.isOpen } ?: return@mapNotNull Act(Act.NOT_MADE + "the photo wasn't kept: “${task?.title ?: "its task"}” was finished, or went, while he answered.", problem = true)
+                    owners.keepPhotoFromChat(open.id, a.value.orEmpty(), jpeg)
+                    Act("Kept the photo with “${open.title}”", a, was = open)
                 }
                 // A piece done that has no step to tick (G1): kept as Day's Done keeps it, earning as that does; or taken back.
                 ChatAction.Type.KeepPiece -> {
@@ -1277,6 +1323,13 @@ class Conversation(
                 val photo = w.getOrNull(1) == "true"
                 val laid = w.getOrNull(3)?.toIntOrNull()?.let { own -> own to (w.getOrNull(4)?.toIntOrNull() ?: 0) }
                 laid != null && focus.pieceMinutes(a.value.orEmpty()) == laid && focus.keepSlot(a.value.orEmpty(), extraMin = w.getOrNull(0)?.toIntOrNull() ?: 0, photo = photo, verified = !photo && w.getOrNull(2) == "true")
+            }
+            // A photo kept with a task (6.8.0): the one it had before back, or none, while it has this one still.
+            ChatAction.Type.KeepPhoto -> act.was.let { was ->
+                was != null && task != null && a.value != null && task.photo?.hash == a.value && run {
+                    owners.restoreTaskPhoto(task.id, was.photo)
+                    true
+                }
             }
             // A reminder or a note, while it's as the act left it: a reminder set goes, one moved has its time and
             // words back, one cancelled comes again; a note added goes, one deleted is back.

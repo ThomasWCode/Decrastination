@@ -12,6 +12,7 @@ import com.thomaswcode.decrastination.core.OwnTaskRules
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
+import com.thomaswcode.decrastination.core.TaskPhoto
 import com.thomaswcode.decrastination.data.SecretCipher
 import com.thomaswcode.decrastination.data.Stores
 import com.thomaswcode.decrastination.enrich.InstructionPrompts
@@ -189,8 +190,8 @@ class FelixHarness(
     }
 
     /** The chat's answer [reply], with the tasks and changes it offers (the schema's JSON for them), what it names [answered], the actions it takes ([actions]), the [replies] it offers, and nothing else. */
-    fun chatAnswer(reply: String, newTasks: String = "[]", changes: String = "[]", answered: String = "[]", actions: String = "[]", replies: String = "[]"): String =
-        """{"reply":"$reply","newTasks":$newTasks,"changes":$changes,"memories":[],"suggestedReplies":$replies,"actions":$actions,"research":"","details":[],"answered":$answered}"""
+    fun chatAnswer(reply: String, newTasks: String = "[]", changes: String = "[]", answered: String = "[]", actions: String = "[]", replies: String = "[]", details: String = "[]", photos: String = ""): String =
+        """{"reply":"$reply","newTasks":$newTasks,"changes":$changes,"memories":[],"suggestedReplies":$replies,"actions":$actions,"research":"","details":$details,"answered":$answered,"photos":"$photos"}"""
 
     /** What the service started in the background (an answer asked for as a message is kept), finished. */
     fun settle() = runBlocking {
@@ -337,6 +338,21 @@ class FelixHarness(
         override suspend fun unfinishGmail(taskId: String, writeId: String?): Boolean = taskId in gmailFinished && writeId == "w-$taskId" && gmailUnfinished.add(taskId)
 
         override fun gmailWriteOf(taskId: String): String? = "w-$taskId".takeIf { taskId in gmailFinished }
+
+        /** The chat's photos here (6.8.0), by hash, as the app's folder holds them. */
+        val chatPhotos: MutableMap<String, ByteArray> = Collections.synchronizedMap(mutableMapOf())
+
+        override fun chatPhoto(hash: String): ByteArray? = chatPhotos[hash]
+
+        override fun hasChatPhoto(hash: String): Boolean = hash in chatPhotos
+
+        override suspend fun keepPhotoFromChat(taskId: String, hash: String, jpeg: ByteArray) {
+            stores.tasks.update { s -> s.copy(tasks = s.tasks.map { if (it.id == taskId) it.copy(photo = TaskPhoto("photos/$taskId.jpg", hash, clock.now())) else it }) }
+        }
+
+        override suspend fun restoreTaskPhoto(taskId: String, photo: TaskPhoto?) {
+            stores.tasks.update { s -> s.copy(tasks = s.tasks.map { if (it.id == taskId) it.copy(photo = photo) else it }) }
+        }
 
         /** Your answer to his question, kept to be read, as `Instructions.addInstruction` keeps one. */
         suspend fun instruction(text: String, about: About, answer: Boolean): String {

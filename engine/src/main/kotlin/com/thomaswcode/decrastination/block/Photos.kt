@@ -2,6 +2,7 @@ package com.thomaswcode.decrastination.block
 
 import com.thomaswcode.decrastination.core.ChatAction
 import com.thomaswcode.decrastination.core.ChatActs
+import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.core.ChatState
 import com.thomaswcode.decrastination.core.Chunk
 import com.thomaswcode.decrastination.core.TaskItem
@@ -25,6 +26,8 @@ import com.thomaswcode.decrastination.enrich.PhotoTasks
 import com.thomaswcode.decrastination.enrich.Profile
 import com.thomaswcode.decrastination.ports.Log
 import java.io.File
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.security.MessageDigest
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -90,8 +93,8 @@ class Photos(
         scope.launch { runCatching { read(taskId) }.onFailure { Log.w(Log.TAG, "Reading a task with its photo failed", it) } }
     }
 
-    /** [photo] kept with [taskId], in place of one before ([com.thomaswcode.decrastination.sync.protocol.AttachPhoto]). */
-    suspend fun keep(taskId: String, photo: TaskPhoto) {
+    /** [photo] kept with [taskId], in place of one before ([com.thomaswcode.decrastination.sync.protocol.AttachPhoto]); none, the one it had taken back. */
+    suspend fun keep(taskId: String, photo: TaskPhoto?) {
         tasks.update { s -> s.copy(tasks = s.tasks.map { if (it.id == taskId) it.copy(photo = photo) else it }) }
     }
 
@@ -136,20 +139,75 @@ class Photos(
         }
     }
 
+    /** Where a photo sent with a message of yours is kept (6.8.0), by its hash; a name no photo has where the hash isn't one's shape. */
+    fun chatPhotoFile(hash: String): File = File(photos, "chat-${hash.takeIf(HASH::matches) ?: "-"}.jpg")
+
+    /** A chat photo's bytes, while its file's here. */
+    fun chatPhoto(hash: String): ByteArray? = runCatching { chatPhotoFile(hash).takeIf { it.isFile }?.readBytes() }.getOrNull()
+
+    /**
+     * [jpeg], a photo for a message of yours, kept by its [hash] (6.8.0), written whole under a name of its own first, so a call
+     * never sends half of one: whether it was, not where the hash isn't the photo's.
+     */
+    fun keepChatPhoto(hash: String, jpeg: ByteArray): Boolean {
+        if (hashOf(jpeg) != hash) return false
+        photos.mkdirs()
+        val part = File.createTempFile("chat", ".part", photos)
+        try {
+            part.writeBytes(jpeg)
+            Files.move(part.toPath(), chatPhotoFile(hash).toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+        } finally {
+            part.delete()
+        }
+        return true
+    }
+
+    /**
+     * [jpeg], the chat photo [hash], kept as [taskId]'s photo of the work (AI-23) at Felix's word (6.8.0): a copy of its own, so the
+     * chat's letting go of it takes nothing from the task, and the task read again with it. Where it's kept is as a task's photo is
+     * here, by its hash on the server; on the phone by the task and the hash, so the photo it replaces is still there for its Undo.
+     */
+    suspend fun keepFromChat(taskId: String, hash: String, jpeg: ByteArray): TaskPhoto {
+        val photo = TaskPhoto(File(photos, taskId.replace(Regex("[^A-Za-z0-9._-]"), "_") + "-$hash.jpg").path, hash, clock.now())
+        withContext(Dispatchers.IO) {
+            photos.mkdirs()
+            fileOf(photo).writeBytes(jpeg)
+        }
+        keep(taskId, photo)
+        scope.launch { runCatching { read(taskId) }.onFailure { Log.w(Log.TAG, "Reading a task with its photo failed", it) } }
+        return photo
+    }
+
+    /** The chat photos a sweep saw named, so one whose message has gone since (taken back, the chat cleared) goes at once (6.8.0). */
+    private val chatNamed = HashSet<String>()
+
     /**
      * The photos no task holds any more let go (AI-23): a task done and gone takes its photo with it. On the server, none kept since
-     * [keptBefore] goes, as a phone's photo comes ahead of the command that keeps it, which may come later (D-148).
+     * [keptBefore] goes, as a phone's photo comes ahead of the command that keeps it, which may come later (D-148). A chat photo's
+     * file is held while its message needs it ([ChatPhoto.live]), and goes once it doesn't, at once (6.8.0).
      */
     fun sweepPhotos(keptBefore: Long = Long.MAX_VALUE) {
         // A task the chat deleted keeps its photo while its Undo can bring it back: no other act's, nor one made again since.
         val messages = chat.value.messages
         val undoable = messages.flatMap { m ->
-            m.acts.filter { it.action?.type == ChatAction.Type.Delete && ChatActs.canUndo(it, tasks.value.tasks, settings.value, messages) }
+            m.acts.filter { it.action?.type in UNDOES_PHOTO && ChatActs.canUndo(it, tasks.value.tasks, settings.value, messages) }
                 .mapNotNull { it.was?.photo }
         }
         // By name, as where a photo's kept is the phone's path here and its hash on the server; a check's kept pages by theirs (6.5.0).
-        val held = (tasks.value.tasks.mapNotNull { it.photo } + undoable).mapTo(HashSet()) { fileOf(it).name } + focus.keptPages().map { pageFile(it.hash).name }
-        photos.listFiles()?.filter { it.name !in held && it.lastModified() < keptBefore }?.forEach { it.delete() }
+        // A chat photo's while its message needs it (6.8.0); one named by none now that was at the last sweep goes at once, not after the
+        // grace a file nothing's named yet is given.
+        val now = clock.now()
+        val named = messages.flatMap { m -> m.photos.map { it.hash } }.toSet()
+        val live = messages.flatMap { m -> m.photos.filter { it.live(m, now) }.map { it.hash } }.toSet()
+        val done = synchronized(chatNamed) {
+            ((named - live) + (chatNamed - named)).also {
+                chatNamed.clear()
+                chatNamed += named
+            }
+        }.mapTo(HashSet()) { chatPhotoFile(it).name }
+        val held = (tasks.value.tasks.mapNotNull { it.photo } + undoable).mapTo(HashSet()) { fileOf(it).name } + focus.keptPages().map { pageFile(it.hash).name } +
+            live.map { chatPhotoFile(it).name }
+        photos.listFiles()?.filter { it.name !in held && (it.lastModified() < keptBefore || it.name in done) }?.forEach { it.delete() }
     }
 
     /** Held while a photo check's asked and its piece ticked off here: the switch holds it too ([quiet]). */
@@ -268,6 +326,15 @@ class Photos(
                 part = if (box) (part ?: 1).coerceIn(1, parts) else 1, parts = parts, taskMinutes = if (parts > 1 && it.effortMin > record.plannedMin) it.effortMin else record.plannedMin * parts, stepIndex = place?.takeIf { p -> p >= 0 }, why = Why.Spread,
             )
         }
+
+        /**
+         * What of [messages]' photos a sweep goes by (6.8.0): each, and whether its message is answered. A sweep's set off as it changes:
+         * a photo sent, answered, taken back, or the chat cleared; a kept one's fortnight is the daily sweep's.
+         */
+        fun chatPhotos(messages: List<ChatMessage>): List<String> = messages.flatMap { m -> m.photos.map { "${it.hash}:${it.kept}:${m.answeredAt != null}" } }
+
+        /** The chat's actions whose Undo puts back a task's photo as it was: its photo's file is held while it can. */
+        private val UNDOES_PHOTO = setOf(ChatAction.Type.Delete, ChatAction.Type.KeepPhoto)
 
         /** A box's step as the planner names it, at the end of a slot's label. */
         private val PART_OF = Regex("part (\\d+) of (\\d+)$")

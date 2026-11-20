@@ -14,6 +14,9 @@ fun interface Http {
 
     /** As [post], its body bytes as they are, not text: a photo's. Only where it's made to. */
     fun postBytes(url: String, headers: Map<String, String>, body: ByteArray): HttpResponse = throw UnsupportedOperationException("This Http sends text alone")
+
+    /** As [get], what comes back as bytes, not text: a photo's; null for an answer that isn't a success. Only where it's made to. */
+    fun getBytes(url: String, headers: Map<String, String>): ByteArray? = throw UnsupportedOperationException("This Http reads text alone")
 }
 
 data class HttpResponse(val code: Int, val body: String) {
@@ -54,6 +57,19 @@ class UrlConnectionHttp(
             val code = connection.responseCode
             val stream = if (code in 200..299) connection.inputStream else connection.errorStream
             return HttpResponse(code, stream?.use { it.readBytes().decodeToString() }.orEmpty())
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    override fun getBytes(url: String, headers: Map<String, String>): ByteArray? {
+        val connection = URL(url).openConnection() as HttpURLConnection
+        try {
+            connection.connectTimeout = connectTimeoutMs
+            connection.readTimeout = readTimeoutMs
+            headers.forEach { (name, value) -> connection.setRequestProperty(name, value) }
+            if (connection.responseCode !in 200..299) return null
+            return connection.inputStream.use { it.readBytes() }
         } finally {
             connection.disconnect()
         }

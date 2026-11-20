@@ -72,6 +72,9 @@ What only the phone can know (W-24; `sync/protocol/Observations.kt`, 5.13.0), se
 | `SpendFreeTime` | free time spent, a half-minute at a time: merged into the outbox's last one while that's not been sent (`Commands.sending` marks what goes), so a pull can neither give it back nor take earned time | `Focus.spend` |
 | `TimerOver` | the timer's zero, heard by its alarm: told once, not again at each pull | `Focus.timerOver` |
 | `AttachPhoto` | a photo of a task's work kept with it, the file this phone's | `Photos.keep` |
+| `SendMessage`'s `photos` (6.8.0) | a message's photos by their hashes, each file sent to `POST /api/chat-photos/<hash>` ahead of it in the same exchange (`Replica.sendChatPhoto`), as a task's photo is; one sent from the website fetched by the phone for its bubble (`Replica.fetchChatPhoto`) | `Conversation.send` |
+
+A chat photo Felix keeps with a task (`keepPhoto`, 6.8.0) is kept by the server, where his answers are made, by its hash: no copy comes down to the phone, which needs none while it sends commands, as the server reads the task. A phone mirroring again would read the task without it, as it holds no file of it; nothing says so.
 
 A slot moved by hand in the calendar goes as `AddOwnChange`, as a screen's would. A command made while another's being applied, an event's question found by the calendar read a sync sets off, is made once that closes, as one of its own: the gate it would wait for is that one's.
 
