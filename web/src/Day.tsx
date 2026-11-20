@@ -306,10 +306,17 @@ export function DayPage({ date, go }: { date: string | null; go: Go }) {
   const { value: day, failed } = useLive(load);
   const [hourPx, setHourPx] = useState(() => Number(localStorage.getItem(ZOOM)) || HOUR_PX);
   const [opened, setOpened] = useState<string | null>(null);
-  // A block's sheet, by its key, found again in each new reading of the day; an all-day event's by its place.
+  // A block's sheet, found again in each new reading of the day by its sheet's key (a piece's by its piece, wherever it's moved to);
+  // an all-day event's by its place.
   const [sheetFor, setSheetFor] = useState<string | null>(null);
   // Its last reading, held while it's open: a piece done goes from the grid, and what Done came to, with its Undo, stays.
   const lastSheet = useRef<Sheet | null>(null);
+  // Another day shown: what was open was of the day it was opened on, and closes.
+  const [sheetDay, setSheetDay] = useState(date);
+  if (sheetDay !== date) {
+    setSheetDay(date);
+    setSheetFor(null);
+  }
   // What a drop came to, on the day it was dropped on: it says nothing of another.
   const [said, setSaid] = useState<{ date: string; text: string } | null>(null);
   const shut = useCallback(() => setOpened(null), []);
@@ -321,7 +328,7 @@ export function DayPage({ date, go }: { date: string | null; go: Go }) {
   }, []);
   const openBlock = useCallback((block: BlockView) => {
     setOpened(null);
-    setSheetFor(block.key);
+    setSheetFor(block.sheetKey ?? block.key);
   }, []);
   const zoom = useCallback((wheelUp: boolean) => {
     setHourPx((was) => {
@@ -337,7 +344,7 @@ export function DayPage({ date, go }: { date: string | null; go: Go }) {
     return () => clearTimeout(timer);
   }, [nextAt]);
   if (!day) return failed ? <p className="problem">The Day couldn't be read. It tries again with the next change.</p> : null;
-  const found: Sheet | null = sheetFor === null ? null : (day.blocks.find((b) => b.key === sheetFor)?.sheet ?? day.allDay.find((e, i) => `all-day-${i}-${e.title}` === sheetFor)?.sheet ?? null);
+  const found: Sheet | null = sheetFor === null ? null : (day.blocks.find((b) => (b.sheetKey ?? b.key) === sheetFor)?.sheet ?? day.allDay.find((e, i) => `all-day-${i}-${e.title}` === sheetFor)?.sheet ?? null);
   if (found) lastSheet.current = found;
   const sheet = sheetFor === null ? null : (found ?? lastSheet.current);
   const dropped = (block: BlockView, onto: string | null, minute: number | null) => {
