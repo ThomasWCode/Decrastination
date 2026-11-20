@@ -257,7 +257,7 @@ class Photos(
      * [jpegs], the pages of [piece]'s work as the model's sent them, checked against it and its task (AI-16), the cost recorded, and
      * how it went said: the server's own check of a phone's pages, and the end of this phone's ([check]).
      */
-    suspend fun checkJpegs(jpegs: List<ByteArray>, piece: Chunk, takenAt: Long, keep: Boolean = false, record: SlotRef? = null): String {
+    suspend fun checkJpegs(jpegs: List<ByteArray>, piece: Chunk, takenAt: Long, keep: Boolean = false, record: SlotRef? = null, said: String = ""): String {
         if (!piece.photoCheckable) return "Only written homework can be checked from a photo."
         // The task's kept pages sent again after these, the newest first, where they leave room (6.5.0), read before these join them.
         val earlier = focus.keptPages(piece.taskId).filter { kept -> jpegs.none { hashOf(it) == kept.hash } }.sortedByDescending { it.at }
@@ -270,7 +270,7 @@ class Photos(
         val key = record?.key ?: piece.key
         // What earlier checks of the task saw counts as shown (6.4.0): the whole task's, each piece's.
         val notes = focus.notesOf(piece.taskId)
-        val about = PhotoChecker.context(piece, tasks.value.tasks.firstOrNull { it.id == piece.taskId }, notes, clock.zone())
+        val about = PhotoChecker.context(piece, tasks.value.tasks.firstOrNull { it.id == piece.taskId }, notes, clock.zone(), said)
         val result = when (val called = gateway.call(interactive = true, record = ModelCalls.OnRecord(ModelEffort.Job.PhotoCheck, piece.label) { r: PhotoChecker.Result -> r.usage to ModelCalls.outcome(r.refused, r.verdict == null) }, cost = { r: PhotoChecker.Result -> r.costUsd to r.refused }) { current.check(jpegs, about, again) }) {
             is Called.Held -> return when (called.hold) {
                 ModelHold.Off -> OFF

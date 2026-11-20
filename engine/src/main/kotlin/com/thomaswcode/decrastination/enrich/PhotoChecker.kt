@@ -105,6 +105,9 @@ class PhotoChecker(private val client: AnthropicClient, val model: String = Clau
 
         private const val MAX_SEEN = 300
 
+        /** The most of the student's word a check's told (6.9.0): a line or two, as Felix gives it. */
+        const val MAX_SAID = 300
+
         /** The most of what a check covered that's kept and sent again: a line or two, by question, page or section. */
         const val MAX_COVERED = 500
 
@@ -116,6 +119,8 @@ class PhotoChecker(private val client: AnthropicClient, val model: String = Clau
 
             You may be told what earlier checks of the same task saw. Their photos aren't sent again unless kept (named "Kept page", below), but what they showed counts as shown: the piece is done when that and these photos together show all of it. A check that passed has earned its time already, so a later one must also show work no passed check showed: say in fresh whether these photos do (true where no earlier check passed). Photos showing only what a passed check showed are not fresh, however much they show. Pages named "Kept page" are from earlier checks, sent again to be seen: they show what those checks showed, never new work.
 
+            The student may have said something of it ("The student says: …"): it can tell you what was set (which questions or pages, what was changed), never stand in for work the photos don't show, however sure it sounds.
+
             A piece may be one part of a task's work, done in order, its share said ("part 1 of 2: with the parts before it, about half of the task's work"). A part is done when the task's work shown, by these photos and earlier checks together, reaches its share from the start of the work: it needs no more than its share, and no less.
 
             Give your confidence from 0 to 1; in reason, one short line the student will read ("Shows worked answers to Q5-8; Q9 isn't visible"), naming a page where it helps; in seen, briefly, what the photos show; in covered, exactly which parts of this task's work these photos show done, by question, page or section ("Exercise 4C Q1-12, each worked in full"), as a later check will rely on it; leave covered empty where they show none of it.
@@ -124,9 +129,10 @@ class PhotoChecker(private val client: AnthropicClient, val model: String = Clau
         /**
          * [piece] and its [task], as the check reads them (AI-16): the piece and its minutes, the
          * task's title and subject, its steps done already, and its instructions; then [notes], what earlier checks of the task saw
-         * (6.4.0), each with its piece, when, as of [zone], and whether it passed.
+         * (6.4.0), each with its piece, when, as of [zone], and whether it passed; and what the student said of it in the chat ([said],
+         * 6.9.0), as their word.
          */
-        fun context(piece: Chunk, task: TaskItem?, notes: List<CheckNote> = emptyList(), zone: ZoneId = ZoneId.systemDefault()): String = buildString {
+        fun context(piece: Chunk, task: TaskItem?, notes: List<CheckNote> = emptyList(), zone: ZoneId = ZoneId.systemDefault(), said: String = ""): String = buildString {
             appendLine("The piece of work: ${piece.label}, ${piece.minutes} min")
             // A part's share of the task, so a first sitting's half passes on its half (your answer, 19 Nov): only where the task's
             // divided with no step named (no place in its list; the planner names a box "part 1 of 2"), as parts are numbered
@@ -150,6 +156,11 @@ class PhotoChecker(private val client: AnthropicClient, val model: String = Clau
                     val at = Instant.ofEpochMilli(note.at).atZone(zone).format(WHEN)
                     appendLine("- $at, for \"${note.label}\", ${if (note.passed) "counted in a check that passed (earned already)" else "not passed"}: ${note.covered}")
                 }
+            }
+            said.trim().takeIf { it.isNotEmpty() }?.let {
+                appendLine()
+                appendLine()
+                append("The student says: ").append(it.take(MAX_SAID))
             }
         }.trimEnd()
 

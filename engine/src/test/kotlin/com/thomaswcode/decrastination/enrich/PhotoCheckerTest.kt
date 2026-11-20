@@ -70,6 +70,20 @@ class PhotoCheckerTest {
     }
 
     @Test
+    fun `a check is told what the student said of it, as their word, cut to its bound`() {
+        val piece = Chunk(
+            taskId = "teams:sheet", source = Source.Teams, kind = Kind.Homework, title = "Graphs sheet", step = null, minutes = 40, dueAt = null,
+            deadline = Fixtures.at("2026-11-23T09:00"), soft = false, overdue = false, dueToday = false, behind = false, part = 1, parts = 1, taskMinutes = 40, why = Why.Spread,
+        )
+        val about = PhotoChecker.context(piece, null, emptyList(), LONDON, said = "we were only set the odd questions")
+        assertTrue(about.endsWith("The student says: we were only set the odd questions"), about)
+        assertFalse("The student says" in PhotoChecker.context(piece, null, emptyList(), LONDON))
+        assertEquals(PhotoChecker.MAX_SAID, PhotoChecker.context(piece, null, emptyList(), LONDON, said = "x".repeat(1_000)).substringAfter("The student says: ").length)
+        // Their word can say what was set, never stand in for the work being seen.
+        assertTrue("never stand in for work the photos don't show" in PhotoChecker.system())
+    }
+
+    @Test
     fun `a check is told what earlier checks of its task saw, each with its piece, when and whether it passed, and its text is cut to its own bound`() {
         val piece = Chunk(
             taskId = "teams:sheet", source = Source.Teams, kind = Kind.Homework, title = "Graphs sheet", step = null, minutes = 40, dueAt = null,
