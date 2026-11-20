@@ -2369,3 +2369,14 @@ label.button:has(input:focus-visible) {
     grid-template-columns: 72px minmax(0, 1fr);
   }
 }
+
+/* The storage near a free allowance's end, among the bar's notices (6.10.0). */
+.storage-notice {
+  color: var(--error);
+  font-size: 14px;
+}
+
+/* Settings' Storage: an allowance near its end stands out. */
+.lines.storage .near .line {
+  font-weight: 600;
+}

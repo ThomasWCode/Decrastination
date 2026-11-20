@@ -97,6 +97,12 @@ function Bar({ url, go, signOut, stillIn }: { url: URL; go: Go; signOut: () => v
         ))}
       </nav>
       <Bell go={go} reading={url.pathname === "/"} waiting={value?.unread ?? 0} />
+      {/* The storage near a free allowance's end (6.10.0): its line, to Settings. */}
+      {value?.storage ? (
+        <Link to="/settings" go={go} className="storage-notice">
+          {value.storage}
+        </Link>
+      ) : null}
       {stillIn ? (
         <span className="still-in" role="status">
           You're still signed in: that didn't reach the server.

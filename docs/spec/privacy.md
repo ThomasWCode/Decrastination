@@ -44,6 +44,8 @@ It runs only while Felix may search (`felixSearches`), and only when a message n
 
 **What you send yourself**: the week's summary opens in your email app to send, to the address in Settings → Notifications; the record (Stats' export, CSV files, PL-11) and a backup (Export) go wherever you share or save them.
 
+**Cloudflare's analytics** (6.10.0): once a day the server asks it what R2's bucket holds and how many requests it took this month, naming the account and the bucket, with a token that reads analytics alone; sizes and counts come back, kept on the box a month. Nothing of the stores goes.
+
 Nothing else: no analytics, no crash reports (crashes are written down on the phone), and no Android cloud backup. From a PC, `ai-endpoint` sends Claude's calls to a stand-in server instead, till the app restarts; `ai-check` sends one task of each reading's job, and made-up words for the other jobs, to the stand-in it names, with a dummy key, outside the gateway; and `ai-prompts` and `chat-context` write what would be sent into the app's files ([storage-and-backups.md](storage-and-backups.md)).
 
 ## What's kept on the phone

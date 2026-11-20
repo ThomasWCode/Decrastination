@@ -2,7 +2,7 @@ import { useCallback, useState } from "react";
 import { BrowserPush } from "./BrowserPush";
 import { api, saying } from "./api";
 import { useLive } from "./live";
-import type { Action, CredentialGroup, ListLine, PendingLine, SettingField, SettingsPage, SettingsView } from "./types";
+import type { Action, CredentialGroup, ListLine, PendingLine, SettingField, SettingsPage, SettingsView, StorageView } from "./types";
 
 type Value = unknown;
 
@@ -436,6 +436,36 @@ function Calls({ view }: { view: SettingsView }) {
   );
 }
 
+/** Settings' Storage (6.10.0, D-161): what the box, R2 and B2 hold, each beside its free allowance, as the server read it once a day. */
+function Storage({ storage }: { storage: StorageView | null }) {
+  if (!storage) return <p className="note">The server hasn't read it yet: it's read once a day.</p>;
+  return (
+    <>
+      <ul className="lines storage">
+        {storage.lines.map((line) => (
+          <li key={line.label} className={line.near ? "near" : undefined}>
+            <span className="title">{line.label}</span>
+            <span className="line">
+              {line.used}: {line.percent}%{line.passes ? `, ${line.passes}` : ""}
+            </span>
+          </li>
+        ))}
+      </ul>
+      {storage.box.map((line) => (
+        <p key={line} className="note">
+          {line}
+        </p>
+      ))}
+      {storage.problems.map((line) => (
+        <p key={line} className="problem">
+          {line}
+        </p>
+      ))}
+      <p className="note">{storage.read}</p>
+    </>
+  );
+}
+
 /** The settings that are shared state, a page at a time: what each takes is the server's to say, and a loosening waits there whichever client asks. */
 export function SettingsPageView() {
   const load = useCallback(() => api.settings(), []);
@@ -479,6 +509,7 @@ export function SettingsPageView() {
           {page.key === "sources" ? <Credentials groups={view.credentials} mirroring={!view.canChange} /> : null}
           {page.key === "claude" ? <Calls view={view} /> : null}
           {page.key === "notifications" && view.push ? <BrowserPush push={view.push} /> : null}
+          {page.key === "storage" ? <Storage storage={view.storage ?? null} /> : null}
         </div>
       </div>
     </main>

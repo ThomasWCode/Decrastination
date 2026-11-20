@@ -52,6 +52,9 @@ enum class NoticeId(val id: Int, val codes: IntRange = IntRange.EMPTY) {
     ModelDropped(5001, 5001..5001),
     ModelKey(5002, 5002..5002),
 
+    /** The storage near a free allowance's end, the server's alert (6.10.0): its tap opens Settings' Storage. */
+    Storage(5100, 5100..5100),
+
     /** His conversation, one notification holding his unread messages: its tap, and its reply with his replies as choices. */
     Felix(6000, 6001..6099),
     ;

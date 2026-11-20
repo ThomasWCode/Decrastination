@@ -22,4 +22,7 @@ object Channels {
 
     /** Your sources (D-106): a write to Gmail that couldn't be made; outside the day's ceiling. */
     const val SOURCES = "sources"
+
+    /** The storage near a free allowance's end (6.10.0). */
+    const val STORAGE = "storage"
 }

@@ -86,6 +86,13 @@ import kotlinx.coroutines.withContext
  * loosens blocking waits its 24 hours and shows here until it applies.
  */
 class SettingsActivity : ComponentActivity() {
+    companion object {
+        /** The page to open at, by its key (6.10.0). */
+        const val EXTRA_PAGE = "page"
+
+        /** Storage's key, the page the storage's alert opens. */
+        const val STORAGE_PAGE = STORAGE
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
@@ -106,7 +113,10 @@ class SettingsActivity : ComponentActivity() {
         // Your edits over what the screen showed as you began, each field as typed, which don't parse,
         // the page open and the apps' search ([SettingsScreenState]): kept through the screen being
         // made again, a turn of the phone (BUG-P2-013, BUG-P2-027).
-        val screen = rememberSaveable(saver = SettingsScreenState.SAVER) { SettingsScreenState(asked) }
+        val screen = rememberSaveable(saver = SettingsScreenState.SAVER) {
+            // Opened at a page of its own where it's asked to be: the storage's alert opens Storage (6.10.0).
+            SettingsScreenState(asked).apply { section = intent.getStringExtra(EXTRA_PAGE)?.takeIf { key -> PAGES.any { it.key == key } } }
+        }
         var draft by screen::draft
         val raw by screen::raw
         val message by screen::message
@@ -359,6 +369,8 @@ class SettingsActivity : ComponentActivity() {
                         item { NightlyBackup(graph, runtime.lastBackupAt, graph.clock.now()) }
                     }
                     RESET -> item { ResetPage(graph) }
+                    // What the server read of the storage (6.10.0), fetched from it as it's opened.
+                    STORAGE -> item { StorageSection(graph) }
                 }
             }
         }
@@ -393,6 +405,7 @@ private const val NOTIFICATIONS = "notifications"
 private const val WEBSITE = "website"
 private const val BACKUP = "backup"
 private const val RESET = "reset"
+private const val STORAGE = "storage"
 
 /** The most of an email address the summary goes to (NF-02). */
 private const val SUMMARY_EMAIL_MAX = 120
@@ -411,6 +424,7 @@ private val PAGES = listOf(
     Page(NOTIFICATIONS, "Notifications", "The morning briefing and Sunday's check-in"),
     Page(WEBSITE, "The website", "This phone paired with it, and when it last sent"),
     Page(BACKUP, "Backup", "The settings, the log and what's learned, saved or restored"),
+    Page(STORAGE, "Storage", "What the box, R2 and B2 hold, beside their free allowances"),
     Page(RESET, "Reset", "Stats, what's learned, what Felix remembers, the chat, your changes"),
 )
 

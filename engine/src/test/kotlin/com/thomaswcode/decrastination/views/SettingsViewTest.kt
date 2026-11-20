@@ -63,7 +63,7 @@ class SettingsViewTest {
 
     @Test
     fun `the pages are the phone's that are shared state, and leave out what's the phone's own`() {
-        assertEquals(listOf("about", "hours", "school", "planning", "felix", "claude", "sources", "notifications"), view().pages.map { it.key })
+        assertEquals(listOf("about", "hours", "school", "planning", "felix", "claude", "sources", "storage", "notifications"), view().pages.map { it.key })
         val names = view().pages.flatMap { it.fields }.map { it.name }
         for (phones in listOf("armed", "blockedApps", "blockedSites", "calendarWriteId", "aiKeyActive", "version")) assertFalse(phones in names, phones)
     }

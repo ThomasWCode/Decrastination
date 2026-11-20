@@ -59,6 +59,8 @@ data class SettingsView(
     val phoneOnly: List<String> = PHONE_ONLY,
     /** A browser told with its tab closed (W-9): there once the server's applying commands with the box's keys set. */
     val push: PushView? = null,
+    /** The storage and its allowances, as the server last read them (6.10.0); none till it has. */
+    val storage: StorageView? = null,
 )
 
 /** What's needed to ask to be told in a browser: the box's public [key], and what can be asked for. */
@@ -223,6 +225,7 @@ object SettingsViews {
                     field("ankiDeadlineMin", "Daily cards due by", SettingField.TIME),
                 ),
             ),
+            SettingsPage("storage", "Storage", "What the box, R2 and B2 hold, beside their free allowances", emptyList()),
             SettingsPage(
                 "notifications", "Notifications", "The morning briefing and Sunday's check-in",
                 listOf(

@@ -96,6 +96,8 @@ Restore on a fresh box: `litestream restore -config /etc/litestream.yml -if-db-n
 
 ## Monitoring
 
+What the box, R2 and B2 hold is read once a day and shown in Settings, with an alert at 80% and 95% of a free allowance (6.10.0, D-161). R2's figures come from Cloudflare's GraphQL analytics, with `CF_ANALYTICS_TOKEN` in the box's `.env`: a token of the owner's, made 19 Nov 2026, that reads the account's analytics and can't read or write the bucket; the account and the bucket are Litestream's `R2_ACCOUNT_ID` and `R2_BUCKET`. With no token, Settings says R2 isn't read.
+
 A heartbeat to healthchecks.io every minute from the server's scheduler, in either mode (5.9.3): a missed one means the box or the process is down, reclaimed included, or that it can't write to its database, or that a job has stuck, as it shares their loop. Alerts by email to the owner after a quarter of an hour's silence (period 5 minutes, grace 10). There's no uptime check from outside, so Caddy failing alone goes unnoticed. Logs are JSON lines on stdout, `docker compose logs`. No log line ever holds a store's content, a credential or a request header (the owner's rule): Caddy's go through one filter on both its loggers, which drops the headers and the sign-in's one-time code, as a request that fails is written by a different logger from one that doesn't. A client closing an event stream, as each page left does, isn't logged as a failure.
 
 ## Security
