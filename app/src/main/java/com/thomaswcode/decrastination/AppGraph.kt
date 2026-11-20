@@ -593,12 +593,12 @@ class AppGraph private constructor(context: Context) : Owners {
             if (tasks.value.tasks.any { Enrichments.jobFor(it, GmailThreads::textRead) != null && Enrichments.stale(it, modelOn, RuleEnricher.BY, ReadingPrompts.VERSION, modelOff) }) EnrichWorker.enqueue(app)
         }
         scope.launch { sync.refreshCalendar() }
-        scope.launch(Dispatchers.IO) { runCatching { photos.sweepPhotos() } }
+        scope.launch(Dispatchers.IO) { runCatching { photos.sweepPhotos(keptBefore = clock.now() - PHOTO_GRACE_MS) } }
         // What photo checks saw of tasks done or gone since (6.4.0): the server's to let go once the phone sends commands, as it writes them then.
         scope.launch { if (!sendsCommands()) runCatching { focus.tidyChecks() } }
         // A check's kept pages' files let go here as their record goes (6.5.0): the server's daily tidy, or a task done, changes it
         // while this process lives on for days, and the files are this phone's own, not a store's.
-        scope.launch(Dispatchers.IO) { stores.session.state.map { it.pages }.distinctUntilChanged().drop(1).collect { runCatching { photos.sweepPhotos() } } }
+        scope.launch(Dispatchers.IO) { stores.session.state.map { it.pages }.distinctUntilChanged().drop(1).collect { runCatching { photos.sweepPhotos(keptBefore = clock.now() - PHOTO_GRACE_MS) } } }
         // What's read again as it changes: the calendar, the calendars picked, Anki's settings, the Teams widget's list ([Sync.start]).
         sync.start(calendarWriter.calendarChanged)
         // The calendar picked, and each plan once plans have been quiet a while, written ([CalendarWriter.start]).
@@ -855,6 +855,12 @@ class AppGraph private constructor(context: Context) : Owners {
         const val TAG = "Decrastination"
 
         private const val WIDGET_DEBOUNCE_MS = 1_000L
+
+        /**
+         * How long a photo file here goes unnamed before a sweep lets it go: one is written a moment before its command applies here,
+         * and a sweep runs as the app's used (6.5.0), so it's given an hour, not the server's day, which waits for a phone offline.
+         */
+        private const val PHOTO_GRACE_MS = 60 * 60_000L
 
         // It holds only the application context, which lives as long as the process anyway.
         @SuppressLint("StaticFieldLeak")

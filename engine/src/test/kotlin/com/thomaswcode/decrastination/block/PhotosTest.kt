@@ -301,6 +301,9 @@ class PhotosTest {
         val step = Photos.pieceOf(box.copy(key = "teams:essay#1", label = "Essay: Plan it"), essay)!!
         assertEquals(1 to 1, step.stepIndex to step.parts)
         assertEquals(null, Photos.pieceOf(box, null))
+        // The task's work in all: its own estimate where it's more than the slot, else the slot's minutes a part.
+        assertEquals(150, Photos.pieceOf(box, essay.copy(sourceEffortMin = 150, aiEffortMin = null))!!.taskMinutes)
+        assertEquals(120, Photos.pieceOf(box, essay.copy(sourceEffortMin = 30, aiEffortMin = null))!!.taskMinutes)
     }
 
     @Test

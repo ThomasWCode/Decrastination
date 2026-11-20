@@ -92,7 +92,7 @@ class PhotoCheckerTest {
         assertTrue(boxes.size > 1, "a long task in boxes")
         assertEquals("part 1 of ${boxes.size}", boxes.first().step)
         assertTrue("It's part 1 of ${boxes.size}: with the parts before it" in PhotoChecker.context(boxes.first(), null, emptyList(), LONDON))
-        assertTrue("Earlier checks of this task, their photos not sent again (what each showed counts as shown):" in about)
+        assertTrue("Earlier checks of this task (what each showed counts as shown; their photos not sent again, but for a page kept, named \"Kept page\"):" in about)
         assertTrue("- Wed 18 Nov 17:05, for \"Graphs sheet, part 1 of 2\", counted in a check that passed (earned already): Pages 8 to 10, every question answered" in about)
         assertTrue("- Thu 19 Nov 18:40, for \"Graphs sheet, part 2 of 2\", not passed: Page 11, question 2 alone" in about)
         assertTrue("Earlier checks" !in PhotoChecker.context(piece, null, emptyList(), LONDON))
