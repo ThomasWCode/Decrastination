@@ -142,6 +142,11 @@ class ChatPhotosTest {
         assertTrue(reading("""{"type":"checkPhotos","taskId":"teams:s","stepIndex":-1,"setting":"teams:s#0","value":""}""").actions.isEmpty(), "a piece kept today")
         assertTrue(reading("""{"type":"checkPhotos","taskId":"teams:s","stepIndex":-1,"setting":"teams:o#-1#2","value":""}""").actions.isEmpty(), "another task's piece")
         assertTrue(reading("""{"type":"checkPhotos","taskId":"teams:s","stepIndex":-1,"setting":"teams:s#7","value":""}""").actions.isEmpty(), "a piece not listed")
+        // One check a piece, the first: the same step twice, or the task's next beside a step of it, pays once; each step its own.
+        fun check(step: Int, said: String = "") = """{"type":"checkPhotos","taskId":"teams:s","stepIndex":$step,"setting":"","value":"$said"}"""
+        assertEquals(listOf("first"), reading(check(1, "first") + "," + check(1, "again")).actions.map { it.value })
+        assertEquals(listOf(1), reading(check(-1) + "," + check(1)).actions.map { it.stepIndex })
+        assertEquals(listOf(0, 1), reading(check(0) + "," + check(1)).actions.map { it.stepIndex })
     }
 
     @Test

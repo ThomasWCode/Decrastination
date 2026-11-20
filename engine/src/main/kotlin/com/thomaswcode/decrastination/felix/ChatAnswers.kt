@@ -300,7 +300,7 @@ object ChatAnswers {
         val replies = answer.suggestedReplies.map { it.trim().take(FelixAnswers.MAX_REPLY) }.filter { it.isNotEmpty() }.distinct().take(FelixAnswers.MAX_REPLIES)
         // A step ticked or unticked, a listed task shown (AI-14); a task of yours done, open again or
         // deleted, a setting set: each only as the task, or the setting, can be.
-        val actions = answer.actions.take(MAX_ACTIONS).mapNotNull { a -> action(a, byId, settings, felix, context, leftOut) }.distinct()
+        val actions = answer.actions.take(MAX_ACTIONS).mapNotNull { a -> action(a, byId, settings, felix, context, leftOut) }.distinct().let(::oneCheckAPiece)
         // Tasks to read in full (D-93): listed and open, not the one the message is about (it came whole); and beside
         // them what else it asks for, each once: the week's numbers, and the calendar past the fortnight or a
         // month of it, the first asked for. Any other word is dropped.
@@ -445,6 +445,17 @@ object ChatAnswers {
         val at = Lessons.nextOf(g.lesson, lessons.groups, emptyMap()) ?: return null
         val start = Instant.ofEpochMilli(at.start).atZone(zone)
         return g.copy(date = start.toLocalDate().toString(), time = start.toLocalTime().format(CLOCK), lesson = "")
+    }
+
+    /**
+     * [actions] with one photo check a piece (6.9.0), the first: two of a task's same step or piece, or one of its next piece beside one
+     * that names a step or piece of it, would each pay for a call on the same pages, the second unable to earn. Each step its own.
+     */
+    private fun oneCheckAPiece(actions: List<ChatAction>): List<ChatAction> {
+        fun named(a: ChatAction) = a.stepIndex != null || a.setting != null
+        val placed = actions.filter { it.type == ChatAction.Type.CheckPhotos && named(it) }.mapTo(HashSet()) { it.taskId }
+        val seen = HashSet<Triple<String, Int?, String?>>()
+        return actions.filter { a -> a.type != ChatAction.Type.CheckPhotos || ((named(a) || a.taskId !in placed) && seen.add(Triple(a.taskId, a.stepIndex, a.setting))) }
     }
 
     /** Why a due date at [lesson]'s next lesson can't be set (G8): no timetable read, one over a week old or of no known age, or no such class with a lesson ahead. */
