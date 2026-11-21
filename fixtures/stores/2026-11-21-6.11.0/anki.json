@@ -1,0 +1,24 @@
+{
+  "ankiReadings": [
+    {
+      "at": 1792306800000,
+      "counts": {
+        "1700000000001": {
+          "learn": 2,
+          "review": 10,
+          "new": 20,
+          "top": false
+        }
+      },
+      "entering": true
+    }
+  ],
+  "ankiFrontSince": 1792306800000,
+  "ankiWorked": {
+    "date": "2026-10-18",
+    "minutes": {
+      "anki:deck-2.3": 6
+    }
+  },
+  "version": 1
+}

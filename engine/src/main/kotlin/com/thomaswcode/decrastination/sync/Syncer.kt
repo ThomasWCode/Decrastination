@@ -4,6 +4,7 @@ import com.thomaswcode.decrastination.core.AnkiRules
 import com.thomaswcode.decrastination.core.Merge
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
+import com.thomaswcode.decrastination.core.Timetables
 import com.thomaswcode.decrastination.core.WallClock
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.core.Settings
@@ -171,6 +172,17 @@ class Syncer(
         tasks.update { state -> state.copy(sources = state.sources + (source to state.status(source).copy(note = note))) }
     }
 
+    /**
+     * Your answer to a timetable read with no lessons, held back while the last one is kept (D-165): [keep] it, asked no more
+     * while the reads stay empty, or take the empty one. Nothing where none's held back, as once a read has brought lessons since.
+     */
+    suspend fun answerTimetable(keep: Boolean) {
+        tasks.update { state ->
+            val kept = Timetables.answered(state.timetable, state.emptyTimetable, keep)
+            state.copy(timetable = kept.timetable, emptyTimetable = kept.empty)
+        }
+    }
+
     /** What follows a sync: what's listening, where something changed, then what follows every one. */
     private suspend fun after(report: SyncReport) {
         if (report.completed.isNotEmpty() || report.reopened.isNotEmpty() || report.added.isNotEmpty() || report.missed.isNotEmpty()) {
@@ -232,6 +244,8 @@ class Syncer(
             // A deck topic an assignment names, come or changed (DX-10): its reading is out of date, so
             // it's read again with the decks as they are, and its vocabulary isn't planned twice.
             val topics = read.deckTopics?.takeIf { it != current.deckTopics }
+            // A timetable read with no lessons isn't taken over one that has them (D-165): held back, yours to keep or take.
+            val kept = read.timetable?.let { Timetables.after(current.timetable, current.emptyTimetable, it, now) }
             current.copy(
                 tasks = if (topics == null) {
                     merged.tasks
@@ -247,7 +261,8 @@ class Syncer(
                 sources = current.sources + (source to SourceStatus(lastSuccessAt = now, lastAttemptAt = startedAt, dataAsOf = read.dataAsOf, note = read.note)),
                 ankiDay = read.ankiDay ?: current.ankiDay,
                 deckTopics = read.deckTopics ?: current.deckTopics,
-                timetable = read.timetable ?: current.timetable,
+                timetable = if (kept == null) current.timetable else kept.timetable,
+                emptyTimetable = if (kept == null) current.emptyTimetable else kept.empty,
             )
         }
         return report

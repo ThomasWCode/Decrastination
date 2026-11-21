@@ -121,6 +121,13 @@ data class NotSame(val a: String, val b: String) : Action, Answers<Unit> {
     override suspend fun run(owners: Owners) = owners.instructions.notSame(a, b)
 }
 
+/** Your answer to a timetable read with no lessons, held back while the last one is kept ([com.thomaswcode.decrastination.sync.Syncer.answerTimetable]). */
+@Serializable
+@SerialName("AnswerTimetable")
+data class AnswerTimetable(val keep: Boolean) : Action, Answers<Unit> {
+    override suspend fun run(owners: Owners) = owners.sources.answerTimetable(keep)
+}
+
 // School's days.
 
 @Serializable

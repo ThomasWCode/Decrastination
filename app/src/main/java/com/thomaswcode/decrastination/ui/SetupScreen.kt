@@ -7,6 +7,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -167,6 +168,10 @@ fun SetupScreen(graph: AppGraph, activity: Activity, parts: Set<SetupPart> = Set
         if (SetupPart.Sources in parts) Group("Sources") {
             SetupItem(SetupPage.teams(state.status(Source.Teams)))
             SetupItem(SetupPage.powerPlanner(state.status(Source.PowerPlanner), Secret.PowerPlannerPassword in secrets), action = "Enter" to { editing = Credential.PowerPlanner })
+            // An empty timetable held back while the last one's kept (D-165): yours to keep or take.
+            SetupPage.timetable(state.emptyTimetable, graph.clock.now(), graph.clock.zone())?.let { line ->
+                SetupItem(line.title, line.done, line.detail, answers = line.answers.map { answer -> answer.label to { graph.scope.launch { graph.act(answer.action) }; Unit } })
+            }
             SetupItem(SetupPage.anki(state.status(Source.Anki), ankiAllowed), action = if (ankiAllowed) null else "Allow" to { requestAnki.launch(AnkiProvider.PERMISSION) })
             SetupItem(
                 SetupPage.gmail(state.status(Source.Gmail), Secret.GmailAppPassword in secrets, graph.settings.value.gmailFinishes, GmailWrites.givenUp(graph.gmailFinishes.value)),
@@ -428,7 +433,7 @@ private fun SetupItem(line: SetupPage.Line, action: Pair<String, () -> Unit>? = 
 
 /** One checklist row, a tile of a [Group]. [done] null means it isn't a thing to tick. */
 @Composable
-fun SetupItem(title: String, done: Boolean?, detail: String, action: Pair<String, () -> Unit>? = null) {
+fun SetupItem(title: String, done: Boolean?, detail: String, action: Pair<String, () -> Unit>? = null, answers: List<Pair<String, () -> Unit>> = emptyList()) {
     Row(
         Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh).padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -445,6 +450,12 @@ fun SetupItem(title: String, done: Boolean?, detail: String, action: Pair<String
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
             Text(detail, style = MaterialTheme.typography.bodySmall, color = if (done == false) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
+            // What the row asks, under its words: two buttons beside them would leave the words no room.
+            if (answers.isNotEmpty()) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    answers.forEach { (label, onClick) -> OutlinedButton(onClick = onClick) { Text(label) } }
+                }
+            }
         }
         action?.let { (label, onClick) -> OutlinedButton(onClick = onClick) { Text(label) } }
     }

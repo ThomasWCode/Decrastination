@@ -1,15 +1,20 @@
 package com.thomaswcode.decrastination.server
 
 import com.thomaswcode.decrastination.core.ChatMessage
+import com.thomaswcode.decrastination.core.EmptyTimetable
 import com.thomaswcode.decrastination.core.OwnTask
+import com.thomaswcode.decrastination.core.PpClass
+import com.thomaswcode.decrastination.core.PpSchedule
 import com.thomaswcode.decrastination.core.Rule
 import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.core.Status
+import com.thomaswcode.decrastination.core.Timetable
 import com.thomaswcode.decrastination.data.Secret
 import com.thomaswcode.decrastination.data.SecretCipher
 import com.thomaswcode.decrastination.learn.CheckIn
 import com.thomaswcode.decrastination.protect.Totp
 import com.thomaswcode.decrastination.sync.DeviceClaim
+import com.thomaswcode.decrastination.sync.protocol.AnswerTimetable
 import com.thomaswcode.decrastination.sync.protocol.ApplyChangeNow
 import com.thomaswcode.decrastination.sync.protocol.ChangeSettings
 import com.thomaswcode.decrastination.sync.protocol.ClearChat
@@ -103,6 +108,19 @@ class CommandApplierTest {
         assertEquals("Essay", task.title)
         assertEquals(at, task.firstSeenAt, "the moment it was done, not the moment it landed")
         assertEquals(listOf("tasks.json"), graph.state(0).stores.map { it.name })
+    }
+
+    @Test
+    fun `an answer to an empty timetable held back goes through to the tasks, the last one kept or the empty one taken`() = runBlocking {
+        val lessons = Timetable("2026-08-24T00:00:00", listOf(PpClass("german", "German", listOf(PpSchedule("2026-09-05T09:50:00", "2026-09-05T10:45:00", 3, 1)))))
+        val held = EmptyTimetable(Timetable(null, emptyList()), at)
+        graph.stores.tasks.update { it.copy(timetable = lessons, emptyTimetable = held) }
+        assertEquals(Outcome.APPLIED, send(Command("keep", at, AnswerTimetable(keep = true))).state)
+        assertEquals(lessons, graph.stores.tasks.value.timetable)
+        assertEquals(held.copy(kept = true), graph.stores.tasks.value.emptyTimetable)
+        assertEquals(Outcome.APPLIED, send(Command("take", at, AnswerTimetable(keep = false))).state)
+        assertEquals(held.read, graph.stores.tasks.value.timetable)
+        assertNull(graph.stores.tasks.value.emptyTimetable)
     }
 
     @Test

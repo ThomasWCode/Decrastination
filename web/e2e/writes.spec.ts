@@ -1034,3 +1034,12 @@ test("a reset asks first, says what it did, and its copy brings it back", async 
   await page.getByRole("listitem").filter({ hasText: /^reset-/ }).first().getByRole("button", { name: "Restore" }).click();
   await expect(page.getByRole("status")).toContainText("Restored the settings");
 });
+
+test("Setup offers the empty timetable held back, as this server applies what's sent", async ({ page }) => {
+  // The made-up stores hold one, kept at your word: its row says so, with the way to take it after all. Not pressed here, as
+  // the tests share these stores and the days' lessons come from the timetable (pages.spec.ts presses one on a made-up view).
+  await page.goto("/setup");
+  const row = page.getByRole("region", { name: "Sources" }).getByRole("listitem").filter({ hasText: "Power Planner's timetable" });
+  await expect(row).toContainText("Kept as it was before");
+  await expect(row.getByRole("button")).toHaveText(["Use the empty one"]);
+});

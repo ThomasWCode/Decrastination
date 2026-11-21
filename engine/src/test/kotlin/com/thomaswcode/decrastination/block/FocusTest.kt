@@ -3,6 +3,7 @@ package com.thomaswcode.decrastination.block
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
 import com.thomaswcode.decrastination.core.Calibration
+import com.thomaswcode.decrastination.data.EmptyTimetableMigration
 import com.thomaswcode.decrastination.data.KeptPage
 import com.thomaswcode.decrastination.data.SlotRef
 import com.thomaswcode.decrastination.data.StepOrderMigration
@@ -73,7 +74,7 @@ import kotlinx.coroutines.test.runTest
 class FocusTest {
     private val dir: File = Files.createTempDirectory("focus").toFile()
     private val clock = FixedClock(Fixtures.at("2026-10-10T12:00"), LONDON)
-    private val tasks = JsonStore(File(dir, "tasks.json"), TaskState.serializer(), ::TaskState, migrations = listOf(TasksMigration.TASKS, StepOrderMigration.TASKS, WeeklyMigration.TASKS, NotSameMigration.TASKS))
+    private val tasks = JsonStore(File(dir, "tasks.json"), TaskState.serializer(), ::TaskState, migrations = listOf(TasksMigration.TASKS, StepOrderMigration.TASKS, WeeklyMigration.TASKS, NotSameMigration.TASKS, EmptyTimetableMigration.TASKS))
     private val settings = JsonStore(File(dir, "settings.json"), Settings.serializer(), ::Settings, migrations = listOf(SettingsMigration.SETTINGS, ZoomMigration.SETTINGS, SpeechMigration.SETTINGS))
     private val protection = JsonStore(File(dir, "protection.json"), ProtectionState.serializer(), ::ProtectionState, migrations = listOf(ProtectionSplit.PROTECTION))
     private val session = JsonStore(File(dir, "session.json"), SessionState.serializer(), ::SessionState, migrations = listOf(CreditMigration.SESSION, TimerMigration.SESSION, CheckNotesMigration.SESSION, PhotoDoorsMigration.SESSION))

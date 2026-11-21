@@ -43,7 +43,7 @@ class Stores(
     private fun <T> store(name: String, serializer: KSerializer<T>, default: () -> T, unreadable: () -> T = default, migrations: List<Migration> = emptyList(), onWrite: (T) -> T = { it }) =
         JsonStore(backend, name, serializer, default, unreadable = unreadable, clock = clock, migrations = migrations, onWrite = onWrite)
 
-    val tasks = store("tasks.json", TaskState.serializer(), ::TaskState, migrations = listOf(TasksMigration.TASKS, StepOrderMigration.TASKS, WeeklyMigration.TASKS, NotSameMigration.TASKS), onWrite = TaskState::withStepIds)
+    val tasks = store("tasks.json", TaskState.serializer(), ::TaskState, migrations = listOf(TasksMigration.TASKS, StepOrderMigration.TASKS, WeeklyMigration.TASKS, NotSameMigration.TASKS, EmptyTimetableMigration.TASKS), onWrite = TaskState::withStepIds)
 
     // A file that can't be read at all starts armed while the device admin is on, as only arming
     // turns it on: a bad file never disarms protection (IMP-P1-003).

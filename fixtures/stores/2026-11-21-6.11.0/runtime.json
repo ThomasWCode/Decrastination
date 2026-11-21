@@ -1,0 +1,76 @@
+{
+  "notifiedToday": {
+    "2026-10-18": 2
+  },
+  "heldNotifications": [
+    {
+      "channel": "weekly",
+      "id": 4003,
+      "tag": null,
+      "at": 1792274400000,
+      "title": "The week's review",
+      "text": "Two changes to your settings.",
+      "taps": [
+        {
+          "label": null,
+          "broadcast": false,
+          "requestCode": 4003,
+          "intent": "intent:#Intent;component=com.thomaswcode.decrastination/.learn.CheckInActivity;end",
+          "reply": null
+        },
+        {
+          "label": "Reply",
+          "broadcast": true,
+          "requestCode": 4200,
+          "intent": "intent:#Intent;action=com.thomaswcode.decrastination.FELIX_REPLY;end",
+          "reply": {
+            "key": "reply",
+            "label": "Reply to Fe",
+            "choices": [
+              "ok"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "channel": "model",
+      "id": 5001,
+      "tag": "teams:as-essay",
+      "at": 1792274700000,
+      "title": "Claude's plan was dropped",
+      "text": "History essay: causes of the war",
+      "taps": []
+    }
+  ],
+  "dailyRanAt": {
+    "briefing": 1792310400000,
+    "review": 1791743400000
+  },
+  "dailyRetries": {
+    "check-in": {
+      "at": 1792348500000,
+      "tries": 1
+    }
+  },
+  "teamsAuto": {
+    "lastOfferedAt": 1792252200000,
+    "delayedUntil": 1792252500000,
+    "firstUnlockDay": "2026-10-17",
+    "morningUntil": 1792306800000,
+    "retries": 1
+  },
+  "lastBackupAt": 1792288800000,
+  "unreadable": [
+    {
+      "file": "log.json",
+      "copy": "log.json.unreadable-20261016-120000",
+      "kept": true,
+      "at": 1792148400000
+    }
+  ],
+  "unreadableSeen": [
+    "runtime.json.unreadable-20261010-080000"
+  ],
+  "version": 4
+}

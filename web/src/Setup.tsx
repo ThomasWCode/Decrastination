@@ -1,10 +1,15 @@
-import { useCallback } from "react";
-import { api } from "./api";
+import { useCallback, useState } from "react";
+import { api, saying } from "./api";
 import { useLive } from "./live";
-import type { SetupLine } from "./types";
+import type { Action, SetupLine } from "./types";
 
 function Line({ line }: { line: SetupLine }) {
   const needed = line.done === false;
+  const [said, setSaid] = useState<string | null>(null);
+  const answer = (action: Action) => {
+    setSaid(null);
+    void saying(action).then(setSaid);
+  };
   return (
     <li className={needed ? "setup-line needed" : "setup-line"}>
       <span className="mark" aria-hidden="true">
@@ -16,6 +21,20 @@ function Line({ line }: { line: SetupLine }) {
           {line.title}
         </span>
         <span className="line">{line.detail}</span>
+        {line.answers?.length ? (
+          <span className="answers">
+            {line.answers.map((one) => (
+              <button key={one.label} className="quiet" onClick={() => answer(one.action)}>
+                {one.label}
+              </button>
+            ))}
+          </span>
+        ) : null}
+        {said ? (
+          <span className="problem" role="status">
+            {said}
+          </span>
+        ) : null}
       </span>
     </li>
   );

@@ -81,7 +81,7 @@ class CommandsTest {
         SaveOwnTask("s", OwnTask(title = "t", steps = listOf(OwnStep("a", 10))), fromForm = true, wasIndexes = listOf(0)),
         FinishOwnTask("t"), ReopenOwnTask("t"), DeleteOwnTask("t"),
         AddOwnChange("i", "words", About(taskId = "t"), Change(ChangeType.OnDay, taskId = "t", date = "2026-11-02")),
-        LaterToday("k"), TakeBackQuick("t", ChangeType.AtTime), ApplyInstruction("i"), DeleteInstruction("i"), RereadInstruction("i", "words"), NotSame("a", "b"),
+        LaterToday("k"), TakeBackQuick("t", ChangeType.AtTime), ApplyInstruction("i"), DeleteInstruction("i"), RereadInstruction("i", "words"), NotSame("a", "b"), AnswerTimetable(keep = true),
         AddNoSchool(NoSchool("2026-11-02", "2026-11-03", "a break")), AddHalfDay(HalfDay("2026-11-02", 780)), DeleteNoSchool(NoSchool("2026-11-02", "2026-11-03")), DeleteHalfDay(HalfDay("2026-11-02", 780)),
         KeepSlot("k", 5L), UndoKeep("k", 5L), TickBlock("t", 1, "a step"), StartTimer("t", 1, "k"), StopTimer, NoteActivity(listOf("t")),
         SendMessage("hello", About(taskId = "t"), "m", "r", false), ReplyFromNotification("hello", "m"), WithdrawQuestion("m"), CancelAnswer, MarkAnswered(listOf("m")), UnmarkAnswered(Conversation.Marked(setOf("m"), 5L)),

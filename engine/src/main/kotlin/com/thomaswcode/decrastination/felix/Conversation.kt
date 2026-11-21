@@ -722,7 +722,8 @@ class Conversation(
         val timetable = state.timetable ?: return null
         val s = settings.value
         val next = Lessons.next(timetable, now, clock.zone(), school.value, skip = setOf(s.studyPeriodName))
-        val readAt = state.status(Source.PowerPlanner).lastSuccessAt
+        // One kept over an empty read (D-165) is as old as the first read that brought none, however well the reads since went.
+        val readAt = state.emptyTimetable?.since ?: state.status(Source.PowerPlanner).lastSuccessAt
         return Lessons.Timetabled(Lessons.groups(next, s.classMap), readAt, Lessons.stale(readAt, now))
     }
 

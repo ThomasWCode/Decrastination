@@ -19,6 +19,7 @@ import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.Why
 import com.thomaswcode.decrastination.core.WindowKind
+import com.thomaswcode.decrastination.data.EmptyTimetableMigration
 import com.thomaswcode.decrastination.data.CalendarState
 import com.thomaswcode.decrastination.data.ChatMigration
 import com.thomaswcode.decrastination.data.JsonStore
@@ -67,7 +68,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 class CalendarWriterTest {
     private val dir: File = Files.createTempDirectory("calendar").toFile()
     private val clock = FixedClock(Fixtures.at("2026-10-19T16:00"), LONDON)
-    private val tasks = JsonStore(File(dir, "tasks.json"), TaskState.serializer(), ::TaskState, migrations = listOf(TasksMigration.TASKS, StepOrderMigration.TASKS, WeeklyMigration.TASKS, NotSameMigration.TASKS))
+    private val tasks = JsonStore(File(dir, "tasks.json"), TaskState.serializer(), ::TaskState, migrations = listOf(TasksMigration.TASKS, StepOrderMigration.TASKS, WeeklyMigration.TASKS, NotSameMigration.TASKS, EmptyTimetableMigration.TASKS))
     private val settings = JsonStore(File(dir, "settings.json"), Settings.serializer(), ::Settings, migrations = listOf(SettingsMigration.SETTINGS, ZoomMigration.SETTINGS, SpeechMigration.SETTINGS))
     private val runtime = JsonStore(File(dir, "runtime.json"), RuntimeState.serializer(), ::RuntimeState, migrations = listOf(ChatMigration.RUNTIME, RuntimeSplit.RUNTIME, NotSameMigration.RUNTIME))
     private val model = JsonStore(File(dir, "model.json"), ModelState.serializer(), ::ModelState)

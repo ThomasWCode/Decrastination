@@ -9,6 +9,7 @@ import com.thomaswcode.decrastination.data.Reset
 import com.thomaswcode.decrastination.data.Secret
 import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.enrich.AiUsage
+import com.thomaswcode.decrastination.sync.protocol.Action
 import com.thomaswcode.decrastination.sync.protocol.ResetData
 import com.thomaswcode.decrastination.ui.BackupPage
 import com.thomaswcode.decrastination.ui.Format
@@ -63,9 +64,13 @@ object BackupViews {
     )
 }
 
-/** A row of Setup: what it's of, whether it's done (none: not a thing to tick), and what's said of it. */
+/** A row of Setup: what it's of, whether it's done (none: not a thing to tick), what's said of it, and what can be answered there. */
 @Serializable
-data class SetupLine(val title: String, val done: Boolean? = null, val detail: String)
+data class SetupLine(val title: String, val done: Boolean? = null, val detail: String, val answers: List<SetupAnswer> = emptyList())
+
+/** An answer a row of Setup offers: its button's words, and what it sends. */
+@Serializable
+data class SetupAnswer(val label: String, val action: Action)
 
 /** Setup as the website draws it (UI-18): what the server couldn't read at its start, the sources and Claude. */
 @Serializable
@@ -82,16 +87,18 @@ object SetupViews {
      */
     fun of(tasks: TaskState, unreadable: List<JsonStore.Unreadable>, holds: (String) -> Boolean, settings: Settings, usage: AiUsage, held: Set<String>, keyHeld: Boolean, now: Long, zone: ZoneId, writable: Boolean, givenUp: List<GmailWrite> = emptyList()) = SetupView(
         saved = unreadable.map { found -> SetupLine("Found unreadable ${Format.at(found.at, now, zone)}", false, if (found.file == SECRETS) SECRETS_LOST else found.says(holds)) },
-        sources = listOf(
+        sources = listOfNotNull(
             SetupPage.teams(tasks.status(Source.Teams)),
             SetupPage.powerPlanner(tasks.status(Source.PowerPlanner), !writable || Secret.PowerPlannerPassword.name in held),
+            // An empty timetable held back (D-165): answered here once this server applies what's sent, said either way.
+            SetupPage.timetable(tasks.emptyTimetable, now, zone)?.let { if (writable) it else it.copy(answers = emptyList()) },
             SetupPage.anki(tasks.status(Source.Anki), allowed = true),
             SetupPage.gmail(tasks.status(Source.Gmail), !writable || Secret.GmailAppPassword.name in held, settings.gmailFinishes, givenUp),
         ).map(::line),
         claude = line(SetupPage.claude(!writable || keyHeld, settings, usage, onBox = writable)),
     )
 
-    private fun line(line: SetupPage.Line) = SetupLine(line.title, line.done, line.detail)
+    private fun line(line: SetupPage.Line) = SetupLine(line.title, line.done, line.detail, line.answers.map { SetupAnswer(it.label, it.action) })
 
     private const val SECRETS = "secrets.bin"
 }
