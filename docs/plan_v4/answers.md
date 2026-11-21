@@ -1,6 +1,6 @@
 # The questions, and your answers
 
-Every question the 4.x plan put to you, and every one raised while it was built, in a line each: what was asked, what you answered, and where it's recorded; after it, the timer's (4.4.0), with the choices its building made without asking, then those of the Day as a calendar (4.5.0 to 4.6.0), the breaks outside (4.4.1 and 4.5.2) and your busy times in your calendar (4.5.3), Felix's moods (4.7.0), his speech (4.8.0), the chat as the app's home (4.9.0) and the chat's kept words with Day's menus (4.11.0), each with the choices made without asking. A "(Q31: A)" in [decisions.md](../decisions.md) or [spec/](../spec/) points here; "C-Q" is the cleanup plan's, "M" a call the merge of the two plans made on its own (18 Oct 2026), and Q32 on were asked while building, each with a recommendation and your answer. Where a line gives only the letter, you took the recommendation. From Q32 on, a Q id is always one of these, with its letter or without, as "(Q83)"; below that, one written without its answer's letter, as "(Q13)", and the hyphenated ones, as "(Q-31)", are older requirement ids, not these ([spec/requirement-ids.md](../spec/requirement-ids.md) §Q).
+Every question the 4.x plan put to you, and every one raised while it was built, in a line each: what was asked, what you answered, and where it's recorded; after it, the timer's (4.4.0), with the choices its building made without asking, then those of the Day as a calendar (4.5.0 to 4.6.0), the breaks outside (4.4.1 and 4.5.2) and your busy times in your calendar (4.5.3), Felix's moods (4.7.0), his speech (4.8.0), the chat as the app's home (4.9.0) and the chat's kept words with Day's menus (4.11.0), each with the choices made without asking; then, after the website's (Q129 to Q145, in [plan_web/README.md](../plan_web/README.md)), a timed event's minutes (6.3.0, Q146 to Q150), the photos' releases with the server's storage (6.3.3 to 6.10.1, Q151 to Q169) and the empty timetable (6.11.0, Q170 and Q171). A "(Q31: A)" in [decisions.md](../decisions.md) or [spec/](../spec/) points here; "C-Q" is the cleanup plan's, "M" a call the merge of the two plans made on its own (18 Oct 2026), and Q32 on were asked while building, each with a recommendation and your answer. Where a line gives only the letter, you took the recommendation. From Q32 on, a Q id is always one of these, with its letter or without, as "(Q83)"; below that, one written without its answer's letter, as "(Q13)", and the hyphenated ones, as "(Q-31)", are older requirement ids, not these ([spec/requirement-ids.md](../spec/requirement-ids.md) §Q).
 
 ## The cleanup's questions (17 and 18 Oct)
 
@@ -31,7 +31,7 @@ Every question the 4.x plan put to you, and every one raised while it was built,
 - **Q10, reminders in quiet hours**: A, a reminder at a time comes whatever the hour, as an alarm would.
 - **Q11, a reminder's chips**: A, *Done*, *Snooze 15 min*, *Snooze 1 h*, with no call; anything else typed a chat turn.
 - **Q12, where notes, reminders and the Gmail journal live**: A, `felix.json` in the backup and cleared by the chat's reset; the journal its own file, in no reset.
-- **Q13, the schema route for reminders and notes**: A, their own fields, the API's compile as the gate.
+- **Q13, the schema route for reminders and notes**: A, their own fields, the API's compile as the gate; the API refused the chat's schema with them as too large to compile, so its fallback, B, was built (4.1.0): the chat's own change types, `Remind` and `Note`, on the changes' fields. The code's "(Q13: B)" is this.
 - **Q14, notes**: A, his from the chat and yours from the sheet; read by the sheet, the chat's context, his own messages' context and the micro-planner; 300 characters a note, 10 a task.
 - **Q15, memory that expires**: A, forgotten silently with the until shown; rules with an until too; the profile's shape raised (one re-read, about 60 cents); a "quiet until" example in his prompt (D-103).
 - **Q16, the voice**: A (lower case, contractions, a little slang, dates and times exact), no emojis; mild swearing allowed, then left out of his prompts on your read of 21 Oct (D-57).
@@ -447,7 +447,7 @@ Applied: `ChatMessage.feeling`, and `FelixAnswer.feeling` for one written ahead,
 7. The kept slot after a let-down is checked above `due`'s early exits, and still has to be fresh.
 8. An Anki piece counts like any other: a missed quota is a missed slot.
 9. No tone setting (D-57 has none): a standing instruction turns it down, the standing instructions coming after the register and the feelings in both prompts.
-10. Misses across days aren't told him: a follow-up, if real use shows one day isn't enough.
+10. Misses across days aren't told him: a follow-up, if real use shows one day isn't enough. (Reversed in 4.8.0: his diary, D-120.)
 11. A time is always as 09:00 in his words, never "at 9", once an example's "9 tomorrow" spread to fourteen answers.
 12. Ratings are on his messages only, and none of it, nor his note, is ever sent back to him; *Remove* takes one off; a message from before 4.7.0 has no note to show.
 13. His note is kept to 400 characters, your words to 1 000.
@@ -659,7 +659,7 @@ Nothing of the draft outlives the app's process. Words handed in to a nearly ful
 
 ## A timed event's minutes taken from its own time (6.3.0, 15 Nov)
 
-An event answered with minutes counted as that much of its day at no set time: `Planner.capacityOf` took them off the day's free time, but the slotter lays work by busy time alone and filled the event. On the phone a 2 h 21 min train told to take half its time held 1 h 45 min of work. The plan was written on 6 Nov and its questions answered on 7 Nov; the numbers continue [plan_web/decisions.md](../plan_web/decisions.md)'s, which ended at Q145.
+An event answered with minutes counted as that much of its day at no set time: `Planner.capacityOf` took them off the day's free time, but the slotter lays work by busy time alone and filled the event. On the phone a 2 h 21 min train told to take half its time held 1 h 45 min of work. The plan was written on 6 Nov and its questions answered on 7 Nov; the numbers continue [plan_web/README.md](../plan_web/README.md)'s, which ended at Q145.
 
 ### Asked and answered
 
@@ -696,99 +696,12 @@ Planned on 18 Nov 2026 in `docs/plan_photos/` with the owner's answers to its qu
 
 ### What the plan measured and estimated (18 and 19 Nov 2026)
 
-As the plan's `storage.md` had it, kept here as its folder went.
-
-#### What the photos will take (estimates)
-
-- **A page**: the sample pages measured were 80 to 180 KB (scans, 1 240 by 1 754). A page from the phone's camera at 1 568 pixels isn't measured yet; 150 to 500 KB is planned for.
-- **Kept by default**: nothing. A check's pages and a chat photo are deleted once used, the box ticked; what's kept is a line of text.
-- **Kept when unticked**, a chat photo for 14 days from when it's sent (README, *Answered on 19 Nov* 4): two a day, about 28 held at once, 4 to 14 MB; ten a day, about 140, 20 to 70 MB. There's no fixed most: it's whatever is sent unticked in a fortnight (forty a day, at half a megabyte each, would be 280 MB). The photos' folder is among the sizes in Settings (6.10.0).
-- **The box's disk**: 91 GB free of 96 (18 Nov 2026), its photos' folder empty.
-
-#### What R2 holds (measured, 18 Nov 2026)
-
-Counted in the bucket, seven and a half days after the replica's fresh path began (11 Nov):
-
-| Litestream's | Files | Size | A day |
-|---|---|---|---|
-| snapshots, one a day | 8 | 1 033 MB | the path's first 252 MB; then 81 MB (12 Nov) rising to 140 MB (18 Nov), and 165 MB on 19 Nov |
-| L1 (every 15 minutes) | 719 | 716 MB | about 95 MB |
-| L2 (hourly) | 179 | 674 MB | about 90 MB |
-| L3 (every 6 hours) | 29 | 372 MB | about 50 MB |
-| in all | 978 | 2 795 MB | about 365 MB |
-
-- L1 to L3 keep every file till it's behind the oldest snapshot kept ([hosting.md](../plan_web/hosting.md) §Litestream), so with 30 days' snapshots all of it is kept 30 days.
-- At that rate, by estimate: 10 GB about the 27th day, 8 or 9 December, and about 11 GB once the 30 days are full; more if the database goes on growing, as each snapshot is the whole of it.
-- The database's file was 360 MB that day (344 MiB), and its write-ahead log 150 MB beside it, not counted in that. The snapshot taken a quarter of an hour later, 165 MB, is 46% of the file it copies.
-- Past its free 10 GB R2 charges $0.015 a gigabyte a month, by the average of each day's most, rounded up (its pricing page, 30 Oct 2026): a gigabyte or two over is a few cents a month. A request past the free million Class A is $4.50 a million, which is what November's bill was for.
-
-#### What trims it, and what it comes to
-
-Nothing here grows without end; each part has a rule that lets go of the old. What they add up to is the question.
-
-**In R2**, Litestream's own rules ([hosting.md](../plan_web/hosting.md) §Litestream):
-
-- a snapshot older than `snapshot.retention` is deleted;
-- L1 to L3's files are deleted once they're behind the oldest snapshot kept, so they last as long as the snapshots do;
-- L0's files go minutes after they're compacted.
-
-So R2 holds about the days kept, times a snapshot and a day's changes: 14 × (a snapshot + about 235 MB). A snapshot is the whole database, so it's the database's size that decides it.
-
-**In the database** (`ServerGraph`'s daily trim, and at each start):
-
-- a store's row is replaced by each write, never added to: all the stores together are about a megabyte;
-- `store_history` keeps every row for a day, then each store's last of each hour, for 30 days (D-151): about 135 MB for the day at the present rate, and by estimate up to 13 MB for each older day, some 500 MB once the 30 days are full, in mid-December;
-- the record of commands is kept 90 days: 69 MB in its first fortnight, so by estimate some 430 MB once the 90 days are full, in early February;
-- the file itself never shrinks (the server never vacuums it): room let go of is used again, so the file stays at the most it has needed.
-
-So the database comes, by estimate, to about 650 MB in mid-December and about 1 GB by February, and then stays. The newest snapshot is 46% of the database it copies (165 MB of 360), so 14 of them are about 4.2 GB in mid-December and 6.4 GB by February, with 3.3 GB of L1 to L3 beside them: about 7.5 GB, then about 10. These rest on a week's figures and on a snapshot staying that share of the database, neither of which is sure; and the week itself ran quicker than the rules above reckon on, a snapshot about 12 MB bigger each day (81 MB to 165 in seven), so the file some 26 MB, so they may be low. 6.10.0's figures show the real course.
-
-What would lessen it, in the order it helps: fewer and smaller writes (6.3.3, below: a day's changes, the history and the commands); the commands kept less long, or without what they needn't hold; fewer days of snapshots.
-
-#### 6.3.3: the writes that change nothing (built: Q151 in answers.md)
-
-The owner's choice of what keeps R2 under its allowance (README, answer 15), so it comes second, straight after the snapshots.
-
-**Measured on the box, the last 24 hours to 18 Nov 2026**: each store's size, and the rows and megabytes its history gained.
-
-| Store | Its size | Rows of history | Their size |
-|---|---|---|---|
-| `tasks.json` | 179 KB | 433 | 75 MB |
-| `chat.json` | 334 KB | 129 | 39 MB |
-| `model.json` | 29 KB | 330 | 10 MB |
-| `calendar-read.json` | 49 KB | 143 | 7 MB |
-| the rest together | | about 120 | about 3 MB |
-
-- A store is written whole, and each write adds its whole text to `store_history` (D-151 thins it after a day, which frees the room later but not the writing). About 135 MB of history a day, and the store's own row written again each time: what Litestream carries.
-- `session.json`, where 6.4.0's notes go, is 4 KB and gained 52 rows: the notes cost it nothing to speak of.
-
-**What writes them** (counted on the box, 19 Nov 2026, the 24 hours before: each row of history by what caused it, and whether it differs from the row before by nothing but times, numbers of 13 digits):
-
-| Store | Rows | Written by | Differ by times alone |
-|---|---|---|---|
-| `tasks.json` | 431 | the phone's `ObserveSources` 215, the server's own reads 209, your changes 7 | 393, nine in ten |
-| `calendar-read.json` | 142 | the phone's `ObserveCalendar`, all of them | 136 |
-| `chat.json` | 129 | the server 74, `ReadChat` 34, `SendMessage` 15, others 6 | 34, `ReadChat`'s: where you've read to |
-| `model.json` | 300 | the server, all of them | none |
-
-- So most of `tasks.json`'s history, about 70 MB a day of it, and nearly all of `calendar-read.json`'s, is a store written again whole to say when it was last looked at. `trimHistory`'s own comment says as much: "most of a store's rows differ from the one before by a sync's time alone". Which times they are isn't read yet; a task's last seen and a source's last read are the likely ones.
-- **The record of commands is one command.** Of its 69 MB, 67 MB is `ObserveCalendar`: 1 475 of them at about 45 KB each, the whole calendar sent each time, nearly every one changing nothing. Kept 90 days, that alone is the 430 MB the record was heading for.
-- `model.json`'s 300 rows each change something (a call's record, the month's spend), and `chat.json`'s others are messages: left as they are.
-
-**What's built**, each weighed against "no data is ever lost" (the history is what a store that can't be read comes back from) and against what the times are for (a source's "last read" on Work, and a task its source no longer lists being told by when it was last seen):
-
-1. **The phone doesn't send a calendar that's the same as the one it sent last**: a fingerprint of what it read, kept beside what it sent. Where the server needs to know the phone still looks, that's a few bytes, not the calendar. This takes the commands' record from some 430 MB to a few, with the 90 days kept.
-2. **No row of history for a write that changes nothing but times.** The store's own row is written, so every time is as true as now; the history, which is there to bring back what a store held, gains a row only when what it holds has changed. On the server alone, no store's shape changed. This is the 70 MB a day.
-3. **Weighed once those two are measured**: the times kept in a small store of their own, so a read that found nothing new doesn't write `tasks.json` at all. It lessens what Litestream carries further, as the store's row isn't written again; it changes a stored shape on the phone and the server, so it's built only if the first two leave too much.
-4. `ReadChat` writes all of `chat.json` to move where you've read to, 34 times a day, 11 MB of history. The same answer as 2 covers its history; its own row is as 3.
-
-**What it should come to**, by estimate: a day's history about 58 MB, not 135; the commands a few megabytes, not 430; the database about half a gigabyte by February, not one; and R2, at 14 days of snapshots, about 4.5 to 5.5 GB, not 10. How much less Litestream carries each day isn't known till it's measured, as 2 still writes the store's own row.
-
-**Its measure**: `private/tools/box_churn.py` and `box_causes.py` before and after, and the bucket's daily growth (`r2_size.py`).
-
-**Tests.** A write that changes a time alone adds no history and still changes the store's row; one that changes anything else adds its row; a store set aside as unreadable is kept as now; the phone sends a calendar that's changed and not one that hasn't, and sends it again after a reset of what it holds.
-
-**Docs.** `spec/server.md` and `plan_web/data-and-sync.md` (what the history holds), `spec/sync.md` (what the phone sends of its calendar), `decisions.md` (D-151's history, as it's then kept).
+- **The photos**: sample pages were 80 to 180 KB. Nothing is kept by default, a check's pages and a chat photo deleted once used; kept unticked, a chat photo's 14 days come to tens of megabytes at most. The box's disk had 91 GB free of 96.
+- **R2** held 2 795 MB seven and a half days after the replica's fresh path began (11 Nov): 8 snapshots, 1 033 MB, and L1 to L3's 1 762 MB, about 365 MB a day in all. L1 to L3 last as long as the snapshots do ([hosting.md](../spec/hosting.md) §Litestream), so R2 holds about the days kept, times a snapshot and a day's changes; and a snapshot is the whole database (46% of the file it copies), so it's the database's size that decides it.
+- **R2's prices** (its pricing page, 30 Oct 2026): past its free 10 GB, $0.015 a gigabyte a month, by the average of each day's most; a request past the free million Class A, $4.50 a million, which is what November's bill was for.
+- **The database** was 360 MB, with a write-ahead log of 150 MB beside it. The file never shrinks, as the server never vacuums it: room let go of is used again, so it stays at the most it has needed.
+- **What wrote it** (counted on the box, a day's rows of history): `tasks.json` 431, 75 MB, nine in ten differing from the row before by times alone; `chat.json` 129, 39 MB; `model.json` 300, 10 MB, each a real change; `calendar-read.json` 142, 7 MB, nearly all the same: about 135 MB a day. Of the commands' 69 MB in a fortnight, 67 was `ObserveCalendar`, the whole calendar sent with every read.
+- **The estimate**: with the snapshots' 14 days alone, about 10 GB by February, the database grown to about 1 GB; with the writes that change nothing stopped (6.3.3, below), a day's history about 58 MB, the commands a few megabytes, the database about half a gigabyte and R2 about 4.5 to 5.5 GB. Settings → Storage has shown the real course since 6.10.0.
 
 ### The writes that change nothing (6.3.3, 19 Nov)
 
@@ -890,7 +803,7 @@ A click on a piece of the website's Day opened its task's sheet, whose *Done*, *
 
 The chat was text throughout: each turn one string, a message with no words dropped. → D-159.
 
-**Q162. What may Felix do with a photo in the chat?** (18 Nov.) **Your answer: see it and answer; make or change tasks from it; keep it with a task; and count it as proof of work**, the last 6.9.0's, through the photo check (Q7 of the plan's answers).
+**Q162. What may Felix do with a photo in the chat?** (18 Nov.) **Your answer: see it and answer; make or change tasks from it; keep it with a task; and count it as proof of work**, the last 6.9.0's, through the photo check (your answer 7 of 18 Nov).
 
 **Q163. How long does Felix go on seeing a chat photo?** (18 Nov.) Offered: with any message sent within ten minutes of it, by itself, then told it's there and asking to see it; your next few messages; once only; as long as it's in his history. **Your answer: the first.**
 
@@ -921,9 +834,25 @@ Felix was told a photo isn't proof, and couldn't hand one to the check. → D-16
 3. **The check runs after his answer's in the chat**, in a call of its own, his line under it saying it's being checked, then what it said ("Photo check: …"), or that it didn't go through; one a stop part-way left is settled as unfinished after the next sync. One at a time with every other check: the website's and the phone's say at once that one's under way rather than wait.
 4. **Tried on the real pages** (two runs each): pages 8 to 10 of a task of 8 to 12, with "the teacher dropped pages 11 and 12", passed, the check saying it took the word for what was set; page 8 alone, with "that's all of it", didn't ($0.11).
 
+### The storage in Settings, and its alert (6.10.0, 20 Nov)
+
+R2's November bill was for requests, which nothing on the phone or the website showed. → D-161.
+
+**Q166. Is the storage shown, and is there an alert near what's billed for?** (18 Nov, said without being asked in answer 15; the alert's lines recommended on 19 Nov.) **Your answer: shown in Settings if it can be measured, with a notification near what's billed for; at 80% of a free allowance and again at 95%, once each a month for each, with the date it'd be passed at the present rate.**
+
+#### Decided without asking
+
+1. **What's read**: the box's own with no credential (the database's file and its log, the photos, the disk); R2's from Cloudflare's analytics (`r2StorageAdaptiveGroups`, `r2OperationsAdaptiveGroups`), one question each a day; B2's as what the server's written there that B2 still keeps (120 days: hidden at 60, deleted 60 after), as its key can't list the bucket, said to be that.
+2. **R2's classes by its own pricing page** (read 20 Nov): Class A, the 15 operations it lists (`ListObjects`, `PutObject`, the multipart uploads among them); Class B, its 8 (`GetObject`, `HeadObject` among them); deletes and aborted uploads free.
+3. **Kept in a file of the server's own** (`storage.json` in its data folder), a month's readings and the alerts given, never a store: nothing of it goes to the phone but by the view.
+4. **A job like the others** (`ServerJob.every("storage")`), daily, in either mode, as the box is watched in both; what can't be read is said in Settings and never fails it.
+5. **The alert's way to the phone** is a Firebase message of its own (`storage`), kept a day, shown with its own id and channel, its tap opening Settings' Storage; on the website, a line beside the bell to Settings. The higher share alone where both are reached at once.
+6. **The phone's Settings fetches the view from the server** as its Storage page opens, as only the server reads the figures.
+7. **Read on 20 Nov, before it was built**: R2 held 3.33 GB, and this month's Class A requests were past the free million (1.17 million, nearly all `ListObjects`, from before the fix of 11 Nov), so the first reading's alert will say so.
+
 ### Parts numbered on, and a part's pass earning those before (6.10.1, 20 Nov)
 
-Asked on the morning of 20 Nov, from building Q4's answer into 6.9.0, and answered that evening before the phone session. → D-162, D-163.
+Asked on the morning of 20 Nov, from building 6.9.0, and answered that evening before the phone session. → D-162, D-163.
 
 **Q167. A photo that passes as part 2: should it also earn part 1, ticked today with no photo?** Part 2's check asks for all the work so far, so a pass shows part 1's too. **Your answer: yes.** The parts before it ticked today and earning nothing yet earn with it, each once.
 
@@ -954,19 +883,3 @@ Your word of 21 Nov, as 6.10.2 was built: "If the timetable is completely missin
 4. **Felix's lessons are as old as the first empty read**, not the last good one: the reads since went well, and would have made a kept timetable look fresh for ever.
 5. **Not in a backup**, as the timetable isn't: both come again with the next read.
 6. **A store's version raised** (`tasks.json` to 6), so the phone has the release before the server does (D-138).
-
-### The storage in Settings, and its alert (6.10.0, 20 Nov)
-
-R2's November bill was for requests, which nothing on the phone or the website showed. → D-161.
-
-**Q166. Is the storage shown, and is there an alert near what's billed for?** (18 Nov, said without being asked in answer 15; the alert's lines recommended on 19 Nov.) **Your answer: shown in Settings if it can be measured, with a notification near what's billed for; at 80% of a free allowance and again at 95%, once each a month for each, with the date it'd be passed at the present rate.**
-
-#### Decided without asking
-
-1. **What's read**: the box's own with no credential (the database's file and its log, the photos, the disk); R2's from Cloudflare's analytics (`r2StorageAdaptiveGroups`, `r2OperationsAdaptiveGroups`), one question each a day; B2's as what the server's written there that B2 still keeps (120 days: hidden at 60, deleted 60 after), as its key can't list the bucket, said to be that.
-2. **R2's classes by its own pricing page** (read 20 Nov): Class A, the 15 operations it lists (`ListObjects`, `PutObject`, the multipart uploads among them); Class B, its 8 (`GetObject`, `HeadObject` among them); deletes and aborted uploads free.
-3. **Kept in a file of the server's own** (`storage.json` in its data folder), a month's readings and the alerts given, never a store: nothing of it goes to the phone but by the view.
-4. **A job like the others** (`ServerJob.every("storage")`), daily, in either mode, as the box is watched in both; what can't be read is said in Settings and never fails it.
-5. **The alert's way to the phone** is a Firebase message of its own (`storage`), kept a day, shown with its own id and channel, its tap opening Settings' Storage; on the website, a line beside the bell to Settings. The higher share alone where both are reached at once.
-6. **The phone's Settings fetches the view from the server** as its Storage page opens, as only the server reads the figures.
-7. **Read on 20 Nov, before it was built**: R2 held 3.33 GB, and this month's Class A requests were past the free million (1.17 million, nearly all `ListObjects`, from before the fix of 11 Nov), so the first reading's alert will say so.

@@ -1,6 +1,6 @@
 # Felix's rated messages
 
-The messages of Felix's that were given a thumb in the chat (D-119), kept as the app stores them (`Message` in `chat.json`, with `rating`, `feedback`, `ratedAt`, `unsent` and `preferred`), oldest first. They are read to tune his prompts ([spec/felix.md](../spec/felix.md) §The chat).
+The messages of Felix's that were given a thumb in the chat (D-119), kept as the app stores them (`ChatMessage` in `chat.json`, with `rating`, `feedback`, `ratedAt`, `unsent` and `preferred`), oldest first. They are read to tune his prompts ([spec/felix.md](../spec/felix.md) §The chat).
 
 | File | What |
 |---|---|
