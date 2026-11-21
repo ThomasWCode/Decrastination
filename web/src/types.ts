@@ -321,6 +321,8 @@ export interface SetupLine {
   title: string;
   done?: boolean | null;
   detail: string;
+  /** What the row asks, each its button's words and what it sends. */
+  answers?: { label: string; action: Action }[];
 }
 
 export interface SetupView {

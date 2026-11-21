@@ -1,10 +1,12 @@
 package com.thomaswcode.decrastination.views
 
 import com.thomaswcode.decrastination.Fixtures
+import com.thomaswcode.decrastination.core.EmptyTimetable
 import com.thomaswcode.decrastination.core.Instruction
 import com.thomaswcode.decrastination.core.InstructionStatus
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.Source
+import com.thomaswcode.decrastination.core.Timetable
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.Reset
 import com.thomaswcode.decrastination.data.Secret
@@ -13,6 +15,7 @@ import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.enrich.AiUsage
 import com.thomaswcode.decrastination.enrich.KeyProblem
 import com.thomaswcode.decrastination.sync.protocol.ResetData
+import com.thomaswcode.decrastination.sync.protocol.AnswerTimetable
 import com.thomaswcode.decrastination.ui.BackupPage
 import java.time.ZoneId
 import kotlin.test.Test
@@ -89,6 +92,25 @@ class BackupViewTest {
     ) = SetupViews.of(tasks, unreadable, { false }, settings, AiUsage(), held, keyHeld, now, zone, writable)
 
     private fun SetupView.source(title: String) = sources.single { it.title == title }
+
+    @Test
+    fun `an empty timetable held back has its row after Power Planner's, answered here once the server applies what's sent`() {
+        val held = EmptyTimetable(Timetable(null, emptyList()), now - 3 * 60 * 60_000L)
+        assertEquals(listOf("Teams Assignments widget", "Power Planner login", "AnkiDroid access", "Gmail app password"), setup(TaskState()).sources.map { it.title })
+        val asked = setup(TaskState(emptyTimetable = held))
+        assertEquals(listOf("Teams Assignments widget", "Power Planner login", "Power Planner's timetable", "AnkiDroid access", "Gmail app password"), asked.sources.map { it.title })
+        val row = asked.source("Power Planner's timetable")
+        assertEquals(false, row.done)
+        assertEquals(listOf(SetupAnswer("Keep the last one", AnswerTimetable(keep = true)), SetupAnswer("Use the empty one", AnswerTimetable(keep = false))), row.answers)
+        // Kept: said, not asked, the way back alone.
+        val kept = setup(TaskState(emptyTimetable = held.copy(kept = true))).source("Power Planner's timetable")
+        assertNull(kept.done)
+        assertEquals(listOf(SetupAnswer("Use the empty one", AnswerTimetable(keep = false))), kept.answers)
+        // While the phone writes, this server applies nothing sent: said, with nothing to press.
+        val mirrored = setup(TaskState(emptyTimetable = held), writable = false).source("Power Planner's timetable")
+        assertEquals(row.detail, mirrored.detail)
+        assertEquals(emptyList(), mirrored.answers)
+    }
 
     @Test
     fun `the sources are the phone's four, each saying how it reads`() {

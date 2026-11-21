@@ -1,9 +1,12 @@
 package com.thomaswcode.decrastination.ui
 
+import com.thomaswcode.decrastination.core.EmptyTimetable
 import com.thomaswcode.decrastination.core.Source
+import com.thomaswcode.decrastination.core.Timetable
 import com.thomaswcode.decrastination.data.SourceStatus
 import com.thomaswcode.decrastination.data.SyncState
 import com.thomaswcode.decrastination.data.TaskState
+import com.thomaswcode.decrastination.sync.protocol.AnswerTimetable
 import java.time.Instant
 import java.time.ZoneId
 import kotlin.test.Test
@@ -43,6 +46,45 @@ class SetupPageTest {
         val read = TaskState(sources = Source.SYNCED.associateWith { SourceStatus(lastSuccessAt = 1) })
         assertFalse(SetupPage.attention(read, gmailGivenUp = false, keyProblem = false, watchdog = false, unreadable = false))
         assertTrue(SetupPage.attention(read, gmailGivenUp = false, keyProblem = false, watchdog = false, unreadable = false, adrift = true))
+    }
+
+    private val held = EmptyTimetable(Timetable(null, emptyList()), now - 3 * HOUR)
+
+    @Test
+    fun `an empty timetable held back is asked about in its own row, with both answers, till you say`() {
+        assertNull(SetupPage.timetable(null, now, zone))
+        assertEquals(
+            SetupPage.Line(
+                "Power Planner's timetable",
+                false,
+                "Power Planner's has had no lessons since today 15:00, which may be a read gone wrong, so the last one is kept. Keep it, or use the empty one?",
+                listOf(SetupPage.Answer("Keep the last one", AnswerTimetable(keep = true)), SetupPage.Answer("Use the empty one", AnswerTimetable(keep = false))),
+            ),
+            SetupPage.timetable(held, now, zone),
+        )
+        assertEquals("Power Planner's timetable came back with no lessons: the last one is kept till you say", SetupPage.timetableTrouble(held))
+    }
+
+    @Test
+    fun `once you've kept the last one it's said plainly, with the way to take the empty one after all`() {
+        assertEquals(
+            SetupPage.Line(
+                "Power Planner's timetable",
+                null,
+                "Kept as it was before today 15:00, as you said: Power Planner's has no lessons.",
+                listOf(SetupPage.Answer("Use the empty one", AnswerTimetable(keep = false))),
+            ),
+            SetupPage.timetable(held.copy(kept = true), now, zone),
+        )
+        assertNull(SetupPage.timetableTrouble(held.copy(kept = true)))
+        assertNull(SetupPage.timetableTrouble(null))
+    }
+
+    @Test
+    fun `the bar's mark shows while an empty timetable's asked about, not once it's kept`() {
+        val read = TaskState(sources = Source.SYNCED.associateWith { SourceStatus(lastSuccessAt = 1) })
+        assertTrue(SetupPage.attention(read.copy(emptyTimetable = held), gmailGivenUp = false, keyProblem = false, watchdog = false, unreadable = false))
+        assertFalse(SetupPage.attention(read.copy(emptyTimetable = held.copy(kept = true)), gmailGivenUp = false, keyProblem = false, watchdog = false, unreadable = false))
     }
 
     private companion object {

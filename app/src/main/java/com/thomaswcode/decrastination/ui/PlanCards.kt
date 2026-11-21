@@ -77,7 +77,7 @@ internal const val MESSAGE_MS = 20_000L
 
 /** Something that makes the plan less than the whole picture, and where it's put right. */
 internal data class Trouble(val text: String, val fix: Fix) {
-    enum class Fix { Protection, Setup, Teams }
+    enum class Fix { Protection, Setup, Teams, Timetable }
 }
 
 /** As the widget's warning has them, all of them, protection first. */
@@ -85,11 +85,12 @@ internal fun trouble(tasks: TaskState, runtime: RuntimeState, device: DeviceStat
     device.watchdog.problems.forEach { add(Trouble(it, Trouble.Fix.Protection)) }
     if (runtime.unreadable.isNotEmpty()) add(Trouble("A saved file couldn't be read: Setup says what was kept", Trouble.Fix.Setup))
     Source.SYNCED.forEach { source -> tasks.status(source).error?.let { add(Trouble("Can't read ${source.label}: $it", Trouble.Fix.Setup)) } }
+    SetupPage.timetableTrouble(tasks.emptyTimetable)?.let { add(Trouble(it, Trouble.Fix.Timetable)) }
     WidgetModel.teamsWarning(tasks, now)?.let { add(Trouble(it, Trouble.Fix.Teams)) }
 }
 
 @Composable
-internal fun TroubleCard(trouble: List<Trouble>, onSetup: () -> Unit, onProtection: () -> Unit, onTeams: () -> Unit) {
+internal fun TroubleCard(trouble: List<Trouble>, onSetup: () -> Unit, onProtection: () -> Unit, onTeams: () -> Unit, onTimetable: (keep: Boolean) -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 12.dp),
         shape = RoundedCornerShape(20.dp),
@@ -103,6 +104,10 @@ internal fun TroubleCard(trouble: List<Trouble>, onSetup: () -> Unit, onProtecti
                 if (Trouble.Fix.Protection in fixes) Button(onClick = onProtection) { Text("Protection") }
                 if (Trouble.Fix.Setup in fixes) Button(onClick = onSetup) { Text("Open Setup") }
                 if (Trouble.Fix.Teams in fixes) OutlinedButton(onClick = onTeams) { Text("Sync Teams") }
+                if (Trouble.Fix.Timetable in fixes) {
+                    OutlinedButton(onClick = { onTimetable(true) }) { Text(SetupPage.KEEP_TIMETABLE) }
+                    OutlinedButton(onClick = { onTimetable(false) }) { Text(SetupPage.TAKE_EMPTY_TIMETABLE) }
+                }
             }
             if (Trouble.Fix.Teams in fixes) {
                 Text("Syncing Teams takes over the screen for about a minute.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onErrorContainer)

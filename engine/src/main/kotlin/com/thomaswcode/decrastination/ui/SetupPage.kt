@@ -1,5 +1,6 @@
 package com.thomaswcode.decrastination.ui
 
+import com.thomaswcode.decrastination.core.EmptyTimetable
 import com.thomaswcode.decrastination.core.GmailWrite
 import com.thomaswcode.decrastination.core.GmailWrites
 import com.thomaswcode.decrastination.core.Settings
@@ -10,14 +11,18 @@ import com.thomaswcode.decrastination.data.SyncState
 import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.enrich.AiUsage
 import com.thomaswcode.decrastination.enrich.KeyProblem
+import com.thomaswcode.decrastination.sync.protocol.AnswerTimetable
 import java.time.Instant
 import java.time.ZoneId
 import java.util.Locale
 
 /** What Setup says of each part (UI-18), and when it needs you: the website's as well as the phone's. */
 object SetupPage {
-    /** A row: what it's of, whether it's done (null: not a thing to tick), and what's said of it. */
-    data class Line(val title: String, val done: Boolean?, val detail: String)
+    /** A row: what it's of, whether it's done (null: not a thing to tick), what's said of it, and what can be answered there. */
+    data class Line(val title: String, val done: Boolean?, val detail: String, val answers: List<Answer> = emptyList())
+
+    /** An answer a row offers: its button's words, and what it sends. */
+    data class Answer(val label: String, val action: AnswerTimetable)
 
     /** How hard Claude thinks, as Settings says it. */
     const val EFFORT_NOTE = "By job, not set here: high for what the plan is made from, medium for what someone's waiting for (AC-02)."
@@ -38,6 +43,34 @@ object SetupPage {
         saved && status.works,
         sourceDetail(status, if (saved) "Saved." else "Not saved."),
     )
+
+    const val KEEP_TIMETABLE = "Keep the last one"
+    const val TAKE_EMPTY_TIMETABLE = "Use the empty one"
+
+    /**
+     * The timetable's row while a read's one with no lessons is held back and the last is kept (D-165): asked, as it may be a
+     * read gone wrong, till you say; once you've kept it, said plainly, with the way to take the empty one after all. Null with
+     * none held back.
+     */
+    fun timetable(empty: EmptyTimetable?, now: Long, zone: ZoneId): Line? {
+        empty ?: return null
+        val since = Format.at(empty.since, now, zone)
+        val take = Answer(TAKE_EMPTY_TIMETABLE, AnswerTimetable(keep = false))
+        return if (empty.kept) {
+            Line("Power Planner's timetable", null, "Kept as it was before $since, as you said: Power Planner's has no lessons.", listOf(take))
+        } else {
+            Line(
+                "Power Planner's timetable",
+                false,
+                "Power Planner's has had no lessons since $since, which may be a read gone wrong, so the last one is kept. Keep it, or use the empty one?",
+                listOf(Answer(KEEP_TIMETABLE, AnswerTimetable(keep = true)), take),
+            )
+        }
+    }
+
+    /** What the trouble card says while the empty timetable's still asked about, or null. */
+    fun timetableTrouble(empty: EmptyTimetable?): String? =
+        empty?.takeUnless { it.kept }?.let { "Power Planner's timetable came back with no lessons: the last one is kept till you say" }
 
     fun anki(status: SourceStatus, allowed: Boolean) = Line(
         "AnkiDroid access",
@@ -78,9 +111,9 @@ object SetupPage {
         )
     }
 
-    /** What Setup would show in red, as a mark that opens it: a source failing, what else is passed in; and, the first run, no source read yet. */
+    /** What Setup would show in red, as a mark that opens it: a source failing, an empty timetable still asked about, what else is passed in; and, the first run, no source read yet. */
     fun attention(tasks: TaskState, gmailGivenUp: Boolean, keyProblem: Boolean, watchdog: Boolean, unreadable: Boolean, adrift: Boolean = false): Boolean =
-        Source.SYNCED.any { tasks.status(it).error != null } || gmailGivenUp || keyProblem || watchdog || unreadable || adrift ||
+        Source.SYNCED.any { tasks.status(it).error != null } || tasks.emptyTimetable?.kept == false || gmailGivenUp || keyProblem || watchdog || unreadable || adrift ||
             Source.SYNCED.all { tasks.status(it).lastSuccessAt == null && tasks.status(it).error == null }
 
     /** How long a change waits to reach the server before the Day says so: a fault, a release's bug, a command nothing can apply, the server gone. */

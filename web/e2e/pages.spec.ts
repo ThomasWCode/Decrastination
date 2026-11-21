@@ -94,9 +94,40 @@ test("a backup can be had while the phone writes, with nothing else to press", a
 test("Setup says how each source reads, and Claude", async ({ page }) => {
   await page.goto("/setup");
   const sources = page.getByRole("region", { name: "Sources" }).getByRole("listitem");
-  await expect(sources).toHaveCount(4);
+  // The four sources, and the timetable's row: the made-up stores hold an empty one held back, kept at your word.
+  await expect(sources).toHaveCount(5);
   await expect(sources.first()).toContainText("Teams Assignments widget");
+  const timetable = sources.filter({ hasText: "Power Planner's timetable" });
+  await expect(timetable).toContainText("Kept as it was before");
+  // This server mirrors, and applies nothing sent: the row says it, with nothing to press (writes.spec.ts has the button).
+  await expect(timetable.getByRole("button")).toHaveCount(0);
   await expect(page.getByRole("region", { name: "Claude" }).getByRole("listitem")).toHaveCount(1);
+});
+
+test("Setup asks about an empty timetable held back, and sends the answer pressed", async ({ page }) => {
+  const reads = (title: string) => ({ title, done: true, detail: "Reading it works." });
+  const answer = (label: string, keep: boolean) => ({ label, action: { type: "AnswerTimetable", keep } });
+  const asked = { title: "Power Planner's timetable", done: false, detail: "A made-up line: keep it, or use the empty one?", answers: [answer("Keep the last one", true), answer("Use the empty one", false)] };
+  await page.route("**/api/views/setup", (route) => route.fulfill({ json: { saved: [], sources: [reads("Power Planner login"), asked, reads("AnkiDroid access")], claude: reads("Claude") } }));
+  const sent: unknown[] = [];
+  let outcome: Record<string, unknown> = { id: "x", state: "applied", revision: 1 };
+  await page.route("**/api/commands", async (route) => {
+    sent.push(route.request().postDataJSON().commands[0].action);
+    await route.fulfill({ json: [outcome] });
+  });
+  await page.goto("/setup");
+  const row = page.getByRole("region", { name: "Sources" }).getByRole("listitem").filter({ hasText: "Power Planner's timetable" });
+  await expect(row).toContainText("Needs you");
+  // A row that asks nothing has no button.
+  await expect(page.getByRole("region", { name: "Sources" }).getByRole("button")).toHaveCount(2);
+  await row.getByRole("button", { name: "Use the empty one" }).click();
+  await expect.poll(() => sent).toEqual([{ type: "AnswerTimetable", keep: false }]);
+  await expect(row.getByRole("status")).toHaveCount(0);
+  // One that couldn't be applied is said under the buttons.
+  outcome = { id: "x", state: "dropped", why: "A made-up reason", revision: 1 };
+  await row.getByRole("button", { name: "Keep the last one" }).click();
+  await expect(row.getByRole("status")).toHaveText("A made-up reason");
+  expect(sent).toEqual([{ type: "AnswerTimetable", keep: false }, { type: "AnswerTimetable", keep: true }]);
 });
 
 test("Setup's marked in the bar while it needs you", async ({ page }) => {

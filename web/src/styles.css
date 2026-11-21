@@ -2338,6 +2338,13 @@ label.button:has(input:focus-visible) {
   color: var(--quiet);
 }
 
+.setup-line .answers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+
 .needs-you {
   display: inline-block;
   width: 8px;

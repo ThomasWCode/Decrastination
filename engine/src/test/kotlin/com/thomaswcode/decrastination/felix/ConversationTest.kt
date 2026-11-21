@@ -29,7 +29,12 @@ import com.thomaswcode.decrastination.core.Proposal
 import com.thomaswcode.decrastination.core.ProposalState
 import com.thomaswcode.decrastination.core.Rule
 import com.thomaswcode.decrastination.core.SlotState
+import com.thomaswcode.decrastination.core.EmptyTimetable
+import com.thomaswcode.decrastination.core.PpClass
+import com.thomaswcode.decrastination.core.PpSchedule
 import com.thomaswcode.decrastination.core.Source
+import com.thomaswcode.decrastination.core.Timetable
+import com.thomaswcode.decrastination.data.SourceStatus
 import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.core.SubStep
@@ -1395,5 +1400,18 @@ class ConversationTest {
         felix.server.takeRequest()
         val second = felix.server.takeRequest().body.readUtf8()
         assertTrue("move the physics to 7" in second && "no, make it 8" in second)
+    }
+
+    @Test
+    fun `lessons from a timetable kept over an empty read are as old as the first empty read, however well the reads since went`() = runBlocking {
+        val timetable = Timetable("2026-08-24T00:00:00", listOf(PpClass("german", "German", listOf(PpSchedule("2026-09-05T09:50:00", "2026-09-05T10:45:00", 3, 3)))))
+        stores.tasks.update { it.copy(timetable = timetable, sources = mapOf(Source.PowerPlanner to SourceStatus(lastSuccessAt = now))) }
+        assertEquals(now, conversation.lessons()?.readAt)
+        assertEquals(false, conversation.lessons()?.stale)
+        // Held back eight days ago and kept since: the reads go on working, and the timetable's no younger for it.
+        val since = now - 8 * 24 * 60 * 60_000L
+        stores.tasks.update { it.copy(emptyTimetable = EmptyTimetable(Timetable(null, emptyList()), since, kept = true)) }
+        assertEquals(since, conversation.lessons()?.readAt)
+        assertEquals(true, conversation.lessons()?.stale)
     }
 }

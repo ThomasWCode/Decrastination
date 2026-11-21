@@ -56,6 +56,7 @@ import com.thomaswcode.decrastination.data.SourceStatus
 import com.thomaswcode.decrastination.protect.ProtectionActivity
 import com.thomaswcode.decrastination.sources.gmail.GmailThreads
 import com.thomaswcode.decrastination.sync.protocol.AddOwnChange
+import com.thomaswcode.decrastination.sync.protocol.AnswerTimetable
 import com.thomaswcode.decrastination.sync.protocol.NotSame
 import java.io.File
 import java.time.ZoneId
@@ -142,6 +143,7 @@ fun WorkScreen(graph: AppGraph, activity: Activity, opening: String? = null, onO
                         onSetup = { activity.startActivity(Intent(activity, SetupActivity::class.java)) },
                         onProtection = { activity.startActivity(Intent(activity, ProtectionActivity::class.java)) },
                         onTeams = { scope.launch { said = graph.sync.requestTeamsSync() ?: "The Teams widget is syncing Teams" } },
+                        onTimetable = { keep -> graph.scope.launch { graph.act(AnswerTimetable(keep)) } },
                     )
                 }
             }
