@@ -15,7 +15,7 @@ Four places are read (Teams, Power Planner, AnkiDroid, Gmail); your own tasks ar
 
 - Each source is a `TaskSource` (`sources/TaskSource.kt`). A read returns everything the source has now, or throws: a failure must never look like an empty list, as the merge takes a task missing from a read as done.
 - A problem Setup can put right (no password saved, a permission not granted, an app not installed) throws `SourceUnavailable`, shown under the source.
-- A read that can't be trusted fails too (BUG-P2-007): a Teams row with no key, an agenda answer with no item list, an Anki deck whose counts can't be read, Gmail describing fewer messages than it listed.
+- A read that can't be trusted fails too (BUG-P2-007): a Teams row with no key, a Power Planner answer with no item list, an Anki deck whose counts can't be read, Gmail describing fewer messages than it listed.
 
 ## Teams
 
@@ -48,16 +48,17 @@ Freshness:
 
 Power Planner's Android app exposes nothing readable, so the app uses the web API its open-source web app uses (`sources/powerplanner/`).
 
-- **Calls** (`PowerPlannerApi`): JSON `POST`s to `https://web.api.powerplanner.net/api`, each with the web app's public development key: `LoginWeb`, `GetSelectedSemesterId`, `GetClassesAndSchedules` and `GetAgenda`. The session token goes in the login's `Password` field, as the web app sends it.
+- **Calls** (`PowerPlannerApi`): JSON `POST`s to `https://web.api.powerplanner.net/api`, each with the web app's public development key: `LoginWeb`, `GetSelectedSemesterId` and `GetClassesSchedulesAndMegaItems`, the one call the web app itself reads a semester by (6.10.2: `GetAgenda` and `GetClassesAndSchedules`, read by till then and never called by the web app, answered 404 from 19 Nov 2026). The session token goes in the login's `Password` field, as the web app sends it.
 - **Login.** Your username and password are in the encrypted secrets file. The session is kept and reused until the API answers a call with an error (an expired session, say); then one fresh login is tried, and the semester read again (`PowerPlannerSource`). A call that doesn't get through (no network, an HTTP error) fails the read.
-- **Semester and timetable** are read at most every six hours, so a read is usually one `GetAgenda` call.
+- **Which semester is selected** is read at most every six hours, so a read is usually the one call, which gives the classes, the timetable's slots (a list of their own, each naming its class by `UpperIdentifier`, put with their classes by `PowerPlannerApi.semester`) and every item of the semester, those long done among them.
+- **The agenda is made here** (`PowerPlannerItems.onAgenda`, as the web app's `isOld` in its `viewItems.ts`), on the day it is where the read is made: a task is on it until it's complete and its day has passed, an event until its day has. Only what's on it is listed, so an item that has left it is done, as it was when the API gave the agenda itself.
 
 An item as a task (`PowerPlannerItems.fetched`):
-- `ItemType` 5 is a task: Homework with a class, Admin without (a task with no class carries the semester's id as its class). `ItemType` 6 is an event. Other types are ignored.
+- `MegaItemType` 0 (a class's) and 3 (the semester's own) are tasks: Homework with a class, Admin without (a task with no class carries the semester's id as its `UpperIdentifier`, where one with a class carries the class's). `MegaItemType` 1 (a class's exam) and 4 (the semester's own) are events. Other types (a holiday, a class's time, one the answer leaves out) are ignored.
 - `Date` is local time, and its seconds carry the time option. With a class: `:00` the class's start, `:01` ahead of class and `:02` during it (both its start), `:03` its end, `:04` a set time, anything else all day. With none: `:04` a set time, else all day.
 - Class times come from the class's first lesson that day in the two-week timetable (`ScheduleWeek` 1, 2, or 3 for both, counted from `WeekOneStartsOn`). A class-relative time on a day without that class is all day. All day is due at 23:59.
 - Power Planner's "no due date" (31 Dec 1999) is no deadline. `PercentComplete` is the task's progress; at 100 % it's done, as it is once it leaves the agenda.
-- An agenda answer without its `Items` list fails the read (BUG-P2-007); an empty agenda comes as an empty list.
+- An answer without its `MegaItems` list fails the read (BUG-P2-007); a semester with no items comes as an empty list. An event's `EndTime` never set comes as 1970 (or 1753): a class's event is then at its class's lesson that day.
 - The timetable a read used is kept with the tasks (`TaskState.timetable`, DX-09), and a failed read leaves it: the school days' lessons and study periods come from it (`PowerPlannerItems.lessonsOn`).
 
 **Open** launches Power Planner: it has no link to one item.
