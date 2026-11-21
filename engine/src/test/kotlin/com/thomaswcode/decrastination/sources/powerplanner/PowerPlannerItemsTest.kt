@@ -8,25 +8,25 @@ import com.thomaswcode.decrastination.core.PowerPlannerItems
 import com.thomaswcode.decrastination.core.PpClass
 import com.thomaswcode.decrastination.core.PpItem
 import com.thomaswcode.decrastination.core.PpSchedule
-import com.thomaswcode.decrastination.core.Timetable
+import com.thomaswcode.decrastination.net.HttpResponse
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 import java.time.LocalDate
 import java.time.LocalTime
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** Against the agenda and German timetable recorded on 8 Oct (fixtures/powerplanner_agenda.json). */
+/** Against the agenda and German timetable recorded on 8 Oct, as the API gives them now (fixtures/powerplanner_agenda.json). */
 class PowerPlannerItemsTest {
     private val json = Json { ignoreUnknownKeys = true }
     private val fixture = json.parseToJsonElement(Fixtures.text("powerplanner_agenda.json")).jsonObject
     private val semester = json.decodeFromJsonElement(SemesterResponse.serializer(), fixture["selectedSemester"]!!).selectedSemesterId!!
-    private val items = json.decodeFromJsonElement(AgendaResponse.serializer(), fixture["agenda"]!!).items!!
-    private val classes = json.decodeFromJsonElement(ClassesResponse.serializer(), fixture["classesAndSchedules"] as JsonObject)
-    private val timetable = Timetable(classes.weekOneStartsOn, classes.classes!!)
+    private val read = PowerPlannerApi { _, _, _ -> HttpResponse(200, fixture["semester"].toString()) }.semester(PowerPlannerApi.Login(1, "a", "s"), semester)
+    private val items = read.items
+    private val timetable = read.timetable
 
     private fun item(name: String) = items.single { it.name.startsWith(name) }
 
@@ -92,8 +92,11 @@ class PowerPlannerItemsTest {
         assertEquals(listOf("Study Period"), PowerPlannerItems.lessonsOn(unknown, LocalDate.of(2026, 10, 12)).map { it.className })
     }
 
-    private fun task(date: String, classId: String? = timetable.classes.single().identifier, percent: Double = 0.0, type: Int = 5, end: String? = null) =
-        PowerPlannerItems.fetched(PpItem("id", "x", null, date, end, classId, type, percent), semester, timetable, LONDON)!!
+    private fun itemOn(date: String, classId: String? = timetable.classes.single().identifier, percent: Double = 0.0, type: Int = PowerPlannerItems.HOMEWORK, end: String? = null) =
+        PpItem("id", "x", null, date, end, classId, type, percent)
+
+    private fun task(date: String, classId: String? = timetable.classes.single().identifier, percent: Double = 0.0, type: Int = PowerPlannerItems.HOMEWORK, end: String? = null) =
+        PowerPlannerItems.fetched(itemOn(date, classId, percent, type, end), semester, timetable, LONDON)!!
 
     @Test
     fun `each time option resolves`() {
@@ -129,17 +132,64 @@ class PowerPlannerItemsTest {
 
     @Test
     fun `events are reminders, all day when their end time ends in 59`() {
-        val allDay = task("2026-10-10T00:00:00", classId = semester, type = 6, end = "2026-10-10T23:59:59")
+        val allDay = task("2026-10-10T00:00:00", classId = semester, type = PowerPlannerItems.EVENT, end = "2026-10-10T23:59:59")
         assertEquals(Kind.Event, allDay.kind)
         assertEquals(Fixtures.at("2026-10-10T00:00"), allDay.dueAt)
-        val timed = task("2026-10-10T14:00:00", classId = semester, type = 6, end = "2026-10-10T15:30:00")
+        val timed = task("2026-10-10T14:00:00", classId = semester, type = PowerPlannerItems.EVENT, end = "2026-10-10T15:30:00")
         assertEquals(Fixtures.at("2026-10-10T14:00"), timed.dueAt)
         assertEquals(Fixtures.at("2026-10-10T15:30").toString(), timed.extra[PowerPlannerItems.EXTRA_END_AT])
     }
 
     @Test
+    fun `a class's event with no end time set is at its class's lesson that day`() {
+        // Friday 16 Oct, week 2: German 08:50–09:45. An end never set comes as 1970, or as 1753.
+        listOf("1970-01-01T00:00:00", "1753-01-01T00:00:00").forEach { unset ->
+            val exam = task("2026-10-16T00:00:00", type = PowerPlannerItems.EXAM, end = unset)
+            assertEquals(Kind.Event, exam.kind)
+            assertEquals(Fixtures.at("2026-10-16T08:50"), exam.dueAt)
+            assertEquals(Fixtures.at("2026-10-16T09:45").toString(), exam.extra[PowerPlannerItems.EXTRA_END_AT])
+        }
+    }
+
+    @Test
+    fun `a task is a class's or the semester's own, by whose id it carries`() {
+        assertEquals(Kind.Homework, task("2026-10-16T00:00:00", type = PowerPlannerItems.HOMEWORK).kind)
+        assertEquals(Kind.Admin, task("2026-10-16T00:00:00", classId = semester, type = PowerPlannerItems.TASK).kind)
+    }
+
+    @Test
     fun `other item types are skipped`() {
-        assertNull(PowerPlannerItems.fetched(PpItem("id", "x", null, "2026-10-09T00:00:00", null, null, 3), semester, timetable, LONDON))
+        // A holiday (2), a class's time (5), and an item whose type the answer left out.
+        listOf(2, 5, -1).forEach { assertNull(PowerPlannerItems.fetched(PpItem("id", "x", null, "2026-10-09T00:00:00", null, null, it), semester, timetable, LONDON)) }
+        assertNull(PowerPlannerItems.fetched(PpItem("id"), semester, timetable, LONDON))
+    }
+
+    @Test
+    fun `a task is on the agenda until it's complete and its day has passed`() {
+        val today = LocalDate.of(2026, 10, 9)
+        assertTrue(PowerPlannerItems.onAgenda(itemOn("2026-10-08T00:00:01"), today))
+        assertTrue(PowerPlannerItems.onAgenda(itemOn("2026-10-08T00:00:01", percent = 0.5), today))
+        assertFalse(PowerPlannerItems.onAgenda(itemOn("2026-10-08T23:59:59", percent = 1.0), today))
+        assertTrue(PowerPlannerItems.onAgenda(itemOn("2026-10-09T00:00:00", percent = 1.0), today))
+        assertTrue(PowerPlannerItems.onAgenda(itemOn("2026-10-12T00:00:00", percent = 1.0), today))
+        // The semester's own task, as a class's; one with no due date stays till it's complete.
+        assertFalse(PowerPlannerItems.onAgenda(itemOn("2026-10-08T16:00:04", classId = semester, percent = 1.0, type = PowerPlannerItems.TASK), today))
+        assertTrue(PowerPlannerItems.onAgenda(itemOn("1999-12-31T00:00:00"), today))
+        assertFalse(PowerPlannerItems.onAgenda(itemOn("1999-12-31T00:00:00", percent = 1.0), today))
+        // One whose date the answer left out has no day to pass, a task's or an event's.
+        assertTrue(PowerPlannerItems.onAgenda(PpItem("id", itemType = PowerPlannerItems.HOMEWORK, percentComplete = 1.0), today))
+        assertTrue(PowerPlannerItems.onAgenda(PpItem("id", itemType = PowerPlannerItems.EVENT), today))
+    }
+
+    @Test
+    fun `an event is on the agenda until its day has passed, complete or not`() {
+        val today = LocalDate.of(2026, 10, 9)
+        listOf(PowerPlannerItems.EXAM, PowerPlannerItems.EVENT).forEach { type ->
+            assertFalse(PowerPlannerItems.onAgenda(itemOn("2026-10-08T14:00:00", type = type, end = "2026-10-08T15:30:00"), today))
+            assertTrue(PowerPlannerItems.onAgenda(itemOn("2026-10-09T08:00:00", type = type, end = "2026-10-09T08:30:00"), today))
+            assertTrue(PowerPlannerItems.onAgenda(itemOn("2026-10-09T08:00:00", type = type, percent = 1.0), today))
+            assertTrue(PowerPlannerItems.onAgenda(itemOn("2026-10-10T00:00:00", type = type, end = "2026-10-10T23:59:59"), today))
+        }
     }
 
     @Test

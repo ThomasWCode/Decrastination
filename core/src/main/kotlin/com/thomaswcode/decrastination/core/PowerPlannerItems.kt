@@ -18,13 +18,18 @@ data class Lesson(val className: String, val start: LocalTime, val end: LocalTim
  * An item's `Date` is local time, and its seconds carry the time option (the web app's
  * `viewItems.ts`, `timeOption`). A task with a class: `:00` start of class, `:01` before class,
  * `:02` during class, `:03` end of class, `:04` a set time, anything else all day. A task with no
- * class, whose `ClassIdentifier` is the semester's id: `:04` a set time, else all day. Class times
+ * class, whose `UpperIdentifier` is the semester's id: `:04` a set time, else all day. Class times
  * come from the class's slot that day in the two-week timetable, counted from `WeekOneStartsOn`.
  * An event (an exam, or "Call with a friend") is all day when its `EndTime` ends in `:59`.
  */
 object PowerPlannerItems {
-    const val TASK = 5
-    const val EVENT = 6
+    /** `MegaItemType`: a task of a class, and one of the semester's own. */
+    const val HOMEWORK = 0
+    const val TASK = 3
+
+    /** `MegaItemType`: an event of a class, and one of the semester's own. */
+    const val EXAM = 1
+    const val EVENT = 4
 
     /** Power Planner's "no due date" (`DateValues.NO_DUE_DATE`). */
     private val NO_DUE_DATE = LocalDate.of(1999, 12, 31)
@@ -33,13 +38,25 @@ object PowerPlannerItems {
     const val EXTRA_ALL_DAY = "allDay"
     const val EXTRA_END_AT = "endAt"
 
+    /**
+     * Whether [item] is on the agenda on [today], as the web app shows one (`viewItems.ts`, `isOld`): a task
+     * until it's complete and its day has passed, an event until its day has. The API gives every item of
+     * the semester, and one that has left the agenda is taken as done (docs/spec/sources.md).
+     */
+    fun onAgenda(item: PpItem, today: LocalDate): Boolean {
+        val past = item.date?.let(::parse)?.toLocalDate()?.let { it < today } ?: false
+        return if (isEvent(item)) !past else !(past && item.percentComplete >= 1.0)
+    }
+
+    private fun isEvent(item: PpItem) = item.itemType == EXAM || item.itemType == EVENT
+
     fun fetched(item: PpItem, semesterId: String, timetable: Timetable, zone: ZoneId): Fetched? {
-        if (item.itemType != TASK && item.itemType != EVENT) return null
+        val isEvent = isEvent(item)
+        if (item.itemType != HOMEWORK && item.itemType != TASK && !isEvent) return null
         val hasClass = item.classIdentifier != null && item.classIdentifier != semesterId
         val klass = timetable.classes.firstOrNull { it.identifier == item.classIdentifier }?.takeIf { hasClass }
         val date = item.date?.let(::parse)
         val due = date?.takeUnless { it.toLocalDate() <= NO_DUE_DATE }?.let { due(item, it, klass, timetable) }
-        val isEvent = item.itemType == EVENT
         return Fetched(
             sourceId = item.identifier,
             title = item.name.ifBlank { "Untitled" },
@@ -68,7 +85,7 @@ object PowerPlannerItems {
         val atSetTime = date.withSecond(0).withNano(0)
         // All-day tasks are due by the end of their day; an all-day event fills it.
         val allDayTask = Due(day.atTime(LocalTime.of(23, 59)), allDay = true)
-        if (item.itemType == EVENT) {
+        if (isEvent(item)) {
             val end = item.endTime?.let(::parse)
             return when {
                 end == null || end.year <= 1970 -> slot(klass, day, timetable)?.let { Due(day.atTime(it.first), endsAt = day.atTime(it.second)) }
@@ -131,7 +148,10 @@ object PowerPlannerItems {
     fun parse(text: String): LocalDateTime = LocalDateTime.parse(text.removeSuffix("Z"))
 }
 
-/** One agenda item. `ItemType` 5 is a task (Homework in the API), 6 an event (Exam). */
+/**
+ * One of the semester's items. `MegaItemType` 0 (Homework in the API) and 3 are tasks, 1 (Exam) and 4 events;
+ * `UpperIdentifier` is its class's id, or the semester's for one with no class.
+ */
 @Serializable
 data class PpItem(
     @SerialName("Identifier") val identifier: String,
@@ -139,7 +159,7 @@ data class PpItem(
     @SerialName("ShortDetails") val details: String? = null,
     @SerialName("Date") val date: String? = null,
     @SerialName("EndTime") val endTime: String? = null,
-    @SerialName("ClassIdentifier") val classIdentifier: String? = null,
-    @SerialName("ItemType") val itemType: Int = 0,
+    @SerialName("UpperIdentifier") val classIdentifier: String? = null,
+    @SerialName("MegaItemType") val itemType: Int = -1,
     @SerialName("PercentComplete") val percentComplete: Double = 0.0,
 )

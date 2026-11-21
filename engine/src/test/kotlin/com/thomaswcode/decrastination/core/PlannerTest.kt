@@ -4,13 +4,12 @@ import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
 import com.thomaswcode.decrastination.learn.CalendarEvent
 import com.thomaswcode.decrastination.learn.EventJudge
-import com.thomaswcode.decrastination.sources.powerplanner.ClassesResponse
-import com.thomaswcode.decrastination.sources.powerplanner.AgendaResponse
+import com.thomaswcode.decrastination.net.HttpResponse
+import com.thomaswcode.decrastination.sources.powerplanner.PowerPlannerApi
 import com.thomaswcode.decrastination.sources.powerplanner.SemesterResponse
 import com.thomaswcode.decrastination.sources.teams.TeamsRows
 import java.time.Instant
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -77,9 +76,8 @@ class PlannerTest {
         }
         val pp = json.parseToJsonElement(Fixtures.text("powerplanner_agenda.json")).jsonObject
         val semester = json.decodeFromJsonElement(SemesterResponse.serializer(), pp["selectedSemester"]!!).selectedSemesterId!!
-        val classes = json.decodeFromJsonElement(ClassesResponse.serializer(), pp["classesAndSchedules"] as JsonObject)
-        val agenda = json.decodeFromJsonElement(AgendaResponse.serializer(), pp["agenda"]!!).items!!
-            .mapNotNull { PowerPlannerItems.fetched(it, semester, Timetable(classes.weekOneStartsOn, classes.classes!!), LONDON) }
+        val read = PowerPlannerApi { _, _, _ -> HttpResponse(200, pp["semester"].toString()) }.semester(PowerPlannerApi.Login(1, "a", "s"), semester)
+        val agenda = read.items.mapNotNull { PowerPlannerItems.fetched(it, semester, read.timetable, LONDON) }
         val quota = Fetched("quota:2026-10-07", "Anki: 100 new", Kind.Revision, dueAt = Fixtures.at("2026-10-07T21:30"), sourceEffortMin = 42, derived = true)
         return Merge.apply(emptyList(), Source.Teams, teams, now).tasks +
             Merge.apply(emptyList(), Source.PowerPlanner, agenda, now).tasks +
