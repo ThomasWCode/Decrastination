@@ -8,7 +8,7 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 /**
- * The phone's calendar as busy time (Q7, docs/spec/slots-and-calendar.md): the next fortnight's events, judged one
+ * The phone's calendar as busy time (Q7, docs/spec/slots-and-calendar.md): its events as far as the plan's days run ([readUntil]), judged one
  * by one ([EventJudge]), given to the planner; an all-day event the rules can't judge is asked
  * about once, as Felix's message in the chat, within the week before it, and takes all its time till answered.
  */

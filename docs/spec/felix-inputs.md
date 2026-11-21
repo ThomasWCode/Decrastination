@@ -4,7 +4,7 @@ Everything the app sends the model as Felix, call by call, and how it changes wi
 
 The exact prompts and schemas are the golden copies in [`engine/src/test/resources/prompts/`](../../engine/src/test/resources/prompts/), which `GoldenPromptsTest` holds the code to; the prompts below are those copies, with his default name and line, but the web search's, which has none: it's written from the code (`FelixInputsDocTest`). Every other example here is made up, as the repository is public, but each was made by the app's own code from that made-up data, so its shape is exact.
 
-`FelixInputsDocTest` writes every example and prompt here, each into the fence after its `<!-- generated: … -->` or `<!-- golden: … -->` mark, and fails when one is out of date. After a change to what Felix is sent, `./gradlew :engine:test --tests '*FelixInputsDocTest*' -PupdateDocs=true` writes them again; the words around them are edited here.
+`FelixInputsDocTest` writes every example and prompt here, each into the fence after its `<!-- generated: … -->` or `<!-- golden: … -->` mark (`<!-- generated, quiet days folded: … -->` for one whose empty days are folded), and fails when one is out of date. After a change to what Felix is sent, `./gradlew :engine:test --tests '*FelixInputsDocTest*' -PupdateDocs=true` writes them again; the words around them are edited here.
 
 ## The calls
 
@@ -352,7 +352,7 @@ This is the worksheet
 |---|---|---|
 | `reply` | one to three short sentences, or a short list | |
 | `newTasks` | tasks of your own to add: title, kind, subject, due date and time, start date, minutes, notes, steps | 10 |
-| `changes` | of the instructions' types (`NotATask` to `Rename`), each with its fields, and `paced` on a Minutes total worked out at your pace (D-69); and the chat's own two (4.1.0, Q13: B): `Remind`, a reminder set or one listed moved (words in `title`, when in `eventKey`, a listed one's id in `afterTaskId`), and `Note`, on a task or, its scope in `eventKey`, standing; and `lesson` on a DueBy (4.1.1, G8): the class whose next lesson it's due at, its date and time the app's to set | 40, reminders and notes 10 each |
+| `changes` | of the instructions' types (`NotATask` to `WeeklyEnd`), each with its fields, and `paced` on a Minutes total worked out at your pace (D-69); and the chat's own two (4.1.0, Q13: B): `Remind`, a reminder set or one listed moved (words in `title`, when in `eventKey`, a listed one's id in `afterTaskId`), and `Note`, on a task or, its scope in `eventKey`, standing; and `lesson` on a DueBy (4.1.1, G8): the class whose next lesson it's due at, its date and time the app's to set | 40, reminders and notes 10 each |
 | `memories` | a fact or a standing instruction, by topic; `until`, how long it holds, and a fact's `taskId`, each empty for none (4.2.0) | 5 |
 | `suggestedReplies` | replies you might give, in your words | 3, of 40 characters each |
 | `actions` | tick or untick a step, finish, reopen or delete one of your own (a starred email finished too, with finishing emails on), open a task (on a card, or where it lives: value `source`), set a setting, cancel a reminder, delete a note; and (4.1.1) keep a piece or take it back (`keepPiece`, `unkeepPiece`, by its key), and ask a source to read (`sync`, the source in `setting`) | 10 |
@@ -489,7 +489,7 @@ You look things up on the web for the assistant in a UK sixth-form student's (Ye
 
 ### When he writes
 
-Every half minute while the blocker runs, at each slot's alarm, and at the check he set, the rules look for a reason to write (`FelixRules.due`), in this order:
+Each minute on the server once the phone sends commands (its `looks` job), or, on a phone that makes its own calls, every half minute while the blocker runs, at each slot's alarm and at the check he set, the rules look for a reason to write (`FelixRules.due`), in this order:
 1. **SlotEnd**: a slot of today's went by undone, or was ticked without the photo it needs to earn, its time over; once a slot, while it's fresh (30 minutes). One a timer on its task could have covered waits till 30 minutes after the timer's zero or its Stop, whichever came first, and is fresh from then (D-112).
 2. **DayDone**: today's last slot kept, with nothing left planned today; once a day.
 3. **SlotKept after a let-down**: a slot kept, while it's fresh, of a task he was let down about today (Q102, D-119), at once, his check or no; not one DayDone has answered already.

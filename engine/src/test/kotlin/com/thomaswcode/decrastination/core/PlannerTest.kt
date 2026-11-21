@@ -328,7 +328,7 @@ class PlannerTest {
 
     @Test
     fun `a task's parts are numbered on from those done, each keeping its key, the last its label`() {
-        // 135 minutes in three 45s (Q7): one kept, the rest are parts 2 and 3 of 3, not 1 and 2 of 2, under the keys they had.
+        // 135 minutes in three 45s (Q169): one kept, the rest are parts 2 and 3 of 3, not 1 and 2 of 2, under the keys they had.
         val big = task("big", Fixtures.at("2026-10-12T09:00"), effort = 135)
         fun parts(worked: Int) = plan(listOf(big.copy(workedMin = worked)), "2026-10-08T17:00").chunksOf("teams:big")
         val fresh = parts(0)

@@ -1,12 +1,12 @@
 # The structure, and the conventions
 
-The app's structure as the 4.x plan left it (4.3.2, D-107), and the conventions every change keeps to. Each concern has one home, owns its data, and is tested without a phone; Felix's features are built inside his. How each area behaves is in [spec/](../spec/); how a change is made, reviewed and shipped is in [development.md](../development.md).
+The code's structure, as the 4.x plan left the app's (4.3.2, D-107) and the website's plan added to it (D-125 to D-149), and the conventions every change keeps to. Each concern has one home, owns its data, and is tested without a phone; Felix's features are built inside his. How each area behaves is in [spec/](../spec/); how a change is made, reviewed and shipped is in [development.md](../development.md).
 
 ## The shape
 
 ```
  screens (ui/, Compose)        Android entry points (workers, receivers, the focus service, the widget)
-            │ read flows, call functions             │ call functions
+            │ read flows, send actions               │ call functions
             ▼                                        ▼
  ┌──────────────────────────── feature services ────────────────────────────┐
  │ Conversation (felix/)   Planning   Sync   Readings   Instructions   OwnTasks │
@@ -27,6 +27,34 @@ The app's structure as the 4.x plan left it (4.3.2, D-107), and the conventions 
 
 Four Gradle modules hold this: `:core` the pure rules and types; `:engine` every line of the app that needs nothing of Android, in the packages it had, what it needs of a platform a port (D-125); `:app` the screens and their state holders, the Android entry points, the device adapters and the ports' Android implementations, with `AppGraph`, and no owner, prompt or migration (`ArchitectureTest`); `:server` the website's server, which runs the same services from a graph of its own ([server.md](../spec/server.md)). So a package can be split across two modules, its Android-free part in `engine/src/main/kotlin` and the rest in `app/src/main/java`; the classes Android holds by name are in `:app`, under the names they always had.
 
+The state is the server's, and the phone and the website are its two clients (D-126):
+
+```
+                      decrastination.thomaswhite.me   (Caddy: TLS, one origin)
+                      +---------------------------------------------------+
+   laptop  --------->  /          web/   React + TypeScript SPA (static)   |
+                      |  /api/*   -----> :server  Ktor on JVM 21           |
+                      |                    | the owners, the planner,      |
+                      |                    | Felix, the readings, the      |
+                      |                    | syncs that need no device:    |
+                      |                    | :engine + :core               |
+                      |                    v                               |
+                      |                 SQLite  --> Litestream --> R2      |
+                      +---------------------------------------------------+
+                           ^  commands                    |  revisions
+                           |  (POST, retried in order)    v  (pull; told by push)
+                      +---------------------------------------------------+
+   phone  :app        |  its own copy: the JsonStore files                 |
+                      |  outbox -> the exchange (ReplicaWorker) <- pull    |
+                      |  device duties: Teams rows, AnkiDroid counts,      |
+                      |  the blocker, the calendar, notifications and      |
+                      |  alarms, protection's device parts, the widget     |
+                      +---------------------------------------------------+
+                      Claude: the Anthropic SDK, from :server only
+```
+
+Everything that decides something (what the plan is, what Felix says, whether a setting may loosen now) runs in Kotlin that both the phone and the server build; the phone applies its own changes through the same owners first, so what it shows offline is what the server will show once they land ([sync.md](../spec/sync.md)). The website holds no rule: it lays out what the server computes (D-137, [website.md](../spec/website.md)). `web/` is npm's, outside Gradle (Vite, React, TypeScript strict, vitest, Playwright); `deploy/` is the box's files ([hosting.md](../spec/hosting.md)).
+
 ## The rules
 
 1. **`core` stays pure**: no Android, no stores, no services. It's a module of its own (`:core`, `core/`), so the compiler holds it; a rule or a type that needs neither goes there, tested there. **`:engine` is free of Android** the same way: plain Kotlin, held by its build, which is why code in it can run on the server.
@@ -34,11 +62,11 @@ Four Gradle modules hold this: `:core` the pure rules and types; `:engine` every
 3. **Services are built like `Focus`**: stores, the clock and small interfaces for Android's effects (notifications, the calendar provider, work, alarms, content resolvers) in the constructor. `AppGraph` passes the real ones; tests pass fakes and stores on temporary files.
 4. **Screens act through commands.** A composable may read flows; a change it makes is an action handed to `graph.act` (D-140), never a call on an owner, and it never calls `update` on a store. The largest screens (the chat, Settings, the task sheet) have a state holder, a plain class tested without Compose (`ChatScreenState`, `SettingsScreenState`, `TaskSheetState`); the composables only draw.
 5. **No cycles.** A service may call another's functions (the Conversation acts on instructions, your own tasks and the focus); none calls back into one that called it. Where two need each other, the later one takes a callback, as `Focus` takes `onOwnTaskDone` and the Conversation takes `requestSync`.
-6. **`ArchitectureTest`** holds the rules that can be checked by reading the code: only the notifier posts; only the gateway builds a Claude client; `core` imports nothing of Android or the services (held by the module's build too); nothing but a store's named writers calls its `update`, and no screen calls one.
+6. **`ArchitectureTest`** holds the rules that can be checked by reading the code: only the notifier posts; only the gateway builds a Claude client; `core` imports nothing of Android or the services, and `:engine`'s build names no Android and no module but `:core` (each held by its module's build too); nothing but a store's named writers calls its `update`, no screen calls one, and `:app` holds no owner, prompt or migration, updating a store only where the phone's own state is kept (`PHONE_WRITERS`); a screen's change is an action, never a call on an owner, a debug command's likewise or made only while the phone mirrors, and `AppGraph` makes none round its command; only the backup service replaces a store whole, and only the replica (and the archive, for its months) takes one whole from the server. On the server no route calls an owner or writes a store: a change that's a command goes through `CommandApplier`, and what isn't one is `ServerGraph`'s; that's kept by review, as is the website's holding no rule (D-137), no test reading either.
 
 ## `AppGraph`
 
-Makes the stores (through `Stores`), the gateway, the notifier and the services; wires the flows that join them (a new plan's hooks: slot alarms, the reminders' alarm, the calendar, the widget, writing ahead; the instructions' values laid when tasks or instructions change); `get(context)`. Its members are the services (`graph.conversation`, `graph.planning`, `graph.sync`, `graph.instructions`, `graph.ownTasks`, …), and `act`, which every screen's change goes through, not functions of its own. 537 lines at 4.3.2, accepted as wiring whatever its length (D-107).
+Makes the stores (through `Stores`), the gateway, the notifier, the services, the commands (`Commands`, with the outbox) and the replica; wires the flows that join them (a new plan's hooks: slot alarms, the reminders' alarm, the calendar, the widget, writing ahead; the instructions' values laid when tasks or instructions change); `get(context)`. It's the phone's `Owners`, what an action reaches. Its members are the services (`graph.conversation`, `graph.planning`, `graph.sync`, `graph.instructions`, `graph.ownTasks`, …) and `act`, which every screen's change goes through; its few functions of its own join several owners or the server (the switch, a backup taken in, a reset, what only the phone knows sent as commands). 537 lines at 4.3.2 and 900 at 6.11.0, accepted as wiring whatever its length (D-107). The server's is `ServerGraph`, with `ServerOwners` ([server.md](../spec/server.md) §The state).
 
 ## The services
 
@@ -46,16 +74,19 @@ Makes the stores (through `Stores`), the gateway, the notifier and the services;
 |---|---|---|
 | **Conversation** (Felix, `felix/`) | `chat.json` (the window) and the archive (`chat-archive-<yyyy-MM>.json`, a file a month); `memory.json`; `felix.json` (notes and reminders); his state (next check, drafts, retry, questions, completions to ask about, the check-in's draft); the outbox | screens, workers, the notification's receiver, the slot and reminder alarms |
 | **Planning** (`plan/`) | the plan watcher, today's slot starts, writing ahead | the focus, the widget, screens, the Conversation |
-| **Focus** (`block/`) | the blocker's session state (`session.json`), Anki's watch (`anki.json`) | the focus service, screens, the Conversation's ticks and kept pieces |
+| **Focus** (`block/`) | the blocker's session state (`session.json`); Anki's watch (`anki.json`) is `AnkiWatch`'s, beside it | the focus service, screens, the Conversation's ticks and kept pieces |
 | **CalendarWriter** (`calendar/`) | `calendar.json`: what was written where, the calendars to clear, your answers about events | Planning's hooks, the Conversation's event answers |
-| **Protection** (`protect/`) | `protection.json`: changes waiting, the override, the code's lock, the uptime mark; and `device.json`, what's only this phone's: the device admin's arming, the watchdog's finding (written by the watchdog), forced blocking | screens, the review, the watchdog |
-| **Instructions** (`tasks/`) | `instructions.json`; your values laid on tasks (`TaskItem.mine`); `Instruction.by` | screens, the Conversation |
+| **Protection** (`protect/`) | `settings.json`, every setting's change going through it; `protection.json`: changes waiting, the override, the code's lock, the uptime mark; and `device.json`, what's only this phone's: the device admin's arming, the watchdog's finding (written by the watchdog), forced blocking | screens, the review, the watchdog |
+| **Instructions** (`tasks/`) | `instructions.json`; the school calendar's days (`school.json`), with the Conversation; your values laid on tasks (`TaskItem.mine`); `Instruction.by` | screens, the Conversation |
 | **OwnTasks** (`tasks/`) | your own tasks | screens, the Conversation, the focus |
 | **Readings** (`enrich/`) | the readings on tasks | Sync, screens |
-| **Sync** (`sync/`) | `tasks.json`: the tasks as sources give them, the sources' statuses; `gmail-writes.json` and `GmailWriteWorker` | workers, screens, the Conversation's `sync` action, the finish of an email |
+| **Sync** (`sync/`: `Syncer` reads the sources, `Sync` runs the phone's jobs and reads the calendar) | `tasks.json`: the tasks as sources give them, the sources' statuses (`Syncer`); the events asked about, in `calendar.json`; `gmail-writes.json` (`GmailFinishes`) and `GmailWriteWorker` | workers, screens, the Conversation's `sync` action, the finish of an email |
 | **Photos** (`block/`) | the photos folder | screens |
 | **Learning** (`learn/`) | `log.json`, `learning.json` (the calibration) | workers, screens, the Conversation's replies |
 | **Backups** (`data/BackupService`) | the backup folder, reset copies | screens, the backup worker |
+| **Replica** and **Commands** (`sync/`, `sync/protocol/`) | `sync.json`: the pairing, the mode and what was sent; `outbox.json`: the commands on their way | `graph.act`, `ReplicaWorker`, the push service |
+
+`model.json` (Claude's month) is the gateway's, writing ahead's part `plan/Ahead`'s; `runtime.json` has no owner of its own: the notifier, the graph's start, the focus service, the briefing and the daily alarms each write their part.
 
 Each service is a class in the package that holds its concern; `Slots`, `AnkiWatch`, `Briefing` and `Moves`, smaller, are built the same way. All are in `:engine`. Felix's has a package of its own, `felix/`: the service (`Conversation`), his looks (`Looks`), his rules, how he feels (`Mood`, D-119), prompts and caller, the check-in's flow, the chat's prompts, answers, rounds and reader, the outbox and his words (`FelixWords`), the replies' routing (`Replies`), his notification and his port to Android (`FelixPorts`), and the receiver and workers that carry a reply or a look.
 
@@ -71,7 +102,7 @@ One class for every call to Claude (`enrich/ModelGateway.kt`): whether Claude ca
 
 ### `Notifier`
 
-One object posts every notification: `NoticeId`, the registry of ids with their request-code ranges (no two alike, held by a test); the channels (`Channels`); `NotifyRules`, the policy that holds or sends, by channel for the app's own and by the kind of his message for Felix's; and his one notification, built by the outbox from the chat's unread ([spec/felix.md](../spec/felix.md) §Notifications and replies). Nothing else calls `NotificationManagerCompat`.
+One object posts every notification: `NoticeId`, the registry of ids with their request-code ranges (no two alike, held by a test); the channels (`Channels`); `NotifyRules`, the policy that holds or sends, by channel for the app's own and by the kind of his message for Felix's; and his one notification, built by the outbox from the chat's unread ([spec/felix.md](../spec/felix.md) §Notifications and replies). Nothing else calls Android's notification manager but `AndroidChannels`, which makes the channels.
 
 ### Ports
 
@@ -80,7 +111,11 @@ Small interfaces for what Android does, so services are tested without it:
 | Port | What | Real one | In tests |
 |---|---|---|---|
 | `Notices` | cancel, whether a channel's shown, post what was held (`Posts` adds a notification Android made, on the phone alone) | `Notifier` | a list of what was posted |
-| `Log` (`ports/`) | the log, in `android.util.Log`'s calls | `AndroidLog` | nothing |
+| `Log` (`ports/`) | the log, in `android.util.Log`'s calls | `AndroidLog`; the server's writes to stdout | nothing |
+| `WallClock` (`core/`) | the time, the zone and the uptime | `DeviceClock`; `ServerClock` on the server | `FixedClock` |
+| `StoreBackend` (`data/`) | where a store's text is kept, with the copies that outlast a change | `FileBackend`, a file a store; `SqliteBackend` on the server, a row | `FileBackend` on a temporary folder |
+| `SecretCipher` (`data/`) | seals the secrets' file | `KeystoreCipher`; `MasterKeyCipher` on the server | |
+| `Http` (`net/`) | one HTTP request | its own, over `HttpURLConnection` | canned responses |
 | `CalendarProvider` | read and write the calendar's events | `SlotCalendar` | events in memory |
 | `FelixPorts` | his notification, his look's alarm, the work that outlives what asked, a task opened where it lives | `AndroidFelixPorts` | `FelixHarness`'s |
 | `SyncPorts` | a sync as a job, the Teams widget asked and watched, the calendar read, the widget drawn | `AndroidSyncPorts` | `SyncTest`'s |
@@ -89,7 +124,7 @@ Small interfaces for what Android does, so services are tested without it:
 ## The data model
 
 - **Your values in one place.** `TaskItem.mine: Mine` holds every value you or Felix set, each wrapped with who set it (`SetBy<T>(value, by)`: `By.You` from the instructions screen or a sheet's quick change, `By.Felix` from the chat), which an `Instruction` records too. `yourMinutes`, `yourSteps`, `pacedMinutes` and `pacedTeaches` are short functions of `mine`.
-- **Steps with an id and an origin.** `SubStep.id` (made once, kept through edits) and `SubStep.origin` (`Source`, `Reading`, `Rules`, `Yours`, `Felix`, `OwnTask`); "are these the reading's steps?" asks the origin, not the titles; a tick follows the id. `OwnStep` carries an id too, so laying an instruction again keeps its steps' ticks. Slot keys are still by a step's place (`taskId#stepIndex`).
+- **Steps with an id and an origin.** `SubStep.id` (made once, kept through edits) and `SubStep.origin` (`Source`, `Reading`, `Rules`, `Yours`, `Felix`, `OwnTask`); "are these the reading's steps?" asks the origin, not the titles; a tick follows the id. `OwnStep` carries an id too, so laying an instruction again keeps its steps' ticks. Slot keys are still by a step's place (`taskId#stepIndex`; a sitting before its last `taskId#stepIndex#n`; a piece of time with no step `taskId#-1#part`, its parts numbered on from those done, D-163).
 - **The conversation**: every message with a kind, who wrote it, what it answers; the read position; his state; the window and the archive. **Notes and reminders**, **memory with an until**, **the Gmail write journal**: each a small versioned store or a field with a default ([data-and-migrations.md](data-and-migrations.md)).
 
 ## Conventions
@@ -125,6 +160,11 @@ Small interfaces for what Android does, so services are tested without it:
 - **No review history**: "#48's second review" and "since 3.1.2" go; the PR that made a change is in `git blame`. A "since" that explains a rule still needed (an older file's shape a migration reads) stays.
 - **The voice stays**: plain British English, short sentences.
 
+### The website and the box
+
+- **`web/`**: TypeScript strict, ESLint's flat config, vitest for units, Playwright against a test server; made-up fixtures, no personal data (D-79); comments in the same plain present tense. It holds no rule about a task, a slot or a day (D-137).
+- **`deploy/`**: `compose.yaml`, `Caddyfile`, `bootstrap.sh`, the update timer and `env.production.example`, which lists every name with no secret's value.
+
 ### Tests
 
 - **Fixtures are made up**: no task, event, person or address from your data, ever. A test that needs real data's shape uses the rehearsal (`private/`, never committed).
@@ -142,12 +182,13 @@ A cleanup PR claims to keep behaviour, and shows it four ways: every test passes
 | Where | What |
 |---|---|
 | `README.md` | what the app is, how to build and install it, where everything else is |
-| `docs/spec/` | how the app works now, one area a file: `sources.md`, `readings.md`, `planner.md`, `slots-and-calendar.md`, `day.md`, `blocking-and-protection.md`, `felix.md` (with `felix-inputs.md`, everything Felix is sent, written by a test), `learning.md`, `storage-and-backups.md`, `privacy.md`, `sync.md`, `server.md`, `website.md`; and `requirement-ids.md`, what each id the code cites asks of the app |
+| `docs/spec/` | how the app works now, one area a file: `sources.md`, `readings.md`, `planner.md`, `slots-and-calendar.md`, `day.md`, `blocking-and-protection.md`, `felix.md` (with `felix-inputs.md`, everything Felix is sent, written by a test), `learning.md`, `storage-and-backups.md`, `privacy.md`, `sync.md`, `server.md`, `website.md`, `hosting.md`; and `requirement-ids.md`, what each id the code cites asks of the app |
 | `docs/decisions.md` | your decisions, numbered (D-1…), dated, each with what it means for the code and where it applies; and what's still open for you |
 | `docs/development.md` | how changes are made, reviewed, checked on the phone and shipped; the public repository's rules |
 | `docs/plan_v4/` | the 4.x plan's record: this file, the plan's README, the stores and migrations, the questions answered |
-| `docs/plan_web/` | the website's plan, built but for the switch |
+| `docs/plan_web/README.md` | the website's plan's record: what was built otherwise than planned, its W-numbers and questions, what's still open |
 | `docs/astra-review-4.3.13/`, `docs/astra-review-29-10-26/` | the reviews of 4.3.13 and 4.9.1, and what became of each finding |
+| `docs/felix-feedback/` | Felix's rated messages, as the app stores them, read to tune his prompts (D-119) |
 
 Nothing else: the old plans, reviews, findings and per-release notes were deleted once their decisions and still-true facts had moved, and there's no change log or history folder; git's tags and the PR descriptions hold what changed when.
 

@@ -4,7 +4,7 @@ import com.thomaswcode.decrastination.net.Http
 import java.io.IOException
 
 /**
- * Whether Litestream is still carrying the database off the box (docs/spec/server.md §Deployment), read from its own metrics as
+ * Whether Litestream is still carrying the database off the box (docs/spec/hosting.md §What runs on it), read from its own metrics as
  * the heartbeat beats. The server writes each minute, the heartbeat's own mark among it, so a stream that's going uploads at least
  * that often: none gone up for [STOPPED_MS] is a stream stopped, whether its key's been taken away, it's stuck, or it's down and
  * can't be asked. Litestream 0.5.17, tried on a PC on 3 Nov 2026: with its bucket taken away, its count of uploads stood still and

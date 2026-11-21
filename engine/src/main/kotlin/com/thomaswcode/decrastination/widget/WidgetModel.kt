@@ -46,7 +46,7 @@ data class WidgetModel(
     val taskId: String?,
     /** The piece the tick keeps (UI-05, LR-09), if any. */
     val key: String? = null,
-    /** When the plan it shows was made: a tick keeps only what it showed (a box's next piece has its key). */
+    /** When the plan it shows was made: a tick keeps only what it showed. */
     val seenAt: Long = 0L,
     /** The timer runs on the piece it shows (D-112): ■ in place of ▶. */
     val timing: Boolean = false,

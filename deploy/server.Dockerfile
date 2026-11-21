@@ -1,5 +1,5 @@
 # The server: a JRE and the fat JAR CI built. No RUN step, so one COPY gives an image for arm64 and amd64
-# with nothing compiled under emulation (docs/plan_web/hosting.md §Deploy). Built from the repository's root.
+# with nothing compiled under emulation (docs/spec/hosting.md §What runs on it). Built from the repository's root.
 FROM eclipse-temurin:21-jre
 ARG APP_VERSION=dev
 ENV APP_VERSION=$APP_VERSION

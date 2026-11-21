@@ -9,7 +9,7 @@ import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
 
 /**
- * The stores as rows (docs/plan_web/data-and-sync.md §The store backend): each store's current text in `stores`, and
+ * The stores as rows (docs/spec/storage-and-backups.md §The store backend): each store's current text in `stores`, and
  * every text it's had in `store_history`, which is what the phone's `.v<n>` and `.unreadable-` files are there: its older
  * shapes are rows already, so keeping one writes nothing more, and one that couldn't be read is marked. A write joins
  * the [Database.transaction] it's called in, or makes one of its own.

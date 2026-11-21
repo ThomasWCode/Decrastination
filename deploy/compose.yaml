@@ -15,7 +15,7 @@ services:
       GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:?set GITHUB_CLIENT_ID in .env}
       GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:?set GITHUB_CLIENT_SECRET in .env}
       ALLOWED_GITHUB_USER_ID: ${ALLOWED_GITHUB_USER_ID:?set ALLOWED_GITHUB_USER_ID in .env}
-      # Used once the server applies commands: empty till then, and the jobs don't run.
+      # Claude's key: used once the server applies commands, empty till then. The heartbeat's address: used in either mode.
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       HEARTBEAT_URL: ${HEARTBEAT_URL:-}
       VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}

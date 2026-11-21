@@ -21,7 +21,7 @@ anthropic = "2.71.0"
 # none, and the SDK takes any 2.x from 2.19 on.
 jackson = "2.21.7"
 okhttp = "4.12.0"
-# The server's (docs/plan_web/hosting.md). Built on Kotlin 2.3, which this Kotlin reads, and coroutines 1.11, the
+# The server's (docs/spec/server.md). Built on Kotlin 2.3, which this Kotlin reads, and coroutines 1.11, the
 # server's alone: the app's stay at the versions above.
 ktor = "3.6.1"
 sqlite = "3.54.1.0"

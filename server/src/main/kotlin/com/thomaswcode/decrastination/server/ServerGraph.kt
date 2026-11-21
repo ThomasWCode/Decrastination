@@ -149,7 +149,7 @@ class ServerClock(private val db: Database) : WallClock {
 }
 
 /**
- * The server's state and what it computes (docs/plan_web/architecture.md §The server), made here as `AppGraph` makes the
+ * The server's state and what it computes (docs/spec/server.md §The state), made here as `AppGraph` makes the
  * phone's. The same stores, on rows; the same plan, from them. In mirror mode (stage 1) the phone is the only writer: a
  * whole store comes in, and nothing here changes one.
  */

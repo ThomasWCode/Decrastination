@@ -7,10 +7,13 @@ import kotlin.test.assertTrue
 /**
  * The rules of the app's structure that can be checked by reading its code
  * (docs/plan_v4/architecture.md §The rules): only the notifier posts; only the gateway
- * builds a Claude client; `core` free of Android and of the app, a module of its own; screens call
- * services, never a store's update; each store updated only by the files named for it, its owner
- * first; and the one way round a store's owner, [com.thomaswcode.decrastination.data.Stores.replace],
- * for a restore or a reset, called by the backup service alone.
+ * builds a Claude client; `core` free of Android and of the app, a module of its own, and `:engine` free
+ * of Android; no screen updates a store, and a screen's change is an action, never a call on an owner;
+ * each store updated only by the files named for it, its owner first, none of them the app's but for the
+ * phone's own state; a debug command and `AppGraph` changing what the server holds through the commands;
+ * and the two ways round a store's owner: [com.thomaswcode.decrastination.data.Stores.replace], for a
+ * restore or a reset, called by the backup service alone, and a store taken whole from the server, by the
+ * replica alone.
  */
 class ArchitectureTest {
     /** Where the app's own code is: :app's, and :engine's, what's Android-free of it (run from the repository or the app module). */
@@ -72,7 +75,7 @@ class ArchitectureTest {
 
     @Test
     fun `screens call services, never a store's update`() {
-        // A screen reads a store's flow and calls its owner's functions (§The rules, 4): what it changes goes through them.
+        // A screen reads a store's flow and sends what it changes as an action (§The rules, 4): it updates no store itself.
         val stray = sources.filter { (path, text) -> path.startsWith("ui/") && UPDATE.containsMatchIn(text) }.keys.sorted()
         assertTrue(stray.isEmpty(), "A screen updates a store itself: $stray")
     }

@@ -57,8 +57,8 @@ object Sigv4 {
 }
 
 /**
- * The nightly Backup-format file's place (W-20): a Backblaze B2 bucket, under a key of its own, with the bucket's Object Lock to
- * hold each file whatever that key can do. Its lifecycle rule lets the old ones go, so this lists none and deletes none. Its
+ * The nightly Backup-format file's place (W-20): a Backblaze B2 bucket, under a key of its own (docs/spec/hosting.md §The copies).
+ * Its lifecycle rule lets the old ones go, so this lists none and deletes none. Its
  * [endpoint] is the bucket's S3 one, `s3.<region>.backblazeb2.com`.
  */
 class B2Folder(

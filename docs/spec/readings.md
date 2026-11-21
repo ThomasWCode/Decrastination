@@ -8,7 +8,7 @@ The rules give every task a reading too, and stand in whenever Claude can't. Cla
 - A reading is an `Enrichment` (`core/Enrichment.kt`), kept on the task and laid over the source's values at every merge (sources.md). It records who made it (`by`: "rules", or the model that answered), from what (`inputHash`), and under which prompts (`promptVersion`).
 - Three jobs run on tasks (`Enrichments.jobFor`): **Email** for a Gmail conversation, **Assignment** for a Teams assignment, **Effort** for a Power Planner task.
 - Not read: a task of your own, Anki's derived tasks, feedback to read (NF-06), a Power Planner event, a task you've said isn't one, a closed task, and an email whose text isn't yet read as far as reads go (`GmailThreads.textRead`).
-- Claude reads only while it's on: the switch in Settings, a key in use (`aiKeyActive`) and the key in the encrypted secrets file (`ModelGateway.claudeKey`). These change at once, armed or not. Off, the rules read everything.
+- Claude reads only while it's on (`ModelGateway.claudeKey`). On a phone that makes its own calls: the switch in Settings, a key in use (`aiKeyActive`) and the key in the encrypted secrets file. Once the phone sends commands the calls are the server's (D-142): the switch, and the box's own key (`ANTHROPIC_API_KEY`), `aiKeyActive` not asked; the phone's gateway then has no key. These change at once, armed or not. Off, the rules read everything.
 - `RuleEnricher` (`enrich/Enricher.kt`) and `ClaudeEnricher` (`enrich/ClaudeEnricher.kt`) both implement `Enricher`. The prompts and the checks are `ReadingPrompts` and `ReadingAnswers` (`enrich/ReadingPrompts.kt`, `enrich/ReadingAnswers.kt`).
 
 ## The three jobs
@@ -101,15 +101,15 @@ A step over an hour is cut into even sittings by time, never by content (`core/S
 
 ## When a task is read
 
-`Readings.enrichNow` (`enrich/Readings.kt`), run by `enrich/EnrichWorker.kt` after a sync leaves any task's reading out of date (online, where Claude's to be asked), when Claude is switched on or off, and when a question gets your answer.
-It runs again once Claude can be asked again (its rest over, `EnrichWorker.retryAfter`; a higher cap). A new photo reads its task at once.
+`Readings.enrichNow` (`enrich/Readings.kt`). Once the phone sends commands it's the server's alone, the phone's returning at once (`byServer`): run there on its own time after each sync (its quarter-hourly read of Power Planner and Gmail, and each read a phone sends) where any task's reading is out of date, and when a question gets your answer; a rest's end, or Claude switched on or off, waits for the next of those.
+On a phone that makes its own calls, `enrich/EnrichWorker.kt` runs it after a sync leaves any task's reading out of date (online, where Claude's to be asked), when Claude is switched on or off, when a question gets your answer, and once Claude can be asked again (its rest over, `EnrichWorker.retryAfter`; a higher cap). A new photo reads its task at once.
 - **Out of date** (`Enrichments.stale`): no reading; its content changed (`inputHash`); Claude on and the reading the rules'; Claude off and the reading Claude's (the rules' replaces it); an email read as only to read; or, Claude on, an open task Claude read under older prompts (AC-06).
 - **Order** (`Enrichments.NEED`): never read first, then the oldest prompts' readings, each soonest due first. At most 20 calls to Claude a run (`Readings.MAX_MODEL_CALLS`), second asks counted.
-- Each task is looked up afresh just ahead of its call, and the reading laid only over the task as read: one that changes during the call is read in the next run. One task is read at a time, whatever's reading it (a sync's run, a rest's retry, the sheet's *Read again*, a photo's): a second run at once waits for the first's answer and finds the task read, so an unchanged task isn't paid for twice (4.3.15); *Read again* still reads it again, as asked.
+- Each task is looked up afresh just ahead of its call, and the reading laid only over the task as read: one that changes during the call is read in the next run. One task is read at a time, whatever's reading it (a sync's run, a rest's retry, the sheet's *Read again*, a photo's): a second run at once waits for the first's answer and finds the task read, so an unchanged task isn't paid for twice; *Read again* still reads it again, as asked.
 - **A call that fails** gives the task the rules' reading (one stale by the version alone keeps its own), and leaves Claude alone for the rest of the run; but a request the API won't take leaves only that task to the rules, till its content changes (`ModelState.enrichFailed`).
 - **Declined or unreadable** (a refusal, an answer cut off at the token limit, one that still can't be read once put back): the rules' reading is kept under Claude's name and these prompts, so it isn't asked for again till something changes.
-- **Read again with Claude** (the sheet, `Readings.readAgain`) reads that task at once, whatever read it. Its reading stands till the new one comes, and you're told if none did. Not while Claude is off, resting or at its cap. Once the phone sends commands the server reads it, begun there and not waited for, its reading coming as it's pulled (sync.md §Asked of the server).
-- A reading that finds new vocabulary sections, or moves a deck task's date, has Anki read again at once.
+- **Read again with Claude** (the sheet, `Readings.readAgain`) reads that task at once, whatever read it. Its reading stands till the new one comes, and you're told if none did. Not while Claude is off, resting or at its cap. Once the phone sends commands the server reads it, begun there and not waited for, its reading coming as it's pulled (sync.md §The exchange, *Asked of the server*).
+- A reading that finds new vocabulary sections, or moves a deck task's date, has Anki read again at once where the phone makes the reading; the server's can't reach AnkiDroid, so its deck tasks follow at the phone's next read of Anki.
 
 ## The input hash
 
@@ -146,11 +146,11 @@ It runs again once Claude can be asked again (its rest over, `EnrichWorker.retry
 
 ## Photos (AI-23)
 
-- *Add a photo of the work*, on a task Claude reads, keeps one photo with it (`Photos.attachPhoto`: the app's own files, one a task, a new one replacing the last). Its hash is in the input hash, so the task is read again at once. Once the phone sends commands the server reads it, the photo sent there first and kept by its hash (D-148, sync.md §Asked of the server).
+- *Add a photo of the work*, on a task Claude reads, keeps one photo with it (`Photos.attachPhoto`: the app's own files, one a task, a new one replacing the last). Its hash is in the input hash, so the task is read again at once. Once the phone sends commands the server reads it, the photo sent there first and kept by its hash (D-148, sync.md §The exchange, *Asked of the server*).
 - The photo goes first in the item, Claude told it's the work itself, to estimate and split from, saying in `reason` what it saw (`ReadingPrompts.photo`). Such a reading is `fromPhoto`, and the sheet says "From your photo".
 - Photos no task holds are let go when the app starts (`Photos.sweepPhotos`), but for one a chat delete can still undo.
 - `Readings` and `Photos` are built like `Focus` (their stores, the clock, the gateway and small callbacks); `ReadingsTest` and `PhotosTest` drive them on temporary stores, Claude's API a stand-in.
-- A photo of homework, taken in Work, is read into tasks of your own instead (NF-01, `PhotoTasks`, `PhotoTaskReader`; by the server once the phone sends commands, sync.md §Asked of the server), at most six from one photo (any past them said under *Left out*), each checked in the form (sources.md) and kept with the photo; or *Attach to an existing task instead* makes it the photo of a task Claude reads, read again with it.
+- A photo of homework, taken in Work, is read into tasks of your own instead (NF-01, `PhotoTasks`, `PhotoTaskReader`; by the server once the phone sends commands, sync.md §The exchange, *Asked of the server*), at most six from one photo (any past them said under *Left out*), each checked in the form (sources.md) and kept with the photo; or *Attach to an existing task instead* makes it the photo of a task Claude reads, read again with it.
 
 ## The request
 
@@ -160,14 +160,11 @@ Each reading is one Messages API call through the Anthropic Java SDK (`ClaudeEnr
 - the answer held to the job's schema (`output_config.format`), and the server-side fallback on (`fallbacks: "default"` and its beta header), so a request the model's safety classifiers decline runs on a model the API picks;
 - the item cut to 40 000 characters (`Pricing.MAX_INPUT_CHARS`), a 3-minute timeout and two retries.
 - A refusal, or an answer cut off at the token limit, is no answer. A fallback's answer is recorded and priced as the model that gave it (BUG-P3-001).
-- The profile: the year group, your subjects (by Settings' class map), the week's lessons and study periods, working hours, days off coming, the textbook, your lines about yourself, how you've asked Felix to behave and what he remembers (one held for a while saying till when, or with which task: "(until Sun 25 Oct)"; what's run out left out, D-103); its own part at most 2 000 characters, the whole 16 000.
+- The profile, whose parts are in [felix-inputs.md](felix-inputs.md) §The profile; its own part at most 2 000 characters, the whole 16 000.
 
 ## Web research
 
-Felix's look-ups are a call of their own (`enrich/WebResearcher.kt`), never part of the chat's: the search tool beside the chat's answer schema makes a grammar the API refuses as too large.
-- When his answer asks to look something up (`research`), `WebResearcher.look` asks Claude with its web search tool (`web_search_20250305`): at most 3 searches, located in the UK and your zone, no profile sent, at medium effort.
-- Its answer is in words, at most 15 short lines (3 000 characters), with up to 4 pages kept. One that searches past its turn isn't carried on. Felix is then asked again with what it found (felix.md).
-- Settings → Felix has its switch (`felixSearches`), on to start with.
+Felix's look-ups are a call of their own (`enrich/WebResearcher.kt`, the tool `web_search_20250305`, medium effort, no profile sent), never part of the chat's: the search tool beside the chat's answer schema makes a grammar the API refuses as too large. One that searches past its turn isn't carried on, and its answer is kept to 3 000 characters; the rest is in [felix.md](felix.md) §Web research.
 
 ## Micro-plans (AI-15)
 

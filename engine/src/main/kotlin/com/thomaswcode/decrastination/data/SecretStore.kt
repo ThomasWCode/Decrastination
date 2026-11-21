@@ -27,7 +27,7 @@ enum class Secret {
     /** The parent override's authenticator secret (Q17). */
     TotpSecret,
 
-    /** What this phone shows the server it's paired with (docs/plan_web/architecture.md §Sign-in). */
+    /** What this phone shows the server it's paired with (docs/spec/sync.md §Pairing). */
     DeviceToken,
     ;
 

@@ -1,64 +1,120 @@
-# The website: Decrastination at decrastination.thomaswhite.me
+# The website's plan: the record
 
-Planned 31 Oct 2026, from ten questions answered that day ([decisions.md](decisions.md)). Built to 5.11.0: stages 0 to 9, dormant till the switch, the last release (D-141), built over 5.12.0 to 6.0.0 and made on 4 Nov 2026, with 6.0.1 after it; how each built part works now is in `docs/spec/` ([server.md](../spec/server.md), [website.md](../spec/website.md), [sync.md](../spec/sync.md)). The folder is the plan's record, as `docs/plan_v4/` was the 4.x plan's: this file is the outline, [architecture.md](architecture.md) the shape the code takes, [data-and-sync.md](data-and-sync.md) how the state moves and is kept, [hosting.md](hosting.md) where it runs and what that costs (with the evidence read for it), [stages.md](stages.md) the steps in order with their estimates, [decisions.md](decisions.md) the choices made and the questions they answered, and [inventory.md](inventory.md) what the phone app holds and does today and where each piece goes.
+Planned 31 Oct 2026, from ten questions answered that day; built as stages 0 to 9 (4.12.0 to 5.11.0), each dormant behind the server's mode; switched on 4 Nov 2026 (5.12.0 to 6.0.0, with 6.0.1 after it). This file is what's left of the plan's folder, as [plan_v4/README.md](../plan_v4/README.md) is of the 4.x plan's: what it set out to do, what was built otherwise than planned, its own numbers (W-1 to W-29, which the code still cites), the questions asked, and what's still open.
 
-## Why
+How it works now is in `docs/spec/`: [server.md](../spec/server.md), [sync.md](../spec/sync.md), [website.md](../spec/website.md), [hosting.md](../spec/hosting.md). The decisions are D-125 to D-149 and D-166 to D-168 in [decisions.md](../decisions.md).
 
-The app lives on one phone. Its state is that phone's files, its planner and Felix run there, and it can be used only where the phone is. The owner wants most of what the phone does on a website too: the chat with Felix, the day's plan, the work list, the timer, the week's rules, the reviews and the settings, from a laptop, with the phone and the website showing one state.
+## What it set out to do
 
-Some of what the phone does can't leave it. Teams assignments are read by driving the Teams app on the phone (the Graph API needs the school's IT admin; `inventory.md` §Integrations), AnkiDroid is a content provider on the phone, the blocker is an accessibility service, and the calendar is written through `CalendarContract`. So the phone stays in the loop whatever is built: the website is a second full client, not a replacement (W-1).
+The app lived on one phone: its state that phone's files, its planner and Felix run there. The owner wanted most of it on a website too, from a laptop, with the phone and the website showing one state. Some of what the phone does can't leave it (Teams read by driving the Teams app, AnkiDroid's content provider, the blocker, the calendar), so the website is a second full client, not a replacement.
 
-## What it is, in one paragraph
+A Kotlin server (Ktor) holds the state in SQLite, replicated off the box by Litestream, and runs the rules from a module cut out of the app (`:engine`, with `:core`). The phone keeps every device duty and becomes a client with a copy of the state and an outbox of its own changes, so it works offline. The website is a React and TypeScript single-page app served from the same box, signed in with the owner's GitHub account alone. Claude is called from the server only. It runs on an Oracle Always Free instance.
 
-A **Kotlin/JVM server** (Ktor) in this repository holds the app's state in **SQLite**, replicated off the box by Litestream, and runs the rules the phone runs today from a **shared JVM module** cut out of the app (`:engine`, with `:core` as it is). The **phone** keeps every device duty (reading Teams and AnkiDroid, blocking, the calendar, notifications, protection) and becomes a client with a **local replica** of the state and an **outbox** of its own changes, so it works offline (W-2). The **website** is a React + TypeScript single-page app served by Caddy from the same box as the server, signed in with the owner's GitHub account alone (W-3). **Claude** is called from the server only, through the same one place, cap and record as today. The server also runs the two syncs that don't need the phone (Power Planner, Gmail). It all runs on an **Oracle Always Free Arm instance** at no monthly cost beyond Claude's.
+**Goals**: one state, two clients; the phone working offline; no data lost (every command and every store's history kept, three copies); one copy of the rules; nothing personal in the public repository; no new calls to Claude.
 
-## Goals
+**Not in scope**: blocking on a laptop; other users; Teams, AnkiDroid or the calendar moved off the phone; a native desktop app, or a website that works offline; a new look.
 
-1. **One state, two clients.** A change made on either shows on the other; neither holds anything the other can't see, except what is device-bound (`data-and-sync.md` §Which stores move).
-2. **The phone keeps working offline** (the owner's word, 31 Oct): reading the plan and the tasks, blocking, the timer, finishing and adding work; only Felix and the syncs need a connection, as they do today.
-3. **No data is ever lost**, as the top of `CLAUDE.md` says: the server keeps every command and every store's history; three independent copies of the state exist at all times (`data-and-sync.md` §Backups).
-4. **One copy of the rules.** The planner, Felix's rules, the readings' prompts and the stores' migrations run on the server from the same Kotlin the phone builds; the goldens and `ArchitectureTest` keep holding (W-4).
-5. **Nothing personal in the public repository** (D-79), the server's code and the web app included: every secret is an environment variable on the box.
-6. **No new Claude calls** beyond the phone's today; one key, one cap, one record, now on the server.
+## The W-numbers
 
-## Not in scope
+The plan numbered its decisions W-n, and the code's comments cite them so. Each became a D-number in [decisions.md](../decisions.md), W-15, W-18 and W-23 only on 21 Nov 2026, but W-22, a rule for the stages alone. Those four are given here as built.
 
-- Blocking on a laptop (W-10: a browser extension would be its own project).
-- Other users: one account, the owner's; tables carry an owner id and nothing more is built for it (W-3).
-- Moving Teams or AnkiDroid off the phone, or the calendar off `CalendarContract` (a server could write Google Calendar through its API; the phone's sync adapter already does the job).
-- A native desktop app, or a PWA that works offline: the laptop is online.
-- Redesigning the app's look. The website takes the phone's colours and words; its layout is its own, for a wide screen.
-
-## The stages
-
-In the most technically feasible order (the owner's word on 31 Oct: the website isn't used until every stage is done, so the order serves the build, not early use). Each is a release with a PR, a phone check where the phone changes, and its docs. [stages.md](stages.md) has each in full.
-
-| Stage | What | Phone release |
+| W | D | What |
 |---|---|---|
-| 0 | `:engine`: the app's Android-free code moved into a JVM module both the app and the server build | 4.12.x, cleanups; 4.13.0 the store split |
-| 1 | `:server` skeleton on the box: Ktor, SQLite, sign-in, device tokens, the image, Caddy, Litestream; the phone uploads its stores; the website shows the Day and the Work list read-only | 5.0.0 |
-| 2 | The command log: the phone sends commands, the server applies them through the owners, revisions flow back; the outbox and the offline rules | 5.1.0, 5.2.0 |
-| 3 | The server's jobs: Power Planner and Gmail syncs, the readings, planning ahead, memory tidy, nightly backups; Claude's key and gateway on the server, in use from the switch | 5.3.0 |
-| 4 | The website writes: the Work list, task sheet, own tasks, Done, Same?, instructions, Settings (protection's delays enforced by the server) | 5.4.0 |
-| 5 | Felix on the website: the chat as its home, replies, cards, ratings; Conversation, looks and reminders on the server | 5.5.0 |
-| 6 | The Day grid with drag, and the timer, on the website | 5.6.0 |
-| 7 | This week, Reviews, Stats, Backup and Reset, Setup on the website | 5.7.0, 5.8.0 |
-| 8 | Optional: the phone told at once of the server's changes (Firebase Cloud Messaging) | 5.10.0, the server's half; 5.11.0, the phone's |
-| 9 | Optional: Web Push for Felix's messages, slot starts and the timer (W-9) | 5.9.0 |
-| Last | The switch: the phone goes over to commands, and what's dormant wakes (D-141). The box it needs was up, mirroring, from 1 Nov 2026; the switch was made on 4 Nov 2026 | 5.12.0 to 6.0.0, then 6.0.1 |
+| W-1 | D-126 | a second full client on shared state |
+| W-2 | D-127 | the phone works offline to an extent |
+| W-3 | D-128 | one account, the owner's |
+| W-4 | D-129 | a Kotlin/JVM server reusing `:core` and `:engine` |
+| W-5 | D-130 | an Oracle Always Free Arm instance |
+| W-6 | D-131 | SQLite with Litestream to R2 |
+| W-7 | D-132 | a React and TypeScript app served by Caddy from the same box |
+| W-8 | D-133 | the server runs the Power Planner and Gmail syncs |
+| W-9 | D-134 | notices in the page first, Web Push a last stage |
+| W-10 | D-135 | no blocking on a laptop |
+| W-11 | D-136 | the stages in the most technically feasible order |
+| W-12 | D-142 | Claude called from the server only |
+| W-13 | D-140 | commands, not merged states |
+| W-14 | D-137 | the website renders view models the server computes |
+| W-15 | D-166 | the calendar written only from slots the server has confirmed; below |
+| W-16 | D-138 | a protocol version in every request; the phone never behind the server on a store's version |
+| W-17 | D-139 | one repository |
+| W-18 | D-167 | the phone told of the server's changes; below |
+| W-19 | D-143 | credentials re-entered on the website, never uploaded |
+| W-20 | D-144 | three independent copies of the state |
+| W-21 | D-125 | the versions: 4.12.x, 4.13.0, 5.0.0 on |
+| W-22 | — | below |
+| W-23 | D-168 | protection's wait counted by the server's clock; below |
+| W-24 | D-147 | what only the phone can know goes as commands |
+| W-25 | D-141 | the switch to commands comes last |
+| W-26 | D-149 | a first pull never at the cost of what the phone holds |
+| W-27 | D-145 | `google-services.json` out of git |
+| W-28 | D-146 | the phone's Import through the server |
+| W-29 | D-148 | the phone's photos through the server |
 
-Estimated at 61 to 83 hours of sessions in all (66 to 90 with the two optional stages), from the durations measured in the 4.x releases (`stages.md` §Estimates), plus the owner's own time at the Oracle console, the DNS, the GitHub App and the phone.
+- **W-15. The calendar is written only from slots the server has confirmed**, so two planners never both write it. The phone plans for itself while a change of its own waits to go, so DO NOW and the blocker follow a task finished offline, and the calendar waits till the outbox is empty and the plan's made again (`AppGraph`). The plan had a provisional mark on such slots; none was needed.
+- **W-18. The phone learns of the server's changes at its sync; Firebase Cloud Messaging an optional stage** to make it seconds. Built as stage 8 (5.10.0, 5.11.0), the phone reached by its Firebase Installation ID ([server.md](../spec/server.md) §Devices, [sync.md](../spec/sync.md) §Told at once).
+- **W-22. Nothing is deleted on the phone until the server holds its own**, and then only the credentials. A mistake in the sync's first stages could lose no data. As built, nothing is deleted at all: the phone keeps its sign-ins and Claude's key, and stops using them once it sends commands, which D-143 now says (the owner's word, 21 Nov 2026).
+- **W-23. The protection delay is counted by the server's clock once the state is shared.** The phone counts a loosening's wait by its uptime, as its date is the owner's to set; the server's clock isn't. Built without the `dueAt` the plan gave each pending change: the server counts by its own time through the same `SettingsChanges.counting`, a mark of the phone's being another clock's there, and the phone, sending commands, applies no loosening itself ([blocking-and-protection.md](../spec/blocking-and-protection.md)).
+
+## The stages, as built
+
+Estimated at 61 to 83 hours of sessions (66 to 90 with the two optional stages). The order was the most technically feasible, as the website wasn't to be used till all of it was done; the phone kept working through every release.
+
+| Stage | Releases | What, and what went otherwise than planned |
+|---|---|---|
+| 0 | 4.12.x, 4.13.0 | `:engine`: the app's Android-free code in a module the app and the server both build, moves alone; then the store split (`protection.json`'s device half to `device.json`, `notSame` to `tasks.json`, backup format 11) |
+| 1 | 5.0.0 | The server, mirroring; pairing; the Day and Work to read; the box, live from 1 Nov 2026 (5.9.2, 5.9.3), when the restore drill was run. The heartbeat came forward from the switch |
+| 2 | 5.1.0, 5.2.0 | The command layer on the phone, then the exchange, the outbox and the stale cases, dormant. **The switch moved to the end** (W-25): 18 of the 20 stores were written by both a person and a background job, so a switch here would have needed commands written only to be thrown away |
+| 3 | 5.3.0 | The server's jobs, the credentials, the nightly file, Claude's gateway on the server |
+| 4 | 5.4.0 | The website writes: Work, the task sheet, Settings, the parent code |
+| 5 | 5.5.0 | The chat as the website's home. The archive read by count, not by month; your changes beside the chat, not on a tab; Claude in the browser tests a stand-in of their own |
+| 6 | 5.6.0 | The Day's grid with drag, and the timer. A drop is judged by the server (`POST /day/drop`), not sent as a move |
+| 7 | 5.7.0, 5.8.0 | Stats, This week, Reviews; then Backup, Reset, Setup. A reset is a command; a backup taken in is a route, held as a command is |
+| 9 | 5.9.0 | Web Push. Which channels is each browser's own, not a setting; a slot's start is told, which the phone has no notification for |
+| 8 | 5.10.0, 5.11.0 | The phone told at once. By its Firebase Installation ID, as Firebase had deprecated the registration token the plan named; `google-services.json` kept out of git (W-27); `ReplicaWorker`, not `SyncWorker` |
+| Last | 5.12.0 to 6.0.0, 6.0.1 | The switch: the phone's last whole seed, the mode set in its transaction (5.12.0); what only the phone knows as commands (5.13.0, W-24, widened from free time alone after a sweep found every write outside a command would go at the next pull); the offline lines and what's asked of the server (5.14.0); Gmail's journal (5.15.0); the photo check (5.16.0); the switch itself (6.0.0), made 4 Nov 2026 in 2.4 s. The server's first Gmail read then failed on a JVM's default host name verifier: 6.0.1 |
+
+## Asked and answered
+
+The numbers continue [answers.md](../plan_v4/answers.md)'s, and go on there from Q146. Each was put with its options and a recommendation; what wasn't picked is in the decision's "Not".
+
+- **Q129. What should the website be, beside the phone?** Two full clients on shared state; the phone primary and the website a mirror; or the web primary and the phone an agent. **Two full clients.** → W-1.
+- **Q130. Who signs in?** Just the owner; a few others later, designed in; or a product. **Just the owner.** → W-3.
+- **Q131. Blocking on a laptop?** An optional last stage; not in this plan; or a core part. **Not in this plan.** → W-10.
+- **Q132. What runs the rules on the server?** Kotlin/JVM reusing `:core`; TypeScript with the rules ported; or Kotlin Multiplatform. **Kotlin/JVM.** → W-4.
+- **Q133. Where does it run?** A new Oracle Always Free Arm instance; a paid VPS; beside another project on a 1 GB micro; or a PaaS. **Oracle Always Free.** → W-5.
+- **Q134. How is the state held?** SQLite with Litestream; the JsonStore files on a volume; or Postgres. **SQLite and Litestream.** → W-6.
+- **Q135. What's the website built with, and served from?** React and TypeScript on the box; vanilla TypeScript; GitHub Pages with the API elsewhere; or Compose for web. **React and TypeScript on the box.** → W-7.
+- **Q136. Should the server run the Power Planner and Gmail syncs?** Both; neither; or Power Planner alone. **Both.** → W-8.
+- **Q137. Notices while a laptop has it open?** In the page now and Web Push later; Web Push at once; or in the page only. **In the page now, Web Push later.** → W-9.
+- **Q138. What comes after the read-only view?** The owner: it doesn't matter, as the website isn't used until every stage is done; the most technically feasible order. → W-11.
+- **Q139. The switch to commands comes last: is that right?** (1 Nov.) **Yes.** → W-25.
+- **Q140. What of the room the server's history takes?** (1 Nov.) Leave it, and read the real size after a fortnight. **Yes.** Read on 11 Nov: 531 MB, 494 of it `store_history`, growing by about 65 MB a day. → D-151, then D-154.
+- **Q141. What if the server's copy is the older at a first pull?** (1 Nov.) The phone saves a copy first, and refuses a pull that would cost anything. **Yes.** → W-26.
+- **Q142. `google-services.json`: commit it, or keep it out of git?** (3 Nov.) GitHub's secret scanning would flag its key. **Out of git.** → W-27.
+- **Q143. A repeated command's answer leaves out its Undo and its words: keep them on record?** (3 Nov.) No client reads them on a repeat. **Accept it.** → [sync.md](../spec/sync.md) §The exchange.
+- **Q144. After the switch, the phone's Import?** (3 Nov.) Sent to the server's, with a pull of everything after; or left to the website. **Sent to the server's.** → W-28.
+- **Q145. After the switch, the phone's three features that ask Claude with a photo?** (3 Nov.) The photos sent to the server, which asks; or off on the phone. **Sent to the server.** → W-29.
+
+Said without being asked, 31 Oct: "The phone should still be able to work offline to an extent." → W-2.
+
+## What the plan couldn't settle, and how each ended
+
+- **Oracle's capacity.** An instance was had, and the box has run since 1 Nov 2026. The account was upgraded to Pay As You Go; whether that stops idle reclamation today is still unverified ([hosting.md](../spec/hosting.md) §The box).
+- **The server's memory.** Measured on the box: 175 MB in use, `-Xmx1g` and a 1.5 GB limit.
+- **How the phone records its owners' calls.** Every change a screen makes is an action handed to `graph.act`, recorded in the outbox before it's applied ([sync.md](../spec/sync.md) §Commands).
+- **The IMAP client on a server's JVM.** It ran but for the host name check, mended in 6.0.1.
+- **The calendar's learnt answers.** Still the phone's; one given on the website is kept as an instruction (D-153).
+- **Voice input on the website.** Not built.
+- **The history's size.** Thinned (D-151), and the snapshots cut to 14 days (D-154). Litestream's requests to R2 were the cost nobody foresaw ([hosting.md](../spec/hosting.md) §Litestream).
 
 ## Done when
 
-Each line with how it was shown; what's still open says when it falls due.
-
-- [x] Every phone feature not bound to the device is on the website: chat, Day, Work, Stats, This week, Reviews, Settings, Backup, Reset, Setup. *Stages 4 to 7 and 9, in use from the switch.*
-- [x] A change made on the website is on the phone at its next sync, and one made on the phone (online) is on the website within a second. *4 Nov 2026: with the phone's app in the background, each change made on the website was on the phone about 3 s later, by stage 8's push; a task added on the phone was on the server 160 ms after it was made, and on the open page within a second. A timer started on the website showed on the phone in its notification and on its piece's sheet.*
-- [x] The phone, with its network off, shows its plan and tasks, blocks, runs the timer, and takes a task added and a task finished; with the network back, both reach the website and the server's plan replaces the phone's. *4 Nov 2026, in aeroplane mode: the plan and the tasks shown, a task added, a task finished, a slot moved and the timer started, their ten commands queued and the calendar left as it was (W-15); with the network back all of it was on the server within the minute, applied in the order made, the website showed it, and the calendar was written from the server's plan. Blocking wasn't tried offline: the blocker reads the phone's own copy, which stays.*
-- [x] A restore drill has been run: the box's database rebuilt from R2 on a clean machine and the server started from it, with the owner's state whole. *1 Nov 2026, on a PC from the real bucket: 14 of 14 stores the same, in 26 s. Its other half, a nightly file into a test build's Import, waits for a run: the first nightly file went to B2 at the switch.*
-- [ ] The server has run a month with no state lost, Claude's spend as before, and nothing paid for hosting. *From the switch: due 4 Dec 2026.*
+- [x] Every phone feature not bound to the device is on the website. *Stages 4 to 7 and 9, in use from the switch.*
+- [x] A change made on the website is on the phone at its next sync, and one made on the phone, online, is on the website within a second. *4 Nov 2026: a change on the website on the phone about 3 s later, by stage 8's push; a task added on the phone on the server 160 ms after, and on the open page within a second.*
+- [x] The phone, with its network off, shows its plan and tasks, blocks, runs the timer, and takes a task added and a task finished; with the network back, both reach the website and the server's plan replaces the phone's. *4 Nov 2026, in aeroplane mode: ten commands queued and the calendar left as it was; with the network back all of it on the server within the minute, in the order made. Blocking wasn't tried offline.*
+- [x] A restore drill has been run. *1 Nov 2026, on a PC from the real bucket: 14 of 14 stores the same, in 26 s. Its other half, a nightly file into a test build's Import, hasn't been run.*
+- [ ] The server has run a month with no state lost, Claude's spend as before, and nothing paid for hosting. *Due 4 Dec 2026. Not as worded: R2's requests past its free million were billed in November ([hosting.md](../spec/hosting.md) §Litestream), and mended on 11 Nov.*
 
 ## After the plan
 
-What would come next, none of it decided: the browser extension that blocks sites on the laptop (W-10), a second person's account (W-3), Google Calendar written from the server, and the digest of Felix's ratings the owner has so far said no to (`memory`: ratings are acted on by an agent only).
+None of it decided: a browser extension that blocks sites on the laptop (W-10), a second person's account (W-3), Google Calendar written from the server.

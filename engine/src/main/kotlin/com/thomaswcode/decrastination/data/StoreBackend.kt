@@ -5,7 +5,7 @@ import java.io.File
 /**
  * Where a store's text is kept: a file a store on the phone ([FileBackend]), a row on the server. A
  * [JsonStore] holds the state, its version and its migrations; this holds the text, and the copies of it
- * that outlast a change (docs/plan_web/data-and-sync.md §The store backend).
+ * that outlast a change (docs/spec/storage-and-backups.md §The store backend).
  */
 interface StoreBackend {
     /** Store [name]'s text: null where it has none, a failure where it can't be read. */

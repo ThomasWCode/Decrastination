@@ -31,8 +31,8 @@ data class MissedActions(
         /**
          * What's offered on missed [record], the plan's [piece] with its key and its [task] as they are now, among
          * [records], the log's. [Focus.keep][com.thomaswcode.decrastination.block.Focus] gives way the last miss of a key
-         * today, as the log has them: a task in boxes has one key for every box, so a Done on any other would be kept
-         * late in that one's place.
+         * today, as the log has them: a piece missed, laid again later today and missed again has two misses under its key,
+         * so a Done on the earlier would be kept late in the later's place.
          */
         fun of(record: SlotRecord, records: List<SlotRecord>, piece: Chunk?, task: TaskItem?): MissedActions {
             val live = piece != null && task?.isOpen == true

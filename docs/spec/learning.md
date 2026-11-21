@@ -75,7 +75,7 @@ Each kind of day learns how much of its free time gets used (`DayKind`: weekday 
 - school windows: the median, over its last 14 days with any, of the minutes kept there in their own time over the minutes laid there that morning, once it has 7, kept between a half and all of it.
 
 Each kind learns from its own days, so a run of bad Saturdays doesn't move the weekdays. Until a kind has its 7 days, it's all of its free time.
-The planner multiplies each day's evening by its kind's yield, and its school windows by school's; a limit you set on a day is of the work, after the yield.
+The planner applies them to each day's capacity ([planner.md](planner.md) §A day's time).
 A day's record has the kind it was planned as (`SchoolDays.kindOf`, D-27): a weekday off school is a weekend's, planned with the weekend's yield and teaching it. A record made before kinds were kept is told by its date (`DayKind.of`).
 
 ## AnkiDroid's seconds a card (DX-11)
@@ -144,10 +144,12 @@ What the Stats, check-in and Reviews pages say is in `ui/StatsPage.kt` and `ui/R
 
 ## The daily jobs
 
+Once the phone sends commands (D-141, D-142), the server runs all three (`ServerJobs`' `morning`, `check-in` and `review`, [server.md](server.md) §Jobs), by the same `Briefing`, `Conversation` and `Learning`: Felix's morning message, the check-in's questions and the week's review are made there and reach the phone as it pulls. The phone's alarms still ring: its briefing still posts what the night held back, reads the calendar, records the day and offers the Teams sync, and its review job does nothing (`Learning.review`, `byServer`). What follows is how each runs, wherever it runs.
+
 `learn/DailyAlarms.kt` keeps three alarms at the times `learn/Daily.kt` works out, each set again once it has run: one that ran today stands for today, and one that failed is tried again 10 minutes later, up to three times (`Daily.failed`).
 - **The morning briefing** (`learn/Briefing.kt`): 07:00 on a school day by the school calendar, 08:30 on any other, a weekday off included (`briefingWeekdayMin`, `briefingWeekendMin`; D-74); set again when the school calendar changes. A change that moves today's time to one already gone by, its briefing not yet run (a day off taken out after 07:15 and before its 08:30, or the time set earlier in Settings), leaves today without one: the next is tomorrow's; one gone by within the last quarter of an hour runs at once (`Daily.from`, D-104).
-  What's run out of what Felix remembers is let go of first (`Conversation.forgetExpired`, D-103); then it posts what the night held back, reads the calendar, finishes yesterday's day record and makes today's, offers the morning's Teams sync for 90 minutes, then sends Felix's message or the day's list; after it, Felix's notes and reminders no longer wanted are let go (`Conversation.pruneFelix`).
+  What's run out of what Felix remembers is let go of first (`Conversation.forgetExpired`, D-103) and a new week's weekly work is made (D-124); then it posts what the night held back, reads the calendar, finishes yesterday's day record and makes today's, offers the morning's Teams sync for 90 minutes, then sends Felix's message or the day's list; after it, Felix's notes and reminders no longer wanted are let go (`Conversation.pruneFelix`).
 - **The check-in**, on Sundays at `checkInMin`, above.
 - **The weekly review**, 90 minutes after it, above.
 
-Completions are recorded as they're confirmed, after each sync and at your *Done* (`Focus.rewardCompletions`); the decks' seconds a card at the end of each AnkiDroid visit.
+Completions are recorded as they're confirmed, after each sync and at your *Done* (`Focus.rewardCompletions`).

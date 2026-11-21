@@ -189,7 +189,7 @@ private fun ApplicationCall.setCookie(web: Web, name: String, value: String, max
     )
 }
 
-/** The whole API (docs/plan_web/architecture.md §The server). A route turns a request into a call on the graph; none writes a store. */
+/** The whole API (docs/spec/server.md §The API). A route turns a request into a call on the graph; none writes a store. */
 fun Application.api(web: Web) {
     install(ContentNegotiation) { json(json) }
     install(XForwardedHeaders)

@@ -49,12 +49,12 @@ class AiUsageTest {
         // Every character three tokens, the instructions' worth more, and all the output, at the
         // dearer rates of a fallback's older Opus. Every call's input is cut to the most it covers,
         // and an email's text is well within it.
-        // The profile sent with every call counted too, at its most.
-        // A photo check's three pictures among the rest (AI-17).
-        val longest = Pricing.costUsd("claude-opus-4-8", input = 3L * (Pricing.MAX_INPUT_CHARS + Profile.MAX_BLOCK_CHARS) + 3 * 3_300 + 1_000, output = ClaudeEnricher.MAX_TOKENS)
+        // The profile sent with every call counted too, at its most. A call's pictures take their room
+        // from its text (`Pricing.PICTURE_CHARS`), so they add nothing to it: the photo check's ten are below.
+        val longest = Pricing.costUsd("claude-opus-4-8", input = 3L * (Pricing.MAX_INPUT_CHARS + Profile.MAX_BLOCK_CHARS) + 1_000, output = ClaudeEnricher.MAX_TOKENS)
         assertTrue(longest <= Pricing.WORST_CALL_USD, "$longest > ${Pricing.WORST_CALL_USD}")
         // And with its instructions written to the hour's cache, dearer than sent as input.
-        val written = Pricing.costUsd("claude-opus-4-8", input = 3L * (Pricing.MAX_INPUT_CHARS + Profile.MAX_BLOCK_CHARS) + 3 * 3_300, output = ClaudeEnricher.MAX_TOKENS, cacheWriteHour = 1_000)
+        val written = Pricing.costUsd("claude-opus-4-8", input = 3L * (Pricing.MAX_INPUT_CHARS + Profile.MAX_BLOCK_CHARS), output = ClaudeEnricher.MAX_TOKENS, cacheWriteHour = 1_000)
         assertTrue(written <= Pricing.WORST_CALL_USD, "$written > ${Pricing.WORST_CALL_USD}")
         assertEquals(1.35, Pricing.WORST_CALL_USD, 1e-9)
         assertTrue(ReadingPrompts.MAX_TEXT + 1_000 < Pricing.MAX_INPUT_CHARS)

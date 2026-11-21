@@ -91,7 +91,7 @@ object StorageRules {
     /** B2's free 10 GB. */
     const val B2_STORED = 10 * GB
 
-    /** How long B2 keeps a nightly file: hidden 60 days after it's written, deleted 60 days after that (`plan_web/hosting.md`). */
+    /** How long B2 keeps a nightly file: hidden 60 days after it's written, deleted 60 days after that (`spec/hosting.md` §The copies). */
     const val B2_KEPT_MS = 120 * DAY_MS
 
     /** The shares of an allowance an alert's given at, each once a month (the owner's answer, 19 Nov). */

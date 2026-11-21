@@ -1,6 +1,6 @@
 # The phone and the server
 
-How the phone keeps the server's copy of the state (`sync/Replica.kt`, `data/SyncState.kt`, `sync/ReplicaWorker.kt`). In 5.0.0 this is mirror mode: the phone is the only writer, and everything the website shows comes from it (D-126). The phone doesn't depend on any of it: unpaired, offline or with the server down, it does all it did before.
+How the phone and the server keep one state (`sync/Replica.kt`, `data/SyncState.kt`, `sync/ReplicaWorker.kt`; D-126). Since the switch (6.0.0, 4 Nov 2026) the two keep in step by commands: each change is sent as it's made, and the server's stores are pulled (§The exchange). Before it, and again after a restore, the phone mirrors: it's the only writer, and sends its stores whole (§What's sent). Unpaired, the phone does all it did before; paired and offline, it works from its own copy (§Offline).
 
 ## Pairing
 
@@ -8,27 +8,41 @@ Settings → The website, or the same row on Setup. The website's Phone page sho
 
 ## What's sent
 
-`Stores.MIRRORED`, each store's whole text as its file holds it: tasks, settings, session, protection, model, anki, learning, log, instructions, chat, school, memory, felix, and from 5.15.0 Gmail's journal (`gmail-writes.json`), its writes still to come among it, so the server takes them over at the switch ([sources.md](sources.md) §Gmail). With them:
+The stores the two share are `Stores.MIRRORED`, sent whole as their files hold them while the phone mirrors, and pulled whole once it sends commands (§The exchange): tasks, settings, session, protection, model, anki, learning, log, instructions, chat, school, memory, felix, and Gmail's journal (`gmail-writes.json`), its writes still to come among it, so the server takes them over at the switch ([sources.md](sources.md) §Gmail). With them:
 
 - each month of the chat's archive, once one has changed, and a month that's gone sent empty, so a chat cleared here is cleared there;
 - `calendar-read.json`: the calendar as last read, and your answers about its events, which the server can't read for itself (`CalendarRead`, from `Sync.calendarRead`).
 
 What's the phone's alone is never sent: the secrets, `runtime.json`, `device.json`, `calendar.json` and `sync.json`.
 
-Only what the server doesn't hold goes. Each answer says what it holds, every store by its SHA-256, and `sync.json` keeps that: a store whose hash matches stays home, and a server restored to an older copy is sent what it's lost in the same send. Nothing changed still sends an empty batch, so the server knows the phone is there and the website can say how fresh it is. Each batch says the phone's time zone, as a day is the owner's wherever they are, and its build.
+While mirroring, only what the server doesn't hold goes. Each answer says what it holds, every store by its SHA-256, and `sync.json` keeps that: a store whose hash matches stays home, and a server restored to an older copy is sent what it's lost in the same send. Nothing changed still sends an empty batch, so the server knows the phone is there and the website can say how fresh it is. Each batch says the phone's time zone, as a day is the owner's wherever they are, and its build.
 
 ## When
 
-- Within a minute of any change to a store the server keeps: a run of changes is one send (`ReplicaWorker.soon`).
+- While mirroring, within a minute of any change to a store the server keeps: a run of changes is one send (`ReplicaWorker.soon`).
+- Sending commands, at once as a change is made (`ReplicaWorker.again`), so the website has it in about a second; free time spent goes within the minute, merged meanwhile (`ReplicaWorker.soon`, §Observations).
 - As the app comes to the front (`ReplicaWorker.now`).
 - At the end of each 15-minute sync.
 - When the server says it's changed, through Firebase (§Told at once): once it applies commands, or when the phone asks to be told.
 
 Each send is WorkManager work, with a network constraint, as Android 15 cuts an app's network seconds after it leaves the screen.
 
+## Offline
+
+Paired and sending commands, the phone works with no network, to an extent (D-127):
+
+- **Reads**: every screen, the widget and the block screen read the phone's own stores.
+- **The blocker, the timer and the alarms** run from them: blocking never needs the network.
+- **Writes**: a task added or finished, a slot moved, the timer started, a setting changed, a check-in answered, each applied here through its owner and kept in the outbox till it can go (§The exchange). A message to Felix waits there too, and is answered once it's gone.
+- **The plan**: the phone's own planner runs as its stores change, so DO NOW and the blocker follow a task finished offline. The calendar isn't written from such a plan: only with nothing waiting in the outbox, so from slots the server's confirmed, and two planners never both write it (W-15, `AppGraph`).
+- **Felix and the sources the server reads** need a connection: Claude is asked by the server alone (D-142), and Power Planner and Gmail are read there (D-133).
+- What's waited three hours to go, or a week with no exchange, is said on the Day (§The exchange, *Held up*).
+
+A store is pulled whole, never as a difference: the largest is a few hundred kilobytes, compressed on the way, and only those changed since the last pull come.
+
 ## Told at once
 
-Stage 8 (W-18; 5.11.0, the server's half in 5.10.0, [server.md](server.md) §Devices): the server tells this phone of a change it didn't make, through Firebase Cloud Messaging, and the phone pulls it in seconds rather than at its next 15-minute sync. Only in a build made with the Firebase project's file (D-145): one without it hears at its sync, as before. Dormant till the switch, as the server tells nothing while it mirrors, but a phone that asks.
+W-18 (the server's half in [server.md](server.md) §Devices): the server tells this phone of a change it didn't make, through Firebase Cloud Messaging, and the phone pulls it in seconds rather than at its next 15-minute sync. Only in a build made with the Firebase project's file (D-145): one without it hears at its sync, as before. While the server mirrors it tells nothing, but a phone that asks.
 
 - **Its id.** Firebase registers this phone by its installation id (`sync/PushService.kt`, `onRegistered`), as it does at a start now and then and whenever the id changes; the manifest asks for that (`firebase_messaging_installation_id_enabled`), as Firebase now calls the registration token deprecated. It's kept in `sync.json` (`SyncState.pushId`, version 3) and sent (`POST /api/devices/push`) with the first upload of each process that goes through, and once a pairing, and when it changes, by a send after any on its way (`ReplicaWorker.again`), as one under way may be past it, so a server restored without it hears it again at the next start. One the server doesn't take goes at the next upload, and says nothing on Setup. Unpairing keeps it, as it's this phone's, and pairing again sends it.
 - **The word.** The server's message says only a revision. What's done with it is work of its own (`ReplicaWorker.told`): expedited, as a high-priority message lets a job start at once, and after any exchange on its way, which may have pulled before the change. It exchanges, unless what it said is here already with nothing waiting to go, as a phone that made the change pulled it in the same exchange (`Replica.told`).
@@ -46,7 +60,7 @@ Nothing's lost: what wasn't accepted stays unsent, and goes next time. Setup say
 
 ## Commands
 
-A screen's change is a command (D-140): an action, one owner's operation with its arguments as data (`sync/protocol/Actions.kt`), with an id and the moment it was done (`Command`). `graph.act(FinishOwnTask(id))` makes one and applies it through its owner; no screen calls an owner's change itself, which `ArchitectureTest` holds to. In 5.1.0 that's all it does: what's changed goes to the server as it did, whole, and nothing behaves differently. It's the shape the switch to commands needs (D-141).
+A screen's change is a command (D-140): an action, one owner's operation with its arguments as data (`sync/protocol/Actions.kt`), with an id and the moment it was done (`Command`). `graph.act(FinishOwnTask(id))` makes one and applies it through its owner; no screen calls an owner's change itself, which `ArchitectureTest` holds to. While mirroring that's all it does: what's changed goes to the server whole. Sending commands, the same action is put in the outbox first, and sent (§The exchange).
 
 So that the same command does the same on the phone and the server, each is applied inside a `Replay` of it (`core/Ids.kt`):
 
@@ -55,7 +69,7 @@ So that the same command does the same on the phone and the server, each is appl
 - What a change to the settings carries is the fields it touched (`SettingsChanges.changed`), laid over whatever's there when it lands, so a change made elsewhere to any other field stands. `Commands.changeSettings` makes one from a change as a screen writes it.
 - `OwnTask` keeps two things only in memory, which of its steps each was and that it came from the form. `SaveOwnTask` carries them, so a renamed step keeps its tick across the wire.
 
-What isn't a command, and why: a change that's only of this phone (its pairing, the parent code's secret, its calendar's answers), one that starts a job rather than changes the state (a sync, a reading), housekeeping that runs by itself (what Felix remembers past its date let go as its page opens), and what's reached only through Claude until that moves to the server. What a sync or the blocker finds is a command once the two keep in step by commands (§Observations).
+What isn't a command, and why: a change that's only of this phone (its pairing, the parent code's secret, which goes on its own, what `calendar.json` holds), one that starts a job rather than changes the state (a sync, a reading), housekeeping that runs by itself (what Felix remembers past its date let go as its page opens), and what asks Claude at your word, which is a route of the server's (§The exchange, *Asked of the server*). What a sync or the blocker finds is a command (§Observations).
 
 ## Observations
 
@@ -80,7 +94,7 @@ A slot moved by hand in the calendar goes as `AddOwnChange`, as a screen's would
 
 ## The exchange, once the server applies commands
 
-Built and tested in 5.2.0, and dormant: `SyncState.mode` stays `mirror`, and the phone behaves as it did, till the server goes over to commands (D-141). The server says so by answering a seed with a 409, and `GET /api/version` by its `mode`; the phone then keeps in step this way, from its next upload. The server's half of going over is built (5.12.0, [server.md](server.md) §The modes): the phone's last whole seed, the mode set in its transaction and its answer kept under its id.
+How the two keep in step since the switch (D-141). The server says it applies commands by answering a seed with a 409, and `GET /api/version` by its `mode`; the phone keeps in step this way from its next upload (`SyncState.mode`). The server's half of going over is in [server.md](server.md) §The modes: the phone's last whole seed, the mode set in its transaction and its answer kept under its id.
 
 **The switch** (6.0.0, D-141), the phone's half, made at the owner's word from a PC (`sync-switch`, `AppGraph.switchOver`; there's no button for it): Gmail's worker stopped, and, a minute at most, no write to Gmail, no read of a source, no answer of the chat's, no review, no task's or instruction's reading and no photo check under way or begun (`GmailFinishes.quiet`, `Syncer.quiet`, `Conversation.quiet`, `Learning.quiet`, `Readings.quiet`, `Instructions.quiet`, `Photos.quiet`, in that order, as a read's own work answers the chat and reads the instructions inside it), as each writes the stores unqueued while mirroring, those that waited going as commands once it's made, or finding the answer, the review, the reading or the check the server's; this phone in step with a server that says it's mirroring; the tasks' photos sent to the box, as one attached while mirroring has no command to take it there; a copy of everything saved first, as a reset's is (`BackupService.switchCopy`, `switch-<date>-<time>.json`, listed with a reset's copies in Settings → Backup, W-26); then, under the commands' gate, with none let begin unqueued, as mirroring makes them, and those under way finished (one begun meanwhile waits, then is made as things are after it), the phone goes over (`Commands.switching`), so each change from then is a command, and every store's read whole into the last seed (`SwitchSeed`), with when the phone last said its morning and made its review, as each alarm notes its run ahead of it, and when it last ran the check-in's reminder, as its alarm ran it, but one with a try still to come, which the server then runs (`Daily.ranBeforeSwitch`). So that the drain holds every change made while mirroring, each that has a command is made through `Commands` whatever the mode, unqueued while mirroring (a finish of Gmail's and its Undo, free time spent, a block, the timer's zero, protection, a photo kept, a calendar move, an event asked or settled, a source's note, a parent code's lock, a reset); an Import or a reset's copy restored, which has none, holds the sources' lock as the switch does, so the two never meet. A switch once begun is made whole, however long it takes, so what it says is what it did. The seed's kept in `switch-seed.json` (`SyncState.switching`, `sync.json` version 6) till it's answered, so it goes again the same, under its id, before anything else, whatever stops the process (`Replica.switchAgain`), whichever exchange comes first (an upload's, or an Import's, Try again's, a photo check's or Read again's, each of which sends what's waiting first); a task's photo not yet on the box goes ahead of it (one attached as the photos went is in the seed), and one that can't go holds it back till the next sync. Answered, the phone's at the answer's revision, with no pull of everything, and the parent code goes, then what was made meanwhile. A server that can't take it (a store it can't read: deploy it first) leaves the phone mirroring, nothing lost; one gone over already makes the next pull a first one. However the phone comes back to mirroring, then or later, what's its own again is set going (`Replica`'s `mirroringAgain`: Gmail's writes waiting in the journal).
 
@@ -91,7 +105,7 @@ Built and tested in 5.2.0, and dormant: `SyncState.mode` stays `mirror`, and the
 - **Then a pull**: `GET /api/state?since=` for every store changed since the last, each taken whole (`JsonStore.adopt`). Only with nothing waiting (`Commands.replacing`): a command made since the upload began is already in the stores, and applying it again on top would make it twice, so it goes first, and the pull's asked for again after it. No command is applied while the stores are replaced. A month of the chat's archive that comes empty is a chat cleared elsewhere, and goes here with its copies (`ChatArchiveStore.adopt`). The pull says too which stores a clear or a reset made elsewhere let go of the copies of (`PulledState.letGo`, 5.12.0), each by the revision that let them go: the copies kept here of those go with it (D-94), what's reset being kept in no copy. Once each: `sync.json` keeps the newest acted on (`SyncState.letGoSeen`, version 4), as a pull of everything says every one there's been, and a copy made here since is what a migration that fails is put right from. Going back to mirroring starts it again from none, as a restored server's revisions start again below it.
 - A pull follows only an answer. With none, what's waiting may already be on the server, and it mustn't be applied twice over.
 - A store newer than this build can read stops the pull whole, and Setup says to install: the stores change together, and half of them new is worse than all of them old.
-- A server behind the revision this phone last took has been restored, and what's here is all that's left of what it lost: nothing's taken from it, and Setup says so. The restore steps set it back to mirroring ([server.md](server.md)), which each pull and a turned-away command tell the phone (`PulledState.mode`): the phone goes back too, and seeds all it holds, what's waiting in the outbox with it, as that's in the stores already. A restored server that's since passed this phone's revision can't be told from one that hasn't, which is why the steps set the mode rather than leave it to be noticed.
+- A server behind the revision this phone last took has been restored, and what's here is all that's left of what it lost: nothing's taken from it, and Setup says so. The restore steps set it back to mirroring ([hosting.md](hosting.md) §A new box, restoring, rolling back), which each pull and a turned-away command tell the phone (`PulledState.mode`): the phone goes back too, and seeds all it holds, what's waiting in the outbox with it, as that's in the stores already. A restored server that's since passed this phone's revision can't be told from one that hasn't, which is why the steps set the mode rather than leave it to be noticed.
 - A command that throws part-way here is half made as a stopped process's is, and the next pull is of everything (`Replica.pullEverything`).
 - The phone's time zone goes with each exchange (`Protocol.ZONE_HEADER`), a command waiting or none, as a seed says it in its body.
 - **Held up** (5.14.0): a change waiting three hours or more (`SetupPage.HELD_MS`), by the oldest in the outbox, holds up what's after it and every pull, whatever the cause (a fault, a release's bug, a command nothing can apply, the server gone). The Day says so in a line at its top, which opens Setup, and so does the bar's mark (`SetupPage.syncLine`, `attention`); a week with no exchange is said the same way, what's changed on the website not here (`ADRIFT_MS`). Setup shows the change, when it was made and the last try's error, with a way out at your word: *Let it go*, asked first, says it among those the server didn't apply ("Let go at your word") and takes it out of the outbox, and the next pull is of everything, so what it did here goes, as for one the server dropped (`Replica.letGo`).
@@ -106,7 +120,7 @@ The server applies commands in the order they arrive, and the owners are the con
 
 | Command | Stale when | Said |
 |---|---|---|
-| `FinishOwnTask`, `ReopenOwnTask`, `DeleteOwnTask`, `TickBlock`, `StartTimer`, `AddNote` | its task has gone | That task had gone |
+| `FinishOwnTask`, `ReopenOwnTask`, `DeleteOwnTask`, `TickBlock`, `StartTimer`, `AddNote`, `AttachPhoto` | its task has gone | That task had gone |
 | `AddOwnChange` | the task it's about has gone | That task had gone |
 | `SaveOwnTask` | the form wouldn't take it (`OwnTaskRules.problem`) | what's wrong with it |
 | `ChangeSettings` | a value the screen wouldn't take (`SettingsLimits`), or the settings' `version` | what's wrong with it |
@@ -130,6 +144,7 @@ A command that ran and came to nothing is `refused`, by what its owner answered 
 | `StopTimer` | No timer was running |
 | `RecordCheckIn` | That week's check-in is done |
 | `ApplyInstruction` | It couldn't be applied |
+| `FinishGmail` | That email can't be finished now |
 
 A command's moment is the server's where a client's clock would decide something (`CommandApplier.stamped`): the website's is always the moment it lands, as it has no queue to send late and a browser can say anything, and a phone's may be earlier but never later, so neither can run the clock past a code's lock or a wait.
 
