@@ -13,19 +13,19 @@ import com.thomaswcode.decrastination.sources.TaskSource
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.time.Instant
-import java.time.temporal.ChronoUnit
 
 /**
  * Power Planner through its web API, with the username and password from the encrypted store.
- * The session is kept and reused until a call fails, then one fresh login is tried. The semester
- * and timetable change rarely, so they're read at most every [TIMETABLE_MAX_AGE_MS]; a read is
- * then a single `GetAgenda` call.
+ * The session is kept and reused until a call fails, then one fresh login is tried. Which semester
+ * is selected changes rarely, so it's read at most every [SEMESTER_MAX_AGE_MS]; a read is then the
+ * single call that gives the timetable and the items. That call gives every item of the semester,
+ * so the agenda is made of them here: an item that has left it is one the merge takes as done.
  */
 class PowerPlannerSource(private val api: PowerPlannerApi, private val secrets: SecretStore) : TaskSource {
     override val source = Source.PowerPlanner
 
-    /** The selected semester and its timetable, as one account read them. */
-    private data class Semester(val accountId: Long, val id: String, val timetable: Timetable, val readAt: Long)
+    /** The selected semester, as one account read it. */
+    private data class Semester(val accountId: Long, val id: String, val readAt: Long)
 
     @Volatile
     private var semester: Semester? = null
@@ -50,10 +50,11 @@ class PowerPlannerSource(private val api: PowerPlannerApi, private val secrets: 
     /** The agenda's items, and the timetable they were read against. */
     private fun readWith(login: PowerPlannerApi.Login, context: ReadContext): Pair<List<Fetched>, Timetable> = run {
         // A login typed into Setup may be another account's: its semester isn't this one's.
-        val current = semester?.takeIf { it.accountId == login.accountId && context.now - it.readAt < TIMETABLE_MAX_AGE_MS }
-            ?: api.selectedSemester(login).let { id -> Semester(login.accountId, id, api.classes(login, id), context.now) }.also { semester = it }
-        val now = Instant.ofEpochMilli(context.now).truncatedTo(ChronoUnit.SECONDS).toString()
-        api.agenda(login, current.id, now).mapNotNull { PowerPlannerItems.fetched(it, current.id, current.timetable, context.zone) } to current.timetable
+        val current = semester?.takeIf { it.accountId == login.accountId && context.now - it.readAt < SEMESTER_MAX_AGE_MS }
+            ?: Semester(login.accountId, api.selectedSemester(login), context.now).also { semester = it }
+        val read = api.semester(login, current.id)
+        val today = Instant.ofEpochMilli(context.now).atZone(context.zone).toLocalDate()
+        read.items.filter { PowerPlannerItems.onAgenda(it, today) }.mapNotNull { PowerPlannerItems.fetched(it, current.id, read.timetable, context.zone) } to read.timetable
     }
 
     private fun savedLogin(): PowerPlannerApi.Login? {
@@ -73,6 +74,6 @@ class PowerPlannerSource(private val api: PowerPlannerApi, private val secrets: 
     }
 
     private companion object {
-        const val TIMETABLE_MAX_AGE_MS = 6 * 3_600_000L
+        const val SEMESTER_MAX_AGE_MS = 6 * 3_600_000L
     }
 }
