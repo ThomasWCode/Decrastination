@@ -3,8 +3,11 @@
 
 Prompts for your powerplanner.net username and password, logs in, fetches the
 selected semester (the years and semesters first, where no semester id is known),
-its classes and their timetables, and its agenda, and prints them. Credentials are
-held in memory for the duration of the run only. Exits 2 when the read isn't proven.
+then its classes, their timetables and its items in the one call the web app makes
+(GetClassesSchedulesAndMegaItems: GetAgenda and GetClassesAndSchedules, read by till
+6.10.2, answer 404 since 19 Nov 2026), and prints them, the agenda's items marked.
+Credentials are held in memory for the duration of the run only. Exits 2 when the
+read isn't proven.
 
 With --save, those responses are also written to private/powerplanner_agenda.json
 (git-ignored), with anything that looks like a login or session removed, so they
@@ -27,7 +30,7 @@ import os
 import sys
 import urllib.error
 import urllib.request
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 BASE_URL = "https://web.api.powerplanner.net/api"
@@ -35,6 +38,9 @@ BASE_URL = "https://web.api.powerplanner.net/api"
 HASHED_KEY = "3a4d3d842fd5c63e8c8ba5677c18abcc59affe2f3a8179081180d56a67376a74"
 SAVE_PATH = Path(__file__).resolve().parent.parent / "private" / "powerplanner_agenda.json"
 SECRET_KEYS = {"login", "session", "password", "token", "username"}
+# MegaItemType (the web app's enums.ts): a class's task and the semester's own; a class's exam and the semester's own event.
+TASKS = {0, 3}
+EVENTS = {1, 4}
 
 
 def post(path: str, body: dict) -> dict:
@@ -55,19 +61,29 @@ def post(path: str, body: dict) -> dict:
 
 def time_option(item: dict, semester_id: str) -> str:
     """Power Planner keeps a task's time option in the seconds of its local date
-    (viewItems.ts, timeOption). A task (ItemType 5) with a class: 0 start of class, 1 before
-    class, 2 during class, 3 end of class, 4 a custom time, anything else all day. A task with no
-    class, whose ClassIdentifier is the semester's id: 4 a custom time, anything else all day.
-    Events (ItemType 6) use their end time instead."""
+    (viewItems.ts, timeOption). A task (MegaItemType 0, or 3 for the semester's own) with a class:
+    0 start of class, 1 before class, 2 during class, 3 end of class, 4 a custom time, anything else
+    all day. A task with no class, whose UpperIdentifier is the semester's id: 4 a custom time,
+    anything else all day. Events (MegaItemType 1 and 4) use their end time instead."""
     date = item.get("Date") or ""
-    if item.get("ItemType") != 5 or len(date) < 19:
-        return "see EndTime" if item.get("ItemType") == 6 else "?"
+    if item.get("MegaItemType") not in TASKS or len(date) < 19:
+        return "see EndTime" if item.get("MegaItemType") in EVENTS else "?"
     second = int(date[17:19])
-    if item.get("ClassIdentifier") == semester_id:
+    if item.get("UpperIdentifier") == semester_id:
         return "custom time" if second == 4 else "all day"
     return {0: "start of class", 1: "before class", 2: "during class", 3: "end of class", 4: "custom time"}.get(
         second, "all day"
     )
+
+
+def on_agenda(item: dict, today: date) -> bool:
+    """As the app makes the agenda of the semester's items (PowerPlannerItems.onAgenda, the web app's isOld):
+    a task until it's complete and its day has passed, an event until its day has."""
+    day = (item.get("Date") or "")[:10]
+    past = bool(day) and day < today.isoformat()
+    if item.get("MegaItemType") in EVENTS:
+        return not past
+    return not (past and (item.get("PercentComplete") or 0) >= 1)
 
 
 def scrub(value):
@@ -104,43 +120,39 @@ def main() -> None:
         print("GetYearsAndSemesters ->", json.dumps(scrub(years), indent=1)[:1500])
         print("Couldn't find a selected semester id automatically; see the raw response above.")
 
-    agenda = None
-    timetable = None
+    semester = None
     failed = not semester_id
     if semester_id:
-        # GetAgenda leaves Classes null: names and timetables come from GetClassesAndSchedules.
-        timetable = post("/GetClassesAndSchedules", {"Login": creds, "SemesterIdentifier": semester_id})
-        if timetable.get("Error"):
-            print("GetClassesAndSchedules error:", timetable["Error"])
-            failed = True
-        class_list = timetable.get("Classes") or []
-        print(f"GetClassesAndSchedules: {len(class_list)} class(es)")
-        for c in class_list:
-            print(f"- {c.get('Name')!r}: {len(c.get('Schedules') or [])} timetable slot(s)")
-        with_slots = next((c for c in class_list if c.get("Schedules")), None)
-        if with_slots:
-            print("Raw first class with a timetable:")
-            print(json.dumps(with_slots, indent=1)[:1500])
-
-        now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-        agenda = post("/GetAgenda", {"Login": creds, "SemesterIdentifier": semester_id, "CurrentTime": now})
-        if agenda.get("Error"):
-            print("GetAgenda error:", agenda["Error"])
+        # One call for the classes, the timetable's slots (a list of their own, each naming its class) and every
+        # item of the semester: the agenda is made of them here, as the app makes it.
+        semester = post("/GetClassesSchedulesAndMegaItems", {"Login": creds, "SemesterIdentifier": semester_id})
+        if semester.get("Error"):
+            print("GetClassesSchedulesAndMegaItems error:", semester["Error"])
             failed = True
         else:
-            print("GetAgenda response:", {k: type(v).__name__ + (f"[{len(v)}]" if isinstance(v, list) else "") for k, v in agenda.items()})
+            print("GetClassesSchedulesAndMegaItems response:", {k: type(v).__name__ + (f"[{len(v)}]" if isinstance(v, list) else "") for k, v in semester.items()})
+            class_list = semester.get("Classes") or []
+            slots = semester.get("Schedules") or []
+            print(f"{len(class_list)} class(es), {len(slots)} timetable slot(s)")
+            for c in class_list:
+                print(f"- {c.get('Name')!r}: {sum(s.get('UpperIdentifier') == c.get('Identifier') for s in slots)} timetable slot(s)")
+            if slots:
+                print("Raw first timetable slot:")
+                print(json.dumps(slots[0], indent=1)[:1500])
+
             classes = {c["Identifier"]: c.get("Name", "?") for c in class_list}
             # A list, empty or not: one missing or null is an answer the app refuses ("the answer had no list of
-            # items", PowerPlannerApi), not an empty agenda.
-            items = agenda.get("Items")
+            # items", PowerPlannerApi), not a semester with none.
+            items = semester.get("MegaItems")
             if not isinstance(items, list):
-                print("GetAgenda error: the answer had no list of items")
+                print("GetClassesSchedulesAndMegaItems error: the answer had no list of items")
                 failed = True
                 items = []
-            print(f"\n{len(items)} agenda item(s):")
-            for it in items:
+            agenda = [it for it in items if on_agenda(it, date.today())]
+            print(f"\n{len(items)} item(s) in the semester, {len(agenda)} on the agenda:")
+            for it in agenda:
                 print(
-                    f"- {it.get('Name')!r} | type={it.get('ItemType')} | class={classes.get(it.get('ClassIdentifier'), '?')} "
+                    f"- {it.get('Name')!r} | type={it.get('MegaItemType')} | class={classes.get(it.get('UpperIdentifier'), '?')} "
                     f"| date={it.get('Date')} ({time_option(it, semester_id)}) | complete={it.get('PercentComplete')}"
                 )
             print("\nRaw first item (for the field names the Kotlin model needs):")
@@ -153,8 +165,7 @@ def main() -> None:
             "loginResponseKeys": sorted(login.keys()),
             "selectedSemester": scrub(sem),
             "yearsAndSemesters": scrub(years),
-            "classesAndSchedules": scrub(timetable),
-            "agenda": scrub(agenda),
+            "semester": scrub(semester),
         }
         SAVE_PATH.write_text(json.dumps(payload, indent=1, ensure_ascii=False), encoding="utf-8")
         print(f"\nSaved to {SAVE_PATH} (git-ignored).")
