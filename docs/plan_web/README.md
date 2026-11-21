@@ -2,7 +2,7 @@
 
 Planned 31 Oct 2026, from ten questions answered that day; built as stages 0 to 9 (4.12.0 to 5.11.0), each dormant behind the server's mode; switched on 4 Nov 2026 (5.12.0 to 6.0.0, with 6.0.1 after it). This file is what's left of the plan's folder, as [plan_v4/README.md](../plan_v4/README.md) is of the 4.x plan's: what it set out to do, what was built otherwise than planned, its own numbers (W-1 to W-29, which the code still cites), the questions asked, and what's still open.
 
-How it works now is in `docs/spec/`: [server.md](../spec/server.md), [sync.md](../spec/sync.md), [website.md](../spec/website.md), [hosting.md](../spec/hosting.md). The decisions are D-125 to D-149 in [decisions.md](../decisions.md).
+How it works now is in `docs/spec/`: [server.md](../spec/server.md), [sync.md](../spec/sync.md), [website.md](../spec/website.md), [hosting.md](../spec/hosting.md). The decisions are D-125 to D-149 and D-166 to D-168 in [decisions.md](../decisions.md).
 
 ## What it set out to do
 
@@ -16,7 +16,7 @@ A Kotlin server (Ktor) holds the state in SQLite, replicated off the box by Lite
 
 ## The W-numbers
 
-The plan numbered its decisions W-n, and the code's comments cite them so. Each became a D-number in [decisions.md](../decisions.md) but four, given here as built.
+The plan numbered its decisions W-n, and the code's comments cite them so. Each became a D-number in [decisions.md](../decisions.md), W-15, W-18 and W-23 only on 21 Nov 2026, but W-22, a rule for the stages alone. Those four are given here as built.
 
 | W | D | What |
 |---|---|---|
@@ -34,15 +34,15 @@ The plan numbered its decisions W-n, and the code's comments cite them so. Each 
 | W-12 | D-142 | Claude called from the server only |
 | W-13 | D-140 | commands, not merged states |
 | W-14 | D-137 | the website renders view models the server computes |
-| W-15 | — | below |
+| W-15 | D-166 | the calendar written only from slots the server has confirmed; below |
 | W-16 | D-138 | a protocol version in every request; the phone never behind the server on a store's version |
 | W-17 | D-139 | one repository |
-| W-18 | — | below |
+| W-18 | D-167 | the phone told of the server's changes; below |
 | W-19 | D-143 | credentials re-entered on the website, never uploaded |
 | W-20 | D-144 | three independent copies of the state |
 | W-21 | D-125 | the versions: 4.12.x, 4.13.0, 5.0.0 on |
 | W-22 | — | below |
-| W-23 | — | below |
+| W-23 | D-168 | protection's wait counted by the server's clock; below |
 | W-24 | D-147 | what only the phone can know goes as commands |
 | W-25 | D-141 | the switch to commands comes last |
 | W-26 | D-149 | a first pull never at the cost of what the phone holds |

@@ -325,8 +325,8 @@ class Focus(
      * grace is over; its free time earned where it's a short piece, or [photo] shows it done, or
      * [verified] its source (AnkiDroid's cards counted) (BL-08), never past today's plan; and its
      * start no longer kept for the next plan. A piece ticked ahead of its slot, or with none, is kept
-     * all the same. [seenAt]: when the plan it was ticked on was made, so a second tap on it (a task
-     * in boxes has its next box under the same key) keeps nothing more. False when there's no such
+     * all the same. [seenAt]: when the plan it was ticked on was made, so a second tap on it keeps
+     * nothing more. False when there's no such
      * piece to keep.
      */
     suspend fun keepSlot(key: String, extraMin: Int = 0, photo: Boolean = false, verified: Boolean = false, seenAt: Long? = null, now: Long = clock.now()): Boolean {
@@ -350,7 +350,7 @@ class Focus(
         val slot = (plan.todaySlots + plan.buckets.flatMap { it.slots }).firstOrNull { it.kind == SlotKind.Work && it.chunk?.key == key }
         val chunk = slot?.chunk ?: plan.ordered.firstOrNull { it.key == key } ?: return null
         // Kept since you saw it (a second tap, a sheet left open), or moments ago (taps in a row, the
-        // screen drawn again between them): a box's next piece has its key now.
+        // screen drawn again between them): the same Done, kept once.
         if (seenAt != null && log.value.slots.any { it.key == key && it.outcome.kept && it.at >= minOf(seenAt, now - AGAIN_MS) }) return null
         val task = tasks.value.tasks.firstOrNull { it.id == chunk.taskId && it.isOpen } ?: return null
         // Its step, where it's still that one and still to do (none for a box of time, or the whole task).
