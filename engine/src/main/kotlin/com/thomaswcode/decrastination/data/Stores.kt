@@ -230,7 +230,7 @@ class Stores(
         val MOVES: List<Move> = listOf(ChatMigration.MOVE, ChatArchiveStore.SPLIT, TasksMigration.MOVE, RuntimeSplit.MOVE, ProtectionSplit.MOVE, NotSameMigration.MOVE)
 
         /**
-         * What the server holds a copy of (docs/plan_web/inventory.md §Stores), the chat's archive's months among them: not
+         * What the server holds a copy of (docs/spec/sync.md §What's sent), the chat's archive's months among them: not
          * `runtime.json`, `device.json` and `calendar.json`, which are this phone's, nor the sync's own. The Gmail journal from
          * 5.15.0, as its writes are the server's once the phone sends commands: sent while mirroring, its writes still to come
          * among it, so the server takes them over at the switch.

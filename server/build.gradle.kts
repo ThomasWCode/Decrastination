@@ -1,4 +1,4 @@
-// The server (docs/plan_web/architecture.md §The server): the state in SQLite, the same rules the phone runs, an API for
+// The server (docs/spec/server.md): the state in SQLite, the same rules the phone runs, an API for
 // the phone and the website. `buildFatJar` makes the JAR the image copies; its tests run with `./gradlew :server:test`.
 plugins {
     alias(libs.plugins.kotlin.jvm)

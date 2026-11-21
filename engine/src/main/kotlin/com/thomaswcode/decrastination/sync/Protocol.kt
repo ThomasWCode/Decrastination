@@ -5,7 +5,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
 
 /**
- * What the phone and the server say to each other (docs/plan_web/data-and-sync.md). Every request names [VERSION]
+ * What the phone and the server say to each other (docs/spec/sync.md). Every request names [VERSION]
  * in [HEADER]; the server takes its own and the one before, and a client behind that gets a 409 and carries on from
  * what it holds till it's installed (W-16).
  */

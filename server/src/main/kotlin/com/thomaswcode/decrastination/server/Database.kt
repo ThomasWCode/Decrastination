@@ -11,7 +11,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 /**
- * The state's one file (docs/plan_web/data-and-sync.md §The database): SQLite in WAL mode, as Litestream needs it, written
+ * The state's one file (docs/spec/server.md §The state): SQLite in WAL mode, as Litestream needs it, written
  * by this process alone through one connection. A [transaction] is all of it or none of it, and takes a revision the
  * first time it writes a store: every store one transaction changes takes the same one. A [command] is one that can suspend,
  * as the owners do; a read that mustn't see one half-way goes through [read], and a store's write from outside one is held

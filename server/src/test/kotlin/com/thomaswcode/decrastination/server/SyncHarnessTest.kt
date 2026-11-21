@@ -95,7 +95,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
 /**
- * A server and two phones in one JVM (docs/plan_web/data-and-sync.md §Testing the sync): the real applier over a real
+ * A server and two phones in one JVM (docs/spec/sync.md §Testing): the real applier over a real
  * database, each phone's commands, outbox and exchange on stores of its own, and between them a wire a test can cut.
  */
 class SyncHarnessTest {

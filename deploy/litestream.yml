@@ -1,7 +1,7 @@
-# Streams the server's database to a private R2 bucket, continuously (docs/plan_web/hosting.md §Litestream).
+# Streams the server's database to a private R2 bucket, continuously (docs/spec/hosting.md §Litestream).
 # ${...} is read from the container's environment. A snapshot a day, kept 14 days, so `restore -timestamp`
 # reaches a fortnight back (D-154; the nightly file in B2 is the long term). Its metrics on the compose network
-# alone, where the server reads whether it's still uploading (docs/spec/server.md §Deployment); no port is published
+# alone, where the server reads whether it's still uploading (docs/spec/hosting.md §What runs on it); no port is published
 # for them.
 #
 # Every one of its timers is a request to R2, most of them Class A, billed past a million a month. Each LIST reads a

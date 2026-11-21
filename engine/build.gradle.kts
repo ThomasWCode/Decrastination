@@ -1,4 +1,4 @@
-// What both the app and the server run (docs/plan_web/architecture.md §The modules): every line of the
+// What both the app and the server run (docs/plan_v4/architecture.md §The shape): every line of the
 // app that needs nothing of Android, in plain Kotlin, so the compiler keeps it so. Where it needs a
 // platform it takes a port (ports/), which the app implements with Android. Its tests run with the app's
 // (the app's testDebugUnitTest depends on this module's test); one alone:

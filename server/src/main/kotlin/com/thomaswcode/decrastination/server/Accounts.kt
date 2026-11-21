@@ -37,7 +37,7 @@ object Tokens {
     fun same(a: String, b: String): Boolean = MessageDigest.isEqual(a.toByteArray(), b.toByteArray())
 }
 
-/** What sign-in asks of GitHub (docs/plan_web/architecture.md §Sign-in): an interface, so the tests need no GitHub. */
+/** What sign-in asks of GitHub (docs/spec/server.md §Signing in): an interface, so the tests need no GitHub. */
 interface GitHub {
     /** Where to send you to sign in. */
     fun authorizeUrl(state: String, challenge: String): String
@@ -144,7 +144,7 @@ class Sessions(private val db: Database, private val allowed: Long, private val 
     }
 }
 
-/** The phone's pairing and its token (docs/plan_web/architecture.md §Sign-in): a one-time code, then 256 random bits held by their hash. */
+/** The phone's pairing and its token (docs/spec/server.md §Devices): a one-time code, then 256 random bits held by their hash. */
 class Devices(private val db: Database, private val clock: () -> Long = System::currentTimeMillis) {
     /** A code for the website to show: the only one live. */
     fun pair(): PairingCode {
