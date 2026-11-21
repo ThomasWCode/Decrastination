@@ -94,7 +94,7 @@ class ProtectionSplitTest {
         file("tasks.json").writeText("""{"tasks":[],"version":4}""")
         val stores = stores()
         assertEquals(listOf("a|b", "c|d"), stores.tasks.value.notSame)
-        assertEquals(5, stores.tasks.value.version)
+        assertEquals(6, stores.tasks.value.version)
         assertEquals(77L, stores.runtime.value.lastBackupAt)
         assertFalse("notSame" in file("runtime.json").readText())
         assertTrue("notSame" in file("runtime.json.v3").readText())
@@ -123,7 +123,7 @@ class ProtectionSplitTest {
         file("runtime.json").writeText("""{"notSame":["a|b"],"version":3}""")
         val stores = stores()
         assertEquals(listOf("a|b"), stores.tasks.value.notSame)
-        assertEquals(5, stores.tasks.value.version)
+        assertEquals(6, stores.tasks.value.version)
     }
 
     @Test
@@ -138,7 +138,7 @@ class ProtectionSplitTest {
     fun `a task file from before the pairs' field moves up through every migration in turn`() {
         // A file of tasks version 1 with no runtime pairs at all: the plain path, from the oldest shape.
         file("tasks.json").writeText("""{"tasks":[]}""")
-        assertEquals(5, stores().tasks.value.version)
+        assertEquals(6, stores().tasks.value.version)
     }
 
     private object Keyless : SecretCipher {

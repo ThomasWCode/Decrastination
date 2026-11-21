@@ -4,6 +4,7 @@ import com.thomaswcode.decrastination.core.AnkiDay
 import com.thomaswcode.decrastination.core.Duplicates
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
+import com.thomaswcode.decrastination.core.EmptyTimetable
 import com.thomaswcode.decrastination.core.Timetable
 import com.thomaswcode.decrastination.core.WeeklyMark
 import com.thomaswcode.decrastination.core.withIds
@@ -29,12 +30,14 @@ data class TaskState(
      * come from it, and a failed read leaves it as it was.
      */
     val timetable: Timetable? = null,
+    /** A read's timetable with no lessons, held back while [timetable], which has them, is kept (D-165): yours to keep or take. */
+    val emptyTimetable: EmptyTimetable? = null,
     /** The weeks of weekly work you've deleted, still to come or under way (D-124): each stays gone, whatever becomes of its rule. */
     val weeksDeleted: List<WeeklyMark> = emptyList(),
     /** Pairs of tasks you've said aren't the same work (DX-15), by [Duplicates.key]: not asked about again. */
     val notSame: List<String> = emptyList(),
     /** The shape this is in ([Migration]): raised with each change of it, a migration bringing older files to it. */
-    val version: Int = 5,
+    val version: Int = 6,
 ) {
     val open: List<TaskItem> get() = tasks.filter { it.isOpen }
 

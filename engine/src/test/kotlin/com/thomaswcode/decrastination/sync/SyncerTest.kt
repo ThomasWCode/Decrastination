@@ -1,5 +1,8 @@
 package com.thomaswcode.decrastination.sync
 
+import com.thomaswcode.decrastination.core.PpSchedule
+import com.thomaswcode.decrastination.core.PpClass
+import com.thomaswcode.decrastination.core.EmptyTimetable
 import com.thomaswcode.decrastination.core.AnkiDay
 import com.thomaswcode.decrastination.core.Fetched
 import com.thomaswcode.decrastination.core.FixedClock
@@ -9,6 +12,7 @@ import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.Timetable
+import com.thomaswcode.decrastination.data.EmptyTimetableMigration
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.NotSameMigration
 import com.thomaswcode.decrastination.data.SettingsMigration
@@ -46,7 +50,7 @@ import kotlinx.coroutines.withContext
 
 class SyncerTest {
     private val dir: File = Files.createTempDirectory("sync").toFile()
-    private val tasks = JsonStore(File(dir, "tasks.json"), TaskState.serializer(), ::TaskState, migrations = listOf(TasksMigration.TASKS, StepOrderMigration.TASKS, WeeklyMigration.TASKS, NotSameMigration.TASKS))
+    private val tasks = JsonStore(File(dir, "tasks.json"), TaskState.serializer(), ::TaskState, migrations = listOf(TasksMigration.TASKS, StepOrderMigration.TASKS, WeeklyMigration.TASKS, NotSameMigration.TASKS, EmptyTimetableMigration.TASKS))
     private val settings = JsonStore(File(dir, "settings.json"), Settings.serializer(), ::Settings, migrations = listOf(SettingsMigration.SETTINGS, ZoomMigration.SETTINGS, SpeechMigration.SETTINGS))
     private val clock = FixedClock.at("2026-10-08T17:00:00+01:00")
 
@@ -151,6 +155,79 @@ class SyncerTest {
         planner.answer = { throw IOException("No network") }
         syncer.sync()
         assertEquals(timetable, tasks.value.timetable)
+    }
+
+    private val lessons = Timetable("2026-08-24T00:00:00", listOf(PpClass("german", "German", listOf(PpSchedule("2026-09-05T09:50:00", "2026-09-05T10:45:00", 3, 1)))))
+    private val noLessons = Timetable("2026-08-24T00:00:00", listOf(PpClass("german", "German", emptyList())))
+
+    @Test
+    fun `a timetable read with no lessons is held back, the last one kept, till you answer`() = runTest {
+        val planner = FakeSource(Source.PowerPlanner) { SourceRead(emptyList(), timetable = lessons) }
+        val syncer = syncer(listOf(planner))
+        syncer.sync()
+        assertEquals(lessons, tasks.value.timetable)
+        assertNull(tasks.value.emptyTimetable)
+
+        planner.answer = { SourceRead(emptyList(), timetable = noLessons) }
+        syncer.sync()
+        assertEquals(lessons, tasks.value.timetable)
+        assertEquals(EmptyTimetable(noLessons, clock.now()), tasks.value.emptyTimetable)
+        // The read itself went well: only its timetable isn't taken.
+        assertNull(tasks.value.status(Source.PowerPlanner).error)
+
+        // Kept at your word: the next empty read asks nothing more, and the one after it with lessons is taken.
+        syncer.answerTimetable(keep = true)
+        syncer.sync()
+        assertEquals(lessons, tasks.value.timetable)
+        assertEquals(EmptyTimetable(noLessons, clock.now(), kept = true), tasks.value.emptyTimetable)
+        val other = lessons.copy(weekOneStartsOn = "2026-08-31T00:00:00")
+        planner.answer = { SourceRead(emptyList(), timetable = other) }
+        syncer.sync()
+        assertEquals(other, tasks.value.timetable)
+        assertNull(tasks.value.emptyTimetable)
+
+        // Blank again after that: the one with lessons is kept and you're asked afresh, the answer of before gone with it.
+        planner.answer = { SourceRead(emptyList(), timetable = noLessons) }
+        syncer.sync()
+        assertEquals(other, tasks.value.timetable)
+        assertEquals(EmptyTimetable(noLessons, clock.now()), tasks.value.emptyTimetable)
+        assertEquals(false, tasks.value.emptyTimetable?.kept)
+    }
+
+    @Test
+    fun `the empty timetable is taken at your word, and the empty reads after it ask nothing`() = runTest {
+        val planner = FakeSource(Source.PowerPlanner) { SourceRead(emptyList(), timetable = lessons) }
+        val syncer = syncer(listOf(planner))
+        syncer.sync()
+        planner.answer = { SourceRead(emptyList(), timetable = noLessons) }
+        syncer.sync()
+        syncer.answerTimetable(keep = false)
+        assertEquals(noLessons, tasks.value.timetable)
+        assertNull(tasks.value.emptyTimetable)
+        syncer.sync()
+        assertEquals(noLessons, tasks.value.timetable)
+        assertNull(tasks.value.emptyTimetable)
+        // With nothing held back, an answer changes nothing.
+        syncer.answerTimetable(keep = false)
+        syncer.answerTimetable(keep = true)
+        assertEquals(noLessons, tasks.value.timetable)
+        assertNull(tasks.value.emptyTimetable)
+    }
+
+    @Test
+    fun `a failed read, and a read of another source, leave an empty timetable held back as it is`() = runTest {
+        val planner = FakeSource(Source.PowerPlanner) { SourceRead(emptyList(), timetable = lessons) }
+        val teams = FakeSource(Source.Teams) { items("a") }
+        val syncer = syncer(listOf(planner, teams))
+        syncer.sync()
+        planner.answer = { SourceRead(emptyList(), timetable = noLessons) }
+        syncer.sync()
+        val held = tasks.value.emptyTimetable
+        assertEquals(EmptyTimetable(noLessons, clock.now()), held)
+        planner.answer = { throw IOException("No network") }
+        syncer.sync()
+        assertEquals(lessons, tasks.value.timetable)
+        assertEquals(held, tasks.value.emptyTimetable)
     }
 
     @Test
