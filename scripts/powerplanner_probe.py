@@ -78,10 +78,14 @@ def time_option(item: dict, semester_id: str) -> str:
 
 def on_agenda(item: dict, today: date) -> bool:
     """As the app makes the agenda of the semester's items (PowerPlannerItems.onAgenda, the web app's isOld):
-    a task until it's complete and its day has passed, an event until its day has."""
+    a task until it's complete and its day has passed, an event until its day has. Another type (a holiday, a
+    class's time, one the answer leaves out) is never on it, as the app reads none as a task (PowerPlannerItems.fetched)."""
+    kind = item.get("MegaItemType")
+    if kind not in TASKS and kind not in EVENTS:
+        return False
     day = (item.get("Date") or "")[:10]
     past = bool(day) and day < today.isoformat()
-    if item.get("MegaItemType") in EVENTS:
+    if kind in EVENTS:
         return not past
     return not (past and (item.get("PercentComplete") or 0) >= 1)
 
