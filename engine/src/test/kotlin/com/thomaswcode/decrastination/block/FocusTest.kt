@@ -760,7 +760,7 @@ class FocusTest {
         val first = log.value.slots.first()
         assertTrue(slotted.photoChecked("teams:long", null, 30, key = first.key, takenAt = clock.time, record = SlotRef.of(first)))
         assertEquals(listOf(true, false), log.value.slots.map { it.earned })
-        // The third ticked too, and checked from its sheet an hour on (Q5): it earns, and the second, before it, with it; the first
+        // The third ticked too, and checked from its sheet an hour on (Q167): it earns, and the second, before it, with it; the first
         // not again. (A check of the plan's next part earns those before it likewise: PhotosTest.)
         clock.time = parts[2].end
         assertTrue(slotted.keepSlot(parts[2].chunk!!.key, seenAt = parts[2].start))
@@ -780,7 +780,7 @@ class FocusTest {
         clock.time = parts[0].end
         assertTrue(slotted.keepSlot(parts[0].chunk!!.key, seenAt = parts[0].start))
         val tick = clock.time
-        // Within the half minute that once took the photo for the slot just ticked, as the two shared a key (Q7).
+        // Within the half minute that once took the photo for the slot just ticked, as the two shared a key (Q169).
         clock.time = tick + 25_000L
         assertTrue(slotted.photoChecked("teams:long", null, 30, key = parts[1].chunk!!.key, takenAt = tick + 5_000L))
         assertEquals(parts.map { it.chunk!!.key }, log.value.slots.map { it.key })

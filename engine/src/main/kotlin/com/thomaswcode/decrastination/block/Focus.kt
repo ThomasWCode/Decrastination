@@ -811,7 +811,7 @@ class Focus(
     }
 
     /**
-     * The parts of [taskId]'s before [key]'s, ticked today and earning nothing yet, earned with it (Q5, your answer of 20 Nov): a part's
+     * The parts of [taskId]'s before [key]'s, ticked today and earning nothing yet, earned with it (Q167, your answer of 20 Nov): a part's
      * check asks for its share of the work from the start, so its pass shows theirs too. Each once ([earnKept]), and before the part
      * checked's own, so a stop between gives them at start-up, its photo not yet let go. A step's check is of its own work alone.
      */

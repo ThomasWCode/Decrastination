@@ -280,7 +280,7 @@ class PhotosTest {
         fun plan() = Planner.plan(Planner.Input(tasks.value.tasks, clock.time, LONDON, settings.value))
         val first = plan().chunksOf(essay.id).first()
         assertTrue(focus.keepSlot(first.key))
-        // An hour on, the next part's photo: numbered on from the part ticked (Q7), its key its own.
+        // An hour on, the next part's photo: numbered on from the part ticked (Q169), its key its own.
         clock.time += 3_600_000
         val next = plan().chunksOf(essay.id).first()
         assertEquals(first.part + 1, next.part)
@@ -288,7 +288,7 @@ class PhotosTest {
         answers(verdict(true, "Pages 1 to 6, written out"))
         val said = answered.checkJpegs(listOf(byteArrayOf(1, 2, 3)), next, clock.time)
         assertTrue(said.startsWith("Done:"), said)
-        // The next part kept and earning, and the part ticked before with no photo earning with it (Q5): its pass shows that work too.
+        // The next part kept and earning, and the part ticked before with no photo earning with it (Q167): its pass shows that work too.
         assertEquals(listOf(first.label to true, next.label to true), log.value.slots.filter { it.taskId == essay.id && it.outcome.kept }.map { it.label to it.earned })
     }
 

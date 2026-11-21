@@ -51,7 +51,7 @@ A task without steps is planned at no less than 5 minutes, or its whole estimate
 
 ### Steps
 
-`TaskItem.plannedStepMinutes(multiplier)` gives each step's minutes: its own × the multiplier, or, where you gave the task's total, your minutes shared over the steps in proportion (`shareOut`: whole minutes adding up to exactly yours; each step its minute first and the rest shared by what each has past it, so a short step beside a long one doesn't take a minute your total hasn't got).
+`TaskItem.plannedStepMinutes(multiplier)` gives each step's minutes: its own × the multiplier, or, where you gave the task's total, your minutes shared over the steps in proportion (`shareOut`: whole minutes adding up to exactly yours; in proportion, the odd minutes to the steps with most left over; each step at least a minute, those taken back from the largest shares, so a short step beside a long one doesn't take a minute your total hasn't got).
 `TaskItem.stepScale` (your total over the steps' sum) scales step minutes the same way where they're counted elsewhere (`Calibration.stepMultiplierFor`).
 
 `Planner.pieces` then takes off what's done:
@@ -68,7 +68,7 @@ A task's pieces are its steps still to do, or, with no steps, boxes of its remai
 
 - **Boxes** are at most `Settings.boxMin`, your setting (D-33; 30 by default).
 - Boxes are even: 100 minutes at 60 is 50 and 50, not 60 and 40. A task in one box is one piece; several are "part 2 of 3".
-- Parts are numbered from the start of the work (6.10.1, D-163): as many as its work from the start makes (`Planner.started`, its calibrated estimate from its first-seen progress) less those left are done, and the rest are numbered on from them. So a part keeps its key as those before it are kept ("part 2 of 4" once part 1's kept, not "part 1 of 3"), the last left keeps its label, and a part kept short is still the part it was, to finish. Each part carries that work from the start (`Chunk.wholeMinutes`), which a part's photo check is told its share of, as a part done may have run its own length.
+- Parts are numbered from the start of the work (D-163): as many as its work from the start makes (`Planner.started`, its calibrated estimate from its first-seen progress) less those left are done, and the rest are numbered on from them. So a part keeps its key as those before it are kept ("part 2 of 4" once part 1's kept, not "part 1 of 3"), the last left keeps its label, and a part kept short is still the part it was, to finish. Each part carries that work from the start (`Chunk.wholeMinutes`), which a part's photo check is told its share of, as a part done may have run its own length.
 - Where your instructions limit days, a box is no longer than the most any day the task can go on holds (`Planner.roomiest`), a day kept for only other tasks that lets in work that would otherwise miss its deadline counted only where no other day before the deadline holds any (D-115). Steps aren't shortened: one longer than every such day is left out where the task goes in order (limited per day, undated, or its first day one you've limited, as it is when your limits make every day short), and otherwise goes on its first day, behind ([Backwards, and behind](#backwards-and-behind)).
 - **Where** (PL-15, `Chunk.where`): a step's own place (home, or anywhere), as Claude read it or as the step was given; else your own task's as you set it, Teams homework at home, the rest anywhere.
 
@@ -97,7 +97,7 @@ Claude's reading cuts a long step when it's read (`ReadingAnswers.fitParts`), bu
 ## The last usable day
 
 A task's last usable day is its deadline's date less its kind's margin (`Calibration.marginDays`, else `Settings.marginDays`, 1 by default).
-- With a margin of 0 it's the deadline's own day, where a window the work can use starts at least 5 minutes before the deadline (for work for home, an evening window); else the day before (`Planner.lastDayBefore`). So for a morning deadline a margin of 0 and of 1 are the same day; Settings' line under the field says so as the planner counts it (`SettingsEffects`, the owner's call on S-06 of the review of 4.9.1).
+- With a margin of 0 it's the deadline's own day, where a window the work can use starts at least 5 minutes before the deadline (for work for home, an evening window); else the day before (`Planner.lastDayBefore`). So for a morning deadline a margin of 0 and of 1 are the same day; Settings' line under the field says so as the planner counts it (`SettingsEffects`).
 - On a real deadline's own day, a piece has only the time before the deadline, as its slot must end by then.
 - A day you put a task on (PL-04) is its last usable day, whatever the margin.
 - Weekly work has no margin: its Sunday, or a session's named day, is a day it can use.
@@ -127,7 +127,7 @@ Work due by today goes on the first day it can (`placeNow`): today, unless a per
 6. A day without room passes its piece to the nearest that has some, earlier first.
 7. A task its window can't hold in order is placed backwards from its last usable day instead (`placeBack`).
 
-Spreading gives today a fair share of each task's days, not a far task's whole work in its last ones. Blocking reads today's work (`Plan.pressure`), so it lifts once today's share is done, unless a slot missed today went to a later day, which keeps it on till the day's hours end (BL-11, [blocking-and-protection.md](blocking-and-protection.md)).
+Spreading gives today a fair share of each task's days, not a far task's whole work in its last ones. Blocking reads today's work (`Plan.pressure`), so it lifts once today's share is done (BL-11, [slots-and-calendar.md](slots-and-calendar.md), [blocking-and-protection.md](blocking-and-protection.md)).
 
 ## Backwards, and behind
 

@@ -166,7 +166,7 @@ object Planner {
         val at: Long? = null,
         /** Which of its step's sittings it is, where it's cut into them ([sittings]). */
         val sitting: Sitting? = null,
-        /** A box's parts of its task done already (Q7): its parts are numbered on from them. */
+        /** A box's parts of its task done already (Q169): its parts are numbered on from them. */
         val before: Int = 0,
         /** A box's task's work from the start ([started]), what a part's share is of; null for a step. */
         val whole: Int? = null,
@@ -188,7 +188,7 @@ object Planner {
      * [hard] where its deadline is the task's own, hard one: a step's own date is a plan (PL-14).
      */
     private fun windows(task: TaskItem, deadline: Long, soft: Boolean, hard: Boolean, pieces: List<Piece>, softFrom: (Long) -> Long): List<Item> {
-        // Its parts done already, a box's (Q7): the rest are numbered on from them.
+        // Its parts done already, a box's (Q169): the rest are numbered on from them.
         val before = pieces.firstOrNull()?.before ?: 0
         if (pieces.all { it.from == null && it.due == null }) return listOf(Item(task, deadline, soft, pieces, hard = hard, home = pieces.isNotEmpty() && pieces.all { it.where == Where.Home }, offset = before, taskParts = before + pieces.size))
         val runs = mutableListOf<MutableList<Piece>>()
@@ -1166,7 +1166,7 @@ object Planner {
 
     /**
      * [task]'s work from the start, in minutes of its calibrated estimate: what [remaining]'s kept slots count down from, so its
-     * parts done can be counted from it (Q7). From the lower of the first-seen and current progress: a percentage corrected
+     * parts done can be counted from it (Q169). From the lower of the first-seen and current progress: a percentage corrected
      * downward brings its work back, rather than the first-seen one capping what's left.
      */
     private fun started(task: TaskItem, multiplier: Double): Double {
@@ -1238,7 +1238,7 @@ object Planner {
             // box too long for all of them would be planned on none.
             .let { box -> roomiest(task, input)?.takeIf { it in MIN_CHUNK until box } ?: box }
         val count = ceil(remaining / box.toDouble()).toInt().coerceAtLeast(1)
-        // Its parts done already (Q7, your answer of 20 Nov): as many as its work from the start makes, less those left. The rest are
+        // Its parts done already (Q169, your answer of 20 Nov): as many as its work from the start makes, less those left. The rest are
         // numbered on from them ("part 2 of 4", not "part 1 of 3"), so each keeps a key of its own and a part's share is of the whole.
         val from = started(task, multiplier).roundToInt()
         val done = (ceil(from / box.toDouble()).toInt() - count).coerceAtLeast(0)
