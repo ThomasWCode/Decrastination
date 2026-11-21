@@ -938,6 +938,23 @@ Asked on the morning of 20 Nov, from building Q4's answer into 6.9.0, and answer
 3. **One of your own tasks, its last piece ticked *Done* with no photo, can still earn by a photo that day**: the tick finishes the task, and a ticked slot's *Check with a photo* had wanted its task open.
 4. **Wording**: the storage alert says its allowance then its share ("R2, Class A requests this month: 126% of its free allowance …"), with no verb to agree with a plural; a check's outcome on Day is said in the snackbar too, as one from a ticked block's sheet had nowhere to be seen.
 
+### An empty timetable asked about (6.11.0, 21 Nov)
+
+Your word of 21 Nov, as 6.10.2 was built: "If the timetable is completely missing, make the app ask me whether to keep the last version of the timetable or update to this empty one in case it is a failed read instead." Till then a read that brought no classes or no slots was taken as a timetable with none, and the school days' lessons went with it. → D-165.
+
+**Q170. Where should the app ask?** Offered: where a failing source is said, with no notification; that and a notification on the phone when the empty one first comes; a message of Felix's in the chat, with two replies. **Your answer: where a failing source is said.** That's Work's *Needs a look* card, Setup's sources with the bar's mark, and the website's Setup, each with both answers. (Put to you as "a card on Day": the card is Work's.)
+
+**Q171. Once you've said to keep the last one, and the reads stay empty?** Offered: quiet, with a plain line in Setup that still offers the empty one, and asked afresh only once a timetable with lessons has been read and one without follows; asked again each day; never said again, with no way to the empty one. **Your answer: quiet, with the way back.**
+
+#### Decided in building it
+
+1. **Empty is no lesson at all**: no classes, or classes none of which has a slot. A timetable that has lost some lessons and kept others is taken as it comes.
+2. **With no lessons kept either, an empty one is taken and nothing asked**: a first read, or the reads after you've taken the empty one.
+3. **The empty one held back is the newest read's**, so taking it takes what Power Planner has now; when it was first held back stays, and so does your answer.
+4. **Felix's lessons are as old as the first empty read**, not the last good one: the reads since went well, and would have made a kept timetable look fresh for ever.
+5. **Not in a backup**, as the timetable isn't: both come again with the next read.
+6. **A store's version raised** (`tasks.json` to 6), so the phone has the release before the server does (D-138).
+
 ### The storage in Settings, and its alert (6.10.0, 20 Nov)
 
 R2's November bill was for requests, which nothing on the phone or the website showed. → D-161.

@@ -60,6 +60,12 @@ An item as a task (`PowerPlannerItems.fetched`):
 - Power Planner's "no due date" (31 Dec 1999) is no deadline. `PercentComplete` is the task's progress; at 100 % it's done, as it is once it leaves the agenda.
 - An answer without its `MegaItems` list fails the read (BUG-P2-007); a semester with no items comes as an empty list. An event's `EndTime` never set comes as 1970 (or 1753): a class's event is then at its class's lesson that day.
 - The timetable a read used is kept with the tasks (`TaskState.timetable`, DX-09), and a failed read leaves it: the school days' lessons and study periods come from it (`PowerPlannerItems.lessonsOn`).
+- **A timetable read with no lessons isn't taken over one that has them** (D-165, `core/Timetable.kt`'s `Timetables`, applied by `Syncer`): a missing list of classes or of slots is read as none, and so is a semester that has none, and from here the two can't be told apart. The last one is kept, the empty one held back beside it (`TaskState.emptyTimetable`: the newest such read, and when the first came), and the read itself counts as good, its tasks merged as ever.
+  - **You're asked** where a failing source is said, with no notification: Work's *Needs a look* card, Setup's sources (a row of its own under Power Planner's, and the bar's mark), and the website's Setup, each with *Keep the last one* and *Use the empty one* (`SetupPage.timetable`; the answer is a command, `AnswerTimetable`, to `Syncer.answerTimetable`).
+  - **Keep the last one** keeps it and asks no more while the reads stay empty: the card and the mark go, and Setup's row says it plainly, still offering *Use the empty one*.
+  - **Use the empty one** takes what was last read; the empty reads after it have nothing to be held back from, so nothing's asked.
+  - **A read with lessons** is taken as ever and nothing's held back any more; an empty one after it is asked about afresh.
+  - Felix's lessons are dated by the first empty read while one's held back (`Conversation.lessons`), as the reads since went well.
 
 **Open** launches Power Planner: it has no link to one item.
 
