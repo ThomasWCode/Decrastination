@@ -744,13 +744,13 @@ class FocusService : AccessibilityService() {
         banner.show(
             message = "Syncing Teams in %d s",
             seconds = BANNER_SECONDS,
-            onCancel = { scope.launch { recordOffer() } },
             onDelay = { scope.launch { graph.runtime.update { it.copy(teamsAuto = TeamsAutoSync.delayed(it.teamsAuto, graph.clock.now())) } } },
+            onSkip = { scope.launch { graph.runtime.update { it.copy(teamsAuto = TeamsAutoSync.skipped(it.teamsAuto, graph.clock.now(), graph.clock.zone(), graph.settings.value)) } } },
             onTimeout = {
                 scope.launch {
                     // Ten seconds on, is it still a moment to take the screen? A call begun, or the
                     // phone locked: offered again in five minutes, as Delay does. Quiet hours begun, or
-                    // automatic syncs switched off meanwhile: not now, as a Cancel is (BUG-P2-010).
+                    // automatic syncs switched off meanwhile: not now, counted as offered (BUG-P2-010).
                     if (!inUse()) {
                         graph.runtime.update { it.copy(teamsAuto = TeamsAutoSync.delayed(it.teamsAuto, graph.clock.now())) }
                         return@launch

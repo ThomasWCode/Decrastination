@@ -83,7 +83,7 @@ class RuntimeSplitTest {
             assertEquals(calendarBefore.getValue("written"), after.getValue("calendar.json").jsonObject.getValue("written"), shape)
             // The runtime keeps only its own, in its new shape.
             val left = json(File(dir, "runtime.json"))
-            assertEquals(4, Migration.versionOf(left), shape)
+            assertEquals(5, Migration.versionOf(left), shape)
             assertTrue(RuntimeSplit.FIELDS.values.flatten().none { it in left }, shape)
             assertEquals(runtime.getValue("heldNotifications"), left.getValue("heldNotifications"), shape)
             assertTrue(File(dir, "runtime.json.v2").isFile || File(dir, "runtime.json.v1").isFile, shape)

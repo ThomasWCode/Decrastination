@@ -243,6 +243,30 @@ class TeamsAutoSyncTest {
     }
 
     @Test
+    fun `skip today offers none till tomorrow, then as usual`() {
+        // Skipped while a delay and the morning's offer stood: both go with the rest of the day's.
+        val before = TeamsAutoSync.delayed(TeamsAutoSync.State(morningUntil = Fixtures.at("2026-10-09T17:30")), Fixtures.at("2026-10-09T17:00"))
+        val skipped = TeamsAutoSync.skipped(before, Fixtures.at("2026-10-09T17:00"), LONDON, settings)
+        assertEquals("2026-10-09", skipped.skippedDay)
+        assertNull(skipped.delayedUntil)
+        assertNull(skipped.morningUntil)
+        assertNull(due("2026-10-09T17:05", skipped, syncedAt = "2026-10-09T12:00", unlocked = true))
+        assertNull(due("2026-10-09T21:00", skipped, syncedAt = "2026-10-09T12:00", unlocked = true))
+        // A delay set after it (a sync the widget didn't start) doesn't bring one back today either.
+        assertNull(due("2026-10-09T18:00", skipped.copy(delayedUntil = Fixtures.at("2026-10-09T17:30")), syncedAt = "2026-10-09T12:00"))
+        // Tomorrow, a Saturday: the three-hourly and the first unlock come again.
+        assertEquals(TeamsAutoSync.Trigger.Every3Hours, due("2026-10-10T10:00", skipped, syncedAt = "2026-10-09T12:00"))
+        assertEquals(TeamsAutoSync.Trigger.FirstUnlock, due("2026-10-10T16:50", skipped, syncedAt = "2026-10-10T16:00", unlocked = true))
+    }
+
+    @Test
+    fun `skip today before the first-unlock time still holds the evening's off`() {
+        val skipped = TeamsAutoSync.skipped(TeamsAutoSync.State(), Fixtures.at("2026-10-10T10:00"), LONDON, settings)
+        assertNull(skipped.firstUnlockDay)
+        assertNull(due("2026-10-10T16:50", skipped, syncedAt = "2026-10-10T07:00", unlocked = true))
+    }
+
+    @Test
     fun `an offer after 16 45 counts as the day's first-unlock sync`() {
         val state = TeamsAutoSync.offered(TeamsAutoSync.State(), Fixtures.at("2026-10-10T17:00"), LONDON, settings)
         assertEquals("2026-10-10", state.firstUnlockDay)

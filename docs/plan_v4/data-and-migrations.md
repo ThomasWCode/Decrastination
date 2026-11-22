@@ -81,6 +81,7 @@ Each store's migrations are listed in `data/Stores.kt`; the shapes they came fro
 - **6.5.0** (`PhotoDoorsMigration`): `session.json` raised to 5 for a check's kept slot (`PhotoDone.record`) and a check's pages kept with their task (`SessionState.pages`), none in a file from before; neither backed up; the fixture `fixtures/stores/2026-11-20-6.5.0`.
 - **6.8.0** (`ChatPhotoMigration`): `chat.json` raised to 14 and the archive's months to 13 for a message's photos (`ChatMessage.photos`: each a hash, whether it's kept, Felix's line of it) and Felix's new action (`ChatAction.Type.KeepPhoto`), none in a file from before; the photos' files never in a store; the fixture `fixtures/stores/2026-11-20-6.8.0`.
 - **6.11.0** (`EmptyTimetableMigration`): `tasks.json` raised to 6 for a timetable read with no lessons, held back while the last one is kept (`TaskState.emptyTimetable`, D-165), none in a file from before; not backed up, as the timetable isn't; the fixture `fixtures/stores/2026-11-21-6.11.0`.
+- **6.12.0** (`TeamsSkipMigration`): `runtime.json` raised to 5 for the day the Teams sync banner's *Skip today* was tapped (`TeamsAutoSync.State.skippedDay`, D-11), none in a file from before; not backed up, as `runtime.json` isn't; the fixture `fixtures/stores/2026-11-22-6.12.0`.
 
 ## Rolling back
 
