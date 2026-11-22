@@ -12,15 +12,15 @@ import java.time.ZoneId
  * time (a weekday off as a weekend day, D-105); and at an unlock in the hour and a half after the
  * morning briefing, school day or not. Only while the phone is
  * unlocked and in use, which the focus service knows; every one is announced first by a banner
- * counting down 10 s, with Cancel and Delay 5 min. Pure.
+ * counting down 10 s, with Delay 5 and Skip today (D-11). Pure.
  */
 object TeamsAutoSync {
 
     @Serializable
     data class State(
-        /** When an automatic sync was last offered, whether it ran, was cancelled or delayed. */
+        /** When an automatic sync was last offered, whether it ran, was skipped or delayed. */
         val lastOfferedAt: Long? = null,
-        /** "Delay 5 min" was tapped: offer again then. */
+        /** "Delay 5" was tapped: offer again then. */
         val delayedUntil: Long? = null,
         /** The day the first-unlock sync was last offered. */
         val firstUnlockDay: String? = null,
@@ -28,6 +28,8 @@ object TeamsAutoSync {
         val morningUntil: Long? = null,
         /** Offers in a row the widget didn't start (its sync service off, no answer). */
         val retries: Int = 0,
+        /** The day "Skip today" was tapped: no automatic sync is offered till the next (D-11). */
+        val skippedDay: String? = null,
     )
 
     enum class Trigger { FirstUnlock, Every3Hours, Delayed, Morning }
@@ -54,8 +56,11 @@ object TeamsAutoSync {
         schoolDay: Boolean,
     ): Trigger? {
         if (!settings.teamsAutoSync) return null
+        val today = Instant.ofEpochMilli(now).atZone(zone).toLocalDate().toString()
+        // Skipped today: none till tomorrow, a delay or the morning's included (D-11).
+        if (state.skippedDay == today) return null
         val recent = teamsSyncedAt != null && now - teamsSyncedAt < RECENT_MS
-        // Put off with "Delay 5 min": not before then, and then even outside the usual hours (a
+        // Put off with "Delay 5": not before then, and then even outside the usual hours (a
         // morning offer's, before school), though never at night.
         val delayed = state.delayedUntil
         if (delayed != null) return if (now >= delayed && !BlockPolicy.isQuiet(now, zone, settings)) Trigger.Delayed else null
@@ -63,7 +68,6 @@ object TeamsAutoSync {
         val morning = state.morningUntil
         if (unlocked && morning != null && now < morning && !recent && !BlockPolicy.isQuiet(now, zone, settings)) return Trigger.Morning
         if (!allowed(now, zone, settings, schoolDay)) return null
-        val today = Instant.ofEpochMilli(now).atZone(zone).toLocalDate().toString()
         val minute = BlockPolicy.minuteOfDay(now, zone)
         if (unlocked && state.firstUnlockDay != today && minute >= settings.teamsFirstUnlockMin && !recent) return Trigger.FirstUnlock
         val every = settings.teamsSyncEveryMin * 60_000L
@@ -114,4 +118,12 @@ object TeamsAutoSync {
         if (before.retries >= RETRIES) offered else before.copy(delayedUntil = now + RETRY_MIN * 60_000L, retries = before.retries + 1)
 
     fun delayed(state: State, now: Long, minutes: Int = 5): State = state.copy(delayedUntil = now + minutes * 60_000L)
+
+    /**
+     * "Skip today" tapped at [now]: no automatic sync offered again till the next day, counted as
+     * offered (as [offered] is) so the day's first-unlock sync is used up, and any delay or
+     * morning's offer dropped (D-11). A tap on Refresh Teams still syncs.
+     */
+    fun skipped(state: State, now: Long, zone: ZoneId, settings: Settings): State =
+        offered(state, now, zone, settings).copy(skippedDay = Instant.ofEpochMilli(now).atZone(zone).toLocalDate().toString())
 }
