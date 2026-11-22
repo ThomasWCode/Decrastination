@@ -150,6 +150,46 @@ class SyncTest {
         assertEquals("The Teams widget didn't answer", sync.requestTeamsSync())
         ports.answer = TeamsAnswer(started = true, reason = null)
         assertNull(sync.requestTeamsSync())
+        // An automatic one says so, for the widget to read less; yours, and a refresh's, don't.
+        assertNull(sync.requestTeamsSync(automatic = true))
+        assertEquals(true, ports.automatic.last())
+        assertTrue(ports.automatic.dropLast(1).none { it })
+    }
+
+    @Test
+    fun `the widget's list is read soon after it changes, and its state at the start and at each change, a read with it where its sync time or note moved`() = runBlocking {
+        val reads = AtomicInteger()
+        teams.answer = { reads.incrementAndGet(); SourceRead(listOf(Fetched("essay", "Essay", Kind.Homework))) }
+        ports.widget = TeamsWidget(lastSuccessAt = 1_000, noticedAt = 500)
+        sync.start(emptyFlow())
+        until("the widget's state read at the start") { sync.teamsWidget.value == TeamsWidget(lastSuccessAt = 1_000, noticedAt = 500) }
+        until("watching the Teams widget") { ports.watching != null && ports.watchingState != null }
+        // The list changed: read within a second, not five.
+        val start = System.currentTimeMillis()
+        ports.watching!!()
+        until("Teams read after its list changed") { reads.get() == 1 }
+        assertTrue(System.currentTimeMillis() - start < 2_000)
+        // A notice alone: the state's read, Teams isn't.
+        ports.widget = TeamsWidget(lastSuccessAt = 1_000, noticedAt = 2_000)
+        ports.watchingState!!()
+        until("the notice seen") { sync.teamsWidget.value?.noticedAt == 2_000L }
+        delay(800)
+        assertEquals(1, reads.get())
+        // A sync ended (its list's rows the same), both lists seen in full, or the widget's note changed: read.
+        ports.widget = TeamsWidget(lastSuccessAt = 3_000, noticedAt = 2_000)
+        ports.watchingState!!()
+        until("Teams read after a sync") { reads.get() == 2 }
+        ports.widget = TeamsWidget(lastSuccessAt = 3_000, listsSeenAt = 4_000, noticedAt = 2_000)
+        ports.watchingState!!()
+        until("Teams read after both lists were seen") { reads.get() == 3 }
+        ports.widget = TeamsWidget(lastSuccessAt = 3_000, listsSeenAt = 4_000, noticedAt = 2_000, note = "The Teams widget's last sync failed")
+        ports.watchingState!!()
+        until("Teams read after its note changed") { reads.get() == 4 }
+        // The widget gone: what was read stands.
+        ports.widget = null
+        ports.watchingState!!()
+        delay(300)
+        assertEquals(4_000L, sync.teamsWidget.value?.syncedAt)
     }
 
     @Test
@@ -312,7 +352,10 @@ class SyncTest {
         val redraws = AtomicInteger()
         val excluded: MutableList<Set<Long>> = Collections.synchronizedList(mutableListOf())
         @Volatile var answer: TeamsAnswer? = TeamsAnswer(started = true, reason = null)
+        val automatic: MutableList<Boolean> = Collections.synchronizedList(mutableListOf())
         @Volatile var watching: (() -> Unit)? = null
+        @Volatile var watchingState: (() -> Unit)? = null
+        @Volatile var widget: TeamsWidget? = null
         @Volatile var allowed = true
         @Volatile var failing = false
         @Volatile var events: List<CalendarEvent> = emptyList()
@@ -321,14 +364,18 @@ class SyncTest {
             syncs += sources
         }
 
-        override fun requestTeamsSync(): TeamsAnswer? {
+        override fun requestTeamsSync(automatic: Boolean): TeamsAnswer? {
             requests.incrementAndGet()
+            this.automatic += automatic
             return answer
         }
 
-        override fun watchTeams(onChange: () -> Unit) {
-            watching = onChange
+        override fun watchTeams(onList: () -> Unit, onState: () -> Unit) {
+            watching = onList
+            watchingState = onState
         }
+
+        override fun teamsWidget(): TeamsWidget? = widget
 
         override fun calendarAllowed(): Boolean = allowed
 

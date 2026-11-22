@@ -34,6 +34,9 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
@@ -207,6 +210,10 @@ class FocusService : AccessibilityService() {
         coverBlockedSideWindows()
         frontPackage()?.let { onFront(it, firstLook = true) }
         handler.post(ticker)
+        // Teams' notice of assignments, as the widget saw it: offered now, not at the next half-minute's look (D-169).
+        scope.launch {
+            graph.sync.teamsWidget.map { it?.noticedAt }.distinctUntilChanged().drop(1).collect { offerTeamsSync() }
+        }
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
@@ -731,14 +738,18 @@ class FocusService : AccessibilityService() {
         if (banner.isShowing) return
         if (!inUse()) return
         val runtime = graph.runtime.value
+        // The widget's own times where it's been read since the app started: a sync it's just finished is known before the
+        // tasks' record of Teams has been read again.
+        val widget = graph.sync.teamsWidget.value
         val trigger = TeamsAutoSync.due(
             now = graph.clock.now(),
             zone = graph.clock.zone(),
             settings = graph.settings.value,
             state = runtime.teamsAuto,
-            teamsSyncedAt = graph.tasks.value.status(Source.Teams).dataAsOf,
+            teamsSyncedAt = listOfNotNull(graph.tasks.value.status(Source.Teams).dataAsOf, widget?.syncedAt).maxOrNull(),
             unlocked = SystemClock.elapsedRealtime() - unlockedAt < UNLOCK_WINDOW_MS,
             schoolDay = graph.focus.schoolDayAt(graph.clock.now()),
+            noticedAt = widget?.noticedAt,
         ) ?: if (force) TeamsAutoSync.Trigger.Delayed else return
         Log.i(TAG, "Offering an automatic Teams sync ($trigger)")
         banner.show(
@@ -762,7 +773,7 @@ class FocusService : AccessibilityService() {
                     // Counted as offered first, so the next look doesn't offer it again meanwhile.
                     val before = graph.runtime.value.teamsAuto
                     recordOffer()
-                    val why = graph.sync.requestTeamsSync() ?: return@launch
+                    val why = graph.sync.requestTeamsSync(automatic = true) ?: return@launch
                     // One already running is as good as one started.
                     if (why == Sync.TEAMS_BUSY) return@launch
                     Log.w(TAG, "Automatic Teams sync didn't start: $why")

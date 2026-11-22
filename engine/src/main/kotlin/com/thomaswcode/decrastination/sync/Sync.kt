@@ -27,6 +27,7 @@ import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -41,11 +42,20 @@ interface SyncPorts {
     /** Every source read now, or only [sources], as a job that keeps its network after the screen that asked has gone (`SyncWorker.syncNow`). */
     fun syncNow(sources: Set<Source>? = null)
 
-    /** The Teams widget asked to sync Teams itself: whether it started and why not, or null if it didn't answer. */
-    fun requestTeamsSync(): TeamsAnswer?
+    /**
+     * The Teams widget asked to sync Teams itself, [automatic] where you didn't just ask for it (the widget rereads less
+     * then): whether it started and why not, or null if it didn't answer.
+     */
+    fun requestTeamsSync(automatic: Boolean = false): TeamsAnswer?
 
-    /** [onChange] at each change the Teams widget announces to its list. */
-    fun watchTeams(onChange: () -> Unit)
+    /**
+     * [onList] at each change the Teams widget announces to its list, [onState] at each to its state (a sync begun or
+     * ended, Teams' notice of assignments); both where it doesn't say which, as a widget before 0.6.0 doesn't.
+     */
+    fun watchTeams(onList: () -> Unit, onState: () -> Unit)
+
+    /** The Teams widget's state as it stands, or null where it can't be read (not installed, or refused). */
+    fun teamsWidget(): TeamsWidget?
 
     /** Whether the calendar may be read. */
     fun calendarAllowed(): Boolean
@@ -59,6 +69,17 @@ interface SyncPorts {
 
 /** The Teams widget's answer to being asked to sync: [started], or why not ([reason]: "service_off", "busy", or another). */
 data class TeamsAnswer(val started: Boolean, val reason: String?)
+
+/**
+ * The Teams widget's state as the automatic syncs need it, in epoch millis: when it last synced Teams
+ * ([lastSuccessAt]), when it last saw both of Teams' open lists in full while you had Teams open ([listsSeenAt]), and
+ * when Teams last notified you of assignments ([noticedAt], 0.6.0 on and with the widget given notification access); and
+ * its [note] where its source's status shows it (`TeamsRows.note`: syncing, its last sync failed, its service off).
+ */
+data class TeamsWidget(val lastSuccessAt: Long? = null, val listsSeenAt: Long? = null, val noticedAt: Long? = null, val note: String? = null) {
+    /** When its list was last as up to date as a sync leaves it. */
+    val syncedAt: Long? get() = listOfNotNull(lastSuccessAt, listsSeenAt).maxOrNull()
+}
 
 /**
  * What the app reads (docs/spec/sources.md): the sources, through the syncer ([sync],
@@ -141,9 +162,12 @@ class Sync(
         ports.syncNow()
     }
 
-    /** Asks the Teams widget to sync Teams. Returns why it didn't start, or null if it did. */
-    suspend fun requestTeamsSync(): String? = withContext(Dispatchers.IO) {
-        val result = runCatching { ports.requestTeamsSync() }.getOrNull()
+    /**
+     * Asks the Teams widget to sync Teams, [automatic] where you didn't just ask for it (Q21's). Returns why it didn't
+     * start, or null if it did.
+     */
+    suspend fun requestTeamsSync(automatic: Boolean = false): String? = withContext(Dispatchers.IO) {
+        val result = runCatching { ports.requestTeamsSync(automatic) }.getOrNull()
         when {
             result?.started == true -> null
             result == null -> "The Teams widget didn't answer"
@@ -161,6 +185,18 @@ class Sync(
      * Anki with it: its homework decks come from Teams' assignments (Anki is read after Teams).
      */
     private val teamsChanged = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+
+    /** The widget's announcements of a change to its state, read at once ([teamsWidget]). */
+    private val teamsStateChanged = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+
+    private val widget = MutableStateFlow<TeamsWidget?>(null)
+
+    /**
+     * The Teams widget's state as last read: when it last synced and when Teams last notified you of assignments, for the
+     * automatic syncs (Q21). Read at the start and at each change the widget announces to it, here alone, as it's the
+     * phone's to act on; null till it's read, or where it can't be.
+     */
+    val teamsWidget: StateFlow<TeamsWidget?> get() = widget
 
     /** The calendar as last read, for the server, which can't read it: your answers about its events with it. */
     fun calendarRead(): CalendarRead = calendarTime.let { CalendarRead(it.events, calendar.value.eventAnswers, it.read?.first ?: 0, it.read?.second ?: 0) }
@@ -284,9 +320,21 @@ class Sync(
         scope.launch {
             settings.state.map { it.ankiDeadlineMin to it.ankiTextbook }.distinctUntilChanged().drop(1).collect { ports.syncNow(setOf(Source.Anki)) }
         }
-        runCatching { ports.watchTeams { teamsChanged.tryEmit(Unit) } }.onFailure { Log.w(Log.TAG, "Can't watch the Teams widget", it) }
+        runCatching { ports.watchTeams(onList = { teamsChanged.tryEmit(Unit) }, onState = { teamsStateChanged.tryEmit(Unit) }) }
+            .onFailure { Log.w(Log.TAG, "Can't watch the Teams widget", it) }
         scope.launch {
             teamsChanged.debounce(TEAMS_QUIET_MS).collect { syncer.sync(setOf(Source.Teams, Source.Anki)) }
+        }
+        // Its state at the start, then at each change. A sync ended, or both lists seen in full, moves when Teams was last
+        // read, and a sync begun or failed changes the widget's note: the tasks' record of Teams (its data's time, its note)
+        // only learns either from a read, so one's made, even where the list's rows came out the same.
+        scope.launch {
+            teamsStateChanged.onStart { emit(Unit) }.collect {
+                val before = widget.value
+                val read = withContext(Dispatchers.IO) { runCatching { ports.teamsWidget() }.getOrNull() } ?: return@collect
+                widget.value = read
+                if (before != null && (read.syncedAt != before.syncedAt || read.note != before.note)) teamsChanged.tryEmit(Unit)
+            }
         }
     }
 
@@ -297,8 +345,12 @@ class Sync(
         /** A read with nothing to say of it in his name. */
         private val NOTHING_SAID: Pair<Collection<String>, List<CalendarEvent>> = emptyList<String>() to emptyList()
 
-        /** The widget sends a change for each step of a sync; read once they've stopped. */
-        private const val TEAMS_QUIET_MS = 5_000L
+        /**
+         * A change to the widget's list comes alone, or with another within a moment (a hand-in seen, then the list
+         * read): read once they've stopped. A sync's steps are announced on its state, not its list, from 0.6.0; before,
+         * they came on its list too, every few seconds, and this was 5 s.
+         */
+        private const val TEAMS_QUIET_MS = 500L
 
         private const val CALENDAR_QUIET_MS = 5_000L
     }

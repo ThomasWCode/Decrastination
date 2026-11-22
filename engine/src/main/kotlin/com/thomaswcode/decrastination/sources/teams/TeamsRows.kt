@@ -6,6 +6,7 @@ import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.sources.gmail.GmailThreads
 import com.thomaswcode.decrastination.sources.gmail.Mime
+import com.thomaswcode.decrastination.sync.TeamsWidget
 import java.io.IOException
 
 /** Turns the provider's rows into tasks. Pure, for the tests. */
@@ -85,6 +86,30 @@ object TeamsRows {
     /** Every returned assignment's feedback as a task; a row without its key fails the read, as [all]'s do. */
     fun allReturned(rows: List<Map<String, Any?>>): List<Fetched> =
         rows.map { row -> returned(row) ?: throw IOException("The Teams widget listed returned work without its key") }
+
+    /**
+     * When the widget's list was last as up to date as a sync leaves it: its last sync, or its last look at both of
+     * Teams' open lists in full while you had Teams open, the later.
+     */
+    fun dataAsOf(state: Map<String, Any?>): Long? = listOfNotNull(state["last_success_at"] as? Long, state["lists_seen_at"] as? Long).maxOrNull()
+
+    /** The widget's state row as the automatic syncs need it ([TeamsWidget]); `noticed_at` absent from a widget before 0.6.0. */
+    fun widget(state: Map<String, Any?>): TeamsWidget = TeamsWidget(
+        lastSuccessAt = state["last_success_at"] as? Long,
+        listsSeenAt = state["lists_seen_at"] as? Long,
+        noticedAt = state["noticed_at"] as? Long,
+        note = note(state),
+    )
+
+    /** What a change the widget announced is to: its list, its state, or either (on its root, as before 0.6.0). */
+    enum class Changed { List, State, Either }
+
+    /** What a change announced on the provider's [path] (`/assignments`, `/state`, the root's empty one, or none) is to. */
+    fun changed(path: String?): Changed = when (path?.trim('/')) {
+        "assignments" -> Changed.List
+        "state" -> Changed.State
+        else -> Changed.Either
+    }
 
     /** A line about the widget's own state worth showing, or null when all is well. */
     fun note(state: Map<String, Any?>): String? {

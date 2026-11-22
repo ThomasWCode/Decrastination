@@ -7,6 +7,7 @@ import com.thomaswcode.decrastination.core.Merge
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.enrich.ReadingPrompts
 import com.thomaswcode.decrastination.sources.gmail.GmailThreads
+import com.thomaswcode.decrastination.sync.TeamsWidget
 import java.io.IOException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
@@ -94,6 +95,41 @@ class TeamsRowsTest {
         assertNull(Enrichments.jobFor(task, GmailThreads::textRead))
         assertNull(TeamsRows.returned(mapOf("title" to "x")))
         assertFailsWith<IOException> { TeamsRows.allReturned(listOf(mapOf("title" to "x"))) }
+    }
+
+    @Test
+    fun `the widget's data is as of its last sync, or its last look at both lists in full, the later`() {
+        assertEquals(1_000L, TeamsRows.dataAsOf(mapOf("last_success_at" to 1_000L, "lists_seen_at" to null)))
+        assertEquals(2_000L, TeamsRows.dataAsOf(mapOf("last_success_at" to 1_000L, "lists_seen_at" to 2_000L)))
+        assertEquals(3_000L, TeamsRows.dataAsOf(mapOf("last_success_at" to 3_000L, "lists_seen_at" to 2_000L)))
+        // A widget older than its lists' time, or none yet.
+        assertEquals(1_000L, TeamsRows.dataAsOf(mapOf("last_success_at" to 1_000L)))
+        assertNull(TeamsRows.dataAsOf(emptyMap()))
+    }
+
+    @Test
+    fun `the widget's state row as the automatic syncs need it, from an older widget too`() {
+        val row = mapOf<String, Any?>(
+            "last_success_at" to 1_000L, "status" to "failed", "status_message" to "Couldn't read the Past due list", "status_at" to 900L,
+            "assignment_count" to 3L, "sync_service_enabled" to 1L, "lists_seen_at" to 2_000L, "noticed_at" to 3_000L,
+        )
+        assertEquals(
+            TeamsWidget(lastSuccessAt = 1_000L, listsSeenAt = 2_000L, noticedAt = 3_000L, note = "The Teams widget's last sync failed: Couldn't read the Past due list"),
+            TeamsRows.widget(row),
+        )
+        assertEquals(2_000L, TeamsRows.widget(row).syncedAt)
+        // Before 0.6.0 there's no noticed_at, and before 0.5.0 no lists_seen_at.
+        assertEquals(TeamsWidget(lastSuccessAt = 1_000L), TeamsRows.widget(mapOf("last_success_at" to 1_000L, "status" to "idle", "sync_service_enabled" to 1L)))
+    }
+
+    @Test
+    fun `a change the widget announced is to its list, its state, or either`() {
+        assertEquals(TeamsRows.Changed.List, TeamsRows.changed("/assignments"))
+        assertEquals(TeamsRows.Changed.State, TeamsRows.changed("/state"))
+        // Its root (as every one was before 0.6.0, and the first since), or none said.
+        assertEquals(TeamsRows.Changed.Either, TeamsRows.changed(""))
+        assertEquals(TeamsRows.Changed.Either, TeamsRows.changed(null))
+        assertEquals(TeamsRows.Changed.Either, TeamsRows.changed("/returned"))
     }
 
     @Test
