@@ -883,3 +883,14 @@ Your word of 21 Nov, as 6.10.2 was built: "If the timetable is completely missin
 4. **Felix's lessons are as old as the first empty read**, not the last good one: the reads since went well, and would have made a kept timetable look fresh for ever.
 5. **Not in a backup**, as the timetable isn't: both come again with the next read.
 6. **A store's version raised** (`tasks.json` to 6), so the phone has the release before the server does (D-138).
+
+## The Teams sync banner's Skip today (6.12.0, 22 Nov)
+
+Your word of 22 Nov: "remove the cancel button and make the buttons 'Delay 5' and 'Skip today', where skip today stops syncing until tomorrow." D-11 is amended to it.
+
+#### Decided in building it
+
+1. **Tomorrow is the next calendar day**, so the usual rules come back after midnight: quiet hours keep the night clear, the morning briefing's sync and the evening's first unlock come as usual.
+2. **Only the automatic syncs stop.** A tap on *Refresh Teams*, the widget's ↻, or asking Felix to check Teams still syncs: each is a sync you've asked for.
+3. **Everything else of the day's goes with it**: a delay standing, the morning's offer, and a retry of one the widget didn't start; it counts as offered, as Cancel did.
+4. **A store's version raised** (`runtime.json` to 5), so an older build sets a newer file aside rather than drop the day skipped; `runtime.json` is the phone's alone, so the server has no part in it.
