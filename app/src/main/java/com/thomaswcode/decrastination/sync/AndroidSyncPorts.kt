@@ -30,9 +30,9 @@ class AndroidSyncPorts(private val context: Context) : SyncPorts {
                 // By the path it came on (0.6.0 on); the root, or none, says either may have changed.
                 override fun onChange(selfChange: Boolean, uri: Uri?) {
                     when (TeamsProvider.changed(uri)) {
-                        TeamsProvider.Changed.List -> onList()
-                        TeamsProvider.Changed.State -> onState()
-                        TeamsProvider.Changed.Either -> {
+                        TeamsRows.Changed.List -> onList()
+                        TeamsRows.Changed.State -> onState()
+                        TeamsRows.Changed.Either -> {
                             onList()
                             onState()
                         }
@@ -42,14 +42,7 @@ class AndroidSyncPorts(private val context: Context) : SyncPorts {
         )
     }
 
-    override fun teamsWidget(): TeamsWidget? = runCatching { TeamsProvider.state(context.contentResolver) }.getOrNull()?.let { state ->
-        TeamsWidget(
-            lastSuccessAt = state["last_success_at"] as? Long,
-            listsSeenAt = state["lists_seen_at"] as? Long,
-            noticedAt = state["noticed_at"] as? Long,
-            note = TeamsRows.note(state),
-        )
-    }
+    override fun teamsWidget(): TeamsWidget? = runCatching { TeamsProvider.state(context.contentResolver) }.getOrNull()?.let(TeamsRows::widget)
 
     override fun calendarAllowed(): Boolean = CalendarReader.allowed(context)
 

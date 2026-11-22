@@ -34,15 +34,8 @@ object TeamsProvider {
     /** [METHOD_REQUEST_SYNC]'s `arg` for an automatic sync (the widget's 0.6.0 on; an older one takes it as any other). */
     const val SYNC_AUTOMATIC = "auto"
 
-    /** What a change the widget announced is to: its list, its state, or either (on the root, as before 0.6.0). */
-    enum class Changed { List, State, Either }
-
-    /** What a change announced on [uri] is to. */
-    fun changed(uri: Uri?): Changed = when (uri) {
-        assignmentsUri -> Changed.List
-        stateUri -> Changed.State
-        else -> Changed.Either
-    }
+    /** What a change announced on [uri] is to ([TeamsRows.changed]): one not of this provider's, either. */
+    fun changed(uri: Uri?): TeamsRows.Changed = TeamsRows.changed(uri?.takeIf { it.authority == AUTHORITY }?.path)
 
     fun assignments(resolver: ContentResolver): List<Map<String, Any?>> = resolver.rows(assignmentsUri)
 
