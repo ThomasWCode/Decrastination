@@ -86,6 +86,12 @@ object TeamsRows {
     fun allReturned(rows: List<Map<String, Any?>>): List<Fetched> =
         rows.map { row -> returned(row) ?: throw IOException("The Teams widget listed returned work without its key") }
 
+    /**
+     * When the widget's list was last as up to date as a sync leaves it: its last sync, or its last look at both of
+     * Teams' open lists in full while you had Teams open, the later.
+     */
+    fun dataAsOf(state: Map<String, Any?>): Long? = listOfNotNull(state["last_success_at"] as? Long, state["lists_seen_at"] as? Long).maxOrNull()
+
     /** A line about the widget's own state worth showing, or null when all is well. */
     fun note(state: Map<String, Any?>): String? {
         val status = state["status"] as? String

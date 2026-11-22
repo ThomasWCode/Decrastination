@@ -97,6 +97,16 @@ class TeamsRowsTest {
     }
 
     @Test
+    fun `the widget's data is as of its last sync, or its last look at both lists in full, the later`() {
+        assertEquals(1_000L, TeamsRows.dataAsOf(mapOf("last_success_at" to 1_000L, "lists_seen_at" to null)))
+        assertEquals(2_000L, TeamsRows.dataAsOf(mapOf("last_success_at" to 1_000L, "lists_seen_at" to 2_000L)))
+        assertEquals(3_000L, TeamsRows.dataAsOf(mapOf("last_success_at" to 3_000L, "lists_seen_at" to 2_000L)))
+        // A widget older than its lists' time, or none yet.
+        assertEquals(1_000L, TeamsRows.dataAsOf(mapOf("last_success_at" to 1_000L)))
+        assertNull(TeamsRows.dataAsOf(emptyMap()))
+    }
+
+    @Test
     fun `the widget's own trouble is noted`() {
         assertEquals("The Teams widget's sync service is off", TeamsRows.note(mapOf("sync_service_enabled" to 0L, "status" to "idle")))
         assertEquals("The Teams widget's last sync failed: Couldn't read the Past due list", TeamsRows.note(mapOf("sync_service_enabled" to 1L, "status" to "failed", "status_message" to "Couldn't read the Past due list")))

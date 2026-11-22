@@ -31,6 +31,19 @@ object TeamsProvider {
     const val RESULT_STARTED = "started"
     const val RESULT_REASON = "reason"
 
+    /** [METHOD_REQUEST_SYNC]'s `arg` for an automatic sync (the widget's 0.6.0 on; an older one takes it as any other). */
+    const val SYNC_AUTOMATIC = "auto"
+
+    /** What a change the widget announced is to: its list, its state, or either (on the root, as before 0.6.0). */
+    enum class Changed { List, State, Either }
+
+    /** What a change announced on [uri] is to. */
+    fun changed(uri: Uri?): Changed = when (uri) {
+        assignmentsUri -> Changed.List
+        stateUri -> Changed.State
+        else -> Changed.Either
+    }
+
     fun assignments(resolver: ContentResolver): List<Map<String, Any?>> = resolver.rows(assignmentsUri)
 
     fun state(resolver: ContentResolver): Map<String, Any?> = resolver.rows(stateUri).single()
@@ -84,7 +97,7 @@ class TeamsSource(private val resolver: ContentResolver) : TaskSource {
         val state = TeamsProvider.state(resolver)
         SourceRead(
             items = TeamsRows.all(rows) + TeamsRows.allReturned(returned),
-            dataAsOf = state["last_success_at"] as? Long,
+            dataAsOf = TeamsRows.dataAsOf(state),
             note = TeamsRows.note(state),
         )
     }
