@@ -29,6 +29,7 @@ import com.thomaswcode.decrastination.data.SpeechMigration
 import com.thomaswcode.decrastination.data.WeeklyMigration
 import com.thomaswcode.decrastination.data.ZoomMigration
 import com.thomaswcode.decrastination.data.TasksMigration
+import com.thomaswcode.decrastination.data.TeamsSkipMigration
 import java.io.File
 import java.net.UnknownHostException
 import java.nio.file.Files
@@ -54,7 +55,7 @@ class ModelGatewayTest {
     private val dir: File = Files.createTempDirectory("gateway").toFile()
     private val clock = FixedClock(Fixtures.at("2026-10-14T18:00"), Fixtures.LONDON)
     private val settings = JsonStore(File(dir, "settings.json"), Settings.serializer(), { Settings(aiEnabled = true, aiKeyActive = true) }, migrations = listOf(SettingsMigration.SETTINGS, ZoomMigration.SETTINGS, SpeechMigration.SETTINGS))
-    private val runtime = JsonStore(File(dir, "runtime.json"), RuntimeState.serializer(), ::RuntimeState, migrations = listOf(ChatMigration.RUNTIME, RuntimeSplit.RUNTIME, NotSameMigration.RUNTIME))
+    private val runtime = JsonStore(File(dir, "runtime.json"), RuntimeState.serializer(), ::RuntimeState, migrations = listOf(ChatMigration.RUNTIME, RuntimeSplit.RUNTIME, NotSameMigration.RUNTIME, TeamsSkipMigration.RUNTIME))
     private val model = JsonStore(File(dir, "model.json"), ModelState.serializer(), ::ModelState)
     private val tasks = JsonStore(File(dir, "tasks.json"), TaskState.serializer(), ::TaskState, migrations = listOf(TasksMigration.TASKS, StepOrderMigration.TASKS, WeeklyMigration.TASKS, NotSameMigration.TASKS, EmptyTimetableMigration.TASKS))
     private var key: String? = "test-key"

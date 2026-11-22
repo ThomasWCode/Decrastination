@@ -38,7 +38,7 @@ data class RuntimeState(
      */
     val unreadableSeen: List<String> = emptyList(),
     /** The shape this is in ([Migration]): raised with each change of it, a migration bringing older files to it. */
-    val version: Int = 4,
+    val version: Int = 5,
 ) {
     /** With [found] (this start's) on Setup's list: each once, and none you've seen. */
     fun withUnreadable(found: List<JsonStore.Unreadable>): RuntimeState {

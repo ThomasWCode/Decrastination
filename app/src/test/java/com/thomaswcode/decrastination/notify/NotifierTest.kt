@@ -13,6 +13,7 @@ import com.thomaswcode.decrastination.data.SettingsMigration
 import com.thomaswcode.decrastination.data.RuntimeSplit
 import com.thomaswcode.decrastination.data.RuntimeState
 import com.thomaswcode.decrastination.data.SpeechMigration
+import com.thomaswcode.decrastination.data.TeamsSkipMigration
 import com.thomaswcode.decrastination.data.ZoomMigration
 import java.io.File
 import java.nio.file.Files
@@ -30,7 +31,7 @@ import kotlinx.coroutines.runBlocking
 class NotifierTest {
     private val dir: File = Files.createTempDirectory("notifier").toFile()
     private val clock = FixedClock(Fixtures.at("2026-10-14T18:00"), Fixtures.LONDON)
-    private val runtime = JsonStore(File(dir, "runtime.json"), RuntimeState.serializer(), ::RuntimeState, migrations = listOf(ChatMigration.RUNTIME, RuntimeSplit.RUNTIME, NotSameMigration.RUNTIME))
+    private val runtime = JsonStore(File(dir, "runtime.json"), RuntimeState.serializer(), ::RuntimeState, migrations = listOf(ChatMigration.RUNTIME, RuntimeSplit.RUNTIME, NotSameMigration.RUNTIME, TeamsSkipMigration.RUNTIME))
     private val settings = JsonStore(File(dir, "settings.json"), Settings.serializer(), ::Settings, migrations = listOf(SettingsMigration.SETTINGS, ZoomMigration.SETTINGS, SpeechMigration.SETTINGS))
     private val job = SupervisorJob()
     private val tray = FakeTray()
