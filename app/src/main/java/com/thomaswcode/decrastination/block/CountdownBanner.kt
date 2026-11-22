@@ -19,7 +19,7 @@ import android.widget.TextView
 
 /**
  * The banner every automatic Teams sync shows first (Q21): at the top of the screen, counting
- * down 10 s, with **Cancel** and **Delay 5 min**. A `TYPE_ACCESSIBILITY_OVERLAY` window, which an
+ * down 10 s, with **Delay 5** and **Skip today** (D-11). A `TYPE_ACCESSIBILITY_OVERLAY` window, which an
  * accessibility service may add without the overlay permission; it looks like the Teams widget's
  * own sync pill, which takes over once the sync starts.
  */
@@ -36,19 +36,19 @@ class CountdownBanner(private val service: AccessibilityService) {
     val isShowing: Boolean get() = root != null
 
     /** Shows [message] (with `%d` for the seconds left) for [seconds], then runs [onTimeout]. */
-    fun show(message: String, seconds: Int, onCancel: () -> Unit, onDelay: () -> Unit, onTimeout: () -> Unit) {
+    fun show(message: String, seconds: Int, onDelay: () -> Unit, onSkip: () -> Unit, onTimeout: () -> Unit) {
         cancel()
         this.message = message
         this.left = seconds
         this.onTimeout = onTimeout
         val view = build(
-            cancel = {
-                cancel()
-                onCancel()
-            },
             delay = {
                 cancel()
                 onDelay()
+            },
+            skip = {
+                cancel()
+                onSkip()
             },
         )
         runCatching { windowManager.addView(view, layoutParams()) }.onFailure { return }
@@ -95,7 +95,7 @@ class CountdownBanner(private val service: AccessibilityService) {
         y = dp(44)
     }
 
-    private fun build(cancel: () -> Unit, delay: () -> Unit): View {
+    private fun build(delay: () -> Unit, skip: () -> Unit): View {
         // Material You colours where available, so the banner matches the phone's theme.
         val dynamic = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
         val surface = if (dynamic) service.getColor(android.R.color.system_neutral1_800) else 0xFF2B2D31.toInt()
@@ -135,8 +135,8 @@ class CountdownBanner(private val service: AccessibilityService) {
             }
             elevation = dp(6).toFloat()
             addView(label)
-            addView(button("Cancel", cancel))
-            addView(button("Delay 5 min", delay))
+            addView(button("Delay 5", delay))
+            addView(button("Skip today", skip))
         }
     }
 
