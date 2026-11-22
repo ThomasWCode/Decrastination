@@ -118,7 +118,7 @@ Small interfaces for what Android does, so services are tested without it:
 | `Http` (`net/`) | one HTTP request | its own, over `HttpURLConnection` | canned responses |
 | `CalendarProvider` | read and write the calendar's events | `SlotCalendar` | events in memory |
 | `FelixPorts` | his notification, his look's alarm, the work that outlives what asked, a task opened where it lives | `AndroidFelixPorts` | `FelixHarness`'s |
-| `SyncPorts` | a sync as a job, the Teams widget asked and watched, the calendar read, the widget drawn | `AndroidSyncPorts` | `SyncTest`'s |
+| `SyncPorts` | a sync as a job, the Teams widget asked, watched and its state read, the calendar read, the widget drawn | `AndroidSyncPorts` | `SyncTest`'s |
 | `GmailWriter` | the writes a finished email needs | `ImapGmailWriter`, over `ImapWriter`'s commands on the socket | a fake writer, with the commands it was sent |
 
 ## The data model
