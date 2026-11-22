@@ -197,14 +197,65 @@ class TeamsAutoSyncTest {
 
     @Test
     fun `the first unlock after 16 45 syncs`() {
-        assertEquals(TeamsAutoSync.Trigger.FirstUnlock, due("2026-10-09T16:50", syncedAt = "2026-10-09T16:00", unlocked = true))
-        assertNull(due("2026-10-09T16:50", syncedAt = "2026-10-09T16:00", unlocked = false))
-        assertNull(due("2026-10-09T16:50", TeamsAutoSync.State(firstUnlockDay = "2026-10-09"), syncedAt = "2026-10-09T16:00", unlocked = true))
+        assertEquals(TeamsAutoSync.Trigger.FirstUnlock, due("2026-10-09T16:50", syncedAt = "2026-10-09T12:00", unlocked = true))
+        // Not unlocked just now, or the day's had its first-unlock sync: only the three-hourly one, that long since 12:00.
+        assertEquals(TeamsAutoSync.Trigger.Every3Hours, due("2026-10-09T16:50", syncedAt = "2026-10-09T12:00", unlocked = false))
+        assertEquals(TeamsAutoSync.Trigger.Every3Hours, due("2026-10-09T16:50", TeamsAutoSync.State(firstUnlockDay = "2026-10-09"), syncedAt = "2026-10-09T12:00", unlocked = true))
     }
 
     @Test
     fun `Teams synced just now needs no sync on unlock`() {
         assertNull(due("2026-10-09T16:50", syncedAt = "2026-10-09T16:40", unlocked = true))
+    }
+
+    @Test
+    fun `any sync in the last three hours puts off the first-unlock and morning syncs too`() {
+        // A sync of yours at 16:00 (before the first-unlock time): none at a 16:50 unlock, nor till 19:00.
+        assertNull(due("2026-10-09T16:50", syncedAt = "2026-10-09T16:00", unlocked = true))
+        assertNull(due("2026-10-09T18:59", syncedAt = "2026-10-09T16:00", unlocked = true))
+        assertEquals(TeamsAutoSync.Trigger.FirstUnlock, due("2026-10-09T19:00", syncedAt = "2026-10-09T16:00", unlocked = true))
+        // The morning's, the same.
+        val morning = TeamsAutoSync.State(morningUntil = Fixtures.at("2026-10-10T09:00"))
+        assertNull(due("2026-10-10T08:00", morning, syncedAt = "2026-10-10T07:30", unlocked = true))
+        assertEquals(TeamsAutoSync.Trigger.Morning, due("2026-10-10T08:00", morning, syncedAt = "2026-10-10T04:59", unlocked = true))
+        // Counted from the setting, not three hours always.
+        val hourly = settings.copy(teamsSyncEveryMin = 60)
+        assertEquals(TeamsAutoSync.Trigger.FirstUnlock, TeamsAutoSync.due(Fixtures.at("2026-10-09T17:00"), LONDON, hourly, TeamsAutoSync.State(), Fixtures.at("2026-10-09T16:00"), unlocked = true, schoolDay = true))
+    }
+
+    private fun noticed(at: String, noticedAt: String?, state: TeamsAutoSync.State = TeamsAutoSync.State(), syncedAt: String? = "2026-10-10T12:00", schoolDay: Boolean = false) =
+        TeamsAutoSync.due(Fixtures.at(at), LONDON, settings, state, syncedAt?.let(Fixtures::at), unlocked = false, schoolDay = schoolDay, noticedAt = noticedAt?.let(Fixtures::at))
+
+    @Test
+    fun `Teams' notice of assignments since its last read is offered at once, a sync just before it notwithstanding`() {
+        assertEquals(TeamsAutoSync.Trigger.Noticed, noticed("2026-10-10T12:15", noticedAt = "2026-10-10T12:10"))
+        assertEquals(TeamsAutoSync.Trigger.Noticed, noticed("2026-10-10T12:15", noticedAt = "2026-10-10T12:10", syncedAt = null))
+        // One read since the notice: nothing.
+        assertNull(noticed("2026-10-10T12:15", noticedAt = "2026-10-10T11:50"))
+        assertNull(noticed("2026-10-10T12:15", noticedAt = null))
+    }
+
+    @Test
+    fun `a notice is offered once, so a sync that fails isn't offered again and again`() {
+        val offered = TeamsAutoSync.offered(TeamsAutoSync.State(), Fixtures.at("2026-10-10T12:11"), LONDON, settings)
+        assertNull(noticed("2026-10-10T12:30", noticedAt = "2026-10-10T12:10", state = offered))
+        // A later notice is offered again.
+        assertEquals(TeamsAutoSync.Trigger.Noticed, noticed("2026-10-10T12:30", noticedAt = "2026-10-10T12:20", state = offered))
+    }
+
+    @Test
+    fun `a notice waits for the hours automatic syncs keep, for a delay, and for a skipped day`() {
+        // At night, and in school hours: then not; at the school day's blocking time, it is.
+        assertNull(noticed("2026-10-09T23:00", noticedAt = "2026-10-09T22:50", syncedAt = "2026-10-09T12:00"))
+        assertNull(noticed("2026-10-09T12:15", noticedAt = "2026-10-09T12:10", syncedAt = "2026-10-09T07:00", schoolDay = true))
+        assertEquals(TeamsAutoSync.Trigger.Noticed, noticed("2026-10-09T16:45", noticedAt = "2026-10-09T12:10", syncedAt = "2026-10-09T07:00", schoolDay = true))
+        // Delay 5 tapped: then, as a delayed one.
+        val delayed = TeamsAutoSync.delayed(TeamsAutoSync.State(), Fixtures.at("2026-10-10T12:11"))
+        assertNull(noticed("2026-10-10T12:14", noticedAt = "2026-10-10T12:10", state = delayed))
+        assertEquals(TeamsAutoSync.Trigger.Delayed, noticed("2026-10-10T12:16", noticedAt = "2026-10-10T12:10", state = delayed))
+        // Skip today: not today.
+        val skipped = TeamsAutoSync.skipped(TeamsAutoSync.State(), Fixtures.at("2026-10-10T09:00"), LONDON, settings)
+        assertNull(noticed("2026-10-10T12:15", noticedAt = "2026-10-10T12:10", state = skipped))
     }
 
     @Test
@@ -228,7 +279,7 @@ class TeamsAutoSyncTest {
         assertEquals(TeamsAutoSync.Trigger.Every3Hours, due("2026-10-09T12:00", syncedAt = "2026-10-09T07:00", unlocked = true, schoolDay = false))
         // Still never in quiet hours, nor before a first unlock's time as its first-unlock sync.
         assertNull(due("2026-10-09T06:30", syncedAt = "2026-10-08T12:00", unlocked = true, schoolDay = false))
-        assertEquals(TeamsAutoSync.Trigger.FirstUnlock, due("2026-10-09T16:50", syncedAt = "2026-10-09T16:00", unlocked = true, schoolDay = false))
+        assertEquals(TeamsAutoSync.Trigger.FirstUnlock, due("2026-10-09T16:50", syncedAt = "2026-10-09T13:00", unlocked = true, schoolDay = false))
         // The same Friday at school waits for 16:45.
         assertNull(due("2026-10-09T12:00", syncedAt = "2026-10-09T07:00", schoolDay = true))
         assertTrue(TeamsAutoSync.allowed(Fixtures.at("2026-10-09T12:00"), LONDON, settings, schoolDay = false))
@@ -256,7 +307,7 @@ class TeamsAutoSyncTest {
         assertNull(due("2026-10-09T18:00", skipped.copy(delayedUntil = Fixtures.at("2026-10-09T17:30")), syncedAt = "2026-10-09T12:00"))
         // Tomorrow, a Saturday: the three-hourly and the first unlock come again.
         assertEquals(TeamsAutoSync.Trigger.Every3Hours, due("2026-10-10T10:00", skipped, syncedAt = "2026-10-09T12:00"))
-        assertEquals(TeamsAutoSync.Trigger.FirstUnlock, due("2026-10-10T16:50", skipped, syncedAt = "2026-10-10T16:00", unlocked = true))
+        assertEquals(TeamsAutoSync.Trigger.FirstUnlock, due("2026-10-10T16:50", skipped, syncedAt = "2026-10-10T13:00", unlocked = true))
     }
 
     @Test

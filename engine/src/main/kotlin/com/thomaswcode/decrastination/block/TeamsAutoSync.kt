@@ -10,7 +10,9 @@ import java.time.ZoneId
  * first-unlock time (16:45 by default), and every three hours (a setting), never while asleep
  * (22:30–07:00) and, on school days by the school calendar, not before the school day's blocking
  * time (a weekday off as a weekend day, D-105); and at an unlock in the hour and a half after the
- * morning briefing, school day or not. Only while the phone is
+ * morning briefing, school day or not. Soon after Teams notifies you of assignments, too, within the
+ * same hours (D-169). Any sync of Teams, yours or one of these, puts off every one of them but the
+ * notice's for those three hours (D-169). Only while the phone is
  * unlocked and in use, which the focus service knows; every one is announced first by a banner
  * counting down 10 s, with Delay 5 and Skip today (D-11). Pure.
  */
@@ -32,7 +34,7 @@ object TeamsAutoSync {
         val skippedDay: String? = null,
     )
 
-    enum class Trigger { FirstUnlock, Every3Hours, Delayed, Morning }
+    enum class Trigger { FirstUnlock, Every3Hours, Delayed, Morning, Noticed }
 
     /** Minutes before an automatic sync the widget didn't start is offered again. */
     const val RETRY_MIN = 15
@@ -40,26 +42,27 @@ object TeamsAutoSync {
     /** Offers in a row that come to nothing before the next waits for its usual time. */
     const val RETRIES = 2
 
-    /** A sync of Teams this recent makes an automatic one pointless. */
-    private const val RECENT_MS = 30 * 60_000L
-
     fun due(
         now: Long,
         zone: ZoneId,
         settings: Settings,
         state: State,
-        /** When the Teams widget last read Teams successfully. */
+        /** When the Teams widget last read Teams: a sync of any kind, or both its lists seen in full while you had Teams open. */
         teamsSyncedAt: Long?,
         /** The phone was unlocked just now. */
         unlocked: Boolean,
         /** Today is a school day by the school calendar (D-105). */
         schoolDay: Boolean,
+        /** When Teams last notified you of assignments, as the widget saw it, or null. */
+        noticedAt: Long? = null,
     ): Trigger? {
         if (!settings.teamsAutoSync) return null
         val today = Instant.ofEpochMilli(now).atZone(zone).toLocalDate().toString()
         // Skipped today: none till tomorrow, a delay or the morning's included (D-11).
         if (state.skippedDay == today) return null
-        val recent = teamsSyncedAt != null && now - teamsSyncedAt < RECENT_MS
+        val every = settings.teamsSyncEveryMin * 60_000L
+        // Any sync this recent, yours included, puts off the timed ones (D-169).
+        val recent = teamsSyncedAt != null && now - teamsSyncedAt < every
         // Put off with "Delay 5": not before then, and then even outside the usual hours (a
         // morning offer's, before school), though never at night.
         val delayed = state.delayedUntil
@@ -68,12 +71,15 @@ object TeamsAutoSync {
         val morning = state.morningUntil
         if (unlocked && morning != null && now < morning && !recent && !BlockPolicy.isQuiet(now, zone, settings)) return Trigger.Morning
         if (!allowed(now, zone, settings, schoolDay)) return null
+        // Teams notified you of assignments since it was last read, and nothing's been offered since: once a notice, so
+        // a sync that fails isn't offered again and again (D-169).
+        if (noticedAt != null && (teamsSyncedAt == null || noticedAt > teamsSyncedAt) && (state.lastOfferedAt == null || noticedAt > state.lastOfferedAt)) {
+            return Trigger.Noticed
+        }
         val minute = BlockPolicy.minuteOfDay(now, zone)
         if (unlocked && state.firstUnlockDay != today && minute >= settings.teamsFirstUnlockMin && !recent) return Trigger.FirstUnlock
-        val every = settings.teamsSyncEveryMin * 60_000L
-        val stale = teamsSyncedAt == null || now - teamsSyncedAt >= every
         val notLately = state.lastOfferedAt == null || now - state.lastOfferedAt >= every
-        return if (stale && notLately) Trigger.Every3Hours else null
+        return if (!recent && notLately) Trigger.Every3Hours else null
     }
 
     /**
