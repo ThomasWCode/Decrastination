@@ -8,9 +8,8 @@ import java.time.ZoneId
 /**
  * When the app asks the Teams widget to sync on its own (Q21): on the first unlock after the
  * first-unlock time (16:45 by default), and every three hours (a setting), never while asleep
- * (22:30–07:00) and, on school days by the school calendar, not before the school day's blocking
- * time (a weekday off as a weekend day, D-105); and at an unlock in the hour and a half after the
- * morning briefing, school day or not. Soon after Teams notifies you of assignments, too, within the
+ * (22:30–07:00), a school day's hours as any other day's (D-105); and at an unlock in the hour and
+ * a half after the morning briefing. Soon after Teams notifies you of assignments, too, within the
  * same hours (D-169). Any sync of Teams, yours or one of these, puts off every one of them but the
  * notice's for those three hours (D-169). Only while the phone is
  * unlocked and in use, which the focus service knows; every one is announced first by a banner
@@ -51,8 +50,6 @@ object TeamsAutoSync {
         teamsSyncedAt: Long?,
         /** The phone was unlocked just now. */
         unlocked: Boolean,
-        /** Today is a school day by the school calendar (D-105). */
-        schoolDay: Boolean,
         /** When Teams last notified you of assignments, as the widget saw it, or null. */
         noticedAt: Long? = null,
     ): Trigger? {
@@ -63,14 +60,13 @@ object TeamsAutoSync {
         val every = settings.teamsSyncEveryMin * 60_000L
         // Any sync this recent, yours included, puts off the timed ones (D-169).
         val recent = teamsSyncedAt != null && now - teamsSyncedAt < every
-        // Put off with "Delay 5": not before then, and then even outside the usual hours (a
-        // morning offer's, before school), though never at night.
+        // Put off with "Delay 5": not before then, and then at once, though never at night.
         val delayed = state.delayedUntil
         if (delayed != null) return if (now >= delayed && !BlockPolicy.isQuiet(now, zone, settings)) Trigger.Delayed else null
         // The morning briefing's sync: at the next unlock in its hour and a half, school day or not.
         val morning = state.morningUntil
         if (unlocked && morning != null && now < morning && !recent && !BlockPolicy.isQuiet(now, zone, settings)) return Trigger.Morning
-        if (!allowed(now, zone, settings, schoolDay)) return null
+        if (!allowed(now, zone, settings)) return null
         // Teams notified you of assignments since it was last read, and nothing's been offered since: once a notice, so
         // a sync that fails isn't offered again and again (D-169).
         if (noticedAt != null && (teamsSyncedAt == null || noticedAt > teamsSyncedAt) && (state.lastOfferedAt == null || noticedAt > state.lastOfferedAt)) {
@@ -84,19 +80,12 @@ object TeamsAutoSync {
 
     /**
      * Whether an offer made a moment ago still stands when its banner runs out: automatic syncs
-     * still on, and not into quiet hours since. (Outside the usual hours it may be, as a morning
-     * offer or a delayed one is.)
+     * still on, and not into quiet hours since.
      */
     fun stillWanted(now: Long, zone: ZoneId, settings: Settings): Boolean = settings.teamsAutoSync && !BlockPolicy.isQuiet(now, zone, settings)
 
-    /**
-     * Within the hours automatic syncs may happen: outside quiet hours, and on a [schoolDay] from the
-     * school day's blocking time; a weekend or a weekday off any time (D-105).
-     */
-    fun allowed(now: Long, zone: ZoneId, settings: Settings, schoolDay: Boolean): Boolean {
-        if (BlockPolicy.isQuiet(now, zone, settings)) return false
-        return !schoolDay || BlockPolicy.minuteOfDay(now, zone) >= settings.weekdayBlockFromMin
-    }
+    /** Within the hours automatic syncs may happen: outside quiet hours, a school day's as any other's (D-105). */
+    fun allowed(now: Long, zone: ZoneId, settings: Settings): Boolean = !BlockPolicy.isQuiet(now, zone, settings)
 
     /**
      * What offering one at [now] does to the state, whatever the answer. One offered after the

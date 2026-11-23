@@ -182,9 +182,9 @@ class CreditTest {
 class TeamsAutoSyncTest {
     private val settings = Settings()
 
-    /** Due at [at], a [schoolDay] unless said otherwise on a weekday, as with no day off. */
-    private fun due(at: String, state: TeamsAutoSync.State = TeamsAutoSync.State(), syncedAt: String? = "2026-10-09T07:00", unlocked: Boolean = false, schoolDay: Boolean = LocalDate.parse(at.take(10)).dayOfWeek.value <= 5) =
-        TeamsAutoSync.due(Fixtures.at(at), LONDON, settings, state, syncedAt?.let(Fixtures::at), unlocked, schoolDay)
+    /** Due at [at]. */
+    private fun due(at: String, state: TeamsAutoSync.State = TeamsAutoSync.State(), syncedAt: String? = "2026-10-09T07:00", unlocked: Boolean = false) =
+        TeamsAutoSync.due(Fixtures.at(at), LONDON, settings, state, syncedAt?.let(Fixtures::at), unlocked)
 
     @Test
     fun `an offer's banner running into quiet hours, or syncs switched off meanwhile, starts nothing`() {
@@ -220,11 +220,11 @@ class TeamsAutoSyncTest {
         assertEquals(TeamsAutoSync.Trigger.Morning, due("2026-10-10T08:00", morning, syncedAt = "2026-10-10T04:59", unlocked = true))
         // Counted from the setting, not three hours always.
         val hourly = settings.copy(teamsSyncEveryMin = 60)
-        assertEquals(TeamsAutoSync.Trigger.FirstUnlock, TeamsAutoSync.due(Fixtures.at("2026-10-09T17:00"), LONDON, hourly, TeamsAutoSync.State(), Fixtures.at("2026-10-09T16:00"), unlocked = true, schoolDay = true))
+        assertEquals(TeamsAutoSync.Trigger.FirstUnlock, TeamsAutoSync.due(Fixtures.at("2026-10-09T17:00"), LONDON, hourly, TeamsAutoSync.State(), Fixtures.at("2026-10-09T16:00"), unlocked = true))
     }
 
-    private fun noticed(at: String, noticedAt: String?, state: TeamsAutoSync.State = TeamsAutoSync.State(), syncedAt: String? = "2026-10-10T12:00", schoolDay: Boolean = false) =
-        TeamsAutoSync.due(Fixtures.at(at), LONDON, settings, state, syncedAt?.let(Fixtures::at), unlocked = false, schoolDay = schoolDay, noticedAt = noticedAt?.let(Fixtures::at))
+    private fun noticed(at: String, noticedAt: String?, state: TeamsAutoSync.State = TeamsAutoSync.State(), syncedAt: String? = "2026-10-10T12:00") =
+        TeamsAutoSync.due(Fixtures.at(at), LONDON, settings, state, syncedAt?.let(Fixtures::at), unlocked = false, noticedAt = noticedAt?.let(Fixtures::at))
 
     @Test
     fun `Teams' notice of assignments since its last read is offered at once, a sync just before it notwithstanding`() {
@@ -245,10 +245,10 @@ class TeamsAutoSyncTest {
 
     @Test
     fun `a notice waits for the hours automatic syncs keep, for a delay, and for a skipped day`() {
-        // At night, and in school hours: then not; at the school day's blocking time, it is.
+        // At night: then not, but at seven. A school day's hours are any other day's (D-105): at once.
         assertNull(noticed("2026-10-09T23:00", noticedAt = "2026-10-09T22:50", syncedAt = "2026-10-09T12:00"))
-        assertNull(noticed("2026-10-09T12:15", noticedAt = "2026-10-09T12:10", syncedAt = "2026-10-09T07:00", schoolDay = true))
-        assertEquals(TeamsAutoSync.Trigger.Noticed, noticed("2026-10-09T16:45", noticedAt = "2026-10-09T12:10", syncedAt = "2026-10-09T07:00", schoolDay = true))
+        assertEquals(TeamsAutoSync.Trigger.Noticed, noticed("2026-10-10T07:00", noticedAt = "2026-10-09T22:50", syncedAt = "2026-10-09T12:00"))
+        assertEquals(TeamsAutoSync.Trigger.Noticed, noticed("2026-10-09T12:15", noticedAt = "2026-10-09T12:10", syncedAt = "2026-10-09T07:00"))
         // Delay 5 tapped: then, as a delayed one.
         val delayed = TeamsAutoSync.delayed(TeamsAutoSync.State(), Fixtures.at("2026-10-10T12:11"))
         assertNull(noticed("2026-10-10T12:14", noticedAt = "2026-10-10T12:10", state = delayed))
@@ -266,24 +266,21 @@ class TeamsAutoSyncTest {
     }
 
     @Test
-    fun `never at night, nor in school hours`() {
+    fun `never at night`() {
         assertNull(due("2026-10-09T23:30", syncedAt = "2026-10-09T12:00", unlocked = true))
-        assertNull(due("2026-10-09T12:00", syncedAt = "2026-10-09T07:00", unlocked = true))
         assertNull(due("2026-10-10T06:30", syncedAt = "2026-10-09T12:00", unlocked = true))
     }
 
     @Test
-    fun `a weekday off syncs as a weekend day does, by the school calendar`() {
-        // A Friday with no school: every three hours from the morning, not waiting for the school day's blocking time.
-        assertEquals(TeamsAutoSync.Trigger.Every3Hours, due("2026-10-09T12:00", syncedAt = "2026-10-09T07:00", schoolDay = false))
-        assertEquals(TeamsAutoSync.Trigger.Every3Hours, due("2026-10-09T12:00", syncedAt = "2026-10-09T07:00", unlocked = true, schoolDay = false))
+    fun `a school day's hours are any other day's`() {
+        // A Friday at school: every three hours from the morning, not waiting for the school day's blocking time (D-105).
+        assertEquals(TeamsAutoSync.Trigger.Every3Hours, due("2026-10-09T12:00", syncedAt = "2026-10-09T07:00"))
+        assertEquals(TeamsAutoSync.Trigger.Every3Hours, due("2026-10-09T12:00", syncedAt = "2026-10-09T07:00", unlocked = true))
         // Still never in quiet hours, nor before a first unlock's time as its first-unlock sync.
-        assertNull(due("2026-10-09T06:30", syncedAt = "2026-10-08T12:00", unlocked = true, schoolDay = false))
-        assertEquals(TeamsAutoSync.Trigger.FirstUnlock, due("2026-10-09T16:50", syncedAt = "2026-10-09T13:00", unlocked = true, schoolDay = false))
-        // The same Friday at school waits for 16:45.
-        assertNull(due("2026-10-09T12:00", syncedAt = "2026-10-09T07:00", schoolDay = true))
-        assertTrue(TeamsAutoSync.allowed(Fixtures.at("2026-10-09T12:00"), LONDON, settings, schoolDay = false))
-        assertTrue(!TeamsAutoSync.allowed(Fixtures.at("2026-10-09T12:00"), LONDON, settings, schoolDay = true))
+        assertNull(due("2026-10-09T06:30", syncedAt = "2026-10-08T12:00", unlocked = true))
+        assertEquals(TeamsAutoSync.Trigger.FirstUnlock, due("2026-10-09T16:50", syncedAt = "2026-10-09T13:00", unlocked = true))
+        assertTrue(TeamsAutoSync.allowed(Fixtures.at("2026-10-09T12:00"), LONDON, settings))
+        assertTrue(!TeamsAutoSync.allowed(Fixtures.at("2026-10-09T23:30"), LONDON, settings))
     }
 
     @Test

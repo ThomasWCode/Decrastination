@@ -748,7 +748,6 @@ class FocusService : AccessibilityService() {
             state = runtime.teamsAuto,
             teamsSyncedAt = listOfNotNull(graph.tasks.value.status(Source.Teams).dataAsOf, widget?.syncedAt).maxOrNull(),
             unlocked = SystemClock.elapsedRealtime() - unlockedAt < UNLOCK_WINDOW_MS,
-            schoolDay = graph.focus.schoolDayAt(graph.clock.now()),
             noticedAt = widget?.noticedAt,
         ) ?: if (force) TeamsAutoSync.Trigger.Delayed else return
         Log.i(TAG, "Offering an automatic Teams sync ($trigger)")
