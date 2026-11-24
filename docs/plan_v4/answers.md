@@ -894,3 +894,18 @@ Your word of 22 Nov: "remove the cancel button and make the buttons 'Delay 5' an
 2. **Only the automatic syncs stop.** A tap on *Refresh Teams*, the widget's ↻, or asking Felix to check Teams still syncs: each is a sync you've asked for.
 3. **Everything else of the day's goes with it**: a delay standing, the morning's offer, and a retry of one the widget didn't start; it counts as offered, as Cancel did.
 4. **A store's version raised** (`runtime.json` to 5), so an older build sets a newer file aside rather than drop the day skipped; `runtime.json` is the phone's alone, so the server has no part in it.
+
+## Skip today taken back (6.15.0, 24 Nov)
+
+Your word of 24 Nov: "After selecting 'skip today' on the 10s countdown for the teams sync, add a button in the app … to remove that rule. also, when I select 'skip today' from the banner, it should show 'undo' on the screen for 3s, that reverts the countdown back to 10s with the original buttons when pressed." D-11 is amended to it.
+
+**Q172. Where should the button that takes the skip back go?** Offered: Settings › Sources › Teams, under *Sync Teams automatically*; a chip on the chat; both. **Your answer: Settings › Sources › Teams.** A line there says it's skipped for the rest of today, beside *Resume*, only while a skip holds.
+
+**Q173. After *Resume*, when does the next automatic sync come?** Offered: at its usual time, the skipped banner counting as an offer; soon, as though the skip had never been. **Your answer: at its usual time.**
+
+#### Decided in building it
+
+1. **In Decrastination, not the widget**: the skip is kept in the phone's `runtime.json`, which the widget can't reach.
+2. **Undo and Resume are the same change** (`TeamsAutoSync.resumed`): only the day skipped is cleared. Undo then counts down 10 s again with *Delay 5* and *Skip today*, and its sync runs as any other's would.
+3. **The skip is kept at once**, not at the end of the 3 s, so one that's left alone stands even if the banner is taken away early (the service restarted, say).
+4. **No store's version raised**: nothing in `runtime.json` changes shape.
