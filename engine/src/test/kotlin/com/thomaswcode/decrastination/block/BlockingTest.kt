@@ -308,6 +308,21 @@ class TeamsAutoSyncTest {
     }
 
     @Test
+    fun `skip today taken back brings syncs back at their usual times`() {
+        val skipped = TeamsAutoSync.skipped(TeamsAutoSync.State(), Fixtures.at("2026-10-09T17:00"), LONDON, settings)
+        assertTrue(TeamsAutoSync.skippedToday(skipped, Fixtures.at("2026-10-09T17:01"), LONDON))
+        val resumed = TeamsAutoSync.resumed(skipped)
+        assertTrue(!TeamsAutoSync.skippedToday(resumed, Fixtures.at("2026-10-09T17:01"), LONDON))
+        // The skipped banner still counts as offered: nothing within three hours of it, nor the day's first unlock again.
+        assertNull(due("2026-10-09T18:00", resumed, syncedAt = "2026-10-09T12:00", unlocked = true))
+        assertEquals(TeamsAutoSync.Trigger.Every3Hours, due("2026-10-09T20:00", resumed, syncedAt = "2026-10-09T12:00"))
+        // Skipped, the same moment offers nothing.
+        assertNull(due("2026-10-09T20:00", skipped, syncedAt = "2026-10-09T12:00"))
+        // A day old, a skip no longer holds.
+        assertTrue(!TeamsAutoSync.skippedToday(skipped, Fixtures.at("2026-10-10T09:00"), LONDON))
+    }
+
+    @Test
     fun `skip today before the first-unlock time still holds the evening's off`() {
         val skipped = TeamsAutoSync.skipped(TeamsAutoSync.State(), Fixtures.at("2026-10-10T10:00"), LONDON, settings)
         assertNull(skipped.firstUnlockDay)

@@ -57,6 +57,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.R
+import com.thomaswcode.decrastination.block.TeamsAutoSync
 import com.thomaswcode.decrastination.core.SettingsLimits
 import com.thomaswcode.decrastination.core.Window
 import com.thomaswcode.decrastination.data.BackupFolder
@@ -77,6 +78,7 @@ import java.time.ZoneId
 import java.util.Locale
 import java.util.Optional
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -326,6 +328,23 @@ class SettingsActivity : ComponentActivity() {
                         item { Section("Teams") }
                         item {
                             SwitchRow("Sync Teams automatically", draft.teamsAutoSync) { draft = draft.copy(teamsAutoSync = it) }
+                            // The sync banner's Skip today (D-11), taken back here: the next comes at its usual time. Worked
+                            // out again at midnight, when a skip stops holding, for a screen left open across it.
+                            val skipped by produceState(TeamsAutoSync.skippedToday(runtime.teamsAuto, graph.clock.now(), graph.clock.zone()), runtime.teamsAuto) {
+                                while (true) {
+                                    val now = graph.clock.now()
+                                    val zone = graph.clock.zone()
+                                    value = TeamsAutoSync.skippedToday(runtime.teamsAuto, now, zone)
+                                    if (!value) break
+                                    delay(Instant.ofEpochMilli(now).atZone(zone).toLocalDate().plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli() - now)
+                                }
+                            }
+                            if (skipped) {
+                                Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Text("Skipped for the rest of today", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+                                    TextButton(onClick = { scope.launch { graph.resumeTeamsAutoSync() } }) { Text("Resume") }
+                                }
+                            }
                             TimeField("First unlock after", draft.teamsFirstUnlockMin, "teamsFirstUnlockMin", form) { draft = draft.copy(teamsFirstUnlockMin = it) }
                             NumberField("Then every (minutes)", draft.teamsSyncEveryMin, SettingsLimits.TEAMS_EVERY_MIN, "teamsSyncEveryMin", form) { draft = draft.copy(teamsSyncEveryMin = it) }
                         }

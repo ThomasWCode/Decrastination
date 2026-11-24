@@ -19,9 +19,10 @@ import android.widget.TextView
 
 /**
  * The banner every automatic Teams sync shows first (Q21): at the top of the screen, counting
- * down 10 s, with **Delay 5** and **Skip today** (D-11). A `TYPE_ACCESSIBILITY_OVERLAY` window, which an
- * accessibility service may add without the overlay permission; it looks like the Teams widget's
- * own sync pill, which takes over once the sync starts.
+ * down 10 s, with **Delay 5** and **Skip today** (D-11). Skip today leaves **Undo** on screen for
+ * 3 s, which takes the skip back and counts down from the start again, with both buttons. A
+ * `TYPE_ACCESSIBILITY_OVERLAY` window, which an accessibility service may add without the overlay
+ * permission; it looks like the Teams widget's own sync pill, which takes over once the sync starts.
  */
 class CountdownBanner(private val service: AccessibilityService) {
 
@@ -35,20 +36,27 @@ class CountdownBanner(private val service: AccessibilityService) {
 
     val isShowing: Boolean get() = root != null
 
-    /** Shows [message] (with `%d` for the seconds left) for [seconds], then runs [onTimeout]. */
-    fun show(message: String, seconds: Int, onDelay: () -> Unit, onSkip: () -> Unit, onTimeout: () -> Unit) {
+    /**
+     * Shows [message] (with `%d` for the seconds left) for [seconds], then runs [onTimeout]. After
+     * [onSkip], Undo for [UNDO_MS]: tapped, [onUndo] runs and the countdown starts again.
+     */
+    fun show(message: String, seconds: Int, onDelay: () -> Unit, onSkip: () -> Unit, onUndo: () -> Unit, onTimeout: () -> Unit) {
         cancel()
         this.message = message
         this.left = seconds
         this.onTimeout = onTimeout
         val view = build(
-            delay = {
+            "Delay 5" to {
                 cancel()
                 onDelay()
             },
-            skip = {
+            "Skip today" to {
                 cancel()
                 onSkip()
+                offerUndo {
+                    onUndo()
+                    show(message, seconds, onDelay, onSkip, onUndo, onTimeout)
+                }
             },
         )
         runCatching { windowManager.addView(view, layoutParams()) }.onFailure { return }
@@ -60,11 +68,28 @@ class CountdownBanner(private val service: AccessibilityService) {
     /** Takes the banner away without running anything. */
     fun cancel() {
         handler.removeCallbacks(tick)
+        handler.removeCallbacks(dismiss)
         root?.let { runCatching { windowManager.removeView(it) } }
         root = null
         label = null
         onTimeout = null
     }
+
+    /** "Skipped for today" with Undo, gone by itself after [UNDO_MS]; the skip stands unless [undo] is tapped. */
+    private fun offerUndo(undo: () -> Unit) {
+        val view = build(
+            "Undo" to {
+                cancel()
+                undo()
+            },
+        )
+        label?.text = "Skipped for today"
+        runCatching { windowManager.addView(view, layoutParams()) }.onFailure { return }
+        root = view
+        handler.postDelayed(dismiss, UNDO_MS)
+    }
+
+    private val dismiss = Runnable { cancel() }
 
     private val tick = object : Runnable {
         override fun run() {
@@ -95,7 +120,7 @@ class CountdownBanner(private val service: AccessibilityService) {
         y = dp(44)
     }
 
-    private fun build(delay: () -> Unit, skip: () -> Unit): View {
+    private fun build(vararg buttons: Pair<String, () -> Unit>): View {
         // Material You colours where available, so the banner matches the phone's theme.
         val dynamic = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
         val surface = if (dynamic) service.getColor(android.R.color.system_neutral1_800) else 0xFF2B2D31.toInt()
@@ -135,10 +160,14 @@ class CountdownBanner(private val service: AccessibilityService) {
             }
             elevation = dp(6).toFloat()
             addView(label)
-            addView(button("Delay 5", delay))
-            addView(button("Skip today", skip))
+            buttons.forEach { (text, onClick) -> addView(button(text, onClick)) }
         }
     }
 
     private fun dp(value: Int): Int = (value * service.resources.displayMetrics.density).toInt()
+
+    private companion object {
+        /** How long Undo stays on screen after Skip today. */
+        const val UNDO_MS = 3_000L
+    }
 }

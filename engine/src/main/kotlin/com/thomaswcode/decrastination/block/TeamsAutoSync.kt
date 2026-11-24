@@ -13,7 +13,8 @@ import java.time.ZoneId
  * same hours (D-169). Any sync of Teams, yours or one of these, puts off every one of them but the
  * notice's for those three hours (D-169). Only while the phone is
  * unlocked and in use, which the focus service knows; every one is announced first by a banner
- * counting down 10 s, with Delay 5 and Skip today (D-11). Pure.
+ * counting down 10 s, with Delay 5 and Skip today, the skip taken back by the banner's Undo or
+ * Settings' Resume (D-11). Pure.
  */
 object TeamsAutoSync {
 
@@ -56,7 +57,7 @@ object TeamsAutoSync {
         if (!settings.teamsAutoSync) return null
         val today = Instant.ofEpochMilli(now).atZone(zone).toLocalDate().toString()
         // Skipped today: none till tomorrow, a delay or the morning's included (D-11).
-        if (state.skippedDay == today) return null
+        if (skippedToday(state, now, zone)) return null
         val every = settings.teamsSyncEveryMin * 60_000L
         // Any sync this recent, yours included, puts off the timed ones (D-169).
         val recent = teamsSyncedAt != null && now - teamsSyncedAt < every
@@ -121,4 +122,15 @@ object TeamsAutoSync {
      */
     fun skipped(state: State, now: Long, zone: ZoneId, settings: Settings): State =
         offered(state, now, zone, settings).copy(skippedDay = Instant.ofEpochMilli(now).atZone(zone).toLocalDate().toString())
+
+    /**
+     * "Skip today" taken back: the banner's Undo, or Resume in Settings. Automatic syncs come
+     * again at their usual times; the skipped banner still counts as offered, so the next timed one
+     * comes three hours after it (D-11).
+     */
+    fun resumed(state: State): State = state.copy(skippedDay = null)
+
+    /** Whether "Skip today" holds at [now]: tapped today. */
+    fun skippedToday(state: State, now: Long, zone: ZoneId): Boolean =
+        state.skippedDay == Instant.ofEpochMilli(now).atZone(zone).toLocalDate().toString()
 }
