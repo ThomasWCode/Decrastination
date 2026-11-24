@@ -756,6 +756,7 @@ class FocusService : AccessibilityService() {
             seconds = BANNER_SECONDS,
             onDelay = { scope.launch { graph.runtime.update { it.copy(teamsAuto = TeamsAutoSync.delayed(it.teamsAuto, graph.clock.now())) } } },
             onSkip = { scope.launch { graph.runtime.update { it.copy(teamsAuto = TeamsAutoSync.skipped(it.teamsAuto, graph.clock.now(), graph.clock.zone(), graph.settings.value)) } } },
+            onUndo = { scope.launch { graph.resumeTeamsAutoSync() } },
             onTimeout = {
                 scope.launch {
                     // Ten seconds on, is it still a moment to take the screen? A call begun, or the

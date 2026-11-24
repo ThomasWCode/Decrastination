@@ -11,6 +11,7 @@ import com.thomaswcode.decrastination.block.PhotoChecks
 import com.thomaswcode.decrastination.block.Photos
 import com.thomaswcode.decrastination.block.SlotAlarms
 import com.thomaswcode.decrastination.block.Slots
+import com.thomaswcode.decrastination.block.TeamsAutoSync
 import com.thomaswcode.decrastination.block.TimerAlarms
 import com.thomaswcode.decrastination.calendar.CalendarWriter
 import com.thomaswcode.decrastination.calendar.SlotCalendar
@@ -219,6 +220,9 @@ class AppGraph private constructor(context: Context) : Owners {
 
     /** Takes [seen] off Setup's list of files found unreadable. */
     suspend fun forgetUnreadable(seen: JsonStore.Unreadable) = runtime.update { it.seenUnreadable(seen) }
+
+    /** Takes back the Teams sync banner's Skip today (D-11): from its Undo, or Resume in Settings. */
+    suspend fun resumeTeamsAutoSync() = runtime.update { it.copy(teamsAuto = TeamsAutoSync.resumed(it.teamsAuto)) }
 
     private val syncer = Syncer(
         tasks = tasks,
